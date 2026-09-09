@@ -25,6 +25,7 @@ func (s packageSymbols) add(owner, name string) bool {
 func applicationValues() packageSymbols {
 	return packageSymbols{
 		"internal/desiredstate/compilation": {"State": true},
+		"internal/workspace/contexts":       {"Configuration": true},
 	}
 }
 

@@ -17,7 +17,7 @@ func secretCommands() []commandSpec {
 		{path: "secret list", short: "List secret metadata", flags: []flagSpec{outputFlag()}},
 		{path: "secret show", short: "Export raw sensitive secret bytes to standard output", flags: []flagSpec{nameFlag(), requiredEnumFlag("part", "Select the secret part", "value", "username", "password", "certificate", "private-key", "public-key")}},
 		{path: "secret delete", short: "Remove an active secret mapping, retaining bound versions", flags: []flagSpec{nameFlag(), confirmationFlag()}},
-		{path: "secret encryption init", short: "Initialize confidential storage", flags: []flagSpec{requiredCatalogFlag("type", "Select a registered confidential-store type", secretEncryptionTypeCatalog)}},
+		{path: "secret encryption init", short: "Initialize or recover the configured confidential store"},
 		{path: "secret encryption status", short: "Show encryption metadata", flags: []flagSpec{outputFlag()}},
 		{path: "secret encryption rotate", short: "Rotate the active encryption key", flags: []flagSpec{confirmationFlag()}},
 	}
@@ -96,7 +96,6 @@ func (s Services) invokeEncryption(ctx context.Context, path string, values *req
 	case "secret encryption init":
 		result, err := invokeResult(ctx, values, encryption.EncryptionInitRequest{
 			ContextName: values.text("context"),
-			Type:        values.text("type"),
 		}, s.Encryption.Init)
 		return commandResult{encryptionMutation: result}, err
 	case "secret encryption status":

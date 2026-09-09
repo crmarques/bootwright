@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -44,7 +45,7 @@ func TestSecretImmutableWritePublishesOnlyCompleteFinalName(t *testing.T) {
 	})
 	store.fail = nil
 	expectSecretFailureCode(t, err, "secret.store.conflict")
-	directory := filepath.Join(store.options.Root, "contexts", record.ID, "secrets", "identities")
+	directory := filepath.Join(store.options.Root, "contexts", record.Name, "secrets", "identities")
 	if _, err := os.Stat(filepath.Join(directory, filepath.Base(immutableIdentityPath))); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("partial immutable artifact became visible at its final name")
 	}
@@ -129,69 +130,46 @@ func TestSecretImmutableWriteDoesNotReplaceExistingFinalName(t *testing.T) {
 		t.Fatal("second immutable publication replaced an existing name")
 	}
 	expectSecretFailureCode(t, secondErr, "secret.store.conflict")
-	data, err := os.ReadFile(filepath.Join(store.options.Root, "contexts", record.ID, "secrets", path))
+	data, err := os.ReadFile(filepath.Join(store.options.Root, "contexts", record.Name, "secrets", path))
 	if err != nil || string(data) != "first" {
 		t.Fatalf("immutable final content: %q %v", data, err)
 	}
 }
 
-func TestPartialSecretStagingDoesNotBreakConcurrentOldReader(t *testing.T) {
+func TestSecretReadSessionPreventsConcurrentMutation(t *testing.T) {
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	token := secretToken(record)
 	implementation := initializeImmutableTestStore(t, store, token)
-	staged := make(chan struct{})
-	resume := make(chan struct{})
-	writes := 0
-	store.fail = func(point string) error {
-		if point != "write-file" {
-			return nil
-		}
-		writes++
-		if writes == 2 {
-			close(staged)
-			<-resume
-			return errors.New("injected mid-write interruption")
-		}
-		return nil
-	}
 	err := store.ReadSecrets(context.Background(), token, func(area storage.Area) error {
 		selector, exists, err := storage.ReadSelector(context.Background(), area, token.ID)
 		if err != nil || !exists {
 			return errors.New("initialized selector is unavailable")
 		}
-		old, err := implementation.Open(context.Background(), token, area, selector, nil)
+		session, err := implementation.Open(context.Background(), token, area, selector, nil)
 		if err != nil {
 			return err
 		}
-		defer old.Close()
+		defer session.Close()
 		writer := make(chan error, 1)
+		var entered atomic.Bool
 		go func() {
-			writer <- store.MutateSecrets(context.Background(), token, func(area storage.Area) error {
-				return area.PublishExclusive(context.Background(), immutableIdentityPath, []byte(strings.Repeat("partial", 16384)))
+			writer <- store.MutateSecrets(context.Background(), token, func(storage.Area) error {
+				entered.Store(true)
+				return nil
 			})
 		}()
 		select {
-		case <-staged:
+		case err := <-writer:
+			if err == nil || entered.Load() {
+				return errors.New("writer entered a shared read lock")
+			}
 		case <-time.After(5 * time.Second):
-			close(resume)
-			return errors.New("immutable writer did not reach its staged write boundary")
+			return errors.New("writer contention did not refuse promptly")
 		}
-		snapshot, inspectErr := old.Inspect(context.Background())
-		close(resume)
-		writeErr := <-writer
-		if inspectErr != nil {
-			return inspectErr
-		}
-		if snapshot.RetainedArtifacts == 0 || !snapshot.CleanupRequired {
-			return errors.New("partial staging artifact was not reported as retained")
-		}
-		if writeErr == nil {
-			return errors.New("injected immutable write interruption succeeded")
-		}
-		return nil
+		_, err = session.Inspect(context.Background())
+		return err
 	})
-	store.fail = nil
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,8 +187,8 @@ func TestSecretImmutableWriteSurvivesSubprocessDeathMidWrite(t *testing.T) {
 	if !errors.As(err, &exit) || exit.ExitCode() != 86 {
 		t.Fatalf("subprocess did not stop at the mid-write boundary: %v %s", err, output)
 	}
-	directory := filepath.Join(store.options.Root, "contexts", record.ID, "secrets", "identities")
-	if _, err := os.Stat(filepath.Join(store.options.Root, "contexts", record.ID, "secrets", immutableIdentityPath)); !errors.Is(err, os.ErrNotExist) {
+	directory := filepath.Join(store.options.Root, "contexts", record.Name, "secrets", "identities")
+	if _, err := os.Stat(filepath.Join(store.options.Root, "contexts", record.Name, "secrets", immutableIdentityPath)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("subprocess exposed a partial final immutable artifact")
 	}
 	entries, err := os.ReadDir(directory)
@@ -246,7 +224,7 @@ func TestSecretImmutableWriteSubprocessHelper(t *testing.T) {
 	if root == "" {
 		return
 	}
-	store := New(Options{Root: root})
+	store := New(testOptions(root))
 	snapshot, err := store.SecretContext(context.Background(), "example")
 	if err != nil {
 		t.Fatal(err)

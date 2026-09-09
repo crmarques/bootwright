@@ -61,8 +61,8 @@ func (i *Implementation) Initialize(ctx context.Context, selected storage.Contex
 	if i == nil || i.random == nil || area == nil || material != nil || !validContext(selected) {
 		return nil, storage.Failure("store.implementation", "local secret store initialization is not configured safely")
 	}
-	if selected.Mode != "active" {
-		return nil, storage.Failure("store.conflict", "secret initialization requires an active context")
+	if selected.Mode != "ready" && selected.Mode != "initializing" {
+		return nil, storage.Failure("store.conflict", "secret initialization requires a ready context")
 	}
 	return i.initialize(ctx, selected, area)
 }
@@ -306,7 +306,7 @@ func (i *Implementation) uniqueID(prefix string, exists func(string) bool) (stri
 }
 
 func validContext(context storage.Context) bool {
-	return validName(context.Name) && validID(context.ID, "ctx-") && validID(context.Revision, "rev-") && (context.Mode == "active" || context.Mode == "recoveryOnly")
+	return validName(context.Name) && validID(context.ID, "ctx-") && (context.Revision == "" || validID(context.Revision, "rev-")) && (context.Mode == "ready" || context.Mode == "initializing")
 }
 
 func validSelector(selector storage.Selector, context storage.Context, selection storage.Selection) bool {

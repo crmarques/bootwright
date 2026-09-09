@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -91,8 +90,11 @@ func validateInvocation(command *cobra.Command, path string) string {
 	}
 	switch path {
 	case "context init", "context update":
-		if len(arrayValue(flags, "file")) != 1 {
-			return "exactly one --file occurrence is required"
+		if len(arrayValue(flags, "file")) > 1 {
+			return "at most one --file occurrence is allowed"
+		}
+		if path == "context update" && len(arrayValue(flags, "file")) == 0 && stringValue(flags, "input-dir") == "" {
+			return "context update requires --file or --input-dir"
 		}
 	case "context delete":
 		if !boolValue(flags, "purge") {
@@ -122,10 +124,6 @@ func validateInvocation(command *cobra.Command, path string) string {
 	case "secret set":
 		if message := validateSecretInput(flags); message != "" {
 			return message
-		}
-	case "secret encryption init":
-		if !api.ValidLexical("name", stringValue(flags, "type")) {
-			return "--type must be a lowercase DNS label"
 		}
 	case "media add", "media delete":
 		if !mediaName(stringValue(flags, "name")) {

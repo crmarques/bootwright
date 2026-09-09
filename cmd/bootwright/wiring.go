@@ -11,6 +11,7 @@ import (
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/containercluster/installation"
 	containerpreflight "github.com/crmarques/bootwright/internal/containercluster/preflight"
+	"github.com/crmarques/bootwright/internal/controller/invocation"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/desiredstate/customplaybooks"
@@ -62,23 +63,52 @@ func wireServices() cli.Services { return wireLocalServices(nil, nil) }
 
 func wireLocalServices(confirmer contexts.Confirmer, input secretmaterial.InputReader) cli.Services {
 	repository := contextfs.New(contextfs.Options{})
-	return wireContextServices(repository, repository, confirmer, input)
+	account := invokingAccount{resolver: invocation.Resolver{}}
+	return wireContextServices(repository, repository, confirmer, input, contextWiringOptions{Selection: account, Operator: account})
 }
 
-func wireContextServices(repository contexts.Repository, workspace secretstorage.Workspace, confirmer contexts.Confirmer, inputs ...secretmaterial.InputReader) cli.Services {
+type contextWiringOptions struct {
+	Selection       contexts.SelectionStore
+	Resolver        secretstorage.ImplementationResolver
+	SessionMaterial secretstorage.SessionMaterialSource
+	Operator        secretmaterial.Operator
+}
+
+func wireContextServices(repository contexts.Repository, workspace secretstorage.Workspace, confirmer contexts.Confirmer, input secretmaterial.InputReader, options ...contextWiringOptions) cli.Services {
 	compiler := wireCompiler()
-	access := secretstorage.NewAccess(workspace, secretstorage.NewCatalog(localstore.New()), nil)
-	var input secretmaterial.InputReader
-	if len(inputs) != 0 {
-		input = inputs[0]
+	var configuration contextWiringOptions
+	if len(options) != 0 {
+		configuration = options[0]
 	}
+	resolver := configuration.Resolver
+	if resolver == nil {
+		resolver = secretstorage.NewCatalog(localstore.New())
+	}
+	selectedWorkspace := selectionWorkspace{Workspace: workspace, selection: configuration.Selection}
+	access := secretstorage.NewAccess(selectedWorkspace, resolver, configuration.SessionMaterial)
+	contextOptions := contexts.Options{
+		Selection:           configuration.Selection,
+		ConfigurationReader: contextConfigurationReader{reader: inputfs.Reader{}},
+		ValidateConfiguration: func(ctx context.Context, config contexts.Configuration) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			_, err := resolver.Select(config.SecretStore.Type)
+			return err
+		},
+		InitializeSecrets: func(ctx context.Context, record contexts.Record, area secretstorage.Area) error {
+			selected := secretstorage.Context{Name: record.Name, ID: record.ID, Mode: string(record.Mode), Revision: record.Revision}
+			return access.InitializeArea(ctx, selected, record.SecretStoreType, area)
+		},
+	}
+
 	return cli.Services{
-		Contexts:              contexts.New(inputfs.Reader{}, compiler, repository, contextguard.Guard{}, confirmer),
+		Contexts:              contexts.New(inputfs.Reader{}, compiler, repository, contextguard.Guard{}, confirmer, contextOptions),
 		AddOnCatalog:          addoncatalog.Service{},
-		Secrets:               custody.New(access, compiler, secretmaterial.New(input), confirmer),
+		Secrets:               custody.New(access, compiler, secretmaterial.New(input, secretmaterial.Options{Operator: configuration.Operator}), confirmer),
 		Encryption:            encryption.New(access, confirmer),
 		Media:                 media.Service{},
-		DesiredState:          compilation.New(inputfs.Reader{}, compiler, contexts.Inputs{Repository: repository}),
+		DesiredState:          compilation.New(inputfs.Reader{}, compiler, contexts.Inputs{Repository: repository, Selection: configuration.Selection}),
 		Controller:            prerequisites.Service{},
 		EnvironmentPreflight:  environmentpreflight.Service{},
 		EnvironmentInspection: inspection.Service{},

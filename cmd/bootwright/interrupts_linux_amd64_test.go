@@ -17,7 +17,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/crmarques/bootwright/internal/workspace/contextfs"
+	"github.com/crmarques/bootwright/internal/cli"
 )
 
 func openTestTerminal(t *testing.T) (*os.File, *os.File) {
@@ -55,10 +55,19 @@ func TestInterruptDuringRealConfirmationPreservesSelection(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(input, "environment.yaml"), []byte(syntheticEnvironment), 0600); err != nil {
 		t.Fatal(err)
 	}
-	repository := contextfs.New(contextfs.Options{Root: filepath.Join(stateParent, "bootwright")})
-	services := wireContextServices(repository, repository, nil)
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "-f", input)
+	root := filepath.Join(stateParent, "bootwright")
+	if err := os.MkdirAll(stateParent, 0700); err != nil {
+		t.Fatal(err)
+	}
+	repository := testRepository(root)
+	services := wireContextServices(repository, repository, nil, nil, testContextWiring(t, root))
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	before, err := repository.View(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pointer := testContextWiring(t, root).Selection
+	selectedBefore, err := pointer.Read(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +75,7 @@ func TestInterruptDuringRealConfirmationPreservesSelection(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestInteractiveInterruptHelper$")
-	command.Env = append(os.Environ(), "BOOTWRIGHT_INTERRUPT_HELPER=1", "BOOTWRIGHT_INTERRUPT_INPUT="+input, "XDG_STATE_HOME="+stateParent)
+	command.Env = append(os.Environ(), "BOOTWRIGHT_INTERRUPT_HELPER=1", "BOOTWRIGHT_INTERRUPT_INPUT="+input, "BOOTWRIGHT_INTERRUPT_STATE="+root)
 	command.Stdin = slave
 	var stdout bytes.Buffer
 	command.Stdout = &stdout
@@ -114,16 +123,24 @@ func TestInterruptDuringRealConfirmationPreservesSelection(t *testing.T) {
 		t.Fatal(err)
 	}
 	if fmt.Sprint(before) != fmt.Sprint(after) {
-		t.Fatal("interrupted confirmation changed selection")
+		t.Fatal("interrupted confirmation changed context state")
 	}
-	contextRun(t, services, 0, "context", "update", "--name", "alpha", "-f", input, "--yes")
+	selectedAfter, err := pointer.Read(context.Background())
+	if err != nil || selectedAfter != selectedBefore {
+		t.Fatal("interrupted confirmation changed user selection", err)
+	}
+	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
 }
 
 func TestInteractiveInterruptHelper(t *testing.T) {
 	if os.Getenv("BOOTWRIGHT_INTERRUPT_HELPER") != "1" {
 		return
 	}
-	os.Exit(runInteractive(context.Background(), []string{"context", "update", "--name", "alpha", "-f", os.Getenv("BOOTWRIGHT_INTERRUPT_INPUT")}, os.Stdout, os.Stderr))
+	root := os.Getenv("BOOTWRIGHT_INTERRUPT_STATE")
+	repository := testRepository(root)
+	confirmer := cli.NewConfirmation(readStdin, os.Stderr, stdinTerminal)
+	services := wireContextServices(repository, repository, confirmer, secretInputFunc(readStdin), testContextWiring(t, root))
+	os.Exit(runServices(context.Background(), []string{"context", "update", "--name", "alpha", "--input-dir", os.Getenv("BOOTWRIGHT_INTERRUPT_INPUT")}, os.Stdout, os.Stderr, services, beginSignalOperation))
 }
 
 func TestTerminalFlagsAreRestoredAfterReadyAndEmptyReads(t *testing.T) {

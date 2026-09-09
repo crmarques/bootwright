@@ -128,6 +128,22 @@ deterministic, inspectable artifacts with fixed command structure and safe
 argument encoding; they do not use `eval`, inline secrets, or execute as part
 of generation.
 
+## Local context privilege
+
+The [context store](contexts.md#storage-locking-and-publication) is always
+root:root and private beneath `/var/lib/bootwright`. Local sudo authentication
+and invocation-scoped credential refresh follow the
+[CLI boundary](cli.md#local-privilege-and-user-identity). No password enters
+Bootwright memory, argv, environment, durable state or output.
+
+Per-user selection is non-authoritative input: validate its bounded name and
+immutable ID against the root registry. Perform user-file effects with that
+user's credentials, using no-follow handles, private modes and atomic
+publication. Never use an untrusted home or a root write followed by chown.
+Permanent context deletion requires positive disposal proof and an exact
+recorded deletion identity before any unlink; partial removal never restores
+ordinary usability or weakens identity checks.
+
 ## Network, remote systems, and privilege
 
 Network access requires an application-authorized typed request with validated

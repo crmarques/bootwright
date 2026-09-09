@@ -21,7 +21,13 @@ const (
 	maxSecretBytes   = 256 << 20
 )
 
-type Options struct{ Root string }
+// Ownership is an explicit filesystem test seam; production uses UID and GID zero.
+type Ownership struct{ UID, GID uint32 }
+
+type Options struct {
+	Root  string
+	Owner *Ownership
+}
 
 // Store has no effects until a repository method is called. A Store is safe for
 // concurrent use; transaction state and held handles belong to one invocation.
@@ -32,7 +38,13 @@ type Store struct {
 	fail func(string) error
 }
 
-func New(options Options) *Store { return &Store{options: options, random: rand.Reader} }
+func New(options Options) *Store {
+	if options.Owner != nil {
+		owner := *options.Owner
+		options.Owner = &owner
+	}
+	return &Store{options: options, random: rand.Reader}
+}
 
 func (s *Store) checkpoint(ctx context.Context, name string) error {
 	if err := ctx.Err(); err != nil {
@@ -47,7 +59,7 @@ func (s *Store) checkpoint(ctx context.Context, name string) error {
 func state(message string) error { return contexts.StateError(message) }
 
 func emptyRegistry() contexts.Registry {
-	return contexts.Registry{Version: 1, Identities: []contexts.Identity{}, Contexts: []contexts.Record{}}
+	return contexts.Registry{Version: 2, Identities: []contexts.Identity{}, Contexts: []contexts.Record{}}
 }
 
 func cloneRegistry(r contexts.Registry) contexts.Registry {

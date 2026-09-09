@@ -9,12 +9,12 @@ import (
 
 func workspaceCommands() []commandSpec {
 	return []commandSpec{
-		{path: "context init", short: "Initialize a context from desired-state input", flags: []flagSpec{nameFlag(), contextFileFlag(), confirmationFlag()}},
-		{path: "context update", short: "Replace a context's desired-state input", flags: []flagSpec{nameFlag(), contextFileFlag(), confirmationFlag()}},
+		{path: "context init", short: "Initialize a configured context and select it", flags: []flagSpec{nameFlag(), contextFileFlag(), stringFlag("input-dir", "Import an Environment input directory")}},
+		{path: "context update", short: "Update Context configuration or Environment input", flags: []flagSpec{nameFlag(), contextFileFlag(), stringFlag("input-dir", "Replace the Environment input directory"), confirmationFlag()}},
 		{path: "context use", short: "Select the current context", flags: []flagSpec{nameFlag()}},
 		{path: "context list", short: "List contexts"},
 		{path: "context current", short: "Show the current context", flags: []flagSpec{boolFlag("short", "Print only the context name")}},
-		{path: "context delete", short: "Delete disposable context data or archive for recovery", flags: []flagSpec{nameFlag(), boolFlag("purge", "Acknowledge context data deletion"), confirmationFlag(), boolFlag("abandon-resources", "Request recovery-only archival")}, long: "Delete proven-disposable local context data with --purge=true. --yes controls ordinary confirmation; --abandon-resources requests recovery-only archival."},
+		{path: "context delete", short: "Permanently delete a context and its local files", flags: []flagSpec{nameFlag(), boolFlag("purge", "Acknowledge permanent context data deletion"), confirmationFlag()}, long: "Permanently delete a context and its verified local files with --purge=true. --yes skips ordinary confirmation. Protected lifecycle state must be resolved before deletion."},
 	}
 }
 
@@ -36,15 +36,16 @@ func (s Services) invokeContexts(ctx context.Context, path string, values *reque
 	switch path {
 	case "context init":
 		result.admission, err = invokeResult(ctx, values, contexts.InitRequest{
-			Name:             values.text("name"),
-			InputDirectory:   values.singleFile(),
-			SkipConfirmation: values.boolean("yes"),
+			Name:              values.text("name"),
+			ConfigurationFile: values.singleFile(),
+			InputDirectory:    values.text("input-dir"),
 		}, s.Contexts.Init)
 	case "context update":
 		result.admission, err = invokeResult(ctx, values, contexts.UpdateRequest{
-			Name:             values.text("name"),
-			InputDirectory:   values.singleFile(),
-			SkipConfirmation: values.boolean("yes"),
+			Name:              values.text("name"),
+			ConfigurationFile: values.singleFile(),
+			InputDirectory:    values.text("input-dir"),
+			SkipConfirmation:  values.boolean("yes"),
 		}, s.Contexts.Update)
 	case "context use":
 		result.use, err = invokeResult(ctx, values, contexts.UseRequest{Name: values.text("name")}, s.Contexts.Use)
@@ -57,7 +58,6 @@ func (s Services) invokeContexts(ctx context.Context, path string, values *reque
 			Name:             values.text("name"),
 			Purge:            values.boolean("purge"),
 			SkipConfirmation: values.boolean("yes"),
-			AbandonResources: values.boolean("abandon-resources"),
 		}, s.Contexts.Delete)
 	default:
 		return commandResult{}, errors.New("command has no application dispatch")

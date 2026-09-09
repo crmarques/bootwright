@@ -30,11 +30,11 @@ func TestCompositionSuppliesRuntimeBuildInformation(t *testing.T) {
 }
 
 func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	services := isolatedServices(t)
 	commandsWithSyntheticInputs := [][]string{
 		{"validate", "-f", filepath.Join(t.TempDir(), "missing.yaml")},
-		{"context", "init", "--name", "example", "-f", "inputs"},
-		{"context", "update", "--name", "example", "-f", "inputs"},
+		{"context", "init", "--name", "example", "--input-dir", "inputs"},
+		{"context", "update", "--name", "example", "--input-dir", "inputs"},
 		{"context", "use", "--name", "example"},
 		{"context", "list"},
 		{"context", "current"},
@@ -48,7 +48,7 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 		{"secret", "list"},
 		{"secret", "show", "--name", "example", "--part", "value"},
 		{"secret", "delete", "--name", "example"},
-		{"secret", "encryption", "init", "--type", "local-keyring"},
+		{"secret", "encryption", "init"},
 		{"secret", "encryption", "status"},
 		{"secret", "encryption", "rotate"},
 		{"media", "add", "--name", "example.iso", "--from-file", "source.iso"},
@@ -86,7 +86,7 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 	for _, args := range commandsWithSyntheticInputs {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
-			code := run(context.Background(), args, &stdout, &stderr)
+			code := runServices(context.Background(), args, &stdout, &stderr, services)
 			prefix := "[FAIL] cli.not-implemented: bootwright "
 			if args[0] == "validate" && len(args) > 1 || args[0] == "context" && (args[1] == "init" || args[1] == "update") {
 				prefix = "[FAIL] input.not-found "
@@ -124,12 +124,15 @@ func TestComposedExplicitValidationIsContextFree(t *testing.T) {
 	if err := os.WriteFile(input, content, 0600); err != nil {
 		t.Fatal(err)
 	}
+	state := filepath.Join(home, "store")
+	repository := testRepository(state)
+	services := wireContextServices(repository, repository, nil, nil, testContextWiring(t, state))
 	for _, args := range [][]string{
 		{"validate", "-f", input, "--context", "missing"},
 		{"validate", "-f", input, "--context", "missing", "--output", "json"},
 	} {
 		var out, errOut bytes.Buffer
-		if code := run(context.Background(), args, &out, &errOut); code != 0 || errOut.Len() != 0 {
+		if code := runServices(context.Background(), args, &out, &errOut, services); code != 0 || errOut.Len() != 0 {
 			t.Fatalf("explicit validation: %d %s %s", code, out.String(), errOut.String())
 		}
 		if args[len(args)-1] == "json" {
@@ -149,13 +152,13 @@ func TestComposedExplicitValidationIsContextFree(t *testing.T) {
 	}
 	for _, args := range [][]string{{"validate", "--context", "missing"}, {"render", "effective", "--context", "missing"}} {
 		var out, errOut bytes.Buffer
-		if code := run(context.Background(), args, &out, &errOut); code != 1 || out.Len() != 0 || !strings.Contains(errOut.String(), "context.state") {
+		if code := runServices(context.Background(), args, &out, &errOut, services); code != 1 || out.Len() != 0 || !strings.Contains(errOut.String(), "context.state") {
 			t.Fatal("absent context failed without a typed state diagnostic", code, out.String(), errOut.String())
 		}
 	}
 	for _, args := range [][]string{{"version"}, {"validate", "-f", input, "--help"}, {"__bootwright_complete", "validate", ""}, {"validate", "-f", input, "--unknown"}} {
 		var out, errOut bytes.Buffer
-		run(context.Background(), args, &out, &errOut)
+		runServices(context.Background(), args, &out, &errOut, services)
 	}
 	entries, err := os.ReadDir(home)
 	if err != nil || len(entries) != 0 {

@@ -56,6 +56,10 @@ func (s *Store) SecretContext(ctx context.Context, name string) (storage.Context
 		return storage.ContextSnapshot{}, safeError(err)
 	}
 	defer root.file.Close()
+	if err := lockShared(root); err != nil {
+		return storage.ContextSnapshot{}, err
+	}
+	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
 	registry, _, err := readRegistry(ctx, root)
 	if err == nil {
 		err = verifyMappings(ctx, root, registry)
@@ -63,18 +67,22 @@ func (s *Store) SecretContext(ctx context.Context, name string) (storage.Context
 	if err != nil {
 		return storage.ContextSnapshot{}, safeError(err)
 	}
-	if name == "" {
-		name = registry.Current
-	}
+
 	record, err := namedSecretRecord(registry, name)
 	if err != nil {
 		return storage.ContextSnapshot{}, err
 	}
-	inputs, err := readSnapshot(ctx, root, record)
-	if err != nil {
-		return storage.ContextSnapshot{}, safeError(err)
+	if record.Mode != contexts.Ready {
+		return storage.ContextSnapshot{}, state("context is incomplete; repeat its init or delete command")
 	}
-	return storage.ContextSnapshot{Context: secretContext(record), Inputs: inputs}, nil
+	inputs := desiredstate.Sources{}
+	if record.Revision != "" {
+		inputs, err = readSnapshot(ctx, root, record)
+		if err != nil {
+			return storage.ContextSnapshot{}, safeError(err)
+		}
+	}
+	return storage.ContextSnapshot{Context: secretContext(record), Inputs: inputs, SecretStoreType: record.SecretStoreType}, nil
 }
 
 func (s *Store) ReadSecrets(ctx context.Context, expected storage.Context, callback func(storage.Area) error) error {
@@ -86,6 +94,10 @@ func (s *Store) ReadSecrets(ctx context.Context, expected storage.Context, callb
 		return safeError(err)
 	}
 	defer root.file.Close()
+	if err := lockShared(root); err != nil {
+		return err
+	}
+	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
 	registry, _, err := readRegistry(ctx, root)
 	if err == nil {
 		err = verifyMappings(ctx, root, registry)
@@ -96,6 +108,9 @@ func (s *Store) ReadSecrets(ctx context.Context, expected storage.Context, callb
 	record, err := exactSecretRecord(registry, expected)
 	if err != nil {
 		return err
+	}
+	if record.Mode != contexts.Ready {
+		return state("context is incomplete; repeat its init or delete command")
 	}
 	container, dir, err := openSecretContext(ctx, root, record)
 	if err != nil {
@@ -145,6 +160,9 @@ func (s *Store) MutateSecrets(ctx context.Context, expected storage.Context, cal
 	record, err := exactSecretRecord(registry, expected)
 	if err != nil {
 		return err
+	}
+	if record.Mode != contexts.Ready {
+		return state("context is incomplete; repeat its init or delete command")
 	}
 	registryExpected, err := registryExpectation(ctx, root, registry)
 	if err != nil {
@@ -213,16 +231,11 @@ func openSecretContext(ctx context.Context, root *directory, record contexts.Rec
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
-	container, err := openDirectory(root, "contexts")
+	container, dir, err := openContext(root, record)
 	if err != nil {
-		return nil, nil, state("context identity directory is missing or unsafe")
+		return nil, nil, err
 	}
-	dir, err := openDirectory(container, record.ID)
-	if err != nil {
-		container.file.Close()
-		return nil, nil, state("context reservation is missing or unsafe")
-	}
-	if err := verifyReservation(ctx, dir, record.ID, record.EnvironmentDirectory); err != nil {
+	if err := verifyReservation(ctx, dir, record.ID, record.Name); err != nil {
 		dir.file.Close()
 		container.file.Close()
 		return nil, nil, err
@@ -234,17 +247,39 @@ func verifyContextLayout(ctx context.Context, dir *directory) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	names, err := directoryNames(dir, 5)
+	names, err := directoryNames(dir, 4)
 	if err != nil {
 		return state("context layout cannot be verified")
 	}
 	for _, name := range names {
 		switch name {
-		case "reservation.json", "mutation.json":
-		case "revisions", "archives", "secrets":
+		case "context.yaml":
+			if _, err := readBounded(ctx, dir, name, maxRecord, true); err != nil {
+				return err
+			}
+		case "state", "desired-state", "secrets":
 			child, err := openDirectory(dir, name)
 			if err != nil {
-				return state("context retained-state directory is unsafe")
+				return state("context subdirectory is unsafe")
+			}
+			if name != "secrets" {
+				maximum := 1
+				if name == "state" {
+					maximum = 2
+				}
+				entries, listErr := directoryNames(child, maximum)
+				if listErr == nil {
+					for _, entry := range entries {
+						if name == "state" && entry != "reservation.json" && entry != "mutation.json" || name == "desired-state" && entry != "revisions" {
+							listErr = state("context contains unsupported state; mutation is refused")
+							break
+						}
+					}
+				}
+				if listErr != nil {
+					child.file.Close()
+					return listErr
+				}
 			}
 			child.file.Close()
 		default:
@@ -492,7 +527,7 @@ func inspectSecretDirectoryNames(ctx context.Context, dir *directory, names []st
 		}
 		switch stat.Mode & syscall.S_IFMT {
 		case syscall.S_IFDIR:
-			if !allowDirectories || !private(stat, syscall.S_IFDIR) || stat.Mode&0777 != 0700 {
+			if !allowDirectories || !private(stat, syscall.S_IFDIR, dir.identity.Uid, dir.identity.Gid) || stat.Mode&0777 != 0700 {
 				return nil, secretCorrupt("secret storage directory is unsafe")
 			}
 			child, err := openDirectory(dir, name)
@@ -502,7 +537,7 @@ func inspectSecretDirectoryNames(ctx context.Context, dir *directory, names []st
 			child.file.Close()
 			entries = append(entries, storage.Entry{Name: name, Directory: true})
 		case syscall.S_IFREG:
-			if !private(stat, syscall.S_IFREG) || stat.Mode&0777 != 0600 || stat.Size < 0 || stat.Size > maxSecretBytes {
+			if !private(stat, syscall.S_IFREG, dir.identity.Uid, dir.identity.Gid) || stat.Mode&0777 != 0600 || stat.Size < 0 || stat.Size > maxSecretBytes {
 				return nil, secretCorrupt("secret storage file is unsafe")
 			}
 			entries = append(entries, storage.Entry{Name: name, Size: stat.Size})

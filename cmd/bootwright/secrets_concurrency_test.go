@@ -19,8 +19,8 @@ func (f secretConfirmationFunc) Confirm(ctx context.Context, action, name string
 func TestSecretConfirmationsHoldMutationLeaseAndReleaseItOnRefusal(t *testing.T) {
 	services, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("payload", "opaque", ""))
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "-f", input)
-	contextRun(t, services, 0, "secret", "encryption", "init", "--type", "local-keyring")
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "secret", "encryption", "init")
 	snapshot, err := repository.SecretContext(context.Background(), "alpha")
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +34,7 @@ func TestSecretConfirmationsHoldMutationLeaseAndReleaseItOnRefusal(t *testing.T)
 			t.Fatal("confirmation did not hold the mutation lease")
 		}
 		return errors.New("synthetic confirmation refusal")
-	}))
+	}), nil, testContextWiring(t, root))
 	value := addSecretInput(t, t.TempDir(), "value", "synthetic-lease-canary")
 	contextRun(t, services, 0, "secret", "set", "--name", "payload", "--value-file", value)
 	if confirmations != 0 {
@@ -62,13 +62,13 @@ func TestSecretConfirmationsHoldMutationLeaseAndReleaseItOnRefusal(t *testing.T)
 func TestSecretExpectedSnapshotRefusesContextUpdateBeforeEffects(t *testing.T) {
 	services, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("payload", "opaque", ""))
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "-f", input)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	snapshot, err := repository.SecretContext(context.Background(), "alpha")
 	if err != nil {
 		t.Fatal(err)
 	}
 	addSecretInput(t, input, "secret.yaml", secretDocument("payload", "token", ""))
-	contextRun(t, services, 0, "context", "update", "--name", "alpha", "-f", input, "--yes")
+	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
 	before := stateFingerprint(t, root)
 	callback := func(storage.Area) error { t.Fatal("stale snapshot reached secret effects"); return nil }
 	if err := repository.ReadSecrets(context.Background(), snapshot.Context, callback); err == nil {

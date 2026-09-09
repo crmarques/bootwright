@@ -186,15 +186,15 @@ mutation leases and atomic publication. Authored input remains separate from
 effective inspection output.
 
 Exit: complete context journeys; canonical public YAML/JSON; concurrent access,
-rooted atomic durable publication, corruption/crash recovery and safe archival
-tests. Read-only commands prove no payload/secret reads, writes, processes or
-network access.
+rooted atomic durable publication, interrupted creation/deletion and guarded
+permanent removal tests. Input inspection proves no payload/secret acquisition
+or state writes; privileged store and invoking-user access follow the CLI boundary.
 
 Delivered evidence:
 
 - Complete init/update/use/list/current/delete journeys, identity-preserving
-  replacement and reinitialization, current-selection clearing, ordinary
-  confirmation, guarded disposal and recovery-only archival pass.
+  input replacement, interrupted initialization retry, per-user selection
+  clearing, ordinary confirmation and guarded permanent disposal pass.
 - The synthetic 93-object example imports, survives removal of its original
   tree, validates equivalently and renders complete canonical YAML/JSON.
   Frozen excluded streams, markers and original Secret path bases are retained.
@@ -231,7 +231,7 @@ lifecycle effects; M1d owns the future lifecycle consumer port.
 Exit evidence:
 
 - Shared semantic conformance for selected/persisted implementations, typed
-  acquisition and generation, immutable bindings and recovery-only policy.
+  acquisition and generation, immutable bindings and protected-context policy.
 - Complete CLI/help/completion and machine-result journeys, exact raw reveal,
   lazy input, confirmation leases and canary non-disclosure checks.
 - Owner-only race-resistant storage, inclusive bounds, authenticated records,
@@ -251,9 +251,9 @@ Delivered evidence:
   and every platform, entitlement and lifecycle effect remain unavailable.
 - [Command journeys](../cmd/bootwright/secrets_test.go) and
   [disclosure checks](../cmd/bootwright/secrets_disclosure_test.go) cover current
-  source/part access, stale/orphan handling, recovery-only policy, context ID
-  reuse, immutable bindings, rotation and non-disclosure. Confirmation and
-  expected-snapshot tests cover the context mutation boundary.
+  source/part access, stale/orphan handling, protected-context refusal, fresh IDs
+  after context-name reuse, immutable bindings, rotation and non-disclosure.
+  Confirmation and expected-snapshot tests cover the context mutation boundary.
 - [Publication tests](../internal/workspace/contextfs/secrets_publication_linux_amd64_test.go)
   inject every mutation/rotation checkpoint and kill subprocesses before/after
   selector publication. Held-reader, inode-substitution, mount-containment,
@@ -292,6 +292,35 @@ cancellation, unchanged-selection and descriptor-flag assertions. Both
 and race gates. Neither real-terminal test was skipped; no device permissions
 were changed.
 M1c remains current and completed; M1d is not promoted and stays unavailable.
+
+### Direct root context storage
+
+The authorized replacement of M1b/M1c context persistence uses the fixed root
+store and independent user selection defined in [Contexts](contexts.md).
+It removes prior formats and archival behavior without migration. Context
+configuration and desired-state import are separate; plain initialization
+creates an eager keyring and may remain without Environment input.
+
+Verification covers no-file creation, immutable imports, configuration-only
+no-ops, fresh identities after name reuse, stale/independent selections,
+protected deletion and explicit pending-mutation retry. Filesystem tests inject
+publication/synchronization failures and substitutions, including resuming
+only after registry intent and reused initialization files are durable.
+Sudo tests cover pre-effect classification, argument/stdin preservation,
+timeout policies, signal forwarding and refresh cleanup. Privileged fixtures
+run in isolated user/mount namespaces with synthetic account data and homes;
+they exercise actual credential drops and the production default store path.
+Normal unprivileged test runs skip those explicitly privileged fixtures; the
+isolated acceptance runs execute them separately.
+
+Final `make check`, `make build` and `./scripts/go test -race ./... -count=1`
+pass. Completion executes all four shell runtimes without skips. The scanner
+uses the complete official database validated on 2026-09-09, with all 4,380
+file hashes rechecked; direct online scanning fails on DNS lookup. It reports
+no reachable or imported-package vulnerabilities. The production-default
+plain-init/current/encryption-status/delete journey passes in a synthetic
+root filesystem, including every UID/GID and private-mode assertion. Actual
+host sudo password authentication and power-loss behavior were not qualified.
 
 ## M1d — managed artifact-server apply
 

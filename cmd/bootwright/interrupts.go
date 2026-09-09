@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"syscall"
 
 	"github.com/crmarques/bootwright/internal/cli"
 )
@@ -13,7 +14,7 @@ import (
 func beginSignalOperation(parent context.Context) (context.Context, func()) {
 	ctx, cancel := context.WithCancelCause(parent)
 	interrupts := make(chan os.Signal, 1)
-	signal.Notify(interrupts, os.Interrupt)
+	signal.Notify(interrupts, os.Interrupt, syscall.SIGTERM)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)

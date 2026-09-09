@@ -24,7 +24,7 @@ func (a *serviceAccess) Context(_ context.Context, name string) (storage.Context
 	if name != a.selected.Name {
 		return storage.ContextSnapshot{}, errors.New("unexpected context name")
 	}
-	return storage.ContextSnapshot{Context: a.selected}, a.contextFailure
+	return storage.ContextSnapshot{Context: a.selected, SecretStoreType: a.selection.Type}, a.contextFailure
 }
 func (a *serviceAccess) Types() []string { return []string{a.selection.Type} }
 func (a *serviceAccess) View(_ context.Context, selected storage.Context, unlock bool, callback func(storage.StoreSession, storage.Selection) error) error {
@@ -76,7 +76,7 @@ func (s *serviceSession) Rotate(context.Context) (string, error) {
 func serviceFixture() (*Service, *serviceAccess) {
 	ref := storage.ComponentRef{ID: "independent", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1}
 	access := &serviceAccess{
-		selected:  storage.Context{Name: "fixture", ID: "ctx-fixture", Mode: "active", Revision: "rev-fixture"},
+		selected:  storage.Context{Name: "fixture", ID: "ctx-fixture", Mode: "ready", Revision: "rev-fixture"},
 		selection: storage.Selection{Type: "independent", Store: ref, KeyCustody: ref},
 		session:   &serviceSession{},
 	}
@@ -89,7 +89,7 @@ func TestEncryptionUsesInjectedStoreAccess(t *testing.T) {
 	if got := service.Types(); !slices.Equal(got, []string{"independent"}) {
 		t.Fatal("completion did not use injected access", got)
 	}
-	initialized, err := service.Init(ctx, EncryptionInitRequest{ContextName: "fixture", Type: "independent"})
+	initialized, err := service.Init(ctx, EncryptionInitRequest{ContextName: "fixture"})
 	if err != nil || initialized.Context != access.selected || initialized.Implementation != access.selection || initialized.ActiveKey != "fixture-key" || !initialized.Changed || access.initializations != 1 {
 		t.Fatal("initialization did not use injected access", initialized, err)
 	}
@@ -106,10 +106,22 @@ func TestEncryptionUsesInjectedStoreAccess(t *testing.T) {
 	}
 }
 
+func TestEncryptionNeedsConfigurationButNotDesiredState(t *testing.T) {
+	service, access := serviceFixture()
+	access.selected.Revision = ""
+	if _, err := service.Init(context.Background(), EncryptionInitRequest{ContextName: "fixture"}); err != nil || access.initializations != 1 {
+		t.Fatal("encryption initialization required desired state", err)
+	}
+	access.selection.Type = ""
+	if _, err := service.Init(context.Background(), EncryptionInitRequest{ContextName: "fixture"}); err == nil || access.initializations != 1 {
+		t.Fatal("missing context configuration reached initialization", err)
+	}
+}
+
 func TestStoreAccessFailuresStopEncryptionBeforeSession(t *testing.T) {
 	operations := map[string]func(*Service) error{
 		"initialize": func(service *Service) error {
-			_, err := service.Init(context.Background(), EncryptionInitRequest{ContextName: "fixture", Type: "independent"})
+			_, err := service.Init(context.Background(), EncryptionInitRequest{ContextName: "fixture"})
 			return err
 		},
 		"status": func(service *Service) error {

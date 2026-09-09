@@ -4,7 +4,6 @@ package contextfs
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"path/filepath"
 	"reflect"
@@ -19,7 +18,7 @@ func prepareManifest(id, environment string, sources desiredstate.Sources) (mani
 	if len(sources.Roots) != 1 || !canonicalPath(sources.Roots[0]) || len(sources.Files) > desiredstate.MaxFiles || len(sources.Markers) > desiredstate.MaxMarkers {
 		return manifest{}, nil, state("frozen input requires one bounded original directory")
 	}
-	m := manifest{Version: 1, ID: id, InputDirectory: sources.Roots[0], EnvironmentDirectory: environment, Files: []frozenFile{}}
+	m := manifest{Version: 2, ID: id, InputDirectory: sources.Roots[0], EnvironmentDirectory: environment, Files: []frozenFile{}}
 	files := make(map[string]desiredstate.SourceFile, len(sources.Files)+len(sources.Markers))
 	minimumMetadataBytes := 0
 	for index, collection := range [][]desiredstate.SourceFile{sources.Files, sources.Markers} {
@@ -81,7 +80,7 @@ func (t *transaction) Publish(ctx context.Context, id, environment string, sourc
 	if !held {
 		return "", state("input publication requires the context mutation lease")
 	}
-	if err := verifyReservation(ctx, dir, id, environment); err != nil {
+	if err := verifyReservation(ctx, dir, id, ""); err != nil {
 		return "", err
 	}
 	m, files, err := prepareManifest(id, environment, sources)
@@ -91,7 +90,12 @@ func (t *transaction) Publish(ctx context.Context, id, environment string, sourc
 	if beneath(m.InputDirectory, t.root.path) || beneath(environment, t.root.path) {
 		return "", state("state root overlaps frozen input")
 	}
-	revisions, err := t.store.ensureDirectory(ctx, dir, "revisions")
+	input, err := t.store.ensureDirectory(ctx, dir, "desired-state")
+	if err != nil {
+		return "", safeError(err)
+	}
+	defer input.file.Close()
+	revisions, err := t.store.ensureDirectory(ctx, input, "revisions")
 	if err != nil {
 		return "", safeError(err)
 	}
@@ -153,7 +157,7 @@ func openManifestBounded(ctx context.Context, root *directory, record contexts.R
 		}
 	}
 	parent := root
-	for _, name := range []string{"contexts", record.ID, "revisions", record.Revision} {
+	for _, name := range []string{"contexts", record.Name, "desired-state", "revisions", record.Revision} {
 		next, err := openDirectory(parent, name)
 		if err != nil {
 			close()
@@ -209,59 +213,4 @@ func readSnapshot(ctx context.Context, root *directory, record contexts.Record) 
 		return desiredstate.Sources{}, err
 	}
 	return result, nil
-}
-
-func (t *transaction) Archive(ctx context.Context, record contexts.Record, outcome string) error {
-	if err := t.available(ctx); err != nil {
-		return err
-	}
-	if outcome != "deleted" && outcome != "recoveryOnly" {
-		return state("context archival outcome is invalid")
-	}
-	if !slices.Contains(t.registry.Contexts, record) {
-		return state("only the current context record may be archived")
-	}
-	dir, held := t.leases[record.ID]
-	if !held {
-		return state("context archival requires its mutation lease")
-	}
-	if _, err := readSnapshot(ctx, t.root, record); err != nil {
-		return err
-	}
-	evidence := t.evidence[record.ID]
-	if len(evidence) == 0 || !json.Valid(evidence) {
-		return state("context archival has no valid mutation evidence")
-	}
-	data, err := encodeRecord(archive{Version: 1, Outcome: outcome, Record: record, Mutation: json.RawMessage(evidence)}, maxRecord)
-	if err != nil {
-		return err
-	}
-	archives, err := t.store.ensureDirectory(ctx, dir, "archives")
-	if err != nil {
-		return safeError(err)
-	}
-	defer archives.file.Close()
-	// Archives share the inclusive 4096-per-identity retained-record bound.
-	if _, err := revisionEntries(archives, "arc-", ".json"); err != nil {
-		return err
-	}
-	for range 16 {
-		name, err := t.store.candidate("arc-")
-		if err != nil {
-			return err
-		}
-		err = t.store.writeExclusive(ctx, archives, name+".json", data)
-		if errors.Is(err, syscall.EEXIST) {
-			continue
-		}
-		if err != nil {
-			return safeError(err)
-		}
-		if t.archived == nil {
-			t.archived = make(map[string]string)
-		}
-		t.archived[record.ID] = outcome
-		return nil
-	}
-	return state("context archival exhausted its collision limit")
 }

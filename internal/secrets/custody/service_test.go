@@ -133,7 +133,7 @@ func (c *serviceConfirmer) Confirm(context.Context, string, string) error { c.ca
 func serviceFixture(t *testing.T, secretYAML string) (*Service, *serviceAccess, *serviceMaterial, *serviceConfirmer) {
 	t.Helper()
 	content := "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: fixture\nspec:\n  domains:\n    base: example.test\n" + secretYAML
-	access := &serviceAccess{snapshot: storage.ContextSnapshot{Context: storage.Context{Name: "fixture", ID: "ctx-fixture", Revision: "rev-fixture", Mode: "active"}, Inputs: desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(content))}}}, session: &serviceSession{materials: map[string]secrets.Material{}}}
+	access := &serviceAccess{snapshot: storage.ContextSnapshot{Context: storage.Context{Name: "fixture", ID: "ctx-fixture", Revision: "rev-fixture", Mode: "ready"}, Inputs: desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(content))}}}, session: &serviceSession{materials: map[string]secrets.Material{}}}
 	material := &serviceMaterial{}
 	confirmer := &serviceConfirmer{}
 	compiler := compilation.NewCompiler(yamlstream.Parser{}, nil, compilation.Rules{Normalize: secrets.Normalize, Validate: secrets.Validate})
@@ -145,6 +145,17 @@ func serviceFixture(t *testing.T, secretYAML string) (*Service, *serviceAccess, 
 }
 func declarationYAML(name, source string) string {
 	return "\n---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: " + name + "\nspec:\n  type: token\n" + source
+}
+
+func TestMissingDesiredStateStopsBeforeMaterialOrStoreMutation(t *testing.T) {
+	service, access, material, confirmer := serviceFixture(t, declarationYAML("token", ""))
+	access.snapshot.Context.Revision = ""
+	access.snapshot.Inputs = desiredstate.Sources{}
+	_, err := service.Set(context.Background(), SetRequest{Name: "token", Input: secrets.Input{ValueStdin: true}})
+	diagnostics := desiredstate.DiagnosticsOf(err)
+	if len(diagnostics) != 1 || diagnostics[0].Code != "context.input" || material.acquired != 0 || access.transactions != 0 || confirmer.calls != 0 {
+		t.Fatal("empty context did not stop before secret effects", err, diagnostics)
+	}
 }
 
 func TestSetAuthorizationBeforeInputAndSameMaterial(t *testing.T) {
@@ -173,11 +184,11 @@ func TestSetAuthorizationBeforeInputAndSameMaterial(t *testing.T) {
 	if _, err := s.Set(ctx, request); err == nil || m.acquired != reads {
 		t.Fatal("undeclared secret acquired material")
 	}
-	a.snapshot.Context.Mode = "recoveryOnly"
+	a.snapshot.Context.Mode = "deleting"
 	request.Name = "token"
 	transactions := a.transactions
 	if _, err := s.Set(ctx, request); err == nil || a.transactions != transactions {
-		t.Fatal("recovery-only set reached mutation")
+		t.Fatal("deleting-context set reached mutation")
 	}
 }
 

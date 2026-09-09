@@ -15,8 +15,9 @@ type Context struct {
 }
 
 type ContextSnapshot struct {
-	Context Context
-	Inputs  desiredstate.Sources
+	Context         Context
+	Inputs          desiredstate.Sources
+	SecretStoreType string
 }
 
 // Workspace provides a coherent input snapshot and confines every store effect
@@ -48,7 +49,7 @@ type Area interface {
 	// remain hidden until a later selector publication.
 	WriteExclusive(context.Context, string, []byte) error
 	// PublishExclusive exposes a fully written immutable artifact atomically and
-	// never replaces an existing final path. A crash may retain opaque staging.
+	// never replaces an existing final path. A crash may retain an unselected temporary file.
 	PublishExclusive(context.Context, string, []byte) error
 	Replace(ctx context.Context, path string, replacement, expected []byte) (Outcome, error)
 	Sync(context.Context, string) error

@@ -1,34 +1,79 @@
 # Durable contexts
 
-Workspace owns named contexts, immutable input revisions, current selection and
-their publication. [State reconciliation](state-reconciliation.md#durable-identities-and-private-paths)
-owns the state-root and durable identity rules. This format is version `1`, for
-Linux/amd64. Unknown versions, malformed or contradictory records, missing
-referenced data and unsafe filesystem objects fail with `context.state`.
-There is no automatic repair, migration, orphan collection or identity reset.
+Workspace owns named contexts, Context configuration, immutable input revisions,
+per-user selection and local publication. This is a breaking private format for
+Linux/amd64: old formats, malformed records, contradictory identity and unsafe
+filesystem objects fail with `context.state`. There is no legacy lookup,
+migration, archive retention or staging directory.
 
 ## Identity and selection
 
-The canonical original directory containing the admitted Environment is the
-identity key. Names are lowercase DNS labels, independent of the allocated
-`ctx-` identity. Only one active name may refer to an identity. Updating or
-recreating a context must retain that Environment directory; moving an input
-tree to another identity requires a separate context. Relocation of an existing
-identity requires a future explicit migration contract.
+Names are lowercase DNS labels of at most 63 characters. Each creation allocates
+an independent immutable `ctx-` identity before importing input. The registry
+reserves a name and identity through `initializing`, `ready` and `deleting`.
+Only ready contexts are usable; lack of an input revision is a valid ready state.
+A successfully deleted name may be reused only with a fresh identity.
 
-A permanent identity mapping survives deletion. Reinitializing its original
-directory uses that identity again after positive disposal proof. An interrupted
-unpublished reservation is never reused. Names become available after final
-deletion, but recovery-only names remain reserved. Successful init selects the
-context. Update preserves selection. Use changes only selection. Deleting the
-current context clears selection without choosing another name. Recovery-only
-archival retains selection. An absent current context fails with `context.state`;
-list on an absent store succeeds with an empty list and does not create it.
+First import binds the canonical original Environment directory. It must not
+belong to another context, and subsequent imports preserve it. Runtime state
+remains separate from authored input. Context identity is not derived from an
+Environment directory or a human-readable name.
+
+Current selection belongs to the invoking user in `~/.bootwright/context`, a
+bounded canonical JSON record containing `version: 1`, `name` and `id` (at most
+4096 bytes). Its parent
+is user-owned `0700`; the regular file is user-owned `0600`. Resolve the account
+through the invocation identity and local account database, never `HOME`.
+Perform its filesystem effects with that user's credentials. Use verified
+no-follow handles, exclusive temporary files and atomic replacement.
+
+There is no global current selection. Explicit `--context` bypasses the user
+file; an implicit selection must still match the registry's immutable ID.
+Missing or stale selection fails with `context use` guidance. List remains
+usable without a current marker. Init selects only after store publication;
+use changes only selection; update preserves it; delete clears only the
+invoking user's matching name and ID. Never enumerate other users' homes.
+
+Store publication and user-file publication are separate durable effects. If
+selection fails after creation, retain the context and report that creation
+succeeded but selection failed, with `context use --name <name>` guidance.
+Never claim rollback. A post-rename sync failure reports uncertain durability.
+
+## Context configuration
+
+A Context is a standalone setup document, separate from the Environment graph:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Context
+metadata:
+  name: example
+
+spec:
+  secretStore:
+    type: local-keyring
+```
+
+The envelope and all records are closed. Exactly one document is accepted;
+`metadata.name` must equal the command's required `--name`. The secret-store
+type defaults to `local-keyring`; its current configuration has no additional
+parameters. Unknown types/fields, duplicate keys, aliases, conflicting names,
+and malformed values refuse before publication. Configuration contains no
+material, runtime identity, path override or user selection.
+
+Store the canonical defaulted document as `context.yaml`. Context commands
+admit it independently of desired-state compilation; it does not participate
+in Environment resources, defaults, or effective rendering. Init without a
+file synthesizes the default configuration without input discovery. Current
+configuration fields are immutable: an equivalent configuration-only update
+succeeds without writes or confirmation; backend changes refuse.
 
 ## Frozen input and provenance
 
-Init and update require one opened directory and compile its entire acquired
-input before creating or changing runtime state. Before discovery, resolve the
+An explicitly supplied `--input-dir` opens one directory and compiles its
+entire acquired input before creating or changing runtime state. Omission at
+init creates a context without desired state; omission at update preserves its
+selected input revision. Before discovery, resolve the
 state-root location read-only and reject a root within the input directory;
 revalidate containment through held handles at publication. Freeze every
 acquired YAML candidate and permitted marker, including streams excluded by
@@ -53,145 +98,142 @@ payload paths. Authored `~` spelling remains unchanged during admission.
 
 ## Storage, locking and publication
 
-The private layout is:
+The registry uses private format version 2; earlier versions are refused.
+Its active records hold the name, immutable ID, initialization/deletion mode,
+selected revision, Environment directory, configured secret-store type and
+reserved directory device/inode. A bounded ledger retains only used IDs after
+deletion so recreation can never recycle them. It retains no context content.
+
+The production root is `/var/lib/bootwright`. Its complete context layout is:
 
 ```text
-<state-root>/
+/var/lib/bootwright/
   registry.json
-  contexts/<context-id>/
-    reservation.json
-    mutation.json
-    secrets/                     # optional; Secrets-owned format
-    revisions/<revision-id>/
+  contexts/<name>/
+    context.yaml
+    desired-state/revisions/<revision-id>/
       manifest.json
       file-0000
       ...
-    archives/<archive-id>.json
+    state/
+      reservation.json
+      mutation.json
+    secrets/
+      init.json
+      selector.json
+      identities/
+      indexes/
+      keys/
+      ledgers/
+      parts/
 ```
 
-Revision and archive IDs are respectively `rev-` and `arc-` followed by 32
-lowercase hexadecimal digits from 128 secure random bits, with the same
-exclusive reservation and 16-attempt collision rule as context IDs. File blobs
-use four-digit manifest indices, never authored path segments. Registry
-publication uses an exclusively created `pending-<32-hex>.json` temporary.
-Unreferenced temporaries and reserved IDs are never adopted or reused.
+Every directory is owned by `root:root` with mode `0700`; every file is owned
+by `root:root` with mode `0600`. All store access runs as root. No environment
+variable selects another production root. Isolated test storage is injected at
+composition. Reject unsafe existing objects without chmod/chown repair.
 
-Workspace records use UTF-8, compact canonical JSON and exactly one final LF.
-Object fields follow the owning typed record order below; registry identities
-sort by Environment directory, contexts by name, and manifest files by relative path.
-Private JSON strings follow the pinned Go `encoding/json` spelling: escape
-quotes, backslashes and control characters; also escape `<`, `>` and `&` as
-`\u003c`, `\u003e` and `\u0026`, and U+2028/U+2029 as `\u2028`/`\u2029`. Other
-valid Unicode is UTF-8. This private format is separate from CLI JSON output.
-Workspace record readers refuse noncanonical encodings as well as unsupported
-semantics. Reconciliation mutation evidence is closed JSON with insignificant
-whitespace and field order; it rejects duplicate, unknown, missing or incorrectly
-typed fields.
+Context and revision IDs use `ctx-` and `rev-` plus 32 lowercase hexadecimal
+digits from 128 secure random bits, exclusive reservation and at most 16
+collision attempts. File blobs use four-digit manifest indices, never authored
+path segments. Records use bounded closed canonical JSON, UTF-8, compact typed
+field order, sorted collections and one final LF. Private JSON uses Go's
+`encoding/json` escaping. Readers reject noncanonical or contradictory records.
+Manifest integrity failures never fall back to external input.
 
-| Record | Required fields, in order |
+| Record | Required fields in canonical order |
 | --- | --- |
-| Registry | `version`, `current`, `identities`, `contexts` |
-| Identity mapping | `environmentDirectory`, `id` |
-| Active context | `name`, `id`, `environmentDirectory`, `revision`, `mode` |
-| Reservation | `version`, `id`, `environmentDirectory` |
-| Input manifest | `version`, `id`, `revision`, `inputDirectory`, `environmentDirectory`, `files` |
-| Manifest file | `path`, `category` (`yaml` or `marker`), `size`, `sha256` (64 lowercase hexadecimal digits) |
-| Archive | `version`, `outcome` (`deleted` or `recoveryOnly`), `record` (complete context record), `mutation` (guard evidence) |
+| Registry | `version` (2), `identities`, `contexts` |
+| Used identity | `id` |
+| Context record | `name`, `id`, `environmentDirectory`, `revision`, `mode`, `secretStoreType`, `directoryDevice`, `directoryInode` |
+| Reservation | `version` (2), `id`, `name` |
+| Input manifest | `version` (2), `id`, `revision`, `inputDirectory`, `environmentDirectory`, `files` |
+| Manifest file | `path`, `category` (`yaml` or `marker`), `size`, `sha256` |
+| User selection | `version` (1), `name`, `id` |
 
-All collections are present arrays, including empty ones. Every reservation,
-manifest and archive is versioned independently. Mutation evidence has its
-Reconciliation-owned version and is interpreted under the guard rules below.
+Collections are present arrays, including empty ones. Identities sort by ID,
+contexts by name and manifest entries by relative path. Empty input is encoded
+with empty revision and Environment-directory strings; no input is invented.
+Reservation, manifest and keyring formats are versioned independently. Mutation
+evidence follows the Reconciliation-owned closed record contract.
 
-The owner-only state root contains a canonical JSON registry and exclusively
-reserved context directories. The registry contains format version, current
-name, permanent identity mappings and active records (name, ID, Environment
-directory, revision and active/recovery-only mode). Names and identities are
-unique, arrays have canonical ordering, and every selected record must agree
-with its reservation and manifest. JSON is closed and rejects duplicates,
-nulls, coercion and unknown fields. All persisted records are untrusted.
+Readers hold a shared nonblocking lock on the verified, never-replaced root
+inode until all stored input or secret-session files have been consumed.
+Mutators hold its exclusive lock plus the context lease where applicable;
+contention fails safely. Revalidate target, identity and evidence under those
+locks. Read-only operations perform no repair, initialization or publication.
 
-Mutators exclusively lock the verified, never-replaced root directory inode.
-The lock is nonblocking and contention fails safely. Revalidate registry,
-identity, target and mutation evidence while holding the lock; retain it through
-confirmation and publication. A separate nonblocking context lease covers the
-Reconciliation guard and publication, preventing a lifecycle mutator from
-appearing after a stale safety check. Readers acquire no lock or lease and
-perform no writes, repairs, migrations or lifecycle-state reads.
+Init validates supplied configuration/input before effects, records its
+initializing name/ID, and creates the final named directory directly. It
+creates default state, empty revision storage and the configured local keyring
+through a transaction-scoped Secrets capability. Only after all required data
+is durable may it publish ready. Secret initialization never reacquires the
+store lock or needs an already-published input revision. No Secret values are
+automatically generated.
 
-Write new immutable revision files and manifests exclusively with mode `0600`
-inside `0700` directories, flush files and containing directories, then publish
-one complete registry by atomic replacement and parent-directory sync. That
-registry replacement is the visibility commit point. Init's name, identity,
-revision and current selection publish together; an update exposes either the
-complete old or complete new revision. A post-rename sync failure reports
-uncertain durability and never claims rollback. Repeating the command must
-first inspect the published registry.
+Interrupted initialization reserves its name and ID. Explicit init retry may
+resume only the exact attributable pending identity and configuration, using
+the keyring's authenticated initialization recovery. Unverifiable partial
+state refuses; never adopt an unrelated directory or silently allocate a new
+identity. A filesystem create and recording its identity are not one atomic
+operation, so not every interruption is automatically resumable.
 
-Root selection follows the existing precedence. The fallback account home is
-read from the local OS account database (`/etc/passwd`, at most 1 MiB) using the
-invoking UID, without consulting `HOME`, NSS, a process or the network. If the
-account has no unambiguous absolute local home, fail and request an explicit
-absolute `XDG_STATE_HOME`. Never fall back after selecting an unsafe root.
-All path traversal uses held no-follow directory/file handles. Inside the
-selected root, reject mount crossings, links, hardlinked files, special files,
-wrong owners, permissive modes and substitution. Every publication revalidates
-its held location. Runtime state remains outside every admitted input root and
-the selected Environment directory.
+Input update writes new immutable blobs/manifests exclusively, flushes files
+and containing directories, then atomically replaces and syncs the registry.
+The selected revision changes at that registry commit point. Readers observe
+a complete old or new input; interrupted unpublished revisions are never
+adopted by scanning. Small temporary files for atomic record replacement stay
+inside existing directories; they do not introduce a staging tree.
 
-Bounds are checked before allocation or traversal: registry 8 MiB and 4096
-identities/active names and 4096 retained context reservations, including
-unpublished/orphan directories; manifest 4 MiB, with 32 MiB total referenced
-manifest bytes per registry; path 4096 bytes; mutation or archive record 64 KiB; at most
-4096 revisions and 4096 archive records per identity. Input limits additionally
-bound manifest file counts and retained bytes. Exceeding a limit refuses the
-operation; it never deletes old evidence to make room.
+All traversal uses held no-follow handles. Inside the root reject mount
+crossings, links, hardlinks, special files, wrong ownership/modes and path
+substitution. Every publication revalidates location. Supported local
+filesystems are ext4, XFS, Btrfs, tmpfs and overlayfs; Linux must provide
+`openat2`. Unsupported containment or durability primitives fail closed.
 
-Before registry publication, interruption leaves only unreferenced owned
-reservations/revisions; existing selection is unchanged. After publication,
-the complete selected revision remains readable. Missing initial registry in
-a nonempty root is corruption, not a new store. Supported local filesystem
-types are ext4, XFS, Btrfs, tmpfs and overlayfs; network and other filesystem
-types refuse. Linux must provide `openat2` (Linux 5.6 or later). Unsupported filesystem/kernel durability or containment
-primitives fail closed. Cleanup never recursively removes an unverified path
-or guesses which interrupted evidence is disposable.
+Bounds apply before allocation/traversal: registry 8 MiB and 4096 identities or
+names; manifest 4 MiB and 32 MiB aggregate referenced manifests; paths 4096
+bytes; mutation records 64 KiB; 4096 revisions per context. Input and Secrets
+limits additionally bound their trees. Missing registry in a nonempty root is
+corruption. Bounds never authorize evidence deletion to make room.
 
-## Mutation evidence and archival
+## Permanent deletion
 
-The [Reconciliation mutation guard](state-reconciliation.md#context-mutation-evidence)
-owns operation/ownership evidence and permitted dispositions. Workspace holds
-its lease through the guard, confirmation and publication. Unknown entries in
-the context directory refuse mutation; its version-1 layout permits only the
-reservation, mutation record, revisions, archives and optional
-[Secrets subtree](secrets.md#local-keyring-v1). Input inspection ignores
-lifecycle entries and never opens them.
+The [Reconciliation guard](state-reconciliation.md#context-mutation-evidence)
+owns positive disposal proof. Under the root lock and context lease, refuse
+live resources, incomplete operations, retained ownership, unknown/corrupt
+evidence, or any required recovery material. There is no abandonment bypass,
+recovery-only mode, archival or remote resource effect.
 
-Final deletion first durably archives the context record and its immutable
-revision references, then removes only its active registry entry. Published
-revisions, mutation evidence and permanent reservation remain available in the
-durable archive. Recovery-only archival likewise records the complete retained
-identity and revision before publishing the mode change. Neither form performs
-remote effects, deletes Secret bytes or discards recovery material. Retention
-and physical archive removal require a separately defined recovery workflow.
+After proof and ordinary confirmation, durably mark the exact context deleting
+before removing any file. Remove only verified objects through bounded held
+handles; preserve identifying state until the remaining children are removed.
+Permanently remove imported revisions, keyring and all other disposable local
+content, then the directory. Sync its parent before removing the active
+registry entry. The name stays reserved until completion.
+
+An explicit delete retry resumes the recorded identity, accepting verified
+missing children as completed removal and refusing replacement or unknown
+objects. A partially deleted context is never reactivated or reported rolled
+back. Recovery guidance names `context delete --name <name> --purge`.
 
 ## Command results and confirmation
 
-Context commands are text-only. Details contain name, durable identity, mode
-and current marker; list is sorted by name. `current --short` emits only the
-name and LF. Init/update print compilation counts and copied file count (YAML
-candidates plus markers) on stdout. Admission warnings print once on stderr.
-No private store paths, payloads or digests appear in presentation.
+Context commands are text-only. Details include name, ID, initialization and
+input readiness, and the invoking user's current marker. List sorts by name;
+`current --short` emits only the name and LF. Input admission reports counts
+and copied files; default creation does not invent compilation counts.
+Warnings appear once on stderr. No private paths, payloads or digests appear.
 
-Fresh init and use need no confirmation. Recreation requires explicit `--yes`.
-Update and deletion require ordinary confirmation unless `--yes` was supplied.
-The prompt follows admission, target resolution and independent safeguards,
-while mutation locks remain held. A noninteractive input, declined answer,
-cancellation, read/write failure or unsafe answer refuses publication. Only
-`y` or `yes` (case-insensitive, surrounding whitespace ignored) accepts; one
-answer of at most 64 bytes including LF is read, without read-ahead. Confirmation
-grants no additional safety authority.
+Fresh init and use need no confirmation. Init refuses an already-ready name
+and directs the user to update. Input update and deletion require ordinary
+confirmation unless `--yes`; equivalent configuration-only update does not.
+The prompt follows admission and safeguards while locks remain held. Only
+`y` or `yes`, case-insensitive with surrounding whitespace ignored, accepts.
+Read one answer of at most 64 bytes including LF without read-ahead. Decline,
+noninteractive input, cancellation or I/O failure refuses publication.
 
-Context-backed validate keeps the explicit-input validation report contract.
-Effective text is canonical YAML with a final LF and empty stderr. Effective
-JSON uses `result: {counts, effectiveState}`, where `effectiveState` is the
-canonical ordered array of complete objects; successful diagnostics and logs
-are empty. Failures have null result and retain typed diagnostics.
+Context-backed validate/render and declaration-dependent secret commands
+reject a missing input revision with `context update --name <name>
+--input-dir <dir>` guidance. Encryption init/status/rotate do not require input.
+Effective output and compilation diagnostics retain their existing contracts.

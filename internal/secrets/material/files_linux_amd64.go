@@ -39,6 +39,7 @@ type secureFiles struct {
 	root        *os.File
 	directories map[string]heldDirectory
 	failureCode string
+	ownerUID    uint32
 }
 
 func (s *Service) readFileParts(ctx context.Context, requests []fileRequest, origin string, relativeToOrigin bool) (map[secrets.Part][]byte, error) {
@@ -51,6 +52,17 @@ func (s *Service) readFileParts(ctx context.Context, requests []fileRequest, ori
 	code := "input"
 	if relativeToOrigin {
 		code = "source"
+	}
+	identity := FileIdentity{UID: os.Getuid()}
+	if s.operator != nil {
+		var err error
+		identity, err = s.operator.FileIdentity(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if identity.UID < 0 || !canonicalAbsolute(identity.Home) {
+			return nil, failure(code, "invoking account identity is invalid", "")
+		}
 	}
 	for _, request := range requests {
 		if _, valid := request.Encoding.maximumBytes(); !valid {
@@ -76,7 +88,7 @@ func (s *Service) readFileParts(ctx context.Context, requests []fileRequest, ori
 	resolved := make([]string, len(requests))
 	var err error
 	for index, request := range requests {
-		resolved[index], err = resolveSecretPath(ctx, base, request.Path, code)
+		resolved[index], err = resolveSecretPathFor(ctx, base, request.Path, code, identity.Home)
 		if err != nil {
 			return nil, err
 		}
@@ -87,6 +99,7 @@ func (s *Service) readFileParts(ctx context.Context, requests []fileRequest, ori
 		return nil, err
 	}
 	defer reader.close()
+	reader.ownerUID = uint32(identity.UID)
 
 	held := make([]heldPart, 0, len(requests))
 	defer func() {
@@ -161,6 +174,10 @@ func fileBase(ctx context.Context, origin string, relativeToOrigin bool) (string
 }
 
 func resolveSecretPath(ctx context.Context, base, authored, code string) (string, error) {
+	return resolveSecretPathFor(ctx, base, authored, code, "")
+}
+
+func resolveSecretPathFor(ctx context.Context, base, authored, code, home string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -169,9 +186,12 @@ func resolveSecretPath(ctx context.Context, base, authored, code string) (string
 	}
 	path := authored
 	if authored == "~" || strings.HasPrefix(authored, "~/") {
-		home, err := accountHome(ctx, code)
-		if err != nil {
-			return "", err
+		if home == "" {
+			var err error
+			home, err = accountHome(ctx, code)
+			if err != nil {
+				return "", err
+			}
 		}
 		if authored == "~" {
 			path = home
@@ -249,7 +269,7 @@ func newSecureFiles(ctx context.Context, code string) (*secureFiles, error) {
 	}
 	return &secureFiles{
 		ctx: ctx, root: os.NewFile(uintptr(fd), "/"),
-		directories: make(map[string]heldDirectory), failureCode: code,
+		directories: make(map[string]heldDirectory), failureCode: code, ownerUID: uint32(os.Getuid()),
 	}, nil
 }
 
@@ -279,7 +299,7 @@ func (s *secureFiles) openPart(request fileRequest, path string) (heldPart, erro
 				}
 				return heldPart{}, failure(s.failureCode, "secret file could not be opened safely", request.Path)
 			}
-			if !safeOperatorFile(stat) {
+			if !safeOperatorFileFor(stat, s.ownerUID) {
 				file.Close()
 				return heldPart{}, failure(s.failureCode, "secret file type, owner, links, or permissions are unsafe", request.Path)
 			}
@@ -392,8 +412,12 @@ func openSecretChild(parent *os.File, name string, flags int) (*os.File, syscall
 }
 
 func safeOperatorFile(stat syscall.Stat_t) bool {
+	return safeOperatorFileFor(stat, uint32(os.Getuid()))
+}
+
+func safeOperatorFileFor(stat syscall.Stat_t, uid uint32) bool {
 	permissions := stat.Mode & 07777
-	return stat.Mode&syscall.S_IFMT == syscall.S_IFREG && stat.Uid == uint32(os.Getuid()) &&
+	return stat.Mode&syscall.S_IFMT == syscall.S_IFREG && stat.Uid == uid &&
 		stat.Nlink == 1 && (permissions == 0400 || permissions == 0600) && stat.Size >= 0
 }
 

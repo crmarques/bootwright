@@ -23,7 +23,7 @@ func (*Store) View(ctx context.Context) (contexts.Registry, error) {
 	return contexts.Registry{}, unsupported(ctx)
 }
 
-func (*Store) ReadInputs(ctx context.Context, _ string) (desiredstate.Sources, error) {
+func (*Store) ReadInputs(ctx context.Context, _, _ string) (desiredstate.Sources, error) {
 	return desiredstate.Sources{}, unsupported(ctx)
 }
 

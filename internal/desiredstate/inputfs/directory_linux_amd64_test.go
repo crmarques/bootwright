@@ -12,6 +12,26 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate"
 )
 
+func TestReadFileRejectsDirectoriesAndBoundsWithoutDiscovery(t *testing.T) {
+	root := t.TempDir()
+	path := writeFixture(t, root, "context.yaml", "context bytes\n")
+	if err := syscall.Mkfifo(filepath.Join(root, "unopened.yaml"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := (Reader{}).ReadFile(context.Background(), path, 14)
+	if err != nil || string(got) != "context bytes\n" {
+		t.Fatal("single file acquisition failed", string(got), err)
+	}
+	for _, source := range []string{root, filepath.Join(root, "unopened.yaml")} {
+		if _, err := (Reader{}).ReadFile(context.Background(), source, 64); err == nil {
+			t.Fatal("non-file source accepted", source)
+		}
+	}
+	if _, err := (Reader{}).ReadFile(context.Background(), path, 4); err == nil {
+		t.Fatal("single-file byte bound ignored")
+	}
+}
+
 func TestReadDirectorySharesBoundedDiscoveryAndPayloadExclusions(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "nested/environment.yaml", "descriptor")

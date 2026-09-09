@@ -39,7 +39,7 @@ func TestSecretPipeInputDrainsThenReturnsEOF(t *testing.T) {
 }
 
 func TestComposedSecretStdinIsLazyAndExact(t *testing.T) {
-	_, repository, input, _ := contextFixture(t)
+	_, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("opaque", "opaque", ""))
 	reader, writer, err := os.Pipe()
 	if err != nil {
@@ -55,9 +55,9 @@ func TestComposedSecretStdinIsLazyAndExact(t *testing.T) {
 	services := wireContextServices(repository, repository, nil, secretInputFunc(func(ctx context.Context, buffer []byte) (int, error) {
 		reads++
 		return readInputFD(ctx, int(reader.Fd()), buffer)
-	}))
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "-f", input)
-	contextRun(t, services, 0, "secret", "encryption", "init", "--type", "local-keyring")
+	}), testContextWiring(t, root))
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "secret", "encryption", "init")
 	stdout, stderr := contextRun(t, services, 0, "secret", "set", "--name", "opaque", "--value-stdin")
 	if reads == 0 || strings.Contains(stdout+stderr, "synthetic-stdin-canary") {
 		t.Fatal("stdin was not acquired confidentially")

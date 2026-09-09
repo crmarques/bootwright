@@ -12,10 +12,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/secrets/custody"
-	"github.com/crmarques/bootwright/internal/secrets/encryption"
 	"github.com/crmarques/bootwright/internal/secrets/localstore"
-	secretmaterial "github.com/crmarques/bootwright/internal/secrets/material"
 	"github.com/crmarques/bootwright/internal/secrets/storage"
 	"github.com/crmarques/bootwright/internal/workspace/contextfs"
 )
@@ -336,14 +333,15 @@ func (s *memoryState) clear() {
 	}
 }
 
-func withMemoryStore(t *testing.T, services cli.Services, repository *contextfs.Store) cli.Services {
+func withMemoryStore(t *testing.T, repository *contextfs.Store, root string) cli.Services {
 	t.Helper()
 	token := &memoryToken{marker: 1}
 	implementation := &memoryImplementation{token: token, states: map[string]*memoryState{}}
 	source := &memorySource{token: token}
-	access := storage.NewAccess(repository, storage.NewCatalog(localstore.New(), implementation), source)
-	services.Secrets = custody.New(access, wireCompiler(), secretmaterial.New(nil), nil)
-	services.Encryption = encryption.New(access, nil)
+	options := testContextWiring(t, root)
+	options.Resolver = storage.NewCatalog(localstore.New(), implementation)
+	options.SessionMaterial = source
+	services := wireContextServices(repository, repository, nil, nil, options)
 	t.Cleanup(func() {
 		if len(source.capabilities) == 0 {
 			t.Error("selected implementation never acquired its session capability")

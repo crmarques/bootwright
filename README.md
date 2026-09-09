@@ -24,11 +24,22 @@ generation, validation, explicit disclosure and key rotation. Other rendering
 and lifecycle operations retain `cli.not-implemented` with exit status `1`
 before application effects. Invalid usage exits `2`.
 
-For a context containing Secret declarations, initialize its selected store
-explicitly before setting or generating material:
+Create a context with its default encrypted keyring, then import desired state:
 
 ```sh
-./bin/bootwright secret encryption init --type local-keyring
+./bin/bootwright context init --name example
+./bin/bootwright context update --name example --input-dir examples/multidc-platform --yes
+./bin/bootwright context current --short
+```
+
+Contexts live in root-only `/var/lib/bootwright/contexts/<name>`. Bootwright
+requests sudo authorization when needed; current selection belongs to the
+invoking user in `~/.bootwright/context`. Optional `--file context.yaml` supplies
+Context setup configuration, independently of `--input-dir`.
+
+For a context containing Secret declarations, set or generate material:
+
+```sh
 ./bin/bootwright secret generate
 ./bin/bootwright secret check --output json
 ```

@@ -45,12 +45,12 @@ process or network access. “Mutate” permits only the named, planned effects.
 
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
-| `bootwright context init` | required `--name <name>` and exactly one `-f, --file <dir>`; `--yes` false | selected context and copied input summary | local context creation; safe recreation only with `--yes` |
-| `bootwright context update` | required `--name <name>` and exactly one `-f, --file <dir>`; `--yes` false | replaced input summary | local atomic input replacement; never lifecycle reconciliation |
+| `bootwright context init` | required `--name <name>`; optional `-f, --file <context.yaml>` and `--input-dir <dir>` | initialized context and user selection; optional imported-input summary | local context and keyring creation |
+| `bootwright context update` | required `--name <name>`; at least one of `-f, --file <context.yaml>` or `--input-dir <dir>`; `--yes` false | unchanged configuration or imported-input summary | local atomic input replacement; never lifecycle reconciliation |
 | `bootwright context use` | required `--name <name>` | selected-current-context summary | local current-context update |
 | `bootwright context list` | none | contexts in canonical name order | read local state |
 | `bootwright context current` | `--short` false | current context details, or only its name with `--short` | read local state |
-| `bootwright context delete` | required `--name <name>` and `--purge`; `--yes` false; `--abandon-resources` false | final deletion or recovery-only archival summary | local cleanup under the [context rules](../cli.md#context-and-setup-behavior); never resource mutation |
+| `bootwright context delete` | required `--name <name>` and `--purge`; `--yes` false | permanent local deletion summary | guarded removal under the [context rules](../cli.md#context-and-setup-behavior); never resource mutation |
 | `bootwright add-ons list` | `--output text\|json` default `text` | built-in catalog and machine-local registrations | read embedded and local catalog state |
 | `bootwright add-ons add` | required `--name <name>[:<version>]`; `--version <version>` default catalog default; `--yes` false | registered immutable catalog release | local add-on registration |
 | `bootwright add-ons delete` | required `--name <name>[:<version>]`; `--yes` false | removed matching registration | local add-on registration deletion |
@@ -60,7 +60,7 @@ process or network access. “Mutate” permits only the named, planned effects.
 | `bootwright secret list` | `--output text\|json` default `text` | context secret identities, types, parts, and availability | read confidential-store metadata |
 | `bootwright secret show` | required `--name` and `--part value\|username\|password\|certificate\|private-key\|public-key` | exact selected sensitive bytes | read and reveal current declared part |
 | `bootwright secret delete` | required `--name <name>`; `--yes` false | removed active mapping or unchanged identity | local logical deletion, preserving bound versions |
-| `bootwright secret encryption init` | required `--type <safe-identifier>`; currently `local-keyring` | selected implementation and active key | idempotent selected implementation initialization |
+| `bootwright secret encryption init` | none | configured implementation and active key | idempotent initialization using Context configuration |
 | `bootwright secret encryption status` | `--output text\|json` default `text` | keyring and encrypted-store status | read confidential metadata |
 | `bootwright secret encryption rotate` | `--yes` false | new active key identity and re-encryption summary | atomic local key rotation and re-encryption |
 | `bootwright media add` | required `--name <filename.iso>` and exactly one of `--from-file <path>` or `--from-url <http-or-https-url>`; `--sha256 <digest>`; `--yes` false | stored media identity, size, and verified digest | local copy or bounded download and atomic publication |
@@ -206,7 +206,7 @@ YAML output mode, global output flag, or `--format` alias. `apply`, `destroy`,
 `--yes` suppresses only the named command's ordinary confirmation after target
 selection and every independent safeguard and authorization succeeds. It may
 confirm a safe command-owned overwrite, recreation, or replacement, but it
-does not itself select a target or authorize data loss, recovery-only archival,
+does not itself select a target or authorize data loss,
 a changed or unknown identity, a failed probe, or another named risk. If a
 prompt remains necessary, the command fails instead when standard input is
 non-interactive, JSON output is selected, or a safe answer cannot be read.
@@ -214,8 +214,7 @@ non-interactive, JSON output is selected, or a safe answer cannot be read.
 `context delete` requires `--purge` to resolve to `true`; omission or
 `--purge=false` fails without changing state. The flag acknowledges deletion of
 proven-disposable local context data, while `--yes` independently controls its
-ordinary confirmation and `--abandon-resources` selects recovery-only archival
-when final deletion is unsafe.
+ordinary confirmation. Protected or unknown state refuses deletion.
 
 `--authorize` accepts only `data-loss`, and only on `apply` and `destroy`.
 Unknown, empty, duplicate, or inapplicable tokens are usage errors; `all` is not

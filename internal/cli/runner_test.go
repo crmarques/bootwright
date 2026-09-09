@@ -27,7 +27,7 @@ func TestRunnerDispatchesEveryApplicationCommand(t *testing.T) {
 	cases := []string{
 		"context init --name demo -f input", "context update --name demo -f input", "context use --name demo", "context list", "context current", "context delete --name demo --purge",
 		"add-ons list", "add-ons add --name demo", "add-ons delete --name demo",
-		"secret set --name demo --value-file secret.bin", "secret generate", "secret check", "secret list", "secret show --name demo --part value", "secret delete --name demo", "secret encryption init --type local-keyring", "secret encryption status", "secret encryption rotate",
+		"secret set --name demo --value-file secret.bin", "secret generate", "secret check", "secret list", "secret show --name demo --part value", "secret delete --name demo", "secret encryption init", "secret encryption status", "secret encryption rotate",
 		"media add --name demo.iso --from-file image.iso", "media list", "media delete --name demo.iso", "validate", "preflight bastion", "preflight infra", "preflight clusters", "preflight container-cluster", "preflight storage-cluster", "preflight add-ons", "preflight all", "plan", "status", "render --output-dir artifacts --sensitive", "render effective", "render installer", "render storage", "apply", "destroy",
 		"machine list", "machine rsh --name demo", "machine exec --name demo echo", "machine trust", "bastion setup", "cluster list", "cluster info", "cluster rsh --name demo", "cluster exec --name demo echo", "cluster oc --name demo get", "cluster kubectl --name demo get", "cluster kubeconfig --name demo",
 	}

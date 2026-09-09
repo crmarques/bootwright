@@ -105,23 +105,18 @@ func TestCompletionProtocolIgnoresAmbientConfiguration(t *testing.T) {
 	}
 }
 
-func TestSecretEncryptionTypeCompletionUsesOnlyInjectedCatalog(t *testing.T) {
-	record := &dispatchRecord{types: []string{"z-store", "local-keyring", "../invalid", "UPPER", "local-keyring"}}
+func TestSecretEncryptionCompletionUsesConfiguredStore(t *testing.T) {
+	record := &dispatchRecord{types: []string{"local-keyring"}}
 	var stdout, stderr bytes.Buffer
 	runner := New(Config{Out: &stdout, ErrOut: &stderr, Services: dispatchSpies(record)})
-	if record.typeCalls != 0 {
-		t.Fatal("runner construction queried the type catalog")
+	code := runner.Run(context.Background(), []string{completionRequest, "secret", "encryption", "init", "--t"})
+	if code != 0 || strings.Contains(stdout.String(), "--type") || stderr.Len() != 0 || record.calls != 0 || record.typeCalls != 0 {
+		t.Fatalf("removed selection surfaced: %d %q %q %#v", code, stdout.String(), stderr.String(), record)
 	}
-	code := runner.Run(context.Background(), []string{completionRequest, "secret", "encryption", "init", "--type", ""})
-	if code != 0 || stdout.String() != "local-keyring\nz-store\n:36\n" || stderr.Len() != 0 || record.calls != 0 || record.typeCalls != 1 {
-		t.Fatalf("completion code=%d stdout=%q stderr=%q calls=%d typeCalls=%d", code, stdout.String(), stderr.String(), record.calls, record.typeCalls)
-	}
-
-	record.typeCalls = 0
 	stdout.Reset()
-	code = runner.Run(context.Background(), []string{"secret", "encryption", "init", "--type", "local-keyring", "--help"})
-	if code != 0 || stdout.Len() == 0 || record.calls != 0 || record.typeCalls != 0 {
-		t.Fatalf("help accessed catalog: code=%d calls=%d typeCalls=%d", code, record.calls, record.typeCalls)
+	code = runner.Run(context.Background(), []string{"secret", "encryption", "init", "--help"})
+	if code != 0 || strings.Contains(stdout.String(), "--type") || record.calls != 0 || record.typeCalls != 0 {
+		t.Fatal("help queried implementation selection")
 	}
 }
 

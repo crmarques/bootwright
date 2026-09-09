@@ -18,3 +18,8 @@ func (Reader) Read(ctx context.Context, _ []string) (desiredstate.Sources, error
 func (r Reader) ReadDirectory(ctx context.Context, path string) (desiredstate.Sources, error) {
 	return r.Read(ctx, []string{path})
 }
+
+func (r Reader) ReadFile(ctx context.Context, path string, _ int) ([]byte, error) {
+	_, err := r.Read(ctx, []string{path})
+	return nil, err
+}

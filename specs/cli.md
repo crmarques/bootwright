@@ -161,9 +161,10 @@ plan, or continuation.
 `validate -f/--file` accepts a YAML file or directory and may be repeated. The
 set is compiled as one ordered desired-state input universe under [the API
 contract](api.md); supplying `-f` makes validation context-free, while omission
-uses the selected context input. `context init` and `context update` use the
-same spelling but require exactly one source directory and copy its accepted
-contents into the context.
+uses the selected context input. For `context init` and `context update`, `-f/--file` instead accepts one
+standalone Context configuration file; `--input-dir` accepts one desired-state
+directory for immutable import. Both are optional at init. Update requires
+at least one. Omission never discovers the working directory.
 
 This document owns public input acquisition and flag cardinality. Each `-f`
 occurrence is one path; commas are filename characters. Cleaned path strings
@@ -190,16 +191,41 @@ every other command.
 Standard input is read only for an ordinary confirmation, an explicitly
 requested sudo-password prompt, `secret set --password-stdin`, or
 `secret set --value-stdin`. The [Secrets contract](secrets.md) requires yes
-before stdin-backed replacement. No command
-reads an ambient configuration file.
+before stdin-backed replacement. No command reads an ambient desired-state configuration file. The invoking
+user's explicit current-context selection is defined by [Contexts](contexts.md).
 
-State-root selection and its sole environment input are defined by
+The fixed state root is defined by
 [state reconciliation](state-reconciliation.md#durable-identities-and-private-paths).
 
-Raw arguments are classified before privilege escalation. Help, completion,
-context-free read-only work, and malformed invocations never trigger a
-privilege prompt. Only a fully resolved command that needs root-owned state may
-re-execute through the qualified privilege boundary.
+### Local privilege and user identity
+
+Classify and validate arguments before privilege effects. Help, completion,
+version, invalid invocations, unavailable commands and explicit-input validate
+never elevate. Available commands requiring context state run as root; a
+non-root invocation keeps an unprivileged supervisor and launches one exact
+Bootwright child as UID 0 through the qualified absolute sudo executable. Pin
+reexecution to the supervisor's verified executable through procfs so a pathname
+replacement during authentication cannot substitute code. Sudo policies that
+refuse that executable path fail closed. Sudo owns
+terminal password handling; Bootwright never captures the password. JSON or
+noninteractive invocation uses noninteractive sudo and fails without cached or
+passwordless authorization. Preserve argv, stdin payloads, outputs and status.
+
+The supervisor owns bounded `sudo -n -v` refresh subprocesses during that child.
+Keep the same parent and terminal identity. An unambiguous positive effective
+timeout refreshes at half its duration, including fractional minutes. Zero and
+negative timeouts need no expiry refresh. Unknown policy uses a 30-second
+best-effort interval; never assume a five-minute timeout. Refresh failure or
+timeout warns once and stops refresh without terminating the elevated command.
+Completion/cancellation stops and reaps every refresh process. Never leave a
+daemon or invalidate the user's wider sudo cache.
+
+Capture the real invoking account before elevation. Validate sudo-provided
+UID/GID/name against the local account database on manual sudo; direct root
+uses root. Ignore spoofed sudo metadata on non-root launch. Resolve account
+homes without `HOME`. Access selection files with the invoking user's actual
+credentials; retain invoking-user home/ownership semantics for authored secret
+file references. Root identity governs only root-owned runtime storage.
 
 For a usage failure, JSON mode is established only after an exact
 JSON-capable command is resolved and its final scalar `--output` occurrence
@@ -216,29 +242,23 @@ A context is a user-facing name for one self-contained lifecycle unit and its
 workspace-owned durable identity. Context names are lowercase DNS labels.
 [Contexts](contexts.md) defines storage, identity-preserving replacement,
 selection, ordinary confirmation and successful context command results.
-`context init` validates its source before exclusive, owner-only publication,
-then makes the new context current. Reinitialization with `--yes` is allowed
-only when no running, failed, unknown, applied, owned, or recovery-relevant
-state would be discarded.
+`context init --name <name>` creates default Context configuration and an
+initialized local keyring without requiring desired state. Optional `--file`
+reads Context configuration; `--input-dir` imports a complete desired-state
+directory. Publish readiness only after all required context files are durable,
+then update the invoking user's selection. Existing ready names require update.
 
-`context update` validates a complete replacement before atomically publishing
-it. It preserves secret material, generated artifacts, ownership, operation
-history, and other context-owned state, but it refuses while an apply or destroy
-is running, failed, or unknown and whenever the replacement would turn exact
-continuation into reconciliation.
+`context update` preserves omitted configuration or input. Equivalent
+configuration-only updates make no writes and need no confirmation. Backend
+changes refuse. Input replacement preserves identity, secrets and runtime
+state, and refuses when it would invalidate exact continuation.
 
-Normal `context delete --purge` requires positive proof that no live resource
-or incomplete lifecycle depends on the context and that every required archive
-and ownership release is durable. When live, owned, failed, or unknown state
-exists, `--abandon-resources` requests recovery-only archival instead of final
-deletion. It never releases ownership or deletes material needed for status,
-exact continuation, or full destroy. The same context name remains selectable
-for those actions; update, fresh apply, access, adoption, and reuse remain
-forbidden. It refuses while a live mutator holds the context, and final purge
-still requires positive absence and durable ownership release.
-The [Secrets contract](secrets.md#immutable-binding-and-contexts) permits
-check/list/show/encryption status/rotate in recovery-only mode while
-init/set/generate/delete remain forbidden.
+`context delete --purge` permanently removes the exact disposable context,
+including secrets and imported revisions. Require positive proof that no live
+resource, incomplete operation, ownership or necessary recovery state depends
+on it. Protected or unknown evidence refuses; there is no abandonment flag or
+archive. Pending local creation/deletion and explicit retry follow
+[Contexts](contexts.md#storage-locking-and-publication).
 
 Media, secret, add-on, and context writes use verified roots, safe
 single path segments, exclusive creation, restrictive permissions, bounded

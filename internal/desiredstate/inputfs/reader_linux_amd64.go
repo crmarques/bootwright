@@ -43,6 +43,48 @@ func (Reader) ReadDirectory(ctx context.Context, path string) (desiredstate.Sour
 	return read(ctx, []string{path}, true)
 }
 
+// ReadFile acquires a single bounded regular input through the same verified
+// handles as graph discovery, without scanning directories or companion files.
+func (Reader) ReadFile(ctx context.Context, path string, maximum int) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if path == "" || maximum < 1 || maximum > desiredstate.MaxFileBytes {
+		return nil, failure("input.read", "single-file input or byte limit is invalid", path)
+	}
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return nil, failure("input.read", "input file path cannot be resolved", path)
+	}
+	scan, err := newDiscovery(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer scan.root.Close()
+	file, stat, err := scan.openPath(absolute, pathHandle)
+	if err != nil {
+		return nil, err
+	}
+	file.Close()
+	if stat.Mode&syscall.S_IFMT != syscall.S_IFREG {
+		return nil, failure("input.read", "input source must be a regular file without symbolic links", path)
+	}
+	if err := scan.candidate(absolute, stat, false); err != nil {
+		return nil, err
+	}
+	files, err := scan.readFiles(scan.files, maximum, maximum, "input file bytes", "input file bytes")
+	if err != nil {
+		return nil, err
+	}
+	if err := scan.verifyDirectories(); err != nil {
+		return nil, err
+	}
+	if len(files) != 1 {
+		return nil, failure("input.read", "single-file input was not acquired", path)
+	}
+	return files[0].Bytes(), nil
+}
+
 func read(ctx context.Context, paths []string, directoryOnly bool) (desiredstate.Sources, error) {
 	if err := ctx.Err(); err != nil {
 		return desiredstate.Sources{}, err

@@ -39,12 +39,12 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		path string
 		want any
 	}{
-		{"context init", contexts.InitRequest{Name: "demo", InputDirectory: "inputs", SkipConfirmation: true}},
-		{"context update", contexts.UpdateRequest{Name: "demo", InputDirectory: "inputs", SkipConfirmation: true}},
+		{"context init", contexts.InitRequest{Name: "demo", ConfigurationFile: "inputs", InputDirectory: "inputs"}},
+		{"context update", contexts.UpdateRequest{Name: "demo", ConfigurationFile: "inputs", InputDirectory: "inputs", SkipConfirmation: true}},
 		{"context use", contexts.UseRequest{Name: "demo"}},
 		{"context list", contexts.ListRequest{}},
 		{"context current", contexts.CurrentRequest{Short: true}},
-		{"context delete", contexts.DeleteRequest{Name: "demo", Purge: true, SkipConfirmation: true, AbandonResources: true}},
+		{"context delete", contexts.DeleteRequest{Name: "demo", Purge: true, SkipConfirmation: true}},
 		{"add-ons list", addoncatalog.ListRequest{}},
 		{"add-ons add", addoncatalog.AddRequest{Name: "demo", Version: "", SkipConfirmation: true}},
 		{"add-ons delete", addoncatalog.DeleteRequest{Name: "demo", Version: "", SkipConfirmation: true}},
@@ -54,7 +54,7 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"secret list", custody.ListRequest{ContextName: "example"}},
 		{"secret show", custody.ShowRequest{ContextName: "example", Name: "demo", Part: secrets.PrivateKeyPart}},
 		{"secret delete", custody.DeleteRequest{ContextName: "example", Name: "demo", SkipConfirmation: true}},
-		{"secret encryption init", encryption.EncryptionInitRequest{ContextName: "example", Type: "local-keyring"}},
+		{"secret encryption init", encryption.EncryptionInitRequest{ContextName: "example"}},
 		{"secret encryption status", encryption.EncryptionStatusRequest{ContextName: "example"}},
 		{"secret encryption rotate", encryption.EncryptionRotateRequest{ContextName: "example", SkipConfirmation: true}},
 		{"media add", media.AddMediaRequest{ContextName: "example", Name: "demo", SourceFile: "", SourceURL: "https://example.invalid/image.iso", SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", SkipConfirmation: true}},

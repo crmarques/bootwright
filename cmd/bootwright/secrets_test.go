@@ -16,6 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
 func secretDocument(name, kind, source string) string {
@@ -58,7 +59,7 @@ func TestCompleteSecretCommandAndBindingJourney(t *testing.T) {
 func secretCommandAndBindingJourney(t *testing.T, implementation string) {
 	services, repository, input, root := contextFixture(t)
 	if implementation == "session-test" {
-		services = withMemoryStore(t, services, repository)
+		services = withMemoryStore(t, repository, root)
 	}
 	declarations := []string{
 		secretDocument("opaque", "opaque", ""), secretDocument("password", "usernamePassword", ""), secretDocument("docker", "dockerConfigJson", ""),
@@ -73,9 +74,12 @@ func secretCommandAndBindingJourney(t *testing.T, implementation string) {
 		t.Fatal(err)
 	}
 	file := addSecretInput(t, filepath.Join(input, "secrets"), "token", "synthetic-file-canary\n")
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "-f", input)
+	configuration := contexts.DefaultConfiguration("alpha")
+	configuration.SecretStore.Type = implementation
+	configPath := addSecretInput(t, t.TempDir(), "context.yaml", string(configuration.Canonical()))
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--file", configPath, "--input-dir", input)
 	status := secretResult(t, services, 0, "secret", "encryption", "status")
-	if string(status["initialized"]) != "false" {
+	if string(status["initialized"]) != "true" {
 		t.Fatal(status)
 	}
 	before := stateFingerprint(t, root)
@@ -87,9 +91,9 @@ func secretCommandAndBindingJourney(t *testing.T, implementation string) {
 	if !sameFingerprints(before, stateFingerprint(t, root)) {
 		t.Fatal("read-only secret inspection wrote state")
 	}
-	contextRun(t, services, 0, "secret", "encryption", "init", "--type", implementation)
-	contextRun(t, services, 0, "secret", "encryption", "init", "--type", implementation)
-	contextRun(t, services, 1, "secret", "encryption", "init", "--type", "unavailable")
+	contextRun(t, services, 0, "secret", "encryption", "init")
+	contextRun(t, services, 0, "secret", "encryption", "init")
+	contextRun(t, services, 2, "secret", "encryption", "init", "--type", "unavailable")
 	opaque := addSecretInput(t, t.TempDir(), "value", "synthetic-opaque-canary\x00\n")
 	password := addSecretInput(t, t.TempDir(), "password", "synthetic-password-canary\n")
 	docker := addSecretInput(t, t.TempDir(), "docker.json", `{"auths":{"registry.example.test":{"auth":"c3ludGhldGljOmNhbmFyeQ=="}}}`)
@@ -166,7 +170,7 @@ func secretCommandAndBindingJourney(t *testing.T, implementation string) {
 	// New desired state may orphan/remove names; an exact continuation still
 	// uses the whole versions pinned before replacement and live-file removal.
 	addSecretInput(t, input, "secret.yaml", strings.Join(declarations[1:], "\n---\n"))
-	contextRun(t, services, 0, "context", "update", "--name", "alpha", "-f", input, "--yes")
+	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
 	contextRun(t, services, 0, "secret", "encryption", "rotate", "--yes")
 	reopened, err := bindings.Reopen(context.Background(), request)
 	if err != nil {
@@ -211,7 +215,7 @@ func secretCommandAndBindingJourney(t *testing.T, implementation string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	secretRoot := filepath.Join(root, "contexts", registry.Contexts[0].ID, "secrets")
+	secretRoot := filepath.Join(root, "contexts", registry.Contexts[0].Name, "secrets")
 	if err := filepath.WalkDir(secretRoot, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -246,27 +250,29 @@ func sameFingerprints(a, b map[string]string) bool {
 	return true
 }
 
-func TestSecretContextReinitializationAndRecoveryMode(t *testing.T) {
+func TestSecretContextReplacementAndProtectedDeletion(t *testing.T) {
 	services, repository, input, root := contextFixture(t)
 	declaration := secretDocument("token", "token", "  source: {generated: {bytes: 32}}\n")
 	addSecretInput(t, input, "secret.yaml", declaration)
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "-f", input)
-	contextRun(t, services, 0, "secret", "encryption", "init", "--type", "local-keyring")
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "secret", "encryption", "init")
 	contextRun(t, services, 0, "secret", "generate")
 	initial, _ := contextRun(t, services, 0, "secret", "show", "--name", "token", "--part", "value")
-	contextRun(t, services, 0, "context", "update", "--name", "alpha", "-f", input, "--yes")
+	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
 	same, _ := contextRun(t, services, 0, "secret", "show", "--name", "token", "--part", "value")
 	if same != initial {
 		t.Fatal("unchanged declaration lost material")
 	}
 	contextRun(t, services, 0, "context", "delete", "--name", "alpha", "--purge", "--yes")
-	contextRun(t, services, 0, "context", "init", "--name", "renamed", "-f", input)
+	contextRun(t, services, 0, "context", "init", "--name", "renamed", "--input-dir", input)
+	contextRun(t, services, 1, "secret", "show", "--name", "token", "--part", "value")
+	contextRun(t, services, 0, "secret", "generate")
 	same, _ = contextRun(t, services, 0, "secret", "show", "--name", "token", "--part", "value")
-	if same != initial {
-		t.Fatal("same-ID recreation lost material")
+	if same == initial {
+		t.Fatal("new context reused deleted secret material")
 	}
 	addSecretInput(t, input, "secret.yaml", strings.ReplaceAll(declaration, "bytes: 32", "bytes: 48"))
-	contextRun(t, services, 0, "context", "update", "--name", "renamed", "-f", input, "--yes")
+	contextRun(t, services, 0, "context", "update", "--name", "renamed", "--input-dir", input, "--yes")
 	contextRun(t, services, 1, "secret", "show", "--name", "token", "--part", "value")
 	check := secretResult(t, services, 1, "secret", "check")
 	if !bytes.Contains(check["secrets"], []byte(`"stale"`)) {
@@ -277,18 +283,21 @@ func TestSecretContextReinitializationAndRecoveryMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mutation := filepath.Join(root, "contexts", registry.Contexts[0].ID, "mutation.json")
+	mutation := filepath.Join(root, "contexts", registry.Contexts[0].Name, "state", "mutation.json")
 	if err := os.WriteFile(mutation, []byte(`{"version":1,"operation":"failed","ownership":"retained"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	contextRun(t, services, 0, "context", "delete", "--name", "renamed", "--purge", "--abandon-resources", "--yes")
+	contextRun(t, services, 1, "context", "delete", "--name", "renamed", "--purge", "--yes")
 	secretResult(t, services, 0, "secret", "check")
 	secretResult(t, services, 0, "secret", "list")
 	secretResult(t, services, 0, "secret", "encryption", "status")
 	contextRun(t, services, 0, "secret", "show", "--name", "token", "--part", "value")
 	contextRun(t, services, 0, "secret", "encryption", "rotate", "--yes")
-	for _, args := range [][]string{{"secret", "encryption", "init", "--type", "local-keyring"}, {"secret", "generate"}, {"secret", "delete", "--name", "token", "--yes"}, {"secret", "set", "--name", "token", "--value-file", "unopened", "--yes"}} {
-		contextRun(t, services, 1, args...)
+	before := stateFingerprint(t, root)
+	contextRun(t, services, 1, "context", "update", "--name", "renamed", "--input-dir", input, "--yes")
+	contextRun(t, services, 1, "context", "delete", "--name", "renamed", "--purge", "--yes")
+	if !sameFingerprints(before, stateFingerprint(t, root)) {
+		t.Fatal("protected context refusal changed state")
 	}
 }
 
@@ -296,8 +305,8 @@ func TestSecretNameReuseCannotExposeAnotherContextIdentity(t *testing.T) {
 	services, repository, input, _ := contextFixture(t)
 	declaration := secretDocument("token", "token", "  source: {generated: {}}\n")
 	addSecretInput(t, input, "secret.yaml", declaration)
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "-f", input)
-	contextRun(t, services, 0, "secret", "encryption", "init", "--type", "local-keyring")
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "secret", "encryption", "init")
 	contextRun(t, services, 0, "secret", "generate")
 	before, err := repository.View(context.Background())
 	if err != nil {
@@ -307,14 +316,14 @@ func TestSecretNameReuseCannotExposeAnotherContextIdentity(t *testing.T) {
 	newInput := t.TempDir()
 	addSecretInput(t, newInput, "environment.yaml", syntheticEnvironment)
 	addSecretInput(t, newInput, "secret.yaml", declaration)
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "-f", newInput)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", newInput)
 	after, err := repository.View(context.Background())
 	if err != nil || len(after.Contexts) != 1 || before.Contexts[0].ID == after.Contexts[0].ID {
 		t.Fatal("context name reuse did not establish a new durable identity", err)
 	}
 	status := secretResult(t, services, 0, "secret", "encryption", "status")
-	if string(status["initialized"]) != "false" {
-		t.Fatal("new identity inherited another context's secret selection")
+	if string(status["initialized"]) != "true" {
+		t.Fatal("new identity did not receive its own initialized secret store")
 	}
 	out, _ := contextRun(t, services, 1, "secret", "show", "--name", "token", "--part", "value")
 	if out != "" {

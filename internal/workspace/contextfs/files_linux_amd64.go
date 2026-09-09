@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -48,15 +47,19 @@ func sameFile(a, b syscall.Stat_t) bool {
 	return sameIdentity(a, b) && a.Size == b.Size && a.Nlink == b.Nlink && a.Mtim == b.Mtim && a.Ctim == b.Ctim
 }
 
-func private(stat syscall.Stat_t, kind uint32) bool {
-	return stat.Mode&syscall.S_IFMT == kind && stat.Uid == uint32(os.Getuid()) && stat.Mode&0077 == 0 && stat.Mode&07000 == 0 && (kind != syscall.S_IFREG || stat.Nlink == 1)
+func private(stat syscall.Stat_t, kind, uid, gid uint32) bool {
+	mode := uint32(0600)
+	if kind == syscall.S_IFDIR {
+		mode = 0700
+	}
+	return stat.Mode&syscall.S_IFMT == kind && stat.Uid == uid && stat.Gid == gid && stat.Mode&07777 == mode && (kind != syscall.S_IFREG || stat.Nlink == 1)
 }
 
-func readableFile(stat syscall.Stat_t, immutable bool) bool {
+func readableFile(stat syscall.Stat_t, immutable bool, parent *directory) bool {
 	if !immutable && stat.Nlink == 0 {
 		stat.Nlink = 1
 	}
-	return private(stat, syscall.S_IFREG)
+	return private(stat, syscall.S_IFREG, parent.identity.Uid, parent.identity.Gid)
 }
 
 func openRelative(parent *directory, name string, flags int, mode uint32) (*os.File, error) {
@@ -86,7 +89,7 @@ func openDirectory(parent *directory, name string) (*directory, error) {
 		return nil, err
 	}
 	stat, err := statHandle(file)
-	if err != nil || !private(stat, syscall.S_IFDIR) || stat.Dev != parent.identity.Dev {
+	if err != nil || !private(stat, syscall.S_IFDIR, parent.identity.Uid, parent.identity.Gid) || stat.Dev != parent.identity.Dev {
 		file.Close()
 		return nil, state("state directory type, owner, permissions or device is unsafe")
 	}
@@ -95,7 +98,7 @@ func openDirectory(parent *directory, name string) (*directory, error) {
 
 func (d *directory) verify() error {
 	stat, err := statHandle(d.file)
-	if err != nil || !private(stat, syscall.S_IFDIR) || !sameIdentity(d.identity, stat) {
+	if err != nil || !private(stat, syscall.S_IFDIR, d.identity.Uid, d.identity.Gid) || !sameIdentity(d.identity, stat) {
 		return state("held state directory changed")
 	}
 	var reopened *os.File
@@ -225,7 +228,7 @@ func createAbsolute(path string, base *os.File) (*os.File, error) {
 			return nil, err
 		}
 		identity, err := statHandle(file)
-		if err != nil || created && (!private(identity, syscall.S_IFDIR) || identity.Mode&0777 != 0700) {
+		if err != nil || created && (!private(identity, syscall.S_IFDIR, uint32(os.Geteuid()), uint32(os.Getegid())) || identity.Mode&0777 != 0700) {
 			file.Close()
 			return nil, state("created state ancestor is unsafe")
 		}
@@ -246,15 +249,7 @@ func createAbsolute(path string, base *os.File) (*os.File, error) {
 func (s *Store) rootPath() (string, error) {
 	path := s.options.Root
 	if path == "" {
-		if xdg := os.Getenv("XDG_STATE_HOME"); xdg != "" && filepath.IsAbs(xdg) {
-			path = filepath.Join(xdg, "bootwright")
-		} else {
-			home, err := accountHome()
-			if err != nil {
-				return "", err
-			}
-			path = filepath.Join(home, ".local", "state", "bootwright")
-		}
+		path = "/var/lib/bootwright"
 	}
 	if !filepath.IsAbs(path) || len(path) > maxPath || strings.ContainsRune(path, 0) {
 		return "", state("state root must be an absolute bounded path")
@@ -266,40 +261,6 @@ func (s *Store) rootPath() (string, error) {
 	return path, nil
 }
 
-func accountHome() (string, error) {
-	fd, err := syscall.Open("/etc/passwd", syscall.O_RDONLY|syscall.O_NONBLOCK|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
-	if err != nil {
-		return "", state("local account home is unavailable; select an absolute XDG_STATE_HOME")
-	}
-	file := os.NewFile(uintptr(fd), "/etc/passwd")
-	defer file.Close()
-	before, err := statHandle(file)
-	if err != nil || before.Mode&syscall.S_IFMT != syscall.S_IFREG || before.Size < 0 || before.Size > 1<<20 {
-		return "", state("local account database cannot be verified")
-	}
-	data, err := io.ReadAll(io.LimitReader(file, (1<<20)+1))
-	after, statErr := statHandle(file)
-	if err != nil || statErr != nil || len(data) > 1<<20 || !sameFile(before, after) {
-		return "", state("local account database cannot be read safely")
-	}
-	uid := strconv.Itoa(os.Getuid())
-	home := ""
-	for _, line := range strings.Split(string(data), "\n") {
-		fields := strings.Split(line, ":")
-		if len(fields) != 7 || fields[2] != uid {
-			continue
-		}
-		if home != "" || !canonicalPath(fields[5]) {
-			return "", state("local account home is ambiguous; select an absolute XDG_STATE_HOME")
-		}
-		home = fields[5]
-	}
-	if home == "" {
-		return "", state("local account home is unavailable; select an absolute XDG_STATE_HOME")
-	}
-	return home, nil
-}
-
 func (s *Store) openRoot(ctx context.Context, create bool, inputs []string) (*directory, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -307,6 +268,16 @@ func (s *Store) openRoot(ctx context.Context, create bool, inputs []string) (*di
 	path, err := s.rootPath()
 	if err != nil {
 		return nil, err
+	}
+	uid, gid := uint32(0), uint32(0)
+	if s.options.Owner != nil {
+		if s.options.Root == "" {
+			return nil, state("test ownership requires an isolated explicit root")
+		}
+		uid, gid = s.options.Owner.UID, s.options.Owner.GID
+	}
+	if uint32(os.Geteuid()) != uid || uint32(os.Getegid()) != gid {
+		return nil, state("context storage requires root privileges")
 	}
 	for _, input := range inputs {
 		if !canonicalPath(input) || beneath(input, path) {
@@ -318,7 +289,7 @@ func (s *Store) openRoot(ctx context.Context, create bool, inputs []string) (*di
 		return nil, err
 	}
 	stat, err := statHandle(file)
-	if err != nil || !private(stat, syscall.S_IFDIR) {
+	if err != nil || !private(stat, syscall.S_IFDIR, uid, gid) {
 		file.Close()
 		return nil, state("state root type, owner or permissions is unsafe")
 	}
@@ -371,7 +342,7 @@ func readBoundedIdentity(ctx context.Context, parent *directory, name string, ma
 	}
 	defer file.Close()
 	before, err := statHandle(file)
-	if err != nil || !readableFile(before, immutable) || before.Size < 0 || before.Size > int64(maximum) {
+	if err != nil || !readableFile(before, immutable, parent) || before.Size < 0 || before.Size > int64(maximum) {
 		return nil, syscall.Stat_t{}, state("state file type, owner, permissions, links or size is unsafe")
 	}
 	data := make([]byte, 0, int(before.Size))
@@ -397,7 +368,7 @@ func readBoundedIdentity(ctx context.Context, parent *directory, name string, ma
 	if !immutable {
 		// A registry replacement may unlink this complete, already-open old
 		// snapshot. Its contents remain immutable even though ctime/nlink change.
-		stable = sameIdentity(before, after) && before.Size == after.Size && before.Mtim == after.Mtim && readableFile(after, false)
+		stable = sameIdentity(before, after) && before.Size == after.Size && before.Mtim == after.Mtim && readableFile(after, false, parent)
 	}
 	if err != nil || !stable || int64(len(data)) != after.Size {
 		return nil, syscall.Stat_t{}, state("state file changed during reading")
@@ -478,7 +449,7 @@ func (s *Store) writeExclusive(ctx context.Context, parent *directory, name stri
 	}
 	defer file.Close()
 	before, err := statHandle(file)
-	if err != nil || !private(before, syscall.S_IFREG) || before.Mode&0777 != 0600 {
+	if err != nil || !private(before, syscall.S_IFREG, parent.identity.Uid, parent.identity.Gid) || before.Mode&0777 != 0600 {
 		return state("new state file is unsafe")
 	}
 	size := len(data)
@@ -499,7 +470,7 @@ func (s *Store) writeExclusive(ctx context.Context, parent *directory, name stri
 		return state("state file durability could not be established")
 	}
 	held, err := statHandle(file)
-	if err != nil || !sameIdentity(before, held) || !private(held, syscall.S_IFREG) || held.Size != int64(size) {
+	if err != nil || !sameIdentity(before, held) || !private(held, syscall.S_IFREG, parent.identity.Uid, parent.identity.Gid) || held.Size != int64(size) {
 		return state("new state file changed during publication")
 	}
 	current, err := openRelative(parent, name, pathHandle, 0)
@@ -606,4 +577,14 @@ func lock(dir *directory) error {
 		return state("context state is held by another mutator")
 	}
 	return dir.verify()
+}
+
+func lockShared(dir *directory) error {
+	if err := dir.verify(); err != nil {
+		return err
+	}
+	if err := syscall.Flock(int(dir.file.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
+		return state("context storage is busy")
+	}
+	return nil
 }

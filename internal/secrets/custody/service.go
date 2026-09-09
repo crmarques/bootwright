@@ -422,8 +422,8 @@ func (s Service) confirm(ctx context.Context, action, name string) error {
 }
 
 func requireActive(selected storage.Context) error {
-	if selected.Mode != "active" {
-		return storage.Failure("store.conflict", "secret mutation requires an active context")
+	if selected.Mode != "ready" {
+		return storage.Failure("store.conflict", "secret mutation requires a ready context")
 	}
 	return nil
 }

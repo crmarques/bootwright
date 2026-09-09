@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/secrets/storage"
 )
 
 type Service struct {
@@ -19,22 +20,28 @@ type Service struct {
 	repository Repository
 	guard      ContextMutationGuard
 	confirmer  Confirmer
+	options    Options
 }
 
-func New(reader DirectoryReader, compiler Compiler, repository Repository, guard ContextMutationGuard, confirmer Confirmer) Service {
-	return Service{reader: reader, compiler: compiler, repository: repository, guard: guard, confirmer: confirmer}
+func New(reader DirectoryReader, compiler Compiler, repository Repository, guard ContextMutationGuard, confirmer Confirmer, options ...Options) Service {
+	s := Service{reader: reader, compiler: compiler, repository: repository, guard: guard, confirmer: confirmer}
+	if len(options) != 0 {
+		s.options = options[0]
+	}
+	return s
 }
 
 type InitRequest struct {
-	Name             string
-	InputDirectory   string
-	SkipConfirmation bool
+	Name              string
+	ConfigurationFile string
+	InputDirectory    string
 }
 
 type UpdateRequest struct {
-	Name             string
-	InputDirectory   string
-	SkipConfirmation bool
+	ConfigurationFile string
+	Name              string
+	InputDirectory    string
+	SkipConfirmation  bool
 }
 
 type UseRequest struct{ Name string }
@@ -47,7 +54,6 @@ type DeleteRequest struct {
 	Name             string
 	Purge            bool
 	SkipConfirmation bool
-	AbandonResources bool
 }
 
 var namePattern = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
@@ -69,14 +75,14 @@ func validName(name string) error {
 	return nil
 }
 
-func summary(r Record, current string) Summary {
-	return Summary{Name: r.Name, ID: r.ID, Mode: r.Mode, Current: r.Name == current}
+func summary(r Record, selected Selection) Summary {
+	return Summary{Name: r.Name, ID: r.ID, Mode: r.Mode, Current: r.Name == selected.Name && r.ID == selected.ID, Configured: r.Revision != ""}
 }
 
 func commitRegistry(ctx context.Context, tx Transaction, reg Registry) error {
 	reg.Identities = slices.Clone(reg.Identities)
 	reg.Contexts = slices.Clone(reg.Contexts)
-	slices.SortFunc(reg.Identities, func(a, b Identity) int { return strings.Compare(a.EnvironmentDirectory, b.EnvironmentDirectory) })
+	slices.SortFunc(reg.Identities, func(a, b Identity) int { return strings.Compare(a.ID, b.ID) })
 	slices.SortFunc(reg.Contexts, func(a, b Record) int { return strings.Compare(a.Name, b.Name) })
 	return tx.Commit(ctx, reg)
 }
@@ -159,91 +165,121 @@ func (s Service) admit(ctx context.Context, path string) (desiredstate.Sources, 
 	return sources, directory, report, nil
 }
 
+func (s Service) configuration(ctx context.Context, name, path string) (Configuration, error) {
+	config := DefaultConfiguration(name)
+	if path != "" {
+		if s.options.ConfigurationReader == nil {
+			return Configuration{}, ConfigurationError("Context configuration reader is not configured")
+		}
+		data, err := s.options.ConfigurationReader.ReadConfiguration(ctx, path)
+		if err != nil {
+			return Configuration{}, err
+		}
+		config, err = ParseConfiguration(name, data)
+		if err != nil {
+			return Configuration{}, err
+		}
+	}
+	if s.options.ValidateConfiguration == nil {
+		return Configuration{}, ConfigurationError("secret store implementation resolver is not configured")
+	}
+	if err := s.options.ValidateConfiguration(ctx, config); err != nil {
+		return Configuration{}, err
+	}
+	return config, ctx.Err()
+}
+
+func selectionFor(record Record) Selection {
+	return Selection{Version: 1, Name: record.Name, ID: record.ID}
+}
+
+func (s Service) selection(ctx context.Context) (Selection, error) {
+	if s.options.Selection == nil {
+		return Selection{}, StateError("current context selection is not configured")
+	}
+	return s.options.Selection.Read(ctx)
+}
+
+func readyRecord(reg Registry, name string) (Record, error) {
+	index := findRecord(reg, name)
+	if index < 0 {
+		return Record{}, StateError("named context does not exist")
+	}
+	record := reg.Contexts[index]
+	if record.Mode == Initializing {
+		return Record{}, StateError("context initialization is incomplete; retry context init --name " + record.Name + " with the original configuration and input")
+	}
+	if record.Mode != Ready {
+		return Record{}, StateError("context deletion is incomplete; retry context delete --name " + record.Name + " --purge")
+	}
+	return record, nil
+}
+
 func (s Service) Init(ctx context.Context, request InitRequest) (*AdmissionResult, error) {
-	return s.publish(ctx, request.Name, request.InputDirectory, request.SkipConfirmation, false)
-}
-
-func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionResult, error) {
-	return s.publish(ctx, request.Name, request.InputDirectory, request.SkipConfirmation, true)
-}
-
-func (s Service) publish(ctx context.Context, name, path string, skip, update bool) (*AdmissionResult, error) {
 	if err := s.ready(ctx); err != nil {
 		return nil, err
 	}
-	if err := validName(name); err != nil {
+	if err := validName(request.Name); err != nil {
 		return nil, err
 	}
-	sources, environment, report, err := s.admit(ctx, path)
+	if s.options.Selection == nil || s.options.InitializeSecrets == nil {
+		return nil, StateError("context selection or secret initialization is not configured")
+	}
+	config, err := s.configuration(ctx, request.Name, request.ConfigurationFile)
 	if err != nil {
 		return nil, err
 	}
+	var sources desiredstate.Sources
+	var environment string
+	var report *compilation.Report
+	if request.InputDirectory != "" {
+		sources, environment, report, err = s.admit(ctx, request.InputDirectory)
+		if err != nil {
+			return nil, err
+		}
+	}
 	var result *AdmissionResult
-	err = s.repository.Transact(ctx, !update, append(slices.Clone(sources.Roots), environment), func(tx Transaction) error {
+	err = s.repository.Transact(ctx, true, slices.Clone(sources.Roots), func(tx Transaction) error {
 		reg := tx.Registry()
-		index := findRecord(reg, name)
-		if update && index < 0 {
-			return StateError("named context does not exist")
+		existingID := ""
+		if index := findRecord(reg, request.Name); index >= 0 {
+			if reg.Contexts[index].Mode != Initializing {
+				return StateError("context name already exists; use context update or delete it explicitly")
+			}
+			existingID = reg.Contexts[index].ID
 		}
-		var record Record
-		if index >= 0 {
-			record = reg.Contexts[index]
-			if record.Mode == RecoveryOnly {
-				return StateError("recovery-only contexts cannot be updated or recreated")
-			}
-			if record.EnvironmentDirectory != environment {
-				return StateError("replacement input changes the context Environment directory; create a separate context")
-			}
-			if !update && !skip {
-				return StateError("context recreation requires --yes")
-			}
-		} else {
-			for _, other := range reg.Contexts {
-				if other.EnvironmentDirectory == environment {
-					return StateError("Environment directory already belongs to another named context")
-				}
-			}
-			id, reserveErr := tx.Reserve(ctx, environment)
-			if reserveErr != nil {
-				return reserveErr
-			}
-			record = Record{Name: name, ID: id, EnvironmentDirectory: environment, Mode: Active}
-			if !slices.ContainsFunc(reg.Identities, func(i Identity) bool { return i.EnvironmentDirectory == environment }) {
-				reg.Identities = append(reg.Identities, Identity{EnvironmentDirectory: environment, ID: id})
+		if err := uniqueEnvironment(reg, existingID, environment); err != nil {
+			return err
+		}
+		record, err := tx.Reserve(ctx, request.Name, environment, config.Canonical())
+		if err != nil {
+			return err
+		}
+		if err := tx.InitializeSecrets(ctx, record.ID, func(area storage.Area) error {
+			return s.options.InitializeSecrets(ctx, record, area)
+		}); err != nil {
+			return err
+		}
+		if request.InputDirectory != "" {
+			record.Revision, err = tx.Publish(ctx, record.ID, environment, sources)
+			if err != nil {
+				return err
 			}
 		}
-		disposition, guardErr := s.disposition(ctx, tx, record.ID)
-		if guardErr != nil {
-			return guardErr
-		}
-		if update && !disposition.Update {
-			return StateError("context has an incomplete operation; preserve it for reconciliation")
-		}
-		if !update && !disposition.Dispose {
-			return StateError("context recreation requires positive disposal evidence")
-		}
-		if update {
-			if confirmErr := s.confirm(ctx, skip, "update", name); confirmErr != nil {
-				return confirmErr
-			}
-		}
-		revision, publishErr := tx.Publish(ctx, record.ID, environment, sources)
-		if publishErr != nil {
-			return publishErr
-		}
-		record.Revision = revision
+		record.Mode = Ready
+		reg = tx.Registry()
+		index := findRecord(reg, record.Name)
 		if index < 0 {
-			reg.Contexts = append(reg.Contexts, record)
-		} else {
-			reg.Contexts[index] = record
+			return StateError("context reservation did not publish its initializing record")
 		}
-		if !update {
-			reg.Current = name
+		reg.Contexts[index] = record
+		if err := commitRegistry(ctx, tx, reg); err != nil {
+			return err
 		}
-		if commitErr := commitRegistry(ctx, tx, reg); commitErr != nil {
-			return commitErr
+		result = admissionResult(record, selectionFor(record), sources, report)
+		if err := s.options.Selection.Write(ctx, selectionFor(record)); err != nil {
+			return StateError("context was created, but current selection could not be updated; run context use --name " + record.Name)
 		}
-		result = &AdmissionResult{Context: summary(record, reg.Current), Counts: report.Counts, FilesCopied: len(sources.Files) + len(sources.Markers), Diagnostics: slices.Clone(report.Diagnostics)}
 		return nil
 	})
 	if err != nil {
@@ -255,6 +291,118 @@ func (s Service) publish(ctx context.Context, name, path string, skip, update bo
 	return result, nil
 }
 
+func uniqueEnvironment(reg Registry, id, environment string) error {
+	if environment == "" {
+		return nil
+	}
+	for _, record := range reg.Contexts {
+		if record.ID != id && record.EnvironmentDirectory == environment {
+			return StateError("Environment directory already belongs to another named context")
+		}
+	}
+	return nil
+}
+
+func admissionResult(record Record, selected Selection, sources desiredstate.Sources, report *compilation.Report) *AdmissionResult {
+	result := &AdmissionResult{Context: summary(record, selected), FilesCopied: len(sources.Files) + len(sources.Markers), InputChanged: report != nil}
+	if report != nil {
+		result.Counts = report.Counts
+		result.Diagnostics = slices.Clone(report.Diagnostics)
+	}
+	return result
+}
+
+func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionResult, error) {
+	if err := s.ready(ctx); err != nil {
+		return nil, err
+	}
+	if err := validName(request.Name); err != nil {
+		return nil, err
+	}
+	if request.ConfigurationFile == "" && request.InputDirectory == "" {
+		return nil, ConfigurationError("context update requires --file or --input-dir")
+	}
+	selected, err := s.selection(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var config Configuration
+	if request.ConfigurationFile != "" {
+		config, err = s.configuration(ctx, request.Name, request.ConfigurationFile)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sources desiredstate.Sources
+	var environment string
+	var report *compilation.Report
+	if request.InputDirectory != "" {
+		sources, environment, report, err = s.admit(ctx, request.InputDirectory)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var result *AdmissionResult
+	err = s.repository.Transact(ctx, false, slices.Clone(sources.Roots), func(tx Transaction) error {
+		reg := tx.Registry()
+		record, err := readyRecord(reg, request.Name)
+		if err != nil {
+			return err
+		}
+		if request.ConfigurationFile != "" {
+			data, err := tx.Configuration(ctx, record.ID)
+			if err != nil {
+				return err
+			}
+			stored, err := ParseConfiguration(record.Name, data)
+			if err != nil {
+				return StateError("stored Context configuration is malformed")
+			}
+			if config != stored {
+				return ConfigurationError("Context configuration is immutable; secret store changes require a separate context")
+			}
+		}
+		if request.InputDirectory == "" {
+			result = admissionResult(record, selected, sources, nil)
+			return nil
+		}
+		if record.EnvironmentDirectory != "" && record.EnvironmentDirectory != environment {
+			return StateError("replacement input changes the context Environment directory; create a separate context")
+		}
+		if err := uniqueEnvironment(reg, record.ID, environment); err != nil {
+			return err
+		}
+		disposition, err := s.disposition(ctx, tx, record.ID)
+		if err != nil {
+			return err
+		}
+		if !disposition.Update {
+			return StateError("context has an incomplete operation; preserve its input for continuation")
+		}
+		if err := s.confirm(ctx, request.SkipConfirmation, "update", request.Name); err != nil {
+			return err
+		}
+		record.Revision, err = tx.Publish(ctx, record.ID, environment, sources)
+		if err != nil {
+			return err
+		}
+		record.EnvironmentDirectory = environment
+		reg.Contexts[findRecord(reg, request.Name)] = record
+		if err := commitRegistry(ctx, tx, reg); err != nil {
+			return err
+		}
+		result = admissionResult(record, selected, sources, report)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, StateError("context update returned no result")
+	}
+	return result, nil
+}
+
 func (s Service) Use(ctx context.Context, request UseRequest) (*UseResult, error) {
 	if err := s.ready(ctx); err != nil {
 		return nil, err
@@ -262,18 +410,20 @@ func (s Service) Use(ctx context.Context, request UseRequest) (*UseResult, error
 	if err := validName(request.Name); err != nil {
 		return nil, err
 	}
+	if s.options.Selection == nil {
+		return nil, StateError("current context selection is not configured")
+	}
 	var result *UseResult
 	err := s.repository.Transact(ctx, false, nil, func(tx Transaction) error {
-		reg := tx.Registry()
-		index := findRecord(reg, request.Name)
-		if index < 0 {
-			return StateError("named context does not exist")
-		}
-		reg.Current = request.Name
-		if err := commitRegistry(ctx, tx, reg); err != nil {
+		record, err := readyRecord(tx.Registry(), request.Name)
+		if err != nil {
 			return err
 		}
-		result = &UseResult{Context: summary(reg.Contexts[index], reg.Current)}
+		selected := selectionFor(record)
+		if err := s.options.Selection.Write(ctx, selected); err != nil {
+			return err
+		}
+		result = &UseResult{Context: summary(record, selected)}
 		return nil
 	})
 	if err != nil {
@@ -289,6 +439,10 @@ func (s Service) List(ctx context.Context, _ ListRequest) (*ListResult, error) {
 	if err := s.ready(ctx); err != nil {
 		return nil, err
 	}
+	selected, err := s.selection(ctx)
+	if err != nil {
+		return nil, err
+	}
 	reg, err := s.repository.View(ctx)
 	if err != nil {
 		return nil, err
@@ -298,7 +452,7 @@ func (s Service) List(ctx context.Context, _ ListRequest) (*ListResult, error) {
 	}
 	result := &ListResult{Contexts: []Summary{}}
 	for _, record := range reg.Contexts {
-		result.Contexts = append(result.Contexts, summary(record, reg.Current))
+		result.Contexts = append(result.Contexts, summary(record, selected))
 	}
 	slices.SortFunc(result.Contexts, func(a, b Summary) int { return strings.Compare(a.Name, b.Name) })
 	return result, nil
@@ -308,18 +462,25 @@ func (s Service) Current(ctx context.Context, _ CurrentRequest) (*CurrentResult,
 	if err := s.ready(ctx); err != nil {
 		return nil, err
 	}
+	selected, err := s.selection(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if selected.Name == "" || selected.ID == "" {
+		return nil, StateError("no current context is selected; use context use --name <name>")
+	}
 	reg, err := s.repository.View(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := ctx.Err(); err != nil {
+	record, err := readyRecord(reg, selected.Name)
+	if err != nil {
 		return nil, err
 	}
-	index := findRecord(reg, reg.Current)
-	if reg.Current == "" || index < 0 {
-		return nil, StateError("no current context is selected")
+	if record.ID != selected.ID {
+		return nil, StateError("current context selection is stale; use context use --name <name>")
 	}
-	return &CurrentResult{Context: summary(reg.Contexts[index], reg.Current)}, nil
+	return &CurrentResult{Context: summary(record, selected)}, ctx.Err()
 }
 
 func (s Service) Delete(ctx context.Context, request DeleteRequest) (*DeleteResult, error) {
@@ -332,45 +493,40 @@ func (s Service) Delete(ctx context.Context, request DeleteRequest) (*DeleteResu
 	if !request.Purge {
 		return nil, UnsafeDelete("context deletion requires --purge")
 	}
+	selected, err := s.selection(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var result *DeleteResult
-	err := s.repository.Transact(ctx, false, nil, func(tx Transaction) error {
+	err = s.repository.Transact(ctx, false, nil, func(tx Transaction) error {
 		reg := tx.Registry()
 		index := findRecord(reg, request.Name)
 		if index < 0 {
 			return StateError("named context does not exist")
 		}
 		record := reg.Contexts[index]
-		disposition, err := s.disposition(ctx, tx, record.ID)
-		if err != nil {
-			return err
-		}
-		outcome := "deleted"
-		if !disposition.Dispose {
-			if !request.AbandonResources || !disposition.Recovery {
-				return UnsafeDelete("context has protected state; recovery-only archival requires --abandon-resources")
+		if record.Mode == Ready {
+			disposition, err := s.disposition(ctx, tx, record.ID)
+			if err != nil {
+				return err
 			}
-			outcome = "recoveryOnly"
+			if !disposition.Dispose {
+				return UnsafeDelete("context has protected lifecycle state; complete its lifecycle before deletion")
+			}
 		}
 		if err := s.confirm(ctx, request.SkipConfirmation, "delete", request.Name); err != nil {
 			return err
 		}
-		if err := tx.Archive(ctx, record, outcome); err != nil {
+		if err := tx.Delete(ctx, record); err != nil {
 			return err
 		}
-		cleared := false
-		if outcome == "deleted" {
-			reg.Contexts = slices.Delete(reg.Contexts, index, index+1)
-			if reg.Current == record.Name {
-				reg.Current = ""
-				cleared = true
+		result = &DeleteResult{Name: record.Name, ID: record.ID, Outcome: "deleted"}
+		if selected.Name == record.Name && selected.ID == record.ID {
+			if err := s.options.Selection.Clear(ctx, selected); err != nil {
+				return StateError("context was deleted, but its current selection could not be cleared")
 			}
-		} else {
-			reg.Contexts[index].Mode = RecoveryOnly
+			result.CurrentCleared = true
 		}
-		if err := commitRegistry(ctx, tx, reg); err != nil {
-			return err
-		}
-		result = &DeleteResult{Name: record.Name, ID: record.ID, Outcome: outcome, CurrentCleared: cleared}
 		return nil
 	})
 	if err != nil {

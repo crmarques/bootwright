@@ -84,5 +84,5 @@ func (Guard) Check(ctx context.Context, data []byte) (contexts.Disposition, erro
 		return contexts.Disposition{}, err
 	}
 	disposable := operation == "none" && ownership == "none"
-	return contexts.Disposition{Update: operation == "none" || operation == "applied", Dispose: disposable, Recovery: !disposable}, nil
+	return contexts.Disposition{Update: operation == "none" || operation == "applied", Dispose: disposable}, nil
 }

@@ -26,7 +26,7 @@ func TestSecretAreaIsAbsentReadOnlyAndAtomicallyPublished(t *testing.T) {
 	if err != nil || snapshot.Context != token || len(snapshot.Inputs.Files) != len(sources.Files) {
 		t.Fatalf("secret context: %#v %v", snapshot, err)
 	}
-	secretDirectory := filepath.Join(store.options.Root, "contexts", record.ID, "secrets")
+	secretDirectory := filepath.Join(store.options.Root, "contexts", record.Name, "secrets")
 	err = store.ReadSecrets(context.Background(), token, func(area storage.Area) error {
 		entries, err := area.Entries(context.Background(), "")
 		if err != nil || len(entries) != 0 {
@@ -43,8 +43,8 @@ func TestSecretAreaIsAbsentReadOnlyAndAtomicallyPublished(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(secretDirectory); !errors.Is(err, os.ErrNotExist) {
-		t.Fatal("read-only secret access created state")
+	if entries, err := os.ReadDir(secretDirectory); err != nil || len(entries) != 0 {
+		t.Fatal("read-only secret access changed empty state")
 	}
 	original := []byte("{\"version\":1}\n")
 	err = store.MutateSecrets(context.Background(), token, func(area storage.Area) error {
@@ -104,7 +104,7 @@ func TestSecretReplaceRejectsSameByteInodeSubstitution(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	selector := filepath.Join(store.options.Root, "contexts", record.ID, "secrets", "selector.json")
+	selector := filepath.Join(store.options.Root, "contexts", record.Name, "secrets", "selector.json")
 	replaced := false
 	store.fail = func(point string) error {
 		if point != "before-secret-rename" || replaced {

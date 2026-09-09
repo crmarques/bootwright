@@ -156,7 +156,7 @@ func TestPublishedStoreCorruptionNeverFallsBackOrWrites(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			root := filepath.Join(h.root, "contexts", h.context.ID, "secrets")
+			root := filepath.Join(h.root, "contexts", h.context.Name, "secrets")
 			path := filepath.Join(root, selectorPath)
 			switch target {
 			case "index":

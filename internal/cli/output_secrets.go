@@ -15,7 +15,7 @@ import (
 )
 
 func validSecretContext(value storage.Context) bool {
-	return value.Name != "" && value.ID != "" && (value.Mode == "active" || value.Mode == "recoveryOnly")
+	return value.Name != "" && value.ID != "" && value.Mode == "ready"
 }
 
 func validSecretPart(part secrets.Part) bool {

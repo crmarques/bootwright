@@ -75,8 +75,11 @@ func (v *requestValues) names(name string) []string {
 
 func (v *requestValues) singleFile() string {
 	files := v.strings("file")
-	if len(files) != 1 {
-		v.recordFirstError(errors.New("context input requires exactly one directory"))
+	if len(files) > 1 {
+		v.recordFirstError(errors.New("context configuration accepts at most one file"))
+		return ""
+	}
+	if len(files) == 0 {
 		return ""
 	}
 	return files[0]

@@ -21,6 +21,18 @@ type Options struct {
 	Random       io.Reader
 	Clock        func() time.Time
 	Cryptography Cryptography
+	Operator     Operator
+}
+
+// Operator resolves the authenticated invoking account only when file material
+// is acquired. Runtime-store ownership remains independent of this identity.
+type Operator interface {
+	FileIdentity(context.Context) (FileIdentity, error)
+}
+
+type FileIdentity struct {
+	UID  int
+	Home string
 }
 
 type InputReader interface {
@@ -32,6 +44,7 @@ type Service struct {
 	random       io.Reader
 	clock        func() time.Time
 	cryptography Cryptography
+	operator     Operator
 }
 
 var _ custody.Materializer = (*Service)(nil)
@@ -39,6 +52,7 @@ var _ custody.Materializer = (*Service)(nil)
 func New(input InputReader, options ...Options) *Service {
 	service := &Service{input: input, random: cryptorand.Reader, clock: time.Now, cryptography: standardCryptography{}}
 	if len(options) > 0 {
+		service.operator = options[0].Operator
 		if options[0].Random != nil {
 			service.random = options[0].Random
 		}

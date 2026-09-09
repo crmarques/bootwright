@@ -43,8 +43,8 @@ merge contexts or create an abstraction before its first consumer.
 | --- | --- | --- |
 | Desired state | Document discovery and provenance, strict decoding, API-to-domain translation, normalized catalog assembly, deterministic diagnostics, and canonical effective-state encoding. | Domain invariants belonging to the referenced platform contexts or any platform effect. |
 | Environment | Environment selection, shared defaults, complete graph closure, and cross-context reference semantics. | Policy internal to a selected machine, provider, cluster, storage service, or add-on. |
-| Workspace | Explicit local contexts, Bootwright-owned paths, and persistence boundaries for local runtime data. | Lifecycle policy, secret meaning, or arbitrary user filesystem content. |
-| Controller | Local controller prerequisite inspection and setup. | Managed-machine provisioning, cluster readiness, or lifecycle ordering. |
+| Workspace | Named root-owned contexts, separate Context configuration, per-user selection, and persistence boundaries for local runtime data. | Lifecycle policy, secret meaning, or arbitrary user filesystem content. |
+| Controller | Local controller prerequisite inspection, setup, invoking-account verification, and sudo process supervision. | Managed-machine provisioning, cluster readiness, or lifecycle ordering. |
 | Secrets | Secret custody and materialization, immutable secret binding, and disclosure classification. | A consuming context's authorization or business decision. Entitlement semantics remain with the product context that consumes them. |
 | Trust | SSH host identity, TLS trust, trust decisions, and durable trust evidence. | Secret custody, endpoint business policy, or ambient trust configuration. |
 | Substrate | Provider capabilities, provider identity, network attachments, machine infrastructure realization, and normalized power and identity operations. | Machine OS policy, cluster installation, or lifecycle ordering. |
@@ -288,7 +288,7 @@ remains with the owning specifications.
 
 | Capability package | `cli.Services` field | Responsibility |
 | --- | --- | --- |
-| `workspace/contexts` | `Contexts` | Context initialization, update, selection, inspection, deletion, identity, and admitted-input publication. |
+| `workspace/contexts` | `Contexts` | Context configuration, initialization, input update, user selection, inspection, permanent deletion, identity, and immutable input publication. |
 | `desiredstate/compilation` | `DesiredState` | Coordinate validation and effective-state rendering around deterministic compilation. |
 | `environment/preflight` | `EnvironmentPreflight` | Infrastructure, selected-cluster, and whole-environment prerequisite checks. |
 | `environment/inspection` | `EnvironmentInspection` | Cluster listing and information across platform contexts. |
@@ -330,8 +330,11 @@ Separate context management, immutable input reading, and compilation of an
 explicit input universe:
 
 ```text
-context init/update -> contexts.Service -> compilation.Compiler
+context init/update -> contexts.Service -> configuration reader/validator
+                                       -> compilation.Compiler (explicit input only)
                                        -> Workspace repository
+                                       -> transaction-scoped secret initializer
+                                       -> invoking-user selection store
 
 validate/render effective -> compilation.Service -> contexts.Inputs
                                                  -> compilation.Compiler
@@ -343,7 +346,24 @@ interface and `Repository` interface. `compilation.Service` consumes a narrow
 `ContextInputs` interface for existing named/current context input.
 `contexts.Inputs` implements that reading capability through a narrow
 repository interface of its own. Input values are immutable views, separate
-from writable context records.
+from writable context records. Context setup is parsed independently of the
+Environment graph; empty desired state is a valid initialized context.
+
+The composition root binds `workspace/contextfs` to the fixed privileged store
+and `workspace/selectionfs` to a lazy verified invoking account. The latter
+accesses the user file with that account's credentials, including a bounded
+credential-dropped subprocess when the caller is root. `controller/invocation`
+owns local account lookup and invocation-scoped sudo process supervision.
+Only validated, available commands needing stored context data acquire that
+privilege boundary; informational and explicit-input validation paths remain
+effect-free. [CLI invocation](cli.md#local-privilege-and-user-identity) owns
+classification and refresh policy.
+
+Context initialization receives a transaction-scoped secret-area capability
+and initializer callback. It initializes the configured implementation before
+readiness publication without reacquiring the Workspace lock. The immutable
+implementation resolver validates configuration before any store mutation.
+Encryption commands use that Context configuration independently of input.
 
 `compilation.Compiler` accepts explicit input independently of context
 selection; it never calls context management. Input lookup never calls the

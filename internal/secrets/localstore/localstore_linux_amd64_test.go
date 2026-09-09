@@ -56,24 +56,23 @@ func newUninitializedIntegrationStore(t *testing.T) *integrationStore {
 		t.Fatal(err)
 	}
 	root := filepath.Join(base, "state")
-	workspace := contextfs.New(contextfs.Options{Root: root})
+	workspace := contextfs.New(contextfs.Options{Root: root, Owner: &contextfs.Ownership{UID: uint32(os.Geteuid()), GID: uint32(os.Getegid())}})
 	sources := desiredstate.Sources{Roots: []string{input}, Files: []desiredstate.SourceFile{desiredstate.NewSourceFile(filepath.Join(input, "environment.yaml"), []byte("apiVersion: bootwright.io/v1alpha1\n"))}, Markers: []desiredstate.SourceFile{}}
 	err := workspace.Transact(context.Background(), true, sources.Roots, func(tx contexts.Transaction) error {
+		record, err := tx.Reserve(context.Background(), "example", input, contexts.DefaultConfiguration("example").Canonical())
+		if err != nil {
+			return err
+		}
+		if _, err := tx.MutationState(context.Background(), record.ID); err != nil {
+			return err
+		}
+		revision, err := tx.Publish(context.Background(), record.ID, input, sources)
+		if err != nil {
+			return err
+		}
 		registry := tx.Registry()
-		id, err := tx.Reserve(context.Background(), input)
-		if err != nil {
-			return err
-		}
-		if _, err := tx.MutationState(context.Background(), id); err != nil {
-			return err
-		}
-		revision, err := tx.Publish(context.Background(), id, input, sources)
-		if err != nil {
-			return err
-		}
-		registry.Identities = append(registry.Identities, contexts.Identity{EnvironmentDirectory: input, ID: id})
-		registry.Contexts = append(registry.Contexts, contexts.Record{Name: "example", ID: id, EnvironmentDirectory: input, Revision: revision, Mode: contexts.Active})
-		registry.Current = "example"
+		record.Revision, record.Mode = revision, contexts.Ready
+		registry.Contexts[0] = record
 		return tx.Commit(context.Background(), registry)
 	})
 	if err != nil {
@@ -310,7 +309,7 @@ func TestPutBatchAlwaysPublishesANewLogicalVersion(t *testing.T) {
 	}
 }
 
-func TestOldReaderSurvivesConcurrentPublicationAndRotation(t *testing.T) {
+func TestReaderBlocksPublicationAndRotationUntilSessionCloses(t *testing.T) {
 	h := newIntegrationStore(t)
 	d := declaration("credential", "opaque", "contextStore")
 	firstMaterial := opaque("first")
@@ -325,34 +324,61 @@ func TestOldReaderSurvivesConcurrentPublicationAndRotation(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.view(func(old storage.StoreSession) error {
-		secondMaterial := opaque("second")
-		defer secondMaterial.Clear()
-		if err := h.mutate(func(current storage.StoreSession) error {
-			_, err := current.PutBatch(context.Background(), []storage.Put{{Declaration: d, Material: secondMaterial}})
+	secondMaterial := opaque("second")
+	defer secondMaterial.Clear()
+	var second storage.Version
+	mutations := []func(storage.StoreSession) error{
+		func(current storage.StoreSession) error {
+			versions, err := current.PutBatch(context.Background(), []storage.Put{{Declaration: d, Material: secondMaterial}})
+			if err == nil {
+				second = versions[0]
+			}
 			return err
-		}); err != nil {
-			return err
-		}
-		if _, err := old.Inspect(context.Background()); err != nil {
-			t.Fatalf("old reader after replacement: %v", err)
-		}
-		if err := h.mutate(func(current storage.StoreSession) error {
+		},
+		func(current storage.StoreSession) error {
 			_, err := current.Rotate(context.Background())
 			return err
-		}); err != nil {
-			return err
+		},
+	}
+	if err := h.view(func(reader storage.StoreSession) error {
+		for _, mutation := range mutations {
+			entered := false
+			err := h.mutate(func(current storage.StoreSession) error {
+				entered = true
+				return mutation(current)
+			})
+			if entered || failureCode(err) != "secret.store.conflict" {
+				t.Fatalf("mutation during read session: entered=%v error=%v", entered, err)
+			}
+			if _, err := reader.Inspect(context.Background()); err != nil {
+				return err
+			}
 		}
-		if _, err := old.Inspect(context.Background()); err != nil {
-			t.Fatalf("old reader after rotation: %v", err)
-		}
-		material, err := old.Read(context.Background(), first.ID)
+		material, err := reader.Read(context.Background(), first.ID)
 		if err != nil {
 			return err
 		}
 		defer material.Clear()
 		if materialValue(t, material, secrets.ValuePart) != "first" {
-			t.Fatal("old reader observed replacement material")
+			t.Fatal("reader observed replacement material")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, mutation := range mutations {
+		if err := h.mutate(mutation); err != nil {
+			t.Fatalf("mutation after read session closed: %v", err)
+		}
+	}
+	if err := h.view(func(reader storage.StoreSession) error {
+		material, err := reader.Read(context.Background(), second.ID)
+		if err != nil {
+			return err
+		}
+		defer material.Clear()
+		if materialValue(t, material, secrets.ValuePart) != "second" {
+			t.Fatal("rotation changed published replacement material")
 		}
 		return nil
 	}); err != nil {
@@ -375,7 +401,7 @@ func TestInspectDoesNotReadOrAuthenticatePartPayloads(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	partsDirectory := filepath.Join(h.root, "contexts", h.context.ID, "secrets", "parts")
+	partsDirectory := filepath.Join(h.root, "contexts", h.context.Name, "secrets", "parts")
 	entries, err := os.ReadDir(partsDirectory)
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("part artifacts: %v %d", err, len(entries))
@@ -419,7 +445,7 @@ func TestInspectDoesNotReadOrAuthenticatePartPayloads(t *testing.T) {
 
 func TestSealLedgerRejectsUnauthenticatedIncrease(t *testing.T) {
 	h := newIntegrationStore(t)
-	ledgerDirectory := filepath.Join(h.root, "contexts", h.context.ID, "secrets", "ledgers")
+	ledgerDirectory := filepath.Join(h.root, "contexts", h.context.Name, "secrets", "ledgers")
 	entries, err := os.ReadDir(ledgerDirectory)
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("ledger artifacts: %v %d", err, len(entries))
@@ -449,7 +475,7 @@ func TestSealLedgerRejectsUnauthenticatedIncrease(t *testing.T) {
 
 func TestInitializationRecordRejectsUnauthenticatedChange(t *testing.T) {
 	h := newIntegrationStore(t)
-	path := filepath.Join(h.root, "contexts", h.context.ID, "secrets", initializationPath)
+	path := filepath.Join(h.root, "contexts", h.context.Name, "secrets", initializationPath)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -597,7 +623,7 @@ func TestInitializationRefusesSelectorLossAfterPublishedUseWithoutWrites(t *test
 	}); err != nil {
 		t.Fatal(err)
 	}
-	selector := filepath.Join(h.root, "contexts", h.context.ID, "secrets", selectorPath)
+	selector := filepath.Join(h.root, "contexts", h.context.Name, "secrets", selectorPath)
 	if err := os.Remove(selector); err != nil {
 		t.Fatal(err)
 	}
@@ -621,7 +647,7 @@ func TestInitializationRefusesSelectorLossAfterEmptyRotationWithoutWrites(t *tes
 	}); err != nil {
 		t.Fatal(err)
 	}
-	selector := filepath.Join(h.root, "contexts", h.context.ID, "secrets", selectorPath)
+	selector := filepath.Join(h.root, "contexts", h.context.Name, "secrets", selectorPath)
 	if err := os.Remove(selector); err != nil {
 		t.Fatal(err)
 	}

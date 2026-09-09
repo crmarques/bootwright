@@ -16,7 +16,7 @@ func TestMutationEvidence(t *testing.T) {
 					t.Fatal(err)
 				}
 				dispose := operation == "none" && ownership == "none"
-				if got.Dispose != dispose || got.Recovery == dispose || got.Update != (operation == "none" || operation == "applied") {
+				if got.Dispose != dispose || got.Update != (operation == "none" || operation == "applied") {
 					t.Fatalf("incorrect disposition: %+v", got)
 				}
 			})

@@ -35,8 +35,8 @@ func (s *session) PutBatch(ctx context.Context, puts []storage.Put) ([]storage.V
 	if err := s.usable(ctx, true); err != nil {
 		return nil, err
 	}
-	if s.context.Mode != "active" {
-		return nil, storage.Failure("store.conflict", "secret publication requires an active context")
+	if s.context.Mode != "ready" {
+		return nil, storage.Failure("store.conflict", "secret publication requires a ready context")
 	}
 	if len(puts) == 0 {
 		return []storage.Version{}, nil
@@ -111,8 +111,8 @@ func (s *session) Delete(ctx context.Context, name string) (bool, error) {
 	if err := s.usable(ctx, true); err != nil {
 		return false, err
 	}
-	if s.context.Mode != "active" {
-		return false, storage.Failure("store.conflict", "secret deletion requires an active context")
+	if s.context.Mode != "ready" {
+		return false, storage.Failure("store.conflict", "secret deletion requires a ready context")
 	}
 	if !validName(name) {
 		return false, storage.Failure("declaration", "secret name is invalid")
@@ -143,8 +143,8 @@ func (s *session) Bind(ctx context.Context, inputs []storage.BoundInput) (storag
 	if err := s.usable(ctx, true); err != nil {
 		return storage.Binding{}, err
 	}
-	if s.context.Mode != "active" {
-		return storage.Binding{}, storage.Failure("store.conflict", "new secret bindings require an active context")
+	if s.context.Mode != "ready" {
+		return storage.Binding{}, storage.Failure("store.conflict", "new secret bindings require a ready context")
 	}
 	if len(inputs) == 0 || len(inputs) > secrets.MaxVersions || len(s.index.Bindings) >= maxBindings {
 		return storage.Binding{}, storage.Failure("store.limit", "secret binding exceeds its item limit")

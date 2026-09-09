@@ -26,7 +26,6 @@ func (s Service) Types() []string {
 
 type EncryptionInitRequest struct {
 	ContextName string
-	Type        string
 }
 type EncryptionStatusRequest struct{ ContextName string }
 type EncryptionRotateRequest struct {
@@ -46,7 +45,10 @@ func (s Service) Init(ctx context.Context, request EncryptionInitRequest) (*Muta
 		return nil, err
 	}
 	result := &MutationResult{Context: selected.Context}
-	err = s.access.Initialize(ctx, selected.Context, request.Type, func(session storage.StoreSession, selection storage.Selection, created bool) error {
+	if selected.SecretStoreType == "" {
+		return nil, storage.Failure("store.implementation", "context secret store configuration is missing")
+	}
+	err = s.access.Initialize(ctx, selected.Context, selected.SecretStoreType, func(session storage.StoreSession, selection storage.Selection, created bool) error {
 		snapshot, err := session.Inspect(ctx)
 		if err != nil {
 			return err

@@ -69,7 +69,7 @@ func (a *Access) Mutate(ctx context.Context, selected Context, callback func(Sto
 			return err
 		}
 		if !exists {
-			return Failure("store.uninitialized", "initialize the secret store with an explicit type first")
+			return Failure("store.uninitialized", "run secret encryption init to initialize the configured store")
 		}
 		return a.open(ctx, selected, area, selector, true, callback)
 	})
@@ -82,44 +82,73 @@ func (a *Access) Initialize(ctx context.Context, selected Context, kind string, 
 	if a == nil || a.workspace == nil {
 		return Failure("store.implementation", "secret workspace is not configured")
 	}
-	if a.resolver == nil {
-		return Failure("store.implementation", "secret store implementation catalog is invalid")
+	if selected.Mode != "ready" {
+		return Failure("store.conflict", "secret initialization requires a ready context")
+	}
+	if a.resolver == nil || callback == nil {
+		return Failure("store.implementation", "secret initialization is not configured")
 	}
 	implementation, err := a.resolver.Select(kind)
 	if err != nil {
 		return err
 	}
-	if selected.Mode != "active" {
-		return Failure("store.conflict", "secret initialization requires an active context")
-	}
 	return a.workspace.MutateSecrets(ctx, selected, func(area Area) error {
-		selector, exists, err := readSelectorRecord(ctx, area, selected.ID)
-		if err != nil {
-			return err
-		}
-		if exists {
-			if selector.Selection != implementation.Selection() {
-				return Failure("store.implementation", "initialization cannot change an existing store implementation")
-			}
-			return a.open(ctx, selected, area, selector, true, func(session StoreSession, selection Selection) error { return callback(session, selection, false) })
-		}
-		material, err := a.acquire(ctx, selected, implementation, true)
-		if err != nil {
-			return err
-		}
-		if material != nil {
-			defer material.Close()
-		}
-		session, err := implementation.Initialize(ctx, selected, area, material)
-		if err != nil {
-			return err
-		}
-		if session == nil {
-			return Failure("store.implementation", "implementation returned no initialized session")
-		}
-		defer session.Close()
-		return callback(session, implementation.Selection(), true)
+		return a.initializeArea(ctx, selected, implementation, area, callback)
 	})
+}
+
+// InitializeArea initializes only the supplied transaction-scoped area. The
+// caller owns its Workspace lock and has authorized creation of this identity.
+func (a *Access) InitializeArea(ctx context.Context, selected Context, kind string, area Area) error {
+	if selected.Mode != "initializing" && selected.Mode != "ready" {
+		return Failure("store.conflict", "secret initialization requires a creating or ready context")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if a == nil || a.resolver == nil {
+		return Failure("store.implementation", "secret initialization is not configured")
+	}
+	implementation, err := a.resolver.Select(kind)
+	if err != nil {
+		return err
+	}
+	return a.initializeArea(ctx, selected, implementation, area, func(StoreSession, Selection, bool) error { return nil })
+}
+
+func (a *Access) initializeArea(ctx context.Context, selected Context, implementation SecretStoreImplementation, area Area, callback func(StoreSession, Selection, bool) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if a == nil || a.resolver == nil || implementation == nil || area == nil || callback == nil {
+		return Failure("store.implementation", "secret initialization is not configured")
+	}
+	selector, exists, err := readSelectorRecord(ctx, area, selected.ID)
+	if err != nil {
+		return err
+	}
+	if exists {
+		if selector.Selection != implementation.Selection() {
+			return Failure("store.implementation", "initialization cannot change an existing store implementation")
+		}
+		return a.open(ctx, selected, area, selector, true, func(session StoreSession, selection Selection) error { return callback(session, selection, false) })
+	}
+	material, err := a.acquire(ctx, selected, implementation, true)
+	if err != nil {
+		return err
+	}
+	if material != nil {
+		defer material.Close()
+	}
+	session, err := implementation.Initialize(ctx, selected, area, material)
+	if err != nil {
+		return err
+	}
+	if session == nil {
+		return Failure("store.implementation", "implementation returned no initialized session")
+	}
+	defer session.Close()
+	return callback(session, implementation.Selection(), true)
 }
 
 func (a *Access) open(ctx context.Context, selected Context, area Area, selector Selector, unlock bool, callback func(StoreSession, Selection) error) error {

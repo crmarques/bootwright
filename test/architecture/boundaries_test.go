@@ -32,6 +32,8 @@ func packageRoles() map[string]packageRole {
 		"internal/desiredstate/yamlstream":      adapterRole,
 		"internal/desiredstate/encoding":        adapterRole,
 		"internal/workspace/contextfs":          adapterRole,
+		"internal/workspace/selectionfs":        adapterRole,
+		"internal/controller/invocation":        adapterRole,
 		"internal/secrets/storage":              applicationRole,
 		"internal/secrets/localstore":           adapterRole,
 		"internal/secrets/material":             adapterRole,
@@ -166,14 +168,18 @@ func TestAdmissionEffectBoundary(t *testing.T) {
 		secretMaterial := source.owner == "internal/secrets/material"
 		secretStore := source.owner == "internal/secrets/localstore"
 		guard := source.owner == "internal/reconciliation/contextguard"
+		selection := source.owner == "internal/workspace/selectionfs"
+		invocation := source.owner == "internal/controller/invocation"
+		configuration := source.owner == "internal/workspace/contexts"
+		localProcess := selection || invocation
 		codec := source.owner == "internal/desiredstate/yamlstream" || source.owner == "internal/desiredstate/encoding"
 		for _, imported := range source.imports {
 			name := imported.path
-			forbidden := strings.HasPrefix(name, "os/") || strings.HasPrefix(name, "net/") && name != "net/url" && name != "net/netip" || !storage && !secretMaterial && !secretStore && name == "crypto/rand" || strings.HasPrefix(name, "math/rand") || !storage && !secretMaterial && name == "unsafe" || strings.HasPrefix(name, "golang.org/x/sys") || !input && !storage && !secretMaterial && (name == "os" || name == "syscall")
+			forbidden := (strings.HasPrefix(name, "os/") && !(localProcess && name == "os/exec" || invocation && name == "os/signal")) || strings.HasPrefix(name, "net/") && name != "net/url" && name != "net/netip" || !storage && !selection && !secretMaterial && !secretStore && name == "crypto/rand" || strings.HasPrefix(name, "math/rand") || !storage && !secretMaterial && name == "unsafe" || strings.HasPrefix(name, "golang.org/x/sys") || !input && !storage && !secretMaterial && !localProcess && (name == "os" || name == "syscall")
 			if forbidden {
 				t.Errorf("%s imports unauthorized effect capability %s", source.path, name)
 			}
-			if !isCLI && (strings.Contains(name, "/internal/cli") || strings.HasPrefix(name, "github.com/spf13/") || name == "io" && !input && !codec && !storage && !guard && !secretMaterial && !secretStore) {
+			if !isCLI && (strings.Contains(name, "/internal/cli") || strings.HasPrefix(name, "github.com/spf13/") || name == "io" && !input && !codec && !storage && !guard && !secretMaterial && !secretStore && !configuration && !localProcess) {
 				t.Errorf("%s depends on presentation or unrestricted I/O %s", source.path, name)
 			}
 			ast.Inspect(source.syntax, func(node ast.Node) bool {

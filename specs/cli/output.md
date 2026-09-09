@@ -276,7 +276,10 @@ repeating unbounded authored text in every diagnostic. The shared codes are:
 | `runtime.interrupted` | An operating-system interrupt canceled the command. |
 | `runtime.canceled` | The supplied context was canceled without an interrupt. |
 | `runtime.deadline` | The supplied context deadline expired. |
+| `runtime.privilege` | Invoking identity, sudo authorization, or the elevated process boundary could not be verified. |
 | `runtime.internal` | An unexpected failure escaped a typed boundary. |
+| `context.configuration` | Context setup is invalid or attempts an unsupported backend change. |
+| `context.input` | The context has no desired-state revision; import one with context update. |
 | `context.state` | Context state does not permit the requested local transition. |
 | `context.unsafe-delete` | Required ownership or recovery evidence prevents deletion. |
 | `addon.catalog` | An add-on name, version, registration, or catalog identity is invalid. |
@@ -328,22 +331,17 @@ resolution use the state-owned operation, block, and attempt log tree below.
 Managed operations use this tree:
 
 ```text
-<state-root>/
-  contexts/
-    <context-id>/
-      operations/
-        <operation-id>/
-          logs/
-            operation.jsonl
-            blocks/
-              <block-id>/
-                attempt-000001.jsonl
-                attempt-000002.jsonl
-                attempt-000002-resolution-000001.jsonl
+<state-root>/contexts/<context-name>/state/operations/<operation-id>/
+  logs/
+    operation.jsonl
+    blocks/<block-id>/
+      attempt-000001.jsonl
+      attempt-000002.jsonl
+      attempt-000002-resolution-000001.jsonl
 ```
 
-Workspace owns `<state-root>` and `<context-id>`; state reconciliation owns
-`<operation-id>`, `<block-id>`, and attempt numbers. Their safe grammar,
+Workspace owns `/var/lib/bootwright` and `<context-name>`; state reconciliation
+owns `<operation-id>`, `<block-id>`, and attempt numbers. Their safe grammar,
 allocation, collision, and crash-gap rules are defined by
 [state reconciliation](../state-reconciliation.md#durable-identities-and-private-paths).
 Directories are `0700`; files are `0600`. Creation is exclusive beneath a held,

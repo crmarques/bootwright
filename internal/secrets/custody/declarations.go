@@ -29,6 +29,9 @@ func (s Service) resolve(ctx context.Context, name string) (storage.Context, []s
 	if err != nil {
 		return storage.Context{}, nil, err
 	}
+	if snapshot.Context.Revision == "" {
+		return storage.Context{}, nil, desiredstate.NewFailure("context.input", "context has no desired state; run context update --name "+snapshot.Context.Name+" --input-dir <dir>", "")
+	}
 	state, _, err := s.compiler.Compile(ctx, snapshot.Inputs)
 	if err != nil {
 		return storage.Context{}, nil, err

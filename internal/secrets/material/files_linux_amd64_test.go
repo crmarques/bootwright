@@ -16,6 +16,27 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
+type fixedOperator struct{ identity FileIdentity }
+
+func (f fixedOperator) FileIdentity(context.Context) (FileIdentity, error) { return f.identity, nil }
+
+func TestFileMaterialUsesInvokingAccountIdentity(t *testing.T) {
+	home := t.TempDir()
+	writeSecretFile(t, home, "token.secret", []byte("operator-value\n"), 0600)
+	t.Setenv("HOME", "/untrusted-home")
+	service := New(nil, Options{Operator: fixedOperator{FileIdentity{UID: os.Getuid(), Home: home}}})
+	declaration := secrets.Declaration{Name: "token", Type: "token", Source: "file", Origin: "/input/secret.yaml", Files: secrets.FileSource{Path: "~/token.secret"}}
+	material, err := service.File(context.Background(), declaration)
+	if err != nil {
+		t.Fatal("invoking-user home was not used", err)
+	}
+	material.Clear()
+	service = New(nil, Options{Operator: fixedOperator{FileIdentity{UID: os.Getuid() + 1, Home: home}}})
+	if _, err := service.File(context.Background(), declaration); err == nil {
+		t.Fatal("file belonging to a different account was accepted")
+	}
+}
+
 func TestAcquireResolvesRelativePathsFromInvocationWorkingDirectory(t *testing.T) {
 	root := t.TempDir()
 	path := writeSecretFile(t, root, "token.secret", []byte("from-cwd\n"), 0600)

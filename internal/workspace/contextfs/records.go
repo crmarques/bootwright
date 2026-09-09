@@ -17,9 +17,9 @@ import (
 )
 
 type reservation struct {
-	Version              int    `json:"version"`
-	ID                   string `json:"id"`
-	EnvironmentDirectory string `json:"environmentDirectory"`
+	Version int    `json:"version"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
 }
 
 type manifest struct {
@@ -36,13 +36,6 @@ type frozenFile struct {
 	Category string `json:"category"`
 	Size     int    `json:"size"`
 	SHA256   string `json:"sha256"`
-}
-
-type archive struct {
-	Version  int             `json:"version"`
-	Outcome  string          `json:"outcome"`
-	Record   contexts.Record `json:"record"`
-	Mutation json.RawMessage `json:"mutation"`
 }
 
 // Comparing the canonical encoding rejects duplicate keys, alternate casing,
@@ -235,6 +228,14 @@ func fitsJSON(value reflect.Value, limit int) bool {
 				return false
 			}
 			return add(stringSize(v.String()))
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			value := v.Uint()
+			digits := 1
+			for value >= 10 {
+				value /= 10
+				digits++
+			}
+			return add(digits)
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			n := v.Int()
 			digits := 1
@@ -338,42 +339,44 @@ func contextName(name string) bool {
 }
 
 func validateRegistry(r contexts.Registry) error {
-	if r.Version != 1 || r.Identities == nil || r.Contexts == nil || len(r.Identities) > maxIdentities || len(r.Contexts) > maxIdentities {
+	if r.Version != 2 || r.Identities == nil || r.Contexts == nil || len(r.Identities) > maxIdentities || len(r.Contexts) > maxIdentities {
 		return state("context registry has unsupported version or bounds")
 	}
-	identities := make(map[string]string, len(r.Identities))
-	paths := make(map[string]string, len(r.Identities))
+	ids := make(map[string]bool, len(r.Identities))
 	previous := ""
-	for _, identity := range r.Identities {
-		if !canonicalPath(identity.EnvironmentDirectory) || !identifier(identity.ID, "ctx-") || identity.EnvironmentDirectory <= previous {
-			return state("context identity mapping is invalid or unordered")
+	for _, item := range r.Identities {
+		if !identifier(item.ID, "ctx-") || item.ID <= previous {
+			return state("context identity ledger is invalid or unordered")
 		}
-		if _, found := identities[identity.ID]; found {
-			return state("context identity mapping is contradictory")
-		}
-		identities[identity.ID], paths[identity.EnvironmentDirectory] = identity.EnvironmentDirectory, identity.ID
-		previous = identity.EnvironmentDirectory
+		ids[item.ID] = true
+		previous = item.ID
 	}
-	activeIDs := make(map[string]bool, len(r.Contexts))
-	currentExists := r.Current == ""
+	active := make(map[string]bool, len(r.Contexts))
 	previous = ""
 	for _, record := range r.Contexts {
-		if !contextName(record.Name) || record.Name <= previous || identities[record.ID] != record.EnvironmentDirectory || paths[record.EnvironmentDirectory] != record.ID || activeIDs[record.ID] || !identifier(record.Revision, "rev-") || record.Mode != contexts.Active && record.Mode != contexts.RecoveryOnly {
-			return state("active context mapping is invalid or contradictory")
+		if !contextName(record.Name) || record.Name <= previous || !ids[record.ID] || active[record.ID] {
+			return state("context name or identity mapping is invalid")
 		}
-		previous, activeIDs[record.ID] = record.Name, true
-		if record.Name == r.Current {
-			currentExists = true
+		if !contextName(record.SecretStoreType) {
+			return state("context secret store type is invalid")
 		}
-	}
-	if !currentExists {
-		return state("current context is missing from the registry")
+		if record.Mode != contexts.Initializing && record.Mode != contexts.Ready && record.Mode != contexts.Deleting {
+			return state("context status is invalid")
+		}
+		if record.EnvironmentDirectory != "" && !canonicalPath(record.EnvironmentDirectory) || record.Revision != "" && !identifier(record.Revision, "rev-") || record.Revision != "" && record.EnvironmentDirectory == "" {
+			return state("context input identity is invalid")
+		}
+		if record.DirectoryInode == 0 && record.DirectoryDevice != 0 || record.Mode != contexts.Initializing && record.DirectoryInode == 0 {
+			return state("context directory identity is missing")
+		}
+		previous = record.Name
+		active[record.ID] = true
 	}
 	return nil
 }
 
-func validateReservation(r reservation, id, environment string) error {
-	if r.Version != 1 || r.ID != id || !identifier(r.ID, "ctx-") || !canonicalPath(r.EnvironmentDirectory) || environment != "" && r.EnvironmentDirectory != environment {
+func validateReservation(r reservation, id, name string) error {
+	if r.Version != 2 || r.ID != id || !identifier(r.ID, "ctx-") || !contextName(r.Name) || name != "" && r.Name != name {
 		return state("context reservation contradicts its identity")
 	}
 	return nil
@@ -399,7 +402,7 @@ func validFrozenPath(path, category string) bool {
 }
 
 func validateManifest(m manifest, id, revision, environment string) error {
-	if m.Version != 1 || m.ID != id || m.Revision != revision || !identifier(id, "ctx-") || !identifier(revision, "rev-") || !canonicalPath(m.InputDirectory) || !canonicalPath(m.EnvironmentDirectory) || !beneath(m.InputDirectory, m.EnvironmentDirectory) || m.EnvironmentDirectory != environment || m.Files == nil {
+	if m.Version != 2 || m.ID != id || m.Revision != revision || !identifier(id, "ctx-") || !identifier(revision, "rev-") || !canonicalPath(m.InputDirectory) || !canonicalPath(m.EnvironmentDirectory) || !beneath(m.InputDirectory, m.EnvironmentDirectory) || m.EnvironmentDirectory != environment || m.Files == nil {
 		return state("input manifest identity is invalid")
 	}
 	if len(m.Files) > desiredstate.MaxFiles+desiredstate.MaxMarkers {

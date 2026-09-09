@@ -36,8 +36,8 @@ supported and only when all of these staged-availability conditions hold:
 - the available command supports exact apply continuation and unknown-outcome
   resolution;
 - once an apply operation is registered, context update, a fresh apply, and
-  final context purge refuse, while recovery-only archival preserves the
-  selectable context and every required record; and
+  final context purge refuse, preserving the selectable context and every
+  required record until compatible destruction releases its obligations; and
 - the operator receives the two-phase
   `lifecycle.destroy-unavailable` warning defined by
   [the CLI contract](cli.md#staged-apply-without-destroy), including in every
@@ -56,24 +56,22 @@ This record establishes only local disposal/update restrictions, not native
 execution, readiness, ownership release or permission to run lifecycle work.
 Future lifecycle publication must participate in the same context lease and
 update its evidence before any remote mutation. Missing or unknown evidence
-fails closed. A live lease refuses every context mutation, including archival.
+fails closed. A live lease refuses every context mutation.
 
 The guard allows update only without pending, failed or unknown operations;
 recreation/final deletion requires `none` operation and `none` ownership.
-An explicitly requested `--abandon-resources` may instead archive recognized
-protected state as recovery-only. It never turns unknown/corrupt evidence into
-proof and never releases ownership. Recovery-only contexts remain named and
-selectable for future status/continue/destroy; input inspection remains allowed,
-but update, recreation and new apply are forbidden.
+Protected contexts remain named and selectable for status, exact continuation
+and destroy. Deletion never bypasses unknown or protected evidence. There is
+no recovery-only archival or abandonment flag.
 
-The [Workspace context contract](contexts.md) defines the held lease, registry
-publication and retained archives that enforce this guard. The staged apply
-restriction above adds a stronger update prohibition when destroy is unavailable.
+The [Workspace context contract](contexts.md) defines publication and permanent
+local deletion under this guard. The staged apply restriction above adds a
+stronger update prohibition when destroy is unavailable.
 
 ## Durable identities and private paths
 
 [Contexts](contexts.md) owns the versioned registry, immutable input revisions,
-selection transactions and archive format.
+selection transactions and permanent deletion.
 
 Workspace owns selection and verification of `<state-root>` and allocation of
 `<context-id>`. `<state-root>` is a canonical absolute Bootwright-owned runtime
@@ -82,32 +80,16 @@ environment directory. It is never either directory, a descendant of either,
 or a path derived by appending to either. Desired-state discovery never enters
 it.
 
-State-root selection has this exact precedence:
+The production root is exactly `/var/lib/bootwright`, owned by root with mode
+`0700`. Its directories and files are root:root with modes `0700` and `0600`.
+No XDG, home or other ambient value selects runtime storage. Workspace uses
+verified no-follow traversal and refuses unsafe existing objects without
+ownership or permission repair. The [CLI privilege boundary](cli.md#local-privilege-and-user-identity)
+provides root execution only for valid available commands that require it.
 
-1. When a future driving application contract provides an explicit state-root
-   value in its typed request, use that value.
-2. Otherwise, when `XDG_STATE_HOME` is set to a non-empty absolute path, use
-   `<XDG_STATE_HOME>/bootwright`.
-3. Otherwise, obtain the invoking OS account's absolute home directory from the
-   operating-system account database and use
-   `<account-home>/.local/state/bootwright`. Never consult `HOME`.
-
-An explicit request value must be absolute. An unset, empty, or relative
-`XDG_STATE_HOME` does not select a root and therefore proceeds to the account
-default. Failure to obtain an absolute account home is an error. Once a
-candidate is selected, Bootwright cleans it to canonical absolute form and
-validates it through race-resistant component traversal. The root must be a
-non-link directory owned by the invoking OS account, outside the input paths
-above, with no group or other permission bits. Bootwright may create a missing
-standard or explicit root and its missing suffix directories with a restrictive
-creation mask and mode `0700`; it never replaces a file, follows a link, changes
-ownership, or weakens an existing permission check. Any canonicalization,
-creation, ownership, type, link, permission, or durability failure rejects the
-selected root and does not fall through to another candidate. Context-free
-read-only commands never select, resolve, validate, or create `<state-root>`.
-Context-backed `validate` and `render effective` may resolve an existing root
-and context only far enough to obtain its immutable desired-state input view;
-they never create, repair, migrate, lease, or otherwise write state.
+Context-free read-only commands do not access the root. Context-backed reads
+acquire the existing store's shared lock and never create, repair or migrate
+state. Workspace defines the narrow explicit retry of pending creation/deletion.
 
 State reconciliation owns `<operation-id>`, `<block-id>`, and effect- and
 resolution-attempt numbers. The identity contract is:
@@ -129,26 +111,20 @@ dot segment, whitespace, encoding escape, or user-facing description. An ID is
 validated before lookup or path construction and never comes from an Ansible
 role, play, task, host alias, or vendor response.
 
-Workspace durably maps the canonical absolute environment-directory path to
-exactly one context ID before an operation can be allocated. Reopening that
-path returns the same ID; a different path never shares it. A missing mapping
-is allocated as `ctx-` followed by 32 lowercase hexadecimal characters encoding
-128 bits read from the operating system's cryptographically secure random
-source. State reconciliation allocates an operation ID with the same process
-and the `op-` prefix. Random-source failure refuses without a clock, process-ID,
-path-hash, or weaker fallback.
+Workspace allocates the context ID independently at creation, before input
+or operations exist, as `ctx-` followed by 32 lowercase hexadecimal characters
+from 128 OS cryptographically secure random bits. The registry maps each name
+to that ID. First input import binds its canonical original Environment
+directory; active contexts cannot share that source, and update preserves it.
+Name reuse after permanent deletion allocates a fresh ID. State reconciliation
+allocates operation IDs with the same entropy and the `op-` prefix.
 
-Each candidate is reserved by exclusive creation beneath the verified root and
-durably recorded before publication or use. A collision leaves the existing
-path untouched, discards that candidate, and retries with fresh random bytes,
-at most 16 candidates per allocation; exhaustion is a typed failure before an
-operation or effect. Publication of a new context mapping is atomic and
-durable. A crash after reservation but before publication leaves an orphan: its
-ID and path are never reused or assigned to another context or operation, and
-cleanup requires a separately verified recovery action. A corrupt, duplicate,
-missing-target, or contradictory context mapping fails closed rather than
-allocating a replacement. Operation records follow the same exclusive durable
-reservation, collision, crash-gap, and non-reuse rules.
+Reserve candidates exclusively, checking existing identities; a collision
+retries with fresh entropy at most 16 times. Random failure has no clock,
+process-ID, hash or weaker fallback. Pending operations and initializations
+remain attributable to their original identity. Corruption or contradictory
+mapping refuses rather than allocating a replacement. Context data resides
+beneath `contexts/<name>`; runtime records reside beneath its `state/`.
 
 ## State machine
 

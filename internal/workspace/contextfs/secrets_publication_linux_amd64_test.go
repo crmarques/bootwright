@@ -229,7 +229,7 @@ func TestSecretPublicationCrashChild(t *testing.T) {
 	if root == "" {
 		return
 	}
-	store := New(Options{Root: root})
+	store := New(testOptions(root))
 	snapshot, err := store.SecretContext(context.Background(), "example")
 	if err != nil {
 		t.Fatal(err)

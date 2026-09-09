@@ -7,14 +7,22 @@ management without platform, entitlement or lifecycle effects.
 
 ## Implementation selection
 
-`secret encryption init --type <type>` requires an explicit safe identifier.
-An immutable catalog injected at composition resolves exactly one implementation.
-M1c registers `local-keyring`: store `local-v1`, custody `local-keyfile-v1`,
-interface/state/config versions `1`, empty closed configurations. Initialization
-atomically publishes selection and state. Repeating the same selection is
-idempotent; changing type refuses. Subsequent commands resolve the exact persisted
-references. Missing, ambiguous or incompatible implementations never fall back.
-Rotation does not migrate implementations.
+The standalone [Context configuration](contexts.md#context-configuration)
+selects `spec.secretStore.type`, defaulting to `local-keyring`. An immutable
+catalog injected at composition resolves exactly one implementation. Local
+keyring uses store `local-v1`, custody `local-keyfile-v1`, interface/state/config
+versions `1`, and empty closed configurations. Context creation initializes
+that implementation through a transaction-scoped Workspace area before ready
+publication, without requiring Environment input or generating Secret values.
+
+`secret encryption init` consumes that configuration and is idempotent; it has
+no `--type` override. Changing the initialized type refuses. Subsequent commands
+resolve exact persisted references; absent, ambiguous or incompatible
+implementations never fall back. Rotation does not migrate implementations.
+Encryption initialization/status/rotation require context identity and
+configuration, but no desired-state revision. Declaration-dependent commands
+require an imported revision and provide `context update --input-dir` guidance
+when it is absent.
 
 Store access consumes a resolver interface, so the catalog itself is replaceable.
 Every resolver preserves exact selection, returns a non-nil implementation on
@@ -115,15 +123,14 @@ versions; release drops only its references. M1d owns the future lifecycle port.
 
 Canonical non-secret declaration fingerprints cover type/source/parameters and
 provenance. Changed declarations make retained values stale/orphaned, never
-automatically import/generate/delete. Final context deletion retains bytes but
-makes them unreachable. Same-ID reinitialization permits exact matching
-declarations only; human-name reuse under another ID cannot expose prior bytes.
-Recovery-only permits check/list/show/encryption status/rotate and exact
-continue/destroy binding access, but forbids init/set/generate/delete.
+automatically import/generate/delete. Final context deletion permanently removes
+the verified keyring only after positive disposal proof. Human-name reuse
+allocates a fresh identity and never exposes prior material. Protected contexts cannot be deleted or abandoned.
 
 ## Local keyring v1
 
-Optional secrets/ extends context v1; secret format v1 is independent. Empty or
+The `secrets/` subtree is initialized during context creation; secret format v1
+is independent of the enclosing context format. Empty or
 absent means uninitialized. Nonempty state without a selector requires recovery.
 Unknown/legacy formats refuse; no migration or automatic Workspace repair.
 Explicit initialization alone may invoke the selected implementation to recover

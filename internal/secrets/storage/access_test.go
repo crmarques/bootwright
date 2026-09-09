@@ -122,7 +122,7 @@ func testBackend(kind string, needs bool) *testImplementation {
 	return &testImplementation{selection: Selection{Type: kind, Store: ref, KeyCustody: ref}, needs: needs}
 }
 func testAccess(backends ...SecretStoreImplementation) (*Access, *testWorkspace, *testSource) {
-	w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", ID: "ctx-fixture", Mode: "active", Revision: "rev-fixture"}}
+	w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", ID: "ctx-fixture", Mode: "ready", Revision: "rev-fixture"}}
 	s := &testSource{}
 	return NewAccess(w, NewCatalog(backends...), s), w, s
 }
@@ -273,7 +273,7 @@ func TestAccessUsesInjectedImplementationResolver(t *testing.T) {
 	ctx := context.Background()
 	backend := testBackend("independent", true)
 	resolver := &testResolver{implementation: backend, types: []string{"independent"}}
-	w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", ID: "ctx-fixture", Mode: "active"}}
+	w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", ID: "ctx-fixture", Mode: "ready"}}
 	source := &testSource{}
 	access := NewAccess(w, resolver, source)
 	if got := access.Types(); !slices.Equal(got, []string{"independent"}) {
@@ -324,7 +324,7 @@ func TestResolverFailureStopsBeforeBackendAndMaterial(t *testing.T) {
 			backend := testBackend("independent", true)
 			want := Failure("store.implementation", "injected resolver refused selection")
 			resolver := &testResolver{implementation: backend, failure: want}
-			w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", ID: "ctx-fixture", Mode: "active"}}
+			w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", ID: "ctx-fixture", Mode: "ready"}}
 			source := &testSource{}
 			access := NewAccess(w, resolver, source)
 			selector, err := EncodeCanonical(Selector{SelectorVersion: 1, ContextID: w.selected.ID, Selection: backend.selection, Generation: "fixture-generation"})
@@ -359,7 +359,7 @@ func TestMissingResolverPreservesUninitializedInspectionAndRefusesSelection(t *t
 	for name, resolver := range map[string]ImplementationResolver{"nil": nil, "typed-nil-catalog": missing} {
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
-			w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", ID: "ctx-fixture", Mode: "active"}}
+			w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", ID: "ctx-fixture", Mode: "ready"}}
 			access := NewAccess(w, resolver, nil)
 			if len(access.Types()) != 0 {
 				t.Fatal("missing resolver offered completion candidates")

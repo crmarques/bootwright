@@ -252,7 +252,7 @@ func TestPublishRejectsOversizedProjectedEnvelopeBeforeEffects(t *testing.T) {
 	random := &sequenceReader{}
 	session := &session{
 		implementation: NewWithOptions(Options{Random: random}),
-		context:        storage.Context{Name: "example", ID: contextID, Mode: "active", Revision: fixedID("rev-", 1)},
+		context:        storage.Context{Name: "example", ID: contextID, Mode: "ready", Revision: fixedID("rev-", 1)},
 		area:           area,
 		selector:       next.Selector,
 		selectorData:   []byte("prior selector"),

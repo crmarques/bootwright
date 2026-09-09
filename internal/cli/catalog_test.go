@@ -12,10 +12,10 @@ import (
 
 func TestPublicCatalog(t *testing.T) {
 	expected := map[string]string{
-		"context init": "file name yes", "context update": "file name yes", "context use": "name", "context list": "", "context current": "short", "context delete": "abandon-resources name purge yes",
+		"context init": "file input-dir name", "context update": "file input-dir name yes", "context use": "name", "context list": "", "context current": "short", "context delete": "name purge yes",
 		"add-ons list": "output", "add-ons add": "name version yes", "add-ons delete": "name yes",
 		"secret set": "certificate-file name password-file password-stdin private-key-file public-key-file username value-file value-stdin yes", "secret generate": "name renew", "secret check": "output", "secret list": "output", "secret show": "name part", "secret delete": "name yes",
-		"secret encryption init": "type", "secret encryption status": "output", "secret encryption rotate": "yes",
+		"secret encryption init": "", "secret encryption status": "output", "secret encryption rotate": "yes",
 		"media add": "from-file from-url name sha256 yes", "media list": "checksums output", "media delete": "name yes",
 		"validate": "file output", "preflight bastion": "", "preflight infra": "clusters dry-run output trust-on-first-use verbose", "preflight clusters": "clusters dry-run output trust-on-first-use verbose", "preflight container-cluster": "clusters dry-run output trust-on-first-use verbose", "preflight storage-cluster": "clusters dry-run output trust-on-first-use verbose", "preflight add-ons": "clusters output", "preflight all": "dry-run output trust-on-first-use verbose",
 		"plan": "", "status": "output watch watch-interval", "render": "clusters input-dir output output-dir sensitive", "render effective": "output", "render installer": "clusters output sensitive", "render storage": "clusters output", "apply": "authorize verbose yes", "destroy": "authorize verbose yes",
