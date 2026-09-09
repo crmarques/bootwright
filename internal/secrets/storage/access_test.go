@@ -3,9 +3,11 @@ package storage
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
@@ -145,8 +147,7 @@ func TestSelectedImplementationAndSessionCapability(t *testing.T) {
 			if needs && (source.calls != 1 || !source.material.closed) {
 				t.Fatal("unlock capability was not acquired and closed")
 			}
-			// Reorder registration: reopening must follow persisted identity.
-			access.catalog = NewCatalog(b, a)
+			access.resolver = NewCatalog(b, a)
 			if err := access.View(context.Background(), w.selected, true, func(s StoreSession, _ Selection) error { return callback(s, Selection{}, false) }); err != nil {
 				t.Fatal(err)
 			}
@@ -165,9 +166,9 @@ func TestSelectedImplementationAndSessionCapability(t *testing.T) {
 
 func TestImplementationAndSelectorRefusalBeforeBackend(t *testing.T) {
 	for _, mutate := range []func(*Access, *testWorkspace, *testImplementation){
-		func(a *Access, _ *testWorkspace, b *testImplementation) { a.catalog = NewCatalog(b, b) },
+		func(a *Access, _ *testWorkspace, b *testImplementation) { a.resolver = NewCatalog(b, b) },
 		func(a *Access, _ *testWorkspace, _ *testImplementation) {
-			a.catalog = NewCatalog(testBackend("other", false))
+			a.resolver = NewCatalog(testBackend("other", false))
 		},
 		func(_ *Access, w *testWorkspace, _ *testImplementation) {
 			w.area.files["selector.json"] = []byte(`{"selectorVersion":1}`)
@@ -247,6 +248,153 @@ func TestTypedNilImplementationFailsClosed(t *testing.T) {
 	}
 	if _, err := catalog.Select("configured"); err == nil {
 		t.Fatal("catalog with a missing implementation was usable")
+	}
+}
+
+type testResolver struct {
+	implementation SecretStoreImplementation
+	types          []string
+	selected       []string
+	reopened       []Selection
+	failure        error
+}
+
+func (r *testResolver) Types() []string { return r.types }
+func (r *testResolver) Select(kind string) (SecretStoreImplementation, error) {
+	r.selected = append(r.selected, kind)
+	return r.implementation, r.failure
+}
+func (r *testResolver) Reopen(selection Selection) (SecretStoreImplementation, error) {
+	r.reopened = append(r.reopened, selection)
+	return r.implementation, r.failure
+}
+
+func TestAccessUsesInjectedImplementationResolver(t *testing.T) {
+	ctx := context.Background()
+	backend := testBackend("independent", true)
+	resolver := &testResolver{implementation: backend, types: []string{"independent"}}
+	w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", ID: "ctx-fixture", Mode: "active"}}
+	source := &testSource{}
+	access := NewAccess(w, resolver, source)
+	if got := access.Types(); !slices.Equal(got, []string{"independent"}) {
+		t.Fatal("completion did not use the injected resolver", got)
+	}
+	if err := access.Initialize(ctx, w.selected, "independent", func(session StoreSession, selection Selection, created bool) error {
+		if session == nil || selection != backend.selection || !created {
+			t.Fatal("incorrect initialization result")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(resolver.selected, []string{"independent"}) || backend.initialized != 1 || !backend.last.closed || !source.material.closed {
+		t.Fatal("initialization bypassed resolver or leaked capabilities")
+	}
+	callback := func(session StoreSession, selection Selection) error {
+		if session == nil || selection != backend.selection {
+			t.Fatal("incorrect reopened result")
+		}
+		return nil
+	}
+	if err := access.View(ctx, w.selected, true, callback); err != nil {
+		t.Fatal(err)
+	}
+	if err := access.Mutate(ctx, w.selected, callback); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(resolver.reopened, []Selection{backend.selection, backend.selection}) || backend.opened != 2 || source.calls != 3 || !backend.last.closed || !source.material.closed {
+		t.Fatal("reopening bypassed persisted selection or leaked capabilities")
+	}
+}
+
+func TestAccessTypesDoesNotExposeResolverMetadata(t *testing.T) {
+	resolver := &testResolver{types: []string{"independent"}}
+	access := NewAccess(nil, resolver, nil)
+	types := access.Types()
+	types[0] = "changed"
+	if !slices.Equal(resolver.types, []string{"independent"}) || !slices.Equal(access.Types(), []string{"independent"}) {
+		t.Fatal("caller mutated resolver metadata")
+	}
+}
+
+func TestResolverFailureStopsBeforeBackendAndMaterial(t *testing.T) {
+	for _, operation := range []string{"initialize", "view", "mutate"} {
+		t.Run(operation, func(t *testing.T) {
+			ctx := context.Background()
+			backend := testBackend("independent", true)
+			want := Failure("store.implementation", "injected resolver refused selection")
+			resolver := &testResolver{implementation: backend, failure: want}
+			w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", ID: "ctx-fixture", Mode: "active"}}
+			source := &testSource{}
+			access := NewAccess(w, resolver, source)
+			selector, err := EncodeCanonical(Selector{SelectorVersion: 1, ContextID: w.selected.ID, Selection: backend.selection, Generation: "fixture-generation"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			w.area.files["selector.json"] = selector
+			callback := func(StoreSession, Selection) error {
+				t.Fatal("resolver failure reached callback")
+				return nil
+			}
+			switch operation {
+			case "initialize":
+				err = access.Initialize(ctx, w.selected, "independent", func(session StoreSession, selection Selection, _ bool) error { return callback(session, selection) })
+				if w.writes != 0 {
+					t.Fatal("failed selection reached mutation")
+				}
+			case "view":
+				err = access.View(ctx, w.selected, true, callback)
+			case "mutate":
+				err = access.Mutate(ctx, w.selected, callback)
+			}
+			if !errors.Is(err, want) || backend.initialized != 0 || backend.opened != 0 || source.calls != 0 {
+				t.Fatal("resolver failure was ignored or acquired capabilities", err)
+			}
+		})
+	}
+}
+
+func TestMissingResolverPreservesUninitializedInspectionAndRefusesSelection(t *testing.T) {
+	var missing *ImplementationCatalog
+	for name, resolver := range map[string]ImplementationResolver{"nil": nil, "typed-nil-catalog": missing} {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", ID: "ctx-fixture", Mode: "active"}}
+			access := NewAccess(w, resolver, nil)
+			if len(access.Types()) != 0 {
+				t.Fatal("missing resolver offered completion candidates")
+			}
+			if err := access.View(ctx, w.selected, false, func(session StoreSession, selection Selection) error {
+				if session != nil || selection != (Selection{}) {
+					t.Fatal("uninitialized inspection returned a selected session")
+				}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			err := access.Initialize(ctx, w.selected, "independent", func(StoreSession, Selection, bool) error {
+				t.Fatal("missing resolver reached initialization callback")
+				return nil
+			})
+			diagnostics := desiredstate.DiagnosticsOf(err)
+			if len(diagnostics) != 1 || diagnostics[0].Code != "secret.store.implementation" || w.writes != 0 {
+				t.Fatal("missing resolver did not safely refuse initialization", err)
+			}
+			selection := testBackend("independent", false).selection
+			selector, err := EncodeCanonical(Selector{SelectorVersion: 1, ContextID: w.selected.ID, Selection: selection, Generation: "fixture-generation"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			w.area.files["selector.json"] = selector
+			err = access.View(ctx, w.selected, true, func(StoreSession, Selection) error {
+				t.Fatal("missing resolver reached reopen callback")
+				return nil
+			})
+			diagnostics = desiredstate.DiagnosticsOf(err)
+			if len(diagnostics) != 1 || diagnostics[0].Code != "secret.store.implementation" || w.writes != 0 {
+				t.Fatal("missing resolver did not safely refuse reopening", err)
+			}
+		})
 	}
 }
 

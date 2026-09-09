@@ -319,6 +319,12 @@ inverse removal and pinned Go-to-Ansible closure. TLS validation must cover
 bounded parsing, certificate/key agreement, validity, server-auth usage and SAN
 coverage without disclosure.
 
+Qualify the [composition boundaries](architecture.md#dependency-direction-and-communication)
+with interchangeable Go capability implementations and Ansible bindings using
+the same request/result/failure/evidence contract. Verify fixed entrypoint,
+role and plugin resolution and refusal of authored executable selection before
+effects. Ansible contract evidence begins with this first implemented adapter.
+
 Exit: deterministic complete plans/digests; immutable input and credentials;
 versioned snapshots, leases, logs, ownership, sequential execution and exact
 continuation; qualified create/configure/readiness/inverse behavior with

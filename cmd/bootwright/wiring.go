@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 
-	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
 	addoncatalog "github.com/crmarques/bootwright/internal/addons/catalog"
 	addonpreflight "github.com/crmarques/bootwright/internal/addons/preflight"
@@ -46,18 +45,8 @@ import (
 )
 
 func wireCompiler() compilation.Compiler {
-	return compilation.NewCompiler(yamlstream.Parser{}, func(catalog api.Catalog) compilation.Selection {
-		attachments := []environment.Attachment{}
-		for _, attachment := range addons.StorageAttachments(catalog) {
-			attachments = append(attachments, environment.Attachment{ClusterRef: attachment.ClusterRef, ExportRef: attachment.ExportRef})
-		}
-		selection := environment.Select(catalog, attachments)
-		result := compilation.Selection{Catalog: selection.Catalog, ExcludedContainerClusters: selection.ExcludedContainerClusters, ExcludedStorageClusters: selection.ExcludedStorageClusters}
-		for _, problem := range selection.Problems {
-			result.Problems = append(result.Problems, compilation.ObjectIssue{Object: problem.Object, Issue: problem.Issue})
-		}
-		return result
-	}, compilation.Rules{Normalize: environment.Normalize, ValidateAuthored: environment.ValidateAuthored, ValidatePartial: environment.ValidatePartial, Validate: environment.Validate},
+	selection := compilation.NewGraphSelector(addons.StorageAttachments, environment.Select)
+	return compilation.NewCompiler(yamlstream.Parser{}, selection.Select, compilation.Rules{Normalize: environment.Normalize, ValidateAuthored: environment.ValidateAuthored, ValidatePartial: environment.ValidatePartial, Validate: environment.Validate},
 		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, ValidatePartial: secrets.ValidateAuthored, Validate: secrets.Validate},
 		compilation.Rules{Normalize: addons.Normalize, ValidateAuthored: addons.ValidateAuthored, ValidatePartial: addons.ValidatePartial, Validate: addons.Validate},
 		compilation.Rules{Normalize: customplaybooks.Normalize, ValidateAuthored: customplaybooks.ValidateAuthored, ValidatePartial: customplaybooks.ValidatePartial, Validate: customplaybooks.Validate},
@@ -69,13 +58,17 @@ func wireCompiler() compilation.Compiler {
 		compilation.Rules{Normalize: infrastructureservices.Normalize, ValidateAuthored: infrastructureservices.ValidateAuthored, ValidatePartial: infrastructureservices.ValidatePartial, Validate: infrastructureservices.Validate})
 }
 
-func wireServices() cli.Services { return wireContextServices(contextfs.New(contextfs.Options{}), nil) }
+func wireServices() cli.Services { return wireLocalServices(nil, nil) }
 
-func wireContextServices(repository contexts.Repository, confirmer contexts.Confirmer, inputs ...custody.MaterialInput) cli.Services {
+func wireLocalServices(confirmer contexts.Confirmer, input secretmaterial.InputReader) cli.Services {
+	repository := contextfs.New(contextfs.Options{})
+	return wireContextServices(repository, repository, confirmer, input)
+}
+
+func wireContextServices(repository contexts.Repository, workspace secretstorage.Workspace, confirmer contexts.Confirmer, inputs ...secretmaterial.InputReader) cli.Services {
 	compiler := wireCompiler()
-	workspace, _ := repository.(secretstorage.Workspace)
 	access := secretstorage.NewAccess(workspace, secretstorage.NewCatalog(localstore.New()), nil)
-	var input custody.MaterialInput
+	var input secretmaterial.InputReader
 	if len(inputs) != 0 {
 		input = inputs[0]
 	}

@@ -7,6 +7,12 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets/storage"
 )
 
+type StoreAccess interface {
+	Context(context.Context, string) (storage.ContextSnapshot, error)
+	View(context.Context, storage.Context, bool, func(storage.StoreSession, storage.Selection) error) error
+	Mutate(context.Context, storage.Context, func(storage.StoreSession, storage.Selection) error) error
+}
+
 type Materializer interface {
 	Acquire(context.Context, secrets.Declaration, secrets.Input) (secrets.Material, error)
 	File(context.Context, secrets.Declaration) (secrets.Material, error)
@@ -14,9 +20,6 @@ type Materializer interface {
 	Validate(context.Context, secrets.Declaration, secrets.Material) error
 }
 
-type MaterialInput interface {
-	Read(context.Context, []byte) (int, error)
-}
 type Confirmer interface {
 	Confirm(context.Context, string, string) error
 }

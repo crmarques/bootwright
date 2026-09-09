@@ -10,11 +10,11 @@ type Confirmer interface {
 	Confirm(context.Context, string, string) error
 }
 type Service struct {
-	access    storage.StoreAccess
+	access    StoreAccess
 	confirmer Confirmer
 }
 
-func New(access storage.StoreAccess, confirmer Confirmer) *Service {
+func New(access StoreAccess, confirmer Confirmer) *Service {
 	return &Service{access: access, confirmer: confirmer}
 }
 func (s Service) Types() []string {

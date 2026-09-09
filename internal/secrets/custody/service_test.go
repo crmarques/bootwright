@@ -14,15 +14,15 @@ import (
 )
 
 type serviceAccess struct {
-	storage.StoreAccess
-	snapshot     storage.ContextSnapshot
-	session      *serviceSession
-	transactions int
-	failure      error
+	snapshot       storage.ContextSnapshot
+	session        *serviceSession
+	transactions   int
+	contextFailure error
+	failure        error
 }
 
 func (a *serviceAccess) Context(context.Context, string) (storage.ContextSnapshot, error) {
-	return a.snapshot, nil
+	return a.snapshot, a.contextFailure
 }
 func (a *serviceAccess) View(_ context.Context, _ storage.Context, _ bool, callback func(storage.StoreSession, storage.Selection) error) error {
 	if a.failure != nil {
@@ -178,6 +178,57 @@ func TestSetAuthorizationBeforeInputAndSameMaterial(t *testing.T) {
 	transactions := a.transactions
 	if _, err := s.Set(ctx, request); err == nil || a.transactions != transactions {
 		t.Fatal("recovery-only set reached mutation")
+	}
+}
+
+func TestStoreAccessFailuresStopCustodyBeforeMaterial(t *testing.T) {
+	operations := map[string]func(*Service) error{
+		"set": func(service *Service) error {
+			_, err := service.Set(context.Background(), SetRequest{Name: "token", Input: secrets.Input{ValueStdin: true}})
+			return err
+		},
+		"generate": func(service *Service) error {
+			_, err := service.Generate(context.Background(), GenerateRequest{Name: "generated"})
+			return err
+		},
+		"check": func(service *Service) error {
+			_, err := service.Check(context.Background(), CheckRequest{})
+			return err
+		},
+		"list": func(service *Service) error {
+			_, err := service.List(context.Background(), ListRequest{})
+			return err
+		},
+		"show": func(service *Service) error {
+			_, err := service.Show(context.Background(), ShowRequest{Name: "token", Part: secrets.ValuePart})
+			return err
+		},
+		"delete": func(service *Service) error {
+			_, err := service.Delete(context.Background(), DeleteRequest{Name: "token"})
+			return err
+		},
+	}
+	for name, invoke := range operations {
+		for _, stage := range []string{"context", "session"} {
+			t.Run(name+"/"+stage, func(t *testing.T) {
+				service, access, material, confirmer := serviceFixture(t, declarationYAML("token", "")+declarationYAML("generated", "  source: {generated: {}}\n"))
+				want := storage.Failure("store.conflict", "injected access refused context")
+				if stage == "context" {
+					access.contextFailure = want
+				} else {
+					access.failure = want
+				}
+				if err := invoke(service); !errors.Is(err, want) {
+					t.Fatal("access failure was not preserved", err)
+				}
+				if material.acquired != 0 || material.generated != 0 || material.files != 0 || material.validated != 0 || confirmer.calls != 0 || access.session.reads != 0 || access.session.writes != 0 {
+					t.Fatal("access failure allowed secret material or confirmation effects")
+				}
+				if stage == "context" && access.transactions != 0 {
+					t.Fatal("context failure reached mutation")
+				}
+			})
+		}
 	}
 }
 

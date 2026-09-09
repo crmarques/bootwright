@@ -26,7 +26,7 @@ func TestSecretConfirmationsHoldMutationLeaseAndReleaseItOnRefusal(t *testing.T)
 		t.Fatal(err)
 	}
 	confirmations := 0
-	services = wireContextServices(repository, secretConfirmationFunc(func(ctx context.Context, _, _ string) error {
+	services = wireContextServices(repository, repository, secretConfirmationFunc(func(ctx context.Context, _, _ string) error {
 		confirmations++
 		entered := false
 		err := repository.MutateSecrets(ctx, snapshot.Context, func(storage.Area) error { entered = true; return nil })

@@ -3,6 +3,7 @@ package compilation
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 
@@ -64,6 +65,14 @@ type State struct {
 	authored  api.Catalog
 	effective api.Catalog
 	origins   map[string]desiredstate.SourceLocation
+}
+
+func NewState(authored, effective api.Catalog, origins map[string]desiredstate.SourceLocation) *State {
+	return &State{
+		authored:  canonicalCatalog(authored.Objects()),
+		effective: canonicalCatalog(effective.Objects()),
+		origins:   maps.Clone(origins),
+	}
 }
 
 func (s *State) Authored() api.Catalog  { return s.authored }
@@ -301,7 +310,7 @@ func (c Compiler) Compile(ctx context.Context, sources desiredstate.Sources) (*S
 		authored = append(authored, record.authored)
 		origins[record.object.Identity()] = desiredstate.SourceLocation{Path: record.path, Document: record.document}
 	}
-	return &State{authored: canonicalCatalog(authored), effective: canonicalCatalog(catalog.Objects()), origins: origins}, report, nil
+	return NewState(api.NewCatalog(authored), catalog, origins), report, nil
 }
 
 func compilationFailure(ctx context.Context, ds *diagnostics) (*State, *Report, error) {

@@ -16,6 +16,14 @@ idempotent; changing type refuses. Subsequent commands resolve the exact persist
 references. Missing, ambiguous or incompatible implementations never fall back.
 Rotation does not migrate implementations.
 
+Store access consumes a resolver interface, so the catalog itself is replaceable.
+Every resolver preserves exact selection, returns a non-nil implementation on
+success, and refuses missing or incompatible identities before acquisition or
+effects. Type listings are independent snapshots. Custody and encryption each
+own the narrow access interface their commands need; neither caller depends on
+the other's operations or a concrete access service. Material acquisition owns
+its input-reading port; the CLI supplies invocation input at composition.
+
 Core services use semantic implementation/session interfaces for inspection,
 publication, reading, binding and rotation, with no concrete imports or identity
 branches. Implementations declare session requirements, acquired through an

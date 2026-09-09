@@ -52,7 +52,7 @@ func TestComposedSecretStdinIsLazyAndExact(t *testing.T) {
 	}
 	writer.Close()
 	reads := 0
-	services := wireContextServices(repository, nil, secretInputFunc(func(ctx context.Context, buffer []byte) (int, error) {
+	services := wireContextServices(repository, repository, nil, secretInputFunc(func(ctx context.Context, buffer []byte) (int, error) {
 		reads++
 		return readInputFD(ctx, int(reader.Fd()), buffer)
 	}))

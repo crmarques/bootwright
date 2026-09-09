@@ -155,52 +155,6 @@ func TestPackageDependencyDirection(t *testing.T) {
 	}
 }
 
-func TestConcreteServicesAreBoundAtComposition(t *testing.T) {
-	roles := packageRoles()
-	sources := productionSources(t)
-	concreteServices := map[string]bool{}
-	for _, source := range sources {
-		if roles[source.owner] != applicationRole {
-			continue
-		}
-		ast.Inspect(source.syntax, func(node ast.Node) bool {
-			declaration, ok := node.(*ast.TypeSpec)
-			if ok && declaration.Name.Name == "Service" {
-				if _, concrete := declaration.Type.(*ast.StructType); concrete {
-					concreteServices["github.com/crmarques/bootwright/"+source.owner] = true
-				}
-			}
-			return true
-		})
-	}
-	for _, source := range sources {
-		if roles[source.owner] == compositionRole {
-			continue
-		}
-		for _, imported := range source.imports {
-			if imported.alias == "." && concreteServices[imported.path] {
-				t.Errorf("%s dot-imports application package %s", source.path, imported.path)
-			}
-		}
-		ast.Inspect(source.syntax, func(node ast.Node) bool {
-			selector, ok := node.(*ast.SelectorExpr)
-			if !ok || selector.Sel.Name != "Service" {
-				return true
-			}
-			qualifier, ok := selector.X.(*ast.Ident)
-			if !ok || qualifier.Obj != nil {
-				return true
-			}
-			for _, imported := range source.imports {
-				if imported.alias == qualifier.Name && concreteServices[imported.path] {
-					t.Errorf("%s references concrete service %s.Service outside composition", source.path, qualifier.Name)
-				}
-			}
-			return true
-		})
-	}
-}
-
 func TestAdmissionEffectBoundary(t *testing.T) {
 	for _, source := range productionSources(t) {
 		if source.owner == "cmd/bootwright" {

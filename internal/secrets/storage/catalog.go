@@ -7,8 +7,6 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// ImplementationCatalog is a frozen set built by the composition root. Selection
-// is exact; registering another implementation never changes existing stores.
 type ImplementationCatalog struct {
 	implementations []SecretStoreImplementation
 	selections      []Selection

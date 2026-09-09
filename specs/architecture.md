@@ -87,9 +87,22 @@ translation location. An application service may coordinate contexts, but it
 must call each through its published capability and must not reproduce its
 rules. An adapter never calls another adapter to bypass that service.
 
+Every replaceable service, repository, resolver, and effect implementation is
+consumed through an injected contract, including dependencies between components
+in the same package. Consumers neither construct another implementation nor
+assert its concrete type. Constructors may return concrete implementations;
+only composition binds them to their consumers. Renaming an implementation
+from `Service` to `Compiler`, `Access`, or another name does not change this rule.
+
 Each consuming package owns the smallest useful interface. In Go this is a
-typed interface located with its consumer, not in a provider or generic
-`ports` package. Its immutable request and result use domain terms rather than
+typed interface or typed function capability located with its consumer, not in
+a provider or generic `ports` package. A function capability is appropriate for
+one operation; cohesive operations may share an interface. Immutable values,
+value constructors, and pure domain functions with shared semantics can remain
+concrete; they do not discover or bind replaceable services. A result value must
+be constructible by every conforming implementation without invoking the default
+implementation, and must preserve its immutability when constructed that way.
+The contract's immutable request and result use domain terms rather than
 vendor, transport, inventory, or persistence shapes. Copy mutable collections
 at boundaries and propagate `context.Context` through cancellable Go calls.
 The contract defines applicable success, typed failure, cancellation, replay
@@ -98,9 +111,11 @@ when every implementation preserves those semantics; otherwise split the
 capability.
 
 Languages without Go-style interfaces use an equivalent explicit contract.
-For Ansible, that contract is the allowlisted playbook entrypoint plus its
-versioned input, result, failure, and evidence schema, verified by shared
-contract tests.
+For Ansible, that contract is a named capability with a versioned input, result,
+failure, and evidence schema. Composition binds it to an allowlisted playbook
+entrypoint and fixed role/plugin references. Shared contract tests qualify each
+implementation; callers depend on the capability contract, not private tasks,
+variables, or implementation-specific result shapes.
 
 No context shares a writable model or store with another. One component owns
 each mutable datum and consistency boundary. Crossing that boundary requires a
@@ -220,8 +235,16 @@ empty packages or repeat generic `domain`, `application`, `ports`, and
 
 Wiring constructs adapters and injects them into their consumers as capabilities
 are implemented. It performs no context discovery, application work, domain
-decision, or presentation. Domain-specific implementation selection belongs
-to the owning application policy.
+decision, or presentation. The CLI collects explicit input; `cmd/bootwright`
+constructs the complete graph of available implementations before dispatch.
+Loading here means explicit construction and injection, not runtime code loading.
+When selection depends on validated context configuration, desired state, or
+persisted identity, composition injects an immutable resolver containing the
+available implementations. Application policy supplies semantic selection
+criteria through that resolver's consumer-owned port; it never imports,
+constructs, or switches on a concrete implementation. Context lookup still
+occurs only in the authorized use case, preserving effect-free help, completion,
+version, and invalid usage.
 
 `internal/cli` is the driving adapter backed by the selected framework. It owns
 the public command catalog, framework configuration, contract-specific
@@ -327,8 +350,10 @@ selection; it never calls context management. Input lookup never calls the
 compiler. This separates context admission's compilation dependency from
 command-facing compilation's input lookup without a package or service cycle.
 Compilation translates decoded values into Environment-owned inputs for pure
-selection and graph closure. Environment's domain rules never import the
-desired-state aggregate. Platform-owned invariants remain with Machine,
+selection and graph closure. Its `GraphSelector` coordinates injected add-on
+attachment and Environment selection functions and translates their results;
+the composition root only binds those functions. Environment's domain rules
+never import the desired-state aggregate. Platform-owned invariants remain with Machine,
 Container cluster, Storage, and the other referenced domains; compilation phase
 and diagnostic semantics remain in [the API contract](api.md).
 
@@ -458,6 +483,19 @@ Implementation variants may share a port only when success, failure, replay,
 ownership, and evidence semantics agree. A role never calls an unrelated domain
 role to hide orchestration.
 
+The selected playbook is the Ansible composition boundary. It binds capability
+dependencies with explicit `ansible.builtin.import_role` or
+`ansible.builtin.include_role` calls using fixed qualified role names, and fixed
+module/action FQCNs. A role's private task includes may split its own
+implementation; they are not public capability interfaces. A replaceable role
+or plugin dependency must have its own declared request/result contract and be
+bound by the selected entrypoint, rather than discovered by a consumer role.
+Implementation changes affect these bindings and their locks, not consumers.
+Any required variant dispatch is an explicit allowlisted binding frozen by Go;
+authored variables, gathered facts, and arbitrary role/task/plugin names cannot
+select executable code. Do not use implicit role dependencies or shared mutable
+facts to communicate across capability boundaries.
+
 ### Ansible collection plugins and results
 
 A Bootwright module or action validates a frozen request, invokes the required
@@ -530,6 +568,11 @@ reviewers retain semantic judgments that source checks cannot prove.
 
 - Check every production Go package for inward dependencies, declared context
   ownership, and no direct adapter-to-adapter calls or domain vendor/I/O leaks.
+- Reject concrete service types and their constructors outside composition,
+  regardless of their names, and reject concrete component dependencies in
+  same-package service fields. Test replacement through consumer interfaces and
+  typed function capabilities, including independently constructed results and
+  failure propagation; import direction alone does not prove substitutability.
 - Verify that builds and runtime adapters use their declared versions and
   locks, with no ambient or silently substituted dependencies.
 - Verify implementation registry entries against actual adapter content,

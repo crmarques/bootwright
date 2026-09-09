@@ -1,6 +1,18 @@
 package encryption
 
-import "github.com/crmarques/bootwright/internal/secrets/storage"
+import (
+	"context"
+
+	"github.com/crmarques/bootwright/internal/secrets/storage"
+)
+
+type StoreAccess interface {
+	Context(context.Context, string) (storage.ContextSnapshot, error)
+	Types() []string
+	View(context.Context, storage.Context, bool, func(storage.StoreSession, storage.Selection) error) error
+	Mutate(context.Context, storage.Context, func(storage.StoreSession, storage.Selection) error) error
+	Initialize(context.Context, storage.Context, string, func(storage.StoreSession, storage.Selection, bool) error) error
+}
 
 type ImplementationStatus struct {
 	Type       string          `json:"type"`

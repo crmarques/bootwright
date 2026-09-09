@@ -11,13 +11,13 @@ import (
 )
 
 type Service struct {
-	access    storage.StoreAccess
+	access    StoreAccess
 	compiler  Compiler
 	material  Materializer
 	confirmer Confirmer
 }
 
-func New(access storage.StoreAccess, compiler Compiler, material Materializer, confirmer Confirmer) *Service {
+func New(access StoreAccess, compiler Compiler, material Materializer, confirmer Confirmer) *Service {
 	return &Service{access: access, compiler: compiler, material: material, confirmer: confirmer}
 }
 

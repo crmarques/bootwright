@@ -10,29 +10,27 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-type StoreAccess interface {
-	Context(context.Context, string) (ContextSnapshot, error)
+type ImplementationResolver interface {
 	Types() []string
-	View(context.Context, Context, bool, func(StoreSession, Selection) error) error
-	Mutate(context.Context, Context, func(StoreSession, Selection) error) error
-	Initialize(context.Context, Context, string, func(StoreSession, Selection, bool) error) error
+	Select(string) (SecretStoreImplementation, error)
+	Reopen(Selection) (SecretStoreImplementation, error)
 }
 
 type Access struct {
 	workspace Workspace
-	catalog   *ImplementationCatalog
+	resolver  ImplementationResolver
 	material  SessionMaterialSource
 }
 
-func NewAccess(workspace Workspace, catalog *ImplementationCatalog, material SessionMaterialSource) *Access {
-	return &Access{workspace: workspace, catalog: catalog, material: material}
+func NewAccess(workspace Workspace, resolver ImplementationResolver, material SessionMaterialSource) *Access {
+	return &Access{workspace: workspace, resolver: resolver, material: material}
 }
 
 func (a *Access) Types() []string {
-	if a == nil {
+	if a == nil || a.resolver == nil {
 		return []string{}
 	}
-	return a.catalog.Types()
+	return slices.Clone(a.resolver.Types())
 }
 
 func (a *Access) Context(ctx context.Context, name string) (ContextSnapshot, error) {
@@ -84,7 +82,10 @@ func (a *Access) Initialize(ctx context.Context, selected Context, kind string, 
 	if a == nil || a.workspace == nil {
 		return Failure("store.implementation", "secret workspace is not configured")
 	}
-	implementation, err := a.catalog.Select(kind)
+	if a.resolver == nil {
+		return Failure("store.implementation", "secret store implementation catalog is invalid")
+	}
+	implementation, err := a.resolver.Select(kind)
 	if err != nil {
 		return err
 	}
@@ -92,8 +93,6 @@ func (a *Access) Initialize(ctx context.Context, selected Context, kind string, 
 		return Failure("store.conflict", "secret initialization requires an active context")
 	}
 	return a.workspace.MutateSecrets(ctx, selected, func(area Area) error {
-		// Only explicit initialization may ask its selected implementation to
-		// recover attributable never-published state. Reads still reject it.
 		selector, exists, err := readSelectorRecord(ctx, area, selected.ID)
 		if err != nil {
 			return err
@@ -124,7 +123,10 @@ func (a *Access) Initialize(ctx context.Context, selected Context, kind string, 
 }
 
 func (a *Access) open(ctx context.Context, selected Context, area Area, selector Selector, unlock bool, callback func(StoreSession, Selection) error) error {
-	implementation, err := a.catalog.Reopen(selector.Selection)
+	if a.resolver == nil {
+		return Failure("store.implementation", "secret store implementation catalog is invalid")
+	}
+	implementation, err := a.resolver.Reopen(selector.Selection)
 	if err != nil {
 		return err
 	}

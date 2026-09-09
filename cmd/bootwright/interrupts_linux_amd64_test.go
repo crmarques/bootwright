@@ -56,7 +56,7 @@ func TestInterruptDuringRealConfirmationPreservesSelection(t *testing.T) {
 		t.Fatal(err)
 	}
 	repository := contextfs.New(contextfs.Options{Root: filepath.Join(stateParent, "bootwright")})
-	services := wireContextServices(repository, nil)
+	services := wireContextServices(repository, repository, nil)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "-f", input)
 	before, err := repository.View(context.Background())
 	if err != nil {

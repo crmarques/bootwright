@@ -23,8 +23,12 @@ type Options struct {
 	Cryptography Cryptography
 }
 
+type InputReader interface {
+	Read(context.Context, []byte) (int, error)
+}
+
 type Service struct {
-	input        custody.MaterialInput
+	input        InputReader
 	random       io.Reader
 	clock        func() time.Time
 	cryptography Cryptography
@@ -32,7 +36,7 @@ type Service struct {
 
 var _ custody.Materializer = (*Service)(nil)
 
-func New(input custody.MaterialInput, options ...Options) *Service {
+func New(input InputReader, options ...Options) *Service {
 	service := &Service{input: input, random: cryptorand.Reader, clock: time.Now, cryptography: standardCryptography{}}
 	if len(options) > 0 {
 		if options[0].Random != nil {

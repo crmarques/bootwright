@@ -8,8 +8,12 @@ implementation and verification guidance.
 ## Implementation
 
 - Place the smallest required port in its consuming package and bind adapters
-  at composition. Prefer concrete internal types; do not create interfaces only
-  for test doubles or hypothetical variants.
+  at composition. Apply this to every service, repository, resolver, and effect
+  dependency, including same-package components. Use a typed function capability
+  for a single operation when suitable. Keep immutable values and private
+  implementation details concrete; do not create interfaces only for test doubles.
+  Ensure alternate implementations can construct the port's immutable results
+  without calling the default implementation.
 - At immutable boundaries, copy reachable mutable state and avoid exposing
   aliases. Make nil-versus-empty serialization deliberate; sort map,
   filesystem, and concurrent results before a deterministic boundary.
