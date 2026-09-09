@@ -1,6 +1,6 @@
 ---
 name: code-implementation
-description: Implement and deliver any authorized Bootwright tracked change, including specs, skills, guidance, code, and tests, using temporary branches, dependency-aware parallel work, verification, commits, and linear integration.
+description: Implement and deliver any authorized Bootwright tracked change, including specs, skills, guidance, code, and tests, using minimal temporary Git state, dependency-aware parallel work, verification, and consolidated final commits.
 ---
 
 # Code Implementation
@@ -8,8 +8,11 @@ description: Implement and deliver any authorized Bootwright tracked change, inc
 This is the shared delivery workflow for all tracked changes. Unless the user
 requests an uncommitted result or integration is unsafe, finish with one
 verified final commit per coherent change on the current destination branch
-(normally main), then remove task-created branches and worktrees. This does
-not authorize a push or release.
+(normally main). Prefer one final commit for the task; split only independently
+reviewable outcomes and keep the total to at most three unless the user requests
+a different history. Commit after implementation and verification are complete,
+then remove task-created branches and worktrees. This does not authorize a push
+or release.
 
 ## Prepare and divide work
 
@@ -38,19 +41,25 @@ not authorize a push or release.
    Record why work must remain sequential when dependencies, shared resources,
    or coordination cost prevent a time saving.
 
-Always use a task-created temporary branch and worktree for tracked edits,
-including small documentation, specification, and skill changes. Never implement
-directly on the destination branch. Create the initial integration branch/worktree
-from the inspected destination. For parallel writing, give each worker a unique
-temporary branch/worktree from the coordinator's current integration tip so
-dependent tasks include their integrated prerequisites. Read-only reviews may
-share a checkout.
+Use one task-created temporary branch and worktree by default, including for
+related code, specs, tests, and skill edits. Reuse it throughout the task rather
+than creating branches for phases or follow-up fixes. Start from the inspected
+destination; never implement directly on that branch.
 
-Record task-created paths and bases using non-sensitive identifiers. Worker
-briefs name scope, ownership, contracts, base, and checks; workers commit only
-their own changes and return SHAs, checks, and concerns. The coordinator alone
-integrates and advances the destination. Agent parallelism does not authorize
-concurrent Bootwright lifecycle execution.
+Parallel workers may share the task worktree when their assigned files and
+mutable resources are disjoint. The coordinator alone stages, commits, rebases,
+merges, or changes branches there. Give a worker a separate temporary worktree
+only when overlapping edits, incompatible checkouts, or mutable build/test
+resources require isolation. Read-only reviewers share an existing checkout.
+Record each necessary worktree's base and ownership with non-sensitive names.
+
+Worker handoffs report changed files, checks and concerns. Shared-worktree
+workers leave changes uncommitted. For an isolated worker, prefer one complete
+handoff patch or commit over prerequisite and follow-up commit chains. Create
+an intermediate commit only when it materially enables dependent isolated work
+or protects substantial progress; it is temporary history to consolidate at
+delivery. Agent parallelism does not authorize concurrent Bootwright lifecycle
+execution.
 
 ## Implement and verify
 
@@ -77,22 +86,27 @@ concurrent Bootwright lifecycle execution.
 
 ## Commit and integrate
 
-Before creating final or follow-up history, inspect the destination tip and
+After implementation and verification, inspect the destination tip and
 relevant range. Record the amend-versus-new decision in the task plan or a
 progress update, including same-change, rewrite authorization,
 publication/share, and intervening-commit evidence. A handoff, task boundary,
 user turn, or prior fast-forward alone does not make related work a new change.
 
-Amend the latest related commit only when all hold: the work is the same
+For existing delivery history, amend the latest related commit only when all hold: the work is the same
 coherent change; the agent created that commit for this work or the user
 authorized rewriting it; it has not been pushed or shared as a dependency; and
 no unrelated commit follows it. Otherwise make a new coherent fix commit.
-Never rewrite other history without authorization.
+Never rewrite unrelated or published history without authorization. Temporary
+task history may be consolidated once dependent workers have finished; their
+internal handoffs do not require preserving intermediate commits.
 
-Accept ready tasks serially through the coordinator. Rebase each onto the current
-integration tip, verify its affected checks, and review the incoming range and
-messages before acceptance. Consolidate temporary history into one non-merge
-commit per coherent change. Check the explicit incoming range with
+Accept isolated worker patches or commits serially through the coordinator;
+rebase only when necessary to integrate them safely. Review the incoming diff
+and messages, then run affected checks. Complete fixes and final integrated
+verification before creating delivery commits. Squash any temporary history to
+the minimum coherent non-merge commits; do not split by worker, package, phase,
+or fixes discovered during verification. Honor the user's commit limit and
+check the explicit incoming range with
 `git diff --check` and inspect its log: fast-forward alone does not prove that
 the range has no merge, WIP, or fixup commits.
 
