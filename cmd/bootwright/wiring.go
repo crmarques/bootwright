@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
 	addoncatalog "github.com/crmarques/bootwright/internal/addons/catalog"
@@ -31,6 +33,9 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/encryption"
+	"github.com/crmarques/bootwright/internal/secrets/localstore"
+	secretmaterial "github.com/crmarques/bootwright/internal/secrets/material"
+	secretstorage "github.com/crmarques/bootwright/internal/secrets/storage"
 	"github.com/crmarques/bootwright/internal/storage"
 	storagepreflight "github.com/crmarques/bootwright/internal/storage/preflight"
 	storagerendering "github.com/crmarques/bootwright/internal/storage/rendering"
@@ -66,13 +71,19 @@ func wireCompiler() compilation.Compiler {
 
 func wireServices() cli.Services { return wireContextServices(contextfs.New(contextfs.Options{}), nil) }
 
-func wireContextServices(repository contexts.Repository, confirmer contexts.Confirmer) cli.Services {
+func wireContextServices(repository contexts.Repository, confirmer contexts.Confirmer, inputs ...custody.MaterialInput) cli.Services {
 	compiler := wireCompiler()
+	workspace, _ := repository.(secretstorage.Workspace)
+	access := secretstorage.NewAccess(workspace, secretstorage.NewCatalog(localstore.New()), nil)
+	var input custody.MaterialInput
+	if len(inputs) != 0 {
+		input = inputs[0]
+	}
 	return cli.Services{
 		Contexts:              contexts.New(inputfs.Reader{}, compiler, repository, contextguard.Guard{}, confirmer),
 		AddOnCatalog:          addoncatalog.Service{},
-		Secrets:               custody.Service{},
-		Encryption:            encryption.Service{},
+		Secrets:               custody.New(access, compiler, secretmaterial.New(input), confirmer),
+		Encryption:            encryption.New(access, confirmer),
 		Media:                 media.Service{},
 		DesiredState:          compilation.New(inputfs.Reader{}, compiler, contexts.Inputs{Repository: repository}),
 		Controller:            prerequisites.Service{},
@@ -92,3 +103,7 @@ func wireContextServices(repository contexts.Repository, confirmer contexts.Conf
 		ClusterAccess:         containeraccess.Service{},
 	}
 }
+
+type secretInputFunc func(context.Context, []byte) (int, error)
+
+func (f secretInputFunc) Read(ctx context.Context, buffer []byte) (int, error) { return f(ctx, buffer) }

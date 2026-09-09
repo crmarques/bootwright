@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -119,8 +120,12 @@ func validateInvocation(command *cobra.Command, path string) string {
 			return "an inline add-on version conflicts with --version"
 		}
 	case "secret set":
-		if message := validateSecretSource(flags); message != "" {
+		if message := validateSecretInput(flags); message != "" {
 			return message
+		}
+	case "secret encryption init":
+		if !api.ValidLexical("name", stringValue(flags, "type")) {
+			return "--type must be a lowercase DNS label"
 		}
 	case "media add", "media delete":
 		if !mediaName(stringValue(flags, "name")) {
@@ -211,30 +216,21 @@ func normalizeNames(value string) []string {
 	return result
 }
 
-func validateSecretSource(flags *pflag.FlagSet) string {
-	cert, key := stringValue(flags, "tls-cert") != "", stringValue(flags, "tls-key") != ""
-	if cert != key {
-		return "--tls-cert and --tls-key must be supplied together"
+func validateSecretInput(flags *pflag.FlagSet) string {
+	valueFile, valueStdin := stringValue(flags, "value-file") != "", boolValue(flags, "value-stdin")
+	username := stringValue(flags, "username") != ""
+	passwordFile, passwordStdin := stringValue(flags, "password-file") != "", boolValue(flags, "password-stdin")
+	certificate := stringValue(flags, "certificate-file") != ""
+	privateKey, publicKey := stringValue(flags, "private-key-file") != "", stringValue(flags, "public-key-file") != ""
+
+	valueInput := valueFile != valueStdin && !username && !passwordFile && !passwordStdin && !certificate && !privateKey && !publicKey
+	passwordInput := username && passwordFile != passwordStdin && !valueFile && !valueStdin && !certificate && !privateKey && !publicKey
+	certificateInput := certificate && !valueFile && !valueStdin && !username && !passwordFile && !passwordStdin && !publicKey
+	privateKeyInput := privateKey && !certificate && !valueFile && !valueStdin && !username && !passwordFile && !passwordStdin
+	if valueInput || passwordInput || certificateInput || privateKeyInput {
+		return ""
 	}
-	count := 0
-	for _, name := range []string{"pull-secret", "tls-cert", "raw-file", "from-file"} {
-		if stringValue(flags, name) != "" {
-			count++
-		}
-	}
-	if boolValue(flags, "password-stdin") {
-		count++
-		if stringValue(flags, "username") == "" {
-			return "--password-stdin requires --username"
-		}
-	}
-	if boolValue(flags, "generate") {
-		count++
-	}
-	if count != 1 {
-		return "secret set requires exactly one source mode"
-	}
-	return ""
+	return "secret set requires exactly one type-specific input shape"
 }
 
 func mediaName(value string) bool {

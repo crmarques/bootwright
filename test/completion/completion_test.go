@@ -73,6 +73,8 @@ func TestGeneratedIntegrations(t *testing.T) {
 						{"enum", []string{"validate", "--output", ""}, []string{"json", "text"}},
 						{"enum prefix", []string{"validate", "--output", "j"}, []string{"json"}},
 						{"attached enum", []string{"validate", "--output=j"}, []string{"--output=json"}},
+						{"injected catalog", []string{"secret", "encryption", "init", "--type", ""}, []string{"local-keyring"}},
+						{"attached injected catalog", []string{"secret", "encryption", "init", "--type=loc"}, []string{"--type=local-keyring"}},
 						{"no paths", []string{"validate", "--file", ""}, nil},
 						{"no names", []string{"context", "use", "--name", ""}, nil},
 						{"no hidden handlers", []string{"__"}, nil},

@@ -10,7 +10,7 @@ output.
 | Condition | Standard output | Standard error | Exit status |
 | --- | --- | --- | --- |
 | Human structured success | result or help, LF-terminated | ordered warnings only | `0` |
-| Human operational or validation failure | empty, except already presented lifecycle state | ordered diagnostics, each LF-terminated | `1` |
+| Human operational or validation failure | empty, except a complete negative secret check or already presented lifecycle state | ordered diagnostics, each LF-terminated | `1` |
 | Human usage failure | empty | usage diagnostic and concise help, LF-terminated | `2` |
 | JSON success or failure | exactly one JSON document followed by one LF | empty | the document's required `exitCode` |
 | Effective-state text | exact canonical effective YAML with its required final LF | empty | `0` |
@@ -94,7 +94,7 @@ Successful result objects have stable top-level fields:
 | --- | --- |
 | `add-ons list` | `addOns` |
 | `secret check`, `secret list` | `context`, `secrets` |
-| `secret encryption status` | `initialized`, `activeKey`, `keys`, `items` |
+| `secret encryption status` | `initialized`, `implementation`, `activeKey`, `keys`, `items` |
 | `media list` | `media` |
 | `validate` | `counts`, `excludedContainerClusters`, `excludedStorageClusters`, `excludedResourceFiles`, `advisories` |
 | `preflight infra`, `preflight clusters`, `preflight container-cluster`, `preflight storage-cluster`, `preflight add-ons`, `preflight all` | `context`, `target`, `checks`, `summary` |

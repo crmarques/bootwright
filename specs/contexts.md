@@ -61,6 +61,7 @@ The private layout is:
   contexts/<context-id>/
     reservation.json
     mutation.json
+    secrets/                     # optional; Secrets-owned format
     revisions/<revision-id>/
       manifest.json
       file-0000
@@ -160,7 +161,8 @@ The [Reconciliation mutation guard](state-reconciliation.md#context-mutation-evi
 owns operation/ownership evidence and permitted dispositions. Workspace holds
 its lease through the guard, confirmation and publication. Unknown entries in
 the context directory refuse mutation; its version-1 layout permits only the
-reservation, mutation record, revisions and archives. Input inspection ignores
+reservation, mutation record, revisions, archives and optional
+[Secrets subtree](secrets.md#local-keyring-v1). Input inspection ignores
 lifecycle entries and never opens them.
 
 Final deletion first durably archives the context record and its immutable

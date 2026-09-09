@@ -12,6 +12,7 @@ A specified capability is not necessarily implemented or authorized.
 | Desired-state grammar, compilation and kind schemas | [API](api.md), with field tables under `api/` |
 | Command behavior, invocation and lifecycle journeys | [CLI](cli.md), [command catalog](cli/commands.md), [output](cli/output.md) |
 | Named contexts, immutable input, current selection and durable publication | [Contexts](contexts.md) |
+| Secret implementations, custody, immutable bindings and reveal | [Secrets](secrets.md) |
 | Apply, destroy, continuation, ownership and GitOps readiness | [State reconciliation](state-reconciliation.md) |
 | Trust, secrets, filesystem, process, network and supply-chain boundaries | [Security](security.md) |
 | Declarative add-on packages and driver contract | [Add-ons](add-ons.md) |

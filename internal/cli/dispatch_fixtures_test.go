@@ -36,6 +36,8 @@ type dispatchRecord struct {
 	request   any
 	err       error
 	afterCall func()
+	types     []string
+	typeCalls int
 }
 
 func (r *dispatchRecord) called(ctx context.Context, path string, request any) error {
@@ -89,42 +91,47 @@ func (s addOnCatalogSpy) Delete(ctx context.Context, request addoncatalog.Delete
 
 type secretsSpy struct{ record *dispatchRecord }
 
-func (s secretsSpy) Set(ctx context.Context, request custody.SetRequest) error {
-	return s.record.called(ctx, "secret set", request)
+func (s secretsSpy) Set(ctx context.Context, request custody.SetRequest) (*custody.MutationResult, error) {
+	return s.record.result.secretMutation, s.record.called(ctx, "secret set", request)
 }
 
-func (s secretsSpy) Generate(ctx context.Context, request custody.GenerateRequest) error {
-	return s.record.called(ctx, "secret generate", request)
+func (s secretsSpy) Generate(ctx context.Context, request custody.GenerateRequest) (*custody.MutationResult, error) {
+	return s.record.result.secretMutation, s.record.called(ctx, "secret generate", request)
 }
 
-func (s secretsSpy) Check(ctx context.Context, request custody.CheckRequest) error {
-	return s.record.called(ctx, "secret check", request)
+func (s secretsSpy) Check(ctx context.Context, request custody.CheckRequest) (*custody.CheckResult, error) {
+	return s.record.result.secretCheck, s.record.called(ctx, "secret check", request)
 }
 
-func (s secretsSpy) List(ctx context.Context, request custody.ListRequest) error {
-	return s.record.called(ctx, "secret list", request)
+func (s secretsSpy) List(ctx context.Context, request custody.ListRequest) (*custody.ListResult, error) {
+	return s.record.result.secretList, s.record.called(ctx, "secret list", request)
 }
 
-func (s secretsSpy) Show(ctx context.Context, request custody.ShowRequest) error {
-	return s.record.called(ctx, "secret show", request)
+func (s secretsSpy) Show(ctx context.Context, request custody.ShowRequest) (*custody.RevealResult, error) {
+	return s.record.result.secretReveal, s.record.called(ctx, "secret show", request)
 }
 
-func (s secretsSpy) Delete(ctx context.Context, request custody.DeleteRequest) error {
-	return s.record.called(ctx, "secret delete", request)
+func (s secretsSpy) Delete(ctx context.Context, request custody.DeleteRequest) (*custody.MutationResult, error) {
+	return s.record.result.secretMutation, s.record.called(ctx, "secret delete", request)
 }
 
 type encryptionSpy struct{ record *dispatchRecord }
 
-func (s encryptionSpy) Init(ctx context.Context, request encryption.EncryptionInitRequest) error {
-	return s.record.called(ctx, "secret encryption init", request)
+func (s encryptionSpy) Types() []string {
+	s.record.typeCalls++
+	return append([]string(nil), s.record.types...)
 }
 
-func (s encryptionSpy) Status(ctx context.Context, request encryption.EncryptionStatusRequest) error {
-	return s.record.called(ctx, "secret encryption status", request)
+func (s encryptionSpy) Init(ctx context.Context, request encryption.EncryptionInitRequest) (*encryption.MutationResult, error) {
+	return s.record.result.encryptionMutation, s.record.called(ctx, "secret encryption init", request)
 }
 
-func (s encryptionSpy) Rotate(ctx context.Context, request encryption.EncryptionRotateRequest) error {
-	return s.record.called(ctx, "secret encryption rotate", request)
+func (s encryptionSpy) Status(ctx context.Context, request encryption.EncryptionStatusRequest) (*encryption.StatusResult, error) {
+	return s.record.result.encryptionStatus, s.record.called(ctx, "secret encryption status", request)
+}
+
+func (s encryptionSpy) Rotate(ctx context.Context, request encryption.EncryptionRotateRequest) (*encryption.MutationResult, error) {
+	return s.record.result.encryptionMutation, s.record.called(ctx, "secret encryption rotate", request)
 }
 
 type mediaSpy struct{ record *dispatchRecord }
@@ -312,11 +319,12 @@ func dispatchFlags() *pflag.FlagSet {
 	for name, value := range map[string]string{
 		"context": "example", "name": "demo", "ssh-id-file": "key.pem",
 		"ssh-user": "operator", "clusters": "first,second", "machines": "node-a,node-b",
-		"replace": "node-b", "node": "node-a", "version": "", "part": "private",
+		"replace": "node-b", "node": "node-a", "version": "", "part": "private-key",
 		"from-file": "", "from-url": "https://example.invalid/image.iso",
-		"sha256":      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-		"pull-secret": "", "tls-cert": "", "tls-key": "", "raw-file": "secret.bin",
-		"username": "operator", "input-dir": "inputs", "output-dir": "artifacts",
+		"sha256":     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		"value-file": "secret.bin", "password-file": "", "certificate-file": "",
+		"private-key-file": "", "public-key-file": "", "type": "local-keyring",
+		"username": "", "input-dir": "inputs", "output-dir": "artifacts",
 	} {
 		flags.String(name, value, "")
 	}
@@ -328,7 +336,7 @@ func dispatchFlags() *pflag.FlagSet {
 		flags.Bool(name, true, "")
 	}
 	flags.Bool("password-stdin", false, "")
-	flags.Bool("generate", false, "")
+	flags.Bool("value-stdin", false, "")
 	flags.StringArray("file", []string{"inputs"}, "")
 	flags.StringArray("authorize", []string{"data-loss"}, "")
 	flags.String("watch-interval", "7s", "")

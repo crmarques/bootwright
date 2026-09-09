@@ -42,13 +42,13 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 		{"add-ons", "list"},
 		{"add-ons", "add", "--name", "example"},
 		{"add-ons", "delete", "--name", "example"},
-		{"secret", "set", "--name", "example", "--raw-file", "secret.bin"},
+		{"secret", "set", "--name", "example", "--value-file", "secret.bin"},
 		{"secret", "generate"},
 		{"secret", "check"},
 		{"secret", "list"},
-		{"secret", "show", "--name", "example"},
+		{"secret", "show", "--name", "example", "--part", "value"},
 		{"secret", "delete", "--name", "example"},
-		{"secret", "encryption", "init"},
+		{"secret", "encryption", "init", "--type", "local-keyring"},
 		{"secret", "encryption", "status"},
 		{"secret", "encryption", "rotate"},
 		{"media", "add", "--name", "example.iso", "--from-file", "source.iso"},
@@ -90,7 +90,7 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 			prefix := "[FAIL] cli.not-implemented: bootwright "
 			if args[0] == "validate" && len(args) > 1 || args[0] == "context" && (args[1] == "init" || args[1] == "update") {
 				prefix = "[FAIL] input.not-found "
-			} else if args[0] == "context" || args[0] == "validate" || args[0] == "render" && len(args) > 1 && args[1] == "effective" {
+			} else if args[0] == "context" || args[0] == "secret" || args[0] == "validate" || args[0] == "render" && len(args) > 1 && args[1] == "effective" {
 				prefix = "[FAIL] context.state:"
 			}
 			if args[0] == "context" && args[1] == "list" {

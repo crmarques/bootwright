@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -12,14 +13,19 @@ import (
 const (
 	completionRequest               = "__bootwright_complete"
 	completionRequestNoDescriptions = "__bootwright_complete_no_desc"
+	secretEncryptionTypeCatalog     = "secret-encryption-types"
 )
 
-func configureCompletion(root *cobra.Command) error {
+type completionCatalog struct {
+	secretEncryptionTypes func() []string
+}
+
+func configureCompletion(root *cobra.Command, catalog completionCatalog) error {
 	for _, name := range []string{completionRequest, completionRequestNoDescriptions} {
 		root.AddCommand(&cobra.Command{
 			Use: name, Hidden: true, DisableFlagParsing: true,
 			RunE: func(cmd *cobra.Command, args []string) error {
-				for _, candidate := range completionCandidates(root, args, cmd.Name() == completionRequest) {
+				for _, candidate := range completionCandidatesWithCatalog(root, args, cmd.Name() == completionRequest, catalog) {
 					if _, err := fmt.Fprintln(cmd.OutOrStdout(), candidate); err != nil {
 						return err
 					}
@@ -33,6 +39,10 @@ func configureCompletion(root *cobra.Command) error {
 }
 
 func completionCandidates(root *cobra.Command, words []string, descriptions bool) []string {
+	return completionCandidatesWithCatalog(root, words, descriptions, completionCatalog{})
+}
+
+func completionCandidatesWithCatalog(root *cobra.Command, words []string, descriptions bool, catalog completionCatalog) []string {
 	if len(words) == 0 {
 		return nil
 	}
@@ -87,7 +97,7 @@ func completionCandidates(root *cobra.Command, words []string, descriptions bool
 	}
 
 	if awaiting != nil {
-		return completionValues(awaiting, incompleteWord, "")
+		return completionValues(awaiting, incompleteWord, "", catalog)
 	}
 	if strings.HasPrefix(incompleteWord, "-") {
 		flagCommand := cmd
@@ -95,7 +105,7 @@ func completionCandidates(root *cobra.Command, words []string, descriptions bool
 			flagCommand = root
 		}
 		if flag, value, attached := completionFlag(flagCommand, incompleteWord); flag != nil && attached {
-			return completionValues(flag, value, strings.TrimSuffix(incompleteWord, value))
+			return completionValues(flag, value, strings.TrimSuffix(incompleteWord, value), catalog)
 		}
 		var candidates []string
 		for _, flag := range completionFlags(flagCommand) {
@@ -160,19 +170,24 @@ func completionFlag(cmd *cobra.Command, token string) (*pflag.Flag, string, bool
 	return nil, "", false
 }
 
-func completionValues(flag *pflag.Flag, prefix, attached string) []string {
+func completionValues(flag *pflag.Flag, prefix, attached string, catalog completionCatalog) []string {
 	values := flag.Annotations["bootwright.enum"]
+	dynamic := false
+	if names := flag.Annotations["bootwright.catalog"]; len(names) == 1 && names[0] == secretEncryptionTypeCatalog && catalog.secretEncryptionTypes != nil {
+		values = catalog.secretEncryptionTypes()
+		dynamic = true
+	}
 	if flag.Value.Type() == "bool" {
 		values = []string{"0", "1", "F", "FALSE", "False", "T", "TRUE", "True", "f", "false", "t", "true"}
 	}
 	var candidates []string
 	for _, value := range values {
-		if strings.HasPrefix(value, prefix) {
+		if strings.HasPrefix(value, prefix) && (!dynamic || api.ValidLexical("name", value)) {
 			candidates = append(candidates, attached+value)
 		}
 	}
 	slices.Sort(candidates)
-	return candidates
+	return slices.Compact(candidates)
 }
 
 func completionDescription(candidate, description string, enabled bool) string {

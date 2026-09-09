@@ -22,23 +22,23 @@ import (
 
 func openTestTerminal(t *testing.T) (*os.File, *os.File) {
 	t.Helper()
-	descriptor, err := syscall.Open("/dev/pts/ptmx", syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_CLOEXEC, 0)
+	descriptor, err := syscall.Open("/dev/ptmx", syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_CLOEXEC, 0)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("open PTY master: %v", err)
 	}
 	master := os.NewFile(uintptr(descriptor), "test-terminal-master")
 	t.Cleanup(func() { master.Close() })
 	var unlock int32
 	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, master.Fd(), syscall.TIOCSPTLCK, uintptr(unsafe.Pointer(&unlock))); errno != 0 {
-		t.Fatal(errno)
+		t.Fatalf("unlock PTY slave: %v", errno)
 	}
 	var number uint32
 	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, master.Fd(), syscall.TIOCGPTN, uintptr(unsafe.Pointer(&number))); errno != 0 {
-		t.Fatal(errno)
+		t.Fatalf("resolve PTY slave number: %v", errno)
 	}
 	descriptor, err = syscall.Open(fmt.Sprintf("/dev/pts/%d", number), syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_CLOEXEC, 0)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("open PTY slave: %v", err)
 	}
 	slave := os.NewFile(uintptr(descriptor), "test-terminal-slave")
 	t.Cleanup(func() { slave.Close() })

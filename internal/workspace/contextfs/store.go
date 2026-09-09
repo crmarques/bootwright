@@ -10,13 +10,15 @@ import (
 )
 
 const (
-	maxRegistry     = 8 << 20
-	maxManifest     = 4 << 20
-	maxAllManifests = 32 << 20
-	maxRecord       = 64 << 10
-	maxPath         = 4096
-	maxIdentities   = 4096
-	maxRevisions    = 4096
+	maxRegistry      = 8 << 20
+	maxManifest      = 4 << 20
+	maxAllManifests  = 32 << 20
+	maxRecord        = 64 << 10
+	maxPath          = 4096
+	maxIdentities    = 4096
+	maxRevisions     = 4096
+	maxSecretEntries = 32768
+	maxSecretBytes   = 256 << 20
 )
 
 type Options struct{ Root string }

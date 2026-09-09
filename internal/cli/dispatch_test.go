@@ -48,13 +48,13 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"add-ons list", addoncatalog.ListRequest{}},
 		{"add-ons add", addoncatalog.AddRequest{Name: "demo", Version: "", SkipConfirmation: true}},
 		{"add-ons delete", addoncatalog.DeleteRequest{Name: "demo", Version: "", SkipConfirmation: true}},
-		{"secret set", custody.SetRequest{ContextName: "example", Name: "demo", Source: secrets.Source{Kind: secrets.RawFileSource, File: "secret.bin"}, Username: "operator", SkipConfirmation: true}},
-		{"secret generate", custody.GenerateRequest{ContextName: "example", Renew: true}},
+		{"secret set", custody.SetRequest{ContextName: "example", Name: "demo", Input: secrets.Input{ValueFile: "secret.bin"}, SkipConfirmation: true}},
+		{"secret generate", custody.GenerateRequest{ContextName: "example", Name: "demo", Renew: true}},
 		{"secret check", custody.CheckRequest{ContextName: "example"}},
 		{"secret list", custody.ListRequest{ContextName: "example"}},
-		{"secret show", custody.ShowRequest{ContextName: "example", Name: "demo", Part: "private"}},
+		{"secret show", custody.ShowRequest{ContextName: "example", Name: "demo", Part: secrets.PrivateKeyPart}},
 		{"secret delete", custody.DeleteRequest{ContextName: "example", Name: "demo", SkipConfirmation: true}},
-		{"secret encryption init", encryption.EncryptionInitRequest{ContextName: "example"}},
+		{"secret encryption init", encryption.EncryptionInitRequest{ContextName: "example", Type: "local-keyring"}},
 		{"secret encryption status", encryption.EncryptionStatusRequest{ContextName: "example"}},
 		{"secret encryption rotate", encryption.EncryptionRotateRequest{ContextName: "example", SkipConfirmation: true}},
 		{"media add", media.AddMediaRequest{ContextName: "example", Name: "demo", SourceFile: "", SourceURL: "https://example.invalid/image.iso", SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", SkipConfirmation: true}},
@@ -259,20 +259,24 @@ func TestDispatchSelectionAndSourceTranslation(t *testing.T) {
 			}
 		}
 	})
-	t.Run("secret sources", func(t *testing.T) {
+	t.Run("secret inputs", func(t *testing.T) {
 		for _, tc := range []struct {
 			flags map[string]string
-			want  secrets.Source
+			want  secrets.Input
 		}{
-			{map[string]string{"pull-secret": "pull.json"}, secrets.Source{Kind: secrets.PullSecretSource, File: "pull.json"}},
-			{map[string]string{"tls-cert": "cert.pem", "tls-key": "key.pem"}, secrets.Source{Kind: secrets.TLSSource, CertificateFile: "cert.pem", PrivateKeyFile: "key.pem"}},
-			{map[string]string{"raw-file": "raw.bin"}, secrets.Source{Kind: secrets.RawFileSource, File: "raw.bin"}},
-			{map[string]string{"from-file": "secret.yaml"}, secrets.Source{Kind: secrets.StructuredFileSource, File: "secret.yaml"}},
-			{map[string]string{"password-stdin": "true"}, secrets.Source{Kind: secrets.PasswordStdinSource}},
-			{map[string]string{"generate": "true"}, secrets.Source{Kind: secrets.GeneratedSource}},
+			{map[string]string{"value-file": "value.bin"}, secrets.Input{Provided: secrets.ValueFileInput, ValueFile: "value.bin"}},
+			{map[string]string{"value-stdin": "true"}, secrets.Input{Provided: secrets.ValueStdinInput, ValueStdin: true}},
+			{map[string]string{"username": "operator", "password-file": "password"}, secrets.Input{Provided: secrets.UsernameInput | secrets.PasswordFileInput, Username: "operator", PasswordFile: "password"}},
+			{map[string]string{"username": "operator", "password-stdin": "true"}, secrets.Input{Provided: secrets.UsernameInput | secrets.PasswordStdinInput, Username: "operator", PasswordStdin: true}},
+			{map[string]string{"certificate-file": "cert.pem"}, secrets.Input{Provided: secrets.CertificateFileInput, CertificateFile: "cert.pem"}},
+			{map[string]string{"certificate-file": "cert.pem", "private-key-file": "key.pem"}, secrets.Input{Provided: secrets.CertificateFileInput | secrets.PrivateKeyFileInput, CertificateFile: "cert.pem", PrivateKeyFile: "key.pem"}},
+			{map[string]string{"private-key-file": "key.pem"}, secrets.Input{Provided: secrets.PrivateKeyFileInput, PrivateKeyFile: "key.pem"}},
+			{map[string]string{"private-key-file": "key.pem", "public-key-file": "key.pub"}, secrets.Input{Provided: secrets.PrivateKeyFileInput | secrets.PublicKeyFileInput, PrivateKeyFile: "key.pem", PublicKeyFile: "key.pub"}},
+			{map[string]string{"value-file": "value.bin", "password-stdin": "false"}, secrets.Input{Provided: secrets.ValueFileInput | secrets.PasswordStdinInput, ValueFile: "value.bin"}},
+			{map[string]string{"value-file": "value.bin", "username": ""}, secrets.Input{Provided: secrets.ValueFileInput | secrets.UsernameInput, ValueFile: "value.bin"}},
 		} {
 			flags := dispatchFlags()
-			if err := flags.Set("raw-file", ""); err != nil {
+			if err := flags.Lookup("value-file").Value.Set(""); err != nil {
 				t.Fatal(err)
 			}
 			for name, value := range tc.flags {
@@ -284,8 +288,8 @@ func TestDispatchSelectionAndSourceTranslation(t *testing.T) {
 			if _, err := dispatchSpies(record).invoke(context.Background(), "secret set", flags, nil); err != nil {
 				t.Fatal(err)
 			}
-			if request := record.request.(custody.SetRequest); request.Source != tc.want {
-				t.Fatalf("source = %#v, want %#v", request.Source, tc.want)
+			if request := record.request.(custody.SetRequest); request.Input != tc.want {
+				t.Fatalf("input = %#v, want %#v", request.Input, tc.want)
 			}
 		}
 	})

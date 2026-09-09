@@ -19,3 +19,15 @@ runtime values; [version tests](../../internal/cli/version_test.go) check
 formatting. These tests do not qualify a release build pipeline. The
 [version output contract](../../specs/cli/commands.md#version-output) owns the
 required representation.
+
+Go 1.26.7's RSA/ECDSA key-generation APIs ignore their supplied `io.Reader`
+unless the temporary `cryptocustomrand` compatibility setting is enabled; an
+erroring Reader therefore does not inject a failure into those operations.
+This was verified against the pinned toolchain sources and the
+[Go 1.26 release notes](https://go.dev/doc/go1.26#crypto/rsa). Do not infer a
+working randomness seam merely from those signatures. The Secrets material
+adapter uses a typed crypto-operation seam for failure/cancellation testing and
+the standard library's OS-backed implementation in production; see
+[generation](../../internal/secrets/material/generation.go), its
+[tests](../../internal/secrets/material/generation_test.go), and the owning
+[Secrets contract](../../specs/secrets.md#acquisition-and-commands).

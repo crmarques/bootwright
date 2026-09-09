@@ -218,18 +218,22 @@ func TestInvalidAdmissionAndUnavailableRoutesDoNotWrite(t *testing.T) {
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Fatalf("failed admission created state: %v", err)
 	}
-	for _, args := range [][]string{{"apply", "--context", "alpha", "--yes"}, {"destroy", "--context", "alpha", "--yes"}, {"secret", "generate", "--context", "alpha"}, {"render", "installer", "--context", "alpha"}, {"status", "--context", "alpha"}} {
+	for _, args := range [][]string{{"apply", "--context", "alpha", "--yes"}, {"destroy", "--context", "alpha", "--yes"}, {"render", "installer", "--context", "alpha"}, {"status", "--context", "alpha"}} {
 		_, stderr := contextRun(t, services, 1, args...)
 		if !strings.Contains(stderr, "cli.not-implemented") {
 			t.Fatal(stderr)
 		}
+	}
+	_, stderr := contextRun(t, services, 1, "secret", "generate", "--context", "alpha")
+	if !strings.Contains(stderr, "context.state") {
+		t.Fatal("implemented secret route did not validate the context", stderr)
 	}
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Fatalf("unavailable route created state: %v", err)
 	}
 	nested := filepath.Join(input, "state")
 	nestedServices := wireContextServices(contextfs.New(contextfs.Options{Root: nested}), nil)
-	_, stderr := contextRun(t, nestedServices, 1, "context", "init", "--name", "alpha", "-f", input)
+	_, stderr = contextRun(t, nestedServices, 1, "context", "init", "--name", "alpha", "-f", input)
 	if !strings.Contains(stderr, "context.state") {
 		t.Fatal("nested store did not fail before parsing input", stderr)
 	}

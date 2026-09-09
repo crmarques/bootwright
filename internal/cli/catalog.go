@@ -17,6 +17,7 @@ type flagSpec struct {
 	defaultValue string
 	required     bool
 	enum         []string
+	catalog      string
 }
 
 func stringFlag(name, help string) flagSpec { return flagSpec{name: name, help: help, kind: "string"} }
@@ -35,6 +36,18 @@ func enumFlag(name, value, help string, values ...string) flagSpec {
 	f := stringFlag(name, help)
 	f.defaultValue = value
 	f.enum = values
+	return f
+}
+
+func requiredEnumFlag(name, help string, values ...string) flagSpec {
+	f := enumFlag(name, "", help, values...)
+	f.required = true
+	return f
+}
+
+func requiredCatalogFlag(name, help, catalog string) flagSpec {
+	f := requiredFlag(name, help)
+	f.catalog = catalog
 	return f
 }
 

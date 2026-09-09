@@ -30,8 +30,15 @@ func registerFlags(flags *pflag.FlagSet, specs []flagSpec) {
 		default:
 			flags.VarP(&scalarValue{finalValue: spec.defaultValue}, spec.name, spec.short, spec.help)
 		}
+		annotations := map[string][]string{}
 		if len(spec.enum) > 0 {
-			flags.Lookup(spec.name).Annotations = map[string][]string{"bootwright.enum": append([]string(nil), spec.enum...)}
+			annotations["bootwright.enum"] = append([]string(nil), spec.enum...)
+		}
+		if spec.catalog != "" {
+			annotations["bootwright.catalog"] = []string{spec.catalog}
+		}
+		if len(annotations) > 0 {
+			flags.Lookup(spec.name).Annotations = annotations
 		}
 	}
 }

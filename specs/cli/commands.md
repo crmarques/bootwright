@@ -54,13 +54,13 @@ process or network access. “Mutate” permits only the named, planned effects.
 | `bootwright add-ons list` | `--output text\|json` default `text` | built-in catalog and machine-local registrations | read embedded and local catalog state |
 | `bootwright add-ons add` | required `--name <name>[:<version>]`; `--version <version>` default catalog default; `--yes` false | registered immutable catalog release | local add-on registration |
 | `bootwright add-ons delete` | required `--name <name>[:<version>]`; `--yes` false | removed matching registration | local add-on registration deletion |
-| `bootwright secret set` | required `--name <name>` and one source mode: `--pull-secret <file>`, paired `--tls-cert <file> --tls-key <file>`, `--raw-file <file>`, `--from-file <file>`, `--password-stdin`, or `--generate`; optional `--username <name>` and `--yes` false | stored secret identity and parts, never values | local confidential store write |
-| `bootwright secret generate` | `--renew` false | generated/missing/unchanged counts | local confidential generation and writes |
-| `bootwright secret check` | `--output text\|json` default `text` | availability and type checks for declared secrets | read declarations and confidential metadata; no values emitted |
+| `bootwright secret set` | required `--name`; type-specific `--value-file`, `--value-stdin`, `--username`, `--password-file`, `--password-stdin`, `--certificate-file`, `--private-key-file`, `--public-key-file` under [Secrets](../secrets.md); `--yes` false | stored identity and parts, never values | local confidential write |
+| `bootwright secret generate` | optional `--name`; `--renew` false | changed/unchanged counts | atomic selected generated-material batch |
+| `bootwright secret check` | `--output text\|json` default `text` | declared availability/type checks | bounded material reads; no values emitted |
 | `bootwright secret list` | `--output text\|json` default `text` | context secret identities, types, parts, and availability | read confidential-store metadata |
-| `bootwright secret show` | required `--name <name>`; `--part primary\|private\|public\|tls-key` default `primary` | the selected part through the explicit sensitive-output boundary | read and reveal one secret part |
-| `bootwright secret delete` | required `--name <name>`; `--yes` false | deleted secret identity | local confidential deletion when not required by immutable continuation |
-| `bootwright secret encryption init` | none | active encryption-key identity and state | idempotent local keyring creation |
+| `bootwright secret show` | required `--name` and `--part value\|username\|password\|certificate\|private-key\|public-key` | exact selected sensitive bytes | read and reveal current declared part |
+| `bootwright secret delete` | required `--name <name>`; `--yes` false | removed active mapping or unchanged identity | local logical deletion, preserving bound versions |
+| `bootwright secret encryption init` | required `--type <safe-identifier>`; currently `local-keyring` | selected implementation and active key | idempotent selected implementation initialization |
 | `bootwright secret encryption status` | `--output text\|json` default `text` | keyring and encrypted-store status | read confidential metadata |
 | `bootwright secret encryption rotate` | `--yes` false | new active key identity and re-encryption summary | atomic local key rotation and re-encryption |
 | `bootwright media add` | required `--name <filename.iso>` and exactly one of `--from-file <path>` or `--from-url <http-or-https-url>`; `--sha256 <digest>`; `--yes` false | stored media identity, size, and verified digest | local copy or bounded download and atomic publication |
@@ -285,14 +285,10 @@ URL, or arbitrary package.
 `--name`; the default-all selection applies only when sensitive values are not
 requested.
 
-`secret set` source modes are mutually exclusive, except that `--tls-cert` and
-`--tls-key` form one inseparable mode. `--password-stdin` requires
-`--username`; `--generate` defaults the username to `admin` when that secret
-type needs one. Empty material fails. Generation uses an operating-system
-cryptographic random source with no fallback. `secret generate --renew`
-regenerates only declarations whose API-owned source is `generated`; it never
-overwrites operator-supplied material. Key rotation preserves a recoverable old
-key until every owned item is durably re-encrypted.
+The [Secrets contract](../secrets.md#acquisition-and-commands) owns the exact
+type/source flag matrix, whole-version validation, generation and reveal parts.
+Stdin replacement requires `--yes` before reading. Rotation atomically preserves
+every active and bound logical version under the selected implementation.
 
 Secret, media, and add-on mutation obeys the immutable binding and external-
 content rules in state reconciliation. A set, renewal, replacement, or

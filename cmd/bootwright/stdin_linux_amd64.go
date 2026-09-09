@@ -11,8 +11,8 @@ import (
 	"unsafe"
 )
 
-// These capabilities are called only after context mutation safeguards decide
-// that ordinary confirmation is needed. Polling keeps cancellation synchronous.
+// These capabilities are acquired lazily after command safeguards authorize
+// confirmation or explicit secret input. Polling keeps cancellation synchronous.
 func stdinTerminal() (bool, error) {
 	var terminal syscall.Termios
 	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, os.Stdin.Fd(), syscall.TCGETS, uintptr(unsafe.Pointer(&terminal)))
@@ -26,10 +26,13 @@ func stdinTerminal() (bool, error) {
 }
 
 func readStdin(ctx context.Context, buffer []byte) (int, error) {
+	return readInputFD(ctx, int(os.Stdin.Fd()), buffer)
+}
+
+func readInputFD(ctx context.Context, fd int, buffer []byte) (int, error) {
 	if len(buffer) == 0 {
 		return 0, nil
 	}
-	fd := int(os.Stdin.Fd())
 	descriptor := struct {
 		FD       int32
 		Events   int16
@@ -50,7 +53,7 @@ func readStdin(ctx context.Context, buffer []byte) (int, error) {
 		if count == 0 {
 			continue
 		}
-		if descriptor.Returned&1 == 0 {
+		if descriptor.Returned&(1|16) == 0 {
 			return 0, errors.New("standard input is unavailable")
 		}
 		if err := ctx.Err(); err != nil {

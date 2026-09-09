@@ -168,6 +168,9 @@ digest, and required ownership evidence before doing work.
 
 ## Plan and execution
 
+[Secrets](secrets.md#immutable-binding-and-contexts) owns confidential immutable
+binding; the lifecycle consumer interface is introduced with M1d.
+
 Planning is pure and read-only. It performs no downloads, remote mutations,
 cache or registry writes, cleanup, lock takeover, or secret materialization.
 A fresh mutation validates the complete graph, freezes input and non-secret

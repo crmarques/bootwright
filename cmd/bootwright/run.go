@@ -16,7 +16,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	confirmer := cli.NewConfirmation(readStdin, stderr, stdinTerminal)
-	return runServices(ctx, args, stdout, stderr, wireContextServices(contextfs.New(contextfs.Options{}), confirmer), beginSignalOperation)
+	return runServices(ctx, args, stdout, stderr, wireContextServices(contextfs.New(contextfs.Options{}), confirmer, secretInputFunc(readStdin)), beginSignalOperation)
 }
 
 func runServices(ctx context.Context, args []string, stdout, stderr io.Writer, services cli.Services, operations ...func(context.Context) (context.Context, func())) int {

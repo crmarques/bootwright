@@ -86,7 +86,11 @@ func newCommandTree(r *Runner) (*cobra.Command, error) {
 		}
 		parent.RunE = func(*cobra.Command, []string) error { return nil }
 	}
-	if err := configureCompletion(root); err != nil {
+	var catalog completionCatalog
+	if r.config.Services.Encryption != nil {
+		catalog.secretEncryptionTypes = r.config.Services.Encryption.Types
+	}
+	if err := configureCompletion(root, catalog); err != nil {
 		return nil, err
 	}
 	return root, nil
@@ -184,6 +188,7 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 		ctx = operationContext
 	}
 	result, err := r.config.Services.invoke(ctx, path, command.Flags(), command.Flags().Args())
+	defer result.clearSensitive()
 	if canceled := ctx.Err(); canceled != nil {
 		err = canceled
 	}
@@ -200,6 +205,12 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 		return r.failure(command, path, "runtime.deadline", "operation deadline exceeded", 1, selectedJSON(command))
 	}
 	if diagnostics := desiredstate.DiagnosticsOf(err); len(diagnostics) != 0 {
+		if handled, presentErr := r.writeNegativeSecretCheck(command, path, result, diagnostics); handled {
+			if presentErr != nil {
+				return 1
+			}
+			return 1
+		}
 		if err := writeDiagnostics(r.config.Out, r.config.ErrOut, path, diagnostics, 1, selectedJSON(command)); err != nil {
 			return 1
 		}

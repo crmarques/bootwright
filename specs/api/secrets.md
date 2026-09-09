@@ -101,6 +101,8 @@ omitted in effective state. Normalization never fabricates secret bytes.
 Materialization follows [security.md](../security.md) for randomness, storage
 and non-disclosure, and [state reconciliation](../state-reconciliation.md) for
 stable retry binding.
+The [runtime Secrets contract](../secrets.md) owns implementation selection,
+acquisition, encrypted custody and immutable bindings.
 
 ## Entitlement
 

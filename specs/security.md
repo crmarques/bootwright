@@ -73,6 +73,9 @@ to the secret type; weak fallback randomness is forbidden.
 
 ## Filesystem and artifact safety
 
+The [Secrets runtime contract](secrets.md) qualifies local key custody,
+cryptography, rotation, material input and sensitive reveal.
+
 `version`, `validate`, and `render effective` are read-only. They create no
 cache, temporary file, state record, output path, or log.
 

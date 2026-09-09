@@ -124,22 +124,34 @@ func (v *requestValues) ssh() machine.SSHOptions {
 	}
 }
 
-func (v *requestValues) secretSource() secrets.Source {
-	switch {
-	case v.text("pull-secret") != "":
-		return secrets.Source{Kind: secrets.PullSecretSource, File: v.text("pull-secret")}
-	case v.text("tls-cert") != "":
-		return secrets.Source{Kind: secrets.TLSSource, CertificateFile: v.text("tls-cert"), PrivateKeyFile: v.text("tls-key")}
-	case v.text("raw-file") != "":
-		return secrets.Source{Kind: secrets.RawFileSource, File: v.text("raw-file")}
-	case v.text("from-file") != "":
-		return secrets.Source{Kind: secrets.StructuredFileSource, File: v.text("from-file")}
-	case v.boolean("password-stdin"):
-		return secrets.Source{Kind: secrets.PasswordStdinSource}
-	case v.boolean("generate"):
-		return secrets.Source{Kind: secrets.GeneratedSource}
-	default:
-		v.recordFirstError(errors.New("secret source is not configured"))
-		return secrets.Source{}
+func (v *requestValues) secretInput() secrets.Input {
+	var provided secrets.InputFields
+	for _, input := range []struct {
+		name  string
+		field secrets.InputFields
+	}{
+		{"value-file", secrets.ValueFileInput},
+		{"value-stdin", secrets.ValueStdinInput},
+		{"username", secrets.UsernameInput},
+		{"password-file", secrets.PasswordFileInput},
+		{"password-stdin", secrets.PasswordStdinInput},
+		{"certificate-file", secrets.CertificateFileInput},
+		{"private-key-file", secrets.PrivateKeyFileInput},
+		{"public-key-file", secrets.PublicKeyFileInput},
+	} {
+		if v.flags.Changed(input.name) {
+			provided |= input.field
+		}
+	}
+	return secrets.Input{
+		Provided:        provided,
+		ValueFile:       v.text("value-file"),
+		ValueStdin:      v.boolean("value-stdin"),
+		Username:        v.text("username"),
+		PasswordFile:    v.text("password-file"),
+		PasswordStdin:   v.boolean("password-stdin"),
+		CertificateFile: v.text("certificate-file"),
+		PrivateKeyFile:  v.text("private-key-file"),
+		PublicKeyFile:   v.text("public-key-file"),
 	}
 }

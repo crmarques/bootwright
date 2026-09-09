@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/secrets/custody"
+	"github.com/crmarques/bootwright/internal/secrets/encryption"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 	"github.com/spf13/pflag"
 )
@@ -21,6 +23,19 @@ type commandResult struct {
 	current    *contexts.CurrentResult
 	deletion   *contexts.DeleteResult
 	effective  *compilation.EffectiveResult
+
+	secretMutation     *custody.MutationResult
+	secretCheck        *custody.CheckResult
+	secretList         *custody.ListResult
+	secretReveal       *custody.RevealResult
+	encryptionMutation *encryption.MutationResult
+	encryptionStatus   *encryption.StatusResult
+}
+
+func (r commandResult) clearSensitive() {
+	if r.secretReveal != nil {
+		r.secretReveal.Material.Clear()
+	}
 }
 
 func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet, args []string) (commandResult, error) {
@@ -37,9 +52,9 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 	case "add-ons list", "add-ons add", "add-ons delete":
 		return commandResult{}, s.invokeAddOnCatalog(ctx, path, &values, args)
 	case "secret set", "secret generate", "secret check", "secret list", "secret show", "secret delete":
-		return commandResult{}, s.invokeSecrets(ctx, path, &values, args)
+		return s.invokeSecrets(ctx, path, &values, args)
 	case "secret encryption init", "secret encryption status", "secret encryption rotate":
-		return commandResult{}, s.invokeEncryption(ctx, path, &values, args)
+		return s.invokeEncryption(ctx, path, &values, args)
 	case "media add", "media list", "media delete":
 		return commandResult{}, s.invokeMedia(ctx, path, &values, args)
 	case "validate", "render effective":

@@ -6,6 +6,7 @@ import (
 	"context"
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/secrets/storage"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -27,5 +28,17 @@ func (*Store) ReadInputs(ctx context.Context, _ string) (desiredstate.Sources, e
 }
 
 func (*Store) Transact(ctx context.Context, _ bool, _ []string, _ func(contexts.Transaction) error) error {
+	return unsupported(ctx)
+}
+
+func (*Store) SecretContext(ctx context.Context, _ string) (storage.ContextSnapshot, error) {
+	return storage.ContextSnapshot{}, unsupported(ctx)
+}
+
+func (*Store) ReadSecrets(ctx context.Context, _ storage.Context, _ func(storage.Area) error) error {
+	return unsupported(ctx)
+}
+
+func (*Store) MutateSecrets(ctx context.Context, _ storage.Context, _ func(storage.Area) error) error {
 	return unsupported(ctx)
 }

@@ -3,6 +3,7 @@
 package contextfs
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -17,6 +18,8 @@ import (
 
 const (
 	openat2Trap                   = 437
+	renameat2Trap                 = 316
+	renameNoReplace               = 1
 	pathHandle                    = 0x200000
 	resolveBeneathNoLinksNoMounts = 0x08 | 0x04 | 0x02 | 0x01
 )
@@ -354,23 +357,28 @@ func qualifiedFileSystem(file *os.File) error {
 }
 
 func readBounded(ctx context.Context, parent *directory, name string, maximum int, immutable bool) ([]byte, error) {
+	data, _, err := readBoundedIdentity(ctx, parent, name, maximum, immutable)
+	return data, err
+}
+
+func readBoundedIdentity(ctx context.Context, parent *directory, name string, maximum int, immutable bool) ([]byte, syscall.Stat_t, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, syscall.Stat_t{}, err
 	}
 	file, err := openRelative(parent, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
-		return nil, err
+		return nil, syscall.Stat_t{}, err
 	}
 	defer file.Close()
 	before, err := statHandle(file)
 	if err != nil || !readableFile(before, immutable) || before.Size < 0 || before.Size > int64(maximum) {
-		return nil, state("state file type, owner, permissions, links or size is unsafe")
+		return nil, syscall.Stat_t{}, state("state file type, owner, permissions, links or size is unsafe")
 	}
 	data := make([]byte, 0, int(before.Size))
 	buffer := make([]byte, min(32768, maximum+1))
 	for len(data) <= maximum {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, syscall.Stat_t{}, err
 		}
 		n, readErr := file.Read(buffer[:min(len(buffer), maximum+1-len(data))])
 		data = append(data, buffer[:n]...)
@@ -378,10 +386,10 @@ func readBounded(ctx context.Context, parent *directory, name string, maximum in
 			break
 		}
 		if readErr != nil {
-			return nil, state("state file could not be read")
+			return nil, syscall.Stat_t{}, state("state file could not be read")
 		}
 		if len(data) > maximum {
-			return nil, state("state file exceeds its byte limit")
+			return nil, syscall.Stat_t{}, state("state file exceeds its byte limit")
 		}
 	}
 	after, err := statHandle(file)
@@ -392,23 +400,23 @@ func readBounded(ctx context.Context, parent *directory, name string, maximum in
 		stable = sameIdentity(before, after) && before.Size == after.Size && before.Mtim == after.Mtim && readableFile(after, false)
 	}
 	if err != nil || !stable || int64(len(data)) != after.Size {
-		return nil, state("state file changed during reading")
+		return nil, syscall.Stat_t{}, state("state file changed during reading")
 	}
 	if immutable {
 		current, err := openRelative(parent, name, pathHandle, 0)
 		if err != nil {
-			return nil, state("immutable state file was replaced")
+			return nil, syscall.Stat_t{}, state("immutable state file was replaced")
 		}
 		stat, statErr := statHandle(current)
 		current.Close()
 		if statErr != nil || !sameFile(after, stat) {
-			return nil, state("immutable state file was replaced")
+			return nil, syscall.Stat_t{}, state("immutable state file was replaced")
 		}
 	}
 	if err := parent.verify(); err != nil {
-		return nil, err
+		return nil, syscall.Stat_t{}, err
 	}
-	return data, nil
+	return data, after, nil
 }
 
 func (s *Store) newDirectory(ctx context.Context, parent *directory, name string) (*directory, error) {
@@ -504,6 +512,90 @@ func (s *Store) writeExclusive(ctx context.Context, parent *directory, name stri
 		return state("new state file was replaced")
 	}
 	return s.syncDirectory(ctx, parent)
+}
+
+func (s *Store) writeExclusiveAtomic(ctx context.Context, parent *directory, name string, data []byte) error {
+	var pending string
+	written := false
+	for range 16 {
+		candidate, err := s.candidate("pending-")
+		if err != nil {
+			return err
+		}
+		pending = candidate
+		err = s.writeExclusive(ctx, parent, pending, data)
+		if errors.Is(err, syscall.EEXIST) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		written = true
+		break
+	}
+	if !written {
+		return state("immutable state staging exhausted its collision limit")
+	}
+	staged, stagedIdentity, err := readBoundedIdentity(ctx, parent, pending, len(data), true)
+	stagedMatches := bytes.Equal(staged, data)
+	clear(staged)
+	if err != nil || !stagedMatches {
+		return state("staged immutable state changed before publication")
+	}
+	if err := s.checkpoint(ctx, "before-secret-immutable-rename"); err != nil {
+		return err
+	}
+	current, currentIdentity, err := readBoundedIdentity(ctx, parent, pending, len(data), true)
+	currentMatches := bytes.Equal(current, data)
+	clear(current)
+	if err != nil || !currentMatches || !sameFile(stagedIdentity, currentIdentity) {
+		return state("staged immutable state changed before publication")
+	}
+	if err := renameNoReplaceAt(parent, pending, name); err != nil {
+		return err
+	}
+	published, publishedIdentity, err := readBoundedIdentity(ctx, parent, name, len(data), true)
+	publishedMatches := bytes.Equal(published, data)
+	clear(published)
+	if err != nil || !publishedMatches || !sameIdentity(stagedIdentity, publishedIdentity) {
+		return state("published immutable state is unsafe")
+	}
+	if err := s.checkpoint(ctx, "after-secret-immutable-rename"); err != nil {
+		return err
+	}
+	return s.syncDirectory(ctx, parent)
+}
+
+func renameNoReplaceAt(parent *directory, oldName, newName string) error {
+	if err := parent.verify(); err != nil {
+		return err
+	}
+	if len(oldName) == 0 || len(oldName) > 255 || oldName == "." || oldName == ".." || strings.ContainsAny(oldName, "/\x00") {
+		return state("staged immutable state name is invalid")
+	}
+	if len(newName) == 0 || len(newName) > 255 || newName == "." || newName == ".." || strings.ContainsAny(newName, "/\x00") {
+		return state("immutable state name is invalid")
+	}
+	oldPointer, err := syscall.BytePtrFromString(oldName)
+	if err != nil {
+		return state("staged immutable state name is invalid")
+	}
+	newPointer, err := syscall.BytePtrFromString(newName)
+	if err != nil {
+		return state("immutable state name is invalid")
+	}
+	_, _, errno := syscall.Syscall6(
+		renameat2Trap,
+		parent.file.Fd(), uintptr(unsafe.Pointer(oldPointer)),
+		parent.file.Fd(), uintptr(unsafe.Pointer(newPointer)),
+		renameNoReplace, 0,
+	)
+	runtime.KeepAlive(oldPointer)
+	runtime.KeepAlive(newPointer)
+	if errno != 0 {
+		return errno
+	}
+	return parent.verify()
 }
 
 func lock(dir *directory) error {

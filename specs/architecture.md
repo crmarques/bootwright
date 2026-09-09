@@ -472,6 +472,10 @@ sensitive detail follow [security.md](security.md).
 
 ## Implementations and version variation
 
+[Secrets](secrets.md#implementation-selection) owns its immutable implementation
+catalog and session ports. Workspace supplies the held context persistence
+capability; core Secret services do not depend on a concrete store type.
+
 A variation that changes authored intent or a business invariant is an
 explicit typed variant in its owning domain. Vendor, substrate, component,
 transport, and release mechanics remain in a concrete adapter or renderer

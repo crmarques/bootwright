@@ -188,7 +188,9 @@ is syntax only for these four payload-bearing commands and is a usage error on
 every other command.
 
 Standard input is read only for an ordinary confirmation, an explicitly
-requested sudo-password prompt, or `secret set --password-stdin`. No command
+requested sudo-password prompt, `secret set --password-stdin`, or
+`secret set --value-stdin`. The [Secrets contract](secrets.md) requires yes
+before stdin-backed replacement. No command
 reads an ambient configuration file.
 
 State-root selection and its sole environment input are defined by
@@ -234,6 +236,9 @@ exact continuation, or full destroy. The same context name remains selectable
 for those actions; update, fresh apply, access, adoption, and reuse remain
 forbidden. It refuses while a live mutator holds the context, and final purge
 still requires positive absence and durable ownership release.
+The [Secrets contract](secrets.md#immutable-binding-and-contexts) permits
+check/list/show/encryption status/rotate in recovery-only mode while
+init/set/generate/delete remain forbidden.
 
 Media, secret, add-on, and context writes use verified roots, safe
 single path segments, exclusive creation, restrictive permissions, bounded

@@ -6,24 +6,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crmarques/bootwright/internal/availability"
+	"github.com/crmarques/bootwright/internal/desiredstate"
 )
 
-func TestUnavailableService(t *testing.T) {
+func TestUnconfiguredServiceAndCancellation(t *testing.T) {
 	tests := []struct {
 		name   string
 		invoke func(context.Context) error
 	}{
-		{"secret set", func(ctx context.Context) error { return (Service{}).Set(ctx, SetRequest{}) }},
-		{"secret generate", func(ctx context.Context) error { return (Service{}).Generate(ctx, GenerateRequest{}) }},
-		{"secret check", func(ctx context.Context) error { return (Service{}).Check(ctx, CheckRequest{}) }},
-		{"secret list", func(ctx context.Context) error { return (Service{}).List(ctx, ListRequest{}) }},
-		{"secret show", func(ctx context.Context) error { return (Service{}).Show(ctx, ShowRequest{}) }},
-		{"secret delete", func(ctx context.Context) error { return (Service{}).Delete(ctx, DeleteRequest{}) }},
+		{"secret set", func(ctx context.Context) error { _, err := (Service{}).Set(ctx, SetRequest{}); return err }},
+		{"secret generate", func(ctx context.Context) error { _, err := (Service{}).Generate(ctx, GenerateRequest{}); return err }},
+		{"secret check", func(ctx context.Context) error { _, err := (Service{}).Check(ctx, CheckRequest{}); return err }},
+		{"secret list", func(ctx context.Context) error { _, err := (Service{}).List(ctx, ListRequest{}); return err }},
+		{"secret show", func(ctx context.Context) error { _, err := (Service{}).Show(ctx, ShowRequest{}); return err }},
+		{"secret delete", func(ctx context.Context) error { _, err := (Service{}).Delete(ctx, DeleteRequest{}); return err }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := tt.invoke(context.Background()); !errors.Is(err, availability.ErrNotImplemented) {
+			if err := tt.invoke(context.Background()); len(desiredstate.DiagnosticsOf(err)) != 1 {
 				t.Fatalf("unavailable result = %v", err)
 			}
 			ctx, cancel := context.WithCancel(context.Background())

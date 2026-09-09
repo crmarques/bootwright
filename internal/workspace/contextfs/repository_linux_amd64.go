@@ -400,21 +400,8 @@ func (t *transaction) MutationState(ctx context.Context, id string) ([]byte, err
 		return nil, err
 	}
 	t.leases[id] = dir
-	names, readErr := dir.file.Readdirnames(5)
-	if readErr != nil && !errors.Is(readErr, io.EOF) {
-		return nil, state("context layout cannot be verified")
-	}
-	for _, name := range names {
-		if !slices.Contains([]string{"reservation.json", "mutation.json", "revisions", "archives"}, name) {
-			return nil, state("context contains unsupported state; mutation is refused")
-		}
-		if name == "revisions" || name == "archives" {
-			child, err := openDirectory(dir, name)
-			if err != nil {
-				return nil, state("context retained-state directory is unsafe")
-			}
-			child.file.Close()
-		}
+	if err := verifyContextLayout(ctx, dir); err != nil {
+		return nil, err
 	}
 	if err := verifyReservation(ctx, dir, id, ""); err != nil {
 		return nil, err

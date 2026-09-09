@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"reflect"
 	"strings"
@@ -26,7 +27,7 @@ func completionFixture(t *testing.T) *cobra.Command {
 	validate.Flags().StringArrayP("file", "f", nil, "Read input")
 	validate.Flags().Bool("watch", false, "Watch state")
 	root.AddCommand(cluster, validate, &cobra.Command{Use: "help"})
-	if err := configureCompletion(root); err != nil {
+	if err := configureCompletion(root, completionCatalog{}); err != nil {
 		t.Fatal(err)
 	}
 	return root
@@ -101,6 +102,26 @@ func TestCompletionProtocolIgnoresAmbientConfiguration(t *testing.T) {
 	}
 	if _, err := os.Stat(debugPath); !os.IsNotExist(err) {
 		t.Fatalf("completion wrote debug file: %v", err)
+	}
+}
+
+func TestSecretEncryptionTypeCompletionUsesOnlyInjectedCatalog(t *testing.T) {
+	record := &dispatchRecord{types: []string{"z-store", "local-keyring", "../invalid", "UPPER", "local-keyring"}}
+	var stdout, stderr bytes.Buffer
+	runner := New(Config{Out: &stdout, ErrOut: &stderr, Services: dispatchSpies(record)})
+	if record.typeCalls != 0 {
+		t.Fatal("runner construction queried the type catalog")
+	}
+	code := runner.Run(context.Background(), []string{completionRequest, "secret", "encryption", "init", "--type", ""})
+	if code != 0 || stdout.String() != "local-keyring\nz-store\n:36\n" || stderr.Len() != 0 || record.calls != 0 || record.typeCalls != 1 {
+		t.Fatalf("completion code=%d stdout=%q stderr=%q calls=%d typeCalls=%d", code, stdout.String(), stderr.String(), record.calls, record.typeCalls)
+	}
+
+	record.typeCalls = 0
+	stdout.Reset()
+	code = runner.Run(context.Background(), []string{"secret", "encryption", "init", "--type", "local-keyring", "--help"})
+	if code != 0 || stdout.Len() == 0 || record.calls != 0 || record.typeCalls != 0 {
+		t.Fatalf("help accessed catalog: code=%d calls=%d typeCalls=%d", code, record.calls, record.typeCalls)
 	}
 }
 

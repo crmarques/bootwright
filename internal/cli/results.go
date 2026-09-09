@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/spf13/cobra"
 )
 
@@ -61,6 +62,31 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		if result.deletion != nil && result.deletion.Name != "" && result.deletion.ID != "" && (result.deletion.Outcome == "deleted" || result.deletion.Outcome == "recoveryOnly") {
 			return true, writeContextDelete(out, result.deletion)
 		}
+	case "secret set", "secret generate", "secret delete":
+		if validSecretMutation(path, result.secretMutation) {
+			return true, writeSecretMutation(out, path, result.secretMutation)
+		}
+	case "secret check":
+		if availableSecretCheck(result.secretCheck) {
+			return true, writeSecretCheck(out, errOut, path, result.secretCheck, nil, 0, selectedJSON(command))
+		}
+	case "secret list":
+		if validSecretList(result.secretList) {
+			return true, writeSecretList(out, path, result.secretList, selectedJSON(command))
+		}
+	case "secret show":
+		part := secrets.Part(stringValue(command.Flags(), "part"))
+		if result.secretReveal != nil && result.secretReveal.Part == part && validSecretPart(part) {
+			return true, writeSecretReveal(out, result.secretReveal, part)
+		}
+	case "secret encryption init", "secret encryption rotate":
+		if validEncryptionMutation(result.encryptionMutation) {
+			return true, writeEncryptionMutation(out, path, result.encryptionMutation)
+		}
+	case "secret encryption status":
+		if validEncryptionStatus(result.encryptionStatus) {
+			return true, writeEncryptionStatus(out, path, result.encryptionStatus, selectedJSON(command))
+		}
 	case "render effective":
 		if result.effective != nil {
 			encoder := r.config.EncodeEffectiveYAML
@@ -71,4 +97,11 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		}
 	}
 	return false, nil
+}
+
+func (r *Runner) writeNegativeSecretCheck(command *cobra.Command, path string, result commandResult, diagnostics []diagnostic) (bool, error) {
+	if path != "secret check" || !negativeSecretCheck(result.secretCheck) {
+		return false, nil
+	}
+	return true, writeSecretCheck(r.config.Out, r.config.ErrOut, path, result.secretCheck, diagnostics, 1, selectedJSON(command))
 }

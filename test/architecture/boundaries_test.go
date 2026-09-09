@@ -32,6 +32,9 @@ func packageRoles() map[string]packageRole {
 		"internal/desiredstate/yamlstream":      adapterRole,
 		"internal/desiredstate/encoding":        adapterRole,
 		"internal/workspace/contextfs":          adapterRole,
+		"internal/secrets/storage":              applicationRole,
+		"internal/secrets/localstore":           adapterRole,
+		"internal/secrets/material":             adapterRole,
 		"internal/reconciliation/contextguard":  applicationRole,
 		"cmd/bootwright":                        compositionRole,
 		"internal/cli":                          cliRole,
@@ -65,7 +68,7 @@ func permitsDependency(consumer, provider packageRole) bool {
 	case technicalRole:
 		return provider == technicalRole
 	case adapterRole:
-		return provider != cliRole && provider != compositionRole
+		return provider != cliRole && provider != compositionRole && provider != adapterRole
 	case compositionRole:
 		return true
 	default:
@@ -206,15 +209,17 @@ func TestAdmissionEffectBoundary(t *testing.T) {
 		isCLI := source.owner == "internal/cli"
 		input := source.owner == "internal/desiredstate/inputfs"
 		storage := source.owner == "internal/workspace/contextfs"
+		secretMaterial := source.owner == "internal/secrets/material"
+		secretStore := source.owner == "internal/secrets/localstore"
 		guard := source.owner == "internal/reconciliation/contextguard"
 		codec := source.owner == "internal/desiredstate/yamlstream" || source.owner == "internal/desiredstate/encoding"
 		for _, imported := range source.imports {
 			name := imported.path
-			forbidden := strings.HasPrefix(name, "os/") || strings.HasPrefix(name, "net/") && name != "net/url" && name != "net/netip" || !storage && name == "crypto/rand" || strings.HasPrefix(name, "math/rand") || !storage && name == "unsafe" || strings.HasPrefix(name, "golang.org/x/sys") || !input && !storage && (name == "os" || name == "syscall")
+			forbidden := strings.HasPrefix(name, "os/") || strings.HasPrefix(name, "net/") && name != "net/url" && name != "net/netip" || !storage && !secretMaterial && !secretStore && name == "crypto/rand" || strings.HasPrefix(name, "math/rand") || !storage && !secretMaterial && name == "unsafe" || strings.HasPrefix(name, "golang.org/x/sys") || !input && !storage && !secretMaterial && (name == "os" || name == "syscall")
 			if forbidden {
 				t.Errorf("%s imports unauthorized effect capability %s", source.path, name)
 			}
-			if !isCLI && (strings.Contains(name, "/internal/cli") || strings.HasPrefix(name, "github.com/spf13/") || name == "io" && !input && !codec && !storage && !guard) {
+			if !isCLI && (strings.Contains(name, "/internal/cli") || strings.HasPrefix(name, "github.com/spf13/") || name == "io" && !input && !codec && !storage && !guard && !secretMaterial && !secretStore) {
 				t.Errorf("%s depends on presentation or unrestricted I/O %s", source.path, name)
 			}
 			ast.Inspect(source.syntax, func(node ast.Node) bool {
@@ -227,7 +232,7 @@ func TestAdmissionEffectBoundary(t *testing.T) {
 					return true
 				}
 				member := selector.Sel.Name
-				if name == "net" && member != "ParseMAC" {
+				if name == "net" && member != "ParseMAC" && !(secretMaterial && (member == "IP" || member == "ParseIP")) {
 					t.Errorf("%s accesses networking through net.%s", source.path, member)
 				}
 				if name == "fmt" && !isCLI && (strings.HasPrefix(member, "Print") || strings.HasPrefix(member, "Fprint") || strings.HasPrefix(member, "Scan") || strings.HasPrefix(member, "Fscan")) {
@@ -238,6 +243,31 @@ func TestAdmissionEffectBoundary(t *testing.T) {
 				}
 				if name == "syscall" && input && (member == "O_WRONLY" || member == "O_RDWR" || member == "O_CREAT" || member == "O_TRUNC" || member == "Write" || member == "Unlink" || member == "Rename") {
 					t.Errorf("%s grants input mutation through syscall.%s", source.path, member)
+				}
+				return true
+			})
+		}
+	}
+}
+
+func TestSecretImplementationsRemainBehindPorts(t *testing.T) {
+	for _, source := range productionSources(t) {
+		for _, imported := range source.imports {
+			if strings.HasPrefix(imported.path, "golang.org/x/crypto/") && (source.owner != "internal/secrets/material" || imported.path != "golang.org/x/crypto/ssh") {
+				t.Errorf("%s imports an unqualified cryptographic dependency %s", source.path, imported.path)
+			}
+			concrete := strings.HasSuffix(imported.path, "/internal/secrets/localstore") || strings.HasSuffix(imported.path, "/internal/secrets/material")
+			if concrete && source.owner != "cmd/bootwright" {
+				t.Errorf("%s imports a concrete secret implementation", source.path)
+			}
+		}
+		if source.owner == "internal/secrets/storage" || source.owner == "internal/secrets/custody" || source.owner == "internal/secrets/encryption" {
+			ast.Inspect(source.syntax, func(node ast.Node) bool {
+				if literal, ok := node.(*ast.BasicLit); ok && literal.Kind == token.STRING {
+					value, _ := strconv.Unquote(literal.Value)
+					if value == "local-keyring" || value == "local-v1" || value == "local-keyfile-v1" {
+						t.Errorf("%s embeds a concrete secret implementation identity", source.path)
+					}
 				}
 				return true
 			})

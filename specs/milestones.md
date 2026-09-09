@@ -1,9 +1,10 @@
 # Milestones
 
-**Current milestone: M1b — completed.** Desired-state admission for all 21 API
-kinds, durable contexts, context-backed validation and public `render effective`
-are implemented. M1a's catalog, help, version, completion and unavailable-command
-guarantees remain in force. M1c is the next delivery and remains unimplemented.
+**Current milestone: M1c — completed.** Desired-state
+admission for all 21 API kinds, durable contexts, context-backed validation and
+public `render effective` are implemented. M1a's catalog, help, version,
+completion and unavailable-command guarantees remain in force. M1c is specified
+in [Secrets](secrets.md).
 
 This file owns delivery scope and deferred work. Product specs describe target
 behavior; they do not claim availability. Keep detailed implementation plans
@@ -219,17 +220,78 @@ Delivered evidence:
 ## M1c — context secret management
 
 **Owner:** Secrets; Workspace owns the enclosing path boundary. **Requires:**
-M1b. **Definition:** Needs definition.
+M1b. **Definition:** Specified in [Secrets](secrets.md). **Delivery:** Completed.
 
-Implement the complete `secret` tree without platform or entitlement effects.
-First select the threat-modeled store and key mechanism; define encrypted format,
-migration, recovery/rotation, declaration and overwrite rules, version retention,
-CLI source/part mappings and machine output.
+Implement the complete `secret` tree through the immutable implementation
+catalog and semantic store sessions in [Secrets](secrets.md), with one production
+implementation, `local-keyring`. Qualify a test-only session-unlock implementation
+without changing core command or binding logic. No platform, entitlement or
+lifecycle effects; M1d owns the future lifecycle consumer port.
 
-Exit: source/type validation, secure generation, immutable binding, owner-only
-race-resistant storage, atomic publication, tamper/corruption refusal and
-recoverable rotation. Test reveal boundaries, non-disclosure, traversal, links,
-permissions, concurrency, cancellation and cryptographic failure.
+Exit evidence:
+
+- Shared semantic conformance for selected/persisted implementations, typed
+  acquisition and generation, immutable bindings and recovery-only policy.
+- Complete CLI/help/completion and machine-result journeys, exact raw reveal,
+  lazy input, confirmation leases and canary non-disclosure checks.
+- Owner-only race-resistant storage, inclusive bounds, authenticated records,
+  tamper refusal without fallback, reservation ceilings, atomic publication,
+  process-death/retry/uncertainty and rotation-failure tests.
+- Integrated `make check`, `make build`, `go test -race ./...`, both module
+  tidy/verification checks, the pinned vulnerability scan, all four completion
+  runtimes, bounded record/material fuzz runs and `git diff --check`. The real
+  PTY tests must pass without skips on a PTY-capable runner.
+
+Delivered evidence:
+
+- All nine secret routes are composed through the immutable implementation
+  catalog. The [shared conformance journey](../cmd/bootwright/secrets_conformance_test.go)
+  exercises local-keyring and a test-only session-unlock implementation through
+  the same core services. Desired-state Secret schemas remain unchanged; M1d
+  and every platform, entitlement and lifecycle effect remain unavailable.
+- [Command journeys](../cmd/bootwright/secrets_test.go) and
+  [disclosure checks](../cmd/bootwright/secrets_disclosure_test.go) cover current
+  source/part access, stale/orphan handling, recovery-only policy, context ID
+  reuse, immutable bindings, rotation and non-disclosure. Confirmation and
+  expected-snapshot tests cover the context mutation boundary.
+- [Publication tests](../internal/workspace/contextfs/secrets_publication_linux_amd64_test.go)
+  inject every mutation/rotation checkpoint and kill subprocesses before/after
+  selector publication. Held-reader, inode-substitution, mount-containment,
+  unsafe-file, canonical-bound, seal-ceiling, and
+  [AAD/envelope tamper tests](../internal/secrets/localstore/tamper_linux_amd64_test.go)
+  pass without older-generation fallback. These are not power-loss or secure
+  erasure qualification.
+- Complete `make check` and `./scripts/go test -race ./... -count=1` pass
+  without test exclusions.
+  `make build`, `make fmt-check`, `make vet`, both module `go mod tidy -diff`
+  checks and both `go mod verify` checks pass using `./scripts/go`.
+  `make completion-test` passes all 104 cases across Bash 5.3.0, Zsh 5.9,
+  Fish 4.2.0 and PowerShell 7.7.0-preview.2, without skips. The pinned
+  scanner reports no reachable or imported-package vulnerabilities; it reports
+  the unimported x/crypto OpenPGP advisory GO-2026-5932 at module level. The final
+  scan uses a complete official database copy freshly acquired and validated
+  on 2026-09-09, modified `2026-09-02T19:12:04Z`. All 4,378 referenced advisory
+  identities, modification times and affected modules match the indexes;
+  both official indexes remain unchanged across acquisition. Direct scanner
+  DNS lookup fails, so the final gate uses this verified local copy.
+- Independent bounded-count fuzz runs pass on their first attempts for canonical
+  selectors, private store records, canonical-size preflight, material JSON and
+  strict PEM parsers, each with `-fuzztime=100000x -parallel=2 -timeout=3m`.
+  Initial 20-second size-preflight and strict-PEM runs exited with
+  `context deadline exceeded`; unchanged timed retries passed, but those initial failures
+  are not counted as acceptance passes. The independent execution-count runs
+  provide the final bounded-fuzz evidence. Focused storage, material, CLI and
+  conformance tests and race checks pass; `git diff --check` passes.
+
+Real-terminal qualification is complete: the
+[test helper](../cmd/bootwright/interrupts_linux_amd64_test.go) allocates through
+the documented Linux PTY multiplexer, retaining all interruption, input,
+cancellation, unchanged-selection and descriptor-flag assertions. Both
+`TestInterruptDuringRealConfirmationPreservesSelection` and
+`TestTerminalFlagsAreRestoredAfterReadyAndEmptyReads` pass in the complete normal
+and race gates. Neither real-terminal test was skipped; no device permissions
+were changed.
+M1c remains current and completed; M1d is not promoted and stays unavailable.
 
 ## M1d — managed artifact-server apply
 
