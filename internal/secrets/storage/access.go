@@ -6,14 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
-
-	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 type ImplementationResolver interface {
 	Types() []string
 	Select(string) (SecretStoreImplementation, error)
-	Reopen(Selection) (SecretStoreImplementation, error)
+	Reopen(string) (SecretStoreImplementation, error)
 }
 
 type Access struct {
@@ -128,10 +126,9 @@ func (a *Access) initializeArea(ctx context.Context, selected Context, implement
 		return err
 	}
 	if exists {
-		if selector.Selection != implementation.Selection() {
+		if selector.Backend != implementation.Backend() {
 			return Failure("store.implementation", "initialization cannot change an existing store implementation")
 		}
-		return a.open(ctx, selected, area, selector, true, func(session StoreSession, selection Selection) error { return callback(session, selection, false) })
 	}
 	material, err := a.acquire(ctx, selected, implementation, true)
 	if err != nil {
@@ -148,14 +145,14 @@ func (a *Access) initializeArea(ctx context.Context, selected Context, implement
 		return Failure("store.implementation", "implementation returned no initialized session")
 	}
 	defer session.Close()
-	return callback(session, implementation.Selection(), true)
+	return callback(session, implementation.Selection(), !exists)
 }
 
 func (a *Access) open(ctx context.Context, selected Context, area Area, selector Selector, unlock bool, callback func(StoreSession, Selection) error) error {
 	if a.resolver == nil {
 		return Failure("store.implementation", "secret store implementation catalog is invalid")
 	}
-	implementation, err := a.resolver.Reopen(selector.Selection)
+	implementation, err := a.resolver.Reopen(selector.Backend)
 	if err != nil {
 		return err
 	}
@@ -174,7 +171,7 @@ func (a *Access) open(ctx context.Context, selected Context, area Area, selector
 		return Failure("store.implementation", "implementation returned no store session")
 	}
 	defer session.Close()
-	return callback(session, selector.Selection)
+	return callback(session, implementation.Selection())
 }
 
 func (a *Access) acquire(ctx context.Context, selected Context, implementation SecretStoreImplementation, unlock bool) (SessionMaterial, error) {
@@ -208,24 +205,21 @@ func ReadSelector(ctx context.Context, area Area, contextID string) (Selector, b
 		return Selector{}, false, err
 	}
 	if len(entries) != 0 {
-		return Selector{}, false, Failure("store.corrupt", "nonempty secret store has no selector; recovery is required")
+		return Selector{}, false, Failure("store.corrupt", "nonempty secret store has no metadata; run secret encryption init for recovery")
 	}
 	return Selector{}, false, nil
 }
 
 func readSelectorRecord(ctx context.Context, area Area, contextID string) (Selector, bool, error) {
-	data, exists, err := area.ReadMutable(ctx, "selector.json", 64<<10)
+	data, exists, err := area.ReadMutable(ctx, RecordPath, RecordMaximum)
+	if err != nil || !exists {
+		return Selector{}, false, err
+	}
+	record, err := DecodeRecord(data, contextID)
 	if err != nil {
 		return Selector{}, false, err
 	}
-	if !exists {
-		return Selector{}, false, nil
-	}
-	var selector Selector
-	if err := DecodeCanonical(data, &selector); err != nil || selector.SelectorVersion != 1 || selector.ContextID != contextID || !validSelection(selector.Selection) || !api.ValidLexical("name", selector.Generation) {
-		return Selector{}, false, Failure("store.corrupt", "secret store selector is invalid or incompatible")
-	}
-	return selector, true, nil
+	return record.Selector, true, nil
 }
 
 func EncodeCanonical(value any) ([]byte, error) {

@@ -35,13 +35,13 @@ func TestSecretSubtreeRefusesUnsafeEntriesBeforeCallback(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			store, token := secretPublicationFixture(t)
 			directory := filepath.Join(store.options.Root, "contexts", token.Name, "secrets", "parts")
-			path := filepath.Join(directory, "blob-00000000000000000000000000000000.bin")
+			path := filepath.Join(directory, "blob-00000000000000000000000000000000.enc")
 			var err error
 			switch kind {
 			case "symlink":
-				err = os.Symlink("../selector.json", path)
+				err = os.Symlink("../store.json", path)
 			case "hardlink":
-				err = os.Link(filepath.Join(directory, "..", "selector.json"), path)
+				err = os.Link(filepath.Join(directory, "..", "store.json"), path)
 			case "fifo":
 				err = syscall.Mkfifo(path, 0600)
 			case "public-mode":

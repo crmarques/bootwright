@@ -112,15 +112,15 @@ func (h *integrationStore) view(callback func(storage.StoreSession) error) error
 
 func readTestSelector(t *testing.T, area storage.Area) storage.Selector {
 	t.Helper()
-	data, exists, err := area.ReadMutable(context.Background(), selectorPath, selectorMaximum)
+	data, exists, err := area.ReadMutable(context.Background(), selectorPath, storage.RecordMaximum)
 	if err != nil || !exists {
-		t.Fatalf("selector: %v", err)
+		t.Fatalf("read metadata: %v", err)
 	}
-	var selector storage.Selector
-	if err := decodeCanonical(data, selectorMaximum, 64, &selector); err != nil {
+	var record storage.Record
+	if err := storage.DecodeCanonical(data, &record); err != nil {
 		t.Fatal(err)
 	}
-	return selector
+	return record.Selector
 }
 
 func declaration(name, kind, source string) secrets.Declaration {
@@ -240,7 +240,7 @@ func TestLocalStoreLifecycleRetainsBindingsAndRotatesLogicalVersions(t *testing.
 		for _, version := range snapshot.Versions {
 			after = append(after, version.ID)
 		}
-		if !slices.Equal(beforeRotation, after) || snapshot.ActiveKey != rotated || len(snapshot.Keys) != 2 || snapshot.RetainedArtifacts == 0 || !snapshot.CleanupRequired {
+		if !slices.Equal(beforeRotation, after) || snapshot.ActiveKey != rotated || len(snapshot.Keys) != 1 || snapshot.RetainedArtifacts != 0 || snapshot.CleanupRequired {
 			t.Fatalf("rotation metadata: %#v", snapshot)
 		}
 		material, err := session.Read(context.Background(), second.ID)
@@ -278,7 +278,7 @@ func TestLocalStoreLifecycleRetainsBindingsAndRotatesLogicalVersions(t *testing.
 		if err != nil {
 			return err
 		}
-		if len(snapshot.Versions) != 0 || len(snapshot.Current) != 0 || len(snapshot.Bindings) != 0 || snapshot.RetainedArtifacts == 0 {
+		if len(snapshot.Versions) != 0 || len(snapshot.Current) != 0 || len(snapshot.Bindings) != 0 || snapshot.RetainedArtifacts != 0 || snapshot.CleanupRequired {
 			t.Fatalf("logical collection: %#v", snapshot)
 		}
 		return nil
@@ -445,12 +445,15 @@ func TestInspectDoesNotReadOrAuthenticatePartPayloads(t *testing.T) {
 
 func TestSealLedgerRejectsUnauthenticatedIncrease(t *testing.T) {
 	h := newIntegrationStore(t)
-	ledgerDirectory := filepath.Join(h.root, "contexts", h.context.Name, "secrets", "ledgers")
-	entries, err := os.ReadDir(ledgerDirectory)
-	if err != nil || len(entries) != 1 {
-		t.Fatalf("ledger artifacts: %v %d", err, len(entries))
+	var activeKey string
+	if err := h.view(func(session storage.StoreSession) error {
+		snapshot, err := session.Inspect(context.Background())
+		activeKey = snapshot.ActiveKey
+		return err
+	}); err != nil {
+		t.Fatal(err)
 	}
-	path := filepath.Join(ledgerDirectory, entries[0].Name())
+	path := filepath.Join(h.root, "contexts", h.context.Name, "secrets", ledgerPath(activeKey))
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -474,7 +477,14 @@ func TestSealLedgerRejectsUnauthenticatedIncrease(t *testing.T) {
 }
 
 func TestInitializationRecordRejectsUnauthenticatedChange(t *testing.T) {
-	h := newIntegrationStore(t)
+	h := newUninitializedIntegrationStore(t)
+	err := h.workspace.MutateSecrets(context.Background(), h.context, func(area storage.Area) error {
+		_, err := h.implementation.Initialize(context.Background(), h.context, &crashArea{Area: area, failBeforeIndex: true}, nil)
+		return err
+	})
+	if err == nil {
+		t.Fatal("initialization interruption succeeded")
+	}
 	path := filepath.Join(h.root, "contexts", h.context.Name, "secrets", initializationPath)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -492,7 +502,14 @@ func TestInitializationRecordRejectsUnauthenticatedChange(t *testing.T) {
 	if err := os.WriteFile(path, tampered, 0600); err != nil {
 		t.Fatal(err)
 	}
-	err = h.view(func(storage.StoreSession) error { return nil })
+	err = h.workspace.MutateSecrets(context.Background(), h.context, func(area storage.Area) error {
+		guard := &rejectMutationArea{Area: area}
+		_, err := h.implementation.Initialize(context.Background(), h.context, guard, nil)
+		if guard.effects != 0 {
+			t.Fatal("tampered recovery attempted mutation")
+		}
+		return err
+	})
 	if failureCode(err) != "secret.store.corrupt" {
 		t.Fatalf("unauthenticated initialization record: %v", err)
 	}
@@ -530,6 +547,16 @@ func (a *rejectMutationArea) Sync(context.Context, string) error {
 	return errSimulatedCrash
 }
 
+func (a *rejectMutationArea) SyncFile(context.Context, string) error {
+	a.effects++
+	return errSimulatedCrash
+}
+
+func (a *rejectMutationArea) PruneUnpublished(context.Context, []storage.RecordExpectation, []string) error {
+	a.effects++
+	return errSimulatedCrash
+}
+
 var errSimulatedCrash = errors.New("simulated process interruption")
 
 func (a *crashArea) EnsureDirectory(ctx context.Context, path string) error {
@@ -543,11 +570,16 @@ func (a *crashArea) EnsureDirectory(ctx context.Context, path string) error {
 
 func (a *crashArea) WriteExclusive(ctx context.Context, path string, data []byte) error {
 	a.effects++
-	if a.failBeforeIndex && strings.HasPrefix(path, "indexes/") {
-		a.failBeforeIndex = false
+	err := a.Area.WriteExclusive(ctx, path, data)
+	if err == nil && a.effects == a.failAfter {
 		return errSimulatedCrash
 	}
-	err := a.Area.WriteExclusive(ctx, path, data)
+	return err
+}
+
+func (a *crashArea) SyncFile(ctx context.Context, path string) error {
+	a.effects++
+	err := a.Area.SyncFile(ctx, path)
 	if err == nil && a.effects == a.failAfter {
 		return errSimulatedCrash
 	}
@@ -556,6 +588,10 @@ func (a *crashArea) WriteExclusive(ctx context.Context, path string, data []byte
 
 func (a *crashArea) Replace(ctx context.Context, path string, data, expected []byte) (storage.Outcome, error) {
 	a.effects++
+	if a.failBeforeIndex && path == selectorPath {
+		a.failBeforeIndex = false
+		return storage.NotCommitted, errSimulatedCrash
+	}
 	outcome, err := a.Area.Replace(ctx, path, data, expected)
 	if err == nil && a.effects == a.failAfter {
 		if outcome == storage.Committed {
@@ -567,7 +603,20 @@ func (a *crashArea) Replace(ctx context.Context, path string, data, expected []b
 }
 
 func TestFreshInitializationResumesEveryDurableEffect(t *testing.T) {
-	for failAfter := 1; failAfter <= 11; failAfter++ {
+	baseline := newUninitializedIntegrationStore(t)
+	var effects int
+	if err := baseline.workspace.MutateSecrets(context.Background(), baseline.context, func(area storage.Area) error {
+		tracked := &crashArea{Area: area}
+		session, err := baseline.implementation.Initialize(context.Background(), baseline.context, tracked, nil)
+		if session != nil {
+			session.Close()
+		}
+		effects = tracked.effects
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for failAfter := 1; failAfter <= effects; failAfter++ {
 		t.Run(string(rune('a'+failAfter-1)), func(t *testing.T) {
 			h := newUninitializedIntegrationStore(t)
 			err := h.workspace.MutateSecrets(context.Background(), h.context, func(area storage.Area) error {
@@ -731,4 +780,18 @@ func errString(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+func (a *rejectMutationArea) Prune(context.Context, []byte, []string) error {
+	a.effects++
+	return errSimulatedCrash
+}
+
+func (a *crashArea) Prune(ctx context.Context, expected []byte, paths []string) error {
+	a.effects++
+	err := a.Area.Prune(ctx, expected, paths)
+	if err == nil && a.effects == a.failAfter {
+		return errSimulatedCrash
+	}
+	return err
 }

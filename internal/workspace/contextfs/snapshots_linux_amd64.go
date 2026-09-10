@@ -100,8 +100,27 @@ func (t *transaction) Publish(ctx context.Context, id, environment string, sourc
 		return "", safeError(err)
 	}
 	defer revisions.file.Close()
-	if _, err := revisionEntries(revisions, "rev-", ""); err != nil {
+	names, err := revisionEntries(revisions, "rev-", "")
+	if err != nil {
 		return "", err
+	}
+	if len(names) == maxRevisions {
+		// A legacy store or interrupted writer may have filled the revision
+		// bound. Establish its existing selection durably before reclaiming
+		// unselected input; a failed sync must preserve every revision.
+		if err := t.syncIntent(ctx); err != nil {
+			return "", err
+		}
+		if err := t.collectRevisions(ctx, id); err != nil {
+			return "", err
+		}
+		names, err = revisionEntries(revisions, "rev-", "")
+		if err != nil {
+			return "", err
+		}
+		if len(names) == maxRevisions {
+			return "", state("retained revision count exceeds its limit")
+		}
 	}
 	for range 16 {
 		revision, err := t.store.candidate("rev-")

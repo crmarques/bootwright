@@ -1,4 +1,4 @@
-// Package localstore implements the version-1 local encrypted secret store.
+// Package localstore implements the local encrypted secret store.
 package localstore
 
 import (
@@ -17,7 +17,7 @@ import (
 
 const (
 	storeType = "local-keyring"
-	storeID   = "local-v1"
+	storeID   = "local-v2"
 	custodyID = "local-keyfile-v1"
 )
 
@@ -37,6 +37,8 @@ func NewWithOptions(options Options) *Implementation {
 	}
 	return &Implementation{random: options.Random}
 }
+
+func (*Implementation) Backend() string { return "local-keyring-v2" }
 
 func (i *Implementation) Selection() storage.Selection {
 	return storage.Selection{
@@ -68,28 +70,27 @@ func (i *Implementation) Initialize(ctx context.Context, selected storage.Contex
 }
 
 func (i *Implementation) Open(ctx context.Context, selected storage.Context, area storage.Area, selector storage.Selector, material storage.SessionMaterial) (storage.StoreSession, error) {
+	return i.open(ctx, selected, area, selector, material)
+}
+
+func (i *Implementation) open(ctx context.Context, selected storage.Context, area storage.Area, selector storage.Selector, material storage.SessionMaterial) (*session, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if i == nil || i.random == nil || area == nil || material != nil || !validContext(selected) || !validSelector(selector, selected, i.Selection()) {
+	if i == nil || i.random == nil || area == nil || material != nil || !validContext(selected) || !validSelector(selector, selected, i.Backend()) {
 		return nil, storage.Failure("store.implementation", "persisted local secret store selection is incompatible")
 	}
-	selectorData, exists, err := area.ReadMutable(ctx, selectorPath, selectorMaximum)
-	if err != nil {
-		return nil, areaFailure(ctx, "store.corrupt", "secret selector cannot be read safely", err)
-	}
-	var actual storage.Selector
-	if !exists || decodeCanonical(selectorData, selectorMaximum, 64, &actual) != nil || actual != selector {
-		return nil, storage.Failure("store.corrupt", "secret selector changed or is invalid")
-	}
-	indexData, exists, err := area.Read(ctx, "indexes/"+selector.Generation+".bin", indexMaximum)
+	selectorData, exists, err := area.ReadMutable(ctx, selectorPath, storage.RecordMaximum)
 	if err != nil || !exists {
-		return nil, areaFailure(ctx, "store.corrupt", "selected encrypted secret index is missing or unsafe", err)
+		return nil, areaFailure(ctx, "store.corrupt", "secret metadata cannot be read safely", err)
 	}
-	defer clear(indexData)
-	var wrapped envelope
-	if decodeCanonical(indexData, indexMaximum, 32, &wrapped) != nil || wrapped.FormatVersion != formatVersion || wrapped.Algorithm != algorithm || wrapped.Purpose != "index" || wrapped.BlobID != selector.Generation || !validID(wrapped.KeyID, "key-") {
-		return nil, storage.Failure("store.corrupt", "selected encrypted secret index is malformed")
+	record, err := storage.DecodeRecord(selectorData, selected.ID)
+	if err != nil || record.Selector != selector {
+		return nil, storage.Failure("store.corrupt", "secret metadata changed or is invalid")
+	}
+	var wrapped metadataEnvelope
+	if decodeMetadataPayload(record.Payload, &wrapped) != nil || !validID(wrapped.KeyID, "key-") {
+		return nil, storage.Failure("store.corrupt", "encrypted secret metadata is malformed")
 	}
 	key, err := readKey(ctx, area, wrapped.KeyID)
 	if err != nil {
@@ -101,14 +102,18 @@ func (i *Implementation) Open(ctx context.Context, selected storage.Context, are
 			clear(key)
 		}
 	}()
-	plaintext, err := openEnvelope(indexData, key, indexAAD(selected.ID, selector, wrapped.KeyID), "index", wrapped.KeyID, selector.Generation, indexMaximum)
+	plaintext, err := openMetadata(record, key)
 	if err != nil {
 		return nil, err
 	}
 	defer clear(plaintext)
 	var index indexRecord
-	if decodeCanonical(plaintext, indexMaximum, maxIndexItems, &index) != nil || validateIndex(index, selector) != nil || index.ActiveKey != wrapped.KeyID {
-		return nil, storage.Failure("store.corrupt", "decrypted secret index is invalid or inconsistent")
+	if decodeCanonical(plaintext, indexMaximum, maxIndexItems, &index) != nil {
+		return nil, storage.Failure("store.corrupt", "decrypted secret metadata is invalid")
+	}
+	index.FormatVersion, index.Algorithm, index.Selector = formatVersion, algorithm, selector
+	if validateIndex(index, selector) != nil || index.ActiveKey != wrapped.KeyID {
+		return nil, storage.Failure("store.corrupt", "decrypted secret metadata is inconsistent")
 	}
 	s := &session{implementation: i, context: selected, area: area, selector: selector, selectorData: slices.Clone(selectorData), index: cloneIndex(index), keys: map[string][]byte{wrapped.KeyID: key}}
 	if err := s.refreshMetadata(ctx); err != nil {
@@ -153,13 +158,13 @@ func (s *session) Inspect(ctx context.Context) (storage.Snapshot, error) {
 	if err := s.refreshMetadata(ctx); err != nil {
 		return storage.Snapshot{}, err
 	}
-	result := storage.Snapshot{Versions: make([]storage.Version, 0, len(s.index.Versions)), Current: slices.Clone(s.index.Current), Bindings: cloneBindings(s.index.Bindings), ActiveKey: s.index.ActiveKey, Keys: slices.Clone(s.index.Keys), RetainedArtifacts: s.retained, CleanupRequired: s.cleanup}
+	result := storage.Snapshot{Versions: make([]storage.Version, 0, len(s.index.Versions)), Current: slices.Clone(s.index.Current), Bindings: cloneBindings(s.index.Bindings), ActiveKey: s.index.ActiveKey, Keys: publicKeys(s.index), RetainedArtifacts: s.retained, CleanupRequired: s.cleanup}
 	for _, version := range s.index.Versions {
 		parts := make([]secrets.Part, len(version.Parts))
 		for i, part := range version.Parts {
 			parts[i] = part.Part
 		}
-		result.Versions = append(result.Versions, storage.Version{ID: version.ID, Declaration: cloneDeclaration(version.Declaration), Parts: parts})
+		result.Versions = append(result.Versions, storage.Version{ID: version.ID, Declaration: version.Declaration, Parts: parts})
 	}
 	return result, nil
 }
@@ -193,11 +198,11 @@ func (s *session) readVersion(ctx context.Context, version storedVersion) (secre
 		if err != nil {
 			return secrets.Material{}, err
 		}
-		data, exists, err := s.area.Read(ctx, "parts/"+part.BlobID+".bin", partMaximum)
+		data, exists, err := s.area.ReadMutable(ctx, partPath(part.BlobID), partMaximum)
 		if err != nil || !exists {
 			return secrets.Material{}, areaFailure(ctx, "store.corrupt", "encrypted secret part is missing or unsafe", err)
 		}
-		plaintext, err := openEnvelope(data, key, partAAD(s.context.ID, s.selector.Selection, version, part), "part", part.KeyID, part.BlobID, partMaximum)
+		plaintext, err := openEnvelope(data, key, partAAD(s.context.ID, s.selector.Backend, version, part), "part", part.KeyID, part.BlobID, partMaximum)
 		clear(data)
 		if err != nil {
 			return secrets.Material{}, err
@@ -232,7 +237,7 @@ func (s *session) key(ctx context.Context, id string) ([]byte, error) {
 }
 
 func readKey(ctx context.Context, area storage.Area, id string) ([]byte, error) {
-	data, exists, err := area.Read(ctx, "keys/"+id+".bin", 32)
+	data, exists, err := area.ReadMutable(ctx, keyPath(id), 32)
 	if err != nil || !exists || len(data) != 32 {
 		clear(data)
 		if ctx.Err() != nil {
@@ -252,11 +257,11 @@ func (s *session) refreshMetadata(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		data, exists, err := s.area.ReadMutable(ctx, "ledgers/"+key.ID+".json", ledgerMaximum)
+		data, exists, err := s.area.ReadMutable(ctx, ledgerPath(key.ID), ledgerMaximum)
 		if err != nil || !exists {
 			return areaFailure(ctx, "store.corrupt", "secret seal ledger is missing or unsafe", err)
 		}
-		ledger, ledgerErr := decodeLedger(data, s.context.ID, s.selector.Selection, keyMaterial, key.ID, key.Seals)
+		ledger, ledgerErr := decodeLedger(data, s.context.ID, s.selector.Backend, keyMaterial, key.ID, key.Seals)
 		if ledgerErr != nil {
 			return storage.Failure("store.corrupt", "secret seal ledger is invalid or contradictory")
 		}
@@ -309,8 +314,8 @@ func validContext(context storage.Context) bool {
 	return validName(context.Name) && validID(context.ID, "ctx-") && (context.Revision == "" || validID(context.Revision, "rev-")) && (context.Mode == "ready" || context.Mode == "initializing")
 }
 
-func validSelector(selector storage.Selector, context storage.Context, selection storage.Selection) bool {
-	return selector.SelectorVersion == formatVersion && selector.ContextID == context.ID && selector.Selection == selection && validID(selector.Generation, "gen-")
+func validSelector(selector storage.Selector, context storage.Context, selection string) bool {
+	return selector.SelectorVersion == formatVersion && selector.ContextID == context.ID && selector.Backend == selection && validID(selector.Generation, "gen-")
 }
 
 func areaFailure(ctx context.Context, code, message string, err error) error {
@@ -359,18 +364,15 @@ func validateIndex(index indexRecord, selector storage.Selector) error {
 	if index.FormatVersion != formatVersion || index.Algorithm != algorithm || index.Selector != selector || !validID(index.ActiveKey, "key-") || index.Keys == nil || index.Versions == nil || index.Current == nil || index.Bindings == nil || len(index.Keys) == 0 || len(index.Versions) > secrets.MaxVersions || len(index.Bindings) > maxBindings {
 		return errors.New("invalid index header")
 	}
-	keys := make(map[string]storage.Key, len(index.Keys))
+	keys := make(map[string]storedKey, len(index.Keys))
 	previous := ""
 	active := 0
 	for _, key := range index.Keys {
-		if !validID(key.ID, "key-") || key.ID <= previous || key.Seals > maxSeals || key.State != "active" && key.State != "retired" {
+		if !validID(key.ID, "key-") || key.ID <= previous || key.Seals > maxSeals {
 			return errors.New("invalid index key")
 		}
-		if key.State == "active" {
+		if key.ID == index.ActiveKey {
 			active++
-			if key.ID != index.ActiveKey {
-				return errors.New("contradictory active key")
-			}
 		}
 		keys[key.ID] = key
 		previous = key.ID
@@ -383,7 +385,7 @@ func validateIndex(index indexRecord, selector storage.Selector) error {
 	total := 0
 	previous = ""
 	for _, version := range index.Versions {
-		if !validID(version.ID, "ver-") || version.ID <= previous || !validateDeclaration(version.Declaration) || version.Parts == nil || len(version.Parts) != len(version.Declaration.Parts()) {
+		if !validID(version.ID, "ver-") || version.ID <= previous || !validateVersionDeclaration(version.Declaration) || version.Parts == nil || len(version.Parts) != len(version.Declaration.Parts()) {
 			return errors.New("invalid secret version")
 		}
 		expectedParts := version.Declaration.Parts()
@@ -445,7 +447,6 @@ func cloneIndex(index indexRecord) indexRecord {
 	result.Versions = make([]storedVersion, len(index.Versions))
 	for i, version := range index.Versions {
 		result.Versions[i] = version
-		result.Versions[i].Declaration = cloneDeclaration(version.Declaration)
 		result.Versions[i].Parts = slices.Clone(version.Parts)
 	}
 	return result
@@ -469,6 +470,18 @@ func findVersion(index indexRecord, id string) (storedVersion, bool) {
 }
 
 func indexHasKey(index indexRecord, id string) bool {
-	_, exists := slices.BinarySearchFunc(index.Keys, id, func(key storage.Key, id string) int { return strings.Compare(key.ID, id) })
+	_, exists := slices.BinarySearchFunc(index.Keys, id, func(key storedKey, id string) int { return strings.Compare(key.ID, id) })
 	return exists
+}
+
+func publicKeys(index indexRecord) []storage.Key {
+	keys := make([]storage.Key, len(index.Keys))
+	for n, key := range index.Keys {
+		state := "retired"
+		if key.ID == index.ActiveKey {
+			state = "active"
+		}
+		keys[n] = storage.Key{ID: key.ID, State: state, Seals: key.Seals}
+	}
+	return keys
 }

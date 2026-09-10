@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -84,6 +85,10 @@ type testImplementation struct {
 	last                *testSession
 }
 
+func (i *testImplementation) Backend() string {
+	return i.selection.Type + "-v" + strconv.Itoa(i.selection.Store.StateVersion)
+}
+
 func (i *testImplementation) Selection() Selection { return i.selection }
 func (i *testImplementation) Requirements() []SessionRequirement {
 	if i.needs {
@@ -92,6 +97,10 @@ func (i *testImplementation) Requirements() []SessionRequirement {
 	return nil
 }
 func (i *testImplementation) Initialize(ctx context.Context, c Context, a Area, m SessionMaterial) (StoreSession, error) {
+	if _, exists := a.(*testArea).files[RecordPath]; exists {
+		i.opened++
+		return i.newSession(m)
+	}
 	i.initialized++
 	if entries, err := a.Entries(ctx, ""); err != nil || len(entries) != 0 {
 		return nil, Failure("store.corrupt", "test implementation cannot recover this partial state")
@@ -100,8 +109,8 @@ func (i *testImplementation) Initialize(ctx context.Context, c Context, a Area, 
 	if err != nil {
 		return nil, err
 	}
-	b, _ := EncodeCanonical(Selector{SelectorVersion: 1, ContextID: c.ID, Selection: i.selection, Generation: "generation-one"})
-	a.(*testArea).files["selector.json"] = b
+	b, _ := EncodeRecord(Selector{SelectorVersion: RecordVersion, ContextID: c.ID, Backend: i.Backend(), Generation: "generation-one"}, []byte(`{}`))
+	a.(*testArea).files[RecordPath] = b
 	return s, nil
 }
 func (i *testImplementation) Open(_ context.Context, _ Context, _ Area, _ Selector, m SessionMaterial) (StoreSession, error) {
@@ -171,10 +180,10 @@ func TestImplementationAndSelectorRefusalBeforeBackend(t *testing.T) {
 			a.resolver = NewCatalog(testBackend("other", false))
 		},
 		func(_ *Access, w *testWorkspace, _ *testImplementation) {
-			w.area.files["selector.json"] = []byte(`{"selectorVersion":1}`)
+			w.area.files[RecordPath] = []byte(`{"selectorVersion":1}`)
 		},
 		func(_ *Access, w *testWorkspace, _ *testImplementation) {
-			w.area.files["selector.json"] = []byte(strings.ReplaceAll(string(w.area.files["selector.json"]), "ctx-fixture", "ctx-other"))
+			w.area.files[RecordPath] = []byte(strings.ReplaceAll(string(w.area.files[RecordPath]), "ctx-fixture", "ctx-other"))
 		},
 		func(_ *Access, _ *testWorkspace, b *testImplementation) { b.selection.Store.StateVersion++ },
 	} {
@@ -255,7 +264,7 @@ type testResolver struct {
 	implementation SecretStoreImplementation
 	types          []string
 	selected       []string
-	reopened       []Selection
+	reopened       []string
 	failure        error
 }
 
@@ -264,7 +273,7 @@ func (r *testResolver) Select(kind string) (SecretStoreImplementation, error) {
 	r.selected = append(r.selected, kind)
 	return r.implementation, r.failure
 }
-func (r *testResolver) Reopen(selection Selection) (SecretStoreImplementation, error) {
+func (r *testResolver) Reopen(selection string) (SecretStoreImplementation, error) {
 	r.reopened = append(r.reopened, selection)
 	return r.implementation, r.failure
 }
@@ -302,7 +311,7 @@ func TestAccessUsesInjectedImplementationResolver(t *testing.T) {
 	if err := access.Mutate(ctx, w.selected, callback); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(resolver.reopened, []Selection{backend.selection, backend.selection}) || backend.opened != 2 || source.calls != 3 || !backend.last.closed || !source.material.closed {
+	if !slices.Equal(resolver.reopened, []string{backend.Backend(), backend.Backend()}) || backend.opened != 2 || source.calls != 3 || !backend.last.closed || !source.material.closed {
 		t.Fatal("reopening bypassed persisted selection or leaked capabilities")
 	}
 }
@@ -327,11 +336,11 @@ func TestResolverFailureStopsBeforeBackendAndMaterial(t *testing.T) {
 			w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", ID: "ctx-fixture", Mode: "ready"}}
 			source := &testSource{}
 			access := NewAccess(w, resolver, source)
-			selector, err := EncodeCanonical(Selector{SelectorVersion: 1, ContextID: w.selected.ID, Selection: backend.selection, Generation: "fixture-generation"})
+			selector, err := EncodeRecord(Selector{SelectorVersion: RecordVersion, ContextID: w.selected.ID, Backend: backend.Backend(), Generation: "fixture-generation"}, []byte(`{}`))
 			if err != nil {
 				t.Fatal(err)
 			}
-			w.area.files["selector.json"] = selector
+			w.area.files[RecordPath] = selector
 			callback := func(StoreSession, Selection) error {
 				t.Fatal("resolver failure reached callback")
 				return nil
@@ -380,12 +389,11 @@ func TestMissingResolverPreservesUninitializedInspectionAndRefusesSelection(t *t
 			if len(diagnostics) != 1 || diagnostics[0].Code != "secret.store.implementation" || w.writes != 0 {
 				t.Fatal("missing resolver did not safely refuse initialization", err)
 			}
-			selection := testBackend("independent", false).selection
-			selector, err := EncodeCanonical(Selector{SelectorVersion: 1, ContextID: w.selected.ID, Selection: selection, Generation: "fixture-generation"})
+			selector, err := EncodeRecord(Selector{SelectorVersion: RecordVersion, ContextID: w.selected.ID, Backend: testBackend("independent", false).Backend(), Generation: "fixture-generation"}, []byte(`{}`))
 			if err != nil {
 				t.Fatal(err)
 			}
-			w.area.files["selector.json"] = selector
+			w.area.files[RecordPath] = selector
 			err = access.View(ctx, w.selected, true, func(StoreSession, Selection) error {
 				t.Fatal("missing resolver reached reopen callback")
 				return nil
@@ -398,17 +406,16 @@ func TestMissingResolverPreservesUninitializedInspectionAndRefusesSelection(t *t
 	}
 }
 
-func FuzzCanonicalSelector(f *testing.F) {
-	valid, _ := EncodeCanonical(Selector{SelectorVersion: 1, ContextID: "ctx-test", Selection: testBackend("selected", false).selection, Generation: "gen-test"})
+func FuzzCanonicalStoreRecord(f *testing.F) {
+	valid, _ := EncodeRecord(Selector{SelectorVersion: RecordVersion, ContextID: "ctx-test", Backend: testBackend("selected", false).Backend(), Generation: "gen-test"}, []byte(`{}`))
 	f.Add(valid)
-	f.Add([]byte(`{"selectorVersion":1,"selectorVersion":2}`))
+	f.Add([]byte(`{"version":2,"version":3}`))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 65536 {
 			return
 		}
-		var s Selector
-		if DecodeCanonical(data, &s) == nil {
-			encoded, err := EncodeCanonical(s)
+		if record, err := DecodeRecord(data, "ctx-test"); err == nil {
+			encoded, err := EncodeRecord(record.Selector, record.Payload)
 			if err != nil || string(encoded) != string(data) {
 				t.Fatal("noncanonical record accepted")
 			}

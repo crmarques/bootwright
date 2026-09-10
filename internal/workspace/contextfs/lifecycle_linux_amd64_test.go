@@ -91,8 +91,8 @@ func TestDirectNamedLayoutAndPermanentDeletion(t *testing.T) {
 		t.Fatal("deleted context tree remains")
 	}
 	registry, err := store.View(context.Background())
-	if err != nil || len(registry.Contexts) != 0 || !slices.Contains(registry.Identities, contexts.Identity{ID: record.ID}) {
-		t.Fatalf("deletion ledger: %#v %v", registry, err)
+	if err != nil || registry.Version != 3 || len(registry.Contexts) != 0 || len(registry.Identities) != 0 || registry.NextIdentity != 2 {
+		t.Fatalf("deletion allocation state: %#v %v", registry, err)
 	}
 	next := publish(t, store, "example", sources)
 	if next.ID == record.ID {
@@ -141,7 +141,7 @@ func TestInterruptedDeletionResumesOnlyRecordedIdentity(t *testing.T) {
 	}
 }
 
-func TestRetiredIdentityCollisionRefusesBeforeCreatingDirectory(t *testing.T) {
+func TestRetiredIdentityIsNotReusedWithRepeatedRandomBytes(t *testing.T) {
 	store, sources := fixture(t)
 	store.random = constantRandom(0)
 	record := publish(t, store, "example", sources)
@@ -153,13 +153,15 @@ func TestRetiredIdentityCollisionRefusesBeforeCreatingDirectory(t *testing.T) {
 		_, err := tx.Reserve(context.Background(), "example", "", config)
 		return err
 	})
-	expectState(t, err)
-	registry, err := store.View(context.Background())
-	if err != nil || len(registry.Contexts) != 0 || len(registry.Identities) != 1 || registry.Identities[0].ID != record.ID {
-		t.Fatalf("retired identity ledger changed: %#v %v", registry, err)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(store.options.Root, "contexts", "example")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatal("collision refusal created a context directory")
+	registry, err := store.View(context.Background())
+	if err != nil || len(registry.Contexts) != 1 || len(registry.Identities) != 0 || registry.NextIdentity != 3 || registry.Contexts[0].ID == record.ID {
+		t.Fatalf("retired identity was reused: %#v %v", registry, err)
+	}
+	if _, err := os.Stat(filepath.Join(store.options.Root, "contexts", "example")); err != nil {
+		t.Fatal("fresh identity did not create its context directory")
 	}
 }
 

@@ -1,10 +1,10 @@
 # Durable contexts
 
 Workspace owns named contexts, Context configuration, immutable input revisions,
-per-user selection and local publication. This is a breaking private format for
-Linux/amd64: old formats, malformed records, contradictory identity and unsafe
-filesystem objects fail with `context.state`. There is no legacy lookup,
-migration, archive retention or staging directory.
+per-user selection and local publication. The private Linux/amd64 store reads registry versions 2 and 3.
+Malformed records, unsupported formats, contradictory identity and unsafe
+filesystem objects fail with `context.state`. There is no archive retention
+or staging directory.
 
 ## Identity and selection
 
@@ -98,11 +98,19 @@ payload paths. Authored `~` spelling remains unchanged during admission.
 
 ## Storage, locking and publication
 
-The registry uses private format version 2; earlier versions are refused.
-Its active records hold the name, immutable ID, initialization/deletion mode,
-selected revision, Environment directory, configured secret-store type and
-reserved directory device/inode. A bounded ledger retains only used IDs after
-deletion so recreation can never recycle them. It retains no context content.
+The registry writes private format version 3. Active records hold the name,
+immutable ID, initialization/deletion mode, selected revision, Environment
+directory, configured secret-store type and reserved directory device/inode.
+A fixed-size allocation namespace and counter prevent ID reuse within the store
+without retaining a lifetime history of deleted contexts. The 4096-name bound
+applies to active or reserved contexts, not past creations.
+
+Version-2 registries remain readable without writes. The next authorized
+registry publication upgrades them atomically, preserving every active name,
+ID and record. Its fresh namespace must differ from the prefix of every used
+version-2 ID before the old identity ledger can be discarded. Admission,
+confirmation and mutation safeguards still precede an authorized publication.
+There is no fallback from corrupt version-3 state to older metadata.
 
 The production root is `/var/lib/bootwright`. Its complete context layout is:
 
@@ -119,23 +127,35 @@ The production root is `/var/lib/bootwright`. Its complete context layout is:
       reservation.json
       mutation.json
     secrets/
-      init.json
-      selector.json
+      store.json
       identities/
-      indexes/
       keys/
-      ledgers/
       parts/
 ```
+
+| Path | Purpose and retention |
+| --- | --- |
+| `registry.json` | One atomic map of names to identities, selected inputs and context status, plus the ID allocator. |
+| `contexts/<name>/context.yaml` | Canonical immutable Context configuration; keeps the authored configuration contract separate from runtime metadata. |
+| `desired-state/revisions/<revision-id>/` | Immutable input snapshot, so publication and protected recovery can retain a complete selected revision. Collect unselected revisions only with disposal proof. |
+| `manifest.json` | Original input provenance, blob mapping, sizes and hashes needed to verify and replay the snapshot. |
+| `file-NNNN` | Exact acquired descriptor or marker bytes; authored filenames never become storage paths. |
+| `state/reservation.json` | Durable name/ID ownership evidence for interrupted creation and guarded deletion. |
+| `state/mutation.json` | Lifecycle ownership and operation evidence; missing or unknown evidence prevents destructive cleanup. |
+| `secrets/` | Context-bound encrypted custody with its own independently versioned [storage contract](secrets.md#local-keyring-v2). |
 
 Every directory is owned by `root:root` with mode `0700`; every file is owned
 by `root:root` with mode `0600`. All store access runs as root. No environment
 variable selects another production root. Isolated test storage is injected at
 composition. Reject unsafe existing objects without chmod/chown repair.
 
-Context and revision IDs use `ctx-` and `rev-` plus 32 lowercase hexadecimal
-digits from 128 secure random bits, exclusive reservation and at most 16
-collision attempts. File blobs use four-digit manifest indices, never authored
+Context IDs retain `ctx-` plus 32 lowercase hexadecimal digits: a 64-bit
+random allocation namespace followed by a positive 64-bit sequence. Reserve
+and increment the counter durably before creating a directory; deletion and
+interruption never decrease it, and exhaustion refuses without wrapping.
+Namespace selection has at most 16 collision attempts. Existing version-2 IDs
+remain unchanged. Revision IDs use `rev-` plus 128 secure random bits and at
+most 16 exclusive collision attempts. File blobs use four-digit manifest indices, never authored
 path segments. Records use bounded closed canonical JSON, UTF-8, compact typed
 field order, sorted collections and one final LF. Private JSON uses Go's
 `encoding/json` escaping. Readers reject noncanonical or contradictory records.
@@ -143,16 +163,15 @@ Manifest integrity failures never fall back to external input.
 
 | Record | Required fields in canonical order |
 | --- | --- |
-| Registry | `version` (2), `identities`, `contexts` |
-| Used identity | `id` |
+| Registry | `version` (3), `idNamespace`, `nextIdentity`, `contexts` |
 | Context record | `name`, `id`, `environmentDirectory`, `revision`, `mode`, `secretStoreType`, `directoryDevice`, `directoryInode` |
 | Reservation | `version` (2), `id`, `name` |
 | Input manifest | `version` (2), `id`, `revision`, `inputDirectory`, `environmentDirectory`, `files` |
 | Manifest file | `path`, `category` (`yaml` or `marker`), `size`, `sha256` |
 | User selection | `version` (1), `name`, `id` |
 
-Collections are present arrays, including empty ones. Identities sort by ID,
-contexts by name and manifest entries by relative path. Empty input is encoded
+Collections are present arrays, including empty ones. Contexts sort by name
+and manifest entries by relative path. Empty input is encoded
 with empty revision and Environment-directory strings; no input is invented.
 Reservation, manifest and keyring formats are versioned independently. Mutation
 evidence follows the Reconciliation-owned closed record contract.
@@ -185,14 +204,28 @@ a complete old or new input; interrupted unpublished revisions are never
 adopted by scanning. Small temporary files for atomic record replacement stay
 inside existing directories; they do not introduce a staging tree.
 
+After durable registry publication, a pristine context may collect verified
+unselected revisions while holding the root lock and context lease. Pristine
+means exact `operation: none` and `ownership: none` evidence; unknown or
+protected evidence retains all revisions. Revalidate registry selection,
+context identity and mutation evidence before removal, and sync the containing
+directories. Cleanup reads filesystem metadata, not frozen payload bytes.
+Failure after publication reports committed input with incomplete cleanup;
+an uncertain publication performs no cleanup. An authorized update can also
+collect old unselected revisions before allocation after establishing the
+current selected registry's durability, so an existing full revision tree can
+recover capacity. Never collect the selected revision or infer disposal proof
+from age. Future lifecycle consumers must define retention before their inputs
+become collectible.
+
 All traversal uses held no-follow handles. Inside the root reject mount
 crossings, links, hardlinks, special files, wrong ownership/modes and path
 substitution. Every publication revalidates location. Supported local
 filesystems are ext4, XFS, Btrfs, tmpfs and overlayfs; Linux must provide
 `openat2`. Unsupported containment or durability primitives fail closed.
 
-Bounds apply before allocation/traversal: registry 8 MiB and 4096 identities or
-names; manifest 4 MiB and 32 MiB aggregate referenced manifests; paths 4096
+Bounds apply before allocation/traversal: registry 8 MiB and 4096 active or reserved
+names (version-2 decoding also bounds its historical identity ledger); manifest 4 MiB and 32 MiB aggregate referenced manifests; paths 4096
 bytes; mutation records 64 KiB; 4096 revisions per context. Input and Secrets
 limits additionally bound their trees. Missing registry in a nonempty root is
 corruption, except that explicit init may finish publication when the root's
@@ -209,6 +242,22 @@ bounded `pending-<32 lowercase hexadecimal digits>.json` files from interrupted
 registry replacement; those files are ignored, never adopted. Any other entry
 refuses with the same complete-store guidance. Bounds never authorize evidence
 deletion to make room.
+
+## Upgrade and restore boundary
+
+Registry upgrade and the [explicit Secrets upgrade](secrets.md#local-keyring-v2)
+preserve logical context and secret identities. Unsupported future formats
+refuse before effects. Format changes must state their supported source
+versions, exact commit point, retry behavior and retained recovery evidence.
+
+Device/inode bindings deliberately reject ordinary directory-copy restoration.
+Read-only commands never rebind them. There is no general copy-restore or
+rollback command. A future restore must validate one coherent complete store,
+preserve live logical identities, explicitly rebind verified filesystem
+objects, and establish a fresh allocation epoch and encryption key before new
+writes when restoring older allocation/seal counters. An old snapshot cannot
+silently become current writable state. See the bounded restore outcome in
+[milestones](milestones.md).
 
 ## Permanent deletion
 

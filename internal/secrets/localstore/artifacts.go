@@ -8,145 +8,165 @@ import (
 )
 
 func inspectArtifacts(ctx context.Context, area storage.Area, selector storage.Selector, index indexRecord) (int, bool, error) {
+	paths, err := obsoleteArtifacts(ctx, area, selector, index)
+	return len(paths), len(paths) != 0, err
+}
+
+func obsoleteArtifacts(ctx context.Context, area storage.Area, selector storage.Selector, index indexRecord) ([]string, error) {
+	legacyPaths := []string{}
+	legacy := map[string]bool{}
+	if index.Legacy {
+		var err error
+		legacyPaths, err = legacyUpgradeArtifacts(ctx, area)
+		if err != nil {
+			return nil, err
+		}
+		for _, path := range legacyPaths {
+			legacy[path] = true
+		}
+	}
+
 	root, err := area.Entries(ctx, "")
 	if err != nil {
-		return 0, false, areaFailure(ctx, "store.corrupt", "secret artifacts cannot be enumerated safely", err)
+		return nil, areaFailure(ctx, "store.corrupt", "secret artifacts cannot be enumerated safely", err)
 	}
-	directories := map[string]bool{"identities": false, "indexes": false, "keys": false, "ledgers": false, "parts": false}
+	directories := map[string]bool{"identities": false, "keys": false, "parts": false}
+	obsolete := legacyPaths
 	count := len(root)
-	retained := 0
-	selectorSeen, initializationSeen := false, false
+	metadataSeen := false
 	for _, entry := range root {
+		if legacy[entry.Name] {
+			continue
+		}
 		if entry.Directory {
 			if _, exists := directories[entry.Name]; !exists || directories[entry.Name] {
-				return 0, false, storage.Failure("store.corrupt", "secret store contains an unsupported directory")
+				return nil, storage.Failure("store.corrupt", "secret store contains an unsupported directory")
 			}
 			directories[entry.Name] = true
 			continue
 		}
-		if entry.Name == selectorPath || entry.Name == initializationPath {
-			if entry.Size <= 0 || entry.Size > selectorMaximum {
-				return 0, false, storage.Failure("store.corrupt", "secret selector size is invalid")
+		if entry.Name == selectorPath {
+			if entry.Size <= 0 || entry.Size > storage.RecordMaximum {
+				return nil, storage.Failure("store.corrupt", "secret metadata size is invalid")
 			}
-			selectorSeen = selectorSeen || entry.Name == selectorPath
-			initializationSeen = initializationSeen || entry.Name == initializationPath
+			metadataSeen = true
 			continue
 		}
-		if !validPending(entry.Name) {
-			return 0, false, storage.Failure("store.corrupt", "secret store contains an unsupported artifact")
+		if entry.Name != initializationPath && !validPending(entry.Name) {
+			return nil, storage.Failure("store.corrupt", "secret store contains an unsupported artifact")
 		}
-		retained++
+		obsolete = append(obsolete, entry.Name)
+	}
+	if !metadataSeen {
+		return nil, storage.Failure("store.corrupt", "secret metadata is missing")
 	}
 	for _, present := range directories {
 		if !present {
-			return 0, false, storage.Failure("store.corrupt", "secret store is missing a required artifact directory")
+			return nil, storage.Failure("store.corrupt", "secret store is missing a required directory")
 		}
 	}
-	if !selectorSeen || !initializationSeen {
-		return 0, false, storage.Failure("store.corrupt", "secret store publication records are incomplete")
-	}
-	initializationData, exists, err := area.Read(ctx, initializationPath, selectorMaximum)
-	if err != nil || !exists {
-		return 0, false, areaFailure(ctx, "store.corrupt", "secret initialization record is missing or unsafe", err)
-	}
-	var initialization initializationRecord
-	selected := storage.Context{ID: selector.ContextID}
-	if decodeCanonical(initializationData, selectorMaximum, 512, &initialization) != nil || !validInitialization(initialization, selected, selector.Selection) || initialization.MAC == "" {
-		return 0, false, storage.Failure("store.corrupt", "secret initialization record is invalid")
-	}
-	signingKey, err := initializationSigningKey(ctx, area, initialization)
-	if err != nil {
-		return 0, false, err
-	}
-	clear(signingKey)
-	referencedKeys := make(map[string]bool, len(index.Keys))
-	referencedLedgers := make(map[string]bool, len(index.Keys))
+	referenced := map[string]int64{}
 	for _, key := range index.Keys {
-		referencedKeys[key.ID+".bin"] = true
-		referencedLedgers[key.ID+".json"] = true
+		referenced[keyPath(key.ID)] = 32
+		referenced[ledgerPath(key.ID)] = ledgerMaximum
 	}
-	referencedIndexes := map[string]bool{selector.Generation + ".bin": true}
-	referencedParts := make(map[string]bool)
 	for _, version := range index.Versions {
 		for _, part := range version.Parts {
-			referencedParts[part.BlobID+".bin"] = true
+			referenced[partPath(part.BlobID)] = partMaximum
 		}
 	}
-	tables := []struct {
-		directory  string
-		prefix     string
-		suffix     string
-		referenced map[string]bool
-		maximum    int64
-		exact      int64
-	}{
-		{directory: "indexes", prefix: "gen-", suffix: ".bin", referenced: referencedIndexes, maximum: indexMaximum},
-		{directory: "keys", prefix: "key-", suffix: ".bin", referenced: referencedKeys, maximum: 32, exact: 32},
-		{directory: "ledgers", prefix: "key-", suffix: ".json", referenced: referencedLedgers, maximum: ledgerMaximum},
-		{directory: "parts", prefix: "blob-", suffix: ".bin", referenced: referencedParts, maximum: partMaximum},
-	}
-	for _, table := range tables {
-		entries, err := area.Entries(ctx, table.directory)
+	for _, directory := range []string{"keys", "parts"} {
+		entries, err := area.Entries(ctx, directory)
 		if err != nil {
-			return 0, false, areaFailure(ctx, "store.corrupt", "secret artifacts cannot be enumerated safely", err)
+			return nil, areaFailure(ctx, "store.corrupt", "secret artifacts cannot be enumerated safely", err)
 		}
 		count += len(entries)
-		seen := make(map[string]bool, len(entries))
 		for _, entry := range entries {
-			if entry.Directory || seen[entry.Name] {
-				return 0, false, storage.Failure("store.corrupt", "secret artifact layout is inconsistent")
+			path := directory + "/" + entry.Name
+			if legacy[path] {
+				continue
 			}
-			seen[entry.Name] = true
 			valid := validPending(entry.Name)
-			if strings.HasSuffix(entry.Name, table.suffix) {
-				valid = valid || validID(strings.TrimSuffix(entry.Name, table.suffix), table.prefix)
+			if directory == "keys" {
+				valid = valid || strings.HasSuffix(entry.Name, ".key") && validID(strings.TrimSuffix(entry.Name, ".key"), "key-") || strings.HasSuffix(entry.Name, ".usage.json") && validID(strings.TrimSuffix(entry.Name, ".usage.json"), "key-")
 			}
-			if !valid {
-				return 0, false, storage.Failure("store.corrupt", "secret artifact name is invalid")
+			if directory == "parts" {
+				valid = valid || strings.HasSuffix(entry.Name, ".enc") && validID(strings.TrimSuffix(entry.Name, ".enc"), "blob-")
 			}
-			if table.referenced[entry.Name] {
-				if entry.Size <= 0 || entry.Size > table.maximum || table.exact != 0 && entry.Size != table.exact {
-					return 0, false, storage.Failure("store.corrupt", "referenced secret artifact size is invalid")
+			if entry.Directory || !valid {
+				return nil, storage.Failure("store.corrupt", "secret artifact name or type is invalid")
+			}
+			if maximum, exists := referenced[path]; exists {
+				if entry.Size <= 0 || entry.Size > maximum || maximum == 32 && entry.Size != 32 {
+					return nil, storage.Failure("store.corrupt", "referenced secret artifact size is invalid")
 				}
+				delete(referenced, path)
 			} else {
-				retained++
+				obsolete = append(obsolete, path)
 			}
 		}
-		for name := range table.referenced {
-			if !seen[name] {
-				return 0, false, storage.Failure("store.corrupt", "referenced secret artifact is missing")
-			}
-		}
+	}
+	if len(referenced) != 0 {
+		return nil, storage.Failure("store.corrupt", "referenced secret artifact is missing")
 	}
 	identities, err := area.Entries(ctx, "identities")
 	if err != nil {
-		return 0, false, areaFailure(ctx, "store.corrupt", "secret identities cannot be enumerated safely", err)
+		return nil, areaFailure(ctx, "store.corrupt", "secret identities cannot be enumerated safely", err)
 	}
 	count += len(identities)
+	reserved := make(map[string]bool, len(index.Versions)+len(index.Bindings))
+	for _, version := range index.Versions {
+		reserved[version.ID] = true
+	}
+	for _, binding := range index.Bindings {
+		reserved[binding.ID] = true
+	}
 	for _, entry := range identities {
 		if !entry.Directory && validPending(entry.Name) {
-			retained++
+			obsolete = append(obsolete, "identities/"+entry.Name)
 			continue
 		}
 		name := strings.TrimSuffix(entry.Name, ".json")
 		if entry.Directory || !strings.HasSuffix(entry.Name, ".json") || !validID(name, "ver-") && !validID(name, "bind-") || entry.Size <= 0 || entry.Size > selectorMaximum {
-			return 0, false, storage.Failure("store.corrupt", "secret identity tombstone is invalid")
+			return nil, storage.Failure("store.corrupt", "secret identity reservation is invalid")
 		}
 		data, exists, err := area.Read(ctx, "identities/"+entry.Name, selectorMaximum)
 		if err != nil || !exists {
-			return 0, false, areaFailure(ctx, "store.corrupt", "secret identity tombstone is missing or unsafe", err)
+			return nil, areaFailure(ctx, "store.corrupt", "secret identity reservation is missing or unsafe", err)
 		}
 		var identity identityRecord
-		if decodeCanonical(data, selectorMaximum, 16, &identity) != nil || identity.FormatVersion != formatVersion || identity.ContextID != selector.ContextID || identity.ID != name {
-			return 0, false, storage.Failure("store.corrupt", "secret identity tombstone is invalid")
+		if decodeCanonical(data, selectorMaximum, 16, &identity) != nil || (identity.FormatVersion != formatVersion && identity.FormatVersion != 1) || identity.ContextID != selector.ContextID || identity.ID != name {
+			return nil, storage.Failure("store.corrupt", "secret identity reservation is invalid")
 		}
+		delete(reserved, name)
+	}
+	if len(reserved) != 0 {
+		return nil, storage.Failure("store.corrupt", "referenced secret identity reservation is missing")
 	}
 	if count > maxPhysicalItems {
-		return 0, false, storage.Failure("store.limit", "secret artifact count exceeds its limit")
+		return nil, storage.Failure("store.limit", "secret artifact count exceeds its limit")
 	}
-	return retained, retained != 0, nil
+	return obsolete, nil
 }
 
-func validPending(name string) bool {
-	return validID(name, "pending-")
+func (s *session) collectArtifacts(ctx context.Context) error {
+	paths, err := obsoleteArtifacts(ctx, s.area, s.selector, s.index)
+	if err != nil {
+		return err
+	}
+	if len(paths) != 0 {
+		if err := s.area.Prune(ctx, s.selectorData, paths); err != nil {
+			return areaFailure(ctx, "store.conflict", "secret cleanup is incomplete; retry secret encryption init", err)
+		}
+	}
+	s.retained, s.cleanup = 0, false
+	for id, value := range s.keys {
+		if !indexHasKey(s.index, id) {
+			clear(value)
+			delete(s.keys, id)
+		}
+	}
+	return nil
 }
+
+func validPending(name string) bool { return validID(name, "pending-") }

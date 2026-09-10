@@ -322,6 +322,33 @@ plain-init/current/encryption-status/delete journey passes in a synthetic
 root filesystem, including every UID/GID and private-mode assertion. Actual
 host sudo password authentication and power-loss behavior were not qualified.
 
+### Storage simplification
+
+Registry v3 uses a fixed-size namespace/counter allocator, preserving existing
+IDs through an authorized v2 upgrade. Pristine input updates collect verified
+unselected revisions after durable publication. Local-keyring v2 uses one
+authenticated metadata file, compact declaration summaries and three artifact
+directories. Cleanup retains current/bound material and identity reservations,
+removes retired custody, and resumes explicitly after interruption. Supported
+v1 conversion preserves logical material and preflights peak storage capacity.
+
+Final `make check`, `make build` and
+`./scripts/go test -race ./... -count=1` pass. Completion uses all four qualified
+shell runtimes. The pinned vulnerability scan uses the official database copy
+validated on 2026-09-09 with all 4,380 hashes rechecked; it finds no reachable
+or imported-package vulnerabilities. The existing unimported module advisory
+remains outside reachable code. Bounded 100,000-execution fuzz runs pass for
+the shared store record, private store records and canonical size preflight;
+the registry record run passes 100,027 executions.
+
+Fault tests cover original and newly written file substitution at metadata
+commit, recovered-key synchronization, guarded cleanup at physical ceilings,
+commit uncertainty, interrupted conversion and cleanup, seal reservations,
+missing live identity reservations, and repeated rotations/input updates.
+Real-store migration and power-loss qualification were not performed. A source
+without conversion headroom safely refuses; complete-store restore and bounded
+lifetime secret-ID allocation remain C14/C15 outcomes below.
+
 ## M1d — managed artifact-server apply
 
 **Owners:** State reconciliation and Infrastructure services, using Workspace,
@@ -405,6 +432,8 @@ fill its concrete version, journey and evidence gaps when requested.
 | C11 | Add-ons: one declarative custom-package lifecycle. | No package/target/driver selected; requires C4, C10 and a supported cluster. | Exact identities, qualified driver, host-contract suite, code-content refusal and apply/readiness/replay/destroy acceptance. |
 | C12 | Container cluster and Native artifacts: one local bootable installer ISO from M2a inputs and declared server endpoints. **Needs definition.** | No builder journey; requires M1d and M2a. No remote publication. | Exact builder/dependencies, bounded inputs, sensitive classification, typed manifest/digest, atomic publication, metadata goldens, negative effect tests and boot evidence. |
 | C13 | Release engineering: one source/binary distribution with licensing and notices. **Needs definition.** | Buildability does not define redistribution; requires M1a and one release channel. | Project license, direct/transitive license review, exact release toolchain/platform/shell matrix, non-skipping completion tests, reproducible archives, notices, dependency inventory, checksums, provenance, SBOM and clean-room packaging verification. |
+| C14 | Workspace and Secrets: explicit complete-store restore with logical identity preservation. **Needs definition.** | Copy restoration changes physical identities and may roll back allocation/seal reservations; storage simplification provides upgrades and safe refusal, not a backup/restore command. Requires M1b/M1c and a selected restore journey. | Coherent snapshot validation, authorized inode rebinding, fresh allocation epoch/key before writes after rollback, interruption/retry and wrong-store refusal tests; preserve lifecycle recovery evidence. |
+| C15 | Secrets: replace per-ID reservations with bounded lifetime allocation. **Needs definition.** | Current opaque random version/binding IDs retain historical reservation files; a new allocation scheme must preserve issued-ID non-reuse across crashes and restore. Requires M1c and C14 restore semantics. | Bounded allocator state, reservation-before-use, counter/namespace exhaustion, migration of existing bindings and failed attempts, non-reuse and crash tests. |
 
 When a cluster inspection or access slice under C6 is promoted, its exit evidence
 must exercise the [cluster discovery](cli/output.md#cluster-discovery) and

@@ -16,7 +16,7 @@ import (
 )
 
 func TestEveryAdditionalDataFieldIsAuthenticated(t *testing.T) {
-	selection := New().Selection()
+	selection := New().Backend()
 	index := indexAdditionalData{Domain: "index", FormatVersion: 1, Algorithm: algorithm, ContextID: "context-example", Selection: selection, Generation: "generation", KeyID: "key", BlobID: "index"}
 	part := partAdditionalData{Domain: "part", FormatVersion: 1, Algorithm: algorithm, ContextID: "context-example", Selection: selection, Generation: "generation", KeyID: "key", BlobID: "blob", DeclarationFingerprint: "nonsecret-fingerprint", Name: "credential", Type: "opaque", Source: "contextStore", Version: "version", Part: "value"}
 	for _, record := range []any{index, part} {
@@ -160,13 +160,13 @@ func TestPublishedStoreCorruptionNeverFallsBackOrWrites(t *testing.T) {
 			path := filepath.Join(root, selectorPath)
 			switch target {
 			case "index":
-				path = filepath.Join(root, "indexes", selected.Generation+".bin")
+				path = filepath.Join(root, selectorPath)
 			case "key", "missing-key":
-				path = filepath.Join(root, "keys", current.ActiveKey+".bin")
+				path = filepath.Join(root, keyPath(current.ActiveKey))
 			case "ledger":
-				path = filepath.Join(root, "ledgers", current.ActiveKey+".json")
+				path = filepath.Join(root, ledgerPath(current.ActiveKey))
 			case "part", "part-length":
-				path = filepath.Join(root, "parts", current.Versions[0].Parts[0].BlobID+".bin")
+				path = filepath.Join(root, partPath(current.Versions[0].Parts[0].BlobID))
 			}
 			data, err := os.ReadFile(path)
 			if err != nil {

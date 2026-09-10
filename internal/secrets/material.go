@@ -91,7 +91,22 @@ type Declaration struct {
 	Fingerprint string     `json:"fingerprint"`
 }
 
-func (d Declaration) Parts() []Part {
+// VersionDeclaration identifies acquired material without retaining acquisition
+// paths or generation parameters. Fingerprint covers the complete declaration.
+type VersionDeclaration struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Source      string `json:"source"`
+	Fingerprint string `json:"fingerprint"`
+}
+
+func (d Declaration) Summary() VersionDeclaration {
+	return VersionDeclaration{Name: d.Name, Type: d.Type, Source: d.Source, Fingerprint: d.Fingerprint}
+}
+
+func (d Declaration) Parts() []Part { return d.Summary().Parts() }
+
+func (d VersionDeclaration) Parts() []Part {
 	switch d.Type {
 	case "opaque", "token", "dockerConfigJson":
 		return []Part{ValuePart}

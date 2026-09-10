@@ -34,6 +34,11 @@ type Entry struct {
 	Size      int64
 }
 
+type RecordExpectation struct {
+	Path string
+	Data []byte
+}
+
 // Area is valid only during its Workspace callback. Paths contain at most two
 // safe segments. Implementations bound enumeration to 32768 entries and total
 // physical bytes to 256 MiB. Read-only areas refuse every mutation.
@@ -52,6 +57,21 @@ type Area interface {
 	// never replaces an existing final path. A crash may retain an unselected temporary file.
 	PublishExclusive(context.Context, string, []byte) error
 	Replace(ctx context.Context, path string, replacement, expected []byte) (Outcome, error)
+	// Prune removes only previously observed files or empty directories after
+	// verifying and synchronizing the exact current store.json. It may run
+	// before publication writes or after a durably committed store replacement;
+	// uncertain publication and read-only access refuse cleanup. General writes
+	// remain forbidden after store publication.
+	Prune(ctx context.Context, expectedStore []byte, paths []string) error
+	// PruneUnpublished removes attributable unpublished artifacts only while
+	// store.json remains absent. Guards are exact prior ReadMutable snapshots
+	// of 1..8 root files, bounded to 8 MiB together, synchronized before cleanup
+	// and revalidated at every removal. Guard files cannot be cleanup targets.
+	PruneUnpublished(ctx context.Context, guards []RecordExpectation, paths []string) error
+	// SyncFile establishes file and parent durability only for the exact object
+	// previously observed by Entries or ReadMutable. Read-only access and
+	// committed or uncertain metadata publication refuse this effect.
+	SyncFile(context.Context, string) error
 	Sync(context.Context, string) error
 }
 
@@ -78,10 +98,10 @@ type Selection struct {
 }
 
 type Selector struct {
-	SelectorVersion int       `json:"selectorVersion"`
-	ContextID       string    `json:"contextId"`
-	Selection       Selection `json:"implementation"`
-	Generation      string    `json:"generation"`
+	SelectorVersion int    `json:"version"`
+	ContextID       string `json:"contextId"`
+	Backend         string `json:"backend"`
+	Generation      string `json:"generation"`
 }
 
 type SessionRequirement struct{ Kind string }
@@ -94,18 +114,20 @@ type SessionMaterialSource interface {
 }
 
 type SecretStoreImplementation interface {
+	Backend() string
 	Selection() Selection
 	Requirements() []SessionRequirement
-	// Initialize may resume only its verifiable never-published initialization;
-	// unknown nonempty state is not an uninitialized store and must be refused.
+	// Initialize may resume attributable initialization, perform an explicitly
+	// supported upgrade, or finish cleanup of authenticated published state.
+	// Unknown nonempty state is never an uninitialized store.
 	Initialize(context.Context, Context, Area, SessionMaterial) (StoreSession, error)
 	Open(context.Context, Context, Area, Selector, SessionMaterial) (StoreSession, error)
 }
 
 type Version struct {
-	ID          string              `json:"id"`
-	Declaration secrets.Declaration `json:"declaration"`
-	Parts       []secrets.Part      `json:"parts"`
+	ID          string                     `json:"id"`
+	Declaration secrets.VersionDeclaration `json:"declaration"`
+	Parts       []secrets.Part             `json:"parts"`
 }
 type Current struct {
 	Name    string `json:"name"`

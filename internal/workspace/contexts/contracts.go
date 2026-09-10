@@ -45,11 +45,14 @@ type DeleteResult struct {
 	CurrentCleared bool
 }
 
-// Registry is an atomic context snapshot. Reserved identities remain after deletion.
+// Registry is an atomic context snapshot. Identities is retained only while
+// reading the legacy registry; current allocation uses a namespace and counter.
 type Registry struct {
-	Version    int        `json:"version"`
-	Identities []Identity `json:"identities"`
-	Contexts   []Record   `json:"contexts"`
+	Version      int        `json:"version"`
+	Identities   []Identity `json:"identities"`
+	Contexts     []Record   `json:"contexts"`
+	IDNamespace  string     `json:"-"`
+	NextIdentity uint64     `json:"-"`
 }
 
 type Identity struct {

@@ -10,13 +10,16 @@ management without platform, entitlement or lifecycle effects.
 The standalone [Context configuration](contexts.md#context-configuration)
 selects `spec.secretStore.type`, defaulting to `local-keyring`. An immutable
 catalog injected at composition resolves exactly one implementation. Local
-keyring uses store `local-v1`, custody `local-keyfile-v1`, interface/state/config
-versions `1`, and empty closed configurations. Context creation initializes
+keyring persists the immutable backend-format identity `local-keyring-v2`.
+The catalog maps that identity to the exact implementation and its public
+component status (`local-v2`, custody `local-keyfile-v1`). Interface/configuration
+metadata belongs to the catalog and is not repeated in persisted records. Context creation initializes
 that implementation through a transaction-scoped Workspace area before ready
 publication, without requiring Environment input or generating Secret values.
 
 `secret encryption init` consumes that configuration and is idempotent; it has
-no `--type` override. Changing the initialized type refuses. Subsequent commands
+no `--type` override. It also completes interrupted cleanup and explicitly
+upgrades supported local-keyring v1 state. Changing the initialized type refuses. Subsequent commands
 resolve exact persisted references; absent, ambiguous or incompatible
 implementations never fall back. Rotation does not migrate implementations.
 Encryption initialization/status/rotation require context identity and
@@ -127,50 +130,124 @@ automatically import/generate/delete. Final context deletion permanently removes
 the verified keyring only after positive disposal proof. Human-name reuse
 allocates a fresh identity and never exposes prior material. Protected contexts cannot be deleted or abandoned.
 
-## Local keyring v1
+## Local keyring v2
 
-The `secrets/` subtree is initialized during context creation; secret format v1
-is independent of the enclosing context format. Empty or
-absent means uninitialized. Nonempty state without a selector requires recovery.
-Unknown/legacy formats refuse; no migration or automatic Workspace repair.
-Explicit initialization alone may invoke the selected implementation to recover
-an exact, authenticated, never-published initialization transaction. A missing
-selector does not authorize accepting arbitrary nonempty state or switching its
-implementation. Inspection never performs this recovery.
+The `secrets/` subtree is initialized during context creation, independently
+of the enclosing registry format. Empty or absent means uninitialized.
+Nonempty state without `store.json` requires explicit initialization recovery
+or the supported upgrade; inspection never repairs it. Unknown formats refuse.
 
-Canonical selector.json records selector version, context ID, public type,
-component references and generation. Immutable encrypted indexes, version/part
-blobs, exact 32-byte key files and durable per-key seal ledgers reside beneath
-held verified handles. Dirs 0700/files 0600; refuse unsafe ownership/modes,
-links/hardlinks/special files, traversal, mount crossings and substitutions.
+The normal layout has one atomically replaced `store.json`, immutable
+`parts/<blob-id>.enc`, immutable 32-byte `keys/<key-id>.key`, independently
+updated `keys/<key-id>.usage.json`, and `identities/<id>.json` reservations.
+`init.json` exists only while initialization or its cleanup is incomplete;
+`upgrade.json` serves the same role for version-1 conversion. No permanent
+initialization-key dependency exists. Dirs are 0700/files 0600 beneath held
+verified handles; refuse unsafe ownership/modes, links, hardlinks, special
+files, traversal, mount crossings and substitutions.
+
+| Path | Why it remains separate |
+| --- | --- |
+| `store.json` | Atomic authenticated metadata and exact backend selection; replaces the old selector and index files. |
+| `parts/*.enc` | Immutable encrypted material, allowing metadata changes without rewriting every secret. |
+| `keys/*.key` | Required local decryption keys. Remove a retired key once retained material no longer references it. |
+| `keys/*.usage.json` | Durable seal reservations, including failed attempts; committing usage separately prevents retries from forgetting encryption already performed. |
+| `identities/*.json` | Historical version/binding ID reservations. Retain them after logical deletion to prevent ID reuse. |
+| `init.json`, `upgrade.json` | Temporary authenticated recovery evidence; remove after successful publication and cleanup. |
+
+The shared canonical `store.json` envelope contains `version` (2), `contextId`,
+`backend`, `generation`, then backend-owned `payload`. Local payload is closed
+JSON containing `keyId`, `nonce` and `ciphertext`. Its authenticated header
+selects the exact backend and binds metadata to the expected context. Resolve
+only catalog implementations; backend selection cannot authorize acquisition
+or effects beyond the current command. Unsupported IDs refuse before session
+acquisition. The encrypted metadata contains `activeKey`, `keys`, `versions`,
+`current` and `bindings`; a true `legacy` flag is present only when the
+published upgrade authorizes removal of remaining version-1 artifacts.
+
+Each key record stores `id` and committed `seals`; presentation derives its
+active/retired state. Each immutable version stores `id`, a declaration summary
+(`name`, `type`, `source`, `fingerprint`), and parts (`part`, `blobId`, `keyId`,
+`generation`, `size`). Compute the declaration fingerprint from full canonical
+parameters and provenance at acquisition, then authenticate the summary.
+Original paths, source fields and generation options are not copied into each
+version. Current mappings contain `name` and `version`; bindings contain `id`
+and a sorted `versions` array. They retain whole versions for exact reopening.
 
 AES-256-GCM uses random 12-byte nonces and 16-byte tags, capped at 2^20 seals/key.
-Durably reserve the full index/parts budget before sealing; abandoned work counts.
-Separate canonical index/part AAD domains bind format/algorithm, context,
-implementation, generation/key/blob IDs, declaration fingerprint, name/type/
-source, logical version and part. Authenticate clear selector fields inside the
-index; reconstruct part AAD from stored immutable metadata, never live input.
+Durably reserve the full metadata/parts budget before sealing; abandoned work
+counts. Usage records contain `formatVersion`, `keyId`, `seals`, and `mac`.
+Their update is independent of metadata publication, and their authenticated
+count must meet the metadata's committed floor. Separate canonical metadata/part
+AAD domains bind format/algorithm, context, backend, generation/key/blob IDs,
+declaration fingerprint, name/type/source, logical version and part. Reconstruct
+part AAD from its original immutable metadata, never current input or the newest
+metadata generation. The metadata header is authenticated without storing a
+second full selector inside its ciphertext.
 
-Identity tombstones use crash-atomic, no-replace publication so partial writes
-cannot invalidate readers of an earlier generation. Selector-hidden artifacts
-may reserve their final exclusive names first; initialization recovery requires
-an attributable intent and never accepts arbitrary partial state by filename.
-Sync exclusive immutable writes first. Revalidate expected old selector/context
-under the lease; atomic selector replacement is the visibility commit, followed
-by parent sync. Outcomes distinguish not committed/committed/uncertain.
-Post-rename failure requires inspection before retry, never rollback/fallback.
-Rotation reencrypts current/bound versions without changing logical IDs.
+Identity reservations use crash-atomic no-replace publication and retain
+`formatVersion`, `contextId`, and `id`. They preserve issued version/binding IDs
+after logical removal. Their allocation policy remains separate from the
+registry's namespace/counter scheme. Initialization uses an attributable,
+authenticated intent recording its context, backend, attempted key/generation
+identities and MAC; never adopt arbitrary partial state by filename.
 
-Logical collection removes references only. Published ciphertext/indexes/retired
-keys remain until a future reader-quiescence protocol proves safe removal.
-Deterministic retry may remove only verified never-published temporaries.
-Count all artifacts including crash orphans against 256 MiB total physical,
-8 MiB index, 64 KiB selector/config and logical ceilings. IDs use 128 random bits
-with 16 exclusive collision attempts. Limits refuse, never erase evidence.
+Sync new immutable material first, then revalidate the expected metadata inode,
+bytes and context under the lease. Atomic `store.json` replacement is the
+visibility commit, followed by parent sync. Readers observe a complete old or
+new metadata snapshot. Outcomes distinguish not committed, committed and
+uncertain; post-rename failure requires inspection before retry and never
+falls back. Rotation reencrypts current/bound material under a fresh key without
+changing logical IDs. Current metadata references only required encryption
+keys, so retired keys cannot prevent access once no retained material needs them.
 
-Threat exclusions: root, same OS identity, process memory and theft of the full
-root with keys. Lost keys need an external complete backup. No recovery slots,
-secure erase, automatic expiry, remote KMS, import/export or FIPS claim.
+The root shared lock protects the complete reader callback; its exclusive
+writer lock supplies cleanup quiescence. Before a new valid publication and
+after a durable publication, collect verified unreferenced material, retired
+keys/ledgers, completed initialization intent and known interrupted temporaries.
+First establish the exact selected metadata's file and parent durability, then
+remove only previously observed objects after revalidating their identities,
+parents and context. Sync every affected directory. Preserve current/bound
+versions, required recovery evidence and identity reservations. A failed or
+uncertain metadata publication never authorizes postpublication cleanup.
+Cleanup failure after commit reports the committed outcome and directs an
+explicit `secret encryption init` retry; inspection reports retained artifacts
+without writing. Cleanup can run at the physical ceiling without first creating
+another file. Publication still reserves room for new material and metadata.
+
+Count all artifacts including crash orphans against 256 MiB physical storage
+and 32768 entries. Bound both the encoded metadata file and decrypted metadata
+at 8 MiB, and initialization/usage records at 64 KiB. Encoding overhead counts
+toward the physical limit. Logical material/version/binding limits also apply.
+Secret IDs use 128 random bits with 16 exclusive collision attempts. Limit
+failure never authorizes removal of referenced material or identity evidence.
+
+Only `secret encryption init` upgrades a complete authenticated local-keyring
+v1 store. Authenticate its selector, encrypted index, declaration fingerprints,
+parts, key usage and initialization evidence before conversion. Preserve
+current/bound logical IDs, mappings, bindings and historical identity
+reservations. Write an attributable upgrade intent before new artifacts;
+reencrypt retained material with a fresh key and durably reserve its seals.
+The single new `store.json` commit selects v2. Before that commit, leave all
+version-1 files unchanged and permit only exact attributable retry. After it,
+remove verified obsolete version-1 artifacts using the normal cleanup boundary.
+An interrupted cleanup must not depend on a retired version-1 key. Never import
+changed source files or regenerate logical material during upgrade.
+
+Before a retry allocates another key, authenticate the original selection and
+upgrade intent, establish their durability, and collect only attributed
+unpublished conversion artifacts. Revalidate both guards and context identity
+at every removal. A new attempt replaces the cleaned attempt's intent rather
+than accumulating a lifetime history. Preflight the conversion's peak encoded
+bytes and entries before new publication effects; a source without enough
+headroom refuses while retaining its complete version-1 state.
+
+Threat exclusions remain root, the same OS identity, process memory and theft
+of the full store with its keys. Keys share the local filesystem custody
+boundary with ciphertext. Lost keys need a complete external backup; ordinary
+copy restoration follows the [restore boundary](contexts.md#upgrade-and-restore-boundary).
+There are no recovery slots, secure erase, automatic expiry, remote KMS,
+import/export or FIPS claims.
 
 ## Results and failures
 

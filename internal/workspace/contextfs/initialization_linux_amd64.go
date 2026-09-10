@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"slices"
 	"syscall"
 
 	"github.com/crmarques/bootwright/internal/secrets/storage"
@@ -44,24 +43,18 @@ func (t *transaction) Reserve(ctx context.Context, name, environment string, con
 		}
 	}
 	if fresh {
-		if len(t.registry.Identities) >= maxIdentities {
-			return contexts.Record{}, state("context identity limit exceeded")
+		if len(t.registry.Contexts) >= maxIdentities {
+			return contexts.Record{}, state("active context limit exceeded")
 		}
-		for range 16 {
-			id, err := t.store.candidate("ctx-")
-			if err != nil {
-				return contexts.Record{}, err
-			}
-			if !slices.ContainsFunc(t.registry.Identities, func(i contexts.Identity) bool { return i.ID == id }) {
-				record = contexts.Record{Name: name, ID: id, EnvironmentDirectory: environment, Mode: contexts.Initializing, SecretStoreType: configuration.SecretStore.Type}
-				break
-			}
+		registry, err := t.store.upgradeRegistry(cloneRegistry(t.registry))
+		if err != nil {
+			return contexts.Record{}, err
 		}
-		if record.ID == "" {
-			return contexts.Record{}, state("context identity reservation exhausted its collision limit")
+		id, err := allocateContextIdentity(&registry)
+		if err != nil {
+			return contexts.Record{}, err
 		}
-		registry := cloneRegistry(t.registry)
-		registry.Identities = append(registry.Identities, contexts.Identity{ID: record.ID})
+		record = contexts.Record{Name: name, ID: id, EnvironmentDirectory: environment, Mode: contexts.Initializing, SecretStoreType: configuration.SecretStore.Type}
 		registry.Contexts = append(registry.Contexts, record)
 		if err := t.save(ctx, registry); err != nil {
 			return contexts.Record{}, err
@@ -160,7 +153,7 @@ func (t *transaction) Reserve(ctx context.Context, name, environment string, con
 		return contexts.Record{}, err
 	}
 	defer runtime.file.Close()
-	evidence := []byte("{\"version\":1,\"operation\":\"none\",\"ownership\":\"none\"}\n")
+	evidence := []byte(pristineMutation)
 	old, err := readBounded(ctx, runtime, "mutation.json", maxRecord, true)
 	if errors.Is(err, syscall.ENOENT) {
 		err = t.store.writeExclusive(ctx, runtime, "mutation.json", evidence)
@@ -220,7 +213,7 @@ func (t *transaction) InitializeSecrets(ctx context.Context, id string, callback
 	dir := t.leases[id]
 	area := &secretArea{store: t.store, root: t.root, context: dir, expected: t.expected, token: secretContext(record), active: true, mutable: make(map[string]secretExpectation)}
 	defer func() {
-		area.active = false
+		area.close()
 		if area.secrets != nil {
 			area.secrets.file.Close()
 		}

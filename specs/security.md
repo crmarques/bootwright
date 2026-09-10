@@ -58,7 +58,7 @@ lifecycle or confidential state. An in-tree file source uses the reserved
 `secrets` path segment so API discovery never reads it as desired state.
 
 The [durable context boundary](contexts.md#storage-locking-and-publication)
-adds held-root publication, strict bounded records, lock-free immutable reads
+adds held-root publication, strict bounded records, immutable reads protected by shared root locks
 and conservative corruption refusal. Its manifest freezes authored input only;
 source paths never authorize payload access during admission or inspection.
 

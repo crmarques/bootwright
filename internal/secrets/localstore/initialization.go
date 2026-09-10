@@ -12,17 +12,31 @@ import (
 const initializationPath = "init.json"
 
 func (i *Implementation) initialize(ctx context.Context, selected storage.Context, area storage.Area) (storage.StoreSession, error) {
-	selectorData, selectorExists, err := area.ReadMutable(ctx, selectorPath, selectorMaximum)
+	selectorData, selectorExists, err := area.ReadMutable(ctx, selectorPath, storage.RecordMaximum)
 	if err != nil {
 		return nil, areaFailure(ctx, "store.corrupt", "secret selector cannot be read safely", err)
 	}
 	if selectorExists {
-		var selector storage.Selector
-		if decodeCanonical(selectorData, selectorMaximum, 64, &selector) != nil || !validSelector(selector, selected, i.Selection()) {
-			return nil, storage.Failure("store.corrupt", "secret selector is invalid or incompatible")
+		record, err := storage.DecodeRecord(selectorData, selected.ID)
+		if err != nil || !validSelector(record.Selector, selected, i.Backend()) {
+			return nil, storage.Failure("store.corrupt", "secret metadata is invalid or incompatible")
 		}
-		return i.Open(ctx, selected, area, selector, nil)
+		s, err := i.open(ctx, selected, area, record.Selector, nil)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.collectArtifacts(ctx); err != nil {
+			s.Close()
+			return nil, err
+		}
+		return s, nil
 	}
+	if _, exists, err := area.ReadMutable(ctx, legacySelectorPath, selectorMaximum); err != nil {
+		return nil, err
+	} else if exists {
+		return i.upgrade(ctx, selected, area)
+	}
+
 	markerData, markerExists, err := area.ReadMutable(ctx, initializationPath, selectorMaximum)
 	if err != nil {
 		return nil, areaFailure(ctx, "store.corrupt", "secret initialization record cannot be read safely", err)
@@ -36,7 +50,7 @@ func (i *Implementation) initialize(ctx context.Context, selected storage.Contex
 	}
 	var marker initializationRecord
 	if markerExists {
-		if decodeCanonical(markerData, selectorMaximum, 512, &marker) != nil || !validInitialization(marker, selected, i.Selection()) {
+		if decodeCanonical(markerData, selectorMaximum, 512, &marker) != nil || !validInitialization(marker, selected, i.Backend()) {
 			return nil, storage.Failure("store.corrupt", "secret initialization record is invalid or incompatible")
 		}
 		if marker.MAC != "" {
@@ -47,7 +61,7 @@ func (i *Implementation) initialize(ctx context.Context, selected storage.Contex
 			clear(signingKey)
 		}
 	} else {
-		pending, pendingExists, err := freshInitializationPending(ctx, area, selected, i.Selection(), root)
+		pending, pendingExists, err := freshInitializationPending(ctx, area, selected, i.Backend(), root)
 		if err != nil {
 			return nil, err
 		}
@@ -72,7 +86,7 @@ func (i *Implementation) initialize(ctx context.Context, selected storage.Contex
 	if err := verifyInitializationArtifacts(ctx, area, selected, marker, true); err != nil {
 		return nil, err
 	}
-	for _, name := range []string{"identities", "indexes", "keys", "ledgers", "parts"} {
+	for _, name := range []string{"identities", "keys", "parts"} {
 		if err := area.EnsureDirectory(ctx, name); err != nil {
 			return nil, areaFailure(ctx, "store.conflict", "secret store directories could not be initialized", err)
 		}
@@ -137,7 +151,7 @@ func (i *Implementation) resumeInitialization(ctx context.Context, selected stor
 		clear(signingKey)
 	}
 	attempt := marker.Attempts[len(marker.Attempts)-1]
-	keyEntry, err := namedEntry(ctx, area, "keys", attempt.KeyID+".bin")
+	keyEntry, err := namedEntry(ctx, area, "keys", attempt.KeyID+".key")
 	if err != nil {
 		return nil, false, marker, err
 	}
@@ -147,7 +161,7 @@ func (i *Implementation) resumeInitialization(ctx context.Context, selected stor
 			clear(key)
 			return nil, false, marker, storage.Failure("store.crypto", "secret encryption randomness is unavailable")
 		}
-		if err := area.WriteExclusive(ctx, "keys/"+attempt.KeyID+".bin", key); err != nil {
+		if err := area.WriteExclusive(ctx, keyPath(attempt.KeyID), key); err != nil {
 			clear(key)
 			return nil, false, marker, areaFailure(ctx, "store.conflict", "secret encryption key could not be stored", err)
 		}
@@ -156,7 +170,7 @@ func (i *Implementation) resumeInitialization(ctx context.Context, selected stor
 			clear(key)
 			return nil, true, marker, nil
 		}
-		value, exists, err := area.Read(ctx, "keys/"+attempt.KeyID+".bin", 32)
+		value, exists, err := area.ReadMutable(ctx, keyPath(attempt.KeyID), 32)
 		if err != nil || !exists || len(value) != 32 {
 			clear(key)
 			clear(value)
@@ -164,6 +178,10 @@ func (i *Implementation) resumeInitialization(ctx context.Context, selected stor
 		}
 		copy(key, value)
 		clear(value)
+		if err := area.SyncFile(ctx, keyPath(attempt.KeyID)); err != nil {
+			clear(key)
+			return nil, false, marker, areaFailure(ctx, "store.conflict", "recovered secret key durability could not be established", err)
+		}
 	}
 	keepKey := false
 	defer func() {
@@ -191,102 +209,75 @@ func (i *Implementation) resumeInitialization(ctx context.Context, selected stor
 		}
 		marker = signed
 	}
-	ledgerEntry, err := namedEntry(ctx, area, "ledgers", attempt.KeyID+".json")
+	ledgerEntry, err := namedEntry(ctx, area, "keys", attempt.KeyID+".usage.json")
 	if err != nil {
 		return nil, false, marker, err
 	}
 	ledger := sealLedger{}
 	freshLedger := false
 	if ledgerEntry == nil {
-		ledgerData, err := encodeLedger(selected.ID, i.Selection(), key, attempt.KeyID, 1)
+		ledgerData, err := encodeLedger(selected.ID, i.Backend(), key, attempt.KeyID, 1)
 		if err != nil {
 			return nil, false, marker, err
 		}
-		if err := area.WriteExclusive(ctx, "ledgers/"+attempt.KeyID+".json", ledgerData); err != nil {
+		if err := area.WriteExclusive(ctx, ledgerPath(attempt.KeyID), ledgerData); err != nil {
 			return nil, false, marker, areaFailure(ctx, "store.conflict", "secret seal reservation could not be stored", err)
 		}
 		ledger = sealLedger{FormatVersion: formatVersion, KeyID: attempt.KeyID, Seals: 1}
 		freshLedger = true
 	} else {
-		data, exists, err := area.Read(ctx, "ledgers/"+attempt.KeyID+".json", ledgerMaximum)
+		data, exists, err := area.Read(ctx, ledgerPath(attempt.KeyID), ledgerMaximum)
 		if err != nil || !exists {
 			return nil, true, marker, nil
 		}
-		ledger, err = decodeLedger(data, selected.ID, i.Selection(), key, attempt.KeyID, 0)
+		ledger, err = decodeLedger(data, selected.ID, i.Backend(), key, attempt.KeyID, 0)
 		if err != nil {
 			return nil, true, marker, nil
 		}
 	}
-	selector := storage.Selector{SelectorVersion: formatVersion, ContextID: selected.ID, Selection: i.Selection(), Generation: attempt.Generation}
-	index := indexRecord{FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, ActiveKey: attempt.KeyID, Keys: []storage.Key{{ID: attempt.KeyID, State: "active", Seals: ledger.Seals}}, Versions: []storedVersion{}, Current: []storage.Current{}, Bindings: []storage.Binding{}}
-	indexEntry, err := namedEntry(ctx, area, "indexes", attempt.Generation+".bin")
-	if err != nil {
-		return nil, false, marker, err
-	}
-	if indexEntry == nil {
-		if !freshLedger {
-			ledgerData, exists, err := area.ReadMutable(ctx, "ledgers/"+attempt.KeyID+".json", ledgerMaximum)
-			if err != nil || !exists {
-				return nil, false, marker, areaFailure(ctx, "store.corrupt", "secret initialization ledger cannot be reserved", err)
-			}
-			ledger, err = decodeLedger(ledgerData, selected.ID, i.Selection(), key, attempt.KeyID, 0)
-			if err != nil || ledger.Seals >= maxSeals {
-				return nil, false, marker, storage.Failure("store.limit", "secret initialization seal limit is exhausted")
-			}
-			ledger.Seals++
-			nextLedger, err := encodeLedger(selected.ID, i.Selection(), key, attempt.KeyID, ledger.Seals)
-			if err != nil {
-				return nil, false, marker, err
-			}
-			outcome, replaceErr := area.Replace(ctx, "ledgers/"+attempt.KeyID+".json", nextLedger, ledgerData)
-			if replaceErr != nil || outcome != storage.Committed {
-				return nil, false, marker, publicationFailure(ctx, outcome, replaceErr)
-			}
-			index.Keys[0].Seals = ledger.Seals
-		}
-		plaintext, err := encodeCanonical(index, indexMaximum)
-		if err != nil {
-			return nil, false, marker, err
-		}
-		sealed, err := seal(key, plaintext, indexAAD(selected.ID, selector, attempt.KeyID), "index", attempt.KeyID, attempt.Generation, i.random, indexMaximum)
-		clear(plaintext)
-		if err != nil {
-			return nil, false, marker, err
-		}
-		err = area.WriteExclusive(ctx, "indexes/"+attempt.Generation+".bin", sealed)
-		clear(sealed)
-		if err != nil {
-			return nil, false, marker, areaFailure(ctx, "store.conflict", "encrypted secret index could not be stored", err)
-		}
-	} else {
-		data, exists, err := area.Read(ctx, "indexes/"+attempt.Generation+".bin", indexMaximum)
+	selector := storage.Selector{SelectorVersion: formatVersion, ContextID: selected.ID, Backend: i.Backend(), Generation: attempt.Generation}
+	index := indexRecord{FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, ActiveKey: attempt.KeyID, Keys: []storedKey{{ID: attempt.KeyID, Seals: ledger.Seals}}, Versions: []storedVersion{}, Current: []storage.Current{}, Bindings: []storage.Binding{}}
+	if !freshLedger {
+		ledgerData, exists, err := area.ReadMutable(ctx, ledgerPath(attempt.KeyID), ledgerMaximum)
 		if err != nil || !exists {
-			return nil, true, marker, nil
+			return nil, false, marker, areaFailure(ctx, "store.corrupt", "secret initialization ledger cannot be reserved", err)
 		}
-		plaintext, err := openEnvelope(data, key, indexAAD(selected.ID, selector, attempt.KeyID), "index", attempt.KeyID, attempt.Generation, indexMaximum)
-		clear(data)
+		ledger, err = decodeLedger(ledgerData, selected.ID, i.Backend(), key, attempt.KeyID, 0)
+		if err != nil || ledger.Seals >= maxSeals {
+			return nil, false, marker, storage.Failure("store.limit", "secret initialization seal limit is exhausted")
+		}
+		ledger.Seals++
+		nextLedger, err := encodeLedger(selected.ID, i.Backend(), key, attempt.KeyID, ledger.Seals)
 		if err != nil {
-			return nil, true, marker, nil
+			return nil, false, marker, err
 		}
-		var persisted indexRecord
-		decodeErr := decodeCanonical(plaintext, indexMaximum, maxIndexItems, &persisted)
-		clear(plaintext)
-		if decodeErr != nil || validateIndex(persisted, selector) != nil || persisted.ActiveKey != attempt.KeyID || len(persisted.Versions) != 0 || len(persisted.Current) != 0 || len(persisted.Bindings) != 0 || len(persisted.Keys) != 1 || persisted.Keys[0].Seals > ledger.Seals {
-			return nil, true, marker, nil
+		outcome, replaceErr := area.Replace(ctx, ledgerPath(attempt.KeyID), nextLedger, ledgerData)
+		if replaceErr != nil || outcome != storage.Committed {
+			return nil, false, marker, publicationFailure(ctx, outcome, replaceErr)
 		}
-		index = persisted
 		index.Keys[0].Seals = ledger.Seals
 	}
-	selectorData, err := encodeCanonical(selector, selectorMaximum)
+	plaintext, err := encodeCanonical(index, indexMaximum)
 	if err != nil {
 		return nil, false, marker, err
 	}
+	selectorData, err := sealMetadata(key, plaintext, selector, attempt.KeyID, i.random)
+	clear(plaintext)
+	if err != nil {
+		return nil, false, marker, err
+	}
+	defer clear(selectorData)
 	outcome, replaceErr := area.Replace(ctx, selectorPath, selectorData, selectorExpected)
 	if replaceErr != nil || outcome != storage.Committed {
 		return nil, false, marker, publicationFailure(ctx, outcome, replaceErr)
 	}
 	keepKey = true
-	return &session{implementation: i, context: selected, area: area, selector: selector, selectorData: slices.Clone(selectorData), index: index, keys: map[string][]byte{attempt.KeyID: key}}, false, marker, nil
+	session := &session{implementation: i, context: selected, area: area, selector: selector, selectorData: slices.Clone(selectorData), index: index, keys: map[string][]byte{attempt.KeyID: key}}
+	if err := session.collectArtifacts(ctx); err != nil {
+		session.Close()
+		return nil, false, marker, cleanupFailure(ctx, err)
+	}
+	return session, false, marker, nil
 }
 
 func (i *Implementation) newInitialization(ctx context.Context, selected storage.Context, area storage.Area, prior *initializationRecord) (initializationRecord, error) {
@@ -294,46 +285,44 @@ func (i *Implementation) newInitialization(ctx context.Context, selected storage
 		return initializationRecord{}, err
 	}
 	keys, keyErr := optionalEntryNames(ctx, area, "keys")
-	ledgers, ledgerErr := optionalEntryNames(ctx, area, "ledgers")
-	indexes, indexErr := optionalEntryNames(ctx, area, "indexes")
-	if prior != nil && (keyErr != nil || ledgerErr != nil || indexErr != nil) {
+	ledgers, ledgerErr := optionalEntryNames(ctx, area, "keys")
+	if prior != nil && (keyErr != nil || ledgerErr != nil) {
 		return initializationRecord{}, storage.Failure("store.corrupt", "secret initialization artifacts cannot be enumerated")
 	}
-	usedAttempts := map[string]bool{}
 	attempts := []initializationAttempt{}
 	if prior != nil {
 		attempts = slices.Clone(prior.Attempts)
+	}
+	keyID, err := i.uniqueID("key-", func(id string) bool { return keys[id+".key"] || ledgers[id+".usage.json"] })
+	if err != nil {
+		return initializationRecord{}, err
+	}
+	generation, err := i.uniqueID("gen-", func(id string) bool {
 		for _, attempt := range attempts {
-			usedAttempts[attempt.AttemptID] = true
+			if attempt.Generation == id {
+				return true
+			}
 		}
-	}
-	attemptID, err := i.uniqueID("init-", func(id string) bool { return usedAttempts[id] })
+		return false
+	})
 	if err != nil {
 		return initializationRecord{}, err
 	}
-	keyID, err := i.uniqueID("key-", func(id string) bool { return keys[id+".bin"] || ledgers[id+".json"] })
-	if err != nil {
-		return initializationRecord{}, err
-	}
-	generation, err := i.uniqueID("gen-", func(id string) bool { return indexes[id+".bin"] })
-	if err != nil {
-		return initializationRecord{}, err
-	}
-	attempts = append(attempts, initializationAttempt{AttemptID: attemptID, KeyID: keyID, Generation: generation})
-	return initializationRecord{FormatVersion: formatVersion, ContextID: selected.ID, Selection: i.Selection(), Attempts: attempts}, nil
+	attempts = append(attempts, initializationAttempt{KeyID: keyID, Generation: generation})
+	return initializationRecord{FormatVersion: formatVersion, ContextID: selected.ID, Selection: i.Backend(), Attempts: attempts}, nil
 }
 
-func validInitialization(record initializationRecord, selected storage.Context, selection storage.Selection) bool {
+func validInitialization(record initializationRecord, selected storage.Context, selection string) bool {
 	if record.FormatVersion != formatVersion || record.ContextID != selected.ID || record.Selection != selection || len(record.Attempts) == 0 || len(record.Attempts) > 16 || (record.MAC == "") != (record.MACKeyID == "") {
 		return false
 	}
 	ids := map[string]bool{}
 	macKey := record.MACKeyID == ""
 	for _, attempt := range record.Attempts {
-		if !validID(attempt.AttemptID, "init-") || !validID(attempt.KeyID, "key-") || !validID(attempt.Generation, "gen-") || ids[attempt.AttemptID] || ids[attempt.KeyID] || ids[attempt.Generation] {
+		if !validID(attempt.KeyID, "key-") || !validID(attempt.Generation, "gen-") || ids[attempt.KeyID] || ids[attempt.Generation] {
 			return false
 		}
-		ids[attempt.AttemptID], ids[attempt.KeyID], ids[attempt.Generation] = true, true, true
+		ids[attempt.KeyID], ids[attempt.Generation] = true, true
 		macKey = macKey || attempt.KeyID == record.MACKeyID
 	}
 	return macKey
@@ -344,7 +333,7 @@ func reflectInitializationEqual(a, b initializationRecord) bool { return reflect
 func validInitializationRoot(entries []storage.Entry, marker bool) bool {
 	for _, entry := range entries {
 		if entry.Directory {
-			if !marker || !slices.Contains([]string{"identities", "indexes", "keys", "ledgers", "parts"}, entry.Name) {
+			if !marker || !slices.Contains([]string{"identities", "keys", "parts"}, entry.Name) {
 				return false
 			}
 			continue
@@ -362,7 +351,7 @@ func validInitializationRoot(entries []storage.Entry, marker bool) bool {
 	return marker || len(entries) == 0 || onlyPending(entries)
 }
 
-func freshInitializationPending(ctx context.Context, area storage.Area, selected storage.Context, selection storage.Selection, entries []storage.Entry) (initializationRecord, bool, error) {
+func freshInitializationPending(ctx context.Context, area storage.Area, selected storage.Context, selection string, entries []storage.Entry) (initializationRecord, bool, error) {
 	var recovered initializationRecord
 	found := false
 	for _, entry := range entries {
@@ -394,7 +383,7 @@ func verifyInitializationArtifacts(ctx context.Context, area storage.Area, selec
 	for _, entry := range root {
 		if entry.Directory {
 			present[entry.Name] = true
-			if !slices.Contains([]string{"identities", "indexes", "keys", "ledgers", "parts"}, entry.Name) {
+			if !slices.Contains([]string{"identities", "keys", "parts"}, entry.Name) {
 				return storage.Failure("store.corrupt", "secret initialization layout contains an unsupported directory")
 			}
 			continue
@@ -410,11 +399,10 @@ func verifyInitializationArtifacts(ctx context.Context, area storage.Area, selec
 			return storage.Failure("store.corrupt", "pending secret initialization publication is not attributable")
 		}
 	}
-	allowedKeys, allowedLedgers, allowedIndexes := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	allowedKeys := map[string]bool{}
 	for _, attempt := range marker.Attempts {
-		allowedKeys[attempt.KeyID+".bin"] = true
-		allowedLedgers[attempt.KeyID+".json"] = true
-		allowedIndexes[attempt.Generation+".bin"] = true
+		allowedKeys[attempt.KeyID+".key"] = true
+		allowedKeys[attempt.KeyID+".usage.json"] = true
 	}
 	for _, directory := range []string{"identities", "parts"} {
 		if !present[directory] {
@@ -436,8 +424,6 @@ func verifyInitializationArtifacts(ctx context.Context, area storage.Area, selec
 		allowed map[string]bool
 	}{
 		{name: "keys", allowed: allowedKeys},
-		{name: "indexes", allowed: allowedIndexes},
-		{name: "ledgers", allowed: allowedLedgers},
 	} {
 		if !present[table.name] {
 			if allowMissing {
@@ -456,7 +442,7 @@ func verifyInitializationArtifacts(ctx context.Context, area storage.Area, selec
 			if table.allowed[entry.Name] {
 				continue
 			}
-			if table.name != "ledgers" || !validPending(entry.Name) || !validInitializationLedgerPending(ctx, area, entry.Name, selected, marker) {
+			if table.name != "keys" || !validPending(entry.Name) || !validInitializationLedgerPending(ctx, area, entry.Name, selected, marker) {
 				return storage.Failure("store.corrupt", "secret initialization contains non-attributable artifacts")
 			}
 		}
@@ -478,7 +464,7 @@ func validRootInitializationPending(ctx context.Context, area storage.Area, data
 		if marker.MAC != "" && candidate.MACKeyID != marker.MACKeyID {
 			return false
 		}
-		key, exists, err := area.Read(ctx, "keys/"+candidate.MACKeyID+".bin", 32)
+		key, exists, err := area.Read(ctx, keyPath(candidate.MACKeyID), 32)
 		if err != nil || !exists || len(key) != 32 {
 			clear(key)
 			return false
@@ -487,14 +473,28 @@ func validRootInitializationPending(ctx context.Context, area storage.Area, data
 		clear(key)
 		return valid
 	}
-	var selector storage.Selector
-	if decodeCanonical(data, selectorMaximum, 64, &selector) != nil || selector.SelectorVersion != formatVersion || selector.ContextID != selected.ID || selector.Selection != marker.Selection {
+	record, err := storage.DecodeRecord(data, selected.ID)
+	if err != nil || !validSelector(record.Selector, selected, marker.Selection) {
 		return false
 	}
 	for _, attempt := range marker.Attempts {
-		if selector.Generation == attempt.Generation {
-			return true
+		if record.Generation != attempt.Generation {
+			continue
 		}
+		key, err := readKey(ctx, area, attempt.KeyID)
+		if err != nil {
+			return false
+		}
+		plaintext, err := openMetadata(record, key)
+		clear(key)
+		if err != nil {
+			return false
+		}
+		var index indexRecord
+		decodeErr := decodeCanonical(plaintext, indexMaximum, maxIndexItems, &index)
+		clear(plaintext)
+		index.FormatVersion, index.Algorithm, index.Selector = formatVersion, algorithm, record.Selector
+		return decodeErr == nil && validateIndex(index, record.Selector) == nil && index.ActiveKey == attempt.KeyID && len(index.Versions) == 0 && len(index.Current) == 0 && len(index.Bindings) == 0 && len(index.Keys) == 1
 	}
 	return false
 }
@@ -504,7 +504,7 @@ func initializationAttemptsPrefix(prefix, complete []initializationAttempt) bool
 }
 
 func validInitializationLedgerPending(ctx context.Context, area storage.Area, name string, selected storage.Context, marker initializationRecord) bool {
-	data, exists, err := area.Read(ctx, "ledgers/"+name, ledgerMaximum)
+	data, exists, err := area.Read(ctx, "keys/"+name, ledgerMaximum)
 	if err != nil || !exists {
 		return false
 	}
@@ -519,7 +519,7 @@ func validInitializationLedgerPending(ctx context.Context, area storage.Area, na
 	if !allowed {
 		return false
 	}
-	key, exists, err := area.Read(ctx, "keys/"+candidate.KeyID+".bin", 32)
+	key, exists, err := area.Read(ctx, keyPath(candidate.KeyID), 32)
 	if err != nil || !exists || len(key) != 32 {
 		clear(key)
 		return false
@@ -530,7 +530,7 @@ func validInitializationLedgerPending(ctx context.Context, area storage.Area, na
 }
 
 func initializationSigningKey(ctx context.Context, area storage.Area, marker initializationRecord) ([]byte, error) {
-	key, exists, err := area.Read(ctx, "keys/"+marker.MACKeyID+".bin", 32)
+	key, exists, err := area.Read(ctx, keyPath(marker.MACKeyID), 32)
 	if err != nil || !exists || len(key) != 32 {
 		clear(key)
 		return nil, storage.Failure("store.corrupt", "secret initialization authentication key is missing or unsafe")

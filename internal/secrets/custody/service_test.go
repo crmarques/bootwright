@@ -2,8 +2,10 @@ package custody
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
@@ -74,7 +76,7 @@ func (s *serviceSession) PutBatch(_ context.Context, puts []storage.Put) ([]stor
 			parts[p], _ = put.Material.Part(p)
 		}
 		s.materials[id] = secrets.NewMaterial(parts)
-		version := storage.Version{ID: id, Declaration: put.Declaration, Parts: put.Material.Parts()}
+		version := storage.Version{ID: id, Declaration: put.Declaration.Summary(), Parts: put.Material.Parts()}
 		s.snapshot.Versions = append(s.snapshot.Versions, version)
 		found := false
 		for i := range s.snapshot.Current {
@@ -261,6 +263,65 @@ func TestGeneratedBatchFailurePublishesNothing(t *testing.T) {
 	result, err = s.Generate(context.Background(), GenerateRequest{Name: "a", Renew: true})
 	if err != nil || result.Changed != 1 || a.session.writes != 2 {
 		t.Fatal(result, err)
+	}
+}
+
+func TestStoredDeclarationSummaryRetainsStalenessIdentity(t *testing.T) {
+	for _, change := range []string{"generation-parameters", "origin-path", "document-position"} {
+		t.Run(change, func(t *testing.T) {
+			service, access, material, _ := serviceFixture(t, declarationYAML("token", "  source: {generated: {bytes: 32}}\n"))
+			ctx := context.Background()
+			if _, err := service.Generate(ctx, GenerateRequest{}); err != nil {
+				t.Fatal(err)
+			}
+			original := access.session.snapshot.Versions[0].Declaration
+			encoded, err := json.Marshal(original)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(encoded, &fields); err != nil || len(fields) != 4 {
+				t.Fatal("stored declaration retained acquisition fields", string(encoded), err)
+			}
+			for _, field := range []string{"name", "type", "source", "fingerprint"} {
+				if _, exists := fields[field]; !exists {
+					t.Fatal("stored declaration lost required metadata", field)
+				}
+			}
+			if strings.Contains(string(encoded), "/synthetic") {
+				t.Fatal("stored declaration retained its acquisition path")
+			}
+			if result, err := service.Check(ctx, CheckRequest{}); err != nil || len(result.Secrets) != 1 || result.Secrets[0].Status != "available" {
+				t.Fatal("unchanged summary lost available material", result, err)
+			}
+			source := access.snapshot.Inputs.Files[0]
+			path, content := source.Path(), string(source.Bytes())
+			switch change {
+			case "generation-parameters":
+				content = strings.Replace(content, "bytes: 32", "bytes: 48", 1)
+			case "origin-path":
+				path = "/synthetic/relocated.yaml"
+			case "document-position":
+				environment, secret, ok := strings.Cut(content, "\n---\n")
+				if !ok {
+					t.Fatal("fixture lacks separate declarations")
+				}
+				content = secret + "\n---\n" + environment
+			}
+			access.snapshot.Inputs.Files = []desiredstate.SourceFile{desiredstate.NewSourceFile(path, []byte(content))}
+			reads, validations := access.session.reads, material.validated
+			result, err := service.Check(ctx, CheckRequest{})
+			if err == nil || result == nil || len(result.Secrets) != 1 || result.Secrets[0].Status != "stale" || access.session.reads != reads || material.validated != validations {
+				t.Fatal("changed complete declaration did not preserve stale refusal", result, err)
+			}
+			if result, err := service.Generate(ctx, GenerateRequest{}); err != nil || result.Changed != 1 {
+				t.Fatal("changed declaration did not renew its material", result, err)
+			}
+			updated, exists := currentVersion(access.session.snapshot, "token")
+			if !exists || updated.Declaration.Fingerprint == original.Fingerprint {
+				t.Fatal("renewed summary lost the new declaration identity")
+			}
+		})
 	}
 }
 

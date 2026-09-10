@@ -78,7 +78,7 @@ func (s *session) PutBatch(ctx context.Context, puts []storage.Put) ([]storage.V
 		}
 		knownIDs[id] = true
 		newIdentities = append(newIdentities, id)
-		version := storedVersion{ID: id, Declaration: cloneDeclaration(put.Declaration), Parts: make([]storedPart, 0, len(put.Declaration.Parts()))}
+		version := storedVersion{ID: id, Declaration: put.Declaration.Summary(), Parts: make([]storedPart, 0, len(put.Declaration.Parts()))}
 		for _, part := range put.Declaration.Parts() {
 			value, _ := put.Material.Part(part)
 			version.Parts = append(version.Parts, storedPart{Part: part, Size: len(value)})
@@ -178,7 +178,7 @@ func (s *session) Bind(ctx context.Context, inputs []storage.BoundInput) (storag
 		}
 		if input.Version != "" {
 			version, exists := findVersion(next, input.Version)
-			if !exists || !sameDeclaration(version.Declaration, input.Declaration) {
+			if !exists || version.Declaration != input.Declaration.Summary() {
 				return storage.Binding{}, storage.Failure("source", "secret binding version does not match its declaration")
 			}
 			equal, err := s.equalVersion(ctx, version, input.Material)
@@ -200,7 +200,7 @@ func (s *session) Bind(ctx context.Context, inputs []storage.BoundInput) (storag
 		}
 		knownVersions[id] = true
 		newIdentities = append(newIdentities, id)
-		version := storedVersion{ID: id, Declaration: cloneDeclaration(input.Declaration), Parts: make([]storedPart, 0, len(input.Declaration.Parts()))}
+		version := storedVersion{ID: id, Declaration: input.Declaration.Summary(), Parts: make([]storedPart, 0, len(input.Declaration.Parts()))}
 		for _, part := range input.Declaration.Parts() {
 			value, _ := input.Material.Part(part)
 			version.Parts = append(version.Parts, storedPart{Part: part, Size: len(value)})
@@ -293,11 +293,11 @@ func (s *session) Rotate(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ledgerNames, err := entryNames(ctx, s.area, "ledgers")
+	ledgerNames, err := entryNames(ctx, s.area, "keys")
 	if err != nil {
 		return "", err
 	}
-	keyID, err := s.implementation.uniqueID("key-", func(id string) bool { return keyNames[id+".bin"] || ledgerNames[id+".json"] })
+	keyID, err := s.implementation.uniqueID("key-", func(id string) bool { return keyNames[id+".key"] || ledgerNames[id+".usage.json"] })
 	if err != nil {
 		return "", err
 	}
@@ -328,10 +328,7 @@ func (s *session) Rotate(ctx context.Context) (string, error) {
 		}
 		material.Clear()
 	}
-	for i := range next.Keys {
-		next.Keys[i].State = "retired"
-	}
-	next.Keys = append(next.Keys, storage.Key{ID: keyID, State: "active"})
+	next.Keys = []storedKey{{ID: keyID}}
 	next.ActiveKey = keyID
 	canonicalizeIndex(&next)
 	if err := s.publish(ctx, &next, plain, publicationKey{id: keyID, value: key, fresh: true}, nil); err != nil {
@@ -348,6 +345,7 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 	if len(plain) >= int(maxSeals) {
 		return storage.Failure("store.limit", "secret publication seal budget exceeds its key limit")
 	}
+
 	required := uint64(len(plain)) + 1
 	if len(publication.value) != 32 || publication.id != next.ActiveKey {
 		return storage.Failure("store.crypto", "secret encryption key is invalid")
@@ -357,11 +355,13 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 		return err
 	}
 	setKeySeals(next, publication.id, reservation.seals)
-	indexNames, err := entryNames(ctx, s.area, "indexes")
-	if err != nil {
-		return err
+	usedGenerations := map[string]bool{s.selector.Generation: true}
+	for _, version := range next.Versions {
+		for _, part := range version.Parts {
+			usedGenerations[part.Generation] = true
+		}
 	}
-	generation, err := s.implementation.uniqueID("gen-", func(id string) bool { return indexNames[id+".bin"] })
+	generation, err := s.implementation.uniqueID("gen-", func(id string) bool { return usedGenerations[id] })
 	if err != nil {
 		return err
 	}
@@ -370,23 +370,24 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 		return err
 	}
 	for i := range plain {
-		blobID, err := s.implementation.uniqueID("blob-", func(id string) bool { return partNames[id+".bin"] })
+		blobID, err := s.implementation.uniqueID("blob-", func(id string) bool { return partNames[id+".enc"] })
 		if err != nil {
 			return err
 		}
-		partNames[blobID+".bin"] = true
+		partNames[blobID+".enc"] = true
 		part, exists := mutablePart(next, plain[i].version, plain[i].part)
 		if !exists {
 			return storage.Failure("store.corrupt", "secret publication lost a pending part")
 		}
 		part.BlobID, part.KeyID, part.Generation = blobID, publication.id, generation
 	}
-	next.Selector = storage.Selector{SelectorVersion: formatVersion, ContextID: s.context.ID, Selection: s.selector.Selection, Generation: generation}
+	next.Legacy = false
+	next.Selector = storage.Selector{SelectorVersion: formatVersion, ContextID: s.context.ID, Backend: s.selector.Backend, Generation: generation}
 	indexSize, err := canonicalEncodedSize(*next, indexMaximum)
 	if err != nil {
 		return err
 	}
-	if _, err := sealedEnvelopeSize(indexSize, "index", publication.id, generation, indexMaximum); err != nil {
+	if _, err := metadataEncodedSize(indexSize, next.Selector, publication.id); err != nil {
 		return err
 	}
 	for _, pending := range plain {
@@ -404,10 +405,7 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 		return err
 	}
 	defer clear(plaintext)
-	selectorData, err := encodeCanonical(next.Selector, selectorMaximum)
-	if err != nil {
-		return err
-	}
+
 	identityData := make([][]byte, len(identities))
 	for index, id := range identities {
 		if !validID(id, "ver-") && !validID(id, "bind-") {
@@ -419,6 +417,9 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 		}
 		identityData[index] = data
 	}
+	if err := s.collectArtifacts(ctx); err != nil {
+		return err
+	}
 	s.mutated = true
 	for index, id := range identities {
 		if err := s.area.PublishExclusive(ctx, "identities/"+id+".json", identityData[index]); err != nil {
@@ -426,7 +427,7 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 		}
 	}
 	if publication.fresh {
-		if err := s.area.WriteExclusive(ctx, "keys/"+publication.id+".bin", publication.value); err != nil {
+		if err := s.area.WriteExclusive(ctx, keyPath(publication.id), publication.value); err != nil {
 			return areaFailure(ctx, "store.conflict", "fresh secret encryption key could not be stored", err)
 		}
 	}
@@ -436,25 +437,21 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 	for _, pending := range plain {
 		version, _ := findVersion(*next, pending.version)
 		part, _ := storedPartOf(version, pending.part)
-		sealed, err := seal(publication.value, pending.data, partAAD(s.context.ID, next.Selector.Selection, version, part), "part", publication.id, part.BlobID, s.implementation.random, partMaximum)
+		sealed, err := seal(publication.value, pending.data, partAAD(s.context.ID, next.Selector.Backend, version, part), "part", publication.id, part.BlobID, s.implementation.random, partMaximum)
 		if err != nil {
 			return err
 		}
-		err = s.area.WriteExclusive(ctx, "parts/"+part.BlobID+".bin", sealed)
+		err = s.area.WriteExclusive(ctx, partPath(part.BlobID), sealed)
 		clear(sealed)
 		if err != nil {
 			return areaFailure(ctx, "store.conflict", "encrypted secret part could not be stored", err)
 		}
 	}
-	sealedIndex, err := seal(publication.value, plaintext, indexAAD(s.context.ID, next.Selector, publication.id), "index", publication.id, generation, s.implementation.random, indexMaximum)
+	selectorData, err := sealMetadata(publication.value, plaintext, next.Selector, publication.id, s.implementation.random)
 	if err != nil {
 		return err
 	}
-	err = s.area.WriteExclusive(ctx, "indexes/"+generation+".bin", sealedIndex)
-	clear(sealedIndex)
-	if err != nil {
-		return areaFailure(ctx, "store.conflict", "encrypted secret index could not be stored", err)
-	}
+	defer clear(selectorData)
 	outcome, err := s.area.Replace(ctx, selectorPath, selectorData, s.selectorData)
 	if err != nil || outcome != storage.Committed {
 		return publicationFailure(ctx, outcome, err)
@@ -466,26 +463,29 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 	if publication.fresh {
 		s.keys[publication.id] = publication.value
 	}
+	if err := s.collectArtifacts(ctx); err != nil {
+		return cleanupFailure(ctx, err)
+	}
 	return nil
 }
 
 func (s *session) prepareSeals(ctx context.Context, publication publicationKey, count uint64) (sealReservation, error) {
 	if publication.fresh {
-		data, err := encodeLedger(s.context.ID, s.selector.Selection, publication.value, publication.id, count)
+		data, err := encodeLedger(s.context.ID, s.selector.Backend, publication.value, publication.id, count)
 		return sealReservation{keyID: publication.id, seals: count, data: data, fresh: true}, err
 	}
-	path := "ledgers/" + publication.id + ".json"
+	path := ledgerPath(publication.id)
 	data, exists, err := s.area.ReadMutable(ctx, path, ledgerMaximum)
 	if err != nil || !exists {
 		return sealReservation{}, areaFailure(ctx, "store.corrupt", "secret seal ledger is missing or unsafe", err)
 	}
 	floor, known := keySeals(s.index, publication.id)
-	ledger, ledgerErr := decodeLedger(data, s.context.ID, s.selector.Selection, publication.value, publication.id, floor)
+	ledger, ledgerErr := decodeLedger(data, s.context.ID, s.selector.Backend, publication.value, publication.id, floor)
 	if !known || ledgerErr != nil || count > maxSeals-ledger.Seals {
 		return sealReservation{}, storage.Failure("store.limit", "secret encryption key seal limit is exhausted or contradictory")
 	}
 	ledger.Seals += count
-	next, err := encodeLedger(s.context.ID, s.selector.Selection, publication.value, publication.id, ledger.Seals)
+	next, err := encodeLedger(s.context.ID, s.selector.Backend, publication.value, publication.id, ledger.Seals)
 	if err != nil {
 		return sealReservation{}, err
 	}
@@ -493,7 +493,7 @@ func (s *session) prepareSeals(ctx context.Context, publication publicationKey, 
 }
 
 func (s *session) commitSeals(ctx context.Context, reservation sealReservation) error {
-	path := "ledgers/" + reservation.keyID + ".json"
+	path := ledgerPath(reservation.keyID)
 	if reservation.fresh {
 		if err := s.area.WriteExclusive(ctx, path, reservation.data); err != nil {
 			return areaFailure(ctx, "store.conflict", "fresh secret seal reservation could not be stored", err)
@@ -586,7 +586,7 @@ func validateLogicalBounds(index indexRecord) error {
 }
 
 func canonicalizeIndex(index *indexRecord) {
-	slices.SortFunc(index.Keys, func(a, b storage.Key) int { return strings.Compare(a.ID, b.ID) })
+	slices.SortFunc(index.Keys, func(a, b storedKey) int { return strings.Compare(a.ID, b.ID) })
 	slices.SortFunc(index.Versions, func(a, b storedVersion) int { return strings.Compare(a.ID, b.ID) })
 	slices.SortFunc(index.Current, func(a, b storage.Current) int { return strings.Compare(a.Name, b.Name) })
 	slices.SortFunc(index.Bindings, func(a, b storage.Binding) int { return strings.Compare(a.ID, b.ID) })
@@ -657,7 +657,7 @@ func publicVersion(version storedVersion) storage.Version {
 	for i, part := range version.Parts {
 		parts[i] = part.Part
 	}
-	return storage.Version{ID: version.ID, Declaration: cloneDeclaration(version.Declaration), Parts: parts}
+	return storage.Version{ID: version.ID, Declaration: version.Declaration, Parts: parts}
 }
 
 func clearPlain(parts []plainPart) {

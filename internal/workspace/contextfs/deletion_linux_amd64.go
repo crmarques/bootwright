@@ -113,6 +113,10 @@ func contextDirectoryLimit(path string) int {
 }
 
 func (s *Store) walkContextTree(ctx context.Context, dir *directory, path string, action contextTreeAction, remaining *int) error {
+	return s.walkContextTreeWithRemovalGuard(ctx, dir, path, action, remaining, nil)
+}
+
+func (s *Store) walkContextTreeWithRemovalGuard(ctx context.Context, dir *directory, path string, action contextTreeAction, remaining *int, beforeRemove func(context.Context) error) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -155,7 +159,7 @@ func (s *Store) walkContextTree(ctx context.Context, dir *directory, path string
 			if path != "" {
 				next = path + "/" + name
 			}
-			err = s.walkContextTree(ctx, child, next, action, remaining)
+			err = s.walkContextTreeWithRemovalGuard(ctx, child, next, action, remaining, beforeRemove)
 			child.file.Close()
 			if err != nil {
 				return err
@@ -168,6 +172,11 @@ func (s *Store) walkContextTree(ctx context.Context, dir *directory, path string
 		if action == removeContextTree {
 			if err := s.checkpoint(ctx, "before-context-unlink"); err != nil {
 				return err
+			}
+			if beforeRemove != nil {
+				if err := beforeRemove(ctx); err != nil {
+					return err
+				}
 			}
 			if err := unlinkVerified(dir, name, identity, kind == syscall.S_IFDIR); err != nil {
 				return err

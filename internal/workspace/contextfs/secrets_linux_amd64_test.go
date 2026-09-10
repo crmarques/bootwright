@@ -32,7 +32,7 @@ func TestSecretAreaIsAbsentReadOnlyAndAtomicallyPublished(t *testing.T) {
 		if err != nil || len(entries) != 0 {
 			t.Fatalf("absent entries: %#v %v", entries, err)
 		}
-		if data, exists, err := area.Read(context.Background(), "selector.json", 64<<10); err != nil || exists || data != nil {
+		if data, exists, err := area.Read(context.Background(), "store.json", 8<<20); err != nil || exists || data != nil {
 			t.Fatalf("absent read: %q %v %v", data, exists, err)
 		}
 		if err := area.WriteExclusive(context.Background(), "forbidden", nil); err == nil {
@@ -48,25 +48,25 @@ func TestSecretAreaIsAbsentReadOnlyAndAtomicallyPublished(t *testing.T) {
 	}
 	original := []byte("{\"version\":1}\n")
 	err = store.MutateSecrets(context.Background(), token, func(area storage.Area) error {
-		if err := area.EnsureDirectory(context.Background(), "indexes"); err != nil {
+		if err := area.EnsureDirectory(context.Background(), "parts"); err != nil {
 			return err
 		}
-		if err := area.WriteExclusive(context.Background(), "indexes/index-00000000000000000000000000000000", []byte("immutable")); err != nil {
+		if err := area.WriteExclusive(context.Background(), "parts/blob-00000000000000000000000000000000", []byte("immutable")); err != nil {
 			return err
 		}
-		expected, exists, err := area.ReadMutable(context.Background(), "selector.json", 64<<10)
+		expected, exists, err := area.ReadMutable(context.Background(), "store.json", 8<<20)
 		if err != nil || exists {
-			return errors.New("unexpected selector")
+			return errors.New("unexpected store")
 		}
-		outcome, err := area.Replace(context.Background(), "selector.json", original, expected)
+		outcome, err := area.Replace(context.Background(), "store.json", original, expected)
 		if err != nil || outcome != storage.Committed {
-			return errors.New("selector was not committed")
+			return errors.New("store was not committed")
 		}
-		if data, exists, err := area.Read(context.Background(), "selector.json", 64<<10); err != nil || !exists || !bytes.Equal(data, original) {
-			return errors.New("committed selector cannot be read")
+		if data, exists, err := area.Read(context.Background(), "store.json", 8<<20); err != nil || !exists || !bytes.Equal(data, original) {
+			return errors.New("committed store cannot be read")
 		}
 		if err := area.WriteExclusive(context.Background(), "after-commit", nil); err == nil {
-			return errors.New("selector commit was not terminal for writes")
+			return errors.New("store commit was not terminal for writes")
 		}
 		return nil
 	})
@@ -74,11 +74,11 @@ func TestSecretAreaIsAbsentReadOnlyAndAtomicallyPublished(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.ReadSecrets(context.Background(), token, func(area storage.Area) error {
-		data, exists, err := area.Read(context.Background(), "selector.json", 64<<10)
+		data, exists, err := area.Read(context.Background(), "store.json", 8<<20)
 		if err != nil || !exists || !bytes.Equal(data, original) {
-			t.Fatalf("published selector: %q %v %v", data, exists, err)
+			t.Fatalf("published store: %q %v %v", data, exists, err)
 		}
-		for _, path := range []string{"../selector.json", "indexes/../selector.json", "/selector.json", "a/b/c"} {
+		for _, path := range []string{"../store.json", "parts/../store.json", "/store.json", "a/b/c"} {
 			if _, _, err := area.Read(context.Background(), path, 64); err == nil {
 				t.Fatalf("unsafe path accepted: %q", path)
 			}
@@ -95,34 +95,34 @@ func TestSecretReplaceRejectsSameByteInodeSubstitution(t *testing.T) {
 	token := secretToken(record)
 	original := []byte("original\n")
 	if err := store.MutateSecrets(context.Background(), token, func(area storage.Area) error {
-		expected, _, err := area.ReadMutable(context.Background(), "selector.json", 64)
+		expected, _, err := area.ReadMutable(context.Background(), "store.json", 64)
 		if err != nil {
 			return err
 		}
-		_, err = area.Replace(context.Background(), "selector.json", original, expected)
+		_, err = area.Replace(context.Background(), "store.json", original, expected)
 		return err
 	}); err != nil {
 		t.Fatal(err)
 	}
-	selector := filepath.Join(store.options.Root, "contexts", record.Name, "secrets", "selector.json")
+	storePath := filepath.Join(store.options.Root, "contexts", record.Name, "secrets", "store.json")
 	replaced := false
 	store.fail = func(point string) error {
 		if point != "before-secret-rename" || replaced {
 			return nil
 		}
 		replaced = true
-		if err := os.Remove(selector); err != nil {
+		if err := os.Remove(storePath); err != nil {
 			return err
 		}
-		return os.WriteFile(selector, original, 0600)
+		return os.WriteFile(storePath, original, 0600)
 	}
 	var outcome storage.Outcome
 	err := store.MutateSecrets(context.Background(), token, func(area storage.Area) error {
-		expected, exists, err := area.ReadMutable(context.Background(), "selector.json", 64)
+		expected, exists, err := area.ReadMutable(context.Background(), "store.json", 64)
 		if err != nil || !exists {
 			return errors.New("missing selector")
 		}
-		outcome, err = area.Replace(context.Background(), "selector.json", []byte("next\n"), expected)
+		outcome, err = area.Replace(context.Background(), "store.json", []byte("next\n"), expected)
 		return err
 	})
 	store.fail = nil
@@ -130,7 +130,7 @@ func TestSecretReplaceRejectsSameByteInodeSubstitution(t *testing.T) {
 	if outcome != storage.NotCommitted || !replaced {
 		t.Fatalf("replacement outcome: %s", outcome)
 	}
-	data, err := os.ReadFile(selector)
+	data, err := os.ReadFile(storePath)
 	if err != nil || !bytes.Equal(data, original) {
 		t.Fatal("substituted destination was overwritten")
 	}
@@ -150,11 +150,11 @@ func TestSecretReplaceReportsPostRenameUncertainty(t *testing.T) {
 	}
 	var outcome storage.Outcome
 	err := store.MutateSecrets(context.Background(), token, func(area storage.Area) error {
-		expected, _, err := area.ReadMutable(context.Background(), "selector.json", 64)
+		expected, _, err := area.ReadMutable(context.Background(), "store.json", 64)
 		if err != nil {
 			return err
 		}
-		outcome, err = area.Replace(context.Background(), "selector.json", []byte("published\n"), expected)
+		outcome, err = area.Replace(context.Background(), "store.json", []byte("published\n"), expected)
 		return err
 	})
 	store.fail = nil
@@ -163,7 +163,7 @@ func TestSecretReplaceReportsPostRenameUncertainty(t *testing.T) {
 		t.Fatalf("post-rename outcome: %s", outcome)
 	}
 	if err := store.ReadSecrets(context.Background(), token, func(area storage.Area) error {
-		data, exists, err := area.Read(context.Background(), "selector.json", 64)
+		data, exists, err := area.Read(context.Background(), "store.json", 64)
 		if err != nil || !exists || string(data) != "published\n" {
 			t.Fatalf("uncertain publication visibility: %q %v %v", data, exists, err)
 		}

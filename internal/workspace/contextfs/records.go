@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -50,6 +51,9 @@ func decodeRecord(data []byte, maximum int, target any) error {
 	}
 	if err := boundedJSON(data, items); err != nil {
 		return err
+	}
+	if registry, ok := target.(*contexts.Registry); ok {
+		return decodeRegistry(data, maximum, registry)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
@@ -124,6 +128,12 @@ func boundedJSON(data []byte, maxItems int) error {
 }
 
 func encodeRecord(value any, maximum int) ([]byte, error) {
+	switch registry := value.(type) {
+	case contexts.Registry:
+		value = registryRecord(registry)
+	case *contexts.Registry:
+		value = registryRecord(*registry)
+	}
 	if maximum < 1 || !fitsJSON(reflect.ValueOf(value), maximum-1) {
 		return nil, state("persisted record exceeds its encoding limit")
 	}
@@ -339,8 +349,11 @@ func contextName(name string) bool {
 }
 
 func validateRegistry(r contexts.Registry) error {
-	if r.Version != 2 || r.Identities == nil || r.Contexts == nil || len(r.Identities) > maxIdentities || len(r.Contexts) > maxIdentities {
+	if r.Version != 2 && r.Version != 3 || r.Version == 2 && r.Identities == nil || r.Contexts == nil || len(r.Identities) > maxIdentities || len(r.Contexts) > maxIdentities {
 		return state("context registry has unsupported version or bounds")
+	}
+	if r.Version == 2 && (r.IDNamespace != "" || r.NextIdentity != 0) || r.Version == 3 && (!validNamespace(r.IDNamespace) || r.NextIdentity == 0 || len(r.Identities) != 0) {
+		return state("context registry allocation state is invalid")
 	}
 	ids := make(map[string]bool, len(r.Identities))
 	previous := ""
@@ -354,8 +367,14 @@ func validateRegistry(r contexts.Registry) error {
 	active := make(map[string]bool, len(r.Contexts))
 	previous = ""
 	for _, record := range r.Contexts {
-		if !contextName(record.Name) || record.Name <= previous || !ids[record.ID] || active[record.ID] {
+		if !contextName(record.Name) || record.Name <= previous || !identifier(record.ID, "ctx-") || r.Version == 2 && !ids[record.ID] || active[record.ID] {
 			return state("context name or identity mapping is invalid")
+		}
+		if r.Version == 3 && identityNamespace(record.ID) == r.IDNamespace {
+			sequence, err := strconv.ParseUint(record.ID[len("ctx-")+16:], 16, 64)
+			if err != nil || sequence == 0 || sequence >= r.NextIdentity {
+				return state("context identity exceeds its allocation counter")
+			}
 		}
 		if !contextName(record.SecretStoreType) {
 			return state("context secret store type is invalid")

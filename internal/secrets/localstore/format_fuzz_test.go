@@ -10,7 +10,7 @@ import (
 )
 
 func FuzzLocalStoreRecords(f *testing.F) {
-	selector := storage.Selector{SelectorVersion: 1, ContextID: "ctx-fixture", Selection: New().Selection(), Generation: "gen-fixture"}
+	selector := storage.Selector{SelectorVersion: formatVersion, ContextID: "ctx-fixture", Backend: New().Backend(), Generation: "gen-fixture"}
 	canonical, err := encodeCanonical(selector, selectorMaximum)
 	if err != nil {
 		f.Fatal(err)
@@ -20,12 +20,16 @@ func FuzzLocalStoreRecords(f *testing.F) {
 	f.Add(uint8(2), []byte("null\n"))
 	f.Add(uint8(3), []byte("{\"formatVersion\":1,\"formatVersion\":2}\n"))
 	f.Add(uint8(4), []byte("[]\n"))
+	f.Add(uint8(5), []byte("{\"keyId\":\"key-fixture\",\"nonce\":\"\",\"ciphertext\":\"\"}\n"))
+	f.Add(uint8(6), []byte("{}\n"))
+	f.Add(uint8(7), []byte("{}\n"))
+	f.Add(uint8(8), []byte("{}\n"))
 	f.Fuzz(func(t *testing.T, kind uint8, data []byte) {
 		if len(data) > 256<<10 {
 			return
 		}
 		var target any
-		switch kind % 5 {
+		switch kind % 9 {
 		case 0:
 			target = new(storage.Selector)
 		case 1:
@@ -36,6 +40,14 @@ func FuzzLocalStoreRecords(f *testing.F) {
 			target = new(sealLedger)
 		case 4:
 			target = new(initializationRecord)
+		case 5:
+			target = new(metadataEnvelope)
+		case 6:
+			target = new(upgradeRecord)
+		case 7:
+			target = new(legacySelector)
+		case 8:
+			target = new(legacyIndex)
 		}
 		if decodeCanonical(data, indexMaximum, 1<<20, target) == nil {
 			encoded, err := encodeCanonical(target, indexMaximum)
@@ -46,7 +58,7 @@ func FuzzLocalStoreRecords(f *testing.F) {
 				_ = validateIndex(*index, index.Selector)
 			}
 		}
-		if kind%5 == 2 {
+		if kind%9 == 2 {
 			plaintext, _ := openEnvelope(data, make([]byte, 32), []byte("synthetic-authentication-domain"), "part", "key-fixture", "blob-fixture", partMaximum)
 			clear(plaintext)
 		}
@@ -64,6 +76,7 @@ func FuzzCanonicalStoreSizePreflight(f *testing.F) {
 			[]string{first, second},
 			envelope{Purpose: first, Ciphertext: second},
 			secrets.Declaration{Origin: first, Generation: secrets.Generation{DNSNames: []string{first, second}}},
+			indexRecord{ActiveKey: first, Legacy: budget%2 == 0, Keys: []storedKey{{ID: second}}},
 		} {
 			encoded, err := json.Marshal(value)
 			if err != nil {

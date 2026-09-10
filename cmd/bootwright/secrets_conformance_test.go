@@ -65,11 +65,24 @@ func (*memoryImplementation) Selection() storage.Selection {
 	return storage.Selection{Type: "session-test", Store: storage.ComponentRef{ID: "memory-test", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1}, KeyCustody: storage.ComponentRef{ID: "operator-test", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1}}
 }
 
+func (*memoryImplementation) Backend() string { return "session-test-v2" }
+
 func (*memoryImplementation) Requirements() []storage.SessionRequirement {
 	return []storage.SessionRequirement{{Kind: "operator-session"}}
 }
 
 func (i *memoryImplementation) Initialize(ctx context.Context, selected storage.Context, area storage.Area, capability storage.SessionMaterial) (storage.StoreSession, error) {
+	data, exists, err := area.ReadMutable(ctx, storage.RecordPath, storage.RecordMaximum)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		record, err := storage.DecodeRecord(data, selected.ID)
+		if err != nil {
+			return nil, err
+		}
+		return i.Open(ctx, selected, area, record.Selector, capability)
+	}
 	i.mu.Lock()
 	state := &memoryState{versions: map[string]storage.Version{}, material: map[string]secrets.Material{}, current: map[string]string{}, bindings: map[string]storage.Binding{}, key: "memory-key"}
 	session := &memorySession{implementation: i, context: selected, area: area, state: state, unlocked: i.accepts(capability)}
@@ -87,11 +100,11 @@ func (i *memoryImplementation) Initialize(ctx context.Context, selected storage.
 func (i *memoryImplementation) Open(ctx context.Context, selected storage.Context, area storage.Area, selector storage.Selector, capability storage.SessionMaterial) (storage.StoreSession, error) {
 	i.mu.Lock()
 	state, exists := i.states[selector.Generation]
-	if !exists || selector.Selection != i.Selection() || selector.ContextID != selected.ID {
+	if !exists || selector.Backend != i.Backend() || selector.ContextID != selected.ID {
 		i.mu.Unlock()
 		return nil, storage.Failure("store.corrupt", "test snapshot is unavailable")
 	}
-	data, exists, err := area.ReadMutable(ctx, "selector.json", 64<<10)
+	data, exists, err := area.ReadMutable(ctx, storage.RecordPath, storage.RecordMaximum)
 	if err != nil || !exists {
 		i.mu.Unlock()
 		return nil, storage.Failure("store.corrupt", "test selector is unavailable")
@@ -131,11 +144,11 @@ func (s *memorySession) publish(ctx context.Context) error {
 		return err
 	}
 	generation := s.implementation.id("generation")
-	selector, err := storage.EncodeCanonical(storage.Selector{SelectorVersion: 1, ContextID: s.context.ID, Selection: s.implementation.Selection(), Generation: generation})
+	selector, err := storage.EncodeRecord(storage.Selector{SelectorVersion: storage.RecordVersion, ContextID: s.context.ID, Backend: s.implementation.Backend(), Generation: generation}, []byte(`{}`))
 	if err != nil {
 		return err
 	}
-	outcome, err := s.area.Replace(ctx, "selector.json", selector, s.selector)
+	outcome, err := s.area.Replace(ctx, storage.RecordPath, selector, s.selector)
 	if err != nil || outcome != storage.Committed {
 		return storage.Failure("store.conflict", "test publication failed")
 	}
@@ -183,7 +196,7 @@ func (s *memorySession) Read(ctx context.Context, id string) (secrets.Material, 
 }
 
 func (s *memorySession) add(declaration secrets.Declaration, material secrets.Material) storage.Version {
-	version := storage.Version{ID: s.implementation.id("version"), Declaration: declaration, Parts: material.Parts()}
+	version := storage.Version{ID: s.implementation.id("version"), Declaration: declaration.Summary(), Parts: material.Parts()}
 	s.state.versions[version.ID] = version
 	s.state.material[version.ID] = cloneTestMaterial(material)
 	return version
@@ -293,8 +306,6 @@ func (s *memoryState) clone() *memoryState {
 	result := &memoryState{versions: map[string]storage.Version{}, material: map[string]secrets.Material{}, current: map[string]string{}, bindings: map[string]storage.Binding{}, key: s.key}
 	for id, version := range s.versions {
 		version.Parts = slices.Clone(version.Parts)
-		version.Declaration.Generation.DNSNames = slices.Clone(version.Declaration.Generation.DNSNames)
-		version.Declaration.Generation.IPAddresses = slices.Clone(version.Declaration.Generation.IPAddresses)
 		result.versions[id] = version
 		result.material[id] = cloneTestMaterial(s.material[id])
 	}

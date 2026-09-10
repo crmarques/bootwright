@@ -1007,6 +1007,8 @@ func (r constantRandom) Read(data []byte) (int, error) {
 func FuzzPersistedRecords(f *testing.F) {
 	valid, _ := encodeRecord(emptyRegistry(), maxRegistry)
 	f.Add(valid, false)
+	v3, _ := encodeRecord(registryV3{Version: 3, IDNamespace: "0123456789abcdef", NextIdentity: 1, Contexts: []contexts.Record{}}, maxRegistry)
+	f.Add(v3, false)
 	input := "/example/input"
 	m := manifest{Version: 2, ID: "ctx-00000000000000000000000000000000", Revision: "rev-00000000000000000000000000000000", InputDirectory: input, EnvironmentDirectory: input, Files: []frozenFile{{Path: "environment.yaml", Category: "yaml", Size: 0, SHA256: digest(nil)}}}
 	validManifest, _ := encodeRecord(m, maxManifest)
@@ -1202,6 +1204,7 @@ func TestAggregateManifestBytesPrecedeDecoding(t *testing.T) {
 func TestRecordSizePreflightMatchesCanonicalEncoding(t *testing.T) {
 	values := []any{
 		emptyRegistry(),
+		registryV3{Version: 3, IDNamespace: "0123456789abcdef", NextIdentity: ^uint64(0), Contexts: []contexts.Record{}},
 		contexts.Record{DirectoryDevice: ^uint64(0), DirectoryInode: ^uint64(0)},
 		reservation{Version: -9223372036854775807, ID: "<>&\n\t\b\r\f\x00\"\\", Name: "/example/\u2028\u2029/é/雪"},
 		manifest{Version: 2, Files: []frozenFile{{Path: "a.yaml", Category: "yaml", Size: 100, SHA256: digest(nil)}}},

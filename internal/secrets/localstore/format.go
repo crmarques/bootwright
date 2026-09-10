@@ -23,9 +23,9 @@ import (
 )
 
 const (
-	formatVersion    = 1
+	formatVersion    = 2
 	algorithm        = "AES-256-GCM"
-	selectorPath     = "selector.json"
+	selectorPath     = storage.RecordPath
 	selectorMaximum  = 64 << 10
 	indexMaximum     = 8 << 20
 	ledgerMaximum    = 64 << 10
@@ -51,20 +51,26 @@ type envelope struct {
 }
 
 type indexRecord struct {
-	FormatVersion int               `json:"formatVersion"`
-	Algorithm     string            `json:"algorithm"`
-	Selector      storage.Selector  `json:"selector"`
+	FormatVersion int               `json:"-"`
+	Algorithm     string            `json:"-"`
+	Selector      storage.Selector  `json:"-"`
 	ActiveKey     string            `json:"activeKey"`
-	Keys          []storage.Key     `json:"keys"`
+	Keys          []storedKey       `json:"keys"`
 	Versions      []storedVersion   `json:"versions"`
 	Current       []storage.Current `json:"current"`
 	Bindings      []storage.Binding `json:"bindings"`
+	Legacy        bool              `json:"legacy,omitempty"`
+}
+
+type storedKey struct {
+	ID    string `json:"id"`
+	Seals uint64 `json:"seals"`
 }
 
 type storedVersion struct {
-	ID          string              `json:"id"`
-	Declaration secrets.Declaration `json:"declaration"`
-	Parts       []storedPart        `json:"parts"`
+	ID          string                     `json:"id"`
+	Declaration secrets.VersionDeclaration `json:"declaration"`
+	Parts       []storedPart               `json:"parts"`
 }
 
 type storedPart struct {
@@ -83,26 +89,25 @@ type sealLedger struct {
 }
 
 type ledgerAuthentication struct {
-	Domain        string            `json:"domain"`
-	FormatVersion int               `json:"formatVersion"`
-	Algorithm     string            `json:"algorithm"`
-	ContextID     string            `json:"contextId"`
-	Selection     storage.Selection `json:"implementation"`
-	KeyID         string            `json:"keyId"`
-	Seals         uint64            `json:"seals"`
+	Domain        string `json:"domain"`
+	FormatVersion int    `json:"formatVersion"`
+	Algorithm     string `json:"algorithm"`
+	ContextID     string `json:"contextId"`
+	Selection     string `json:"backend"`
+	KeyID         string `json:"keyId"`
+	Seals         uint64 `json:"seals"`
 }
 
 type initializationRecord struct {
 	FormatVersion int                     `json:"formatVersion"`
 	ContextID     string                  `json:"contextId"`
-	Selection     storage.Selection       `json:"implementation"`
+	Selection     string                  `json:"backend"`
 	Attempts      []initializationAttempt `json:"attempts"`
 	MACKeyID      string                  `json:"macKeyId"`
 	MAC           string                  `json:"mac"`
 }
 
 type initializationAttempt struct {
-	AttemptID  string `json:"attemptId"`
 	KeyID      string `json:"keyId"`
 	Generation string `json:"generation"`
 }
@@ -111,7 +116,7 @@ type initializationAuthentication struct {
 	Domain        string                  `json:"domain"`
 	FormatVersion int                     `json:"formatVersion"`
 	ContextID     string                  `json:"contextId"`
-	Selection     storage.Selection       `json:"implementation"`
+	Selection     string                  `json:"backend"`
 	Attempts      []initializationAttempt `json:"attempts"`
 	MACKeyID      string                  `json:"macKeyId"`
 }
@@ -123,31 +128,31 @@ type identityRecord struct {
 }
 
 type indexAdditionalData struct {
-	Domain        string            `json:"domain"`
-	FormatVersion int               `json:"formatVersion"`
-	Algorithm     string            `json:"algorithm"`
-	ContextID     string            `json:"contextId"`
-	Selection     storage.Selection `json:"implementation"`
-	Generation    string            `json:"generation"`
-	KeyID         string            `json:"keyId"`
-	BlobID        string            `json:"blobId"`
+	Domain        string `json:"domain"`
+	FormatVersion int    `json:"formatVersion"`
+	Algorithm     string `json:"algorithm"`
+	ContextID     string `json:"contextId"`
+	Selection     string `json:"backend"`
+	Generation    string `json:"generation"`
+	KeyID         string `json:"keyId"`
+	BlobID        string `json:"blobId"`
 }
 
 type partAdditionalData struct {
-	Domain                 string            `json:"domain"`
-	FormatVersion          int               `json:"formatVersion"`
-	Algorithm              string            `json:"algorithm"`
-	ContextID              string            `json:"contextId"`
-	Selection              storage.Selection `json:"implementation"`
-	Generation             string            `json:"generation"`
-	KeyID                  string            `json:"keyId"`
-	BlobID                 string            `json:"blobId"`
-	DeclarationFingerprint string            `json:"declarationFingerprint"`
-	Name                   string            `json:"name"`
-	Type                   string            `json:"type"`
-	Source                 string            `json:"source"`
-	Version                string            `json:"version"`
-	Part                   secrets.Part      `json:"part"`
+	Domain                 string       `json:"domain"`
+	FormatVersion          int          `json:"formatVersion"`
+	Algorithm              string       `json:"algorithm"`
+	ContextID              string       `json:"contextId"`
+	Selection              string       `json:"backend"`
+	Generation             string       `json:"generation"`
+	KeyID                  string       `json:"keyId"`
+	BlobID                 string       `json:"blobId"`
+	DeclarationFingerprint string       `json:"declarationFingerprint"`
+	Name                   string       `json:"name"`
+	Type                   string       `json:"type"`
+	Source                 string       `json:"source"`
+	Version                string       `json:"version"`
+	Part                   secrets.Part `json:"part"`
 }
 
 func encodeCanonical(value any, maximum int) ([]byte, error) {
@@ -238,7 +243,11 @@ func canonicalValueSize(value reflect.Value, maximum, depth int) (int, bool) {
 			if name == "-" {
 				continue
 			}
-			if options != "" {
+			if options == "omitempty" && value.Field(index).Kind() == reflect.Bool {
+				if !value.Field(index).Bool() {
+					continue
+				}
+			} else if options != "" {
 				return 0, false
 			}
 			if name == "" {
@@ -650,22 +659,22 @@ func decodeBase64(value string, maximum int) ([]byte, error) {
 }
 
 func indexAAD(contextID string, selector storage.Selector, keyID string) []byte {
-	data, _ := json.Marshal(indexAdditionalData{Domain: "bootwright.secret.index.v1", FormatVersion: formatVersion, Algorithm: algorithm, ContextID: contextID, Selection: selector.Selection, Generation: selector.Generation, KeyID: keyID, BlobID: selector.Generation})
+	data, _ := json.Marshal(indexAdditionalData{Domain: "bootwright.secret.index.v2", FormatVersion: formatVersion, Algorithm: algorithm, ContextID: contextID, Selection: selector.Backend, Generation: selector.Generation, KeyID: keyID, BlobID: selector.Generation})
 	return data
 }
 
-func partAAD(contextID string, selection storage.Selection, version storedVersion, part storedPart) []byte {
-	data, _ := json.Marshal(partAdditionalData{Domain: "bootwright.secret.part.v1", FormatVersion: formatVersion, Algorithm: algorithm, ContextID: contextID, Selection: selection, Generation: part.Generation, KeyID: part.KeyID, BlobID: part.BlobID, DeclarationFingerprint: version.Declaration.Fingerprint, Name: version.Declaration.Name, Type: version.Declaration.Type, Source: version.Declaration.Source, Version: version.ID, Part: part.Part})
+func partAAD(contextID string, selection string, version storedVersion, part storedPart) []byte {
+	data, _ := json.Marshal(partAdditionalData{Domain: "bootwright.secret.part.v2", FormatVersion: formatVersion, Algorithm: algorithm, ContextID: contextID, Selection: selection, Generation: part.Generation, KeyID: part.KeyID, BlobID: part.BlobID, DeclarationFingerprint: version.Declaration.Fingerprint, Name: version.Declaration.Name, Type: version.Declaration.Type, Source: version.Declaration.Source, Version: version.ID, Part: part.Part})
 	return data
 }
 
-func encodeLedger(contextID string, selection storage.Selection, key []byte, keyID string, seals uint64) ([]byte, error) {
+func encodeLedger(contextID string, selection string, key []byte, keyID string, seals uint64) ([]byte, error) {
 	record := sealLedger{FormatVersion: formatVersion, KeyID: keyID, Seals: seals}
 	record.MAC = ledgerMAC(contextID, selection, key, keyID, seals)
 	return encodeCanonical(record, ledgerMaximum)
 }
 
-func decodeLedger(data []byte, contextID string, selection storage.Selection, key []byte, keyID string, floor uint64) (sealLedger, error) {
+func decodeLedger(data []byte, contextID string, selection string, key []byte, keyID string, floor uint64) (sealLedger, error) {
 	var record sealLedger
 	if decodeCanonical(data, ledgerMaximum, 24, &record) != nil || record.FormatVersion != formatVersion || record.KeyID != keyID || record.Seals < floor || record.Seals > maxSeals || record.MAC == "" {
 		return sealLedger{}, errors.New("invalid seal ledger")
@@ -682,11 +691,11 @@ func decodeLedger(data []byte, contextID string, selection storage.Selection, ke
 	return record, nil
 }
 
-func ledgerMAC(contextID string, selection storage.Selection, key []byte, keyID string, seals uint64) string {
+func ledgerMAC(contextID string, selection string, key []byte, keyID string, seals uint64) string {
 	derive := hmac.New(sha256.New, key)
-	derive.Write([]byte("bootwright.secret.ledger.mac-key.v1"))
+	derive.Write([]byte("bootwright.secret.ledger.mac-key.v2"))
 	macKey := derive.Sum(nil)
-	data, _ := json.Marshal(ledgerAuthentication{Domain: "bootwright.secret.ledger.v1", FormatVersion: formatVersion, Algorithm: "HMAC-SHA256", ContextID: contextID, Selection: selection, KeyID: keyID, Seals: seals})
+	data, _ := json.Marshal(ledgerAuthentication{Domain: "bootwright.secret.ledger.v2", FormatVersion: formatVersion, Algorithm: "HMAC-SHA256", ContextID: contextID, Selection: selection, KeyID: keyID, Seals: seals})
 	mac := hmac.New(sha256.New, macKey)
 	mac.Write(data)
 	result := rawBase64.EncodeToString(mac.Sum(nil))
@@ -715,9 +724,9 @@ func verifyInitializationMAC(record initializationRecord, key []byte) bool {
 
 func initializationMAC(record initializationRecord, key []byte) string {
 	derive := hmac.New(sha256.New, key)
-	derive.Write([]byte("bootwright.secret.initialization.mac-key.v1"))
+	derive.Write([]byte("bootwright.secret.initialization.mac-key.v2"))
 	macKey := derive.Sum(nil)
-	data, _ := json.Marshal(initializationAuthentication{Domain: "bootwright.secret.initialization.v1", FormatVersion: record.FormatVersion, ContextID: record.ContextID, Selection: record.Selection, Attempts: record.Attempts, MACKeyID: record.MACKeyID})
+	data, _ := json.Marshal(initializationAuthentication{Domain: "bootwright.secret.initialization.v2", FormatVersion: record.FormatVersion, ContextID: record.ContextID, Selection: record.Selection, Attempts: record.Attempts, MACKeyID: record.MACKeyID})
 	mac := hmac.New(sha256.New, macKey)
 	mac.Write(data)
 	result := rawBase64.EncodeToString(mac.Sum(nil))
@@ -804,18 +813,6 @@ func validateMaterial(declaration secrets.Declaration, material secrets.Material
 	return nil
 }
 
-func cloneDeclaration(declaration secrets.Declaration) secrets.Declaration {
-	declaration.Generation.DNSNames = slices.Clone(declaration.Generation.DNSNames)
-	declaration.Generation.IPAddresses = slices.Clone(declaration.Generation.IPAddresses)
-	return declaration
-}
-
-func sameDeclaration(a, b secrets.Declaration) bool {
-	aData, aErr := json.Marshal(a)
-	bData, bErr := json.Marshal(b)
-	return aErr == nil && bErr == nil && bytes.Equal(aData, bData)
-}
-
 func interrupted(ctx context.Context, err error) error {
 	if err == nil {
 		return nil
@@ -824,4 +821,8 @@ func interrupted(ctx context.Context, err error) error {
 		return ctx.Err()
 	}
 	return err
+}
+
+func validateVersionDeclaration(declaration secrets.VersionDeclaration) bool {
+	return validName(declaration.Name) && validFingerprint(declaration.Fingerprint) && (declaration.Source == "contextStore" || declaration.Source == "file" || declaration.Source == "generated") && len(declaration.Parts()) > 0 && len(declaration.Parts()) <= 2
 }

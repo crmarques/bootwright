@@ -124,7 +124,7 @@ func (s *Store) ReadSecrets(ctx context.Context, expected storage.Context, callb
 			area.secrets.file.Close()
 		}
 	}()
-	defer func() { area.active = false }()
+	defer area.close()
 	if secrets, openErr := openDirectory(dir, "secrets"); openErr == nil {
 		area.secrets = secrets
 	} else if !errors.Is(openErr, syscall.ENOENT) {
@@ -187,7 +187,7 @@ func (s *Store) MutateSecrets(ctx context.Context, expected storage.Context, cal
 			area.secrets.file.Close()
 		}
 	}()
-	defer func() { area.active = false }()
+	defer area.close()
 	if secrets, openErr := openDirectory(dir, "secrets"); openErr == nil {
 		area.secrets = secrets
 	} else if !errors.Is(openErr, syscall.ENOENT) {
@@ -332,6 +332,15 @@ type secretExpectation struct {
 	parentKnown    bool
 }
 
+type secretPublicationPhase uint8
+
+const (
+	secretBeforePublication secretPublicationPhase = iota
+	secretPublishing
+	secretCommitted
+	secretUncertain
+)
+
 type secretArea struct {
 	store    *Store
 	root     *directory
@@ -340,16 +349,44 @@ type secretArea struct {
 	expected *expectedRegistry
 	token    storage.Context
 	mutable  map[string]secretExpectation
+	observed map[string]secretExpectation
 	readOnly bool
 	active   bool
-	terminal bool
+	phase    secretPublicationPhase
+}
+
+func (a *secretArea) forgetExpectation(path string) {
+	if expected, exists := a.mutable[path]; exists {
+		clear(expected.data)
+		delete(a.mutable, path)
+	}
+}
+
+func (a *secretArea) rememberReadExpectation(path string, next secretExpectation) error {
+	if prior, exists := a.mutable[path]; exists {
+		if prior.exists != next.exists || prior.parentKnown != next.parentKnown || prior.parentKnown && !sameIdentity(prior.parentIdentity, next.parentIdentity) || prior.exists && (!sameFile(prior.identity, next.identity) || !bytes.Equal(prior.data, next.data)) {
+			return secretCorrupt("secret storage observation changed during the callback")
+		}
+		return nil
+	}
+	next.data = slices.Clone(next.data)
+	a.mutable[path] = next
+	return nil
+}
+
+func (a *secretArea) close() {
+	a.active = false
+	for path := range a.mutable {
+		a.forgetExpectation(path)
+	}
+	a.observed = nil
 }
 
 func (a *secretArea) available(ctx context.Context, mutation bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if !a.active || mutation && a.terminal {
+	if !a.active || mutation && (a.phase == secretCommitted || a.phase == secretUncertain) {
 		return secretConflict(ctx, "secret storage callback has already finished", nil)
 	}
 	if mutation && a.readOnly {
@@ -397,6 +434,7 @@ func (a *secretArea) ensureRoot(ctx context.Context) error {
 		}
 		return nil
 	}
+	a.phase = secretPublishing
 	dir, err := a.store.newDirectory(ctx, a.context, "secrets")
 	if err != nil {
 		return secretEffectFailure(ctx, "secret storage directory could not be created safely", err)
@@ -441,7 +479,9 @@ func (a *secretArea) read(ctx context.Context, path string, maximum int, mutable
 	parent, name, close, err := a.parent(ctx, parts)
 	if errors.Is(err, syscall.ENOENT) {
 		if mutable {
-			a.mutable[path] = secretExpectation{}
+			if err := a.rememberReadExpectation(path, secretExpectation{}); err != nil {
+				return nil, false, err
+			}
 		}
 		return nil, false, nil
 	}
@@ -452,7 +492,9 @@ func (a *secretArea) read(ctx context.Context, path string, maximum int, mutable
 	data, identity, err := readBoundedIdentity(ctx, parent, name, maximum, !mutable)
 	if errors.Is(err, syscall.ENOENT) {
 		if mutable {
-			a.mutable[path] = secretExpectation{parentIdentity: parent.identity, parentKnown: true}
+			if err := a.rememberReadExpectation(path, secretExpectation{parentIdentity: parent.identity, parentKnown: true}); err != nil {
+				return nil, false, err
+			}
 		}
 		return nil, false, nil
 	}
@@ -460,7 +502,11 @@ func (a *secretArea) read(ctx context.Context, path string, maximum int, mutable
 		return nil, false, secretCorruption(ctx, "secret storage file is unsafe", err)
 	}
 	if mutable {
-		a.mutable[path] = secretExpectation{exists: true, data: slices.Clone(data), identity: identity, parentIdentity: parent.identity, parentKnown: true}
+		if err := a.rememberReadExpectation(path, secretExpectation{exists: true, data: data, identity: identity, parentIdentity: parent.identity, parentKnown: true}); err != nil {
+			clear(data)
+			return nil, false, err
+		}
+		a.observe(path, parent.identity, identity)
 	}
 	return data, true, nil
 }
@@ -490,7 +536,24 @@ func (a *secretArea) Entries(ctx context.Context, path string) ([]storage.Entry,
 		}
 		defer dir.file.Close()
 	}
-	return listSecretDirectory(ctx, dir, len(parts) == 0, a.readOnly)
+	names, err := secretDirectoryNames(ctx, dir, maxSecretEntries)
+	if err != nil {
+		return nil, err
+	}
+	observations := make(map[string]syscall.Stat_t, len(names))
+	entries, err := inspectSecretDirectoryNamesObserved(ctx, dir, names, len(parts) == 0, a.readOnly, func(name string, identity syscall.Stat_t) {
+		if path != "" {
+			name = path + "/" + name
+		}
+		observations[name] = identity
+	})
+	if err != nil {
+		return nil, err
+	}
+	for name, identity := range observations {
+		a.observe(name, dir.identity, identity)
+	}
+	return entries, nil
 }
 
 func listSecretDirectory(ctx context.Context, dir *directory, allowDirectories, allowVanishedPending bool) ([]storage.Entry, error) {
@@ -502,6 +565,10 @@ func listSecretDirectory(ctx context.Context, dir *directory, allowDirectories, 
 }
 
 func inspectSecretDirectoryNames(ctx context.Context, dir *directory, names []string, allowDirectories, allowVanishedPending bool) ([]storage.Entry, error) {
+	return inspectSecretDirectoryNamesObserved(ctx, dir, names, allowDirectories, allowVanishedPending, nil)
+}
+
+func inspectSecretDirectoryNamesObserved(ctx context.Context, dir *directory, names []string, allowDirectories, allowVanishedPending bool, observe func(string, syscall.Stat_t)) ([]storage.Entry, error) {
 	entries := make([]storage.Entry, 0, len(names))
 	for _, name := range names {
 		if err := ctx.Err(); err != nil {
@@ -543,6 +610,9 @@ func inspectSecretDirectoryNames(ctx context.Context, dir *directory, names []st
 			entries = append(entries, storage.Entry{Name: name, Size: stat.Size})
 		default:
 			return nil, secretCorrupt("secret storage entry type is unsafe")
+		}
+		if observe != nil {
+			observe(name, stat)
 		}
 	}
 	if err := dir.verify(); err != nil {
@@ -669,6 +739,7 @@ func (a *secretArea) EnsureDirectory(ctx context.Context, path string) error {
 	if err := a.capacity(ctx, 1, 0); err != nil {
 		return err
 	}
+	a.phase = secretPublishing
 	child, err := a.store.newDirectory(ctx, a.secrets, parts[0])
 	if err != nil {
 		return secretEffectFailure(ctx, "secret storage directory could not be created safely", err)
@@ -695,6 +766,7 @@ func (a *secretArea) writeExclusive(ctx context.Context, path string, data []byt
 	if len(data) > maxSecretBytes {
 		return secretLimit("secret storage file exceeds its byte limit")
 	}
+	a.phase = secretPublishing
 	if err := a.ensureRoot(ctx); err != nil {
 		return err
 	}
@@ -714,6 +786,22 @@ func (a *secretArea) writeExclusive(ctx context.Context, path string, data []byt
 	if err != nil {
 		return secretEffectFailure(ctx, "exclusive secret state could not be published safely", err)
 	}
+	if err := a.rememberPublishedFile(ctx, parent, name, path, data); err != nil {
+		a.phase = secretUncertain
+		return err
+	}
+	return nil
+}
+
+func (a *secretArea) rememberPublishedFile(ctx context.Context, parent *directory, name, path string, data []byte) error {
+	actual, identity, err := readBoundedIdentity(ctx, parent, name, len(data), true)
+	defer clear(actual)
+	if err != nil || !bytes.Equal(actual, data) {
+		return secretConflict(ctx, "published secret state changed before verification", err)
+	}
+	a.forgetExpectation(path)
+	a.mutable[path] = secretExpectation{exists: true, data: slices.Clone(data), identity: identity, parentIdentity: parent.identity, parentKnown: true}
+	a.observeReplacement(path, parent.identity, identity)
 	return nil
 }
 
@@ -732,6 +820,7 @@ func (a *secretArea) Replace(ctx context.Context, path string, data, expected []
 	if len(data) > maxSecretBytes {
 		return storage.NotCommitted, secretLimit("secret storage file exceeds its byte limit")
 	}
+	a.phase = secretPublishing
 	if err := a.ensureRoot(ctx); err != nil {
 		return storage.NotCommitted, err
 	}
@@ -777,6 +866,11 @@ func (a *secretArea) Replace(ctx context.Context, path string, data, expected []
 	if err := verifySecretExpectation(ctx, parent, name, expectation); err != nil {
 		return storage.NotCommitted, err
 	}
+	if path == storage.RecordPath {
+		if err := a.verifyReadDependencies(ctx, path); err != nil {
+			return storage.NotCommitted, err
+		}
+	}
 	currentPending, err := verifySecretPending(ctx, parent, pending, data)
 	if err != nil || !sameFile(pendingIdentity, currentPending) {
 		return storage.NotCommitted, state("pending secret state changed before publication")
@@ -784,15 +878,22 @@ func (a *secretArea) Replace(ctx context.Context, path string, data, expected []
 	if err := syscall.Renameat(int(parent.file.Fd()), pending, int(parent.file.Fd()), name); err != nil {
 		return storage.NotCommitted, state("secret state could not be atomically published")
 	}
-	delete(a.mutable, path)
-	if path == "selector.json" {
-		a.terminal = true
+	a.forgetExpectation(path)
+	if path == storage.RecordPath {
+		a.phase = secretUncertain
 	}
 	if err := a.store.checkpoint(ctx, "after-secret-rename"); err != nil {
 		return storage.Uncertain, state("secret state publication has uncertain durability; inspect it before retrying")
 	}
 	if err := a.store.syncDirectory(ctx, parent); err != nil {
 		return storage.Uncertain, state("secret state publication has uncertain durability; inspect it before retrying")
+	}
+	if err := a.rememberPublishedFile(ctx, parent, name, path, data); err != nil {
+		a.phase = secretUncertain
+		return storage.Committed, err
+	}
+	if path == storage.RecordPath {
+		a.phase = secretCommitted
 	}
 	return storage.Committed, nil
 }
@@ -812,14 +913,42 @@ func verifySecretExpectation(ctx context.Context, parent *directory, name string
 		return parent.verify()
 	}
 	actual, identity, err := readBoundedIdentity(ctx, parent, name, len(expected.data), true)
+	defer clear(actual)
 	if err != nil || !sameFile(expected.identity, identity) || !bytes.Equal(expected.data, actual) {
 		return state("secret state was replaced or modified before publication")
 	}
 	return nil
 }
 
+func (a *secretArea) verifyReadDependencies(ctx context.Context, target string) error {
+	paths := make([]string, 0, len(a.mutable))
+	for path := range a.mutable {
+		if path != target {
+			paths = append(paths, path)
+		}
+	}
+	slices.Sort(paths)
+	for _, path := range paths {
+		parts, err := secretPath(path, 1, 2)
+		if err != nil {
+			return err
+		}
+		parent, name, close, err := a.parent(ctx, parts)
+		if err != nil {
+			return secretConflict(ctx, "secret publication dependency parent changed", err)
+		}
+		err = verifySecretExpectation(ctx, parent, name, a.mutable[path])
+		close()
+		if err != nil {
+			return secretConflict(ctx, "secret publication dependency changed", err)
+		}
+	}
+	return nil
+}
+
 func verifySecretPending(ctx context.Context, parent *directory, name string, data []byte) (syscall.Stat_t, error) {
 	actual, identity, err := readBoundedIdentity(ctx, parent, name, len(data), true)
+	defer clear(actual)
 	if err != nil || !bytes.Equal(data, actual) {
 		return syscall.Stat_t{}, state("pending secret state changed before publication")
 	}

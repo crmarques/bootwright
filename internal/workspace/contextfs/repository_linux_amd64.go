@@ -5,7 +5,6 @@ package contextfs
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"errors"
 	"io"
 	"path/filepath"
@@ -216,7 +215,7 @@ func inspectInitialRegistry(ctx context.Context, root *directory) (string, sysca
 }
 
 func verifyEmptyRegistryRoot(ctx context.Context, root *directory, registry contexts.Registry) error {
-	if len(registry.Identities) != 0 || len(registry.Contexts) != 0 {
+	if registry.Version == 3 || len(registry.Identities) != 0 || len(registry.Contexts) != 0 {
 		return nil
 	}
 	names, err := rootEntryNames(root, maxIdentities+1)
@@ -641,17 +640,6 @@ func (t *transaction) contextDirectory(ctx context.Context, id string) (*directo
 	return dir, nil
 }
 
-func (s *Store) candidate(prefix string) (string, error) {
-	var bytes [16]byte
-	if s.random == nil {
-		return "", state("context identity randomness is unavailable")
-	}
-	if _, err := io.ReadFull(s.random, bytes[:]); err != nil {
-		return "", state("context identity randomness is unavailable")
-	}
-	return prefix + hex.EncodeToString(bytes[:]), nil
-}
-
 func (t *transaction) save(ctx context.Context, registry contexts.Registry) error {
 	slices.SortFunc(registry.Identities, func(a, b contexts.Identity) int {
 		if a.ID < b.ID {
@@ -672,6 +660,10 @@ func (t *transaction) save(ctx context.Context, registry contexts.Registry) erro
 		return 0
 	})
 	if err := validateRegistry(registry); err != nil {
+		return err
+	}
+	registry, err := t.store.upgradeRegistry(registry)
+	if err != nil {
 		return err
 	}
 	if err := t.store.writeRegistry(ctx, t.root, registry, t.expected); err != nil {
@@ -916,7 +908,7 @@ func (t *transaction) Commit(ctx context.Context, registry contexts.Registry) er
 	if err := validateRegistry(registry); err != nil {
 		return err
 	}
-	if !slices.Equal(registry.Identities, t.registry.Identities) || len(registry.Contexts) != len(t.registry.Contexts) {
+	if registry.Version != t.registry.Version || registry.IDNamespace != t.registry.IDNamespace || registry.NextIdentity != t.registry.NextIdentity || !slices.Equal(registry.Identities, t.registry.Identities) || len(registry.Contexts) != len(t.registry.Contexts) {
 		return state("context commit cannot change reserved identities")
 	}
 	for _, prior := range t.registry.Contexts {
@@ -986,6 +978,11 @@ func (t *transaction) Commit(ctx context.Context, registry contexts.Registry) er
 		return err
 	}
 	t.committed = true
+	for _, record := range registry.Contexts {
+		if err := t.collectRevisions(ctx, record.ID); err != nil {
+			return state("context was published, but input revision cleanup is incomplete; inspect the context before retrying")
+		}
+	}
 	return nil
 }
 
@@ -1000,12 +997,9 @@ func blobName(index int) string {
 }
 
 func revisionEntries(dir *directory, prefix, suffix string) ([]string, error) {
-	names, err := dir.file.Readdirnames(maxRevisions + 1)
-	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, state("retained state cannot be enumerated")
-	}
-	if len(names) >= maxRevisions {
-		return nil, state("retained revision count exceeds its limit")
+	names, err := directoryNames(dir, maxRevisions)
+	if err != nil {
+		return nil, err
 	}
 	for _, name := range names {
 		candidate := name

@@ -22,9 +22,9 @@ func TestCanonicalEncodedSizeMatchesJSONEncoding(t *testing.T) {
 	invalidUTF8 := string(allBytes)
 	values := []any{
 		envelope{FormatVersion: formatVersion, Algorithm: algorithm, Purpose: invalidUTF8, KeyID: "key", BlobID: "blob", Nonce: "nonce", Ciphertext: "ciphertext\u2028\u2029"},
-		storage.Selector{SelectorVersion: formatVersion, ContextID: "ctx", Selection: New().Selection(), Generation: "generation"},
+		storage.Selector{SelectorVersion: formatVersion, ContextID: "ctx", Backend: New().Backend(), Generation: "generation"},
 		indexRecord{FormatVersion: formatVersion, Algorithm: algorithm, Keys: nil, Versions: []storedVersion{}, Current: nil, Bindings: []storage.Binding{}},
-		initializationRecord{FormatVersion: formatVersion, ContextID: "ctx", Selection: New().Selection(), Attempts: []initializationAttempt{}, MACKeyID: "", MAC: ""},
+		initializationRecord{FormatVersion: formatVersion, ContextID: "ctx", Selection: New().Backend(), Attempts: []initializationAttempt{}, MACKeyID: "", MAC: ""},
 	}
 	for index, value := range values {
 		marshaled, err := json.Marshal(value)
@@ -149,14 +149,14 @@ func TestIndexStructuralPreflightEnforcesTypedArrayLimits(t *testing.T) {
 }
 
 func TestMaximumLogicalIndexRoundTrips(t *testing.T) {
-	selector := storage.Selector{SelectorVersion: formatVersion, ContextID: fixedID("ctx-", 1), Selection: New().Selection(), Generation: fixedID("gen-", 1)}
+	selector := storage.Selector{SelectorVersion: formatVersion, ContextID: fixedID("ctx-", 1), Backend: New().Backend(), Generation: fixedID("gen-", 1)}
 	keyID := fixedID("key-", 1)
 	index := indexRecord{
 		FormatVersion: formatVersion,
 		Algorithm:     algorithm,
 		Selector:      selector,
 		ActiveKey:     keyID,
-		Keys:          []storage.Key{{ID: keyID, State: "active", Seals: 1}},
+		Keys:          []storedKey{{ID: keyID, Seals: 1}},
 		Versions:      make([]storedVersion, 0, secrets.MaxVersions),
 		Current:       make([]storage.Current, 0, secrets.MaxVersions),
 		Bindings:      []storage.Binding{},
@@ -168,7 +168,7 @@ func TestMaximumLogicalIndexRoundTrips(t *testing.T) {
 		declaration.Fingerprint = declarationFingerprint(declaration)
 		index.Versions = append(index.Versions, storedVersion{
 			ID:          versionID,
-			Declaration: declaration,
+			Declaration: declaration.Summary(),
 			Parts: []storedPart{{
 				Part:       secrets.ValuePart,
 				BlobID:     fixedID("blob-", item+1),
@@ -193,13 +193,14 @@ func TestMaximumLogicalIndexRoundTrips(t *testing.T) {
 	if err := decodeCanonical(encoded, indexMaximum, maxIndexItems, &decoded); err != nil {
 		t.Fatalf("maximum index decode: %v", err)
 	}
+	decoded.FormatVersion, decoded.Algorithm, decoded.Selector = formatVersion, algorithm, selector
 	if err := validateIndex(decoded, selector); err != nil {
 		t.Fatalf("decoded maximum index: %v", err)
 	}
 }
 
 func TestPublishRejectsOversizedProjectedEnvelopeBeforeEffects(t *testing.T) {
-	selection := New().Selection()
+	selection := New().Backend()
 	contextID := fixedID("ctx-", 1)
 	keyID := fixedID("key-", 1)
 	oldGeneration := fixedID("gen-", 99)
@@ -219,12 +220,12 @@ func TestPublishRejectsOversizedProjectedEnvelopeBeforeEffects(t *testing.T) {
 	next := indexRecord{
 		FormatVersion: formatVersion,
 		Algorithm:     algorithm,
-		Selector:      storage.Selector{SelectorVersion: formatVersion, ContextID: contextID, Selection: selection, Generation: oldGeneration},
+		Selector:      storage.Selector{SelectorVersion: formatVersion, ContextID: contextID, Backend: selection, Generation: oldGeneration},
 		ActiveKey:     keyID,
-		Keys:          []storage.Key{{ID: keyID, State: "active"}},
+		Keys:          []storedKey{{ID: keyID}},
 		Versions: []storedVersion{{
 			ID:          versionID,
-			Declaration: declaration,
+			Declaration: declaration.Summary(),
 			Parts: []storedPart{
 				{Part: secrets.CertificatePart, Size: 1},
 				{Part: secrets.PrivateKeyPart, Size: 1},
@@ -232,6 +233,13 @@ func TestPublishRejectsOversizedProjectedEnvelopeBeforeEffects(t *testing.T) {
 		}},
 		Current:  []storage.Current{{Name: declaration.Name, Version: versionID}},
 		Bindings: []storage.Binding{},
+	}
+	ids := make([]string, secrets.MaxVersions)
+	for n := range ids {
+		ids[n] = fixedID("ver-", n+1)
+	}
+	for n := 0; n < 45; n++ {
+		next.Bindings = append(next.Bindings, storage.Binding{ID: fixedID("bind-", n+1), Versions: ids})
 	}
 	projected := cloneIndex(next)
 	projected.Selector.Generation = fixedID("gen-", 1)
@@ -244,7 +252,7 @@ func TestPublishRejectsOversizedProjectedEnvelopeBeforeEffects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("test index must fit the plaintext bound: %v", err)
 	}
-	if _, err := sealedEnvelopeSize(indexSize, "index", keyID, projected.Selector.Generation, indexMaximum); limitFailureCode(err) != "secret.store.limit" {
+	if _, err := metadataEncodedSize(indexSize, projected.Selector, keyID); limitFailureCode(err) != "secret.store.limit" {
 		t.Fatalf("test index must exceed only the projected envelope bound: size=%d error=%v", indexSize, err)
 	}
 
@@ -273,19 +281,19 @@ func TestPublishRejectsOversizedProjectedEnvelopeBeforeEffects(t *testing.T) {
 func TestSealReservationCeilingIncludesAbandonedReservations(t *testing.T) {
 	contextID := fixedID("ctx-", 1)
 	keyID := fixedID("key-", 1)
-	selection := New().Selection()
+	selection := New().Backend()
 	key := bytes.Repeat([]byte{0x42}, 32)
 	initial, err := encodeLedger(contextID, selection, key, keyID, maxSeals-2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	area := &limitArea{files: map[string][]byte{"ledgers/" + keyID + ".json": initial}}
+	area := &limitArea{files: map[string][]byte{ledgerPath(keyID): initial}}
 	newSession := func() *session {
 		return &session{
 			context:  storage.Context{ID: contextID},
 			area:     area,
-			selector: storage.Selector{Selection: selection},
-			index:    indexRecord{Keys: []storage.Key{{ID: keyID, Seals: maxSeals - 2}}},
+			selector: storage.Selector{Backend: selection},
+			index:    indexRecord{Keys: []storedKey{{ID: keyID, Seals: maxSeals - 2}}},
 		}
 	}
 
@@ -307,12 +315,12 @@ func TestSealReservationCeilingIncludesAbandonedReservations(t *testing.T) {
 	if err := second.commitSeals(context.Background(), reservation); err != nil {
 		t.Fatal(err)
 	}
-	before := bytes.Clone(area.files["ledgers/"+keyID+".json"])
+	before := bytes.Clone(area.files[ledgerPath(keyID)])
 	mutations := area.mutations
 	if _, err := newSession().prepareSeals(context.Background(), publicationKey{id: keyID, value: key}, 1); limitFailureCode(err) != "secret.store.limit" {
 		t.Fatalf("seal ceiling was exceeded: %v", err)
 	}
-	if area.mutations != mutations || !bytes.Equal(before, area.files["ledgers/"+keyID+".json"]) {
+	if area.mutations != mutations || !bytes.Equal(before, area.files[ledgerPath(keyID)]) {
 		t.Fatal("failed ceiling reservation changed durable state")
 	}
 	ledger, err := decodeLedger(before, contextID, selection, key, keyID, maxSeals-2)
@@ -441,3 +449,12 @@ func limitFailureCode(err error) string {
 	}
 	return diagnostics[0].Code
 }
+
+func (a *limitArea) Prune(context.Context, []byte, []string) error { a.mutations++; return nil }
+
+func (a *limitArea) PruneUnpublished(context.Context, []storage.RecordExpectation, []string) error {
+	a.mutations++
+	return nil
+}
+
+func (a *limitArea) SyncFile(context.Context, string) error { a.mutations++; return nil }

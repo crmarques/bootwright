@@ -4,6 +4,7 @@ package contextfs
 import (
 	"context"
 	"crypto/rand"
+	"encoding/hex"
 	"io"
 
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -20,6 +21,8 @@ const (
 	maxSecretEntries = 32768
 	maxSecretBytes   = 256 << 20
 )
+
+const pristineMutation = "{\"version\":1,\"operation\":\"none\",\"ownership\":\"none\"}\n"
 
 // Ownership is an explicit filesystem test seam; production uses UID and GID zero.
 type Ownership struct{ UID, GID uint32 }
@@ -66,4 +69,15 @@ func cloneRegistry(r contexts.Registry) contexts.Registry {
 	r.Identities = append([]contexts.Identity{}, r.Identities...)
 	r.Contexts = append([]contexts.Record{}, r.Contexts...)
 	return r
+}
+
+func (s *Store) candidate(prefix string) (string, error) {
+	var bytes [16]byte
+	if s.random == nil {
+		return "", state("context identity randomness is unavailable")
+	}
+	if _, err := io.ReadFull(s.random, bytes[:]); err != nil {
+		return "", state("context identity randomness is unavailable")
+	}
+	return prefix + hex.EncodeToString(bytes[:]), nil
 }
