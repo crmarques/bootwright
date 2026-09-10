@@ -566,7 +566,9 @@ func renameNoReplaceAt(parent *directory, oldName, newName string) error {
 	if errno != 0 {
 		return errno
 	}
-	return parent.verify()
+	// Publication is complete once renameat2 succeeds. Callers verify the
+	// published entry and parent before reporting success.
+	return nil
 }
 
 func lock(dir *directory) error {

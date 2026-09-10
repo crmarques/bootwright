@@ -10,6 +10,7 @@ import (
 	"io"
 	"path/filepath"
 	"slices"
+	"strings"
 	"syscall"
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
@@ -17,6 +18,22 @@ import (
 )
 
 var _ contexts.Repository = (*Store)(nil)
+
+const (
+	missingRegistryMessage     = "context store is missing registry.json"
+	storeRecoveryRemediation   = "restore the whole store from a matching backup or move it aside if disposable, then retry"
+	pendingRegistryMessage     = "context initialization is incomplete"
+	pendingRegistryRemediation = "retry context init with the original options"
+)
+
+type missingRegistryError struct {
+	failure     error
+	recoverable bool
+}
+
+func (e *missingRegistryError) Error() string { return e.failure.Error() }
+
+func (e *missingRegistryError) Unwrap() error { return e.failure }
 
 func (s *Store) CheckInputDirectory(ctx context.Context, path string) error {
 	if err := ctx.Err(); err != nil {
@@ -71,7 +88,14 @@ func readRegistry(ctx context.Context, root *directory) (contexts.Registry, bool
 		if len(names) == 0 && errors.Is(readErr, io.EOF) {
 			return emptyRegistry(), false, nil
 		}
-		return contexts.Registry{}, false, state("nonempty state root has no registry; recovery is required")
+		_, _, recoverable, inspectErr := inspectInitialRegistry(ctx, root)
+		if canceled := ctx.Err(); canceled != nil {
+			return contexts.Registry{}, false, canceled
+		}
+		if inspectErr == nil && recoverable {
+			return contexts.Registry{}, false, pendingInitialRegistry()
+		}
+		return contexts.Registry{}, false, missingRegistry()
 	}
 	if err != nil {
 		return contexts.Registry{}, false, err
@@ -83,7 +107,257 @@ func readRegistry(ctx context.Context, root *directory) (contexts.Registry, bool
 	if err := validateRegistry(registry); err != nil {
 		return contexts.Registry{}, false, err
 	}
+	if err := verifyEmptyRegistryRoot(ctx, root, registry); err != nil {
+		return contexts.Registry{}, false, err
+	}
 	return registry, true, nil
+}
+
+func missingRegistry() error {
+	return &missingRegistryError{failure: contexts.StateErrorWithRemediation(
+		missingRegistryMessage,
+		storeRecoveryRemediation,
+	)}
+}
+
+func inconsistentEmptyRegistry() error {
+	return contexts.StateErrorWithRemediation(
+		"registry.json is empty but the context store is not",
+		storeRecoveryRemediation,
+	)
+}
+
+func pendingInitialRegistry() error {
+	return &missingRegistryError{
+		failure:     contexts.StateErrorWithRemediation(pendingRegistryMessage, pendingRegistryRemediation),
+		recoverable: true,
+	}
+}
+
+func initialRegistryRecoveryError(message string) error {
+	return contexts.StateErrorWithRemediation(message, pendingRegistryRemediation)
+}
+
+func uncertainInitialRegistryRecovery() error {
+	return contexts.StateErrorWithRemediation(
+		"context initialization may have completed",
+		pendingRegistryRemediation,
+	)
+}
+
+func uncertainRegistryPublication(initial bool) error {
+	if initial {
+		return uncertainInitialRegistryRecovery()
+	}
+	return contexts.StateErrorWithRemediation(
+		"registry publication may have completed, but its disk state is unconfirmed",
+		"inspect the target context, then retry the same command",
+	)
+}
+
+func pendingInitialRegistryName(name string) bool {
+	const suffix = ".json"
+	return strings.HasSuffix(name, suffix) && identifier(strings.TrimSuffix(name, suffix), "pending-")
+}
+
+func rootEntryNames(root *directory, maximum int) ([]string, error) {
+	if err := root.verify(); err != nil {
+		return nil, err
+	}
+	file, err := openWithin(root, ".", syscall.O_RDONLY|syscall.O_DIRECTORY, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	identity, err := statHandle(file)
+	if err != nil || !sameIdentity(root.identity, identity) {
+		return nil, state("state root changed during enumeration")
+	}
+	names, readErr := file.Readdirnames(maximum + 1)
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
+		return nil, state("state root cannot be enumerated safely")
+	}
+	if len(names) > maximum {
+		return nil, state("state root entry count exceeds its limit")
+	}
+	if err := root.verify(); err != nil {
+		return nil, err
+	}
+	slices.Sort(names)
+	return names, nil
+
+}
+
+func soleRootEntry(root *directory) (string, bool, error) {
+	names, err := rootEntryNames(root, 2)
+	if err != nil || len(names) != 1 {
+		return "", false, err
+	}
+	return names[0], true, nil
+}
+
+func inspectInitialRegistry(ctx context.Context, root *directory) (string, syscall.Stat_t, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return "", syscall.Stat_t{}, false, err
+	}
+	name, sole, err := soleRootEntry(root)
+	if err != nil || !sole || !pendingInitialRegistryName(name) {
+		return "", syscall.Stat_t{}, false, err
+	}
+	want, err := encodeRecord(emptyRegistry(), maxRegistry)
+	if err != nil {
+		return "", syscall.Stat_t{}, false, err
+	}
+	data, identity, err := readBoundedIdentity(ctx, root, name, maxRegistry, true)
+	if err != nil || !bytes.Equal(data, want) {
+		return "", syscall.Stat_t{}, false, err
+	}
+	return name, identity, true, nil
+}
+
+func verifyEmptyRegistryRoot(ctx context.Context, root *directory, registry contexts.Registry) error {
+	if len(registry.Identities) != 0 || len(registry.Contexts) != 0 {
+		return nil
+	}
+	names, err := rootEntryNames(root, maxIdentities+1)
+	if err != nil {
+		return inconsistentEmptyRegistry()
+	}
+	registryFound := false
+	for _, name := range names {
+		if name == "registry.json" {
+			if registryFound {
+				return inconsistentEmptyRegistry()
+			}
+			registryFound = true
+			continue
+		}
+		if !pendingInitialRegistryName(name) {
+			return inconsistentEmptyRegistry()
+		}
+		if err := verifyIgnoredRegistryStage(ctx, root, name); err != nil {
+			if canceled := ctx.Err(); canceled != nil {
+				return canceled
+			}
+			return inconsistentEmptyRegistry()
+		}
+	}
+	current, err := rootEntryNames(root, maxIdentities+1)
+	if !registryFound || err != nil || !slices.Equal(names, current) {
+		return inconsistentEmptyRegistry()
+	}
+	return nil
+}
+
+func verifyIgnoredRegistryStage(ctx context.Context, root *directory, name string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	file, err := openRelative(root, name, pathHandle, 0)
+	if err != nil {
+		return err
+	}
+	before, err := statHandle(file)
+	file.Close()
+	if err != nil || before.Dev != root.identity.Dev || !private(before, syscall.S_IFREG, root.identity.Uid, root.identity.Gid) || before.Size < 0 || before.Size > maxRegistry {
+		return state("unpublished registry stage is unsafe")
+	}
+	file, err = openRelative(root, name, pathHandle, 0)
+	if err != nil {
+		return err
+	}
+	after, err := statHandle(file)
+	file.Close()
+	if err != nil || !sameFile(before, after) {
+		return state("unpublished registry stage changed during verification")
+	}
+	return root.verify()
+}
+
+func (s *Store) syncPendingInitialRegistry(ctx context.Context, root *directory, name string, expected syscall.Stat_t) (syscall.Stat_t, error) {
+	file, err := openRelative(root, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return syscall.Stat_t{}, initialRegistryRecoveryError("pending initial registry cannot be verified")
+	}
+	defer file.Close()
+	before, err := statHandle(file)
+	if err != nil || !sameFile(expected, before) {
+		return syscall.Stat_t{}, initialRegistryRecoveryError("pending initial registry changed during recovery")
+	}
+	if err := s.checkpoint(ctx, "sync-initial-registry-file"); err != nil {
+		return syscall.Stat_t{}, err
+	}
+	if err := file.Sync(); err != nil {
+		return syscall.Stat_t{}, initialRegistryRecoveryError("pending initial registry durability could not be established")
+	}
+	after, err := statHandle(file)
+	if err != nil || !sameFile(before, after) {
+		return syscall.Stat_t{}, initialRegistryRecoveryError("pending initial registry changed during recovery")
+	}
+	if err := root.verify(); err != nil {
+		return syscall.Stat_t{}, initialRegistryRecoveryError("state root changed during initial registry recovery")
+	}
+	return after, nil
+}
+
+func (s *Store) recoverInitialRegistry(ctx context.Context, root *directory) (bool, error) {
+	name, identity, recoverable, err := inspectInitialRegistry(ctx, root)
+	if err != nil {
+		if canceled := ctx.Err(); canceled != nil {
+			return false, canceled
+		}
+		return false, initialRegistryRecoveryError("pending initial registry cannot be inspected safely")
+	}
+	if !recoverable {
+		return false, initialRegistryRecoveryError("pending initial registry changed before recovery")
+	}
+	identity, err = s.syncPendingInitialRegistry(ctx, root, name, identity)
+	if err != nil {
+		return false, err
+	}
+	if err := s.checkpoint(ctx, "before-initial-registry-recovery"); err != nil {
+		return false, err
+	}
+	currentName, currentIdentity, recoverable, err := inspectInitialRegistry(ctx, root)
+	if err != nil {
+		if canceled := ctx.Err(); canceled != nil {
+			return false, canceled
+		}
+		return false, initialRegistryRecoveryError("pending initial registry cannot be reverified safely")
+	}
+	if !recoverable || currentName != name || !sameFile(identity, currentIdentity) {
+		return false, initialRegistryRecoveryError("pending initial registry changed during recovery")
+	}
+	if err := renameNoReplaceAt(root, name, "registry.json"); err != nil {
+		return false, initialRegistryRecoveryError("initial registry could not be atomically recovered")
+	}
+	want, err := encodeRecord(emptyRegistry(), maxRegistry)
+	if err != nil {
+		return false, uncertainInitialRegistryRecovery()
+	}
+	published, publishedIdentity, err := readBoundedIdentity(ctx, root, "registry.json", maxRegistry, true)
+	if err != nil || !bytes.Equal(published, want) || !sameIdentity(currentIdentity, publishedIdentity) {
+		return false, uncertainInitialRegistryRecovery()
+	}
+	if err := s.checkpoint(ctx, "after-initial-registry-recovery"); err != nil {
+		return false, uncertainInitialRegistryRecovery()
+	}
+	entry, sole, err := soleRootEntry(root)
+	if err != nil || !sole || entry != "registry.json" {
+		return false, uncertainInitialRegistryRecovery()
+	}
+	if err := s.syncDirectory(ctx, root); err != nil {
+		return false, uncertainInitialRegistryRecovery()
+	}
+	entry, sole, err = soleRootEntry(root)
+	if err != nil || !sole || entry != "registry.json" {
+		return false, uncertainInitialRegistryRecovery()
+	}
+	final, finalIdentity, err := readBoundedIdentity(ctx, root, "registry.json", maxRegistry, true)
+	if err != nil || !bytes.Equal(final, want) || !sameFile(publishedIdentity, finalIdentity) {
+		return false, uncertainInitialRegistryRecovery()
+	}
+	return true, nil
 }
 
 func verifyMappings(ctx context.Context, root *directory, registry contexts.Registry) error {
@@ -258,6 +532,16 @@ func (s *Store) Transact(ctx context.Context, create bool, inputs []string, call
 	}
 	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
 	registry, exists, err := readRegistry(ctx, root)
+	var missing *missingRegistryError
+	if create && errors.As(err, &missing) && missing.recoverable {
+		recovered, recoveryErr := s.recoverInitialRegistry(ctx, root)
+		if recoveryErr != nil {
+			return safeError(recoveryErr)
+		}
+		if recovered {
+			registry, exists, err = readRegistry(ctx, root)
+		}
+	}
 	if err != nil {
 		return safeError(err)
 	}
@@ -541,7 +825,7 @@ func (s *Store) writeRegistry(ctx context.Context, root *directory, registry con
 			file.Close()
 		}
 		if !errors.Is(err, syscall.ENOENT) {
-			return state("initial registry destination unexpectedly exists")
+			return initialRegistryRecoveryError("initial registry destination unexpectedly exists")
 		}
 	}
 	currentPending, err := verifyPending(ctx, root, name, data)
@@ -549,16 +833,52 @@ func (s *Store) writeRegistry(ctx context.Context, root *directory, registry con
 		return err
 	}
 	if !sameFile(pendingIdentity, currentPending) {
+		if expected == nil {
+			return initialRegistryRecoveryError("pending initial registry changed before publication")
+		}
 		return state("pending registry was replaced before publication")
 	}
-	if err := syscall.Renameat(int(root.file.Fd()), name, int(root.file.Fd()), "registry.json"); err != nil {
+	if expected == nil {
+		entry, sole, err := soleRootEntry(root)
+		if err != nil {
+			return initialRegistryRecoveryError("state root cannot be verified before initial registry publication")
+		}
+		if !sole || entry != name {
+			return initialRegistryRecoveryError("state root changed before initial registry publication")
+		}
+	}
+	if expected == nil {
+		if err := renameNoReplaceAt(root, name, "registry.json"); err != nil {
+			return initialRegistryRecoveryError("initial registry could not be atomically published")
+		}
+	} else if err := syscall.Renameat(int(root.file.Fd()), name, int(root.file.Fd()), "registry.json"); err != nil {
 		return state("registry could not be atomically published")
 	}
+	publishedIdentity, err := verifyPending(ctx, root, "registry.json", data)
+	if err != nil || !sameIdentity(currentPending, publishedIdentity) {
+		return uncertainRegistryPublication(expected == nil)
+	}
 	if err := s.checkpoint(ctx, "after-registry-rename"); err != nil {
-		return state("registry publication has uncertain durability; inspect the selected context before retrying")
+		return uncertainRegistryPublication(expected == nil)
+	}
+	if expected == nil {
+		entry, sole, err := soleRootEntry(root)
+		if err != nil || !sole || entry != "registry.json" {
+			return uncertainInitialRegistryRecovery()
+		}
 	}
 	if err := s.syncDirectory(ctx, root); err != nil {
-		return state("registry publication has uncertain durability; inspect the selected context before retrying")
+		return uncertainRegistryPublication(expected == nil)
+	}
+	if expected == nil {
+		entry, sole, err := soleRootEntry(root)
+		if err != nil || !sole || entry != "registry.json" {
+			return uncertainInitialRegistryRecovery()
+		}
+	}
+	finalIdentity, err := verifyPending(ctx, root, "registry.json", data)
+	if err != nil || !sameFile(publishedIdentity, finalIdentity) {
+		return uncertainRegistryPublication(expected == nil)
 	}
 	return nil
 }

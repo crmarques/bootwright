@@ -84,7 +84,8 @@ type Repository interface {
 	CheckInputDirectory(context.Context, string) error
 	View(context.Context) (Registry, error)
 	// Transact holds the root lock throughout the callback and commit. Roots
-	// exclude the state directory from every admitted input directory.
+	// exclude the state directory from every admitted input directory. Create is
+	// reserved for context init and permits exact initial-registry recovery.
 	Transact(context.Context, bool, []string, func(Transaction) error) error
 }
 
@@ -168,6 +169,10 @@ func (i Inputs) ReadInputs(ctx context.Context, name string) (desiredstate.Sourc
 }
 
 func StateError(message string) error { return desiredstate.NewFailure("context.state", message, "") }
+
+func StateErrorWithRemediation(message, remediation string) error {
+	return desiredstate.NewFailureWithRemediation("context.state", message, "", remediation)
+}
 
 func UnsafeDelete(message string) error {
 	return desiredstate.NewFailure("context.unsafe-delete", message, "")

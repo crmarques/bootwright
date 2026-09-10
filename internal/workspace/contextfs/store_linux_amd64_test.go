@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -87,6 +88,30 @@ func expectState(t *testing.T, err error) {
 	}
 }
 
+func expectMissingRegistry(t *testing.T, err error) {
+	t.Helper()
+	diagnostics := desiredstate.DiagnosticsOf(err)
+	if len(diagnostics) != 1 || diagnostics[0].Code != "context.state" || diagnostics[0].Message != missingRegistryMessage || diagnostics[0].Remediation != storeRecoveryRemediation {
+		t.Fatalf("unexpected missing-registry diagnostic: %#v", diagnostics)
+	}
+}
+
+func expectPendingRegistry(t *testing.T, err error) {
+	t.Helper()
+	diagnostics := desiredstate.DiagnosticsOf(err)
+	if len(diagnostics) != 1 || diagnostics[0].Code != "context.state" || diagnostics[0].Message != pendingRegistryMessage || diagnostics[0].Remediation != pendingRegistryRemediation {
+		t.Fatalf("unexpected pending-registry diagnostic: %#v", diagnostics)
+	}
+}
+
+func expectInconsistentEmptyRegistry(t *testing.T, err error) {
+	t.Helper()
+	diagnostics := desiredstate.DiagnosticsOf(err)
+	if len(diagnostics) != 1 || diagnostics[0].Code != "context.state" || diagnostics[0].Message != "registry.json is empty but the context store is not" || diagnostics[0].Remediation != storeRecoveryRemediation {
+		t.Fatalf("unexpected empty-registry diagnostic: %#v", diagnostics)
+	}
+}
+
 func writePrivate(t *testing.T, path string, data []byte) {
 	t.Helper()
 	if err := os.WriteFile(path, data, 0600); err != nil {
@@ -151,6 +176,433 @@ func TestMissingStoreAndInputPreflight(t *testing.T) {
 	}
 	if err := store.CheckInputDirectory(context.Background(), sources.Roots[0]); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestEmptyRootViewRemainsReadOnly(t *testing.T) {
+	store, _ := fixture(t)
+	if err := os.Mkdir(store.options.Root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	view, err := store.View(context.Background())
+	if err != nil || !reflect.DeepEqual(view, emptyRegistry()) {
+		t.Fatalf("empty root view: %#v %v", view, err)
+	}
+	entries, err := os.ReadDir(store.options.Root)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("empty root view changed state: %#v %v", entries, err)
+	}
+}
+
+func TestEmptyRegistryToleratesVerifiedUnpublishedRegistryStage(t *testing.T) {
+	store, _ := fixture(t)
+	checkpoints := 0
+	store.fail = func(point string) error {
+		if point == "before-registry-rename" {
+			checkpoints++
+			if checkpoints == 2 {
+				return errors.New("synthetic reservation publication interruption")
+			}
+		}
+		return nil
+	}
+	reserve := func() error {
+		return store.Transact(context.Background(), true, nil, func(tx contexts.Transaction) error {
+			_, err := tx.Reserve(context.Background(), "pending", "", contexts.DefaultConfiguration("pending").Canonical())
+			return err
+		})
+	}
+	expectState(t, reserve())
+	store.fail = nil
+	view, err := store.View(context.Background())
+	if err != nil || !reflect.DeepEqual(view, emptyRegistry()) {
+		t.Fatalf("unpublished registry stage changed the visible registry: %#v %v", view, err)
+	}
+	entries, err := os.ReadDir(store.options.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending := 0
+	for _, entry := range entries {
+		if pendingInitialRegistryName(entry.Name()) {
+			pending++
+		}
+	}
+	if pending != 1 {
+		t.Fatalf("interruption retained %d pending registries, want 1", pending)
+	}
+	if err := reserve(); err != nil {
+		t.Fatal(err)
+	}
+	view, err = store.View(context.Background())
+	if err != nil || len(view.Contexts) != 1 || view.Contexts[0].Mode != contexts.Initializing {
+		t.Fatalf("retry did not publish initialization intent: %#v %v", view, err)
+	}
+}
+
+func TestInterruptedInitialRegistryPublicationRecoversOnlyDuringCreate(t *testing.T) {
+	store, _ := fixture(t)
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, executable, "-test.run=^TestInitialRegistryCrashHelper$")
+	command.Env = append(os.Environ(), "BOOTWRIGHT_INITIAL_REGISTRY_TEST_ROOT="+store.options.Root)
+	output, err := command.CombinedOutput()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 78 {
+		t.Fatalf("initial registry crash helper: %v %s", err, output)
+	}
+
+	entries, err := os.ReadDir(store.options.Root)
+	if err != nil || len(entries) != 1 || !pendingInitialRegistryName(entries[0].Name()) {
+		t.Fatalf("unexpected interrupted initial state: %v %#v", err, entries)
+	}
+	pending := filepath.Join(store.options.Root, entries[0].Name())
+	before, err := os.ReadFile(pending)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.View(context.Background()); err == nil {
+		t.Fatal("read-only view accepted an unpublished initial registry")
+	} else {
+		expectPendingRegistry(t, err)
+	}
+	after, err := os.ReadFile(pending)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("read-only view changed the pending initial registry")
+	}
+	if _, err := os.Stat(filepath.Join(store.options.Root, "registry.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("read-only view published the initial registry")
+	}
+	callbackCalled := false
+	if err := store.Transact(context.Background(), false, nil, func(contexts.Transaction) error {
+		callbackCalled = true
+		return nil
+	}); err == nil {
+		t.Fatal("non-create transaction accepted an unpublished initial registry")
+	} else {
+		expectPendingRegistry(t, err)
+	}
+	if callbackCalled {
+		t.Fatal("non-create transaction callback ran before registry publication")
+	}
+	if _, err := os.Stat(filepath.Join(store.options.Root, "registry.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("non-create transaction published the initial registry")
+	}
+
+	callbackCalled = false
+	if err := store.Transact(context.Background(), true, nil, func(tx contexts.Transaction) error {
+		callbackCalled = true
+		registry := tx.Registry()
+		if !reflect.DeepEqual(registry, contexts.Registry{Version: 2, Identities: []contexts.Identity{}, Contexts: []contexts.Record{}}) {
+			t.Fatalf("recovered registry is not empty and canonical: %#v", registry)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !callbackCalled {
+		t.Fatal("create transaction did not continue after initial registry recovery")
+	}
+	view, err := store.View(context.Background())
+	if err != nil || !reflect.DeepEqual(view, emptyRegistry()) {
+		t.Fatalf("recovered registry cannot be read: %#v %v", view, err)
+	}
+	entries, err = os.ReadDir(store.options.Root)
+	if err != nil || len(entries) != 1 || entries[0].Name() != "registry.json" {
+		t.Fatalf("pending initial registry was not atomically consumed: %v %#v", err, entries)
+	}
+}
+
+func TestInitialRegistryCrashHelper(t *testing.T) {
+	root := os.Getenv("BOOTWRIGHT_INITIAL_REGISTRY_TEST_ROOT")
+	if root == "" {
+		t.Skip("subprocess helper")
+	}
+	store := New(testOptions(root))
+	store.fail = func(point string) error {
+		if point == "before-registry-rename" {
+			os.Exit(78)
+		}
+		return nil
+	}
+	if err := store.Transact(context.Background(), true, nil, func(contexts.Transaction) error {
+		t.Fatal("initial transaction callback ran before registry publication")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Fatal("initial registry crash checkpoint was not reached")
+}
+
+type rootEntrySnapshot struct {
+	name       string
+	mode       uint32
+	device     uint64
+	inode      uint64
+	links      uint64
+	size       int64
+	modified   syscall.Timespec
+	changed    syscall.Timespec
+	linkTarget string
+	data       []byte
+}
+
+func snapshotRootEntries(t *testing.T, root string) []rootEntrySnapshot {
+	t.Helper()
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := make([]rootEntrySnapshot, 0, len(entries))
+	for _, entry := range entries {
+		path := filepath.Join(root, entry.Name())
+		info, err := os.Lstat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stat, ok := info.Sys().(*syscall.Stat_t)
+		if !ok {
+			t.Fatal("state entry has no syscall identity")
+		}
+		snapshot := rootEntrySnapshot{name: entry.Name(), mode: stat.Mode, device: uint64(stat.Dev), inode: stat.Ino, links: uint64(stat.Nlink), size: stat.Size, modified: stat.Mtim, changed: stat.Ctim}
+		if info.Mode().IsRegular() {
+			snapshot.data, err = os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			snapshot.linkTarget, err = os.Readlink(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		result = append(result, snapshot)
+	}
+	return result
+}
+
+func TestInitialRegistryRecoveryRefusesUnknownOrUnsafeState(t *testing.T) {
+	const pending = "pending-00000000000000000000000000000000.json"
+	for _, kind := range []string{"unrelated", "wrong-name", "partial", "noncanonical", "extra", "multiple", "mode", "hardlink", "symlink", "fifo", "directory"} {
+		t.Run(kind, func(t *testing.T) {
+			store, _ := fixture(t)
+			if err := os.Mkdir(store.options.Root, 0700); err != nil {
+				t.Fatal(err)
+			}
+			canonical, err := encodeRecord(emptyRegistry(), maxRegistry)
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(store.options.Root, pending)
+			switch kind {
+			case "unrelated":
+				writePrivate(t, filepath.Join(store.options.Root, "legacy-state"), []byte("retained\n"))
+			case "wrong-name":
+				writePrivate(t, filepath.Join(store.options.Root, strings.TrimSuffix(pending, ".json")), canonical)
+			case "partial":
+				writePrivate(t, path, canonical[:len(canonical)/2])
+			case "noncanonical":
+				writePrivate(t, path, []byte("{\"version\":2, \"identities\":[],\"contexts\":[]}\n"))
+			case "extra":
+				writePrivate(t, path, canonical)
+				writePrivate(t, filepath.Join(store.options.Root, "retained"), []byte("retained\n"))
+			case "multiple":
+				writePrivate(t, path, canonical)
+				writePrivate(t, filepath.Join(store.options.Root, "pending-11111111111111111111111111111111.json"), canonical)
+			case "mode":
+				writePrivate(t, path, canonical)
+				if err := os.Chmod(path, 0644); err != nil {
+					t.Fatal(err)
+				}
+			case "hardlink":
+				writePrivate(t, path, canonical)
+				if err := os.Link(path, filepath.Join(filepath.Dir(store.options.Root), "retained-link")); err != nil {
+					t.Fatal(err)
+				}
+			case "symlink":
+				target := filepath.Join(filepath.Dir(store.options.Root), "retained-target")
+				writePrivate(t, target, canonical)
+				if err := os.Symlink(target, path); err != nil {
+					t.Fatal(err)
+				}
+			case "fifo":
+				if err := syscall.Mkfifo(path, 0600); err != nil {
+					t.Fatal(err)
+				}
+			case "directory":
+				if err := os.Mkdir(path, 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			before := snapshotRootEntries(t, store.options.Root)
+			callbackCalled := false
+			err = store.Transact(context.Background(), true, nil, func(contexts.Transaction) error {
+				callbackCalled = true
+				return nil
+			})
+			expectMissingRegistry(t, err)
+			if callbackCalled {
+				t.Fatal("create callback reached unknown or unsafe state")
+			}
+			after := snapshotRootEntries(t, store.options.Root)
+			if !reflect.DeepEqual(before, after) {
+				t.Fatalf("refusal changed unknown or unsafe state:\nbefore: %#v\nafter:  %#v", before, after)
+			}
+			if _, err := os.Stat(filepath.Join(store.options.Root, "registry.json")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatal("refusal published a registry")
+			}
+		})
+	}
+}
+
+func TestInitialRegistryRecoveryRejectsCandidateSubstitution(t *testing.T) {
+	store, _ := fixture(t)
+	if err := store.Transact(context.Background(), true, nil, func(contexts.Transaction) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	registry := filepath.Join(store.options.Root, "registry.json")
+	data, err := os.ReadFile(registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending := filepath.Join(store.options.Root, "pending-00000000000000000000000000000000.json")
+	if err := os.Rename(registry, pending); err != nil {
+		t.Fatal(err)
+	}
+	store.fail = func(point string) error {
+		if point != "before-initial-registry-recovery" {
+			return nil
+		}
+		if err := os.Remove(pending); err != nil {
+			return err
+		}
+		return os.WriteFile(pending, data, 0600)
+	}
+	callbackCalled := false
+	err = store.Transact(context.Background(), true, nil, func(contexts.Transaction) error {
+		callbackCalled = true
+		return nil
+	})
+	expectState(t, err)
+	if callbackCalled {
+		t.Fatal("create callback ran after pending registry substitution")
+	}
+	if _, err := os.Stat(registry); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("substituted pending registry was published")
+	}
+}
+
+func TestInitialRegistryRecoveryReportsUncertainDurability(t *testing.T) {
+	store, _ := fixture(t)
+	if err := os.Mkdir(store.options.Root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	want, err := encodeRecord(emptyRegistry(), maxRegistry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending := filepath.Join(store.options.Root, "pending-00000000000000000000000000000000.json")
+	writePrivate(t, pending, want)
+	store.fail = func(point string) error {
+		if point == "after-initial-registry-recovery" {
+			return errors.New("synthetic post-rename interruption")
+		}
+		return nil
+	}
+	callbackCalled := false
+	err = store.Transact(context.Background(), true, nil, func(contexts.Transaction) error {
+		callbackCalled = true
+		return nil
+	})
+	diagnostics := desiredstate.DiagnosticsOf(err)
+	if len(diagnostics) != 1 || diagnostics[0].Message != "context initialization may have completed" || diagnostics[0].Remediation != pendingRegistryRemediation {
+		t.Fatalf("unexpected uncertain-recovery diagnostic: %#v", diagnostics)
+	}
+	if callbackCalled {
+		t.Fatal("create callback ran after uncertain initial registry recovery")
+	}
+	registry := filepath.Join(store.options.Root, "registry.json")
+	got, err := os.ReadFile(registry)
+	if err != nil || !bytes.Equal(got, want) {
+		t.Fatalf("published initial registry is not inspectable after uncertainty: %v %q", err, got)
+	}
+	if _, err := os.Stat(pending); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("published initial registry retained its pending name")
+	}
+
+	store.fail = nil
+	if err := store.Transact(context.Background(), true, nil, func(contexts.Transaction) error {
+		callbackCalled = true
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !callbackCalled {
+		t.Fatal("retry did not inspect the published registry and continue")
+	}
+}
+
+func TestInitialRegistryRecoveryRejectsPostRenameRootChange(t *testing.T) {
+	store, _ := fixture(t)
+	if err := os.Mkdir(store.options.Root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	want, err := encodeRecord(emptyRegistry(), maxRegistry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending := filepath.Join(store.options.Root, "pending-00000000000000000000000000000000.json")
+	writePrivate(t, pending, want)
+	store.fail = func(point string) error {
+		if point == "after-initial-registry-recovery" {
+			writePrivate(t, filepath.Join(store.options.Root, "unexpected"), []byte("retain\n"))
+		}
+		return nil
+	}
+	callbackCalled := false
+	err = store.Transact(context.Background(), true, nil, func(contexts.Transaction) error {
+		callbackCalled = true
+		return nil
+	})
+	diagnostics := desiredstate.DiagnosticsOf(err)
+	if len(diagnostics) != 1 || diagnostics[0].Message != "context initialization may have completed" || diagnostics[0].Remediation != pendingRegistryRemediation {
+		t.Fatalf("unexpected changed-root diagnostic: %#v", diagnostics)
+	}
+	if callbackCalled {
+		t.Fatal("create callback ran after the recovered root changed")
+	}
+	if data, readErr := os.ReadFile(filepath.Join(store.options.Root, "registry.json")); readErr != nil || !bytes.Equal(data, want) {
+		t.Fatalf("published registry was not preserved: %v %q", readErr, data)
+	}
+	store.fail = nil
+	callbackCalled = false
+	if _, err := store.View(context.Background()); err == nil {
+		t.Fatal("read-only view accepted the changed recovered root")
+	} else {
+		expectInconsistentEmptyRegistry(t, err)
+	}
+	if _, err := store.ReadInputs(context.Background(), "test", ""); err == nil {
+		t.Fatal("input reader accepted the changed recovered root")
+	} else {
+		expectInconsistentEmptyRegistry(t, err)
+	}
+	if _, err := store.SecretContext(context.Background(), "test"); err == nil {
+		t.Fatal("secret reader accepted the changed recovered root")
+	} else {
+		expectInconsistentEmptyRegistry(t, err)
+	}
+	err = store.Transact(context.Background(), true, nil, func(contexts.Transaction) error {
+		callbackCalled = true
+		return nil
+	})
+	expectInconsistentEmptyRegistry(t, err)
+	if callbackCalled {
+		t.Fatal("retry callback ran with unexpected state beside the empty registry")
 	}
 }
 

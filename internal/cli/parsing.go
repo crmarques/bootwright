@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -37,6 +36,32 @@ type invocation struct {
 	helpTarget *cobra.Command
 }
 
+type resolutionError string
+
+const (
+	separatorNotAccepted    resolutionError = "separator is not accepted"
+	flagNotAccepted         resolutionError = "flag is not accepted at this position"
+	flagValueMissing        resolutionError = "flag value is missing"
+	unknownCommand          resolutionError = "unknown command"
+	localFlagNotInherited   resolutionError = "flag does not apply to the selected subcommand"
+	commandResolutionFailed resolutionError = "command resolution failed"
+	unknownHelpCommand      resolutionError = "unknown help command"
+)
+
+func (e resolutionError) Error() string { return string(e) }
+
+func trustedResolutionMessage(err error) string {
+	resolution, ok := err.(resolutionError)
+	if ok {
+		switch resolution {
+		case separatorNotAccepted, flagNotAccepted, flagValueMissing, unknownCommand,
+			localFlagNotInherited, commandResolutionFailed, unknownHelpCommand:
+			return resolution.Error()
+		}
+	}
+	return "invalid command or flag syntax"
+}
+
 type localFlagOccurrence struct {
 	owner      *cobra.Command
 	start, end int
@@ -49,7 +74,7 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 	operands := false
 	pathComplete := false
 	helpCommand := false
-	failure := func(remaining []string, message string) (invocation, error) {
+	failure := func(remaining []string, reason resolutionError) (invocation, error) {
 		arguments := append([]string(nil), forwarded...)
 		for i := len(localFlags) - 1; i >= 0; i-- {
 			occurrence := localFlags[i]
@@ -57,13 +82,13 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 				arguments = append(arguments[:occurrence.start], arguments[occurrence.end:]...)
 			}
 		}
-		return invocation{command: current, arguments: append(arguments, remaining...)}, errors.New(message)
+		return invocation{command: current, arguments: append(arguments, remaining...)}, reason
 	}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
 			if !hasPayload(current) || helpCommand {
-				return failure(args[i:], "separator is not accepted")
+				return failure(args[i:], separatorNotAccepted)
 			}
 			forwarded = append(forwarded, args[i:]...)
 			break
@@ -71,13 +96,13 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 		if strings.HasPrefix(arg, "-") && arg != "-" && !operands {
 			flag, attached := tokenFlag(root, current, arg)
 			if flag == nil {
-				return failure(args[i:], "flag is not accepted at this position")
+				return failure(args[i:], flagNotAccepted)
 			}
 			start := len(forwarded)
 			forwarded = append(forwarded, arg)
 			if flag.NoOptDefVal == "" && !attached {
 				if i+1 == len(args) {
-					return failure(nil, "flag value is missing")
+					return failure(nil, flagValueMissing)
 				}
 				i++
 				forwarded = append(forwarded, args[i])
@@ -99,7 +124,7 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 				continue
 			}
 			if !current.Runnable() {
-				return failure(args[i:], "unknown command")
+				return failure(args[i:], unknownCommand)
 			}
 		}
 		forwarded = append(forwarded, arg)
@@ -110,12 +135,12 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 	}
 	for _, occurrence := range localFlags {
 		if occurrence.owner != current {
-			return failure(nil, "local flag is not inherited")
+			return failure(nil, localFlagNotInherited)
 		}
 	}
 	command, remaining, err := root.Find(path)
 	if err != nil || len(remaining) != 0 || command != current {
-		return failure(nil, "command resolution failed")
+		return failure(nil, commandResolutionFailed)
 	}
 	result := invocation{command: command, arguments: forwarded}
 	if helpCommand {
@@ -123,7 +148,7 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 		for _, token := range helpPath {
 			target = exactChild(target, token)
 			if target == nil || target.Hidden {
-				return failure(nil, "unknown help command")
+				return failure(nil, unknownHelpCommand)
 			}
 		}
 		result.helpTarget = target

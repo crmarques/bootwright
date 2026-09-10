@@ -146,6 +146,32 @@ func TestCompleteContextJourney(t *testing.T) {
 	}
 }
 
+func TestMissingContextRegistryExplainsSafeRecovery(t *testing.T) {
+	services, _, _, root := contextFixture(t)
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	retained := filepath.Join(root, "retained-state")
+	if err := os.WriteFile(retained, []byte("retain\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	before := stateFingerprint(t, root)
+	want := "[FAIL] context.state: context store is missing registry.json; next: restore the whole store from a matching backup or move it aside if disposable, then retry\n"
+	for _, args := range [][]string{
+		{"context", "list"},
+		{"context", "delete", "--name", "test", "--purge"},
+		{"context", "init", "--name", "test"},
+	} {
+		out, stderr := contextRun(t, services, 1, args...)
+		if out != "" || stderr != want {
+			t.Fatalf("%v: stdout=%q stderr=%q", args, out, stderr)
+		}
+		if !sameFingerprints(before, stateFingerprint(t, root)) {
+			t.Fatalf("%v changed unrecognized state", args)
+		}
+	}
+}
+
 func TestContextInitWithoutInputCreatesSelectableEncryptedContext(t *testing.T) {
 	services, repository, input, root := contextFixture(t)
 	out, stderr := contextRun(t, services, 0, "context", "init", "--name", "test")

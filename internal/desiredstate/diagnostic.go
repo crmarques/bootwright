@@ -35,7 +35,11 @@ type Failure struct {
 func (f *Failure) Error() string { return "desired-state admission failed" }
 
 func NewFailure(code, message, path string) error {
-	d := Diagnostic{Severity: "error", Code: code, Message: message}
+	return NewFailureWithRemediation(code, message, path, "")
+}
+
+func NewFailureWithRemediation(code, message, path, remediation string) error {
+	d := Diagnostic{Severity: "error", Code: code, Message: message, Remediation: remediation}
 	if path != "" {
 		d.Source = &SourceLocation{Path: path}
 	}

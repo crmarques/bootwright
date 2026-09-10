@@ -134,7 +134,7 @@ func writeHumanDiagnostics(out io.Writer, diagnostics []diagnostic) error {
 			message += " (" + d.Field + ")"
 		}
 		if d.Remediation != "" {
-			message += "; " + d.Remediation
+			message += "; next: " + d.Remediation
 		}
 		if _, err := fmt.Fprintf(out, "[%s] %s%s: %s\n", status, d.Code, location, message); err != nil {
 			return err

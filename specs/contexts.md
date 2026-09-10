@@ -195,7 +195,20 @@ Bounds apply before allocation/traversal: registry 8 MiB and 4096 identities or
 names; manifest 4 MiB and 32 MiB aggregate referenced manifests; paths 4096
 bytes; mutation records 64 KiB; 4096 revisions per context. Input and Secrets
 limits additionally bound their trees. Missing registry in a nonempty root is
-corruption. Bounds never authorize evidence deletion to make room.
+corruption, except that explicit init may finish publication when the root's
+only entry is one private `pending-<32 lowercase hexadecimal digits>.json` file
+whose bytes are exactly the canonical empty version-2 registry. Recovery holds
+the exclusive root lock, revalidates the file and sole-entry layout, publishes
+with a no-replace rename, verifies the result, and syncs the root before
+proceeding. Inspection never performs this recovery; it directs the user to
+repeat context init with the original options. Every other missing-registry
+shape is left unchanged and reports that the complete store must be restored
+from a matching backup or moved aside only after it is verified disposable.
+A published empty registry permits only its own file and verified private,
+bounded `pending-<32 lowercase hexadecimal digits>.json` files from interrupted
+registry replacement; those files are ignored, never adopted. Any other entry
+refuses with the same complete-store guidance. Bounds never authorize evidence
+deletion to make room.
 
 ## Permanent deletion
 

@@ -136,7 +136,7 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 	resolved, err := resolveInvocation(root, args)
 	if err != nil {
 		path := strings.TrimSpace(strings.TrimPrefix(resolved.command.CommandPath(), "bootwright"))
-		return r.failure(resolved.command, path, "cli.usage", "invalid command or flag syntax", 2, syntaxJSON(resolved.command, resolved.arguments))
+		return r.failure(resolved.command, path, "cli.usage", trustedResolutionMessage(err), 2, syntaxJSON(resolved.command, resolved.arguments))
 	}
 	command := resolved.command
 	path := strings.TrimPrefix(command.CommandPath(), "bootwright")

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/crmarques/bootwright/internal/desiredstate"
 )
 
 func TestFailureRepresentations(t *testing.T) {
@@ -20,6 +22,44 @@ func TestFailureRepresentations(t *testing.T) {
 				t.Fatalf("JSON output = %q, stderr = %q", out.String(), errOut.String())
 			}
 		} else if out.Len() != 0 || errOut.String() != "[FAIL] cli.not-implemented: bootwright validate is not implemented\n" {
+			t.Fatalf("human output = %q, stderr = %q", out.String(), errOut.String())
+		}
+	}
+}
+
+func TestDiagnosticRemediationRepresentations(t *testing.T) {
+	diagnostics := []diagnostic{{
+		Severity: "error",
+		Code:     "api.required",
+		Message:  "metadata.name is required",
+		Source: &desiredstate.SourceLocation{
+			Path:     "input.yaml",
+			Document: 1,
+			Line:     4,
+			Column:   3,
+		},
+		Object: &desiredstate.ObjectIdentity{
+			APIVersion: "bootwright.io/v1alpha1",
+			Kind:       "NetworkConfig",
+			Name:       "management",
+		},
+		Field:       "$.metadata.name",
+		Remediation: "set metadata.name to a unique DNS label",
+	}}
+	for _, jsonMode := range []bool{false, true} {
+		var out, errOut bytes.Buffer
+		if err := writeDiagnostics(&out, &errOut, "validate", diagnostics, 1, jsonMode); err != nil {
+			t.Fatal(err)
+		}
+		if jsonMode {
+			want := "{\"schemaVersion\":\"v1alpha1\",\"command\":\"validate\",\"ok\":false,\"exitCode\":1,\"result\":null,\"diagnostics\":[{\"severity\":\"error\",\"code\":\"api.required\",\"message\":\"metadata.name is required\",\"source\":{\"path\":\"input.yaml\",\"document\":1,\"line\":4,\"column\":3},\"object\":{\"apiVersion\":\"bootwright.io/v1alpha1\",\"kind\":\"NetworkConfig\",\"name\":\"management\"},\"field\":\"$.metadata.name\",\"remediation\":\"set metadata.name to a unique DNS label\"}],\"logs\":[]}\n"
+			if out.String() != want || errOut.Len() != 0 {
+				t.Fatalf("JSON output = %q, stderr = %q", out.String(), errOut.String())
+			}
+			continue
+		}
+		want := "[FAIL] api.required input.yaml:4:3: metadata.name is required [NetworkConfig/management] ($.metadata.name); next: set metadata.name to a unique DNS label\n"
+		if out.Len() != 0 || errOut.String() != want {
 			t.Fatalf("human output = %q, stderr = %q", out.String(), errOut.String())
 		}
 	}

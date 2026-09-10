@@ -66,6 +66,52 @@ func TestHelpPrecedenceAndClosedSyntax(t *testing.T) {
 	}
 }
 
+func TestResolutionFailuresExplainOnlyTrustedReasons(t *testing.T) {
+	const privateArgument = "do-not-display-private-argument"
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"separator", []string{"version", "--", privateArgument}, "separator is not accepted"},
+		{"flag-position", []string{"version", "--" + privateArgument}, "flag is not accepted at this position"},
+		{"missing-value", []string{"context", "init", "--name"}, "flag value is missing"},
+		{"command", []string{privateArgument}, "unknown command"},
+		{"flag-owner", []string{"render", "--output", "text", "effective"}, "flag does not apply to the selected subcommand"},
+		{"help-command", []string{"help", privateArgument}, "unknown help command"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			code, out, errOut, record := runRecorded(test.args)
+			if code != 2 || out != "" || record.calls != 0 || !strings.HasPrefix(errOut, "[FAIL] cli.usage: "+test.want+"\n") {
+				t.Fatalf("code=%d out=%q stderr=%q calls=%d", code, out, errOut, record.calls)
+			}
+			if strings.Contains(errOut, privateArgument) {
+				t.Fatalf("resolution diagnostic exposed argv: %q", errOut)
+			}
+		})
+	}
+	for _, reason := range []resolutionError{
+		separatorNotAccepted,
+		flagNotAccepted,
+		flagValueMissing,
+		unknownCommand,
+		localFlagNotInherited,
+		commandResolutionFailed,
+		unknownHelpCommand,
+	} {
+		if got := trustedResolutionMessage(reason); got != reason.Error() {
+			t.Fatalf("trusted resolution reason changed: got %q, want %q", got, reason)
+		}
+	}
+
+	for _, err := range []error{errors.New(privateArgument), resolutionError(privateArgument)} {
+		if got := trustedResolutionMessage(err); got != "invalid command or flag syntax" {
+			t.Fatalf("untrusted resolution error became diagnostic: %q", got)
+		}
+	}
+}
+
 func TestJSONUsageUsesFinalOutputAndScalarValues(t *testing.T) {
 	cases := []struct {
 		args  []string
@@ -108,6 +154,21 @@ func TestJSONUsageUsesFinalOutputAndScalarValues(t *testing.T) {
 				t.Fatalf("human usage: out=%q err=%q", out, errOut)
 			}
 		})
+	}
+}
+
+func TestRawFlagParseFailureRemainsPrivate(t *testing.T) {
+	const privateValue = "do-not-display-private-value"
+	code, out, errOut, record := runRecorded([]string{"machine", "list", "--silent=" + privateValue, "--output", "json"})
+	var envelope commandEnvelope
+	if err := json.Unmarshal([]byte(out), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if code != 2 || errOut != "" || record.calls != 0 || len(envelope.Diagnostics) != 1 || envelope.Diagnostics[0].Message != "invalid flag syntax or value" {
+		t.Fatalf("code=%d out=%q stderr=%q calls=%d", code, out, errOut, record.calls)
+	}
+	if strings.Contains(out, privateValue) {
+		t.Fatalf("flag parser detail escaped into diagnostic: %q", out)
 	}
 }
 

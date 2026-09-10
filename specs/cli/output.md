@@ -59,15 +59,17 @@ group membership, order, safe target identity, and next action remain stable.
 Human diagnostics have one of these forms:
 
 ```text
-[<STATUS>] <code> <source>:<line>:<column>: <message>
-[<STATUS>] <code>: <message>
+[<STATUS>] <code> <source>:<line>:<column>: <message>[ <object>][ <field>][; next: <safe action>]
+[<STATUS>] <code>: <message>[ <object>][ <field>][; next: <safe action>]
 ```
 
-Optional source coordinates are included only when known. Text is single-line,
+Optional source coordinates are included only when known. An object is rendered
+as `[<kind>/<name>]` and a field as `(<field>)`. Text is single-line,
 deterministically escaped, and contains neither a secret nor an untrusted
-terminal sequence. A refusal names the object or block, observed or missing
-evidence, safety reason, and exact safe next action. It never invents a force
-command.
+terminal sequence. When remediation is available, the labeled `next:` clause
+states the shortest exact safe action. A refusal names the object or block,
+observed or missing evidence, safety reason, and exact safe next action. It
+never invents a force command.
 
 ## JSON output
 
