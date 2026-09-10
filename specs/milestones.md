@@ -1,14 +1,17 @@
 # Milestones
 
-**Current milestone: M1c — completed.** Desired-state
-admission for all 26 API kinds, durable contexts, context-backed validation and
-public `render effective` are implemented. M1a's catalog, help, version,
-completion and unavailable-command guarantees remain in force. M1c is specified
-in [Secrets](secrets.md).
+**Current milestone: M1d — bastion setup. Delivery: not started.**
+The implementation plan below targets RHEL 9 and Fedora; exact release and
+dependency qualification remains required before implementation promotion.
+M1a–M1c are completed: admission for all 26 API kinds, durable contexts,
+context-backed validation, public `render effective` and context Secret
+management are implemented. Existing unavailable-command guarantees remain
+in force. This milestone update defines work; it enables no runtime behavior.
 
 This file owns delivery scope and deferred work. Product specs describe target
-behavior; they do not claim availability. Keep detailed implementation plans
-close to the task that will execute them, rather than pre-designing later work.
+behavior; they do not claim availability. The current milestone includes its
+bounded implementation plan; later work retains only the definitions,
+dependencies and exit evidence needed to preserve its scope.
 
 ## Scope rules
 
@@ -221,8 +224,8 @@ Delivered evidence:
 
 **Owners:** Desired state, Environment, Infrastructure services, Machine,
 Managed OS and Container cluster. **Definition:** Specified.
-**Delivery:** Completed. This authorized admission update retains M1c as the
-current milestone and keeps `bootwright.io/v1alpha1`.
+**Delivery:** Completed. At delivery, this admission update retained M1c as
+the current milestone and kept `bootwright.io/v1alpha1`.
 
 Replace the former shared-service union and Environment catalogs with the six
 [infrastructure service kinds](api/infrastructure-services.md), taking the
@@ -242,14 +245,14 @@ Machines share the host-level choice, with profile fallback for the latter;
 downstream-installed nodes continue to use cluster installation policy.
 Admission checks declared locality without probing the running host. Runtime
 host binding, controller protection and local service execution remain future
-work under C16 and M1d below.
+work under M1d (controller setup/binding) and M1e (service execution) below.
 
 Update schemas, strict admission, normalization, graph retention, effective
 encoding, examples and context-backed validation together. Old kinds and
 fields refuse; there is no alias, input-conversion command, silent frozen-input
 rewrite or new runtime capability. The historical counts and evidence above
 record the earlier 21-kind deliveries and are not the revised catalog's counts.
-M1d and all later native rendering or platform lifecycle work remain deferred.
+M1e and all later native rendering or platform lifecycle work remain deferred.
 
 Delivered evidence:
 
@@ -285,7 +288,7 @@ Implement the complete `secret` tree through the immutable implementation
 catalog and semantic store sessions in [Secrets](secrets.md), with one production
 implementation, `local-keyring`. Qualify a test-only session-unlock implementation
 without changing core command or binding logic. No platform, entitlement or
-lifecycle effects; M1d owns the future lifecycle consumer port.
+lifecycle effects; M1e owns the future lifecycle consumer port.
 
 Exit evidence:
 
@@ -306,7 +309,7 @@ Delivered evidence:
 - All nine secret routes are composed through the immutable implementation
   catalog. The [shared conformance journey](../cmd/bootwright/secrets_conformance_test.go)
   exercises local-keyring and a test-only session-unlock implementation through
-  the same core services. Desired-state Secret schemas remain unchanged; M1d
+  the same core services. Desired-state Secret schemas remain unchanged; M1e
   and every platform, entitlement and lifecycle effect remain unavailable.
 - [Command journeys](../cmd/bootwright/secrets_test.go) and
   [disclosure checks](../cmd/bootwright/secrets_disclosure_test.go) cover current
@@ -350,7 +353,8 @@ cancellation, unchanged-selection and descriptor-flag assertions. Both
 `TestTerminalFlagsAreRestoredAfterReadyAndEmptyReads` pass in the complete normal
 and race gates. Neither real-terminal test was skipped; no device permissions
 were changed.
-M1c remains current and completed; M1d is not promoted and stays unavailable.
+M1c delivery is completed. M1d now owns the next setup delivery; M1e remains
+deferred. Setup and lifecycle commands stay unavailable until implemented.
 
 ### Direct root context storage
 
@@ -408,11 +412,145 @@ Real-store migration and power-loss qualification were not performed. A source
 without conversion headroom safely refuses; complete-store restore and bounded
 lifetime secret-ID allocation remain C14/C15 outcomes below.
 
-## M1d — managed artifact-server apply
+## M1d — bastion setup
+
+**Owners:** Controller (prerequisites, local adapters and verified host evidence),
+Workspace (shared setup state and context binding), using Machine, Desired
+state and the existing invocation boundary. **Requires:** M1c.
+**Definition:** Needs definition for the exact qualified releases/locks and
+durable identity formats in S1/S2 below. Behavioral scope is defined in
+[Controller](controller.md). **Delivery:** not started.
+
+Deliver `bastion setup`, `bastion setup --dry-run`, and `preflight bastion`
+for **both RHEL 9 and Fedora on Linux/amd64**. Neither distribution is an
+optional follow-up. Setup prepares the provided local OS for Bootwright:
+verified baseline execution dependencies, optional declared container runtime,
+and an explicit context's controller binding. It does not install the OS,
+start managed services or enable plan/apply/destroy. This promotes C16's setup
+and binding scope; service-specific shared-host ownership remains with M1e.
+
+Without explicit `--context`, prepare or inspect the baseline before context
+creation/import and ignore the current-context marker. With an explicit
+context, use its admitted controller intent, egress and required capabilities.
+The [command journeys](controller.md#selection-and-command-journeys) own exact
+selection, dry-run, preflight, confirmation, no-op and effect boundaries.
+Required shared prerequisites are the qualified isolated Python/Ansible
+bundle and, only when declared for the controller, the qualified Podman runtime.
+Future platform clients and service-adapter dependencies remain consumer-owned.
+
+Implementation order:
+
+1. **S1 — qualify both host and dependency matrices.** Record an exact RHEL 9
+   minor release and Fedora release, architecture, tested kernel/filesystems,
+   sudo/package-manager interfaces, approved repository identities, complete
+   package builds, Python/Ansible bundle, Podman variant, digests, publisher
+   trust, acquisition limits and available real-host fixtures. Compare native
+   package and isolated-bundle mechanisms under the dependency selection rule;
+   use their standard lock formats. Qualify package hooks and solver behavior,
+   including refusal of upgrades/removals and changes to protected dependencies.
+   Record the supported matrix in Controller and locks with their owning
+   implementation. Do not infer a tested release or use floating versions.
+2. **S2 — close host identity and durable recovery definitions.** Specify and
+   qualify the installed-host evidence provider for both distributions,
+   ordinary reboot continuity, clone/namespace/copy refusal and same-host
+   verification. Freeze the canonical versioned shared receipt, per-context
+   binding and root-layout compatibility, bounds, lock order, mutation-guard
+   integration, publication commit points and crash/retry rules in
+   [Contexts](contexts.md#controller-relationship-and-host-binding).
+   Explicit baseline setup must bootstrap a valid empty registry before any
+   shared controller files. Context inspection/deletion must recognize and
+   preserve host state, and pending setup must protect its referenced input.
+   S1/S2 close the definition gate before effect implementation begins.
+3. **S3 — implement pure selection and capability contracts.** Extend
+   `controller/prerequisites` with immutable requests/results and consuming
+   ports for host inspection, dependency catalog/selection, local package
+   transactions, acquisition and publication. Define typed failures,
+   cancellation and complete postcondition evidence. Reuse Workspace input and
+   invocation services through their published interfaces. Cover baseline vs
+   explicit context, optional runtime, unsupported routes and bootstrap cycles,
+   deterministic dependency order, dry-run unknowns and no-effect refusals.
+4. **S4 — implement Workspace binding and shared setup state.** Add versioned
+   storage and guarded publication under the fixed root, context-free store
+   bootstrap, cross-context serialization and binding mismatch refusal.
+   Protect pending input/recovery and all shared bundles through context update
+   and purge. Test old-store compatibility, interruption at every commit point,
+   non-adoption of unrelated files, no-op reads, bounds and process death.
+5. **S5 — implement qualified local adapters.** Build the RHEL 9 and Fedora
+   adapters against the same request/result/failure contract, selecting each
+   implementation only at composition. Implement bounded trusted acquisition,
+   complete transaction inspection, additive installation, immutable bundle
+   publication and exact readiness probes. Implement cancellation/reaping,
+   unknown-outcome resolution and explicit retry; test native installer locks
+   and children surviving parent death. No lifecycle adapter or managed remote
+   interaction is introduced by this step.
+6. **S6 — expose complete CLI journeys.** Wire only the two Controller routes,
+   reuse ordinary confirmation and verified sudo, and render ordered text plans,
+   readiness, partial progress and safe recovery guidance. Update help and
+   catalog tests for the explicit-context exception, dry-run privilege boundary,
+   unsupported host/dependency diagnostics and stable streams/exit status.
+   Setup and preflight create no lifecycle identity or lifecycle receipt/log;
+   setup retains its separate private recovery receipt.
+7. **S7 — qualify and deliver both targets.** Run the exit evidence below on
+   the integrated tree, record exact tested matrices and results, and update
+   delivery status only when both distributions pass. M1e remains unavailable
+   and needs its own explicit implementation authorization.
+
+S1's two distribution investigations can run in parallel. S2 can draft state
+semantics alongside them but must use the qualified identity evidence. After
+S3 fixes the shared contracts, S4 and independent distribution adapters can be
+implemented concurrently with disjoint ownership and isolated test machines.
+S6 integration and S7 acceptance follow those prerequisites. Never run parallel
+host mutations against the same machine or shared store.
+
+Exit evidence, required before claiming M1d complete:
+
+- Exact supported RHEL 9 and Fedora releases and complete dependency closures
+  are locked, authenticity/integrity verified, and accepted on real isolated
+  hosts. Include clean setup, pre-existing compatible dependencies, additive
+  installation and unchanged rerun on each target. Unsupported releases and
+  package transactions refuse before installation.
+- Complete context-free setup/preflight before any context exists; empty and
+  imported contexts; explicit controller selection; no implicit current-context
+  reads; optional `container-runtime`; first binding, same-host retry/reboot and
+  wrong-host refusal. The full synthetic admitted graph does not activate any
+  cluster/service effects merely because setup reads its controller intent.
+- Dry-run and preflight effect sentinels prove their exact boundaries, including
+  no Secret material or managed endpoint access. Check direct and qualified
+  external-proxy routing, absent dependencies, unsupported authenticated/private
+  trust or managed proxies, bootstrap cycles and refusal without route fallback.
+- Confirmation, `--yes`, decline, noninteractive refusal, verified no-op,
+  privilege failure, output failure and interrupts preserve ordered text and
+  correct exit status. All other unavailable commands retain M1a's no-effect
+  gate; imported-input validation and secret journeys retain M1b/M1c behavior.
+- Multi-context contention, protected shared prerequisites, package locks,
+  unsafe root/file/path substitution, changed bundle/dependency identities,
+  input update/purge during pending setup, root bootstrap, interrupted binding
+  and every setup publication checkpoint have failure-injection coverage.
+  Prove exact retry or safe refusal after OS process death, surviving children,
+  partial package success, unknown outcomes and uncertain durable publication.
+- Final `make check`, `make build`, `./scripts/go test -race ./...`, both module
+  tidy/verification checks and `git diff --check` pass. Run all qualified shell
+  and required privileged/PTY fixtures without silently counting skips as
+  acceptance. Record native-adapter contract and both real-host acceptance
+  commands/results; mocked success is insufficient. Review the complete diff,
+  dependency closure and retained recovery evidence.
+
+Deferred boundaries: Controller and Secrets own authenticated/private-trust
+setup acquisition (**Needs definition**; requires M1d). It is deferred because
+setup has no immutable Secret consumer/recovery contract; exit evidence must
+cover exact binding/reopen/release, certificate validation, non-disclosure and
+interrupted acquisition with changed or unavailable credentials. Additional
+host families and architectures need separate matrices; controller
+relocation/restore remains C14. M1e owns service images, its pinned Ansible
+adapter closure, full-context lifecycle state, local service reservations, readiness and qualified inverse.
+There is no host uninstall, automatic OS upgrade or speculative tool bundle.
+
+## M1e — managed artifact-server apply
 
 **Owners:** State reconciliation and Infrastructure services, using Workspace,
-Secrets, Machine and Trust. **Requires:** M1c and one exact supported server and
-host-runtime matrix. **Definition:** Needs definition.
+Secrets, Machine, Controller and Trust. **Requires:** M1d and one exact
+supported server and host-runtime matrix. **Definition:** Needs definition.
+**Delivery:** not started.
 
 Extend the context mutation guard to enforce the staged-availability update
 restriction after apply registration while destroy remains unavailable, as
@@ -428,8 +566,11 @@ Use authored `knownHostsRef`, `privateKeyRef` or `passwordRef`, and any required
 `sudoPasswordRef`, binding the effective user and all Secret versions.
 `operatorIdentity` and the global borrowed-SSH flags are unsupported here.
 These credentials apply to SSH hosts. Supporting placement on the controller
-requires C16's verified local binding and host-wide coordination, plus a
-qualified local execution adapter; no SSH configuration is inferred for it.
+requires M1d's verified local binding and shared-prerequisite coordination,
+plus a qualified local execution adapter and service-specific cross-context
+port, path, container and runtime reservations. Define conflict identities,
+ownership, refusal and crash/retry before local effects; no SSH configuration
+is inferred for the controller.
 The controller declares `container-runtime` when it hosts managed containers.
 
 First define the capability port, HTTP implementation/image, content ownership,
@@ -464,10 +605,10 @@ implementation. Each must qualify exact releases and close its own contracts.
 
 | Milestone | Owner and outcome | Requires | Definition and exit evidence |
 | --- | --- | --- | --- |
-| M2a — OpenShift/OKD native files | Container cluster and Native artifacts: generate standalone `install-config.yaml` and `agent-config.yaml`. | M1d | Map identity, roles, networks, VIPs, hosts, interfaces, root hints and rendezvous. **N1:** validate NMState/installer schema parity. **N2:** validate/bind pull-secret and public SSH key (M1c). **N3:** define typed manifest, canonical bytes, destinations and overwrite rules (M1b). Prove API sufficiency, sensitive publication/cleanup, non-disclosure and release-specific native goldens. A FIPS slice also qualifies the matching installer and artifact parity. |
-| M2b — Ceph native files | Storage and Native artifacts: render typed storage intent into one release-specific declarative file set. | M1d, N3 | Qualify release schemas and reject unprovable fields; revise the API deliberately if needed. **N5:** define each storage secret consumer's validation, immutable binding and sensitive publication (M1c, N3), or prove outputs secret-free. Native goldens and negative disclosure tests. |
-| M3 — Ceph-pool script | Storage and Native artifacts: generate one deterministic native-CLI pool script. | M1d | **N4:** define the script manifest, bytes, fixed command structure, destination and generation journey (M1b). Prove argument encoding, replay semantics, diagnostics, sensitive classification, publication and goldens. No authored shell fragments, inline secrets or execution. |
-| M4 — OCP bare-metal lifecycle | State reconciliation, Substrate and Container cluster: extend full-context apply and enable destroy for artifact-server and OCP effects. | M1d, M2a | **L2:** extend pure plans, impacts, dependencies and digests. **L5:** add consumer-owned OCP remote ports. **L4:** extend durable execution, readiness and removal, preserving the M1d inverse and safely refusing incompatible state. **L6:** qualify exact implementations with contract, crash/lease, identity/ownership, replay, cancellation and real-system tests. Destroy a completed M1d snapshot before a fresh expanded apply. |
+| M2a — OpenShift/OKD native files | Container cluster and Native artifacts: generate standalone `install-config.yaml` and `agent-config.yaml`. | M1e | Map identity, roles, networks, VIPs, hosts, interfaces, root hints and rendezvous. **N1:** validate NMState/installer schema parity. **N2:** validate/bind pull-secret and public SSH key (M1c). **N3:** define typed manifest, canonical bytes, destinations and overwrite rules (M1b). Prove API sufficiency, sensitive publication/cleanup, non-disclosure and release-specific native goldens. A FIPS slice also qualifies the matching installer and artifact parity. |
+| M2b — Ceph native files | Storage and Native artifacts: render typed storage intent into one release-specific declarative file set. | M1e, N3 | Qualify release schemas and reject unprovable fields; revise the API deliberately if needed. **N5:** define each storage secret consumer's validation, immutable binding and sensitive publication (M1c, N3), or prove outputs secret-free. Native goldens and negative disclosure tests. |
+| M3 — Ceph-pool script | Storage and Native artifacts: generate one deterministic native-CLI pool script. | M1e | **N4:** define the script manifest, bytes, fixed command structure, destination and generation journey (M1b). Prove argument encoding, replay semantics, diagnostics, sensitive classification, publication and goldens. No authored shell fragments, inline secrets or execution. |
+| M4 — OCP bare-metal lifecycle | State reconciliation, Substrate and Container cluster: extend full-context apply and enable destroy for artifact-server and OCP effects. | M1e, M2a | **L2:** extend pure plans, impacts, dependencies and digests. **L5:** add consumer-owned OCP remote ports. **L4:** extend durable execution, readiness and removal, preserving the M1e inverse and safely refusing incompatible state. **L6:** qualify exact implementations with contract, crash/lease, identity/ownership, replay, cancellation and real-system tests. Destroy a completed M1e snapshot before a fresh expanded apply. |
 | M5 — managed RHEL installation | Managed OS and Substrate: install one RHEL release using typed image, profile, entitlement, Secret and Machine intent. | M4 | Extend L2/L4/L5; apply L6. Prove renderer/executor parity, identity, ownership, replay, secret custody and real-system acceptance. |
 | M6 — managed Ceph bare metal | Storage, Managed OS, Substrate and State reconciliation: provision one Ceph cluster slice. | M2b and required M5 OS-readiness slice | Extend L2/L4/L5; apply L6 to each implementation. Prove storage identity, ownership, destructive authorization, replay, secret custody and real-system acceptance. |
 
@@ -482,22 +623,22 @@ fill its concrete version, journey and evidence gaps when requested.
 
 | ID | Owner and bounded outcome | Deferred because / requires | Exit evidence |
 | --- | --- | --- | --- |
-| C1 | Substrate: one libvirt, vSphere or KubeVirt provisioning variant. | No variant/consumer selected; requires M1d and a named use case. | Exact release, adapter contract, failure/replay tests and real-system qualification. |
-| C2 | Infrastructure services: one managed service kind beyond artifact serving. | No named consumer; requires M1d. | Typed port, exact implementation, lifecycle evidence, failure and acceptance tests. |
+| C1 | Substrate: one libvirt, vSphere or KubeVirt provisioning variant. | No variant/consumer selected; requires M1e and a named use case. | Exact release, adapter contract, failure/replay tests and real-system qualification. |
+| C2 | Infrastructure services: one managed service kind beyond artifact serving. | No named consumer; requires M1e. | Typed port, exact implementation, lifecycle evidence, failure and acceptance tests. |
 | C3 | Storage: one Ceph pool, filesystem, gateway, NFS or export lifecycle. | Separate from operator-run scripts; requires M6 and a named service. | Ownership, replay, destroy and real-system qualification. |
 | C4 | Add-ons: one built-in package and binding lifecycle. | No exact package/target/release selected; requires a supported cluster. | [Package/driver contract](add-ons.md), compatibility, trust/secrets, readiness, ordering/replay/destroy and acceptance. |
 | C5 | Managed OS: one additional image/profile/entitlement variant. | No concrete consumer; requires M5. | Intent gap, deliberate API revision, renderer/executor parity and qualification. |
 | C6 | UX: one additional view of available evidence or explicit access, or a dashboard/completion extension. | No journey selected; requires the underlying capability. | Complete human/machine journey, diagnostics, safety and end-to-end tests. |
 | C7 | State reconciliation: bounded parallel block execution. | Sequential execution must be qualified first; requires L4. | Ordering/exclusion, deterministic scheduling, cancellation, persistence, partial-failure and replay tests. |
-| C8 | Custom automation: one typed, invertible executable playbook journey. **Needs definition.** | Reserved schema cannot prove effects/ownership/non-exfiltration; requires M1d, L2/L4/L5 and a named journey. | Same-change API replacement, immutable source/dependencies, exact targets, bounded secrets, authorization, continuation, failure injection and isolated-runner qualification. |
+| C8 | Custom automation: one typed, invertible executable playbook journey. **Needs definition.** | Reserved schema cannot prove effects/ownership/non-exfiltration; requires M1e, L2/L4/L5 and a named journey. | Same-change API replacement, immutable source/dependencies, exact targets, bounded secrets, authorization, continuation, failure injection and isolated-runner qualification. |
 | C9 | Bare-metal safety: physical offline disk erase and managed-machine destroy. **Blocked.** | Exact disk identity is unproved during the controller-to-installer interval; needs new safety evidence that closes or explicitly bounds it. | Separate safety contract, immutable target proof at erase, failure injection and real-hardware qualification. |
 | C10 | Add-ons, Workspace and CLI: custom-catalog acquisition, immutable publication, selection and removal. **Needs definition.** | No source/trust/storage/selection contract; requires M1b and C4. | Closed schemas and formats, fixed bounds, authenticity, atomic/crash-safe storage, deterministic selection, retention through destroy and security/acceptance tests. |
 | C11 | Add-ons: one declarative custom-package lifecycle. | No package/target/driver selected; requires C4, C10 and a supported cluster. | Exact identities, qualified driver, host-contract suite, code-content refusal and apply/readiness/replay/destroy acceptance. |
-| C12 | Container cluster and Native artifacts: one local bootable installer ISO from M2a inputs and declared server endpoints. **Needs definition.** | No builder journey; requires M1d and M2a. No remote publication. | Exact builder/dependencies, bounded inputs, sensitive classification, typed manifest/digest, atomic publication, metadata goldens, negative effect tests and boot evidence. |
+| C12 | Container cluster and Native artifacts: one local bootable installer ISO from M2a inputs and declared server endpoints. **Needs definition.** | No builder journey; requires M1e and M2a. No remote publication. | Exact builder/dependencies, bounded inputs, sensitive classification, typed manifest/digest, atomic publication, metadata goldens, negative effect tests and boot evidence. |
 | C13 | Release engineering: one source/binary distribution with licensing and notices. **Needs definition.** | Buildability does not define redistribution; requires M1a and one release channel. | Project license, direct/transitive license review, exact release toolchain/platform/shell matrix, non-skipping completion tests, reproducible archives, notices, dependency inventory, checksums, provenance, SBOM and clean-room packaging verification. |
 | C14 | Workspace and Secrets: explicit complete-store restore with logical identity preservation. **Needs definition.** | Copy restoration changes physical identities and may roll back allocation/seal reservations; storage simplification provides upgrades and safe refusal, not a backup/restore command. Requires M1b/M1c and a selected restore journey. | Coherent snapshot validation, authorized inode rebinding, fresh allocation epoch/key before writes after rollback, interruption/retry and wrong-store refusal tests; preserve lifecycle recovery evidence. |
 | C15 | Secrets: replace per-ID reservations with bounded lifetime allocation. **Needs definition.** | Current opaque random version/binding IDs retain historical reservation files; a new allocation scheme must preserve issued-ID non-reuse across crashes and restore. Requires M1c and C14 restore semantics. | Bounded allocator state, reservation-before-use, counter/namespace exhaustion, migration of existing bindings and failed attempts, non-reuse and crash tests. |
-| C16 | Controller and Workspace, using Machine: bind the declared controller to the executing local host and prepare its declared prerequisites. **Needs definition.** | Admission proves only declared locality; actual host identity, supported local execution/runtime matrix and host-wide coordination need qualification before controller-hosted M1d services. Requires M1c; explicit relocation also requires C14. | Private durable host binding before effects, mismatch refusal, protected controller OS/CLI/state, setup/apply ordering, proxy bootstrap dependency refusal, bounded port/path/runtime ownership across contexts, and cancellation/crash/retry tests on a qualified local host. |
+| C16 | Controller setup and host binding: **promoted to M1d**. | Tracked in the current milestone rather than as an additional candidate. Local service ownership/conflicts remain M1e; relocation requires C14 and a separately defined journey. | M1d owns setup/binding evidence; M1e owns local service qualification. |
 
 When a cluster inspection or access slice under C6 is promoted, its exit evidence
 must exercise the [cluster discovery](cli/output.md#cluster-discovery) and

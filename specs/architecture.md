@@ -386,16 +386,19 @@ selected host's proxy and capability intent; Environment owns selection and
 retention. The current admission/compiler boundary remains free of host probes
 and runtime writes.
 
-Future controller execution has these boundaries; implementation availability
-and the required qualification phase remain in [milestones](milestones.md):
+[Controller](controller.md) defines prerequisite selection, local setup,
+inspection and host-evidence requirements. These boundaries apply to that
+setup and later service execution; implementation availability and qualification
+remain in [milestones](milestones.md):
 
 - Controller owns verified local-host evidence, prerequisite readiness and
   setup through bounded capability interfaces. Authored names, addresses,
   `access.local` and controller selection cannot substitute for that evidence.
 - Workspace owns any durable binding between a context and its verified
-  controller host. Its record format, publication, replacement/refusal and
-  recovery semantics must be defined before binding is implemented. Desired
-  state never supplies a storage-root override or runtime identity token.
+  controller host, following the
+  [binding/publication contract](contexts.md#controller-relationship-and-host-binding).
+  M1d closes its versioned formats and qualification before implementation.
+  Desired state never supplies a storage-root override or runtime identity token.
 - Infrastructure services own local service effects and their readiness,
   replay and inverse evidence. A local adapter must preserve the same logical
   capability contract as its qualified remote counterpart; local execution
@@ -479,8 +482,11 @@ own operation state, or format product output.
 
 An Ansible adapter receives one frozen validated request and returns a bounded
 structured result with required evidence. A local native tool may run
-through a typed Go runner for a purely local transformation; a tool contacting
-a managed remote component belongs inside Ansible.
+through a typed Go runner for a purely local transformation. Controller
+prerequisite inspection and local package installation also use their bounded
+[Controller ports](controller.md#egress-and-local-effects); this includes only
+the qualified setup transaction, not managed service configuration. A tool
+contacting a managed remote component belongs inside Ansible.
 
 Operator-supplied automation and add-on package content are not internal
 adapters. A schema declaration or package origin grants no execution authority.

@@ -122,7 +122,7 @@ X.509, key generation and entropy. Do not import unrelated x/crypto packages.
 Bind/Reopen/Release operate on whole versions with opaque IDs. File binding
 freezes one validated read without changing source or importing a named entry.
 Reopen never rereads the source. Replacement/deletion/rotation preserve bound
-versions; release drops only its references. M1d owns the future lifecycle port.
+versions; release drops only its references. M1e owns the future lifecycle port.
 
 Canonical non-secret declaration fingerprints cover type/source/parameters and
 provenance. Changed declarations make retained values stale/orphaned, never

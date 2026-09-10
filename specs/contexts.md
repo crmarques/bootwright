@@ -39,7 +39,7 @@ selection fails after creation, retain the context and report that creation
 succeeded but selection failed, with `context use --name <name>` guidance.
 Never claim rollback. A post-rename sync failure reports uncertain durability.
 
-### Controller relationship and future host binding
+### Controller relationship and host binding
 
 An admitted Environment names its required controller Machine under
 [the API contract](api/environment.md#controller-machine). Empty context
@@ -47,14 +47,53 @@ initialization remains valid without an Environment. Importing that
 relationship does not bind the registry to a newly verified host, move local
 state, change its root or infer a Machine from the invocation.
 
-Before a future controller execution capability relies on host identity,
-Workspace must define a versioned durable host-binding record and its atomic
-publication, same-host verification, replacement refusal and recovery rules.
-The binding uses Controller-owned verified evidence; authored Machine names or
-addresses are not that evidence. Existing context formats and command effects
-remain unchanged until that explicitly scoped capability is implemented.
-[Architecture](architecture.md#controller-host-and-local-services) owns the
-consumer boundaries, and [milestones](milestones.md) owns delivery status.
+[Controller](controller.md) owns verified local-host evidence and setup
+semantics. Workspace owns its durable shared-host receipt and the binding
+between immutable context ID, admitted controller Machine identity and verified
+host. First binding is an explicit confirmed setup publication under the root
+lock and context lease; context import and inspection never publish it.
+Missing, contradictory or different host evidence refuses without replacement.
+A changed Machine name cannot silently transfer an existing binding. Ordinary
+same-host reboot must remain distinguishable from relocation in the qualified
+identity implementation.
+
+The M1d storage definition must close the exact versioned canonical record
+schemas, evidence-provider identity, bounds and publication commit points before
+implementation. Shared host state belongs under `/var/lib/bootwright/controller/`;
+context bindings and context-specific setup references belong under the
+existing context's `state/` directory. Records contain no Secret values, and
+opaque private host evidence is never emitted by inspection. Dependency files
+that must execute are a narrow root-owned `0700` exception to the regular-file
+`0600` rule; metadata and other files remain `0600`. Only catalogued immutable
+controller bundles may use this exception.
+
+Explicit baseline setup may initialize the fixed root and publish a durable
+empty registry without creating a context or keyring. That registry commit
+must precede any controller subtree. Define the enclosing format upgrade so an
+older reader that cannot preserve controller evidence refuses it. The admitted
+root layout must include the independently versioned controller subtree even
+with zero contexts; unknown layouts or versions refuse. Ordinary context
+commands never infer ownership, repair interrupted setup or remove shared host
+state. The currently implemented registry versions/layout remain unchanged
+until M1d supplies that qualified upgrade.
+
+Before a context-bound setup effect, persist its pending receipt with the exact
+input revision and binding references. Under the same root/context coordination,
+context update, purge and revision collection refuse while setup recovery needs
+those references, independently of lifecycle mutation evidence. Inspection
+never converts a pending receipt to completion. Only explicit setup retry
+resolves it through Controller postconditions. Host-wide setup effects retain
+their receipt even without a context; a new context cannot bypass that pending
+host work. Reads never bootstrap, upgrade, repair or write these records.
+
+After definitive setup completion, preserve existing lifecycle guards. A safe
+input update retains binding identity; context deletion may drop disposable
+context-specific references but never uninstalls shared packages or deletes
+shared bundles/host evidence. Package failure or process death is not disposal
+proof. Complete-store restore and controller relocation must preserve these
+relationships and remain separate recovery work.
+[Architecture](architecture.md#controller-host-and-local-services) owns consumer
+boundaries, and [milestones](milestones.md) owns delivery status.
 
 ## Context configuration
 
@@ -129,7 +168,9 @@ version-2 ID before the old identity ledger can be discarded. Admission,
 confirmation and mutation safeguards still precede an authorized publication.
 There is no fallback from corrupt version-3 state to older metadata.
 
-The production root is `/var/lib/bootwright`. Its complete context layout is:
+The production root is `/var/lib/bootwright`. Its implemented context layout
+is below; M1d must version the additional Controller layout under the
+[host-binding contract](#controller-relationship-and-host-binding) before use:
 
 ```text
 /var/lib/bootwright/
@@ -162,8 +203,9 @@ The production root is `/var/lib/bootwright`. Its complete context layout is:
 | `secrets/` | Context-bound encrypted custody with its own independently versioned [storage contract](secrets.md#local-keyring-v2). |
 
 Every directory is owned by `root:root` with mode `0700`; every file is owned
-by `root:root` with mode `0600`. All store access runs as root. No environment
-variable selects another production root. Isolated test storage is injected at
+by `root:root` with mode `0600`, except the explicitly catalogued controller
+executables described in the host-binding contract. All store access runs as
+root. No environment variable selects another production root. Isolated test storage is injected at
 composition. Reject unsafe existing objects without chmod/chown repair.
 
 Context IDs retain `ctx-` plus 32 lowercase hexadecimal digits: a 64-bit
@@ -254,9 +296,10 @@ proceeding. Inspection never performs this recovery; it directs the user to
 repeat context init with the original options. Every other missing-registry
 shape is left unchanged and reports that the complete store must be restored
 from a matching backup or moved aside only after it is verified disposable.
-A published empty registry permits only its own file and verified private,
-bounded `pending-<32 lowercase hexadecimal digits>.json` files from interrupted
-registry replacement; those files are ignored, never adopted. Any other entry
+For the currently implemented root formats, a published empty registry permits
+only its own file and verified private, bounded
+`pending-<32 lowercase hexadecimal digits>.json` files from interrupted registry
+replacement; those files are ignored, never adopted. Any other entry
 refuses with the same complete-store guidance. Bounds never authorize evidence
 deletion to make room.
 

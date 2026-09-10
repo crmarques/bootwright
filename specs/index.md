@@ -11,6 +11,7 @@ A specified capability is not necessarily implemented or authorized.
 | Self-explanatory code, minimal comments and retained implementation knowledge | [Code clarity](architecture.md#self-explanatory-code-and-retained-knowledge), [knowledge catalog](../.agents/knowledge/index.md) |
 | Desired-state grammar, compilation and kind schemas | [API](api.md), with field tables under `api/` |
 | Command behavior, invocation and lifecycle journeys | [CLI](cli.md), [command catalog](cli/commands.md), [output](cli/output.md) |
+| Local host prerequisites, bastion setup and controller readiness | [Controller](controller.md) |
 | Named contexts, immutable input, current selection and durable publication | [Contexts](contexts.md) |
 | Secret implementations, custody, immutable bindings and reveal | [Secrets](secrets.md) |
 | Apply, destroy, continuation, ownership and GitOps readiness | [State reconciliation](state-reconciliation.md) |

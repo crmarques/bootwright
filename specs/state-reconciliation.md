@@ -81,13 +81,17 @@ or a path derived by appending to either. Desired-state discovery never enters
 it.
 
 The production root is exactly `/var/lib/bootwright`, owned by root with mode
-`0700`. Its directories and files are root:root with modes `0700` and `0600`.
+`0700`. Its directories and files are root:root with modes `0700` and `0600`;
+[Workspace](contexts.md#controller-relationship-and-host-binding) defines the
+narrow `0700` executable-file exception for immutable controller bundles.
 No XDG, home or other ambient value selects runtime storage. Workspace uses
 verified no-follow traversal and refuses unsafe existing objects without
 ownership or permission repair. The [CLI privilege boundary](cli.md#local-privilege-and-user-identity)
 provides root execution only for valid available commands that require it.
 
-Context-free read-only commands do not access the root. Context-backed reads
+Context-free read-only commands do not access the root except available
+[Controller inspection](controller.md#selection-and-command-journeys), which
+may read shared host metadata without selecting a context. Context-backed reads
 acquire the existing store's shared lock and never create, repair or migrate
 state. Workspace defines the narrow explicit retry of pending creation/deletion.
 
@@ -145,7 +149,7 @@ digest, and required ownership evidence before doing work.
 ## Plan and execution
 
 [Secrets](secrets.md#immutable-binding-and-contexts) owns confidential immutable
-binding; the lifecycle consumer interface is introduced with M1d.
+binding; the lifecycle consumer interface is introduced with M1e.
 
 Planning is pure and read-only. It performs no downloads, remote mutations,
 cache or registry writes, cleanup, lock takeover, or secret materialization.
@@ -320,9 +324,11 @@ a safe path.
 The controller is an OS-ready provided Machine and remains outside selected
 cluster node membership under
 [the API relationship](api/environment.md#controller-machine). That declaration
-alone does not prove live host identity or ownership. The following rules
-constrain future controller-hosted effects; they do not introduce a runtime
-capability in the admission delivery.
+alone does not prove live host identity or ownership.
+[Controller setup](controller.md) defines prerequisite preparation and uses
+[Workspace host binding](contexts.md#controller-relationship-and-host-binding).
+The following rules constrain later controller-hosted service effects; their
+availability is separate from prerequisite setup.
 
 Before enabling local service execution, the owning capabilities must define
 verified host binding and stable conflict identities for shared ports, paths,

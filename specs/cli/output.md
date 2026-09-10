@@ -10,7 +10,7 @@ output.
 | Condition | Standard output | Standard error | Exit status |
 | --- | --- | --- | --- |
 | Human structured success | result or help, LF-terminated | ordered warnings only | `0` |
-| Human operational or validation failure | empty, except a complete negative secret check or already presented lifecycle state | ordered diagnostics, each LF-terminated | `1` |
+| Human operational or validation failure | empty, except a complete negative secret check, controller readiness report, or already presented setup plan/progress or lifecycle state | ordered diagnostics, each LF-terminated | `1` |
 | Human usage failure | empty | usage diagnostic and concise help, LF-terminated | `2` |
 | JSON success or failure | exactly one JSON document followed by one LF | empty | the document's required `exitCode` |
 | Effective-state text | exact canonical effective YAML with its required final LF | empty | `0` |
@@ -289,6 +289,11 @@ repeating unbounded authored text in every diagnostic. The shared codes are:
 | `media.store` | Media identity, integrity, import, publication, or deletion failed. |
 | `preflight.failed` | One or more required readiness checks definitely failed. |
 | `preflight.unknown` | Required readiness could not be positively determined. |
+| `controller.unsupported` | The setup host, dependency combination or acquisition route is not qualified. |
+| `controller.identity` | Required controller binding or verified host evidence is missing or contradictory. |
+| `controller.conflict` | Another setup or context protects a shared prerequisite or holds its coordination boundary. |
+| `controller.setup` | A local setup action definitely failed. |
+| `controller.unknown` | A setup action has an unresolved effect outcome. |
 | `render.publish` | A requested artifact could not be safely rendered or published. |
 | `lifecycle.state` | Durable lifecycle state does not permit the requested transition or continuation. |
 | `lifecycle.destroy-unavailable` | Apply is operational but this executable cannot invoke the required future destroy. |
@@ -327,8 +332,11 @@ Help, completion, `version`, every `validate`, `render effective`, `plan`, and
 local list/current/status reads create no cache, temporary file, state record,
 output path, or log. Other render commands create only their declared
 artifacts. Preflight, local setup, sensitive export, and access handoff allocate
-no lifecycle identity or log. Only lifecycle effects and unknown-effect
-resolution use the state-owned operation, block, and attempt log tree below.
+no lifecycle identity or log. Setup uses only its
+[private recovery receipt](../controller.md#publication-and-interrupted-setup),
+separate from the lifecycle receipt and operation logs. Only lifecycle effects
+and unknown-effect resolution use the state-owned operation, block, and attempt
+log tree below.
 
 Managed operations use this tree:
 

@@ -93,7 +93,10 @@ All managed writes remain beneath an explicitly selected and verified root.
 Components are validated single path segments; traversal, absolute
 substitution, links, special files, alternate streams, and unexpected mount or
 device crossings are rejected. Directories use mode `0700` and private files
-use `0600`, with a restrictive creation mask. Temporary and final files are
+use `0600`, with a restrictive creation mask. The only executable-file
+exception is the root-owned `0700` immutable Controller bundle entry defined
+by [Workspace](contexts.md#controller-relationship-and-host-binding); it grants
+no group or other access. Temporary and final files are
 created exclusively, written through held handles, bounded, flushed where
 durability is required, and atomically published without overwriting unrelated
 content. Parent directory durability is established when the owning state

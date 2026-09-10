@@ -317,8 +317,11 @@ capability declaration does not install or prove a runtime. No service
 placement defaults to the controller.
 
 Admission checks these declarations without inspecting the invoking host,
-opening runtime state or moving execution. The [future runtime boundary](../architecture.md#controller-host-and-local-services)
-owns verified host binding and local effects. The former Environment fields
+opening runtime state or moving execution. The
+[Controller contract](../controller.md) defines setup and verified host
+binding; [Architecture](../architecture.md#controller-host-and-local-services)
+owns local-effect boundaries. Availability follows [milestones](../milestones.md).
+The former Environment fields
 `spec.proxy`, `spec.infraComponents`, `spec.registries`,
 `spec.componentImages`, and `spec.trustedCAs` remain unknown. Registry policy,
 image pins and service connection facts stay with their owning consumers and

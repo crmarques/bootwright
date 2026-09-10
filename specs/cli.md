@@ -201,7 +201,12 @@ The fixed state root is defined by
 
 Classify and validate arguments before privilege effects. Help, completion,
 version, invalid invocations, unavailable commands and explicit-input validate
-never elevate. Available commands requiring context state run as root; a
+never elevate. Context-free setup dry-run also never elevates. Available
+Controller setup/inspection may need private shared-host metadata or installation
+privilege even without a named context; their exact effects follow
+[Controller](controller.md#selection-and-command-journeys). Context-bound setup
+dry-run may elevate solely for private input/metadata reads.
+Available commands requiring context state run as root; a
 non-root invocation keeps an unprivileged supervisor and launches one exact
 Bootwright child as UID 0 through the qualified absolute sudo executable. Pin
 reexecution to the supervisor's verified executable through procfs so a pathname
@@ -275,13 +280,16 @@ completion, or context initialization without input. Context-free validation
 can run away from the declared controller; it checks input relationships and
 never verifies the invoking host.
 
-`bastion setup` and `preflight bastion` retain their existing command names and
-local-controller purpose. Their future implementation must support preparing
-and inspecting a host before Environment import, while context-bound runtime
-effects require the verified binding defined by their owning capabilities.
-Controller selection does not cause setup, install a container runtime or
-start services. Commands retain their specified unavailable result until the
-corresponding delivery is implemented.
+`bastion setup` and `preflight bastion` follow the
+[Controller journeys](controller.md#selection-and-command-journeys), including
+preparation before context creation or Environment import. These commands
+consume a context only when `--context` is explicit and nonempty; omission ignores current
+selection and uses the baseline prerequisites. Explicit context setup uses
+immutable controller intent and includes any required first binding in the
+confirmed local plan; preflight verifies without publishing a binding.
+Controller selection alone does not cause setup, install a container runtime
+or start services. Commands retain their specified unavailable result until
+the corresponding delivery is implemented.
 
 The local-access controller is not an SSH target. The existing SSH handoff and
 trust commands must not silently turn its selection into a local shell,
