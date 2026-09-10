@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
 func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
@@ -23,6 +24,7 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 		return nil
 	}
 	issues := validateCloneCustomizations(o)
+	issues = add(issues, infrastructureservices.ValidateProxyChoice(o.Spec().Get("proxy"), "$.spec.proxy")...)
 	custom := o.Spec().Get("customizations")
 	for _, service := range custom.Get("services", "enabled").Strings() {
 		if slices.Contains(custom.Get("services", "disabled").Strings(), service) {

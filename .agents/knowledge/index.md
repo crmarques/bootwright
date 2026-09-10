@@ -6,7 +6,7 @@ investigating or designing, then open only the relevant page.
 
 | Area or symptom | Page |
 | --- | --- |
-| Desired-state API, `v1alpha1`, 27-to-21-kind alignment, superseded schema proposal | [api-alignment.md](api-alignment.md) |
+| Desired-state API, `v1alpha1`, 26-kind service update, controller Machine and proxy, historical 27-to-21-kind alignment | [api-alignment.md](api-alignment.md) |
 | Admission parser composition, YAML directives/tags, exact integers, effective inspection, offline vulnerability database | [desired-state-admission.md](desired-state-admission.md) |
 | CLI, Cobra, completion effects, `BASH_COMP_DEBUG_FILE`, `ExecuteContext`, local `--output`, nil/empty cluster selection, Zsh `compadd`, PowerShell `-File` | [cli-adapter-constraints.md](cli-adapter-constraints.md) |
 | Go toolchain pin, `GOTOOLCHAIN`, `govulncheck`, release version metadata, `-ldflags -X`, Go 1.26 crypto Reader injection | [build-toolchain.md](build-toolchain.md) |

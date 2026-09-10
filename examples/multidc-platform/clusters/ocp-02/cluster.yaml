@@ -49,15 +49,16 @@ spec:
     agent:
       redfishVirtualMedia:
         artifactServerEndpoint:
+          serverRef: artifact-server
           endpointRef: ip-https
-          serverRef: default
 
     pullSecretRef: openshift-pull-secret
 
     nodeSSH:
       keyPairRef: ocp-multidc-02-cluster-admin-ssh-key
 
-    additionalTrustBundleRefs: []
+    additionalTrustBundleRefs:
+      - custom-ca-bundle
 
   networking:
     clusterNetwork:

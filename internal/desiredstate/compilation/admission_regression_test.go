@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/desiredstate/yamlstream"
 	"github.com/crmarques/bootwright/internal/environment"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/storage"
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -26,7 +27,8 @@ func regressionCompiler() compilation.Compiler {
 		return result
 	}
 	return compilation.NewCompiler(yamlstream.Parser{}, selection,
-		compilation.Rules{Normalize: environment.Normalize, ValidateAuthored: environment.ValidateAuthored, ValidatePartial: environment.ValidatePartial, Validate: environment.Validate},
+		compilation.Rules{Normalize: environment.Normalize, Validate: environment.Validate},
+		compilation.Rules{Normalize: infrastructureservices.Normalize, ValidateAuthored: infrastructureservices.ValidateAuthored, ValidatePartial: infrastructureservices.ValidatePartial, Validate: infrastructureservices.Validate},
 		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, ValidatePartial: secrets.ValidateAuthored, Validate: secrets.Validate},
 		compilation.Rules{Normalize: storage.Normalize, ValidateAuthored: storage.ValidateAuthored, ValidatePartial: storage.ValidatePartial, Validate: storage.Validate},
 		compilation.Rules{Normalize: substrate.Normalize, ValidateAuthored: substrate.ValidateAuthored, ValidatePartial: substrate.ValidatePartial, Validate: substrate.Validate})
@@ -53,7 +55,7 @@ func TestUnusedDefaultsRejectPresentContradictions(t *testing.T) {
 	for _, test := range []struct{ name, fields, field string }{
 		{"discriminator", "  defaults:\n    StoragePool:\n      type: replicated\n      erasure: {dataChunks: 2, codingChunks: 1}\n", "$.spec.defaults.StoragePool.erasure"},
 		{"secret parameters", "  defaults:\n    Secret:\n      type: token\n      source: {generated: {username: alice}}\n", "$.spec.defaults.Secret.source.generated.username"},
-		{"shadowed registry defaults", "  infraComponents: {registries: []}\n  defaults:\n    Environment:\n      infraComponents:\n        registries:\n          - {name: first, management: external, url: registry.example, default: true}\n          - {name: second, management: external, url: other.example, default: true}\n", "$.spec.defaults.Environment.infraComponents.registries"},
+		{"external service placement", "  defaults:\n    Proxy:\n      management: external\n      machineRef: host\n", "$.spec.defaults.Proxy.machineRef"},
 		{"storage range", "  defaults:\n    StoragePool:\n      compression: {minBlobSize: 20, maxBlobSize: 10}\n", "$.spec.defaults.StoragePool.compression"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -72,7 +74,7 @@ func TestUnusedDefaultsRejectPresentContradictions(t *testing.T) {
 func TestUnusedDefaultsPermitMissingRequiredArmsAndReferences(t *testing.T) {
 	input := sources(environmentYAML + "  defaults:\n    InfraProvider:\n      baremetal: {}\n      networkAttachments: [{name: network}]\n    StoragePool:\n      clusterRef: future\n      compression: {minBlobSize: 20}\n    Secret:\n      source: {generated: {bytes: 32}}\n")
 	state, report, err := regressionCompiler().Compile(context.Background(), input)
-	if err != nil || report.Counts.ObjectsDecoded != 1 || len(state.Effective().Objects()) != 1 {
+	if err != nil || report.Counts.ObjectsDecoded != 2 || len(state.Effective().Objects()) != 2 {
 		t.Fatalf("partial defaults were completed or required a recipient: state=%v report=%v err=%v", state, report, err)
 	}
 	env, _ := state.Effective().Find(api.Environment, "synthetic")
@@ -116,7 +118,7 @@ func TestEnvironmentSelectionUsesBootwrightAPIVersion(t *testing.T) {
 		input.Files = append(input.Files, native)
 		state, report, err := regressionCompiler().Compile(context.Background(), input)
 		if !selected {
-			if err != nil || report.Counts != (compilation.Counts{FilesSeen: 2, ObjectsDecoded: 1}) || len(report.Diagnostics) != 0 || len(state.Effective().Objects()) != 1 {
+			if err != nil || report.Counts != (compilation.Counts{FilesSeen: 2, ObjectsDecoded: 2}) || len(report.Diagnostics) != 0 || len(state.Effective().Objects()) != 2 {
 				t.Fatalf("foreign excluded Environment affected selecting identity: %v %#v", err, report)
 			}
 			continue
@@ -153,7 +155,7 @@ func TestInheritedReferenceProvenanceAndImmutableSourceState(t *testing.T) {
 		t.Fatal("failed admission mutated source bytes")
 	}
 	resolved := strings.Replace(env, "clusterRef: missing", "clusterRef: storage", 1) + "---\napiVersion: bootwright.io/v1alpha1\nkind: StorageCluster\nmetadata: {name: storage}\nspec: {type: ceph, management: external}\n"
-	input.Files[0] = desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(resolved))
+	input.Files[0] = desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(resolved+controllerYAML))
 	state, _, err = regressionCompiler().Compile(context.Background(), input)
 	if err != nil {
 		t.Fatal(desiredstate.DiagnosticsOf(err))

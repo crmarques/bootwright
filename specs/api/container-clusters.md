@@ -67,22 +67,59 @@ claims no renderer support for that release.
 | `spec.install.endpoints` | map | yes | — | Closed keys `api`, `api-int`, and `ingress`; endpoint shape below. |
 | `spec.install.agent.redfishVirtualMedia.artifactServerEndpoint` | object | conditional | — | Required when any bound machine uses bare metal. |
 | `spec.install.agent.bootArtifacts.artifactServerEndpoint` | object | conditional | — | Required in disconnected mode. |
+| `spec.install.proxy` | choice object | no | direct access | Independent Proxy choice for installation and cluster policy. |
+| `spec.install.ntp` | array of selections | no | native OS default | NTPServer selections; an empty list clears inherited selections. |
+| `spec.install.registries` | object | no | — | Cluster-owned mirror selection and image-source policy below. |
 | `spec.install.pullSecretRef` | string | OpenShift | environment/convention | `dockerConfigJson` `Secret`; not required for OKD. |
 | `spec.install.nodeSSH` | object | normalized | environment/convention | Cluster administration public/private SSH material. |
-| `spec.install.additionalTrustBundleRefs` | array of strings | no | `[]` | Unique `caBundle` `Secret` references. |
+| `spec.install.additionalTrustBundleRefs` | array of strings | no | `[]` | Ordered unique `caBundle` Secret references for this cluster's native installation trust. |
 | `spec.install.servingCertificates` | object | no | — | Typed API and ingress serving-certificate refs below. |
 
-Disconnected mode requires `Environment.spec.registries.mirror` and a managed
+Disconnected mode requires `spec.install.registries.mirror` and a managed
 agent boot-artifacts endpoint. Connected mode obtains boot artifacts from the
 release payload and does not use an authored boot-artifacts selection.
 
 Both consumers use the shared
-[artifact endpoint selection](environment.md#artifact-server-catalog), and
+[artifact endpoint selection](infrastructure-services.md#artifactserver), and
 require a managed artifact server.
 
 The Redfish endpoint serves virtual media for bare-metal nodes; the boot
 artifacts endpoint serves rootfs, kernel, and initramfs content. They are
 separate selections even when one component provides both.
+
+### Installation network services
+
+`spec.install.proxy` uses the shared
+[proxy choice](infrastructure-services.md#proxy-choice), independently of
+Machine choices, including the selected controller's proxy. An omitted choice
+normalizes to `direct: {}` after kind defaults. `spec.install.ntp` uses the shared
+[NTP selection list](infrastructure-services.md#dns-and-ntp-selection-lists).
+Omission leaves the native OS default; an explicit empty list clears inherited
+selections without requesting that time synchronization be disabled. These
+fields describe the downstream installation and do not mutate or inherit
+Machine OS installation policy.
+
+### Registry policy
+
+`spec.install.registries` contains optional `mirror` then
+`imageDigestSources`. `mirror` selects a declared Registry; connection details,
+credentials and trust belong to that object.
+
+| Field | Type | Required | Rule |
+| --- | --- | --- | --- |
+| `mirror.registryRef` | string | with mirror | Global Registry name; never inferred. |
+| `mirror.endpointRef` | string | conditional | [Registry endpoint selection](infrastructure-services.md#registry-selection). |
+| `imageDigestSources[].source` | string | yes | Source image registry. |
+| `imageDigestSources[].mirrors` | array of strings | yes | Non-empty ordered mirror registries. |
+| `imageDigestSources[].sourcePolicy` | string | no | `NeverContactSource` or `AllowContactingSource`. |
+
+Source entries are unique by `source`. Registry locations contain no inline
+credentials. Disconnected installation requires a mirror selection whose
+Registry declares `trustBundleRef`, in addition to its managed boot-artifacts
+endpoint. Defaults can share complete cluster mirror policy; another cluster's
+choice never changes this cluster's route. A mirror selection and its image
+source mapping describe different facts and do not implicitly create each
+other.
 
 ### Platform union and derivation
 
@@ -120,19 +157,19 @@ Every endpoint has this exact shape:
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `address` | string | source- and topology-dependent | — | Optional IP literal owned by `openshift` or `external`; absent for managed component and node sources and required when that direct source must supply a VIP. |
+| `address` | string | source- and topology-dependent | — | Optional IP literal owned by `openshift` or `external`; absent for load-balancer and node sources and required when that direct source must supply a VIP. |
 | `dnsName` | string | no | — | DNS subdomain naming the endpoint. |
 | `port` | integer | no | consumer default | `1..65535` when set. |
 | `scheme` | string | no | consumer default | `http` or `https`. |
 | `prefixLength` | integer | no | — | Valid only with `address`; `1..32` for IPv4 or `1..128` for IPv6. |
 | `interfaceNetworks` | array of strings | no | `[]` | Valid CIDRs narrowing the interface that carries an owned address; effective state masks host bits. |
-| `source.type` | string | no | `openshift` | `openshift`, `external`, `infraComponent`, or `node`. |
-| `source.componentRef` | string | conditional | — | Global `InfraComponent` selecting the `loadBalancer` arm; valid only for `infraComponent`. |
-| `source.bindAddressRef` | string | conditional | sole bind address | Component-local `bindAddresses[].name`; valid only for `infraComponent`. |
+| `source.type` | string | no | `openshift` | `openshift`, `external`, `loadBalancer`, or `node`. |
+| `source.loadBalancerRef` | string | conditional | — | Global LoadBalancer; valid only for `loadBalancer`. |
+| `source.bindAddressRef` | string | conditional | sole bind address | LoadBalancer-local `bindAddresses[].name`; valid only for `loadBalancer`. |
 
 `openshift` and `external` may own an authored `address`; otherwise `dnsName`
-can satisfy a non-VIP slot. `infraComponent` forbids an authored address: the
-component and optional bind-address ref resolve it. `bindAddressRef` may be
+can satisfy a non-VIP slot. `loadBalancer` forbids an authored address: the
+LoadBalancer and optional bind-address ref resolve it. `bindAddressRef` may be
 omitted only when the selected load balancer has one bind address.
 
 `node` is valid only for a one-node cluster and also forbids an authored
@@ -146,7 +183,7 @@ recommended form so one machine address is not repeated in three places, while
 
 On a multi-node `baremetal` or `vsphere` platform, all three endpoint slots are
 VIP-bearing. Each therefore resolves an address directly or through an
-`infraComponent`; `dnsName` alone is insufficient. API, internal API, ingress,
+`loadBalancer`; `dnsName` alone is insufficient. API, internal API, ingress,
 and node IPs obey the selected machine-network CIDRs. VIPs do not collide with
 node install IPs, and endpoint/network address families are consistent.
 
@@ -182,8 +219,36 @@ declare installation but cannot authorize a cluster SSH command.
 | `apiServer.namedCertificates[].secretRef` | string | yes | `tlsCertificate` `Secret`. |
 | `ingress.defaultCertificateRef` | string | when `ingress` is set | `tlsCertificate` `Secret`. |
 
-A native consumer combines additional trust-bundle refs with
-`Environment.spec.trustedCAs.caBundleRefs`.
+### Additional installation trust
+
+`spec.install.additionalTrustBundleRefs` selects additional CA bundles for this
+cluster's native install rendering. Each scalar reference resolves directly to
+a `caBundle` Secret, and authored order is retained. The complete list is the
+cluster's additional trust selection; there is no Environment trust list to
+append to it.
+
+Kind defaults may share the choice:
+
+```yaml
+spec:
+  defaults:
+    ContainerCluster:
+      install:
+        additionalTrustBundleRefs:
+          - installation-ca
+```
+
+An omitted cluster field receives this list under the ordinary
+[kind-default rules](environment.md#kind-defaults), then defaults to `[]` if
+still absent. An authored list replaces the complete default, and an explicit
+`additionalTrustBundleRefs: []` clears inherited additional trust. Defaults do
+not create Secret declarations or read certificate material.
+
+This selection does not add controller, Machine OS, SSH, service or ambient
+process trust. Proxy and Registry connection trust, entitlement trust and
+other consumer-specific trust remain on their owning objects. The former
+`Environment.spec.trustedCAs` is rejected; there is no compatibility merge or
+implicit trust inherited from another consumer.
 
 ## Networking
 

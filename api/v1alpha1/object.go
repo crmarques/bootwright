@@ -14,7 +14,12 @@ const (
 	MachineInstallProfile  Kind = "MachineInstallProfile"
 	NetworkConfig          Kind = "NetworkConfig"
 	InfraProvider          Kind = "InfraProvider"
-	InfraComponent         Kind = "InfraComponent"
+	Proxy                  Kind = "Proxy"
+	DNSServer              Kind = "DNSServer"
+	NTPServer              Kind = "NTPServer"
+	ArtifactServer         Kind = "ArtifactServer"
+	Registry               Kind = "Registry"
+	LoadBalancer           Kind = "LoadBalancer"
 	ContainerCluster       Kind = "ContainerCluster"
 	StorageCluster         Kind = "StorageCluster"
 	StoragePlacementPolicy Kind = "StoragePlacementPolicy"
@@ -30,7 +35,7 @@ const (
 	Secret                 Kind = "Secret"
 )
 
-var kindOrder = []Kind{Environment, Entitlement, Machine, MachineImage, MachineInstallProfile, NetworkConfig, InfraProvider, InfraComponent, ContainerCluster, StorageCluster, StoragePlacementPolicy, StoragePool, StorageFilesystem, StorageObjectGateway, StorageNFSExport, StorageExport, ClusterAddon, ClusterAddonProfile, ClusterAddonBinding, CustomPlaybook, Secret}
+var kindOrder = []Kind{Environment, Entitlement, Machine, MachineImage, MachineInstallProfile, NetworkConfig, InfraProvider, Proxy, DNSServer, NTPServer, ArtifactServer, Registry, LoadBalancer, ContainerCluster, StorageCluster, StoragePlacementPolicy, StoragePool, StorageFilesystem, StorageObjectGateway, StorageNFSExport, StorageExport, ClusterAddon, ClusterAddonProfile, ClusterAddonBinding, CustomPlaybook, Secret}
 
 func Kinds() []Kind           { return slices.Clone(kindOrder) }
 func KindIndex(kind Kind) int { return slices.Index(kindOrder, kind) }
@@ -97,4 +102,13 @@ type Issue struct {
 	Field       string
 	Message     string
 	Remediation string
+}
+
+// FieldOrigin identifies the authored owner of a value materialized by a domain
+// normalizer, allowing admission diagnostics to retain source provenance.
+type FieldOrigin struct {
+	Field       string
+	SourceKind  Kind
+	SourceName  string
+	SourceField string
 }

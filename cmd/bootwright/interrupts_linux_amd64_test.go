@@ -55,6 +55,7 @@ func TestInterruptDuringRealConfirmationPreservesSelection(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(input, "environment.yaml"), []byte(syntheticEnvironment), 0600); err != nil {
 		t.Fatal(err)
 	}
+	addSecretInput(t, input, "controller.yaml", serviceHost)
 	root := filepath.Join(stateParent, "bootwright")
 	if err := os.MkdirAll(stateParent, 0700); err != nil {
 		t.Fatal(err)

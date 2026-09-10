@@ -33,9 +33,10 @@ type Shape struct {
 }
 
 type Suppression struct {
-	Field  string
-	Value  Value
-	Fields []string
+	Field         string
+	Value         Value
+	FallbackValue Value
+	Fields        []string
 }
 
 func (s *Shape) Field(name string) (Field, bool) {

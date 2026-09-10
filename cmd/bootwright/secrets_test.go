@@ -315,6 +315,7 @@ func TestSecretNameReuseCannotExposeAnotherContextIdentity(t *testing.T) {
 	contextRun(t, services, 0, "context", "delete", "--name", "alpha", "--purge", "--yes")
 	newInput := t.TempDir()
 	addSecretInput(t, newInput, "environment.yaml", syntheticEnvironment)
+	addSecretInput(t, newInput, "controller.yaml", serviceHost)
 	addSecretInput(t, newInput, "secret.yaml", declaration)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", newInput)
 	after, err := repository.View(context.Background())

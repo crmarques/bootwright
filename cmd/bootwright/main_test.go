@@ -120,7 +120,7 @@ func TestComposedExplicitValidationIsContextFree(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, "cache"))
 	input := filepath.Join(root, "environment.yaml")
-	content := []byte("apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: synthetic\nspec:\n  domains:\n    base: example.test\n")
+	content := []byte(serviceEnvironment + "\n---\n" + serviceHost)
 	if err := os.WriteFile(input, content, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -143,10 +143,10 @@ func TestComposedExplicitValidationIsContextFree(t *testing.T) {
 				}
 				Diagnostics []any
 			}
-			if err := json.Unmarshal(out.Bytes(), &envelope); err != nil || !envelope.OK || envelope.Result.Counts.FilesSeen != 1 || envelope.Result.Counts.ObjectsDecoded != 1 || len(envelope.Diagnostics) != 0 {
+			if err := json.Unmarshal(out.Bytes(), &envelope); err != nil || !envelope.OK || envelope.Result.Counts.FilesSeen != 1 || envelope.Result.Counts.ObjectsDecoded != 2 || len(envelope.Diagnostics) != 0 {
 				t.Fatalf("complete compiler result %s: %v", out.String(), err)
 			}
-		} else if out.String() != "[OK] Desired state is valid (files seen: 1, objects decoded: 1)\n" {
+		} else if out.String() != "[OK] Desired state is valid (files seen: 1, objects decoded: 2)\n" {
 			t.Fatal(out.String())
 		}
 	}

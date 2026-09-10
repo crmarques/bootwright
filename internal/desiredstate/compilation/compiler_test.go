@@ -15,13 +15,15 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
-const environmentYAML = "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: synthetic\nspec:\n  domains:\n    base: example.test\n"
+const environmentYAML = "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: synthetic\nspec:\n  domains:\n    base: example.test\n  controller: {machineRef: controller}\n"
+
+const controllerYAML = "\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: controller}\nspec:\n  os: {provided: true}\n  access: {local: true}\n"
 
 func compiler() compilation.Compiler {
 	return compilation.NewCompiler(yamlstream.Parser{}, nil, compilation.Rules{Normalize: environment.Normalize, Validate: environment.Validate}, compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, Validate: secrets.Validate})
 }
 func sources(content string) desiredstate.Sources {
-	return desiredstate.Sources{Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(content))}, Roots: []string{"/synthetic"}}
+	return desiredstate.Sources{Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(content+controllerYAML))}, Roots: []string{"/synthetic"}}
 }
 
 func TestCompilerPreservesAuthoredAndDerivedValues(t *testing.T) {
@@ -31,7 +33,7 @@ func TestCompilerPreservesAuthoredAndDerivedValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Counts != (compilation.Counts{FilesSeen: 1, ObjectsDecoded: 1}) || report.Advisories == nil || report.ExcludedResourceFiles == nil {
+	if report.Counts != (compilation.Counts{FilesSeen: 1, ObjectsDecoded: 2}) || report.Advisories == nil || report.ExcludedResourceFiles == nil {
 		t.Fatalf("invalid report: %#v", report)
 	}
 	if state.Authored().Objects()[0].Spec().Has("domains", "machines") {
@@ -78,7 +80,7 @@ func TestCompilerRejectsStrictSyntaxAndScalarViolations(t *testing.T) {
 func TestCompilerDefaultPrecedenceAndRecipientPaths(t *testing.T) {
 	env := environmentYAML + "  defaults:\n    Secret:\n      type: token\n      source:\n        generated:\n          bytes: 64\n"
 	secret := "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: material\nspec:\n  source: {}\n"
-	input := desiredstate.Sources{Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(env)), desiredstate.NewSourceFile("/synthetic/nested/secret.yaml", []byte(secret))}, Roots: []string{"/synthetic"}}
+	input := desiredstate.Sources{Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(env+controllerYAML)), desiredstate.NewSourceFile("/synthetic/nested/secret.yaml", []byte(secret))}, Roots: []string{"/synthetic"}}
 	state, _, err := compiler().Compile(context.Background(), input)
 	if err != nil {
 		t.Fatal(desiredstate.DiagnosticsOf(err))
@@ -101,7 +103,7 @@ func TestCompilerResourceSelectionAndCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(state.Effective().Objects()) != 1 || report.Counts.FilesSeen != 2 || report.Counts.ObjectsDecoded != 1 || len(report.Advisories) != 1 || !reflect.DeepEqual(report.ExcludedResourceFiles, []string{"excluded.yaml"}) {
+	if len(state.Effective().Objects()) != 2 || report.Counts.FilesSeen != 2 || report.Counts.ObjectsDecoded != 2 || len(report.Advisories) != 1 || !reflect.DeepEqual(report.ExcludedResourceFiles, []string{"excluded.yaml"}) {
 		t.Fatalf("unexpected report: %#v", report)
 	}
 	ctx, cancel := context.WithCancel(context.Background())

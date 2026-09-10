@@ -27,6 +27,9 @@ spec:
   domains:
     base: example.test
 
+  controller:
+    machineRef: controller
+
   resources:
     - declarations
 
@@ -55,7 +58,7 @@ spec:
 	input := desiredstate.Sources{
 		Roots: []string{"/synthetic/original"},
 		Files: []desiredstate.SourceFile{
-			desiredstate.NewSourceFile("/synthetic/original/config/environment.yaml", []byte(environment)),
+			desiredstate.NewSourceFile("/synthetic/original/config/environment.yaml", []byte(environment+controllerYAML)),
 			desiredstate.NewSourceFile("/synthetic/original/config/declarations/material.yaml", []byte(secret)),
 			desiredstate.NewSourceFile("/synthetic/original/config/excluded.yaml", []byte(excluded)),
 		},
@@ -67,14 +70,14 @@ spec:
 	if err != nil {
 		t.Fatal(desiredstate.DiagnosticsOf(err))
 	}
-	if report.Counts != (compilation.Counts{FilesSeen: 3, ObjectsDecoded: 2}) || !reflect.DeepEqual(report.ExcludedResourceFiles, []string{"excluded.yaml"}) || len(report.Diagnostics) != 1 || len(report.Advisories) != 1 {
+	if report.Counts != (compilation.Counts{FilesSeen: 3, ObjectsDecoded: 3}) || !reflect.DeepEqual(report.ExcludedResourceFiles, []string{"excluded.yaml"}) || len(report.Diagnostics) != 1 || len(report.Advisories) != 1 {
 		t.Fatalf("replay lost counts or exclusions: %#v", report)
 	}
 	if report.Diagnostics[0].Source.Path != "/synthetic/original/config/excluded.yaml" {
 		t.Fatal("replay substituted the storage path for original provenance")
 	}
 	result, err := service.RenderEffective(context.Background(), compilation.EffectiveRequest{ContextName: "frozen"})
-	if err != nil || result.Counts != report.Counts || len(result.Effective.Objects()) != 2 {
+	if err != nil || result.Counts != report.Counts || len(result.Effective.Objects()) != 3 {
 		t.Fatalf("effective replay = %#v, %v", result, err)
 	}
 	material, ok := result.Effective.Find(api.Secret, "material")
@@ -83,7 +86,7 @@ spec:
 	}
 	objects := result.Effective.Objects()
 	objects[0] = api.Object{}
-	if len(result.Effective.Objects()) != 2 || result.Effective.Objects()[0].Name() == "" {
+	if len(result.Effective.Objects()) != 3 || result.Effective.Objects()[0].Name() == "" {
 		t.Fatal("effective result exposed mutable catalog storage")
 	}
 	if len(report.Diagnostics) != 1 || len(report.Advisories) != 1 {
@@ -94,7 +97,7 @@ spec:
 	// external relative to the Environment, but inside the input tree relative
 	// to the recipient, where a secrets segment is required.
 	badEnvironment := strings.Replace(environment, "../secrets/material", "../../operator-material/value", 1)
-	input.Files[0] = desiredstate.NewSourceFile(input.Files[0].Path(), []byte(badEnvironment))
+	input.Files[0] = desiredstate.NewSourceFile(input.Files[0].Path(), []byte(badEnvironment+controllerYAML))
 	service = compilation.New(nil, compiler(), frozenContextInputs{input})
 	failed, err := service.RenderEffective(context.Background(), compilation.EffectiveRequest{})
 	if failed != nil || err == nil {

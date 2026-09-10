@@ -10,6 +10,14 @@ spec:
   os:
     provided: true
 
+  proxy:
+    proxyRef: default
+    noProxy:
+      - .example.com
+      - 192.0.2.0/24
+      - 198.51.100.0/24
+      - 203.0.113.0/24
+
   network:
     addresses:
       - name: fqdn

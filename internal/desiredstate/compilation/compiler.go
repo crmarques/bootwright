@@ -17,10 +17,11 @@ type SyntaxParser interface {
 
 // Rules are pure, component-owned transformations and admission constraints.
 type Rules struct {
-	Normalize        func(api.Object, api.Catalog) (api.Object, []api.Issue)
-	ValidatePartial  func(api.Object, api.Catalog) []api.Issue
-	ValidateAuthored func(api.Object, api.Catalog) []api.Issue
-	Validate         func(api.Object, api.Catalog) []api.Issue
+	Normalize            func(api.Object, api.Catalog) (api.Object, []api.Issue)
+	NormalizationOrigins func(api.Object, api.Object, api.Catalog) []api.FieldOrigin
+	ValidatePartial      func(api.Object, api.Catalog) []api.Issue
+	ValidateAuthored     func(api.Object, api.Catalog) []api.Issue
+	Validate             func(api.Object, api.Catalog) []api.Issue
 }
 
 type Selection struct {
@@ -224,13 +225,22 @@ func (c Compiler) Compile(ctx context.Context, sources desiredstate.Sources) (*S
 	// Normalize dependency providers before their consumers. Within a kind the
 	// result must not depend on source order or another peer's normalized state.
 	ordered := slices.Clone(records)
+	byIdentity := make(map[string]*objectRecord, len(records))
+	for _, record := range records {
+		identity := record.object.Identity()
+		if _, exists := byIdentity[identity]; exists {
+			byIdentity[identity] = nil
+		} else {
+			byIdentity[identity] = record
+		}
+	}
 	normalizationBudget := expansionBudget{}
 	for _, record := range records {
 		if !normalizationBudget.admit(record, ds) {
 			return compilationFailure(ctx, ds)
 		}
 	}
-	ranks := []api.Kind{api.Environment, api.Entitlement, api.Secret, api.NetworkConfig, api.MachineImage, api.MachineInstallProfile, api.InfraProvider, api.Machine, api.InfraComponent, api.ContainerCluster, api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageFilesystem, api.StorageObjectGateway, api.StorageNFSExport, api.StorageExport, api.ClusterAddon, api.ClusterAddonProfile, api.ClusterAddonBinding, api.CustomPlaybook}
+	ranks := []api.Kind{api.Environment, api.Entitlement, api.Secret, api.NetworkConfig, api.MachineImage, api.MachineInstallProfile, api.InfraProvider, api.Machine, api.Proxy, api.DNSServer, api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer, api.ContainerCluster, api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageFilesystem, api.StorageObjectGateway, api.StorageNFSExport, api.StorageExport, api.ClusterAddon, api.ClusterAddonProfile, api.ClusterAddonBinding, api.CustomPlaybook}
 	slices.SortStableFunc(ordered, func(a, b *objectRecord) int {
 		return slices.Index(ranks, a.object.Kind()) - slices.Index(ranks, b.object.Kind())
 	})
@@ -252,7 +262,8 @@ func (c Compiler) Compile(ctx context.Context, sources desiredstate.Sources) (*S
 					if !previous.admit(record, ds) {
 						return compilationFailure(ctx, ds)
 					}
-					object, issues := rules.Normalize(record.object, catalog)
+					before := record.object
+					object, issues := rules.Normalize(before, catalog)
 					previousSpec := record.object.Spec()
 					record.object = object
 					normalizationBudget.nodes -= previous.nodes
@@ -260,6 +271,9 @@ func (c Compiler) Compile(ctx context.Context, sources desiredstate.Sources) (*S
 						return compilationFailure(ctx, ds)
 					}
 					record.recordReordering(previousSpec, object.Spec(), api.Schema(object.Kind()))
+					if rules.NormalizationOrigins != nil {
+						record.recordOrigins(rules.NormalizationOrigins(before, object, catalog), byIdentity)
+					}
 					for _, issue := range issues {
 						ds.issue(record, issue)
 					}

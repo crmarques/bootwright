@@ -1,7 +1,8 @@
 # Machines and infrastructure
 
 This page defines `InfraProvider`, `Machine`, `MachineImage`,
-`MachineInstallProfile`, `NetworkConfig` and `InfraComponent`.
+`MachineInstallProfile` and `NetworkConfig`. Shared services have their own
+[kind schemas](infrastructure-services.md).
 [The compiler boundary](../api.md#compiler-boundary) and
 [native-field rules](../api.md#native-and-implementation-shaped-fields) apply.
 Apply [Environment kind defaults](environment.md#kind-defaults) before the
@@ -11,7 +12,7 @@ Unless a field below declares a narrower namespace, a scalar `*Ref` is a plain
 `metadata.name` reference in the global namespace of its target kind. Local
 references are deliberately scalar too: `profileRef` resolves inside one
 provider, NIC and address refs inside one machine, listener and endpoint refs
-inside one component, and attachment refs inside one provider. Loading order
+inside one service, and attachment refs inside one provider. Loading order
 never chooses among duplicates.
 
 ## InfraProvider
@@ -164,7 +165,9 @@ downstream installer supplies.
 | `spec.hardware.management.bmc` | object | conditional | — | Required for bare-metal install; exact shape below. |
 | `spec.os.provided` | boolean | yes | — | Selects the OS lifecycle with `installProfileRef`. |
 | `spec.os.installProfileRef` | string | conditional | — | Global `MachineInstallProfile`; valid only when `provided: false`. |
+| `spec.os.install.ntp` | array of selections | no | install-profile selections | NTPServer selections for a Bootwright-installed Machine; `[]` clears profile selections. |
 | `spec.os.install.rootDeviceHints` | object | conditional | — | Exact root-device fields below; bare-metal install requires `deviceName` or `wwn`. |
+| `spec.proxy` | choice object | no | profile choice or direct access | Lifecycle-dependent atomic Machine-owned selection below; emits immediately after `os`. |
 | `spec.network` | object | no | contacts normalized below | Network selection, named contacts/static assignments, attachments, and bindings below. |
 | `spec.access` | object | lifecycle-dependent | normalized as below | Local or SSH access plus optional root-login posture. |
 
@@ -230,7 +233,7 @@ destructive target selector.
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `configRef` | string | union | — | Global `NetworkConfig`. |
-| `inline` | `NetworkConfig.spec` object | union | — | Inline one-off alternative with the same NMState, CIDR, and catalog constraints. |
+| `inline` | `NetworkConfig.spec` object | union | — | Inline one-off alternative with the same NMState, CIDR, and DNS selection constraints. |
 | `attachmentRef` | string | conditional | `configRef` name | Provider-local `networkAttachments[].name`; applies one attachment to every effective physical interface. |
 | `interfaceAttachments` | array | conditional | `[]` | KubeVirt-only set of `{interface, attachmentRef}`; mutually exclusive with `attachmentRef`. |
 | `installAddressRef` | string | when a consumer requires a static install IP | unique eligible address below | Machine-local `addresses[].name`; selects an interface-assigned IP inside a consumed machine network. |
@@ -326,6 +329,32 @@ rejected. Its static installation interface is `ethernet`, `vlan`, or `bond`.
 Every installation consumer uses the same `installAddressRef` selection;
 there is no first-interface fallback.
 
+### Machine proxy
+
+`spec.proxy` uses the shared
+[atomic proxy choice](infrastructure-services.md#proxy-choice). Its meaning
+and applicability follow the Machine's OS lifecycle:
+
+| Machine lifecycle | Proxy selection |
+| --- | --- |
+| OS-ready (`os.provided: true`) | An authored or kind-default choice may select a managed or external Proxy; omission normalizes to `direct: {}`. The selected controller's Machine proxy also owns controller egress. |
+| Bootwright-installed (`os.provided: false` with `installProfileRef`) | An authored or Machine kind-default choice wins as a whole; otherwise inherit the install profile's proxy, then use `direct: {}`. A selected Proxy must be external. |
+| Downstream-installer (`os.provided: false` without `installProfileRef`) | `spec.proxy` is forbidden, including a choice introduced by Machine defaults. No intrinsic proxy field is materialized; the downstream cluster owns its installation choice. |
+
+The complete choice includes endpoint and bypass selections. An explicit
+`direct: {}` overrides inherited routing; fields from different choices never
+merge. Invalid explicit values never trigger fallback. A broad Machine proxy
+default therefore fails for a fleet containing downstream-installer Machines.
+Use install-profile defaults to share Bootwright OS installation proxy policy
+without adding a proxy field to those downstream Machines.
+
+Provided-machine proxy intent does not request an OS proxy reconfiguration or
+change ambient process trust. Each future executable consumer must define how
+it uses this Machine-owned egress choice. The controller is identified only
+by [Environment selection](environment.md#controller-machine), not by its proxy,
+Machine name or local access. The retired `Machine.spec.os.install.proxy` and
+`Environment.spec.controller.proxy` are rejected.
+
 ### Addresses and access
 
 Address names and references in this section belong to
@@ -335,7 +364,9 @@ contact using [Environment domains](environment.md#domains). An authored
 and is unique across Machines.
 
 `access.local` is boolean `true`, not an object. It is mutually exclusive with
-`access.ssh` and valid only for an OS-ready machine. On an OS-ready machine,
+`access.ssh` and valid only for the OS-ready
+[controller Machine](environment.md#controller-machine) in the retained graph.
+Controller selection does not infer local access. On an OS-ready machine,
 omitting all access fields defaults to `ssh.auth.operatorIdentity: {}`. On an
 installer-provisioned machine, omission means no Bootwright login.
 
@@ -396,6 +427,8 @@ download fields are not part of this contract. Validation is lexical only.
 | `spec.installer.anaconda` | object | union | Anaconda arm below. |
 | `spec.installer.templateClone` | object | union | Template-clone arm below. |
 | `spec.subscription.entitlementRef` | string | no | Global `Entitlement` of type `redhat-rhel`. |
+| `spec.proxy` | choice object | no | External Proxy choice; omission uses direct access. |
+| `spec.ntp` | array of selections | no | NTPServer selections; omission leaves the native OS default. |
 | `spec.customizations` | object | no | Closed customization groups below. |
 
 ### Installer arms
@@ -405,12 +438,12 @@ The `anaconda` arm contains:
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
 | `imageRef` | string | yes | Global `MachineImage`. |
-| `redfishVirtualMedia.artifactServerEndpoint.serverRef` | string | no | `Environment.spec.infraComponents.artifactServers[].name`; omission selects the default or sole catalog entry. |
-| `redfishVirtualMedia.artifactServerEndpoint.endpointRef` | string | with endpoint block | Endpoint name on the selected managed artifact-server `InfraComponent`. |
+| `redfishVirtualMedia.artifactServerEndpoint.serverRef` | string | with endpoint block | Global managed ArtifactServer; required and never inferred. |
+| `redfishVirtualMedia.artifactServerEndpoint.endpointRef` | string | with endpoint block | Endpoint name on the selected managed ArtifactServer. |
 | `packageSource` | object | no | Exactly one of `mirror`, `fromSubscription`, or `hostedTree`. |
 
 `redfishVirtualMedia` is optional in the standalone install-profile shape. If
-its endpoint block is present, `endpointRef` is required; graph validation
+its endpoint block is present, both `serverRef` and `endpointRef` are required; graph validation
 requires that complete endpoint when a consuming managed-OS install uses bare
 metal.
 
@@ -423,13 +456,36 @@ The optional package-source arms are exact:
   already registers during installation.
 - `hostedTree` has required `fromMedia` using local `local-media:` or `file://`
   DVD media, distinct from the boot image's `bootMedia`, plus required
-  `artifactServerEndpoint` with the same `{serverRef?, endpointRef}` shape.
+  `artifactServerEndpoint` with the same `{serverRef, endpointRef}` shape.
   Its selected managed endpoint supports HTTP package content.
 
 The `templateClone` arm has required `seed`, and `seed` has exactly one arm:
 `cloudInit`. `cloudInit.growRootFilesystem` is optional and defaults `true`.
 Template clone consumes no `MachineImage` or Anaconda package source. A
 consuming machine uses a vSphere provider profile whose `template` is present.
+
+### Installation network services
+
+`spec.proxy` and `spec.ntp` configure the installation and installed-OS policy
+of Machines consuming this profile. They use the shared
+[proxy choice](infrastructure-services.md#proxy-choice) and
+[NTP selection list](infrastructure-services.md#dns-and-ntp-selection-lists).
+A profile's proxy must be external to avoid requiring its own managed service
+before the installation that creates that service's host.
+
+Machine proxy precedence and applicability belong to
+[the Machine proxy field](#machine-proxy). Profile proxy policy is inherited
+only by Bootwright-installed Machines that omit their own effective choice;
+provided Machines and container-cluster installation do not inherit it.
+
+After kind defaults, a Bootwright-installed Machine's `spec.os.install.ntp`
+overrides the profile's NTP list as a whole. An absent override receives the
+profile list; absent NTP remains absent for the native OS default. An explicit
+`ntp: []` clears inherited selections without disabling OS time
+synchronization. Invalid explicit values never fall back to profile values.
+Only Bootwright-installed Machines may author this NTP override; provided and
+downstream-installer Machines reject it. Container installation owns its
+separate cluster proxy and NTP choices and does not inherit Machine fields.
 
 ### Customizations
 
@@ -484,77 +540,33 @@ disk-encryption customizations. Any referenced install profile enables `sshd`;
 cross-field service and firewall requirements are checked before effective
 rendering.
 
-## InfraComponent
-
-`InfraComponent.spec` contains exactly one populated service arm:
-`artifactServer`, `loadBalancer`, `proxy`, `nameResolution`, `ntp`, or
-`registry`. Its arm selects the service; `spec.type` is rejected. Missing,
-multiple, or unknown arms fail validation. Required fields inside the selected
-arm still apply.
-
-| Arm | Required implementation | Exact arm fields |
-| --- | --- | --- |
-| `artifactServer` | no implementation field | `machineRef`, `bindAddress?`, `retention?`, `tls?`, `listeners[]?`, `endpoints[]?` |
-| `loadBalancer` | `haproxy` | `implementation`, `machineRef`, `bindAddresses[]` |
-| `proxy` | `squid` | `implementation`, `machineRef`, `bindAddress?`, `port?`, `endpoints[]?` |
-| `nameResolution` | `dnsmasq` | Proxy/common service fields plus `additionalIngressHosts[]?`, `forwarders[]?` |
-| `ntp` | `chrony` | Common service fields plus `upstreamSources[]?` |
-| `registry` | `mirror-registry` | Common service fields |
-
-Every `machineRef` is a global `Machine`. Artifact server, load balancer,
-proxy, name resolution, and registry placement requires that machine's
-`container-runtime` capability; NTP does not.
-
-Proxy, name resolution, NTP, and registry share optional `bindAddress`, which
-defaults `0.0.0.0`, and optional `port`, which respectively defaults to `3128`,
-`53`, `123`, and `5000`. Effective ports are `1..65535`; name resolution
-accepts only `53`. Their `endpoints[]` are sets keyed by required `name`, with
-required `addressRef` resolving to the placement machine's
-`network.addresses[].name`. `forwarders[]` are IP resolver addresses and
-`upstreamSources[]` are IP or DNS NTP sources.
-
-A load balancer has a non-empty `bindAddresses[]`. Each entry has required IP
-`address`; `name` is required when more than one entry exists and, when set, is
-unique. A cluster endpoint selects one with `source.bindAddressRef`; omission is
-valid only for a single bind address.
-
-The artifact-server arm has these additional rules:
-
-- `bindAddress` defaults to `0.0.0.0`;
-- `retention` is `persistent` by default or `install-only`;
-- omitted `listeners` defaults to
-  `[{name: https, protocol: https, port: 8443}]`;
-- listener names and ports are unique, protocol is `http` or `https`, and port
-  is `1..65535`;
-- each endpoint has required unique `name`, `listenerRef` resolving locally,
-  and `addressRef` resolving to the placement machine;
-- `tls` is required when any effective listener uses HTTPS and forbidden when
-  every listener uses HTTP; it contains `secretRef` then `minVersion`;
-- `tls.secretRef` is a required `tlsCertificate` `Secret` reference supplying
-  both certificate and key; retired `tls.certificateRef` is rejected;
-- `tls.minVersion` is `TLSv1.2` by default or `TLSv1.3`.
-
 ## NetworkConfig
 
-`NetworkConfig` owns reusable machine CIDRs, name-resolution catalog refs, and
+`NetworkConfig` owns reusable machine CIDRs, DNS service selections, and
 an NMState template:
 
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
 | `spec.machineNetwork` | array | yes | Non-empty set of `{cidr}` with valid, unique CIDRs; effective state masks host bits. |
-| `spec.nameResolutionRefs` | array of strings | no | Unique `Environment.spec.infraComponents.nameResolution[].name` references. |
+| `spec.dns` | array of selections | no | Ordered `{serverRef, endpointRef?}` records targeting DNSServer; unique by resolved pair. |
 | `spec.nmstate` | arbitrary map | yes | Native NMState desired-state template. |
 
 `nmstate` retains native spelling and topology; Bootwright adds no alternate
-interface vocabulary. It must not contain a Bootwright `nameResolutionRefs`
-key. The retired `template.networkConfig` wrapper is rejected. The selected
+interface vocabulary. It must not contain Bootwright `dns` or retired
+`nameResolutionRefs` keys. The retired top-level `nameResolutionRefs` and
+`template.networkConfig` wrapper are also rejected. The selected
 template is composed with machine overrides using the deterministic merge and
 address injection defined under
 [Machine network configuration](#network-configuration).
 
-Name-resolution references select managed components or external entries under
-[the Environment catalog rules](environment.md#name-resolution-catalog),
-including its limit of at most one consumed managed component.
+DNS selections use the shared
+[server selection rules](infrastructure-services.md#dns-and-ntp-selection-lists).
+A selected network may consume at most one distinct managed DNSServer;
+multiple endpoint selections on the same service do not count as multiple
+managed servers. External servers do not count toward this limit. Omission
+leaves native resolver configuration unchanged; an explicit empty list clears
+inherited Bootwright selections. The same rules apply to Machine inline
+network configuration.
 
 ### NMState composition subset
 

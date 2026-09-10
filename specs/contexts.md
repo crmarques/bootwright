@@ -39,6 +39,23 @@ selection fails after creation, retain the context and report that creation
 succeeded but selection failed, with `context use --name <name>` guidance.
 Never claim rollback. A post-rename sync failure reports uncertain durability.
 
+### Controller relationship and future host binding
+
+An admitted Environment names its required controller Machine under
+[the API contract](api/environment.md#controller-machine). Empty context
+initialization remains valid without an Environment. Importing that
+relationship does not bind the registry to a newly verified host, move local
+state, change its root or infer a Machine from the invocation.
+
+Before a future controller execution capability relies on host identity,
+Workspace must define a versioned durable host-binding record and its atomic
+publication, same-host verification, replacement refusal and recovery rules.
+The binding uses Controller-owned verified evidence; authored Machine names or
+addresses are not that evidence. Existing context formats and command effects
+remain unchanged until that explicitly scoped capability is implemented.
+[Architecture](architecture.md#controller-host-and-local-services) owns the
+consumer boundaries, and [milestones](milestones.md) owns delivery status.
+
 ## Context configuration
 
 A Context is a standalone setup document, separate from the Environment graph:

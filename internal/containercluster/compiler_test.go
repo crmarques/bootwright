@@ -25,6 +25,19 @@ metadata:
 spec:
   domains:
     base: example.test
+
+  controller:
+    machineRef: controller
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: controller
+
+spec:
+  os: {provided: true}
+  access: {local: true}
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
@@ -114,7 +127,11 @@ spec:
 `
 
 func compiler() compilation.Compiler {
-	return compilation.NewCompiler(yamlstream.Parser{}, nil,
+	return compilerWithSelection(nil)
+}
+
+func compilerWithSelection(selection compilation.SelectGraph) compilation.Compiler {
+	return compilation.NewCompiler(yamlstream.Parser{}, selection,
 		compilation.Rules{Normalize: environment.Normalize, Validate: environment.Validate},
 		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, Validate: secrets.Validate},
 		compilation.Rules{Normalize: substrate.Normalize, ValidateAuthored: substrate.ValidateAuthored, Validate: substrate.Validate},
@@ -123,6 +140,56 @@ func compiler() compilation.Compiler {
 		compilation.Rules{Normalize: infrastructureservices.Normalize, ValidateAuthored: infrastructureservices.ValidateAuthored, Validate: infrastructureservices.Validate},
 		compilation.Rules{Normalize: containercluster.Normalize, ValidateAuthored: containercluster.ValidateAuthored, Validate: containercluster.Validate},
 	)
+}
+
+func TestExcludedMachineServiceReferencesDoNotFailSelectedGraph(t *testing.T) {
+	selection := func(catalog api.Catalog) compilation.Selection {
+		selected := environment.Select(catalog, nil)
+		result := compilation.Selection{Catalog: selected.Catalog, ExcludedContainerClusters: selected.ExcludedContainerClusters, ExcludedStorageClusters: selected.ExcludedStorageClusters}
+		for _, problem := range selected.Problems {
+			result.Problems = append(result.Problems, compilation.ObjectIssue{Object: problem.Object, Issue: problem.Issue})
+		}
+		return result
+	}
+	c := compilerWithSelection(selection)
+	for _, tc := range []struct {
+		name, choice, field string
+	}{
+		{"proxy", "  proxy: {proxyRef: missing-egress}", "$.spec.proxy.proxyRef"},
+		{"ntp", "  os:\n    provided: false\n    installProfileRef: deferred-profile\n    install:\n      ntp: [{serverRef: missing-clock}]", "$.spec.os.install.ntp[0].serverRef"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			deferred := `
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: deferred
+spec:
+` + tc.choice + "\n"
+			if tc.name == "proxy" {
+				deferred += "  os: {provided: false, installProfileRef: deferred-profile}\n"
+			}
+			content := strings.Replace(clusterYAML, "spec:\n  domains:", "spec:\n  containerClusters: [cluster]\n  domains:", 1) + deferred
+			state, _, err := c.Compile(context.Background(), sources(content))
+			if err != nil {
+				t.Fatal("excluded Machine references failed selected graph", desiredstate.DiagnosticsOf(err))
+			}
+			if _, retained := state.Effective().Find(api.Machine, "deferred"); retained {
+				t.Fatal("unconsumed Machine was retained by cluster selection")
+			}
+			_, _, err = c.Compile(context.Background(), sources(clusterYAML+deferred))
+			found := false
+			for _, diagnostic := range desiredstate.DiagnosticsOf(err) {
+				if diagnostic.Object != nil && diagnostic.Object.Kind == string(api.Machine) && diagnostic.Object.Name == "deferred" && diagnostic.Field == tc.field {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatal("retained Machine did not validate its service reference", desiredstate.DiagnosticsOf(err))
+			}
+		})
+	}
 }
 func sources(content string) desiredstate.Sources {
 	return desiredstate.Sources{Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(content))}, Roots: []string{"/synthetic"}}
@@ -200,8 +267,8 @@ func TestExplicitEndpointAndPlatformChoicesSuppressDefaults(t *testing.T) {
               type: external
           ingress:
             source:
-              type: infraComponent
-              componentRef: unused-lb
+              type: loadBalancer
+              loadBalancerRef: unused-lb
               bindAddressRef: unused
 `
 	// The inherited endpoint fragment is partial; the explicit source controls
@@ -217,10 +284,10 @@ func TestExplicitEndpointAndPlatformChoicesSuppressDefaults(t *testing.T) {
 		t.Fatal("inactive platform defaults inherited")
 	}
 	endpoint := cluster.Spec().Get("install", "endpoints", "api")
-	if endpoint.Get("address").Text() != "192.0.2.10" || endpoint.Get("source").Has("componentRef") || endpoint.Get("source").Has("bindAddressRef") {
+	if endpoint.Get("address").Text() != "192.0.2.10" || endpoint.Get("source").Has("loadBalancerRef") || endpoint.Get("source").Has("bindAddressRef") {
 		t.Fatal("inactive endpoint defaults inherited")
 	}
-	if cluster.Spec().Get("install", "endpoints", "ingress", "source").Has("componentRef") {
+	if cluster.Spec().Get("install", "endpoints", "ingress", "source").Has("loadBalancerRef") {
 		t.Fatal("inactive component selection inherited")
 	}
 }

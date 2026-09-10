@@ -4,6 +4,9 @@ metadata:
   name: precedence
 
 spec:
+  controller:
+    machineRef: local
+
   domains:
     base: example.test
 

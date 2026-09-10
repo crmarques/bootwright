@@ -8,10 +8,10 @@ spec:
     - cidr: "198.51.100.0/25"
     - cidr: "203.0.113.0/24"
 
-  nameResolutionRefs:
-    - default-01
-    - default-02
-    - default-03
+  dns:
+    - serverRef: default-01
+    - serverRef: default-02
+    - serverRef: default-03
 
   nmstate:
     interfaces:

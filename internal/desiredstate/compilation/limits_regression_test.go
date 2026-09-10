@@ -69,7 +69,7 @@ func TestInheritedCopiesConsumeAggregateRepresentationBudget(t *testing.T) {
 			compiler := compilation.NewCompiler(yamlstream.Parser{}, nil, compilation.Rules{Normalize: func(object api.Object, _ api.Catalog) (api.Object, []api.Issue) { calls++; return object, nil }})
 			state, report, err := compiler.Compile(context.Background(), sources(documents.String()))
 			if recipients == 45 {
-				if err != nil || state == nil || report == nil || calls != recipients+1 {
+				if err != nil || state == nil || report == nil || calls != recipients+2 {
 					t.Fatalf("admitted copies failed: %v, callbacks=%d", err, calls)
 				}
 				return
@@ -96,8 +96,18 @@ func TestDiagnosticCeilingDeduplicatesAndStopsLaterValidators(t *testing.T) {
 		t.Run(fmt.Sprint(count), func(t *testing.T) {
 			later := 0
 			compiler := compilation.NewCompiler(yamlstream.Parser{}, nil,
-				compilation.Rules{Validate: func(api.Object, api.Catalog) []api.Issue { return repeatedIssues(count) }},
-				compilation.Rules{Validate: func(api.Object, api.Catalog) []api.Issue { later++; return nil }})
+				compilation.Rules{Validate: func(object api.Object, _ api.Catalog) []api.Issue {
+					if object.Kind() == api.Environment {
+						return repeatedIssues(count)
+					}
+					return nil
+				}},
+				compilation.Rules{Validate: func(object api.Object, _ api.Catalog) []api.Issue {
+					if object.Kind() == api.Environment {
+						later++
+					}
+					return nil
+				}})
 			state, report, err := compiler.Compile(context.Background(), sources(environmentYAML))
 			diagnostics := requireCompilationFailure(t, state, report, err)
 			if len(diagnostics) != min(count, desiredstate.MaxDiagnostics) {

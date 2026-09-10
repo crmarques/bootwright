@@ -70,8 +70,8 @@ func requireObject(t *testing.T, catalog api.Catalog, kind api.Kind, name string
 
 func TestActualCLIValidatesCompleteExample(t *testing.T) {
 	sources := exampleSources(t)
-	if len(sources.Files) != 93 {
-		t.Fatalf("example discovery: got %d files, want 93", len(sources.Files))
+	if len(sources.Files) != 100 {
+		t.Fatalf("example discovery: got %d files, want 100", len(sources.Files))
 	}
 	var out, errOut bytes.Buffer
 	code := run(context.Background(), []string{"validate", "-f", sources.Roots[0], "--output", "json"}, &out, &errOut)
@@ -89,14 +89,14 @@ func TestActualCLIValidatesCompleteExample(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
 		t.Fatal(err, out.String())
 	}
-	if code != 0 || errOut.Len() != 0 || !result.OK || result.Result.Counts != (compilation.Counts{FilesSeen: 93, ObjectsDecoded: 93}) || len(result.Diagnostics) != 0 || len(result.Result.Advisories) != 0 {
+	if code != 0 || errOut.Len() != 0 || !result.OK || result.Result.Counts != (compilation.Counts{FilesSeen: 100, ObjectsDecoded: 100}) || len(result.Diagnostics) != 0 || len(result.Result.Advisories) != 0 {
 		t.Fatalf("actual CLI admission: code=%d out=%s err=%s", code, out.String(), errOut.String())
 	}
 	if len(result.Result.ExcludedResourceFiles)+len(result.Result.ExcludedContainerClusters)+len(result.Result.ExcludedStorageClusters) != 0 {
 		t.Fatal("unexpected example exclusions")
 	}
 	state, _ := compileAcceptance(t, sources)
-	if len(state.Effective().Objects()) != 93 {
+	if len(state.Effective().Objects()) != 100 {
 		t.Fatal("example objects lost")
 	}
 	installed := requireObject(t, state.Effective(), api.Machine, "storage-a-01")
@@ -111,7 +111,7 @@ func TestActualCLIValidatesCompleteExample(t *testing.T) {
 func TestActualCompilerAdmitsAllKindsAndAdditionalVariants(t *testing.T) {
 	sources := expandedExampleSources(t)
 	state, report := compileAcceptance(t, sources)
-	if report.Counts != (compilation.Counts{FilesSeen: 94, ObjectsDecoded: 113}) {
+	if report.Counts != (compilation.Counts{FilesSeen: 101, ObjectsDecoded: 120}) {
 		t.Fatalf("expanded graph counts: %#v", report.Counts)
 	}
 	for _, kind := range api.Kinds() {
@@ -119,7 +119,7 @@ func TestActualCompilerAdmitsAllKindsAndAdditionalVariants(t *testing.T) {
 			t.Errorf("kind %s has no full-wiring positive admission coverage", kind)
 		}
 	}
-	if len(api.Kinds()) != 21 {
+	if len(api.Kinds()) != 26 {
 		t.Fatalf("kind catalog changed: %d", len(api.Kinds()))
 	}
 	nfs := requireObject(t, state.Effective(), api.StorageNFSExport, "acceptance-nfs")
@@ -142,14 +142,13 @@ func TestActualCompilerAdmitsAllKindsAndAdditionalVariants(t *testing.T) {
 	if !clone.Spec().Get("installer", "templateClone", "seed", "cloudInit", "growRootFilesystem").Bool() {
 		t.Fatal("clone seed default missing")
 	}
-	for name, port := range map[string]string{"acceptance-proxy": "3128", "acceptance-dns": "53", "acceptance-ntp": "123", "acceptance-registry": "5000"} {
-		component := requireObject(t, state.Effective(), api.InfraComponent, name)
-		found := false
-		for _, arm := range component.Spec().Fields() {
-			found = found || arm.Value.Get("port").Text() == port
-		}
-		if !found {
-			t.Errorf("component %s missing default port %s", name, port)
+	for _, service := range []struct {
+		kind       api.Kind
+		name, port string
+	}{{api.Proxy, "acceptance-proxy", "3128"}, {api.DNSServer, "acceptance-dns", "53"}, {api.NTPServer, "acceptance-ntp", "123"}, {api.Registry, "acceptance-registry", "5000"}} {
+		component := requireObject(t, state.Effective(), service.kind, service.name)
+		if component.Spec().Get("port").Text() != service.port {
+			t.Errorf("service %s missing default port %s", service.name, service.port)
 		}
 	}
 	if requireObject(t, state.Effective(), api.Entitlement, "acceptance-redhat-ceph").Spec().Get("rhsm").Has("connectToInsights") {
@@ -260,11 +259,19 @@ metadata:
   name: fuzz
 
 spec:
+  controller: {machineRef: service-host}
+
   domains:
     base: example.test
 `
 	for _, seed := range []string{
 		"",
+		"apiVersion: bootwright.io/v1alpha1\nkind: Proxy\nmetadata: {name: egress}\nspec: {management: external, connection: {httpProxy: 'http://proxy.example.test:3128'}}\n",
+		"apiVersion: bootwright.io/v1alpha1\nkind: DNSServer\nmetadata: {name: resolver}\nspec: {management: external, address: '2001:0db8::53'}\n",
+		"apiVersion: bootwright.io/v1alpha1\nkind: NTPServer\nmetadata: {name: clock}\nspec: {management: external, address: time.example.test}\n",
+		"apiVersion: bootwright.io/v1alpha1\nkind: ArtifactServer\nmetadata: {name: artifacts}\nspec: {management: external, endpoints: [{name: media, url: 'https://artifacts.example.test'}]}\n",
+		"apiVersion: bootwright.io/v1alpha1\nkind: Registry\nmetadata: {name: mirror}\nspec: {management: external, url: registry.example.test}\n",
+		"apiVersion: bootwright.io/v1alpha1\nkind: LoadBalancer\nmetadata: {name: ingress}\nspec: {management: external, bindAddresses: [{address: '192.0.2.10'}]}\n",
 		`apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata:
@@ -331,7 +338,7 @@ spec:
 		}
 		content := slices.Clone(body)
 		if !completeStream {
-			content = append([]byte(environment+"\n---\n"), content...)
+			content = append([]byte(environment+"\n---\n"+serviceHost+"\n---\n"), content...)
 		}
 		sources := desiredstate.Sources{Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", content)}, Roots: []string{"/synthetic"}}
 		before := sources.Files[0].Bytes()

@@ -1,0 +1,8 @@
+apiVersion: bootwright.io/v1alpha1
+kind: DNSServer
+metadata:
+  name: default-01
+
+spec:
+  management: external
+  address: 192.0.2.53

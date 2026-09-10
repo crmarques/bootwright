@@ -247,7 +247,10 @@ func validateNative(native api.Value, path string, partial bool) []api.Issue {
 	}
 	issues := []api.Issue{}
 	if native.Has("nameResolutionRefs") {
-		issues = appendIssues(issues, invariant(path+".nameResolutionRefs", "Bootwright name-resolution references do not belong inside native NMState"))
+		issues = appendIssues(issues, invariant(path+".nameResolutionRefs", "use DNS server selections in the enclosing Bootwright dns field"))
+	}
+	if native.Has("dns") {
+		issues = appendIssues(issues, invariant(path+".dns", "Bootwright DNS server selections belong in the enclosing dns field; native NMState uses dns-resolver"))
 	}
 	interfaces := native.Get("interfaces")
 	if interfaces.Present() && interfaces.Type() != api.Sequence {

@@ -60,13 +60,9 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	if custom.Present() {
 		s = s.With("customizations", custom)
 	}
-	for _, path := range [][]string{{"installer", "anaconda", "redfishVirtualMedia", "artifactServerEndpoint"}, {"installer", "anaconda", "packageSource", "hostedTree", "artifactServerEndpoint"}} {
-		selection := s.Get(path...)
-		if selection.Present() && !selection.Has("serverRef") {
-			if row, _, ok := infrastructureservices.ArtifactEndpoint(selection, c); ok {
-				s = s.WithPath(selection.With("serverRef", row.Get("name")), path...)
-			}
-		}
+	s = s.With("proxy", infrastructureservices.NormalizeProxy(s.Get("proxy"), c))
+	if s.Has("ntp") {
+		s = s.With("ntp", infrastructureservices.NormalizeServerSelections(s.Get("ntp"), c, api.NTPServer))
 	}
 	return o.WithSpec(s), nil
 }
@@ -78,7 +74,8 @@ func ValidateAuthored(o api.Object, c api.Catalog) []api.Issue {
 	if o.Kind() != api.MachineInstallProfile {
 		return nil
 	}
-	return validateCloneCustomizations(o)
+	issues := validateCloneCustomizations(o)
+	return add(issues, infrastructureservices.ValidateProxyChoice(o.Spec().Get("proxy"), "$.spec.proxy")...)
 }
 
 func Validate(o api.Object, c api.Catalog) []api.Issue {
@@ -94,6 +91,8 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	s := o.Spec()
 	custom := s.Get("customizations")
 	issues := validateCloneCustomizations(o)
+	issues = add(issues, infrastructureservices.ValidateProxy(s.Get("proxy"), c, "$.spec.proxy", true)...)
+	issues = add(issues, infrastructureservices.ValidateServerSelections(s.Get("ntp"), c, api.NTPServer, "$.spec.ntp")...)
 	if family := s.Get("os", "family"); family.Present() && !strings.EqualFold(family.Text(), "rhel") {
 		issues = add(issues, issue("$.spec.os.family", "machine installation supports the rhel OS family"))
 	}
@@ -191,6 +190,14 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		http  bool
 	}{{anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"), "$.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint", false}, {anaconda.Get("packageSource", "hostedTree", "artifactServerEndpoint"), "$.spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint", true}} {
 		issues = add(issues, infrastructureservices.ValidateArtifactEndpoint(selection.value, c, selection.path, selection.http)...)
+		if server, ok := infrastructureservices.ArtifactEndpoint(selection.value, c); ok && server.Spec().Get("management").Text() == "managed" {
+			for _, machine := range consumers(o, c) {
+				if machine.Spec().Has("os", "provided") && !machine.Spec().Get("os", "provided").Bool() && server.Spec().Get("machineRef").Text() == machine.Name() {
+					issues = add(issues, issue(selection.path+".serverRef", "installation requires an artifact server hosted on the same Machine being installed; place the server on an independently available Machine"))
+					break
+				}
+			}
+		}
 	}
 	if hosted := anaconda.Get("packageSource", "hostedTree"); hosted.Present() {
 		if !validMedia(hosted.Get("fromMedia").Text(), false) {

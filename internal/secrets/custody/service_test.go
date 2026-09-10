@@ -134,7 +134,7 @@ func (c *serviceConfirmer) Confirm(context.Context, string, string) error { c.ca
 
 func serviceFixture(t *testing.T, secretYAML string) (*Service, *serviceAccess, *serviceMaterial, *serviceConfirmer) {
 	t.Helper()
-	content := "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: fixture\nspec:\n  domains:\n    base: example.test\n" + secretYAML
+	content := "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: fixture\nspec:\n  controller: {machineRef: controller}\n  domains:\n    base: example.test\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: controller}\nspec:\n  os: {provided: true}\n  access: {local: true}\n" + secretYAML
 	access := &serviceAccess{snapshot: storage.ContextSnapshot{Context: storage.Context{Name: "fixture", ID: "ctx-fixture", Revision: "rev-fixture", Mode: "ready"}, Inputs: desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(content))}}}, session: &serviceSession{materials: map[string]secrets.Material{}}}
 	material := &serviceMaterial{}
 	confirmer := &serviceConfirmer{}

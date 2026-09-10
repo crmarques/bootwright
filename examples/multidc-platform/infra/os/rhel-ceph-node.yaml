@@ -14,14 +14,14 @@ spec:
       imageRef: rhel-boot
       redfishVirtualMedia:
         artifactServerEndpoint:
+          serverRef: artifact-server
           endpointRef: ip-https
-          serverRef: default
       packageSource:
         hostedTree:
           fromMedia: local-media:rhel-9.99-x86_64-dvd.iso
           artifactServerEndpoint:
+            serverRef: artifact-server
             endpointRef: ip-http
-            serverRef: default
 
   subscription:
     entitlementRef: rhel-satellite

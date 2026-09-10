@@ -54,7 +54,9 @@ spec:
     provided: true
 
   access:
-    local: true
+    ssh:
+      auth:
+        operatorIdentity: {}
 
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -147,60 +149,65 @@ spec:
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: InfraComponent
+kind: LoadBalancer
 metadata:
   name: acceptance-load-balancer
 
 spec:
-  loadBalancer:
-    implementation: haproxy
-    machineRef: acceptance-hypervisor
-    bindAddresses:
-      - address: 192.0.2.200
+  management: managed
+
+  implementation: haproxy
+  machineRef: acceptance-hypervisor
+  bindAddresses:
+    - address: 192.0.2.200
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: InfraComponent
+kind: Proxy
 metadata:
   name: acceptance-proxy
 
 spec:
-  proxy:
-    implementation: squid
-    machineRef: acceptance-hypervisor
+  management: managed
+
+  implementation: squid
+  machineRef: acceptance-hypervisor
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: InfraComponent
+kind: DNSServer
 metadata:
   name: acceptance-dns
 
 spec:
-  nameResolution:
-    implementation: dnsmasq
-    machineRef: acceptance-hypervisor
+  management: managed
+
+  implementation: dnsmasq
+  machineRef: acceptance-hypervisor
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: InfraComponent
+kind: NTPServer
 metadata:
   name: acceptance-ntp
 
 spec:
-  ntp:
-    implementation: chrony
-    machineRef: acceptance-hypervisor
+  management: managed
+
+  implementation: chrony
+  machineRef: acceptance-hypervisor
 
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: InfraComponent
+kind: Registry
 metadata:
   name: acceptance-registry
 
 spec:
-  registry:
-    implementation: mirror-registry
-    machineRef: acceptance-hypervisor
+  management: managed
+
+  implementation: mirror-registry
+  machineRef: acceptance-hypervisor
 
 ---
 apiVersion: bootwright.io/v1alpha1

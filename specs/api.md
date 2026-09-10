@@ -7,6 +7,7 @@ Kind-specific fields live in:
 
 - [Environment](api/environment.md);
 - [machines and infrastructure](api/machines.md);
+- [infrastructure services](api/infrastructure-services.md);
 - [container clusters](api/container-clusters.md);
 - [storage](api/storage.md);
 - [add-ons](api/addons.md);
@@ -281,7 +282,7 @@ Every document has exactly these top-level fields:
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
 | `apiVersion` | string | yes | Exactly `bootwright.io/v1alpha1`. |
-| `kind` | string | yes | One of the 21 registered kinds; case-sensitive. |
+| `kind` | string | yes | One of the 26 registered kinds; case-sensitive. |
 | `metadata` | object | yes | Contains only `name` and optional `labels`. |
 | `metadata.name` | string | yes | DNS label matching `[a-z0-9]([-a-z0-9]*[a-z0-9])?`. |
 | `metadata.labels` | object | no | String-to-string map; keys emit lexically in effective state. |
@@ -298,7 +299,7 @@ fields.
 `Ref` and `Refs` fields are plain name strings on the wire and typed references
 internally. Object references resolve case-sensitively by `metadata.name` in
 the schema's target kind after Environment selection. Nested references resolve
-only within the schema's selected owner or catalog.
+only within the schema's selected owner.
 
 The deliberate exceptions are:
 
@@ -328,7 +329,7 @@ all-zero replicated block is unpopulated, so only nonzero replicated members
 conflict with an erasure type or a placement policy.
 
 A presence union carries no discriminator. Exactly one implementation arm
-selects `InfraProvider`, `InfraComponent`, and `ClusterAddon`; their former
+selects `InfraProvider` and `ClusterAddon`; their former
 `type` fields are unknown. An implementation arm must satisfy its own required
 fields after defaulting. Presence choices also cover provider attachments,
 machine-install backends and package sources, authentication, proxy choices,
@@ -358,7 +359,7 @@ for kind-of-thing discriminators. The who-runs-it axis is always
 
 ## Kind catalog
 
-The `v1alpha1` catalog contains exactly 21 authored kinds:
+The `v1alpha1` catalog contains exactly 26 authored kinds:
 
 | Schema catalog group | Kinds | Architectural semantic owner |
 | --- | --- | --- |
@@ -367,7 +368,7 @@ The `v1alpha1` catalog contains exactly 21 authored kinds:
 | Machines and networks | `Machine`, `NetworkConfig` | Machine |
 | Managed operating systems | `MachineImage`, `MachineInstallProfile` | Managed OS |
 | Substrates | `InfraProvider` | Substrate |
-| Infrastructure services | `InfraComponent` | Infrastructure services |
+| Infrastructure services | `Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer` | Infrastructure services |
 | Container clusters | `ContainerCluster` | Container cluster |
 | Storage | `StorageCluster`, `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`, `StorageObjectGateway`, `StorageNFSExport`, `StorageExport` | Storage |
 | Add-ons | `ClusterAddon`, `ClusterAddonProfile`, `ClusterAddonBinding` | Add-ons |
@@ -384,6 +385,8 @@ rules; each schema page adds its own:
   diagnostic, no value wins, and a reference to the name remains ambiguous;
 - `ContainerCluster` and `StorageCluster` additionally share one cluster-name
   namespace;
+- the selected controller and local-access cardinality satisfy
+  [Environment controller selection](api/environment.md#controller-machine);
 - a `Machine` is bound by at most one node entry across all selected container
   and storage clusters;
 - every reference resolves to the required kind, variant, capability, nested
@@ -454,7 +457,8 @@ operator where to override it.
 Canonical effective output:
 
 1. orders kinds as `Environment`, `Entitlement`, `Machine`, `MachineImage`,
-   `MachineInstallProfile`, `NetworkConfig`, `InfraProvider`, `InfraComponent`,
+   `MachineInstallProfile`, `NetworkConfig`, `InfraProvider`, `Proxy`,
+   `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer`,
    `ContainerCluster`, `StorageCluster`, `StoragePlacementPolicy`,
    `StoragePool`, `StorageFilesystem`, `StorageObjectGateway`,
    `StorageNFSExport`, `StorageExport`, `ClusterAddon`,

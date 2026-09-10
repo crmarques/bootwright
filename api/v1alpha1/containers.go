@@ -3,12 +3,12 @@ package v1alpha1
 func init() { register(ContainerCluster, containerClusterSchema) }
 
 func containerEndpoint() *Shape {
-	source := record(defaulted("type", enumeration("openshift", "external", "infraComponent", "node"), StringValue("openshift")), field("componentRef", ref(InfraComponent)), field("bindAddressRef", nonempty()))
+	source := record(defaulted("type", enumeration("openshift", "external", "loadBalancer", "node"), StringValue("openshift")), field("loadBalancerRef", ref(LoadBalancer)), field("bindAddressRef", nonempty()))
 	for _, kind := range []string{"openshift", "external", "node"} {
-		source.Suppress = append(source.Suppress, Suppression{Field: "type", Value: StringValue(kind), Fields: []string{"componentRef", "bindAddressRef"}})
+		source.Suppress = append(source.Suppress, Suppression{Field: "type", Value: StringValue(kind), Fields: []string{"loadBalancerRef", "bindAddressRef"}})
 	}
 	endpoint := record(field("address", ip()), field("dnsName", dns()), field("port", port()), field("scheme", enumeration("http", "https")), field("prefixLength", integer("1", "128")), defaulted("interfaceNetworks", set(cidr()), ListValue()), defaulted("source", source, MapValue()))
-	for _, kind := range []string{"node", "infraComponent"} {
+	for _, kind := range []string{"node", "loadBalancer"} {
 		endpoint.Suppress = append(endpoint.Suppress, Suppression{Field: "source.type", Value: StringValue(kind), Fields: []string{"address"}})
 	}
 	return endpoint
@@ -36,6 +36,9 @@ func containerClusterSchema() *Shape {
 		defaulted("method", enumeration("agent"), StringValue("agent")),
 		defaulted("mode", enumeration("connected", "disconnected"), StringValue("connected")),
 		field("platform", platform),
+		field("proxy", proxySelection()),
+		field("ntp", serverSelections(NTPServer)),
+		field("registries", registrySelections()),
 		required("endpoints", record(required("api", containerEndpoint()), field("api-int", containerEndpoint()), required("ingress", containerEndpoint()))),
 		field("agent", record(field("redfishVirtualMedia", record(required("artifactServerEndpoint", artifactEndpoint()))), field("bootArtifacts", record(required("artifactServerEndpoint", artifactEndpoint()))))),
 		field("pullSecretRef", secret("dockerConfigJson")),

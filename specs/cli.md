@@ -266,6 +266,29 @@ input, and atomic publication. A confirmation cannot authorize overwriting an
 unrelated path. Network media import follows the endpoint and supply-chain
 rules in [security](security.md).
 
+### Controller declaration and command applicability
+
+A complete Environment requires its
+[controller Machine](api/environment.md#controller-machine). This admission
+requirement does not make desired state a prerequisite for help, version,
+completion, or context initialization without input. Context-free validation
+can run away from the declared controller; it checks input relationships and
+never verifies the invoking host.
+
+`bastion setup` and `preflight bastion` retain their existing command names and
+local-controller purpose. Their future implementation must support preparing
+and inspecting a host before Environment import, while context-bound runtime
+effects require the verified binding defined by their owning capabilities.
+Controller selection does not cause setup, install a container runtime or
+start services. Commands retain their specified unavailable result until the
+corresponding delivery is implemented.
+
+The local-access controller is not an SSH target. The existing SSH handoff and
+trust commands must not silently turn its selection into a local shell,
+privileged command or fabricated host-key operation. Their future supported
+journeys must define local-target applicability and actionable diagnostics;
+this schema change does not extend their execution authority.
+
 ## Validation, preflight, and rendering
 
 `validate` performs discovery, strict decoding, normalization, complete graph

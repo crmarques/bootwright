@@ -51,7 +51,8 @@ func inherit(value, fallback api.Value, shape *api.Shape, path string, root bool
 		}
 	}
 	for _, condition := range shape.Suppress {
-		if value.Get(strings.Split(condition.Field, ".")...).Equal(condition.Value) {
+		path := strings.Split(condition.Field, ".")
+		if value.Get(path...).Equal(condition.Value) && (!condition.FallbackValue.Present() || fallback.Get(path...).Equal(condition.FallbackValue)) {
 			for _, name := range condition.Fields {
 				fallback = withoutPath(fallback, strings.Split(name, "."))
 			}

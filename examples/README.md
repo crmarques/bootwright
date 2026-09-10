@@ -16,7 +16,7 @@ multi-datacenter graph. It demonstrates a large resource and reference surface
 using fictional identities, documentation address ranges, and deliberately
 fake operational coordinates. Its private Secret payload root is ignored.
 
-Once the compiler is implemented, validate the directory as a whole:
+Validate the directory as a whole:
 
 ```text
 bootwright validate -f examples/multidc-platform

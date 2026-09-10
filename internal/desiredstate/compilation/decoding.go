@@ -32,7 +32,7 @@ func decodeDocument(document desiredstate.Document, diagnostics *diagnostics) *o
 	}
 	kindNode := mappingNode(root, "kind")
 	if kindNode == nil {
-		d.fail(root, "api.kind", "$.kind", "kind must name one of the 21 registered API kinds")
+		d.fail(root, "api.kind", "$.kind", "kind must name a registered API kind")
 		return nil
 	}
 	kindValue := d.value(kindNode, &api.Shape{Type: api.String}, "$.kind")
@@ -42,7 +42,11 @@ func decodeDocument(document desiredstate.Document, diagnostics *diagnostics) *o
 	kind := api.Kind(kindValue.Text())
 	shape := api.Schema(kind)
 	if shape == nil {
-		d.fail(mappingNode(root, "kind"), "api.kind", "$.kind", "kind must name one of the 21 registered API kinds")
+		message := "kind must name a registered API kind"
+		if kind == "InfraComponent" {
+			message = "InfraComponent is retired; declare Proxy, DNSServer, NTPServer, ArtifactServer, Registry, or LoadBalancer with management on its spec"
+		}
+		d.fail(mappingNode(root, "kind"), "api.kind", "$.kind", message)
 		return nil
 	}
 	envelope := &api.Shape{Type: api.Mapping, Fields: []api.Field{
@@ -194,7 +198,11 @@ func (d *decoder) value(node *desiredstate.Node, shape *api.Shape, path string) 
 			} else if field, ok := shape.Field(key.Value); ok {
 				childShape = field.Shape
 			} else {
-				d.fail(key, "api.field", path, "field is not permitted by this schema")
+				if message := d.retiredFieldMessage(path, key.Value); message != "" {
+					d.fail(key, "api.field", childPath, message)
+				} else {
+					d.fail(key, "api.field", path, "field is not permitted by this schema")
+				}
 				continue
 			}
 			fields = append(fields, api.FieldValue{Name: key.Value, Value: d.value(n, childShape, childPath)})
@@ -252,6 +260,33 @@ func (d *decoder) value(node *desiredstate.Node, shape *api.Shape, path string) 
 	}
 	d.fail(node, "yaml.shape", path, "unsupported YAML representation")
 	return api.Value{}
+}
+
+func (d *decoder) retiredFieldMessage(path, field string) string {
+	kind := nodeText(mappingNode(documentBody(d.document), "kind"))
+	if field == "proxy" {
+		if kind == string(api.Environment) && (path == "$.spec.controller" || path == "$.spec.defaults.Environment.controller") {
+			return "Environment controller.proxy is retired; put proxy on the Machine selected by controller.machineRef"
+		}
+		if kind == string(api.Machine) && path == "$.spec.os.install" || kind == string(api.Environment) && path == "$.spec.defaults.Machine.os.install" {
+			return "Machine os.install.proxy is retired; use Machine.spec.proxy or its kind defaults"
+		}
+	}
+	if kind == string(api.Environment) && (path == "$.spec" || path == "$.spec.defaults.Environment") {
+		switch field {
+		case "infraComponents":
+			return "infraComponents is retired; declare typed service objects and reference them from their consumers"
+		case "proxy":
+			return "Environment proxy is retired; use Machine.spec.proxy on the controller and proxy choices on install consumers or their kind defaults"
+		case "registries":
+			return "Environment registries is retired; declare Registry objects and select them through ContainerCluster install.registries"
+		case "componentImages":
+			return "componentImages is retired; put image pins on managed service objects or their kind defaults"
+		case "trustedCAs":
+			return "Environment trustedCAs is retired; reference caBundle Secrets through ContainerCluster.spec.install.additionalTrustBundleRefs or its kind defaults; connection trust remains on the consuming service or Entitlement"
+		}
+	}
+	return ""
 }
 
 func allowedTag(n *desiredstate.Node) bool {

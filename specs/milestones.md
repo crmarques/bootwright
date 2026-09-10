@@ -1,7 +1,7 @@
 # Milestones
 
 **Current milestone: M1c — completed.** Desired-state
-admission for all 21 API kinds, durable contexts, context-backed validation and
+admission for all 26 API kinds, durable contexts, context-backed validation and
 public `render effective` are implemented. M1a's catalog, help, version,
 completion and unavailable-command guarantees remain in force. M1c is specified
 in [Secrets](secrets.md).
@@ -217,6 +217,65 @@ Delivered evidence:
   allowlisted local filesystem types were not individually exercised; no
   power-loss or remote-filesystem qualification is claimed.
 
+### Admission API update — independent infrastructure services
+
+**Owners:** Desired state, Environment, Infrastructure services, Machine,
+Managed OS and Container cluster. **Definition:** Specified.
+**Delivery:** Completed. This authorized admission update retains M1c as the
+current milestone and keeps `bootwright.io/v1alpha1`.
+
+Replace the former shared-service union and Environment catalogs with the six
+[infrastructure service kinds](api/infrastructure-services.md), taking the
+catalog from 21 to 26 kinds. Consumers own typed proxy, DNS, NTP, artifact and
+registry selections; Environment explicitly selects its controller Machine. Kind
+defaults supply shared values, while external service connection facts and
+managed service deployment/image intent each have one object identity.
+Cluster installation owns its direct CA Secret references; the former
+Environment trust list is retired without broadening other trust boundaries.
+
+Require `Environment.spec.controller.machineRef` to identify one provided,
+local Machine outside selected cluster node membership. Retain that Machine
+through cluster selection, while honoring resource-file selection. Its ordinary
+`Machine.spec.proxy` owns controller egress; the former controller and Machine
+installation proxy fields are retired. Provided Machines and Bootwright-installed
+Machines share the host-level choice, with profile fallback for the latter;
+downstream-installed nodes continue to use cluster installation policy.
+Admission checks declared locality without probing the running host. Runtime
+host binding, controller protection and local service execution remain future
+work under C16 and M1d below.
+
+Update schemas, strict admission, normalization, graph retention, effective
+encoding, examples and context-backed validation together. Old kinds and
+fields refuse; there is no alias, input-conversion command, silent frozen-input
+rewrite or new runtime capability. The historical counts and evidence above
+record the earlier 21-kind deliveries and are not the revised catalog's counts.
+M1d and all later native rendering or platform lifecycle work remain deferred.
+
+Delivered evidence:
+
+- All six managed/external service schemas, explicit management changes and
+  kind defaults; consumer references and endpoint selection; atomic proxy
+  opt-out; ordered DNS/NTP replacement; and profile/default diagnostic origins.
+- Consumer-owned installation CA references, whole-list defaults and explicit
+  empty-list opt-out; Secret type/reference checks; and actionable refusal of
+  retired Environment trust fields, including kind-default fragments.
+- Required controller references, provided/local identity, sole retained local
+  Machine, cluster membership refusal and controller retention under filtering;
+  Machine proxy applicability, atomic replacement, profile/default provenance
+  and actionable refusal of both retired proxy locations.
+- Registry trust, artifact bootstrap and rescue constraints; service-root/host
+  retention; reference checks after cluster selection; canonical effective
+  round trips; and the 100-object synthetic example plus all-kind fixtures.
+- Frozen retired-input refusal leaves context state unchanged. Explicit
+  context input replacement retains context identity and stored Secret data.
+- `make check` passed, including formatting, module verification, all Go tests,
+  vet, four-shell completion and the official online vulnerability database.
+  The scanner found no reachable or imported-package vulnerabilities; one
+  advisory affects an unused package in a required module.
+- `make build`, `go test -race ./...`, and 100,000 executions of
+  `FuzzAdmissionCompiler` passed. Changed documentation's local file and
+  heading links were checked.
+
 ## M1c — context secret management
 
 **Owner:** Secrets; Workspace owns the enclosing path boundary. **Requires:**
@@ -360,7 +419,7 @@ restriction after apply registration while destroy remains unavailable, as
 required by [state reconciliation](state-reconciliation.md#lifecycle-unit).
 
 Enable full-context apply and exact continuation for an Environment whose only
-lifecycle capabilities are persistent managed `artifactServer` components on
+lifecycle capabilities are persistent managed `ArtifactServer` objects on
 OS-ready provided Machines. Refuse any unsupported required capability before
 registration or effects. `Environment` and `Secret` are inputs, not plan blocks;
 `install-only` retention is excluded.
@@ -368,6 +427,10 @@ registration or effects. `Environment` and `Secret` are inputs, not plan blocks;
 Use authored `knownHostsRef`, `privateKeyRef` or `passwordRef`, and any required
 `sudoPasswordRef`, binding the effective user and all Secret versions.
 `operatorIdentity` and the global borrowed-SSH flags are unsupported here.
+These credentials apply to SSH hosts. Supporting placement on the controller
+requires C16's verified local binding and host-wide coordination, plus a
+qualified local execution adapter; no SSH configuration is inferred for it.
+The controller declares `container-runtime` when it hosts managed containers.
 
 First define the capability port, HTTP implementation/image, content ownership,
 endpoints/TLS, host-key limits and algorithms, readiness, replay, cancellation,
@@ -420,7 +483,7 @@ fill its concrete version, journey and evidence gaps when requested.
 | ID | Owner and bounded outcome | Deferred because / requires | Exit evidence |
 | --- | --- | --- | --- |
 | C1 | Substrate: one libvirt, vSphere or KubeVirt provisioning variant. | No variant/consumer selected; requires M1d and a named use case. | Exact release, adapter contract, failure/replay tests and real-system qualification. |
-| C2 | Infrastructure services: one managed service arm beyond artifact serving. | No named consumer; requires M1d. | Typed port, exact implementation, lifecycle evidence, failure and acceptance tests. |
+| C2 | Infrastructure services: one managed service kind beyond artifact serving. | No named consumer; requires M1d. | Typed port, exact implementation, lifecycle evidence, failure and acceptance tests. |
 | C3 | Storage: one Ceph pool, filesystem, gateway, NFS or export lifecycle. | Separate from operator-run scripts; requires M6 and a named service. | Ownership, replay, destroy and real-system qualification. |
 | C4 | Add-ons: one built-in package and binding lifecycle. | No exact package/target/release selected; requires a supported cluster. | [Package/driver contract](add-ons.md), compatibility, trust/secrets, readiness, ordering/replay/destroy and acceptance. |
 | C5 | Managed OS: one additional image/profile/entitlement variant. | No concrete consumer; requires M5. | Intent gap, deliberate API revision, renderer/executor parity and qualification. |
@@ -434,6 +497,7 @@ fill its concrete version, journey and evidence gaps when requested.
 | C13 | Release engineering: one source/binary distribution with licensing and notices. **Needs definition.** | Buildability does not define redistribution; requires M1a and one release channel. | Project license, direct/transitive license review, exact release toolchain/platform/shell matrix, non-skipping completion tests, reproducible archives, notices, dependency inventory, checksums, provenance, SBOM and clean-room packaging verification. |
 | C14 | Workspace and Secrets: explicit complete-store restore with logical identity preservation. **Needs definition.** | Copy restoration changes physical identities and may roll back allocation/seal reservations; storage simplification provides upgrades and safe refusal, not a backup/restore command. Requires M1b/M1c and a selected restore journey. | Coherent snapshot validation, authorized inode rebinding, fresh allocation epoch/key before writes after rollback, interruption/retry and wrong-store refusal tests; preserve lifecycle recovery evidence. |
 | C15 | Secrets: replace per-ID reservations with bounded lifetime allocation. **Needs definition.** | Current opaque random version/binding IDs retain historical reservation files; a new allocation scheme must preserve issued-ID non-reuse across crashes and restore. Requires M1c and C14 restore semantics. | Bounded allocator state, reservation-before-use, counter/namespace exhaustion, migration of existing bindings and failed attempts, non-reuse and crash tests. |
+| C16 | Controller and Workspace, using Machine: bind the declared controller to the executing local host and prepare its declared prerequisites. **Needs definition.** | Admission proves only declared locality; actual host identity, supported local execution/runtime matrix and host-wide coordination need qualification before controller-hosted M1d services. Requires M1c; explicit relocation also requires C14. | Private durable host binding before effects, mismatch refusal, protected controller OS/CLI/state, setup/apply ordering, proxy bootstrap dependency refusal, bounded port/path/runtime ownership across contexts, and cancellation/crash/retry tests on a qualified local host. |
 
 When a cluster inspection or access slice under C6 is promoted, its exit evidence
 must exercise the [cluster discovery](cli/output.md#cluster-discovery) and

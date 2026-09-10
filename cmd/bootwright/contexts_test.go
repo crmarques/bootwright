@@ -22,7 +22,7 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
-const syntheticEnvironment = "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: synthetic\nspec:\n  domains:\n    base: example.test\n"
+const syntheticEnvironment = "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: synthetic\nspec:\n  controller: {machineRef: service-host}\n  domains:\n    base: example.test\n"
 
 func contextFixture(t *testing.T) (cli.Services, *contextfs.Store, string, string) {
 	t.Helper()
@@ -33,6 +33,9 @@ func contextFixture(t *testing.T) (cli.Services, *contextfs.Store, string, strin
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(input, "environment.yaml"), []byte(syntheticEnvironment), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(input, "controller.yaml"), []byte(serviceHost), 0600); err != nil {
 		t.Fatal(err)
 	}
 	repository := testRepository(root)
@@ -124,6 +127,7 @@ func TestCompleteContextJourney(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(other, "environment.yaml"), []byte(syntheticEnvironment), 0600); err != nil {
 		t.Fatal(err)
 	}
+	addSecretInput(t, other, "controller.yaml", serviceHost)
 	contextRun(t, services, 1, "context", "update", "--name", "alpha", "--input-dir", other, "--yes")
 	contextRun(t, services, 0, "context", "init", "--name", "beta", "--input-dir", other)
 	contextRun(t, services, 0, "context", "use", "--name", "alpha")
@@ -319,7 +323,7 @@ func TestContextReplayAndReadOnlyEffects(t *testing.T) {
 		Diagnostics []json.RawMessage
 		Logs        []json.RawMessage
 	}
-	if err := json.Unmarshal([]byte(output), &envelope); err != nil || !envelope.OK || len(envelope.Result.EffectiveState) != 2 || envelope.Result.Counts.FilesSeen != 2 || len(envelope.Diagnostics) != 0 || len(envelope.Logs) != 0 {
+	if err := json.Unmarshal([]byte(output), &envelope); err != nil || !envelope.OK || len(envelope.Result.EffectiveState) != 3 || envelope.Result.Counts.FilesSeen != 3 || len(envelope.Diagnostics) != 0 || len(envelope.Logs) != 0 {
 		t.Fatalf("effective result %s: %v", output, err)
 	}
 	frozen, _ = contextRun(t, services, 0, "validate", "--context", "alpha", "--output", "json")
@@ -428,7 +432,7 @@ func TestCompleteExampleContextRoundTrip(t *testing.T) {
 	var result struct {
 		Result struct{ EffectiveState []json.RawMessage }
 	}
-	if err := json.Unmarshal([]byte(rendered), &result); err != nil || len(result.Result.EffectiveState) != 93 || stderr != "" {
+	if err := json.Unmarshal([]byte(rendered), &result); err != nil || len(result.Result.EffectiveState) != 100 || stderr != "" {
 		t.Fatalf("complete effective state: count=%d stderr=%s err=%v", len(result.Result.EffectiveState), stderr, err)
 	}
 }

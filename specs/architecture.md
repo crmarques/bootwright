@@ -377,6 +377,38 @@ never import the desired-state aggregate. Platform-owned invariants remain with 
 Container cluster, Storage, and the other referenced domains; compilation phase
 and diagnostic semantics remain in [the API contract](api.md).
 
+#### Controller host and local services
+
+The [controller Machine reference](api/environment.md#controller-machine) is
+an admitted Environment relationship. It does not prove the invoking host's
+identity, relocate execution or change Workspace storage. Machine owns the
+selected host's proxy and capability intent; Environment owns selection and
+retention. The current admission/compiler boundary remains free of host probes
+and runtime writes.
+
+Future controller execution has these boundaries; implementation availability
+and the required qualification phase remain in [milestones](milestones.md):
+
+- Controller owns verified local-host evidence, prerequisite readiness and
+  setup through bounded capability interfaces. Authored names, addresses,
+  `access.local` and controller selection cannot substitute for that evidence.
+- Workspace owns any durable binding between a context and its verified
+  controller host. Its record format, publication, replacement/refusal and
+  recovery semantics must be defined before binding is implemented. Desired
+  state never supplies a storage-root override or runtime identity token.
+- Infrastructure services own local service effects and their readiness,
+  replay and inverse evidence. A local adapter must preserve the same logical
+  capability contract as its qualified remote counterpart; local execution
+  does not bypass Go authorization, privileged-process or Ansible boundaries.
+- Reconciliation freezes the required controller/implementation evidence and
+  owns ordering and [controller-host protection](state-reconciliation.md#controller-host-protection).
+  Shared host effects require coordination across contexts, not only the
+  existing per-context mutation lease.
+
+No inferred capability, public executable selector or generic local command
+runner is introduced by the controller reference. Optional service co-location
+must qualify its actual host/runtime implementation before becoming executable.
+
 #### Environment inspection and access
 
 Environment preflight consumes domain-owned prerequisite capabilities.

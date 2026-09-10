@@ -6,7 +6,6 @@ func init() {
 	register(InfraProvider, machineProviderSchema)
 	register(MachineImage, machineImageSchema)
 	register(MachineInstallProfile, machineInstallSchema)
-	register(InfraComponent, machineComponentSchema)
 }
 
 func machineVirtualMediaSchema() *Shape {
@@ -39,13 +38,14 @@ func machineSchema() *Shape {
 		field("placement", record(field("site", name()))),
 		field("substrate", record(field("providerRef", ref(InfraProvider)), field("profileRef", nonempty()))),
 		field("hardware", record(field("nics", named(record(required("name", nonempty()), field("macAddress", lexical("mac"))))), field("boot", record(field("nicRef", nonempty()))), field("management", record(field("bmc", machineBMCSchema()))))),
-		required("os", record(required("provided", boolean()), field("installProfileRef", ref(MachineInstallProfile)), field("install", record(field("rootDeviceHints", record(field("deviceName", lexical("device-path")), field("hctl", nonempty()), field("model", nonempty()), field("vendor", nonempty()), field("serialNumber", nonempty()), field("minSizeGigabytes", integer("0", "")), field("wwn", nonempty()), field("rotational", boolean()))))))),
+		required("os", record(required("provided", boolean()), field("installProfileRef", ref(MachineInstallProfile)), field("install", record(field("ntp", serverSelections(NTPServer)), field("rootDeviceHints", record(field("deviceName", lexical("device-path")), field("hctl", nonempty()), field("model", nonempty()), field("vendor", nonempty()), field("serialNumber", nonempty()), field("minSizeGigabytes", integer("0", "")), field("wwn", nonempty()), field("rotational", boolean()))))))),
+		field("proxy", proxySelection()),
 		field("network", network), field("access", access),
 	)
 }
 
 func machineNetworkSchema() *Shape {
-	return record(required("machineNetwork", nonemptyArray(set(record(required("cidr", cidr()))))), field("nameResolutionRefs", set(nonempty())), required("nmstate", native()))
+	return record(required("machineNetwork", nonemptyArray(set(record(required("cidr", cidr()))))), field("dns", serverSelections(DNSServer)), required("nmstate", native()))
 }
 
 func machineProfileSchema(variant string) *Shape {

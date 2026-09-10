@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Proxy
+metadata:
+  name: default
+
+spec:
+  management: external
+
+  connection:
+    httpProxy: http://proxy.example.com:8080
+    httpsProxy: http://proxy.example.com:8080
+    trustBundleRef: custom-ca-bundle

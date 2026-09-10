@@ -71,7 +71,14 @@ func (d *diagnostics) issue(record *objectRecord, issue api.Issue) bool {
 		if location, ok := record.location(issue.Field); ok {
 			item.Source = &location
 		}
-		if record.isInherited(issue.Field) {
+		if origin, sourceField, ok := record.derivedOrigin(issue.Field); ok {
+			item.Message += " (from " + string(origin.object.Kind())
+			if origin.isInherited(sourceField) {
+				item.Message += " via Environment defaults"
+			}
+			item.Message += ")"
+			item.Remediation = "override the field on the recipient object or correct the referenced object's source field"
+		} else if record.isInherited(issue.Field) {
 			item.Message += " (from Environment defaults)"
 			item.Remediation = "override the field on the recipient object or correct its Environment kind default"
 		} else if issue.Code == "api.reference" {
@@ -122,9 +129,13 @@ type objectRecord struct {
 	inherited            map[string]desiredstate.SourceLocation
 	inheritedEnvironment *objectRecord
 	remappings           []map[string]string
+	derived              map[string]fieldSource
 }
 
 func (r *objectRecord) location(field string) (desiredstate.SourceLocation, bool) {
+	if origin, sourceField, ok := r.derivedOrigin(field); ok {
+		return origin.location(sourceField)
+	}
 	field = r.sourceField(field)
 	requested := field
 	for {

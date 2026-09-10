@@ -7,10 +7,10 @@ spec:
   machineNetwork:
     - cidr: 192.0.2.0/24
 
-  nameResolutionRefs:
-    - default-01
-    - default-02
-    - default-03
+  dns:
+    - serverRef: default-01
+    - serverRef: default-02
+    - serverRef: default-03
 
   nmstate:
     interfaces:

@@ -37,11 +37,12 @@ func Select(catalog api.Catalog, attachments []Attachment) Selection {
 			retained[string(kind)+"/"+name] = true
 		}
 	}
-	for _, kind := range []api.Kind{api.Environment, api.Entitlement, api.MachineImage, api.MachineInstallProfile, api.NetworkConfig, api.InfraComponent, api.CustomPlaybook, api.Secret} {
+	for _, kind := range []api.Kind{api.Environment, api.Entitlement, api.MachineImage, api.MachineInstallProfile, api.NetworkConfig, api.Proxy, api.DNSServer, api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer, api.CustomPlaybook, api.Secret} {
 		for _, object := range catalog.OfKind(kind) {
 			keep(kind, object.Name())
 		}
 	}
+	keep(api.Machine, env.Spec().Get("controller", "machineRef").Text())
 	for _, entry := range []struct {
 		field string
 		kind  api.Kind
@@ -95,9 +96,9 @@ func Select(catalog api.Catalog, attachments []Attachment) Selection {
 				continue
 			}
 			switch kind {
-			case api.InfraComponent:
-				for _, arm := range spec.Fields() {
-					keep(api.Machine, arm.Value.Get("machineRef").Text())
+			case api.Proxy, api.DNSServer, api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer:
+				if spec.Get("management").Text() == "managed" {
+					keep(api.Machine, spec.Get("machineRef").Text())
 				}
 			case api.Machine:
 				keep(api.InfraProvider, spec.Get("substrate", "providerRef").Text())

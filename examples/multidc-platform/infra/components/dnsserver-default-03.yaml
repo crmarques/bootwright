@@ -1,0 +1,8 @@
+apiVersion: bootwright.io/v1alpha1
+kind: DNSServer
+metadata:
+  name: default-03
+
+spec:
+  management: external
+  address: 203.0.113.53

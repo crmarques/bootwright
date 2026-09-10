@@ -24,61 +24,32 @@ spec:
       install:
         pullSecretRef: openshift-pull-secret
 
-  proxy:
-    defaultRef: default
-
-    bootwright:
-      proxyRef: default
-
-    containerClusterInstall:
-      proxyRef: default
-
-    machineOSInstall:
-      proxyRef: default
-
-  infraComponents:
-    proxies:
-      - name: default
-        management: external
-        connection:
-          httpProxy: http://proxy.example.com:8080
-          httpsProxy: http://proxy.example.com:8080
+        proxy:
+          proxyRef: default
           noProxy:
             - .example.com
             - 192.0.2.0/24
             - 198.51.100.0/24
             - 203.0.113.0/24
-          trustBundleRef: custom-ca-bundle
-    nameResolution:
-      - name: default-01
-        management: external
-        address: 192.0.2.53
 
-      - name: default-02
-        management: external
-        address: 198.51.100.53
+        ntp:
+          - serverRef: default-01
+          - serverRef: default-02
+          - serverRef: default-03
 
-      - name: default-03
-        management: external
-        address: 203.0.113.53
-    artifactServers:
-      - name: default
-        management: managed
-        componentRef: artifact-server
-        default: false
-    ntp:
-      - name: default-01
-        management: external
-        address: time1.example.com
+    MachineInstallProfile:
+      proxy:
+        proxyRef: default
+        noProxy:
+          - .example.com
+          - 192.0.2.0/24
+          - 198.51.100.0/24
+          - 203.0.113.0/24
 
-      - name: default-02
-        management: external
-        address: time2.example.com
+      ntp:
+        - serverRef: default-01
+        - serverRef: default-02
+        - serverRef: default-03
 
-      - name: default-03
-        management: external
-        address: time3.example.com
-
-  trustedCAs:
-    caBundleRefs:
-      - custom-ca-bundle
+  controller:
+    machineRef: bastion

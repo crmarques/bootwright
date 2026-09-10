@@ -67,6 +67,9 @@ process or network access. “Mutate” permits only the named, planned effects.
 | `bootwright media list` | `--checksums` false; `--output text\|json` default `text` | media names, sizes, and optional computed digests | read local media; `--checksums` reads each image in full |
 | `bootwright media delete` | required `--name <filename.iso>`; `--yes` false | deleted media identity | local media deletion when not frozen by an operation |
 
+The required controller declaration and context-free setup boundary follow
+[controller command applicability](../cli.md#controller-declaration-and-command-applicability).
+
 ### Inspect and lifecycle commands
 
 | Invocation | Local flags and defaults | Successful result | Effects |

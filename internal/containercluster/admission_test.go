@@ -169,9 +169,9 @@ func TestAPIInternalCopiesOnlyAddressAndSource(t *testing.T) {
 
 func TestLoadBalancerSelectionAndVIPCollisions(t *testing.T) {
 	o, c := fixture("vsphere", 2, false)
-	lb := obj(api.InfraComponent, "lb", m("loadBalancer", m("bindAddresses", list(m("name", "api", "address", "192.0.2.2"), m("name", "ingress", "address", "192.0.2.3")))))
+	lb := obj(api.LoadBalancer, "lb", m("management", "external", "bindAddresses", list(m("name", "api", "address", "192.0.2.2"), m("name", "ingress", "address", "192.0.2.3"))))
 	c = api.NewCatalog(append(c.Objects(), lb))
-	o = o.WithSpec(o.Spec().WithPath(m("source", m("type", "infraComponent", "componentRef", "lb", "bindAddressRef", "api")), "install", "endpoints", "api"))
+	o = o.WithSpec(o.Spec().WithPath(m("source", m("type", "loadBalancer", "loadBalancerRef", "lb", "bindAddressRef", "api")), "install", "endpoints", "api"))
 	effective, _ := Normalize(o, c)
 	if issues := Validate(effective, c); len(issues) > 0 {
 		t.Fatal(issues)
@@ -179,7 +179,7 @@ func TestLoadBalancerSelectionAndVIPCollisions(t *testing.T) {
 	if effective.Spec().Get("install", "endpoints", "api", "address").Text() != "192.0.2.2" {
 		t.Fatal("load-balancer address missing")
 	}
-	bad := o.WithSpec(o.Spec().WithPath(m("type", "infraComponent", "componentRef", "lb"), "install", "endpoints", "api", "source"))
+	bad := o.WithSpec(o.Spec().WithPath(m("type", "loadBalancer", "loadBalancerRef", "lb"), "install", "endpoints", "api", "source"))
 	bad, _ = Normalize(bad, c)
 	if issues := Validate(bad, c); !hasField(issues, "$.spec.install.endpoints.api.source.bindAddressRef") {
 		t.Fatal(issues)
@@ -192,7 +192,7 @@ func TestLoadBalancerSelectionAndVIPCollisions(t *testing.T) {
 	if issues := Validate(bad, c); !hasField(issues, "$.spec.install.endpoints.ingress.address") {
 		t.Fatal("out-of-network VIP accepted", issues)
 	}
-	missing := o.WithSpec(o.Spec().WithPath(api.StringValue("unknown"), "install", "endpoints", "api", "source", "componentRef"))
+	missing := o.WithSpec(o.Spec().WithPath(api.StringValue("unknown"), "install", "endpoints", "api", "source", "loadBalancerRef"))
 	if _, _, issues := endpointAddress(missing, missing.Spec().Get("install", "endpoints", "api"), c, "$.endpoint"); len(issues) != 0 {
 		t.Fatal("unresolved component cascaded", issues)
 	}
@@ -297,27 +297,41 @@ func TestDisconnectedAndBaremetalArtifactSelections(t *testing.T) {
 	}
 	o = o.WithSpec(o.Spec().WithPath(api.StringValue("disconnected"), "install", "mode"))
 	issues := Validate(o, c)
-	if !hasField(issues, "$.spec.install.agent.bootArtifacts.artifactServerEndpoint") || !hasField(issues, "$.spec.install.mode") {
+	if !hasField(issues, "$.spec.install.agent.bootArtifacts.artifactServerEndpoint") || !hasField(issues, "$.spec.install.registries.mirror") {
 		t.Fatal(issues)
 	}
-	component := obj(api.InfraComponent, "artifacts", m("artifactServer", m("endpoints", list(m("name", "media")))))
-	objects := c.Objects()
-	for i, x := range objects {
-		if x.Kind() == api.Environment {
-			objects[i] = x.WithSpec(x.Spec().With("registries", m("mirror", m("url", "mirror.example.test"))).With("infraComponents", m("artifactServers", list(m("name", "primary", "management", "managed", "componentRef", "artifacts")))))
-		}
-	}
-	objects = append(objects, component)
-	c = api.NewCatalog(objects)
+	server := obj(api.ArtifactServer, "artifacts", m("management", "managed", "machineRef", "services", "endpoints", list(m("name", "media"))))
+	registry := obj(api.Registry, "mirror", m("management", "external", "url", "mirror.example.test", "trustBundleRef", "mirror-ca"))
+	c = api.NewCatalog(append(c.Objects(), server, registry))
+	o = o.WithSpec(o.Spec().WithPath(m("registryRef", "mirror"), "install", "registries", "mirror"))
 	for _, consumer := range []string{"redfishVirtualMedia", "bootArtifacts"} {
-		o = o.WithSpec(o.Spec().WithPath(m("endpointRef", "media"), "install", "agent", consumer, "artifactServerEndpoint"))
+		o = o.WithSpec(o.Spec().WithPath(m("serverRef", "artifacts", "endpointRef", "media"), "install", "agent", consumer, "artifactServerEndpoint"))
 	}
 	o, _ = Normalize(o, c)
 	if issues := Validate(o, c); len(issues) > 0 {
 		t.Fatal(issues)
 	}
-	if o.Spec().Get("install", "agent", "bootArtifacts", "artifactServerEndpoint", "serverRef").Text() != "primary" {
-		t.Fatal("artifact server default missing")
+	missing := o.WithSpec(o.Spec().WithPath(m("endpointRef", "media"), "install", "agent", "bootArtifacts", "artifactServerEndpoint"))
+	missing, _ = Normalize(missing, c)
+	if missing.Spec().Has("install", "agent", "bootArtifacts", "artifactServerEndpoint", "serverRef") {
+		t.Fatal("artifact server inferred from catalog")
+	}
+	if issues := Validate(missing, c); !hasField(issues, "$.spec.install.agent.bootArtifacts.artifactServerEndpoint.serverRef") {
+		t.Fatal("missing explicit artifact reference admitted", issues)
+	}
+	for _, bad := range []api.Object{
+		registry.WithSpec(registry.Spec().Without("trustBundleRef")),
+		server.WithSpec(server.Spec().With("machineRef", api.StringValue("node-0"))),
+	} {
+		objects := c.Objects()
+		for i, object := range objects {
+			if object.Identity() == bad.Identity() {
+				objects[i] = bad
+			}
+		}
+		if issues := Validate(o, api.NewCatalog(objects)); len(issues) == 0 {
+			t.Fatal("unsafe disconnected installation admitted")
+		}
 	}
 }
 
@@ -329,7 +343,7 @@ func TestMissingPrerequisitesSuppressSecondaryErrors(t *testing.T) {
 			t.Fatal("missing prerequisites cascaded", issue)
 		}
 	}
-	fragment := obj(api.ContainerCluster, "defaults", m("install", m("nodeSSH", m("privateKeyRef", "private"), "endpoints", m("api", m("source", m("type", "infraComponent"))))))
+	fragment := obj(api.ContainerCluster, "defaults", m("install", m("nodeSSH", m("privateKeyRef", "private"), "endpoints", m("api", m("source", m("type", "loadBalancer"))))))
 	if issues := ValidatePartial(fragment, api.Catalog{}); len(issues) != 0 {
 		t.Fatal("partial required fields cascaded", issues)
 	}

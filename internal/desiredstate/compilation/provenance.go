@@ -7,6 +7,44 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
+type fieldSource struct {
+	record *objectRecord
+	field  string
+}
+
+func (r *objectRecord) recordOrigins(origins []api.FieldOrigin, records map[string]*objectRecord) {
+	for _, origin := range origins {
+		source := records[string(origin.SourceKind)+"/"+origin.SourceName]
+		if source == nil || source == r {
+			continue
+		}
+		_, authored := source.locations[source.sourceField(origin.SourceField)]
+		_, _, derived := source.derivedOrigin(origin.SourceField)
+		if !authored && !derived && !source.isInherited(origin.SourceField) {
+			continue
+		}
+		if r.derived == nil {
+			r.derived = map[string]fieldSource{}
+		}
+		r.derived[origin.Field] = fieldSource{record: source, field: origin.SourceField}
+	}
+}
+
+func (r *objectRecord) derivedOrigin(field string) (*objectRecord, string, bool) {
+	field = r.sourceField(field)
+	prefix := field
+	for {
+		if source, ok := r.derived[prefix]; ok {
+			return source.record, source.field + strings.TrimPrefix(field, prefix), true
+		}
+		at := strings.LastIndexAny(prefix, ".[")
+		if at < 0 {
+			return nil, "", false
+		}
+		prefix = prefix[:at]
+	}
+}
+
 // A normalizer may sort a named list while keeping the authored source intact.
 // Retain only moved list prefixes; a diagnostic's effective field still points
 // to the original element, including when the entire list came from defaults.

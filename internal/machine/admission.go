@@ -9,12 +9,13 @@ import (
 	"unicode"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	if o.Kind() == api.NetworkConfig {
-		return o.WithSpec(normalizeConfiguration(o.Spec())), nil
+		return o.WithSpec(normalizeConfiguration(o.Spec(), c)), nil
 	}
 	if o.Kind() != api.Machine {
 		return o, nil
@@ -31,7 +32,7 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	}
 	network := s.Get("network")
 	if network.Has("inline") {
-		network = network.With("inline", normalizeConfiguration(network.Get("inline")))
+		network = network.With("inline", normalizeConfiguration(network.Get("inline"), c))
 	}
 	if network.Has("overrides") {
 		network = network.With("overrides", normalizeNativeMACs(network.Get("overrides")))
@@ -119,7 +120,47 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	if access.Present() {
 		s = s.With("access", access.Default("rootLogin", api.StringValue("keep")))
 	}
+	if installed(o) {
+		install := s.Get("os", "install")
+		if profile, ok := c.Find(api.MachineInstallProfile, s.Get("os", "installProfileRef").Text()); ok {
+			if value := profile.Spec().Get("proxy"); value.Present() {
+				s = s.Default("proxy", value)
+			}
+			if value := profile.Spec().Get("ntp"); value.Present() {
+				install = install.Default("ntp", value)
+			}
+		}
+		if install.Has("ntp") {
+			install = install.With("ntp", infrastructureservices.NormalizeServerSelections(install.Get("ntp"), c, api.NTPServer))
+		}
+		if install.Present() {
+			s = s.WithPath(install, "os", "install")
+		}
+	}
+	if s.Get("os", "provided").Bool() || installed(o) {
+		s = s.With("proxy", infrastructureservices.NormalizeProxy(s.Get("proxy"), c))
+	}
 	return o.WithSpec(s), nil
+}
+
+// NormalizationOrigins identifies profile choices inherited by an installed
+// Machine without assigning a profile origin to intrinsic direct access.
+func NormalizationOrigins(before, after api.Object, c api.Catalog) []api.FieldOrigin {
+	if before.Kind() != api.Machine || !installed(before) {
+		return nil
+	}
+	profile, ok := c.Find(api.MachineInstallProfile, before.Spec().Get("os", "installProfileRef").Text())
+	if !ok {
+		return nil
+	}
+	origins := []api.FieldOrigin{}
+	if !before.Spec().Has("proxy") && profile.Spec().Has("proxy") && after.Spec().Has("proxy") {
+		origins = append(origins, api.FieldOrigin{Field: "$.spec.proxy", SourceKind: api.MachineInstallProfile, SourceName: profile.Name(), SourceField: "$.spec.proxy"})
+	}
+	if !before.Spec().Has("os", "install", "ntp") && profile.Spec().Has("ntp") && after.Spec().Has("os", "install", "ntp") {
+		origins = append(origins, api.FieldOrigin{Field: "$.spec.os.install.ntp", SourceKind: api.MachineInstallProfile, SourceName: profile.Name(), SourceField: "$.spec.ntp"})
+	}
+	return origins
 }
 
 func ValidateAuthored(o api.Object, c api.Catalog) []api.Issue {
@@ -131,6 +172,7 @@ func ValidateAuthored(o api.Object, c api.Catalog) []api.Issue {
 	}
 	s := o.Spec()
 	issues := []api.Issue{}
+	issues = appendIssues(issues, validateServiceIntent(o)...)
 	if installed(o) && s.Has("access") {
 		issues = appendIssues(issues, invariant("$.spec.access", "Bootwright-installed Machines must not author access"))
 	}
@@ -155,6 +197,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	}
 	s := o.Spec()
 	issues := []api.Issue{}
+	issues = appendIssues(issues, validateServices(o, c)...)
 	if slices.Contains(s.Get("capabilities").Strings(), "ceph-arbiter") && !slices.Contains(s.Get("capabilities").Strings(), "ceph-node") {
 		issues = appendIssues(issues, invariant("$.spec.capabilities", "ceph-arbiter requires ceph-node capability"))
 	}
@@ -419,7 +462,10 @@ func validateAnacondaNetwork(address, native api.Value) []api.Issue {
 	return []api.Issue{invariant("$.spec.network", "Anaconda install networking requires DHCP or a static IPv4 installation address")}
 }
 
-func normalizeConfiguration(config api.Value) api.Value {
+func normalizeConfiguration(config api.Value, c api.Catalog) api.Value {
+	if config.Has("dns") {
+		config = config.With("dns", infrastructureservices.NormalizeServerSelections(config.Get("dns"), c, api.DNSServer))
+	}
 	networks := config.Get("machineNetwork").Items()
 	for i, network := range networks {
 		if prefix, err := netip.ParsePrefix(network.Get("cidr").Text()); err == nil {
@@ -461,20 +507,36 @@ func validateConfiguration(config api.Value, c api.Catalog, path string) []api.I
 			seen[prefix] = true
 		}
 	}
-	if envs := c.OfKind(api.Environment); len(envs) == 1 {
-		managed := 0
-		for i, ref := range config.Get("nameResolutionRefs").Items() {
-			row, ok := namedValue(envs[0].Spec().Get("infraComponents", "nameResolution"), ref.Text())
-			if !ok {
-				issues = appendIssues(issues, reference(fmt.Sprintf("%s.nameResolutionRefs[%d]", path, i), "name resolution must name an Environment catalog entry"))
-			} else if row.Get("management").Text() == "managed" {
-				managed++
-			}
-		}
-		if managed > 1 {
-			issues = appendIssues(issues, invariant(path+".nameResolutionRefs", "a network may consume at most one managed name-resolution component"))
+	issues = appendIssues(issues, infrastructureservices.ValidateServerSelections(config.Get("dns"), c, api.DNSServer, path+".dns")...)
+	managed := map[string]bool{}
+	for _, selection := range config.Get("dns").Items() {
+		if server, ok := c.Find(api.DNSServer, selection.Get("serverRef").Text()); ok && server.Spec().Get("management").Text() == "managed" {
+			managed[server.Name()] = true
 		}
 	}
+	if len(managed) > 1 {
+		issues = appendIssues(issues, invariant(path+".dns", "a network may consume at most one distinct managed DNS server"))
+	}
+	return issues
+}
+
+func validateServiceIntent(o api.Object) []api.Issue {
+	s := o.Spec()
+	issues := infrastructureservices.ValidateProxyChoice(s.Get("proxy"), "$.spec.proxy")
+	if provided := s.Get("os", "provided"); s.Has("proxy") && provided.Present() && !provided.Bool() && !installed(o) {
+		issues = appendIssues(issues, invariant("$.spec.proxy", "installer-provisioned Machines use their cluster's installation proxy choice"))
+	}
+	if s.Has("os", "install", "ntp") && !installed(o) {
+		issues = appendIssues(issues, invariant("$.spec.os.install.ntp", "installation NTP choices require a Bootwright-installed Machine with installProfileRef"))
+	}
+	return issues
+}
+
+func validateServices(o api.Object, c api.Catalog) []api.Issue {
+	s := o.Spec()
+	issues := validateServiceIntent(o)
+	issues = appendIssues(issues, infrastructureservices.ValidateProxy(s.Get("proxy"), c, "$.spec.proxy", installed(o))...)
+	issues = appendIssues(issues, infrastructureservices.ValidateServerSelections(s.Get("os", "install", "ntp"), c, api.NTPServer, "$.spec.os.install.ntp")...)
 	return issues
 }
 

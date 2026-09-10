@@ -51,7 +51,8 @@ spec:
     nodeSSH:
       keyPairRef: hub-multidc-02-cluster-admin-ssh-key
 
-    additionalTrustBundleRefs: []
+    additionalTrustBundleRefs:
+      - custom-ca-bundle
 
   networking:
     clusterNetwork:

@@ -28,8 +28,18 @@ metadata:
   name: example
 
 spec:
+  controller: {machineRef: controller}
+
   domains:
     base: example.test
+`
+
+const controllerInput = `apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata: {name: controller}
+spec:
+  os: {provided: true}
+  access: {local: true}
 `
 
 type repository struct {
@@ -260,7 +270,10 @@ func (c confirmer) Confirm(ctx context.Context, action, name string) error {
 }
 
 func sourceFixture(directory string) desiredstate.Sources {
-	return desiredstate.Sources{Roots: []string{directory}, Files: []desiredstate.SourceFile{desiredstate.NewSourceFile(filepath.Join(directory, "environment.yaml"), []byte(environmentInput))}}
+	return desiredstate.Sources{Roots: []string{directory}, Files: []desiredstate.SourceFile{
+		desiredstate.NewSourceFile(filepath.Join(directory, "environment.yaml"), []byte(environmentInput)),
+		desiredstate.NewSourceFile(filepath.Join(directory, "controller.yaml"), []byte(controllerInput)),
+	}}
 }
 
 func service(t *testing.T, r *repository, input desiredstate.Sources) contexts.Service {
@@ -319,6 +332,7 @@ func TestInitCompilesBeforeTransactionAndPublishesOriginalAcquisition(t *testing
 	env := environmentInput + `
   resources:
     - declared.yaml
+    - controller.yaml
 
   defaults:
     Secret:
@@ -337,7 +351,7 @@ func TestInitCompilesBeforeTransactionAndPublishesOriginalAcquisition(t *testing
 	if err != nil {
 		t.Fatal(desiredstate.DiagnosticsOf(err))
 	}
-	if got.Counts != (compilation.Counts{FilesSeen: 3, ObjectsDecoded: 2}) || got.FilesCopied != 4 || len(got.Diagnostics) != 1 || got.Diagnostics[0].Source.Path != "/synthetic/input/excluded.yaml" {
+	if got.Counts != (compilation.Counts{FilesSeen: 4, ObjectsDecoded: 3}) || got.FilesCopied != 5 || len(got.Diagnostics) != 1 || got.Diagnostics[0].Source.Path != "/synthetic/input/excluded.yaml" {
 		t.Fatalf("admission result lost counts or warnings: %#v", got)
 	}
 	if !got.Context.Current || got.Context.Mode != contexts.Ready || got.Context.ID == "" || !r.create || !reflect.DeepEqual(r.roots, []string{"/synthetic/input"}) {
@@ -347,7 +361,7 @@ func TestInitCompilesBeforeTransactionAndPublishesOriginalAcquisition(t *testing
 		t.Fatal("init order", r.calls)
 	}
 	published := r.published[r.registry.Contexts[0].Revision]
-	if !reflect.DeepEqual(published, input) || strings.Contains(string(published.Files[1].Bytes()), "source:") {
+	if !reflect.DeepEqual(published, input) || strings.Contains(string(published.Files[2].Bytes()), "source:") {
 		t.Fatal("publication changed authored bytes or omitted excluded acquisition")
 	}
 }

@@ -315,6 +315,37 @@ agent installer's remaining disk-safety limitation is recorded in
 offline disk erase remain unsupported until a separate spec defines and tests
 a safe path.
 
+### Controller-host protection
+
+The controller is an OS-ready provided Machine and remains outside selected
+cluster node membership under
+[the API relationship](api/environment.md#controller-machine). That declaration
+alone does not prove live host identity or ownership. The following rules
+constrain future controller-hosted effects; they do not introduce a runtime
+capability in the admission delivery.
+
+Before enabling local service execution, the owning capabilities must define
+verified host binding and stable conflict identities for shared ports, paths,
+service instances and other exclusive host resources. Context-local leases
+remain necessary but do not coordinate two contexts targeting the same host.
+The capability and Reconciliation contracts must establish cross-context
+ownership, conflict refusal and recovery evidence before those effects run.
+
+An apply or destroy must preserve the controller OS, power, Bootwright runtime,
+Workspace state, keyring and evidence needed to continue or remove owned
+resources. An owned service may be removed only through its frozen inverse
+when remaining operations no longer depend on it. Selecting a Machine as the
+controller never grants ownership of the host, its runtime or another context's
+services.
+
+Controller setup, immutable execution dependencies and locally hosted services
+have separate owners. Plans must model their actual readiness relationships
+without converting every Machine address or service reference into a readiness
+edge. Missing, changed or unprovable controller bindings refuse the affected
+operation; continuation never silently substitutes the invoking host or moves
+context state. Migration and complete-store restore require their own defined
+recovery journey.
+
 ## Confirmation and authorization
 
 Ordinary confirmation and any non-interactive suppression belong to the public

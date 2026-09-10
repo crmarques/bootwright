@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -85,13 +84,12 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	if endpoints.Present() {
 		install = install.With("endpoints", endpoints)
 	}
-	for _, consumer := range []string{"redfishVirtualMedia", "bootArtifacts"} {
-		selection := install.Get("agent", consumer, "artifactServerEndpoint")
-		if selection.Present() && !selection.Has("serverRef") {
-			if row, _, ok := infrastructureservices.ArtifactEndpoint(selection, c); ok {
-				install = install.WithPath(selection.With("serverRef", row.Get("name")), "agent", consumer, "artifactServerEndpoint")
-			}
-		}
+	install = install.With("proxy", infrastructureservices.NormalizeProxy(install.Get("proxy"), c))
+	if install.Has("ntp") {
+		install = install.With("ntp", infrastructureservices.NormalizeServerSelections(install.Get("ntp"), c, api.NTPServer))
+	}
+	if install.Has("registries", "mirror") {
+		install = install.WithPath(infrastructureservices.NormalizeRegistrySelection(install.Get("registries", "mirror"), c), "registries", "mirror")
 	}
 	s = s.With("install", install)
 	nodes := s.Get("nodes").Items()
@@ -159,12 +157,12 @@ func ValidateAuthored(o api.Object, c api.Catalog) []api.Issue {
 	if o.Kind() != api.ContainerCluster {
 		return nil
 	}
-	issues := []api.Issue{}
+	issues := infrastructureservices.ValidateProxyChoice(o.Spec().Get("install", "proxy"), "$.spec.install.proxy")
 	for _, slot := range endpointSlots {
 		endpoint := o.Spec().Get("install", "endpoints", slot)
 		kind := sourceType(endpoint)
-		if endpoint.Has("address") && (kind == "infraComponent" || kind == "node") {
-			issues = add(issues, invariant("$.spec.install.endpoints."+slot+".address", "component and node endpoint sources forbid authored addresses"))
+		if endpoint.Has("address") && (kind == "loadBalancer" || kind == "node") {
+			issues = add(issues, invariant("$.spec.install.endpoints."+slot+".address", "load-balancer and node endpoint sources forbid authored addresses"))
 		}
 	}
 	return issues
@@ -227,17 +225,29 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		if !install.Has("agent", "bootArtifacts", "artifactServerEndpoint") {
 			issues = add(issues, invariant("$.spec.install.agent.bootArtifacts.artifactServerEndpoint", "disconnected installation requires a managed boot-artifacts endpoint"))
 		}
-		if envs := c.OfKind(api.Environment); len(envs) == 1 && !envs[0].Spec().Has("registries", "mirror") {
-			issues = add(issues, invariant("$.spec.install.mode", "disconnected installation requires an Environment registry mirror"))
+		mirror := install.Get("registries", "mirror")
+		if !mirror.Present() {
+			issues = add(issues, invariant("$.spec.install.registries.mirror", "disconnected installation requires a registry mirror selection"))
+		} else if registry, ok := c.Find(api.Registry, mirror.Get("registryRef").Text()); ok && !registry.Spec().Has("trustBundleRef") {
+			issues = add(issues, invariant("$.spec.install.registries.mirror.registryRef", "disconnected installation requires trustBundleRef on the selected Registry"))
 		}
 	}
 	for _, consumer := range []string{"redfishVirtualMedia", "bootArtifacts"} {
 		path := "$.spec.install.agent." + consumer + ".artifactServerEndpoint"
-		for _, issue := range environment.ValidateArtifactEndpoint(install.Get("agent", consumer, "artifactServerEndpoint"), c, true, false) {
-			issue.Field = path + strings.TrimPrefix(issue.Field, "$")
-			issues = add(issues, issue)
+		selection := install.Get("agent", consumer, "artifactServerEndpoint")
+		issues = add(issues, infrastructureservices.ValidateArtifactEndpoint(selection, c, path, false)...)
+		if server, ok := infrastructureservices.ArtifactEndpoint(selection, c); ok && server.Spec().Get("management").Text() == "managed" {
+			for _, node := range nodes {
+				if server.Spec().Get("machineRef").Equal(node.Get("machineRef")) {
+					issues = add(issues, invariant(path+".serverRef", "cluster installation requires an artifact server hosted on a node being installed; place the server on an independently available Machine"))
+					break
+				}
+			}
 		}
 	}
+	issues = add(issues, infrastructureservices.ValidateProxy(install.Get("proxy"), c, "$.spec.install.proxy", false)...)
+	issues = add(issues, infrastructureservices.ValidateServerSelections(install.Get("ntp"), c, api.NTPServer, "$.spec.install.ntp")...)
+	issues = add(issues, infrastructureservices.ValidateRegistrySelection(install.Get("registries", "mirror"), c, "$.spec.install.registries.mirror")...)
 	issues = add(issues, validateEndpoints(o, c)...)
 	issues = add(issues, validateNetworks(o, c)...)
 	return issues
@@ -330,10 +340,10 @@ func validateLocal(o api.Object, partial bool) []api.Issue {
 		path := "$.spec.install.endpoints." + slot
 		source := endpoint.Get("source")
 		sourceKind := sourceType(endpoint)
-		if sourceKind != "infraComponent" && (!partial || source.Has("type")) {
-			for _, key := range []string{"componentRef", "bindAddressRef"} {
+		if sourceKind != "loadBalancer" && (!partial || source.Has("type")) {
+			for _, key := range []string{"loadBalancerRef", "bindAddressRef"} {
 				if source.Has(key) {
-					issues = add(issues, invariant(path+".source."+key, "component selections require infraComponent source"))
+					issues = add(issues, invariant(path+".source."+key, "load-balancer selections require loadBalancer source"))
 				}
 			}
 		}
@@ -377,25 +387,29 @@ func validateLocal(o api.Object, partial bool) []api.Issue {
 			}
 		}
 	}
+	seenSources := map[string]bool{}
+	for i, source := range install.Get("registries", "imageDigestSources").Items() {
+		name := source.Get("source").Text()
+		if name != "" && seenSources[name] {
+			issues = add(issues, invariant(fmt.Sprintf("$.spec.install.registries.imageDigestSources[%d].source", i), "image digest sources must be unique"))
+		}
+		seenSources[name] = true
+	}
 	return issues
 }
 
 func endpointAddress(o api.Object, endpoint api.Value, c api.Catalog, path string) (api.Value, api.Value, []api.Issue) {
 	source := endpoint.Get("source")
 	switch sourceType(endpoint) {
-	case "infraComponent":
-		if !source.Has("componentRef") {
-			return api.Value{}, source, []api.Issue{invariant(path+".source.componentRef", "component endpoint source requires a load-balancer reference")}
+	case "loadBalancer":
+		if !source.Has("loadBalancerRef") {
+			return api.Value{}, source, []api.Issue{invariant(path+".source.loadBalancerRef", "load-balancer endpoint source requires a LoadBalancer reference")}
 		}
-		component, ok := c.Find(api.InfraComponent, source.Get("componentRef").Text())
+		balancer, ok := c.Find(api.LoadBalancer, source.Get("loadBalancerRef").Text())
 		if !ok {
 			return api.Value{}, source, nil
 		}
-		arm, lb := infrastructureservices.Arm(component)
-		if arm != "loadBalancer" {
-			return api.Value{}, source, []api.Issue{reference(path+".source.componentRef", "endpoint source must reference a load-balancer component")}
-		}
-		addresses := lb.Get("bindAddresses")
+		addresses := balancer.Spec().Get("bindAddresses")
 		var address api.Value
 		if ref := source.Get("bindAddressRef"); ref.Present() {
 			var ok bool
@@ -461,7 +475,7 @@ func validateEndpoints(o api.Object, c api.Catalog) []api.Issue {
 		expected, _, selectionIssues := endpointAddress(o, endpoint, c, path)
 		issues = add(issues, selectionIssues...)
 		source := sourceType(endpoint)
-		if source == "node" || source == "infraComponent" {
+		if source == "node" || source == "loadBalancer" {
 			if expected.Present() && endpoint.Has("address") && !expected.Equal(endpoint.Get("address")) {
 				issues = add(issues, invariant(path+".address", "effective endpoint address must agree with its selected source"))
 			}

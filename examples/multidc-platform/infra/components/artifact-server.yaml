@@ -1,40 +1,40 @@
 apiVersion: bootwright.io/v1alpha1
-kind: InfraComponent
+kind: ArtifactServer
 metadata:
   name: artifact-server
 
 spec:
-  artifactServer:
-    machineRef: bastion
-    bindAddress: 0.0.0.0
-    retention: persistent
+  management: managed
+  machineRef: bastion
+  bindAddress: 0.0.0.0
+  retention: persistent
 
-    tls:
-      secretRef: artifact-server-tls
-      minVersion: TLSv1.2
+  tls:
+    secretRef: artifact-server-tls
+    minVersion: TLSv1.2
 
-    listeners:
-      - name: https
-        protocol: https
-        port: 9443
+  listeners:
+    - name: https
+      protocol: https
+      port: 9443
 
-      - name: http
-        protocol: http
-        port: 9080
+    - name: http
+      protocol: http
+      port: 9080
 
-    endpoints:
-      - name: ip-https
-        listenerRef: https
-        addressRef: ip
+  endpoints:
+    - name: ip-https
+      listenerRef: https
+      addressRef: ip
 
-      - name: ip-http
-        listenerRef: http
-        addressRef: ip
+    - name: ip-http
+      listenerRef: http
+      addressRef: ip
 
-      - name: server-name-https
-        listenerRef: https
-        addressRef: dns-alias
+    - name: server-name-https
+      listenerRef: https
+      addressRef: dns-alias
 
-      - name: server-name-http
-        listenerRef: http
-        addressRef: dns-alias
+    - name: server-name-http
+      listenerRef: http
+      addressRef: dns-alias

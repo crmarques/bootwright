@@ -16,7 +16,7 @@ make build
 
 Help, version, shell completion, durable context commands, validation and
 `render effective` are implemented.
-Validation admits all 21 desired-state kinds, resolves defaults and references,
+Validation admits all 26 desired-state kinds, resolves defaults and references,
 and reports deterministic diagnostics without reading secret values. Explicit
 `validate -f` does not open context state; omission uses the frozen current
 context inputs. The complete `secret` tree provides local encrypted custody,

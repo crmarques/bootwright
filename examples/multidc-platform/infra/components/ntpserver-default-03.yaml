@@ -1,0 +1,8 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NTPServer
+metadata:
+  name: default-03
+
+spec:
+  management: external
+  address: time3.example.com
