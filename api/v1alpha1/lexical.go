@@ -15,6 +15,8 @@ var tokenPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 var userPattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]*[$]?$`)
 var digestPattern = regexp.MustCompile(`(?i)^(?:sha256:)?[a-f0-9]{64}$`)
 var imageTagPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
+var cliVersionPattern = regexp.MustCompile(`^(?:latest|v?(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8}))$`)
+var packageVersionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+~^:-]{0,95}$`)
 
 func ValidLexical(rule, value string) bool {
 	if rule == "checksum" {
@@ -50,6 +52,10 @@ func ValidLexical(rule, value string) bool {
 		return validImage(value)
 	case "image-version":
 		return value != "latest" && (imageTagPattern.MatchString(value) || strings.HasPrefix(strings.ToLower(value), "sha256:") && digestPattern.MatchString(value))
+	case "cli-version":
+		return cliVersionPattern.MatchString(value)
+	case "package-version":
+		return packageVersionPattern.MatchString(value)
 	case "duration":
 		duration, err := time.ParseDuration(value)
 		return err == nil && duration > 0

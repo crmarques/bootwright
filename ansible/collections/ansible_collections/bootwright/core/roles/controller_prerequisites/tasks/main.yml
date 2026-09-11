@@ -1,0 +1,70 @@
+---
+- name: Validate the frozen controller request
+  ansible.builtin.assert:
+    that:
+      - bootwright_controller_request.version == 'controller-prerequisites-v2'
+      - bootwright_controller_request.operation in ['setup', 'recover']
+      - bootwright_controller_request.platform.os in ['rhel', 'fedora']
+      - bootwright_controller_request.platform.architecture == 'amd64'
+      - bootwright_controller_request.packages | length <= 512
+      - bootwright_controller_request.tools | length <= 128
+      - bootwright_controller_request.bundle.path is string
+      - bootwright_controller_request.bundle.device | int > 0
+      - bootwright_controller_request.bundle.inode | int > 0
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.controller_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Read native package identities
+  bootwright.core.controller_inventory:
+    platform: '{{ bootwright_controller_request.platform }}'
+    plan: '{{ bootwright_controller_request.native }}'
+  register: controller_prerequisites_before
+  no_log: true
+
+- name: Record durable preparation before dependency effects
+  bootwright.core.controller_protocol:
+    phase: prepared
+    request: '{{ bootwright_controller_request }}'
+    inventory: '{{ controller_prerequisites_before.inventory }}'
+    roots_ready: '{{ controller_prerequisites_before.rootsReady }}'
+  register: controller_prerequisites_plan
+  no_log: true
+
+- name: Apply the exact frozen native dependency transitions
+  bootwright.core.controller_packages:
+    request: '{{ bootwright_controller_request }}'
+  when:
+    - controller_prerequisites_plan.apply_native
+  no_log: true
+  diff: false
+
+- name: Prepare the exact target tool members
+  ansible.builtin.include_tasks: tool.yml
+  loop: '{{ bootwright_controller_request.tools }}'
+  loop_control:
+    label: '{{ item.kind }}'
+  no_log: true
+
+- name: Read complete native postconditions
+  bootwright.core.controller_inventory:
+    platform: '{{ bootwright_controller_request.platform }}'
+    plan: '{{ bootwright_controller_request.native }}'
+  register: controller_prerequisites_after
+  no_log: true
+
+- name: Publish bounded controller completion evidence
+  bootwright.core.controller_protocol:
+    phase: completed
+    request: '{{ bootwright_controller_request }}'
+    inventory: '{{ controller_prerequisites_after.inventory }}'
+    roots_ready: '{{ controller_prerequisites_after.rootsReady }}'
+    preparation: '{{ controller_prerequisites_plan.preparation }}'
+    native_applied: '{{ controller_prerequisites_plan.apply_native }}'
+    tools: '{{ controller_prerequisites_tool_evidence | default([]) }}'
+    tools_changed: '{{ controller_prerequisites_tools_changed | default(false) }}'
+  no_log: true

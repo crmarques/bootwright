@@ -21,7 +21,18 @@ type registryV3 struct {
 	Contexts     []contexts.Record `json:"contexts"`
 }
 
+type registryV4 struct {
+	Version      int                           `json:"version"`
+	IDNamespace  string                        `json:"idNamespace"`
+	NextIdentity uint64                        `json:"nextIdentity"`
+	Contexts     []contexts.Record             `json:"contexts"`
+	Controller   contexts.ControllerDescriptor `json:"controller"`
+}
+
 func registryRecord(registry contexts.Registry) any {
+	if registry.Version == 4 {
+		return registryV4{Version: registry.Version, IDNamespace: registry.IDNamespace, NextIdentity: registry.NextIdentity, Contexts: registry.Contexts, Controller: registry.Controller}
+	}
 	if registry.Version == 3 {
 		return registryV3{Version: registry.Version, IDNamespace: registry.IDNamespace, NextIdentity: registry.NextIdentity, Contexts: registry.Contexts}
 	}
@@ -48,6 +59,12 @@ func decodeRegistry(data []byte, maximum int, target *contexts.Registry) error {
 			return err
 		}
 		*target = contexts.Registry{Version: record.Version, IDNamespace: record.IDNamespace, NextIdentity: record.NextIdentity, Identities: []contexts.Identity{}, Contexts: record.Contexts}
+	case 4:
+		var record registryV4
+		if err := decodeRecord(data, maximum, &record); err != nil {
+			return err
+		}
+		*target = contexts.Registry{Version: record.Version, IDNamespace: record.IDNamespace, NextIdentity: record.NextIdentity, Identities: []contexts.Identity{}, Contexts: record.Contexts, Controller: record.Controller}
 	default:
 		return state("context registry version is unsupported")
 	}
@@ -67,7 +84,7 @@ func (s *Store) upgradeRegistry(registry contexts.Registry) (contexts.Registry, 
 	if err := validateRegistry(registry); err != nil {
 		return contexts.Registry{}, err
 	}
-	if registry.Version == 3 {
+	if registry.Version >= 3 {
 		return registry, nil
 	}
 	used := make(map[string]bool, len(registry.Identities))
@@ -93,7 +110,7 @@ func (s *Store) upgradeRegistry(registry contexts.Registry) (contexts.Registry, 
 }
 
 func allocateContextIdentity(registry *contexts.Registry) (string, error) {
-	if registry.Version != 3 || !validNamespace(registry.IDNamespace) || registry.NextIdentity == 0 || registry.NextIdentity == ^uint64(0) {
+	if registry.Version != 3 && registry.Version != 4 || !validNamespace(registry.IDNamespace) || registry.NextIdentity == 0 || registry.NextIdentity == ^uint64(0) {
 		return "", state("context identity allocation is invalid or exhausted")
 	}
 	id := fmt.Sprintf("ctx-%s%016x", registry.IDNamespace, registry.NextIdentity)

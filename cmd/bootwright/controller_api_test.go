@@ -28,6 +28,8 @@ func TestControllerRequiresOneProvidedLocalMachine(t *testing.T) {
 		{"wrong kind", serviceEnvironment, "", "apiVersion: bootwright.io/v1alpha1\nkind: NTPServer\nmetadata: {name: service-host}\nspec: {management: external, address: time.example.test}\n", "api.reference", "$.spec.controller.machineRef"},
 		{"SSH Machine", serviceEnvironment, strings.Replace(serviceHost, "access: {local: true}", "access: {ssh: {auth: {operatorIdentity: {}}}}", 1), "", "api.invariant", "$.spec.controller.machineRef"},
 		{"unprovided Machine", serviceEnvironment, strings.Replace(serviceHost, "provided: true", "provided: false", 1), "", "api.invariant", "$.spec.controller.machineRef"},
+		{"missing runtime capability", serviceEnvironment, strings.Replace(serviceHost, "  capabilities: [container-runtime]\n", "", 1), "", "api.invariant", "$.spec.controller.machineRef"},
+		{"empty capabilities", serviceEnvironment, strings.Replace(serviceHost, "[container-runtime]", "[]", 1), "", "api.invariant", "$.spec.controller.machineRef"},
 		{"second local Machine", serviceEnvironment, serviceHost, strings.Replace(serviceHost, "name: service-host", "name: other-local", 1), "api.invariant", "$.spec.controller.machineRef"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

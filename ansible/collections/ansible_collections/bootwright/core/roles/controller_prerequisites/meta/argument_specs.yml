@@ -1,0 +1,42 @@
+argument_specs:
+  main:
+    short_description: Prepare one frozen controller dependency closure.
+    options:
+      bootwright_controller_request:
+        type: dict
+        required: true
+        options:
+          version:
+            type: str
+            required: true
+            choices: [controller-prerequisites-v2]
+          operation:
+            type: str
+            required: true
+            choices: [setup, recover]
+          identity:
+            type: str
+            required: true
+          platform:
+            type: dict
+            required: true
+          bundle:
+            type: dict
+            required: true
+          packages:
+            type: list
+            elements: dict
+            required: true
+          native:
+            type: raw
+            required: false
+          tools:
+            type: list
+            elements: dict
+            required: true
+          egress:
+            type: dict
+            required: true
+          preparation:
+            type: dict
+            default: {}

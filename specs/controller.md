@@ -9,84 +9,198 @@ executes a managed service's lifecycle.
 
 ## Supported host and dependency selection
 
-M1d must qualify **both RHEL 9 and Fedora on Linux/amd64**. Each supported
+M1d supports **RHEL 9 and Fedora on Linux/amd64**. Each supported
 combination identifies an exact OS release, tested kernel/filesystem and
 privilege primitives, package repositories, native package-manager version,
-package builds, and immutable execution bundle. A family name alone does not
+package builds, and immutable execution bundle. The implementation matrix is
+RHEL 9.8 and Fedora 43 on Linux/amd64. Each setup
+freezes source identities, byte counts and SHA-256 values. A family name alone does not
 qualify all minor releases, Fedora releases or future updates. Unsupported or
 unprovable combinations refuse before installation. The exact matrix and
-dependency locks must be recorded here before implementation is promoted;
-none is claimed qualified by this definition change.
+dependency locks must remain consistent with that exit evidence.
 
-The dependency catalog is compiled into the executable and follows
+The baseline selects CPython from python-build-standalone, `ansible-core`,
+their supporting wheels and urllib3 for bounded Ansible-owned downloads.
+The [Environment version policy](api/environment.md#dependency-versions)
+defaults every configurable dependency to latest stable. An explicit version
+overrides that root. Resolve Python and Ansible independently, then use the
+selected interpreter's maintained pip resolver with exact roots and wheel-only
+downloads. Incompatibility is a refusal, not permission to choose an older root.
+Freeze the complete wheel closure, metadata and resolver identities. Production
+publishes the verified fixed file projection; unsupported scheme relocations,
+`.pth` files and startup hooks refuse. No package resolution occurs during
+installation or retry, and entrypoints are repository-owned.
+The exact Python archive's internal file links become regular private files;
+directory links and escape/cycle attempts refuse. Retained source bytes derive
+the complete expected file inventory, including executable modes, so readiness
+rejects additions and substitutions rather than trusting a version string.
+
+The private interpreter uses isolated mode, disables bytecode and `site`
+initialization, and imports only its four explicit private roots. Its readiness
+probe verifies every locked distribution, required standard-library modules,
+and the cryptographic extension. System Python, pip configuration, user site,
+Ansible configuration and environment search paths cannot alter this closure.
+The provided host supplies qualified glibc and libgcc support; setup does not
+replace those shared libraries to make an incompatible bundle work.
+Freeze their package ownership with the execution profile and refuse any native
+transaction that changes those packages before presenting the plan. A dependency
+release that requires a different foundation needs a separately qualified profile.
+
+Execution verifies the catalogued host loader, ELF library files and aliases
+under the native package read lock. It invokes that loader directly with the
+cache disabled, hardware-capability selection disabled, a fixed library path
+and an explicit dependency-ordered preload list. A nonempty system loader
+preload configuration refuses. The baseline probe retains the read lock until
+it has exited. The Ansible runner acknowledges its loaded state before Go releases that
+read lock; package installation then acquires native transaction coordination
+and revalidates the selected foundation. No ambient loader cache,
+library search variable or preload configuration selects executable code.
+
+The publisher and platform policies are compiled into the executable; exact
+releases are resolved by explicit setup. Dependency selection follows
 [dependency selection](architecture.md#dependency-selection-and-reuse) and
 [supply-chain integrity](security.md). It distinguishes:
 
 | Prerequisite | Selection and allowed setup |
 | --- | --- |
 | Host foundation | Verify the provided OS, architecture, local identity, account/sudo boundary, filesystem containment/durability, free-space limits and trusted package sources. No OS installation, release upgrade, repository enrollment, entitlement registration or reboot. |
-| Baseline execution bundle | Publish the exact qualified Python and `ansible-core` closure in an isolated Bootwright-owned location. Select only its declared supporting OS packages. Do not use system/user Python imports, ambient Ansible configuration or a floating package resolver. |
-| Container runtime | Select the qualified Podman implementation only for an explicit context whose controller declares `container-runtime`. Install missing approved packages if the complete native transaction is safe; verify an existing exact compatible runtime without taking ownership of its containers or configuration. Do not start a service, pull a managed-service image or create a container. |
-| Future consumer tools | Installer clients, `oc`, `kubectl`, `virtctl`, Helm, Ceph tools, service images and adapter-specific collections belong to their first supported consumer. An admitted graph or download mirror does not request speculative installation. M1e adds and qualifies its artifact-server adapter closure. |
+| Baseline execution bundle | Publish the resolved exact Python and `ansible-core` closure in an isolated Bootwright-owned location. Do not use system/user Python imports or ambient Ansible configuration. |
+| Container runtime | Require the controller to declare `container-runtime`; context-free baseline setup also selects Podman. Install or update the approved dependency set and verify an existing exact runtime without taking ownership of its containers or configuration. Do not start a service, pull a managed-service image or create a container. |
+| Native target clients | Select the complete controller-side tool closure from the admitted desired-state graph. OpenShift/OKD clients (`oc`, `kubectl`) and installer match the selected release; Kubernetes consumers select Helm; referenced vSphere providers select `govc`; virtualization selects upstream `virtctl`. Native SSH clients and NMState support the baseline flows. A declared `libvirt` capability or referenced libvirt provider selects `virsh` and its native client dependencies. Install these with the fixed Ansible bastion role. |
+| Service execution | Service images, containers and lifecycle configuration remain with their service consumer; M1e owns artifact-server apply. Installing a client grants no authority to contact or change a target. |
 
-Setup is additive. It may install absent catalogued dependencies and publish a
-new immutable private bundle. It does not replace the running Bootwright
-executable, modify shell profiles or global tool search paths, run a general
-package update, downgrade/remove packages, or repair unrelated files. A native
-transaction that would replace an installed package or affect a protected
-dependency refuses with the exact prerequisite requiring operator preparation.
-Approved publisher package hooks are part of that transaction's qualified
-effect boundary; a list of package names alone is not a complete plan.
+Setup installs missing dependencies, updates selected dependencies to their
+resolved versions and publishes immutable private bundles. An explicit native
+root version may require a reviewed downgrade of that root. Supporting package
+upgrades must be required by the solved closure. Refuse unrelated removals,
+dependency downgrades, vendor changes, protected-foundation replacement and OS
+release upgrades. Setup does not replace the running Bootwright executable,
+modify shell profiles or global tool search paths, run a general package update,
+or repair unrelated files. Present each install, upgrade or explicit downgrade
+with exact before and after identities before confirmation.
+Approved publisher package hooks are part of the dependency transaction: the
+Ansible package role must run required hooks and verify their postconditions.
+It must not suppress required hooks and then claim a usable runtime. Existing
+operator SELinux policy remains operator-owned. The native package manager
+performs required labeling and policy hooks; setup does not toggle enforcement
+or replace local policy. Readiness checks installed nonconfiguration files and
+dependency identities. Workload access under that policy is verified by its
+flow consumer.
+A list of package names alone is not a complete plan.
+
+Each native selection has its own content identity, including the host platform
+and required client capabilities. A completed baseline bundle cannot prove an
+additional libvirt requirement. The Fedora catalog includes a separate libvirt
+client closure without installing virtualization daemons. The public RHEL
+baseline source does not include that client; a selected RHEL libvirt requirement
+refuses before acquisition until an approved entitled source is defined.
+
+Python, Ansible and generic clients without exact desired-state versions resolve
+latest stable during explicit setup, before confirmation. Native packages use
+the latest available build for the selected OS release and approved repository
+set. OpenShift/OKD installer and clients remain tied to the target release.
+A cluster pinned to a release image still selects its clients from the declared
+`release.version`; without that version setup refuses rather than inferring a
+client release from the image.
+`virtctl` uses upstream latest unless explicitly overridden; no remote target
+discovery or automatic compatibility inference is required. Freeze source URL,
+version, byte count and publisher SHA-256 in the plan and receipt. Mirrors
+change acquisition only. Dry-run and preflight do not discover versions. A
+fresh setup resolves latest again; an incomplete setup reuses its exact frozen
+resolution without metadata refresh.
 
 An already installed dependency is usable only after identity, version and
 integrity checks against the catalog. Process exit status alone does not prove
 readiness. An older bundle needed for retry or a future frozen lifecycle is
-retained; setup supplies no upgrade, uninstall or garbage-collection command.
+retained; setup supplies no uninstall or garbage-collection command.
 
 ## Selection and command journeys
 
 These commands use a named context **only when `--context` is explicit and
 nonempty**. An explicitly empty value is omission. Nonempty names follow the
 existing context-name grammar. Omission ignores the invoking user's current selection, resolves no desired
-state and selects the baseline bundle with direct download routing. This
+state and selects the baseline dependencies with direct download routing. This
 allows preparation before context creation or Environment import. No current
 directory, user profile or ambient proxy selects inputs.
 
 An explicit context must be ready and have an admitted input revision. Resolve
-its immutable input, select its controller Machine and add only the controller
-prerequisites consumed by this delivery. An empty context returns
-`context.input` with the import command. Unsupported unrelated cluster or
-service lifecycles do not block controller setup, and setup does not claim
-those lifecycles ready. A controller requirement outside the supported setup
+its immutable input, select its controller Machine and derive all local native prerequisites
+needed by the selected target flows. An empty context returns
+`context.input` with the import command. Unavailable cluster or service lifecycle commands remain unavailable;
+setup readiness reports local dependencies only. A controller requirement outside the supported setup
 matrix does block setup before effects. Global SSH flags remain unconsumed.
 
 | Invocation | Required behavior |
 | --- | --- |
-| `bootwright bastion setup --dry-run` | Produce the deterministic baseline dependency/action plan from the embedded catalog and bounded local file metadata. No dependency subprocess, network, Secret read, privilege escalation or write. Facts requiring those effects are explicitly unverified. |
+| `bootwright bastion setup --dry-run` | Produce deterministic dependency intent and actions from policy and bounded local file metadata. No dependency subprocess, network, Secret read, privilege escalation or write. Versions requiring live resolution and readiness facts requiring effects are explicitly unverified. |
 | `bootwright bastion setup` | Inspect, present the complete bounded local plan, confirm when it contains changes, prepare the baseline and verify every required postcondition. |
 | `bootwright bastion setup --context <name> --dry-run` | Add controller requirements, binding disposition and declared egress from immutable context input. Existing verified sudo may be used solely to read the private store. After that boundary, no dependency subprocess, network, Secret material access, binding publication or other write. |
 | `bootwright bastion setup --context <name>` | Verify the local target, include any first host binding in the plan, then perform the confirmed prerequisite work under host and context coordination. |
-| `bootwright preflight bastion [--context <name>]` | Read and verify the selected prerequisites with bounded local probes. May use the verified privilege boundary for private metadata. Never install, download, refresh repository metadata, contact a managed endpoint, create/repair state or publish a binding. |
+| `bootwright preflight bastion [--context <name>]` | Read and verify the selected prerequisites with bounded local probes. May use the verified privilege boundary for private metadata and disposable local probe scratch. Never install, download, refresh repository metadata, contact a managed endpoint, create/repair shared state or publish a binding. |
 
-Dry-run does not execute a native package resolver. It lists the pinned required
-closure and identifies any transaction feasibility, live identity or readiness
+Dry-run does not execute a native package resolver. It lists required version
+intent and identifies any transaction feasibility, live identity or readiness
 evidence still needed by real setup. A valid dry-run exits successfully with
 unverified checks visibly labeled; it never reports completed setup. Preflight
 requires positive current evidence for all selected checks; an unbound context
 is a failure with setup guidance, distinct from host mismatch.
 
-Real setup resolves the complete package transaction and checks its effects
-before confirmation. Any source access required for that inspection is
-read-only, bounded and uses the selected route; metadata remains in memory.
-Only after confirmation may it cache/download package payloads or write state.
+Real setup first resolves dependencies in disposable unprivileged staging.
+This phase may download verified public bootstrap payloads, run wheel-only pip
+resolution and use the provided OS's DNF4/DNF5 foundation to inspect a private
+inventory snapshot and solve the exact native transaction. All metadata,
+caches, logs and resolver outputs stay in bounded scratch storage. Scratch is
+private Bootwright-owned durable temporary storage, never the shared ambient
+temporary directory and never the verified context store, so an interrupted run
+leaves no unrecognized state behind. Setup refuses before any effect when that
+filesystem cannot hold the approved payload closure with headroom; exhausting it
+mid-transaction is an unknown outcome. Isolate
+downloaded resolver code from installed-host writes and ambient configuration;
+root invocation drops to an unprivileged staging identity. This phase grants no
+shared-state, host-package, Secret or managed-target mutation authority.
+
+Present the frozen complete package closure and permitted effects before
+confirmation. Only after confirmation and durable intent may setup publish a
+private execution bundle or install host dependencies. DNF4 on RHEL 9 and DNF5
+on Fedora own native solving and installation. Apply verified local RPMs with
+repositories disabled, compare all resulting actions with the frozen plan and
+refuse extra actions. Do not implement a separate dependency solver.
 Revalidate the transaction, host and input under the held coordination boundary
 before the first mutation. A changed transaction requires a fresh plan and
 confirmation, never extra work silently appended to the approved plan.
+Hold native package-manager coordination through apply. Direct concurrent RPM
+or other operator mutation outside that coordination is unsupported
+interference; native transaction checks still apply, and a differing final
+inventory is an unknown outcome requiring recovery, never success.
+
+The `controller-prerequisites-v2` Ansible adapter receives one frozen request
+with platform, exact package/tool sources, a scoped bundle identity, declared
+egress and optional retained preparation. The fixed controller setup playbook
+composes `bootwright.core.controller_prerequisites`. It validates the request,
+observes the before-inventory, and waits for Go to durably record preparation
+before installation. Package effects use the native package manager under its
+transaction boundary; target archives are verified before safe extraction of
+only the named regular members into private versioned tool locations. Existing
+files are verified, never overwritten. Inventory, request, downloads, expanded
+members and callback frames have fixed bounds.
+
+Go publishes only the pinned private Python/Ansible runtime and embedded
+repository automation needed to start Ansible. All host-package and target-CLI
+installation runs in the roles. Final bootstrap publication projects frozen
+artifacts without a fresh pip resolution. The platform's Python/DNF runtime is
+a separate provided foundation; it does not supply private Ansible imports.
+Neither phase uses ambient Ansible or executable discovery. The automation content
+digest participates in bundle and receipt identity. Go owns selection,
+authorization, host/context coordination, durable state and product output;
+Ansible returns bounded structured evidence through the runner protocol.
+Task output is not an application API. Read-only Go verification reconstructs
+installed bootstrap and target file inventories from approved retained sources.
 
 `--yes` suppresses ordinary confirmation only. Use the existing bounded
 yes/no confirmation semantics, with the plan before the prompt; decline,
 noninteractive input without `--yes`, or cancellation starts no setup mutation.
-A verified no-op needs no prompt or writes. First binding publication is a
+A verified no-op needs no prompt or installed-host/shared-state writes.
+Disposable resolution and local-probe scratch is removed after use. First binding publication is a
 change even when every dependency is already ready. Setup changes neither
 current-context selection nor Environment input.
 
@@ -115,20 +229,35 @@ and bundle-publication ports. Requests carry exact target evidence, dependency
 identities, authorized actions, route, limits and cancellation. Results report
 per-action postconditions and `unchanged`, `changed`, `failed`, `canceled` or
 `unknown` outcomes; they contain no raw subprocess transcript. Pure policy
-selects and orders actions; composition binds fixed local adapters. Qualified
-native package management is an explicitly local Controller capability, not
-managed-remote automation. The [Go/Ansible boundary](architecture.md#go-and-ansible-responsibility-boundary)
-continues to govern managed targets.
+selects and orders actions; composition binds fixed local adapters. Local dependency installation crosses the same controlled
+[Go/Ansible boundary](architecture.md#go-and-ansible-responsibility-boundary)
+as managed automation. Playbook and role selection is fixed by Bootwright,
+never supplied by desired-state input.
 
 ## Host identity and shared prerequisites
 
 Controller verifies the executing installed host; a Machine name, address,
-DNS answer or `access.local` cannot prove it. The selected host identity
-implementation must define stable installed-host evidence and how it detects
-substitution, copied state, cloned identity, containers and a different mount
-namespace. Qualification must distinguish ordinary reboot from relocation;
-unprovable identity refuses. A hostname or machine-id string alone is
-insufficient. Hardware attestation and controller relocation are not implied.
+DNS answer or `access.local` cannot prove it. `linux-installed-v1` combines the
+canonical 32-digit lowercase machine-id, canonical DMI product UUID and root
+filesystem UUID. Missing, all-zero or all-ones identity evidence refuses. The
+private host digest is SHA-256 over `bootwright.controller.installed-host`, the
+provider and those three values, separated by NUL without a trailing separator.
+Boot IDs, hostnames, kernel versions and mount namespace IDs are not durable
+identity. This preserves an ordinary reboot while detecting relocation that
+changes any required evidence.
+
+Acquisition uses bounded trusted file handles, checks procfs/sysfs identity,
+compares the executing process and PID 1 mount namespaces, and refuses known
+container markers. The root mount's block source must match its trusted
+`/dev/disk/by-uuid` entry. Btrfs uses its real block source rather than treating
+an anonymous subvolume device number as the filesystem identity. XFS/ext4 also
+cross-check the root mount device. Mutable ancestry or identity files refuse;
+setup does not repair their permissions. These checks detect observable
+substitution and namespace contradictions, not hardware attestation. A complete
+clone preserving all three identity values and the relevant namespace view is
+indistinguishable; copied identity bytes alone are never a claim of clone
+resistance. Controller relocation and full-store restore remain separately
+defined work.
 
 [Workspace](contexts.md#controller-relationship-and-host-binding) persists the
 verified identity and context relationship. A first explicit setup displays
@@ -177,16 +306,28 @@ with a presumed no-effect outcome. Changed input, host identity or dependency
 closure cannot replace an incomplete setup; restore the exact compatible
 executable/dependencies and resolve that receipt first.
 
-Cancellation stops new actions, cancels and reaps the complete child process
-tree, and preserves verified progress. Never release coordination while an
-installer child can still mutate the host. Qualification must also cover
-parent process death and a surviving package-manager process: another setup
-must refuse until that transaction has stopped and its exact outcome is
-proved. Publication/sync failure leaves uncertainty explicit and authorizes
-neither cleanup nor an unrecorded retry.
+Cancellation stops authorization of new effects. Before native installation
+starts, the runner terminates and reaps its process group. Once an authorized
+package transaction is running, it waits for native package hooks to finish
+and retains coordination until the child has exited; a timeout never grants
+lock takeover. Abrupt process death can leave package effects or an incomplete
+bundle. An explicit retry must prove either the exact before-inventory for
+safe replay, or the complete expected after-inventory and every required tool
+before recording success. Missing
+or contradictory evidence remains unknown and requires operator recovery.
+After the native transaction is proved complete, an attributable subset of
+exact tool files may be completed by Ansible under the original source closure
+and route. Publish each source and selected member atomically; never adopt a
+partial download, overwrite a file or repeat a native transaction to repair
+missing tool files. Each additional tool effect requires a live Go authorization.
+Publication/sync failure authorizes neither cleanup nor an unrecorded retry.
 
 Completed setup retains enough bounded host and bundle evidence for later
 inspection; no-op repetition revalidates without republishing. A later input
+or Bootwright automation revision may select a new bundle through a fresh setup.
+Preflight reports an incompatible retained bundle without resolving a replacement;
+an incomplete receipt still requires its original compatible executable.
+An input
 update may change controller prerequisite intent after setup recovery is
 complete, but cannot silently change an established controller Machine/host
 binding. Changes in readiness require another explicit setup. Deleting a
@@ -210,9 +351,13 @@ actionable next step. The [output contract](cli/output.md) owns streams and exit
 status, including complete negative readiness reports and partial setup
 outcomes. No setup failure may imply that already verified effects rolled back.
 
-M1d's gate requires independent RHEL 9 and Fedora end-to-end evidence, including
-clean install, already-ready no-op, context-free preparation, explicit binding,
-read-only preflight and dry-run, unsupported combinations, dependency/identity
-substitution, multi-context contention, protected dependencies, canceled and
-killed processes, package failures, uncertain publication and exact retry.
-Unit or fake-adapter results do not qualify a host or native installer.
+RHEL 9 and Fedora share one set of host-independent request/result tests
+covering clean dependency installation, already-ready no-op, context-free
+preparation, explicit binding, read-only preflight and dry-run, unsupported
+combinations, dependency/identity substitution, multi-context contention,
+protected dependencies, cancellation, package failures, uncertain publication
+and exact retry. A fake adapter proves this contract and never proves an
+executed native installer. Collection syntax, pinned lint, sanity, unit and
+local integration checks qualify the shipped Ansible entrypoints as content.
+[M1d](milestones.md#m1d--bastion-setup) owns the verification model and which
+acceptance remains operator-run.

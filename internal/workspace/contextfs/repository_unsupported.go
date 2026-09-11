@@ -5,6 +5,7 @@ package contextfs
 import (
 	"context"
 
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/secrets/storage"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -15,6 +16,13 @@ func unsupported(ctx context.Context) error {
 		return err
 	}
 	return state("durable context storage requires qualified Linux/amd64")
+}
+
+func (*Store) ReadController(ctx context.Context, _ string, _ func(prerequisites.StorageView) error) error {
+	return unsupported(ctx)
+}
+func (*Store) MutateController(ctx context.Context, _ prerequisites.SetupContext, _ bool, _ func(prerequisites.StorageTransaction) error) error {
+	return unsupported(ctx)
 }
 
 func (*Store) CheckInputDirectory(ctx context.Context, _ string) error { return unsupported(ctx) }

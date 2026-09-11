@@ -1,0 +1,21 @@
+---
+- name: Authorize one target tool preparation
+  bootwright.core.controller_protocol:
+    phase: continue
+  no_log: true
+
+- name: Prepare one exact target tool
+  bootwright.core.controller_tool:
+    bundle: '{{ bootwright_controller_request.bundle }}'
+    tool: '{{ item }}'
+    egress: '{{ bootwright_controller_request.egress }}'
+    inspect_only: false
+  register: controller_prerequisites_tool_result
+  no_log: true
+  diff: false
+
+- name: Collect private tool evidence
+  ansible.builtin.set_fact:
+    controller_prerequisites_tool_evidence: '{{ (controller_prerequisites_tool_evidence | default([])) + [controller_prerequisites_tool_result.evidence] }}'
+    controller_prerequisites_tools_changed: '{{ (controller_prerequisites_tools_changed | default(false)) or controller_prerequisites_tool_result.changed }}'
+  no_log: true

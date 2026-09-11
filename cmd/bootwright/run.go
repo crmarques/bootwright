@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -42,9 +43,14 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 			return classification.Failure(stdout, stderr, "runtime.privilege", "sudo is unavailable; run Bootwright as root", 1)
 		}
 		terminal, terminalErr := stdinTerminal()
+		noninteractive := classification.JSON || terminalErr != nil || !terminal
 		output := &invocationOutput{writer: stdout}
-		supervisor := invocation.NewSupervisor(invocation.SudoOptions{Executable: executable, Sudo: sudo, Executor: invocation.ProcessExecutor{}, Delay: invocation.Timer{}, NonInteractive: classification.JSON || terminalErr != nil || !terminal, Input: os.Stdin, Output: output, Error: stderr})
+		// Without a terminal sudo cannot prompt, so its refusal text carries no
+		// operator action and is not a product result.
+		errOut := &invocationError{writer: stderr, withhold: noninteractive}
+		supervisor := invocation.NewSupervisor(invocation.SudoOptions{Executable: executable, Sudo: sudo, Executor: invocation.ProcessExecutor{}, Delay: invocation.Timer{}, NonInteractive: noninteractive, Input: os.Stdin, Output: output, Error: errOut})
 		code, err := supervisor.Run(operation, args)
+		errOut.Close()
 		if err != nil {
 			if output.bytes != 0 {
 				if code != 0 {
@@ -57,13 +63,13 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 			}
 			return classification.Failure(stdout, stderr, "runtime.privilege", "sudo invocation failed", 1)
 		}
-		if code != 0 && classification.JSON && output.bytes == 0 {
-			return classification.Failure(stdout, stderr, "runtime.privilege", "sudo invocation failed", code)
+		if code != 0 && output.bytes == 0 && (classification.JSON || errOut.withheld) {
+			return classification.Failure(stdout, stderr, "runtime.privilege", "sudo authorization could not be obtained; authenticate to sudo or run Bootwright as root", code)
 		}
 		return code
 	}
 	confirmer := cli.NewConfirmation(readStdin, stderr, stdinTerminal)
-	return runServices(ctx, args, stdout, stderr, wireLocalServices(confirmer, secretInputFunc(readStdin)), beginSignalOperation)
+	return runServices(ctx, args, stdout, stderr, wireLocalServices(confirmer, secretInputFunc(readStdin), cli.NewControllerPlanPresenter(stdout)), beginSignalOperation)
 }
 
 type invocationOutput struct {
@@ -75,6 +81,52 @@ func (w *invocationOutput) Write(data []byte) (int, error) {
 	n, err := w.writer.Write(data)
 	w.bytes += n
 	return n, err
+}
+
+// invocationError forwards the elevated child's diagnostics unchanged and
+// withholds sudo's own refusal lines, which the caller replaces with the
+// product diagnostic for the privilege boundary.
+type invocationError struct {
+	writer   io.Writer
+	withhold bool
+	withheld bool
+	pending  []byte
+}
+
+const invocationErrorLine = 4096
+
+func (w *invocationError) Write(data []byte) (int, error) {
+	if !w.withhold {
+		return w.writer.Write(data)
+	}
+	for _, b := range data {
+		w.pending = append(w.pending, b)
+		if b != '\n' && len(w.pending) < invocationErrorLine {
+			continue
+		}
+		if err := w.emit(); err != nil {
+			return 0, err
+		}
+	}
+	return len(data), nil
+}
+
+func (w *invocationError) Close() error {
+	if !w.withhold || len(w.pending) == 0 {
+		return nil
+	}
+	return w.emit()
+}
+
+func (w *invocationError) emit() error {
+	line := w.pending
+	w.pending = nil
+	if bytes.HasPrefix(line, []byte("sudo: ")) {
+		w.withheld = true
+		return nil
+	}
+	_, err := w.writer.Write(line)
+	return err
 }
 
 func runServices(ctx context.Context, args []string, stdout, stderr io.Writer, services cli.Services, operations ...func(context.Context) (context.Context, func())) int {

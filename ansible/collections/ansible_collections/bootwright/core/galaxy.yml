@@ -1,0 +1,12 @@
+namespace: bootwright
+name: core
+version: 0.1.0
+readme: README.md
+authors:
+  - Bootwright contributors
+description: Embedded Bootwright capability adapters.
+license: []
+dependencies: {}
+tags:
+  - infrastructure
+repository: https://github.com/crmarques/bootwright

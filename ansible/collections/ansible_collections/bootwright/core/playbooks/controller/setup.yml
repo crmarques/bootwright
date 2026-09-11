@@ -1,0 +1,12 @@
+---
+- name: Prepare the authorized bastion dependencies
+  hosts: bootwright_controller
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute the controller prerequisites capability
+      ansible.builtin.import_role:
+        name: bootwright.core.controller_prerequisites

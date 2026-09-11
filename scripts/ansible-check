@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repository=$(CDPATH= cd -- "$script_directory/.." && pwd)
+interpreter="${BOOTWRIGHT_ANSIBLE_CHECK_PYTHON:-}"
+if test -z "$interpreter"; then
+    interpreter="$repository/.cache/ansible-check/venv/bin/python"
+    if ! test -x "$interpreter"; then
+        "${BOOTWRIGHT_ANSIBLE_BOOTSTRAP_PYTHON:-python3}" "$script_directory/tools/ansible_check_bootstrap.py"
+    fi
+fi
+exec "$interpreter" -I "$script_directory/tools/ansible_check.py" "$@"

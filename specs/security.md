@@ -196,9 +196,20 @@ SDKs, execution-environment images, playbooks, add-on packages and catalog
 snapshots, executables, and downloaded artifacts by an immutable version and
 content digest. Verify integrity and required publisher authenticity from
 separately trusted metadata before use. Repository-owned automation is
-content-digested as part of the selected implementation. Runtime dependency
-discovery, implicit upgrade, floating tags, and ambient external tools are
-forbidden. A frozen operation never substitutes an update silently; recovery
+content-digested as part of the selected implementation. Implicit upgrade,
+floating tags during execution, and ambient external tools are forbidden.
+Explicit bastion setup resolves latest or declared dependency versions before
+confirmation. It may acquire verified public resolver payloads and execute a
+maintained resolver within disposable, unprivileged staging. This exception
+permits only bounded scratch writes and explicit publisher/repository access;
+it grants no installed-host package, shared-state, Secret or target authority.
+Root invocation must establish an unprivileged, isolated execution boundary
+before downloaded resolver code runs. Freeze exact versions, source identities,
+publisher digests, resolver identities and the complete native transaction
+before presenting the installation plan. Each staging executable is verified
+before its own execution; the installation phase uses only the frozen result.
+Preflight, dry-run and pending-operation recovery never refresh this metadata.
+A frozen operation never substitutes an update silently; recovery
 follows [state reconciliation](state-reconciliation.md#dependency-safety-during-recovery).
 
 ## Logs, output, and diagnostics

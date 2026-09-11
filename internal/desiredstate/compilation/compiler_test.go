@@ -17,7 +17,7 @@ import (
 
 const environmentYAML = "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: synthetic\nspec:\n  domains:\n    base: example.test\n  controller: {machineRef: controller}\n"
 
-const controllerYAML = "\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: controller}\nspec:\n  os: {provided: true}\n  access: {local: true}\n"
+const controllerYAML = "\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: controller}\nspec:\n  capabilities: [container-runtime]\n  os: {provided: true}\n  access: {local: true}\n"
 
 func compiler() compilation.Compiler {
 	return compilation.NewCompiler(yamlstream.Parser{}, nil, compilation.Rules{Normalize: environment.Normalize, Validate: environment.Validate}, compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, Validate: secrets.Validate})

@@ -21,7 +21,7 @@ func TestOperationBoundaryIsLazyForInformationalMalformedAndUnavailablePaths(t *
 		"context init --name example -f one -f two", "context delete --name example --purge=false",
 		"validate --output json --unknown", "render effective -f input", "render --output json",
 		"apply --yes", "destroy --yes", "plan", "status",
-		"add-ons list", "media list", "bastion setup", "preflight all", "preflight container-cluster",
+		"add-ons list", "media list", "preflight all", "preflight container-cluster",
 		"preflight storage-cluster", "preflight add-ons", "machine list", "machine trust", "cluster list",
 		"cluster kubeconfig --name example", "machine exec --name example uptime", "cluster oc --name example get pods",
 		"render --output-dir artifacts --sensitive", "render installer", "render storage",
@@ -46,7 +46,7 @@ func TestOperationBoundaryOwnsContextAndCleanupForEveryImplementedPath(t *testin
 		[]string{"validate", "-f", "input"}, []string{"validate", "--context", "example"}, []string{"render", "effective"},
 		[]string{"secret", "set", "--name", "example", "--value-file", "value"}, []string{"secret", "generate"}, []string{"secret", "check"}, []string{"secret", "list"},
 		[]string{"secret", "show", "--name", "example", "--part", "value"}, []string{"secret", "delete", "--name", "example"},
-		[]string{"secret", "encryption", "init"}, []string{"secret", "encryption", "status"}, []string{"secret", "encryption", "rotate"})
+		[]string{"secret", "encryption", "init"}, []string{"secret", "encryption", "status"}, []string{"secret", "encryption", "rotate"}, []string{"bastion", "setup"}, []string{"bastion", "setup", "--dry-run"}, []string{"preflight", "bastion"})
 	for _, args := range invocations {
 		begins, finishes := 0, 0
 		parent := context.WithValue(context.Background(), dispatchContextKey{}, "parent")

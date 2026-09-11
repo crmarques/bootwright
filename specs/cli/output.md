@@ -291,6 +291,7 @@ repeating unbounded authored text in every diagnostic. The shared codes are:
 | `preflight.unknown` | Required readiness could not be positively determined. |
 | `controller.unsupported` | The setup host, dependency combination or acquisition route is not qualified. |
 | `controller.identity` | Required controller binding or verified host evidence is missing or contradictory. |
+| `controller.state` | Retained setup evidence is incomplete, contradictory or no longer valid. |
 | `controller.conflict` | Another setup or context protects a shared prerequisite or holds its coordination boundary. |
 | `controller.setup` | A local setup action definitely failed. |
 | `controller.unknown` | A setup action has an unresolved effect outcome. |

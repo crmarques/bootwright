@@ -215,6 +215,9 @@ func inspectInitialRegistry(ctx context.Context, root *directory) (string, sysca
 }
 
 func verifyEmptyRegistryRoot(ctx context.Context, root *directory, registry contexts.Registry) error {
+	if registry.Version == 4 {
+		return verifyControllerRootEntries(ctx, root, registry)
+	}
 	if registry.Version == 3 || len(registry.Identities) != 0 || len(registry.Contexts) != 0 {
 		return nil
 	}
@@ -360,6 +363,9 @@ func (s *Store) recoverInitialRegistry(ctx context.Context, root *directory) (bo
 }
 
 func verifyMappings(ctx context.Context, root *directory, registry contexts.Registry) error {
+	if _, err := readControllerStored(ctx, root, registry); err != nil {
+		return err
+	}
 	sizes := make([]int, len(registry.Contexts))
 	total := int64(0)
 	for index, record := range registry.Contexts {
@@ -572,15 +578,17 @@ func (s *Store) Transact(ctx context.Context, create bool, inputs []string, call
 }
 
 type transaction struct {
-	store     *Store
-	root      *directory
-	container *directory
-	registry  contexts.Registry
-	leases    map[string]*directory
-	evidence  map[string][]byte
-	committed bool
-	closed    bool
-	expected  *expectedRegistry
+	store              *Store
+	root               *directory
+	container          *directory
+	registry           contexts.Registry
+	leases             map[string]*directory
+	evidence           map[string][]byte
+	committed          bool
+	closed             bool
+	expected           *expectedRegistry
+	controllerInputs   map[string]string
+	controllerEvidence *controllerStored
 }
 
 func (t *transaction) close() {
@@ -702,8 +710,30 @@ func (t *transaction) MutationState(ctx context.Context, id string) ([]byte, err
 	if err := t.available(ctx); err != nil {
 		return nil, err
 	}
+	if err := t.checkControllerRecovery(ctx, id); err != nil {
+		return nil, err
+	}
 	if prior, ok := t.evidence[id]; ok {
 		return slices.Clone(prior), nil
+	}
+	dir, err := t.leaseContext(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	data, err := readMutation(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+	t.evidence[id] = slices.Clone(data)
+	return data, nil
+}
+
+func (t *transaction) leaseContext(ctx context.Context, id string) (*directory, error) {
+	if err := t.available(ctx); err != nil {
+		return nil, err
+	}
+	if dir := t.leases[id]; dir != nil {
+		return dir, dir.verify()
 	}
 	dir, err := t.contextDirectory(ctx, id)
 	if err != nil {
@@ -720,12 +750,7 @@ func (t *transaction) MutationState(ctx context.Context, id string) ([]byte, err
 	if err := verifyReservation(ctx, dir, id, ""); err != nil {
 		return nil, err
 	}
-	data, err := readMutation(ctx, dir)
-	if err != nil {
-		return nil, err
-	}
-	t.evidence[id] = slices.Clone(data)
-	return data, nil
+	return dir, nil
 }
 
 type expectedRegistry struct {
@@ -908,7 +933,7 @@ func (t *transaction) Commit(ctx context.Context, registry contexts.Registry) er
 	if err := validateRegistry(registry); err != nil {
 		return err
 	}
-	if registry.Version != t.registry.Version || registry.IDNamespace != t.registry.IDNamespace || registry.NextIdentity != t.registry.NextIdentity || !slices.Equal(registry.Identities, t.registry.Identities) || len(registry.Contexts) != len(t.registry.Contexts) {
+	if registry.Version != t.registry.Version || registry.Controller != t.registry.Controller || registry.IDNamespace != t.registry.IDNamespace || registry.NextIdentity != t.registry.NextIdentity || !slices.Equal(registry.Identities, t.registry.Identities) || len(registry.Contexts) != len(t.registry.Contexts) {
 		return state("context commit cannot change reserved identities")
 	}
 	for _, prior := range t.registry.Contexts {
@@ -919,6 +944,14 @@ func (t *transaction) Commit(ctx context.Context, registry contexts.Registry) er
 		next := registry.Contexts[index]
 		if next == prior {
 			continue
+		}
+		if err := t.checkControllerRecovery(ctx, prior.ID); err != nil {
+			return err
+		}
+		if next.Revision != prior.Revision {
+			if err := t.checkControllerPublication(ctx, prior.ID); err != nil {
+				return err
+			}
 		}
 		if next.Name != prior.Name || next.DirectoryDevice != prior.DirectoryDevice || next.DirectoryInode != prior.DirectoryInode || next.SecretStoreType != prior.SecretStoreType {
 			return state("context identity or secret implementation cannot change")

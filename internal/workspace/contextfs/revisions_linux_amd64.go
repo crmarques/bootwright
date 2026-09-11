@@ -18,6 +18,9 @@ func (t *transaction) collectRevisions(ctx context.Context, id string) error {
 	if !held || !bytes.Equal(t.evidence[id], []byte(pristineMutation)) {
 		return nil
 	}
+	if err := t.checkControllerRecovery(ctx, id); err != nil {
+		return err
+	}
 	record, err := t.record(id)
 	if err != nil {
 		return err
@@ -93,6 +96,9 @@ func (t *transaction) collectRevision(ctx context.Context, owner, revisions *dir
 }
 
 func (t *transaction) verifyRevisionCollection(ctx context.Context, owner *directory, id string) error {
+	if err := t.checkControllerRecovery(ctx, id); err != nil {
+		return err
+	}
 	file, err := openRelative(t.root, "registry.json", pathHandle, 0)
 	if err != nil {
 		return state("context selection cannot be verified before input cleanup")

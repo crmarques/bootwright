@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -25,44 +26,53 @@ func NewConfirmation(read func(context.Context, []byte) (int, error), out io.Wri
 }
 
 func (c *Confirmation) Confirm(ctx context.Context, action, name string) error {
+	failure := func(reason string) error {
+		if action == "bastion setup" {
+			return desiredstate.NewFailure("controller.setup", "setup confirmation "+reason, "")
+		}
+		return contexts.StateError("context confirmation " + reason)
+	}
 	if ctx.Err() != nil {
-		return contexts.StateError("context confirmation was canceled")
+		return failure("was canceled")
 	}
 	if c == nil || c.read == nil || c.out == nil || c.isTerminal == nil {
-		return contexts.StateError("context confirmation is not configured")
+		return failure("is not configured")
 	}
 	interactive, err := c.isTerminal()
 	if ctx.Err() != nil {
-		return contexts.StateError("context confirmation was canceled")
+		return failure("was canceled")
 	}
 	if err != nil || !interactive {
-		return contexts.StateError("context confirmation requires interactive input; use --yes after reviewing the selected transition")
+		return failure("requires interactive input; use --yes after reviewing the selected transition")
 	}
 	prompt := fmt.Sprintf("Confirm %s for context %s? [y/N] ", escapeDisplayLine(action), escapeDisplayLine(name))
+	if action == "bastion setup" {
+		prompt = fmt.Sprintf("Confirm bastion setup for %s? [y/N] ", escapeDisplayLine(name))
+	}
 	if n, err := io.WriteString(c.out, prompt); err != nil || n != len(prompt) {
-		return contexts.StateError("context confirmation prompt could not be written")
+		return failure("prompt could not be written")
 	}
 	// Read one byte at a time to avoid consuming input after the answer. The
 	// 64-byte ceiling includes the LF terminating the single answer.
 	var answer [64]byte
 	for i := range answer {
 		if ctx.Err() != nil {
-			return contexts.StateError("context confirmation was canceled")
+			return failure("was canceled")
 		}
 		n, err := c.read(ctx, answer[i:i+1])
 		if ctx.Err() != nil {
-			return contexts.StateError("context confirmation was canceled")
+			return failure("was canceled")
 		}
 		if err != nil || n != 1 {
-			return contexts.StateError("context confirmation answer could not be read")
+			return failure("answer could not be read")
 		}
 		if answer[i] == '\n' {
 			value := strings.ToLower(strings.TrimSpace(string(answer[:i])))
 			if value == "y" || value == "yes" {
 				return nil
 			}
-			return contexts.StateError("context confirmation was declined")
+			return failure("was declined")
 		}
 	}
-	return contexts.StateError("context confirmation answer exceeds the 64-byte limit")
+	return failure("answer exceeds the 64-byte limit")
 }

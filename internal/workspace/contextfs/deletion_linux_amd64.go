@@ -257,6 +257,9 @@ func (t *transaction) Delete(ctx context.Context, requested contexts.Record) err
 	if err := t.available(ctx); err != nil {
 		return err
 	}
+	if err := t.checkControllerRecovery(ctx, requested.ID); err != nil {
+		return err
+	}
 	record, err := t.record(requested.ID)
 	if err != nil {
 		return err
@@ -314,11 +317,17 @@ func (t *transaction) Delete(ctx context.Context, requested contexts.Record) err
 				return err
 			}
 		}
+		if err := t.dropControllerBinding(ctx, record.ID); err != nil {
+			return err
+		}
 		remaining := maxContextEntries
-		if err := t.store.walkContextTree(ctx, dir, "", removeContextTree, &remaining); err != nil {
+		if err := t.store.walkContextTreeWithRemovalGuard(ctx, dir, "", removeContextTree, &remaining, func(ctx context.Context) error { return t.checkControllerRecovery(ctx, record.ID) }); err != nil {
 			return err
 		}
 		if err := t.store.checkpoint(ctx, "before-context-rmdir"); err != nil {
+			return err
+		}
+		if err := t.checkControllerRecovery(ctx, record.ID); err != nil {
 			return err
 		}
 		if err := unlinkVerified(t.container, record.Name, dir.identity, true); err != nil {
@@ -329,6 +338,9 @@ func (t *transaction) Delete(ctx context.Context, requested contexts.Record) err
 		}
 	}
 	registry := cloneRegistry(t.registry)
+	if err := t.dropControllerBinding(ctx, record.ID); err != nil {
+		return err
+	}
 	registry.Contexts = slices.DeleteFunc(registry.Contexts, func(item contexts.Record) bool { return item.ID == record.ID })
 	if err := t.save(ctx, registry); err != nil {
 		return err

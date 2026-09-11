@@ -12,7 +12,7 @@ func implementedOperation(path string) bool {
 	switch path {
 	case "context init", "context update", "context use", "context list", "context current", "context delete", "validate", "render effective",
 		"secret set", "secret generate", "secret check", "secret list", "secret show", "secret delete",
-		"secret encryption init", "secret encryption status", "secret encryption rotate":
+		"secret encryption init", "secret encryption status", "secret encryption rotate", "bastion setup", "preflight bastion":
 		return true
 	default:
 		return false

@@ -38,6 +38,7 @@ metadata:
 spec:
   os: {provided: true}
   access: {local: true}
+  capabilities: [container-runtime]
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider

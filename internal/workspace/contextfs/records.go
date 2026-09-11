@@ -49,7 +49,11 @@ func decodeRecord(data []byte, maximum int, target any) error {
 	if _, ok := target.(*manifest); ok {
 		items = desiredstate.MaxFiles + desiredstate.MaxMarkers
 	}
-	if err := boundedJSON(data, items); err != nil {
+	depth, fields := 8, 16
+	if _, ok := target.(*controllerStateRecord); ok {
+		depth, fields = 16, 32
+	}
+	if err := boundedJSONLimits(data, items, depth, fields); err != nil {
 		return err
 	}
 	if registry, ok := target.(*contexts.Registry); ok {
@@ -76,6 +80,10 @@ func decodeRecord(data []byte, maximum int, target any) error {
 // Bound representation before encoding/json allocates typed collections. The
 // decoder below remains the sole JSON grammar implementation.
 func boundedJSON(data []byte, maxItems int) error {
+	return boundedJSONLimits(data, maxItems, 8, 16)
+}
+
+func boundedJSONLimits(data []byte, maxItems, maxDepth, maxFields int) error {
 	type frame struct {
 		kind   byte
 		commas int
@@ -102,7 +110,7 @@ func boundedJSON(data []byte, maxItems int) error {
 		case '"':
 			quoted, start = true, index
 		case '{', '[':
-			if len(stack) >= 8 {
+			if len(stack) >= maxDepth {
 				return state("persisted record exceeds its nesting limit")
 			}
 			stack = append(stack, frame{kind: c})
@@ -114,7 +122,7 @@ func boundedJSON(data []byte, maxItems int) error {
 			if len(stack) > 0 {
 				top := &stack[len(stack)-1]
 				top.commas++
-				if top.kind == '[' && top.commas >= maxItems || top.kind == '{' && top.commas >= 16 {
+				if top.kind == '[' && top.commas >= maxItems || top.kind == '{' && top.commas >= maxFields {
 					return state("persisted collection exceeds its limit")
 				}
 			}
@@ -134,7 +142,12 @@ func encodeRecord(value any, maximum int) ([]byte, error) {
 	case *contexts.Registry:
 		value = registryRecord(*registry)
 	}
-	if maximum < 1 || !fitsJSON(reflect.ValueOf(value), maximum-1) {
+	depth := 8
+	switch value.(type) {
+	case controllerStateRecord, *controllerStateRecord:
+		depth = 20
+	}
+	if maximum < 1 || !fitsJSON(reflect.ValueOf(value), maximum-1, depth) {
 		return nil, state("persisted record exceeds its encoding limit")
 	}
 	data, err := json.Marshal(value)
@@ -146,7 +159,11 @@ func encodeRecord(value any, maximum int) ([]byte, error) {
 
 // All record types are closed structs of strings, integers, slices and raw
 // mutation JSON. Count their exact encoding before allocating the output.
-func fitsJSON(value reflect.Value, limit int) bool {
+func fitsJSON(value reflect.Value, limit int, depths ...int) bool {
+	maxDepth := 8
+	if len(depths) != 0 {
+		maxDepth = depths[0]
+	}
 	count := 0
 	add := func(n int) bool {
 		if n < 0 || n > limit-count {
@@ -176,7 +193,7 @@ func fitsJSON(value reflect.Value, limit int) bool {
 	}
 	var visit func(reflect.Value, int) bool
 	visit = func(v reflect.Value, depth int) bool {
-		if depth > 8 || !v.IsValid() {
+		if depth > maxDepth || !v.IsValid() {
 			return false
 		}
 		if v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
@@ -297,8 +314,24 @@ func fitsJSON(value reflect.Value, limit int) bool {
 				if name == "" {
 					name = field.Name
 				}
-				if strings.Contains(name, ",") {
-					return false
+				if base, option, found := strings.Cut(name, ","); found {
+					if option != "omitempty" {
+						return false
+					}
+					item := v.Field(i)
+					empty := false
+					switch item.Kind() {
+					case reflect.String, reflect.Slice:
+						empty = item.Len() == 0
+					case reflect.Pointer:
+						empty = item.IsNil()
+					default:
+						return false
+					}
+					if empty {
+						continue
+					}
+					name = base
 				}
 				if fields > 0 && !add(1) {
 					return false
@@ -349,11 +382,14 @@ func contextName(name string) bool {
 }
 
 func validateRegistry(r contexts.Registry) error {
-	if r.Version != 2 && r.Version != 3 || r.Version == 2 && r.Identities == nil || r.Contexts == nil || len(r.Identities) > maxIdentities || len(r.Contexts) > maxIdentities {
+	if r.Version != 2 && r.Version != 3 && r.Version != 4 || r.Version == 2 && r.Identities == nil || r.Contexts == nil || len(r.Identities) > maxIdentities || len(r.Contexts) > maxIdentities {
 		return state("context registry has unsupported version or bounds")
 	}
-	if r.Version == 2 && (r.IDNamespace != "" || r.NextIdentity != 0) || r.Version == 3 && (!validNamespace(r.IDNamespace) || r.NextIdentity == 0 || len(r.Identities) != 0) {
+	if r.Version == 2 && (r.IDNamespace != "" || r.NextIdentity != 0) || r.Version >= 3 && (!validNamespace(r.IDNamespace) || r.NextIdentity == 0 || len(r.Identities) != 0) {
 		return state("context registry allocation state is invalid")
+	}
+	if r.Version < 4 && r.Controller != (contexts.ControllerDescriptor{}) || r.Version == 4 && (r.Controller.Version != 1 || r.Controller.Mode != "initializing" && r.Controller.Mode != "ready" || r.Controller.DirectoryInode == 0 && (r.Controller.DirectoryDevice != 0 || r.Controller.Mode == "ready")) {
+		return state("controller store descriptor is invalid")
 	}
 	ids := make(map[string]bool, len(r.Identities))
 	previous := ""
@@ -370,7 +406,7 @@ func validateRegistry(r contexts.Registry) error {
 		if !contextName(record.Name) || record.Name <= previous || !identifier(record.ID, "ctx-") || r.Version == 2 && !ids[record.ID] || active[record.ID] {
 			return state("context name or identity mapping is invalid")
 		}
-		if r.Version == 3 && identityNamespace(record.ID) == r.IDNamespace {
+		if r.Version >= 3 && identityNamespace(record.ID) == r.IDNamespace {
 			sequence, err := strconv.ParseUint(record.ID[len("ctx-")+16:], 16, 64)
 			if err != nil || sequence == 0 || sequence >= r.NextIdentity {
 				return state("context identity exceeds its allocation counter")

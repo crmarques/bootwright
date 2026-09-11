@@ -20,10 +20,12 @@ const (
 	cliRole         packageRole = "CLI"
 	technicalRole   packageRole = "technical"
 	compositionRole packageRole = "composition"
+	embeddedRole    packageRole = "embedded assets"
 )
 
 func packageRoles() map[string]packageRole {
 	roles := map[string]packageRole{
+		"ansible":                               embeddedRole,
 		"api/v1alpha1":                          domainRole,
 		"internal/substrate":                    domainRole,
 		"internal/infrastructureservices":       domainRole,
@@ -34,6 +36,10 @@ func packageRoles() map[string]packageRole {
 		"internal/workspace/contextfs":          adapterRole,
 		"internal/workspace/selectionfs":        adapterRole,
 		"internal/controller/invocation":        adapterRole,
+		"internal/controller/hostlinux":         adapterRole,
+		"internal/controller/bundlelocal":       adapterRole,
+		"internal/controller/ansiblelocal":      adapterRole,
+		"internal/controller/nativelocal":       adapterRole,
 		"internal/secrets/storage":              applicationRole,
 		"internal/secrets/localstore":           adapterRole,
 		"internal/secrets/material":             adapterRole,
@@ -66,7 +72,9 @@ func permitsDependency(consumer, provider packageRole) bool {
 	case applicationRole:
 		return provider == domainRole || provider == applicationRole || provider == technicalRole
 	case cliRole:
-		return provider != adapterRole && provider != compositionRole
+		return provider != adapterRole && provider != compositionRole && provider != embeddedRole
+	case embeddedRole:
+		return provider == technicalRole
 	case technicalRole:
 		return provider == technicalRole
 	case adapterRole:
@@ -94,7 +102,7 @@ func productionSources(t *testing.T) []sourceFile {
 	t.Helper()
 	var sources []sourceFile
 	root := filepath.Join("..", "..")
-	for _, directory := range []string{"api", "internal", filepath.Join("cmd", "bootwright")} {
+	for _, directory := range []string{"api", "internal", "ansible", filepath.Join("cmd", "bootwright")} {
 		err := filepath.WalkDir(filepath.Join(root, directory), func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {
 				return err
@@ -170,16 +178,21 @@ func TestAdmissionEffectBoundary(t *testing.T) {
 		guard := source.owner == "internal/reconciliation/contextguard"
 		selection := source.owner == "internal/workspace/selectionfs"
 		invocation := source.owner == "internal/controller/invocation"
+		controllerHost := source.owner == "internal/controller/hostlinux"
+		controllerBundle := source.owner == "internal/controller/bundlelocal"
+		controllerPackages := source.owner == "internal/controller/ansiblelocal"
+		controllerNative := source.owner == "internal/controller/nativelocal"
+		controllerEffects := controllerBundle || controllerPackages || controllerNative
 		configuration := source.owner == "internal/workspace/contexts"
-		localProcess := selection || invocation
+		localProcess := selection || invocation || controllerEffects
 		codec := source.owner == "internal/desiredstate/yamlstream" || source.owner == "internal/desiredstate/encoding"
 		for _, imported := range source.imports {
 			name := imported.path
-			forbidden := (strings.HasPrefix(name, "os/") && !(localProcess && name == "os/exec" || invocation && name == "os/signal")) || strings.HasPrefix(name, "net/") && name != "net/url" && name != "net/netip" || !storage && !selection && !secretMaterial && !secretStore && name == "crypto/rand" || strings.HasPrefix(name, "math/rand") || !storage && !secretMaterial && name == "unsafe" || strings.HasPrefix(name, "golang.org/x/sys") || !input && !storage && !secretMaterial && !localProcess && (name == "os" || name == "syscall")
+			forbidden := (strings.HasPrefix(name, "os/") && !(localProcess && name == "os/exec" || invocation && name == "os/signal")) || strings.HasPrefix(name, "net/") && name != "net/url" && name != "net/netip" && !controllerEffects || !storage && !selection && !secretMaterial && !secretStore && name == "crypto/rand" || strings.HasPrefix(name, "math/rand") || !storage && !secretMaterial && name == "unsafe" || strings.HasPrefix(name, "golang.org/x/sys") && !controllerHost && !controllerEffects || !input && !storage && !secretMaterial && !localProcess && !controllerHost && (name == "os" || name == "syscall")
 			if forbidden {
 				t.Errorf("%s imports unauthorized effect capability %s", source.path, name)
 			}
-			if !isCLI && (strings.Contains(name, "/internal/cli") || strings.HasPrefix(name, "github.com/spf13/") || name == "io" && !input && !codec && !storage && !guard && !secretMaterial && !secretStore && !configuration && !localProcess) {
+			if !isCLI && (strings.Contains(name, "/internal/cli") || strings.HasPrefix(name, "github.com/spf13/") || name == "io" && !input && !codec && !storage && !guard && !secretMaterial && !secretStore && !configuration && !localProcess && !controllerHost) {
 				t.Errorf("%s depends on presentation or unrestricted I/O %s", source.path, name)
 			}
 			ast.Inspect(source.syntax, func(node ast.Node) bool {
@@ -192,7 +205,7 @@ func TestAdmissionEffectBoundary(t *testing.T) {
 					return true
 				}
 				member := selector.Sel.Name
-				if name == "net" && member != "ParseMAC" && !(secretMaterial && (member == "IP" || member == "ParseIP")) {
+				if name == "net" && member != "ParseMAC" && !controllerEffects && !(secretMaterial && (member == "IP" || member == "ParseIP")) {
 					t.Errorf("%s accesses networking through net.%s", source.path, member)
 				}
 				if name == "fmt" && !isCLI && (strings.HasPrefix(member, "Print") || strings.HasPrefix(member, "Fprint") || strings.HasPrefix(member, "Scan") || strings.HasPrefix(member, "Fscan")) {

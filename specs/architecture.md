@@ -160,7 +160,7 @@ owned behavior or asset is added.
 | `api/<version>/` | Public desired-state wire types and schema vocabulary for one API version. |
 | `cmd/bootwright/` | Executable composition root and process boundary. |
 | `internal/<context>/` | Private Go domain, application, and adapter packages grouped by bounded context. |
-| `ansible/` | Controlled Ansible configuration, dependency locks, and embedded remote adapter collection. |
+| `ansible/` | Controlled Ansible configuration, dependency locks, and embedded adapter collection. |
 | `add-ons/` | Built-in packages conforming to [the add-on contract](add-ons.md), owned by the Add-ons context and embedded through a narrow package. |
 | `scripts/` | Build, generation, packaging, and verification tooling; never product policy. |
 | `test/` | Cross-component and end-to-end fixtures and harnesses; package tests remain beside their Go packages. |
@@ -474,7 +474,8 @@ Go owns:
 - translation of one authorized capability request into one bounded adapter
   call.
 
-Ansible owns Bootwright-controlled interaction with managed remote components.
+Ansible owns bastion dependency installation and Bootwright-controlled
+interaction with managed remote components.
 Remote observation, access, configuration, installation, verification, and
 removal cross an Ansible adapter boundary. Ansible does not infer desired
 state, choose product workflow, order cross-domain work, grant authorization,
@@ -483,9 +484,10 @@ own operation state, or format product output.
 An Ansible adapter receives one frozen validated request and returns a bounded
 structured result with required evidence. A local native tool may run
 through a typed Go runner for a purely local transformation. Controller
-prerequisite inspection and local package installation also use their bounded
-[Controller ports](controller.md#egress-and-local-effects); this includes only
-the qualified setup transaction, not managed service configuration. A tool
+prerequisite inspection uses bounded Go read-only ports. Go also materializes
+the private Python/Ansible execution bootstrap. Host-package and native target
+CLI installation cross the fixed Ansible bastion roles/playbooks through
+[Controller ports](controller.md#egress-and-local-effects). A tool
 contacting a managed remote component belongs inside Ansible.
 
 Operator-supplied automation and add-on package content are not internal
@@ -505,9 +507,9 @@ needed paths:
 | `ansible/ansible.cfg` | Controlled configuration. |
 | `ansible/controller/` and `ansible/collections/` | Selected dependency inputs and exact locks for the complete runtime closure. |
 | Collection `playbooks/<domain>/<operation>.yml` | One fixed application-port entrypoint; private fragments under its `tasks/`. |
-| Collection `roles/<domain>_<capability>[_<implementation>]/` | One remote capability adapter with only applicable standard role directories. |
+| Collection `roles/<domain>_<capability>[_<implementation>]/` | One local or remote capability adapter with only applicable standard role directories. |
 | Collection `plugins/` | Capability adapters or effect-free product translation/evidence normalization. |
-| Collection `tests/unit/` | Collection-owned tests. |
+| Collection `tests/unit/` | Collection-owned tests following `ansible-test` discovery. |
 
 The first consumer selects package-native or standard lock formats; Bootwright
 does not invent a dependency resolver or lock format. Locks cover

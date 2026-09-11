@@ -1,0 +1,3 @@
+---
+supported_ansible_also:
+  - "2.21"

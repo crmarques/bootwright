@@ -1,12 +1,12 @@
 # Milestones
 
-**Current milestone: M1d — bastion setup. Delivery: not started.**
-The implementation plan below targets RHEL 9 and Fedora; exact release and
-dependency qualification remains required before implementation promotion.
-M1a–M1c are completed: admission for all 26 API kinds, durable contexts,
-context-backed validation, public `render effective` and context Secret
-management are implemented. Existing unavailable-command guarantees remain
-in force. This milestone update defines work; it enables no runtime behavior.
+**Current milestone: M1d — bastion setup. Delivery: completed.**
+M1a–M1d are completed: admission for all 26 API kinds, durable contexts,
+context-backed validation, public `render effective`, context Secret
+management, and `bastion setup` with `preflight bastion` on RHEL 9 and Fedora
+for Linux/amd64 are implemented. Existing unavailable-command guarantees remain
+in force for deferred commands. M1e stays deferred and needs its own explicit
+implementation authorization before it becomes current.
 
 This file owns delivery scope and deferred work. Product specs describe target
 behavior; they do not claim availability. The current milestone includes its
@@ -417,15 +417,29 @@ lifetime secret-ID allocation remain C14/C15 outcomes below.
 **Owners:** Controller (prerequisites, local adapters and verified host evidence),
 Workspace (shared setup state and context binding), using Machine, Desired
 state and the existing invocation boundary. **Requires:** M1c.
-**Definition:** Needs definition for the exact qualified releases/locks and
-durable identity formats in S1/S2 below. Behavioral scope is defined in
-[Controller](controller.md). **Delivery:** not started.
+**Definition:** Specified in [Controller](controller.md) and
+[Contexts](contexts.md#controller-relationship-and-host-binding), with exact
+implementation locks. **Delivery:** completed. End-to-end acceptance against a
+real bastion remains operator-run and deferred.
+
+The implementation includes desired-state dependency selection and version
+overrides, frozen resolution and retry evidence, shared bundles and host binding,
+and the Go-orchestrated Ansible setup entrypoint.
+
+**Verification model.** Every test carried in this repository is unitary and
+host-independent: it runs without a package manager, network, privilege or a
+second operating system, and creates no virtual machine. Such tests qualify the
+contracts, refusals and recovery semantics, never an executed native installer.
+End-to-end acceptance on a real bastion is run by the operator as the code
+evolves and is not a condition of this milestone. A gate is reported as passing
+only with the command and result that produced it; an unavailable gate is
+recorded as unexecuted. These results do not promote M1e.
 
 Deliver `bastion setup`, `bastion setup --dry-run`, and `preflight bastion`
-for **both RHEL 9 and Fedora on Linux/amd64**. Neither distribution is an
-optional follow-up. Setup prepares the provided local OS for Bootwright:
-verified baseline execution dependencies, optional declared container runtime,
-and an explicit context's controller binding. It does not install the OS,
+for **RHEL 9 and Fedora on Linux/amd64**. Setup prepares the provided local OS for Bootwright:
+verified baseline execution dependencies, mandatory `container-runtime`
+capability, Podman installation when absent, all native target CLIs and local
+dependencies selected by desired state, and an explicit context's host binding. It does not install the OS,
 start managed services or enable plan/apply/destroy. This promotes C16's setup
 and binding scope; service-specific shared-host ownership remains with M1e.
 
@@ -435,21 +449,29 @@ context, use its admitted controller intent, egress and required capabilities.
 The [command journeys](controller.md#selection-and-command-journeys) own exact
 selection, dry-run, preflight, confirmation, no-op and effect boundaries.
 Required shared prerequisites are the qualified isolated Python/Ansible
-bundle and, only when declared for the controller, the qualified Podman runtime.
-Future platform clients and service-adapter dependencies remain consumer-owned.
+bundle, qualified Podman and native flow dependencies. Go orchestrates the
+fixed Ansible roles/playbooks that install packages and target clients. All configurable dependencies, including Python, Ansible and native packages,
+resolve latest stable or explicit Environment overrides before confirmation.
+OpenShift installer and clients stay tied to the target release. Exact
+selections are retained for retries; a fresh setup resolves latest again. Service-adapter execution remains consumer-owned.
 
 Implementation order:
 
-1. **S1 — qualify both host and dependency matrices.** Record an exact RHEL 9
+1. **S1 — define both host matrices.** Record an exact RHEL 9
    minor release and Fedora release, architecture, tested kernel/filesystems,
    sudo/package-manager interfaces, approved repository identities, complete
    package builds, Python/Ansible bundle, Podman variant, digests, publisher
-   trust, acquisition limits and available real-host fixtures. Compare native
+   trust and acquisition limits. Both matrices are defined from published
+   publisher metadata; neither requires an executed host to be recorded. Compare native
    package and isolated-bundle mechanisms under the dependency selection rule;
    use their standard lock formats. Qualify package hooks and solver behavior,
-   including refusal of upgrades/removals and changes to protected dependencies.
+   including selected upgrades, explicit root downgrades, refusal of unrelated
+   removals/downgrades and changes to protected dependencies.
    Record the supported matrix in Controller and locks with their owning
-   implementation. Do not infer a tested release or use floating versions.
+   implementation. Do not infer a tested release or use floating versions inside execution.
+   Resolve latest or overridden roots with maintained pip and DNF resolvers in
+   disposable unprivileged staging before confirmation. Freeze complete
+   versions, metadata, checksums, sizes and native before/after action evidence.
 2. **S2 — close host identity and durable recovery definitions.** Specify and
    qualify the installed-host evidence provider for both distributions,
    ordinary reboot continuity, clone/namespace/copy refusal and same-host
@@ -467,7 +489,7 @@ Implementation order:
    transactions, acquisition and publication. Define typed failures,
    cancellation and complete postcondition evidence. Reuse Workspace input and
    invocation services through their published interfaces. Cover baseline vs
-   explicit context, optional runtime, unsupported routes and bootstrap cycles,
+   explicit context, mandatory runtime, desired-state tool closure, unsupported routes and bootstrap cycles,
    deterministic dependency order, dry-run unknowns and no-effect refusals.
 4. **S4 — implement Workspace binding and shared setup state.** Add versioned
    storage and guarded publication under the fixed root, context-free store
@@ -475,10 +497,14 @@ Implementation order:
    Protect pending input/recovery and all shared bundles through context update
    and purge. Test old-store compatibility, interruption at every commit point,
    non-adoption of unrelated files, no-op reads, bounds and process death.
-5. **S5 — implement qualified local adapters.** Build the RHEL 9 and Fedora
-   adapters against the same request/result/failure contract, selecting each
-   implementation only at composition. Implement bounded trusted acquisition,
-   complete transaction inspection, additive installation, immutable bundle
+5. **S5 — implement the Ansible bastion skeleton and roles.** Add controlled
+   `ansible.cfg`, exact controller locks, embedded `bootwright.core` collection,
+   fixed `playbooks/controller/setup.yml`, and the `controller_prerequisites`
+   role with argument specs and structured results. Go bootstraps the private
+   execution runtime and orchestrates these entrypoints. Ansible performs actual
+   RHEL 9/Fedora package and native target CLI installation through one frozen
+   request/result/failure contract. Implement bounded trusted acquisition,
+   complete transaction inspection, dependency installation/update, immutable bundle
    publication and exact readiness probes. Implement cancellation/reaping,
    unknown-outcome resolution and explicit retry; test native installer locks
    and children surviving parent death. No lifecycle adapter or managed remote
@@ -490,30 +516,33 @@ Implementation order:
    unsupported host/dependency diagnostics and stable streams/exit status.
    Setup and preflight create no lifecycle identity or lifecycle receipt/log;
    setup retains its separate private recovery receipt.
-7. **S7 — qualify and deliver both targets.** Run the exit evidence below on
-   the integrated tree, record exact tested matrices and results, and update
-   delivery status only when both distributions pass. M1e remains unavailable
-   and needs its own explicit implementation authorization.
+7. **S7 — qualify and deliver.** Run the exit evidence below on the integrated
+   tree and record each gate's command and result, including every gate that
+   could not execute and why. Include the pinned Ansible syntax/lint and
+   collection sanity, unit and local integration gates. M1e remains unavailable and needs its own
+   explicit implementation authorization.
 
 S1's two distribution investigations can run in parallel. S2 can draft state
 semantics alongside them but must use the qualified identity evidence. After
 S3 fixes the shared contracts, S4 and independent distribution adapters can be
-implemented concurrently with disjoint ownership and isolated test machines.
+implemented concurrently with disjoint ownership and separate test fixtures.
 S6 integration and S7 acceptance follow those prerequisites. Never run parallel
 host mutations against the same machine or shared store.
 
 Exit evidence, required before claiming M1d complete:
 
 - Exact supported RHEL 9 and Fedora releases and complete dependency closures
-  are locked, authenticity/integrity verified, and accepted on real isolated
-  hosts. Include clean setup, pre-existing compatible dependencies, additive
-  installation and unchanged rerun on each target. Unsupported releases and
-  package transactions refuse before installation.
+  are locked and authenticity/integrity verified. Both matrices are covered by
+  the same host-independent tests: clean setup, pre-existing exact dependencies,
+  selected upgrades, explicit overrides including Python/Ansible and native root
+  downgrades, frozen retry and unchanged rerun when latest has not changed.
+  Unsupported releases and package transactions refuse before installation.
 - Complete context-free setup/preflight before any context exists; empty and
   imported contexts; explicit controller selection; no implicit current-context
-  reads; optional `container-runtime`; first binding, same-host retry/reboot and
-  wrong-host refusal. The full synthetic admitted graph does not activate any
-  cluster/service effects merely because setup reads its controller intent.
+  reads; required `container-runtime` and installation of absent Podman; first binding, same-host retry/reboot and
+  wrong-host refusal. Desired-state tool selection covers the complete retained graph without
+  activating cluster/service effects. Missing target release metadata refuses
+  before installation; placeholder fixture versions are not real releases.
 - Dry-run and preflight effect sentinels prove their exact boundaries, including
   no Secret material or managed endpoint access. Check direct and qualified
   external-proxy routing, absent dependencies, unsupported authenticated/private
@@ -529,11 +558,39 @@ Exit evidence, required before claiming M1d complete:
   Prove exact retry or safe refusal after OS process death, surviving children,
   partial package success, unknown outcomes and uncertain durable publication.
 - Final `make check`, `make build`, `./scripts/go test -race ./...`, both module
-  tidy/verification checks and `git diff --check` pass. Run all qualified shell
-  and required privileged/PTY fixtures without silently counting skips as
-  acceptance. Record native-adapter contract and both real-host acceptance
-  commands/results; mocked success is insufficient. Review the complete diff,
-  dependency closure and retained recovery evidence.
+  tidy/verification checks and `git diff --check` are run, with each result
+  recorded and each unavailable gate named. A skipped case is never counted as
+  acceptance. Review the complete diff, dependency closure and retained recovery
+  evidence.
+
+Recorded gate results, on Fedora 43 / linux-amd64:
+
+| Gate | Result |
+| --- | --- |
+| `make build` | pass |
+| `make test` | pass |
+| `./scripts/go test -race ./...` | pass; 49 packages, no data race |
+| `make vet` | pass |
+| `make fmt-check` | pass |
+| `make modules-check` | pass; both module locks verified |
+| `make vulncheck` | pass; no reachable vulnerability |
+| `git diff --check` | pass |
+| `make completion-test` | pass; Bash only, the shell this milestone qualifies |
+| `make ansible-check` | pass; syntax, lint, sanity, units and the host-independent integration targets |
+| `make check` | pass; the complete gate chain above |
+| `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1 make ansible-check` | pass; adds the two host-backed targets, including the shipped setup playbook and role over the real runner protocol |
+
+The Ansible gate builds its own pinned interpreter, so it does not depend on the
+development host's Python. Completion is qualified for Bash; the other shells
+ship and stay covered behind an explicit selection.
+
+Deliberately outside the unitary gate, and run by the operator on a qualified
+Fedora or RHEL host with `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1`: the
+`controller_native` target, which drives the host package manager, and the
+`controller_prerequisites` target, which runs the shipped setup playbook and
+role over the real runner protocol. Both exercise shipped entrypoints that no
+host-independent test can reach. A successful `preflight bastion` prints no next
+command, because this slice exposes no follow-on command to name.
 
 Deferred boundaries: Controller and Secrets own authenticated/private-trust
 setup acquisition (**Needs definition**; requires M1d). It is deferred because
@@ -543,7 +600,13 @@ interrupted acquisition with changed or unavailable credentials. Additional
 host families and architectures need separate matrices; controller
 relocation/restore remains C14. M1e owns service images, its pinned Ansible
 adapter closure, full-context lifecycle state, local service reservations, readiness and qualified inverse.
-There is no host uninstall, automatic OS upgrade or speculative tool bundle.
+There is no host uninstall or automatic OS upgrade. Native dependency
+preparation belongs to M1d even when the consuming lifecycle command is
+deferred: setup installs every dependency the admitted desired state selects,
+which reverses this slice's earlier deferral of target clients to their first
+consuming milestone. End-to-end acceptance against a real bastion, including
+executed native installation on either distribution, is operator-run work
+outside this repository's test suite and outside M1d's exit gate.
 
 ## M1e — managed artifact-server apply
 
@@ -571,7 +634,7 @@ plus a qualified local execution adapter and service-specific cross-context
 port, path, container and runtime reservations. Define conflict identities,
 ownership, refusal and crash/retry before local effects; no SSH configuration
 is inferred for the controller.
-The controller declares `container-runtime` when it hosts managed containers.
+The controller already declares the mandatory `container-runtime` capability.
 
 First define the capability port, HTTP implementation/image, content ownership,
 endpoints/TLS, host-key limits and algorithms, readiness, replay, cancellation,
@@ -583,7 +646,7 @@ Qualify the [composition boundaries](architecture.md#dependency-direction-and-co
 with interchangeable Go capability implementations and Ansible bindings using
 the same request/result/failure/evidence contract. Verify fixed entrypoint,
 role and plugin resolution and refusal of authored executable selection before
-effects. Ansible contract evidence begins with this first implemented adapter.
+effects. Ansible service-adapter evidence extends M1d's bastion dependency contracts.
 
 Exit: deterministic complete plans/digests; immutable input and credentials;
 versioned snapshots, leases, logs, ownership, sequential execution and exact

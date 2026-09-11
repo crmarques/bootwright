@@ -122,47 +122,51 @@ func (s Service) confirm(ctx context.Context, skip bool, action, name string) er
 	return ctx.Err()
 }
 
-func (s Service) admit(ctx context.Context, path string) (desiredstate.Sources, string, *compilation.Report, error) {
+func (s Service) admit(ctx context.Context, path string) (desiredstate.Sources, string, string, *compilation.Report, error) {
 	if s.reader == nil || s.compiler == nil {
-		return desiredstate.Sources{}, "", nil, StateError("context admission is not configured")
+		return desiredstate.Sources{}, "", "", nil, StateError("context admission is not configured")
 	}
 	if err := s.repository.CheckInputDirectory(ctx, path); err != nil {
-		return desiredstate.Sources{}, "", nil, err
+		return desiredstate.Sources{}, "", "", nil, err
 	}
 	if err := ctx.Err(); err != nil {
-		return desiredstate.Sources{}, "", nil, err
+		return desiredstate.Sources{}, "", "", nil, err
 	}
 	sources, err := s.reader.ReadDirectory(ctx, path)
 	if err != nil {
-		return desiredstate.Sources{}, "", nil, err
+		return desiredstate.Sources{}, "", "", nil, err
 	}
 	if err = ctx.Err(); err != nil {
-		return desiredstate.Sources{}, "", nil, err
+		return desiredstate.Sources{}, "", "", nil, err
 	}
 	state, report, err := s.compiler.Compile(ctx, desiredstate.Sources{Files: slices.Clone(sources.Files), Markers: slices.Clone(sources.Markers), Roots: slices.Clone(sources.Roots)})
 	if err != nil {
-		return desiredstate.Sources{}, "", nil, err
+		return desiredstate.Sources{}, "", "", nil, err
 	}
 	if err = ctx.Err(); err != nil {
-		return desiredstate.Sources{}, "", nil, err
+		return desiredstate.Sources{}, "", "", nil, err
 	}
 	if state == nil || report == nil || len(sources.Roots) != 1 {
-		return desiredstate.Sources{}, "", nil, StateError("context admission returned incomplete input")
+		return desiredstate.Sources{}, "", "", nil, StateError("context admission returned incomplete input")
 	}
 	environments := state.Authored().OfKind(api.Environment)
 	if len(environments) != 1 {
-		return desiredstate.Sources{}, "", nil, StateError("context admission returned no unique Environment")
+		return desiredstate.Sources{}, "", "", nil, StateError("context admission returned no unique Environment")
 	}
 	origin, ok := state.Origin(environments[0].Identity())
 	if !ok || !filepath.IsAbs(origin.Path) {
-		return desiredstate.Sources{}, "", nil, StateError("context admission returned no Environment provenance")
+		return desiredstate.Sources{}, "", "", nil, StateError("context admission returned no Environment provenance")
 	}
 	directory := filepath.Dir(origin.Path)
 	relative, err := filepath.Rel(sources.Roots[0], directory)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return desiredstate.Sources{}, "", nil, StateError("Environment is outside the admitted input directory")
+		return desiredstate.Sources{}, "", "", nil, StateError("Environment is outside the admitted input directory")
 	}
-	return sources, directory, report, nil
+	effectiveEnvironment, found := state.Effective().Find(api.Environment, environments[0].Name())
+	if !found {
+		return desiredstate.Sources{}, "", "", nil, StateError("context admission returned no effective Environment")
+	}
+	return sources, directory, effectiveEnvironment.Spec().Get("controller", "machineRef").Text(), report, nil
 }
 
 func (s Service) configuration(ctx context.Context, name, path string) (Configuration, error) {
@@ -233,7 +237,7 @@ func (s Service) Init(ctx context.Context, request InitRequest) (*AdmissionResul
 	var environment string
 	var report *compilation.Report
 	if request.InputDirectory != "" {
-		sources, environment, report, err = s.admit(ctx, request.InputDirectory)
+		sources, environment, _, report, err = s.admit(ctx, request.InputDirectory)
 		if err != nil {
 			return nil, err
 		}
@@ -334,10 +338,10 @@ func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionR
 		}
 	}
 	var sources desiredstate.Sources
-	var environment string
+	var environment, controllerMachine string
 	var report *compilation.Report
 	if request.InputDirectory != "" {
-		sources, environment, report, err = s.admit(ctx, request.InputDirectory)
+		sources, environment, controllerMachine, report, err = s.admit(ctx, request.InputDirectory)
 		if err != nil {
 			return nil, err
 		}
@@ -371,6 +375,15 @@ func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionR
 		}
 		if err := uniqueEnvironment(reg, record.ID, environment); err != nil {
 			return err
+		}
+		if reg.Version == 4 {
+			guard, ok := tx.(ControllerInputGuard)
+			if !ok {
+				return StateError("controller binding guard is unavailable")
+			}
+			if err := guard.CheckControllerInput(ctx, record.ID, controllerMachine); err != nil {
+				return err
+			}
 		}
 		disposition, err := s.disposition(ctx, tx, record.ID)
 		if err != nil {

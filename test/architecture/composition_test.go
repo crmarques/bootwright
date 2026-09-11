@@ -26,6 +26,7 @@ func applicationValues() packageSymbols {
 	return packageSymbols{
 		"internal/desiredstate/compilation": {"State": true},
 		"internal/workspace/contexts":       {"Configuration": true},
+		"internal/controller/prerequisites": {"SetupReceipt": true},
 	}
 }
 

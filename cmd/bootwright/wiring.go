@@ -11,7 +11,11 @@ import (
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/containercluster/installation"
 	containerpreflight "github.com/crmarques/bootwright/internal/containercluster/preflight"
+	"github.com/crmarques/bootwright/internal/controller/ansiblelocal"
+	"github.com/crmarques/bootwright/internal/controller/bundlelocal"
+	"github.com/crmarques/bootwright/internal/controller/hostlinux"
 	"github.com/crmarques/bootwright/internal/controller/invocation"
+	"github.com/crmarques/bootwright/internal/controller/nativelocal"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/desiredstate/customplaybooks"
@@ -61,17 +65,36 @@ func wireCompiler() compilation.Compiler {
 
 func wireServices() cli.Services { return wireLocalServices(nil, nil) }
 
-func wireLocalServices(confirmer contexts.Confirmer, input secretmaterial.InputReader) cli.Services {
+func wireLocalServices(confirmer contexts.Confirmer, input secretmaterial.InputReader, presenters ...prerequisites.PlanPresenter) cli.Services {
 	repository := contextfs.New(contextfs.Options{})
+	return wireContextServices(repository, repository, confirmer, input, localWiringOptions(repository, presenters...))
+}
+
+func localWiringOptions(repository *contextfs.Store, presenters ...prerequisites.PlanPresenter) contextWiringOptions {
 	account := invokingAccount{resolver: invocation.Resolver{}}
-	return wireContextServices(repository, repository, confirmer, input, contextWiringOptions{Selection: account, Operator: account})
+	native := nativelocal.New(bundlelocal.FetchMetadata)
+	options := contextWiringOptions{Selection: account, Operator: account, ControllerStorage: repository, ControllerHost: hostlinux.New(), ControllerCatalog: bundlelocal.Catalog{}, ControllerBundle: bundlelocal.New(), ControllerTools: bundlelocal.NewToolCatalog(), ControllerRuntime: ansiblelocal.New(bundlelocal.ExecutionGuard{}), ControllerBootstrap: bundlelocal.NewBootstrapResolver(), ControllerNative: native, ControllerNativeInspector: native}
+	if len(presenters) != 0 {
+		options.ControllerPresenter = presenters[0]
+	}
+	return options
 }
 
 type contextWiringOptions struct {
-	Selection       contexts.SelectionStore
-	Resolver        secretstorage.ImplementationResolver
-	SessionMaterial secretstorage.SessionMaterialSource
-	Operator        secretmaterial.Operator
+	Selection                 contexts.SelectionStore
+	Resolver                  secretstorage.ImplementationResolver
+	SessionMaterial           secretstorage.SessionMaterialSource
+	Operator                  secretmaterial.Operator
+	ControllerStorage         prerequisites.Storage
+	ControllerHost            prerequisites.HostInspector
+	ControllerCatalog         prerequisites.DependencyCatalog
+	ControllerBundle          prerequisites.BundleManager
+	ControllerRuntime         prerequisites.RuntimeInstaller
+	ControllerPresenter       prerequisites.PlanPresenter
+	ControllerTools           prerequisites.TargetToolCatalog
+	ControllerBootstrap       prerequisites.BootstrapResolver
+	ControllerNative          prerequisites.NativeResolver
+	ControllerNativeInspector prerequisites.NativeInspector
 }
 
 func wireContextServices(repository contexts.Repository, workspace secretstorage.Workspace, confirmer contexts.Confirmer, input secretmaterial.InputReader, options ...contextWiringOptions) cli.Services {
@@ -109,7 +132,7 @@ func wireContextServices(repository contexts.Repository, workspace secretstorage
 		Encryption:            encryption.New(access, confirmer),
 		Media:                 media.Service{},
 		DesiredState:          compilation.New(inputfs.Reader{}, compiler, contexts.Inputs{Repository: repository, Selection: configuration.Selection}),
-		Controller:            prerequisites.Service{},
+		Controller:            prerequisites.New(configuration.ControllerStorage, compiler, configuration.ControllerHost, configuration.ControllerCatalog, configuration.ControllerBundle, configuration.ControllerRuntime, prerequisites.Options{Confirmer: confirmer, Presenter: configuration.ControllerPresenter, Tools: configuration.ControllerTools, Bootstrap: configuration.ControllerBootstrap, Native: configuration.ControllerNative, NativeInspector: configuration.ControllerNativeInspector}),
 		EnvironmentPreflight:  environmentpreflight.Service{},
 		EnvironmentInspection: inspection.Service{},
 		EnvironmentAccess:     environmentaccess.Service{},

@@ -57,11 +57,10 @@ A changed Machine name cannot silently transfer an existing binding. Ordinary
 same-host reboot must remain distinguishable from relocation in the qualified
 identity implementation.
 
-The M1d storage definition must close the exact versioned canonical record
-schemas, evidence-provider identity, bounds and publication commit points before
-implementation. Shared host state belongs under `/var/lib/bootwright/controller/`;
-context bindings and context-specific setup references belong under the
-existing context's `state/` directory. Records contain no Secret values, and
+Shared host state belongs under `/var/lib/bootwright/controller/`. The current
+receipt and all context bindings share one atomic `state.json` publication;
+there is no independently published per-context binding record. This prevents
+completion and binding evidence from disagreeing after interruption. Records contain no Secret values, and
 opaque private host evidence is never emitted by inspection. Dependency files
 that must execute are a narrow root-owned `0700` exception to the regular-file
 `0600` rule; metadata and other files remain `0600`. Only catalogued immutable
@@ -69,13 +68,94 @@ controller bundles may use this exception.
 
 Explicit baseline setup may initialize the fixed root and publish a durable
 empty registry without creating a context or keyring. That registry commit
-must precede any controller subtree. Define the enclosing format upgrade so an
-older reader that cannot preserve controller evidence refuses it. The admitted
+must precede any controller subtree. Confirmed setup introduces registry version
+4, preserving the version-3 allocator and active context records and adding a
+versioned Controller descriptor. An older reader refuses version 4. The admitted
 root layout must include the independently versioned controller subtree even
 with zero contexts; unknown layouts or versions refuse. Ordinary context
 commands never infer ownership, repair interrupted setup or remove shared host
-state. The currently implemented registry versions/layout remain unchanged
-until M1d supplies that qualified upgrade.
+state. Reading versions 2 or 3 does not introduce Controller state. Ordinary
+context publications preserve an existing version-4 descriptor.
+
+The descriptor fixes version `1`, mode `initializing` or `ready`, and the
+Controller directory's device/inode. Its reservation precedes directory
+creation; a second publication records the actual directory identity. An
+unattributable directory after a crash is preserved and refuses adoption.
+Only explicit setup can finish an attributable initialization.
+
+The private Controller record version is `1`. Its fields are `version`, `host`,
+`receipt`, `bindings`, `retainedSources`, optional `retainedDefinitions` and
+`bundles`, encoded as compact JSON
+in schema order followed by LF. Unknown fields, duplicate keys, noncanonical
+records and versions refuse. The host contains the confidential
+[`linux-installed-v1` tuple](controller.md#host-identity-and-shared-prerequisites).
+The receipt fixes its ID, catalog digest, plan digest, context name/ID/revision/
+Machine, explicit egress, source closure, full resolved dependency definition,
+ordered actions and status. A baseline
+receipt has empty context fields. Sources bind a stable ID to its original
+credential-free URL, SHA-256 and exact byte count. Bindings contain immutable
+context ID, Machine name and the private host digest, ordered by context ID;
+sources are ordered by source ID. Reusing a source ID with different bytes or
+origin refuses, including after replacing a terminal receipt.
+
+Action requests and evidence are canonical compact JSON objects with sorted
+keys. Each action records `planned`, `intent` or `observed`; an observed action
+requires bounded evidence and an explicit outcome. Successful observations
+cannot regress. `pending` and `unknown` retain recovery protection. `complete`
+requires every action's verified `changed` or `unchanged` postcondition;
+`failed`/`canceled` require no unresolved intent or unknown effect. The plan
+digest is SHA-256 of the domain-separated host digest, catalog, resolution, context, egress,
+sources and immutable action requests; progress and receipt ID are excluded.
+Receipt IDs are `setup-` plus 128 bits of a domain-separated SHA-256 over the
+plan digest and previous receipt ID. They are private coordination evidence.
+
+The ordered actions prepare the execution bundle, run the Ansible native
+dependency transaction (`container-runtime`, including selected target clients),
+and publish an explicit context binding. The catalog digest binds the base
+runtime and automation assets plus the exact resolved tool definitions and
+native artifacts. Each full definition also has a resolution digest binding
+version intent, platform, Python/wheel metadata and the native transaction's
+exact before/after inventory and actions. Retained definitions are append-only
+in publication order and identified by resolution digest. The receipt's
+definition must match one retained entry. Versions resolved from latest become
+ordinary immutable retained sources; they are not refreshed during exact
+recovery. A new solve with unchanged selected releases and no native action
+reuses the existing verified bundle and source closure.
+
+An action may also carry a canonical `preparation` object, omitted until its
+before-state has been observed. First publication requires an existing durable
+intent; the object is immutable for that receipt and excluded from the plan
+digest. Native preparation contains `inventorySHA256`, `afterInventorySHA256`,
+`planDigest`, `transitionsSHA256` and sorted unique `addedSources`. These bind
+the complete before and expected after inventories, exact native plan and its
+ordered transitions, with payload IDs retained for acquisition evidence.
+It must commit before the installer receives permission
+to enter its native transaction. Its absence proves installation was not
+authorized; its presence requires exact transaction recovery, even if ordinary
+readiness checks pass. Recovery may retry an unchanged exact before-state, or
+verify the complete expected after-state without repeating native effects.
+An intermediate or contradictory inventory remains unknown.
+
+The state record is bounded to 4 MiB, with at most 128 actions, 512 current
+sources, 4096 retained source identities and 4096 bindings. Each request,
+preparation or evidence object is at most 64 KiB. A full resolved definition is
+at most 512 KiB, with at most 16 retained definitions subject to the aggregate
+state bound. Controller records allow nesting depth 16 and 32 fields per object;
+other durable record bounds remain unchanged. There are at most 16 retained bundle
+namespaces, named by the 64-character catalog digest. Their reservations record
+`reserved`, `attributed` or `sealed` and physical directory identity. A bundle
+is bounded to 8 GiB total, 1 GiB per file, 32768 entries and depth 32. Symlinks, hard links, nested
+mounts, unsafe modes, unexpected entries and replacement refuse. Only a durable
+setup intent grants its scoped write capability. Completion verifies and syncs
+the complete tree before sealing; sealed contents cannot be rewritten.
+
+Publication writes and syncs an exclusive private staging file, revalidates
+the held directory and previous record identity, then renames and syncs its
+parent. A pre-rename failure is uncommitted; uncertain rename/durability closes
+the transaction capability and permits no further mutation. The root lock
+precedes the selected context lease and remains held through each callback.
+Read-only bundle capabilities expire with their shared-lock callback, and all
+mutation capabilities expire with their transaction.
 
 Before a context-bound setup effect, persist its pending receipt with the exact
 input revision and binding references. Under the same root/context coordination,
@@ -154,7 +234,8 @@ payload paths. Authored `~` spelling remains unchanged during admission.
 
 ## Storage, locking and publication
 
-The registry writes private format version 3. Active records hold the name,
+The registry writes private format version 3, or version 4 once confirmed setup
+has introduced the shared Controller descriptor. Active records hold the name,
 immutable ID, initialization/deletion mode, selected revision, Environment
 directory, configured secret-store type and reserved directory device/inode.
 A fixed-size allocation namespace and counter prevent ID reuse within the store
@@ -166,15 +247,20 @@ registry publication upgrades them atomically, preserving every active name,
 ID and record. Its fresh namespace must differ from the prefix of every used
 version-2 ID before the old identity ledger can be discarded. Admission,
 confirmation and mutation safeguards still precede an authorized publication.
-There is no fallback from corrupt version-3 state to older metadata.
+There is no fallback from corrupt version-3 or version-4 state to older metadata.
 
-The production root is `/var/lib/bootwright`. Its implemented context layout
-is below; M1d must version the additional Controller layout under the
-[host-binding contract](#controller-relationship-and-host-binding) before use:
+The production root is `/var/lib/bootwright`. Its layout follows the
+[host-binding contract](#controller-relationship-and-host-binding); the
+Controller subtree exists only after confirmed setup:
 
 ```text
 /var/lib/bootwright/
   registry.json
+  controller/
+    state.json
+    bundles/<catalog-digest>/
+      sources/
+      python/
   contexts/<name>/
     context.yaml
     desired-state/revisions/<revision-id>/

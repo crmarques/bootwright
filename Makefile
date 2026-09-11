@@ -1,4 +1,4 @@
-.PHONY: build test vet fmt-check modules-check completion-test vulncheck check
+.PHONY: build test vet fmt-check modules-check completion-test vulncheck ansible-check check
 
 GO := ./scripts/go
 VULNDB ?= https://vuln.go.dev
@@ -29,5 +29,8 @@ completion-test:
 vulncheck:
 	./scripts/govulncheck -db "$(VULNDB)" ./...
 
-check: fmt-check modules-check test vet completion-test vulncheck
+ansible-check:
+	./scripts/ansible-check
+
+check: fmt-check modules-check test vet completion-test vulncheck ansible-check
 	git diff --check

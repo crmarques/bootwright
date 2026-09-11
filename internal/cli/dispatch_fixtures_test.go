@@ -160,12 +160,12 @@ func (s desiredStateSpy) RenderEffective(ctx context.Context, request compilatio
 
 type controllerSpy struct{ record *dispatchRecord }
 
-func (s controllerSpy) Check(ctx context.Context, request prerequisites.CheckRequest) error {
-	return s.record.called(ctx, "preflight bastion", request)
+func (s controllerSpy) Check(ctx context.Context, request prerequisites.CheckRequest) (*prerequisites.Report, error) {
+	return s.record.result.controller, s.record.called(ctx, "preflight bastion", request)
 }
 
-func (s controllerSpy) Setup(ctx context.Context, request prerequisites.SetupRequest) error {
-	return s.record.called(ctx, "bastion setup", request)
+func (s controllerSpy) Setup(ctx context.Context, request prerequisites.SetupRequest) (*prerequisites.Report, error) {
+	return s.record.result.controller, s.record.called(ctx, "bastion setup", request)
 }
 
 type environmentSpy struct{ record *dispatchRecord }

@@ -20,12 +20,74 @@ Environment fields emit in this order:
 | `spec.remoteMachinesAccessKey` | object | conditional | — | Fleet key for the `bootwright` account installed on managed machines. |
 | `spec.defaults` | kind-keyed partial specs | no | `{}` | Omitted object fields inherit the corresponding kind entry under the rules below. |
 | `spec.downloads` | object | no | source-specific | Closed download-mirror policy below. |
+| `spec.dependencyVersions` | object | no | `latest` at setup | Version intent for bastion dependencies; closed shape below. |
 | `spec.controller` | object | yes | — | Required controller Machine selection below. |
 | `spec.lifecycle` | object | no | — | Offline-rescue input; the declaration exposes no lifecycle command. |
 
 Omitted optional arrays remain omitted unless their owning rule declares a
 materialized default. Authored arrays reject duplicate entries by their
 documented identity.
+
+## Dependency versions
+
+`spec.dependencyVersions` controls the versions installed by
+[`bootwright bastion setup`](../controller.md). Fields emit in the following
+order. Every field is optional and accepts a string; omission means `latest`
+when setup resolves the dependency. Admission preserves authored values and
+does not materialize release numbers or contact publishers.
+
+| Field | Dependency | Exact override |
+| --- | --- | --- |
+| `python` | Private CPython interpreter | Stable `MAJOR.MINOR.PATCH`, optionally prefixed by `v`. |
+| `ansible` | Private `ansible-core` | Stable `MAJOR.MINOR.PATCH`, optionally prefixed by `v`. |
+| `podman` | Native container runtime | Distribution package version or `[EPOCH:]VERSION-RELEASE`. |
+| `openssh` | Native OpenSSH clients | Distribution package version or `[EPOCH:]VERSION-RELEASE`. |
+| `nmstate` | Native NMState client | Distribution package version or `[EPOCH:]VERSION-RELEASE`. |
+| `libvirt` | Native libvirt client, including `virsh` | Distribution package version or `[EPOCH:]VERSION-RELEASE`. |
+| `helm` | Helm | Stable `MAJOR.MINOR.PATCH`, optionally prefixed by `v`. |
+| `govc` | vSphere client | Stable `MAJOR.MINOR.PATCH`, optionally prefixed by `v`. |
+| `virtctl` | Upstream KubeVirt client | Stable `MAJOR.MINOR.PATCH`, optionally prefixed by `v`. |
+
+`latest` selects the publisher's latest stable release for Python, Ansible and
+the generic target clients. For native packages it selects the newest available
+build from the approved repositories for the executing OS release and
+architecture. A native version without a release selects the highest available
+build of that version, using the package manager's version ordering. Version
+ranges, wildcards, prereleases for generic clients, nulls and empty strings
+are invalid. Native values are at most 96 ASCII characters, start with an
+alphanumeric character, and otherwise contain only alphanumerics or `._+~^:-`.
+
+The selected desired-state graph determines which dependencies are needed.
+An override alone does not select an unused libvirt, Helm, govc or virtctl
+client. Supporting Python wheels and native package dependencies are resolved
+as a complete compatible closure; they are not individually configurable.
+An incompatible or unavailable exact request fails with a dependency
+diagnostic rather than silently substituting another root version.
+The bastion adapter requires Ansible Core 2.19 or newer; an older exact override
+refuses before confirmation. Python must satisfy the selected Ansible release's
+published compatibility requirements.
+
+OpenShift/OKD installer and client versions remain tied to the target cluster's
+declared release. `openshift-install`, `oc` and `kubectl` are not override keys.
+`virtctl` defaults to upstream latest; declare an explicit version when the
+target virtualization installation requires a particular client. Setup does
+not infer its version from a running target cluster.
+
+For example:
+
+```yaml
+spec:
+  dependencyVersions:
+    python: "3.14.7"
+    ansible: latest
+    podman: latest
+    virtctl: "1.9.0"
+```
+
+These fields follow the normal `defaults.Environment` inheritance rules.
+A fresh setup resolves `latest` again and presents any required changes.
+An incomplete setup retries its recorded exact selection without resolving
+new versions. Preflight checks retained dependencies and never refreshes them.
 
 ## Domains
 
@@ -245,11 +307,17 @@ own expansion limits, canonical output, and immutable source provenance.
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `openshiftClientsMirror` | string | no | upstream source | Absolute HTTP(S) base URL for OpenShift client downloads. |
-| `virtctlMirror` | string | no | host-cluster source | Absolute HTTP(S) base URL for the matching `virtctl`. |
-| `helmMirror` | string | no | upstream source | Absolute HTTP(S) base URL for Helm's `latest` channel. |
+| `virtctlMirror` | string | no | upstream source | Absolute HTTP(S) base URL for the resolved `virtctl` release. |
+| `helmMirror` | string | no | upstream source | Absolute HTTP(S) base URL for the resolved Helm release. |
 
 URLs require scheme and host and reject embedded credentials. These fields
 select download sources; they do not fill attributes on cluster objects.
+M1d setup qualifies HTTPS mirrors on the default port or port 443, without
+query strings or fragments. Helm archives reside directly under the base URL;
+OpenShift archives and `virtctl` binaries reside under `<base>/<exact-version>/`.
+The `virtctl` directory and filename include the release's `v` prefix.
+Publisher metadata determines versions and checksums even when a mirror supplies
+the artifact bytes.
 
 Secret source and custody declarations belong to
 [each Secret](secrets.md#source-union). `Environment` has no `secretStorage`
@@ -266,9 +334,10 @@ sole Machine, hostname, capability or local-access declaration never selects
 it implicitly. The former `controller.proxy` is unknown; controller egress
 belongs to the selected Machine's [proxy choice](machines.md#machine-proxy).
 
-The referenced Machine must have effective `os.provided: true` and
-`access.local: true`. Selection never supplies either value or changes an SSH
-transport into local execution. This is the sole local-access Machine in the
+The referenced Machine must have effective `os.provided: true`,
+`access.local: true` and the declared `container-runtime` capability.
+Selection never supplies these values or changes an SSH transport into local
+execution. This is the sole local-access Machine in the
 retained graph and cannot be a node of a selected ContainerCluster or
 StorageCluster. Other retained Machines must not declare local access.
 
@@ -300,6 +369,9 @@ metadata:
   name: bastion
 
 spec:
+  capabilities:
+    - container-runtime
+
   os:
     provided: true
 
@@ -312,9 +384,10 @@ spec:
 
 A controller may host a managed service when that service explicitly selects
 its `machineRef` and the Machine has the service's required capabilities.
-`container-runtime` is optional when no consuming service requires it; a
-capability declaration does not install or prove a runtime. No service
-placement defaults to the controller.
+`container-runtime` is required for the bastion even when no managed service
+is selected. A capability declaration does not install or prove a runtime;
+`bastion setup` installs an absent qualified Podman and verifies its dependencies.
+No service placement defaults to the controller.
 
 Admission checks these declarations without inspecting the invoking host,
 opening runtime state or moving execution. The

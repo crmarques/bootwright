@@ -1,0 +1,215 @@
+//go:build linux && amd64
+
+package ansiblelocal
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+)
+
+func TestRunnerProtocolChild(t *testing.T) {
+	if len(os.Args) < 2 || !strings.HasPrefix(os.Args[len(os.Args)-1], "controller-child-") {
+		return
+	}
+	mode := strings.TrimPrefix(os.Args[len(os.Args)-1], "controller-child-")
+	output, input := os.NewFile(3, "result"), bufio.NewReader(os.NewFile(4, "authorization"))
+	emit := func(value any, acknowledge bool) {
+		data, _ := json.Marshal(value)
+		_, _ = output.Write(append(data, '\n'))
+		if acknowledge {
+			line, _ := input.ReadString('\n')
+			if line != "proceed\n" {
+				os.Exit(19)
+			}
+		}
+	}
+	sha := strings.Repeat("a", 64)
+	if mode == "hang" {
+		// Completes the load handshake, then waits. Nothing but a reaped
+		// process group ends this child.
+		emit(map[string]any{"phase": "loaded"}, true)
+		time.Sleep(30 * time.Second)
+		os.Exit(0)
+	}
+	emit(map[string]any{"phase": "loaded"}, true)
+	if mode == "recover-native" {
+		emit(map[string]any{"phase": "native"}, true)
+		emit(map[string]any{"phase": "completed", "outcome": "changed", "evidence": map[string]any{"request": sha, "before": sha, "after": strings.Repeat("b", 64), "planDigest": strings.Repeat("c", 64), "added": []string{"native-one"}, "tools": []string{}, "postcondition": true}}, false)
+		os.Exit(0)
+	}
+	if mode == "mixed" {
+		emit(map[string]any{"phase": "continue", "evidence": map[string]bool{}}, false)
+		os.Exit(0)
+	}
+	emit(map[string]any{"phase": "prepared", "preparation": prerequisites.NativePreparation{InventorySHA256: sha, AddedSources: []string{}}}, true)
+	fmt.Fprintln(os.Stderr, "private-child-diagnostic")
+	emit(map[string]any{"phase": "completed", "outcome": "unchanged", "evidence": map[string]any{"request": sha, "before": sha, "after": sha, "planDigest": "", "added": []string{}, "tools": []string{}, "postcondition": true}}, false)
+	os.Exit(0)
+}
+
+func runnerFixture(t *testing.T, mode string) (prerequisites.PythonLaunch, capabilityRequest, processBoundary) {
+	t.Helper()
+	bundle := t.TempDir()
+	if err := os.Mkdir(filepath.Join(bundle, "automation"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	launch := prerequisites.PythonLaunch{Loader: "/qualified/loader", Arguments: []string{"--inhibit-cache", "/qualified/python"}, Directory: bundle, Environment: []string{"LANG=C.UTF-8"}}
+	request := capabilityRequest{Operation: "setup", Identity: strings.Repeat("a", 64), Bundle: bundleLocation{Path: bundle, Writable: true}, Packages: []prerequisites.NativePackage{}, Tools: []prerequisites.ToolDefinition{}}
+	boundary := processBoundary{owner: os.Geteuid(), jobParent: t.TempDir(), scratchParent: t.TempDir(), command: func(path string, arguments ...string) *exec.Cmd {
+		if path != launch.Loader || !strings.Contains(strings.Join(arguments, "\x00"), "-I\x00-B\x00-S\x00-c") {
+			t.Fatal("qualified isolated Python boundary changed")
+		}
+		return exec.Command(os.Args[0], "-test.run=^TestRunnerProtocolChild$", "--", "controller-child-"+mode)
+	}}
+	return launch, request, boundary
+}
+
+func TestRunnerDrainsCompletionAfterChildExit(t *testing.T) {
+	launch, request, boundary := runnerFixture(t, "complete")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	released, published := false, false
+	result, err := runProcess(ctx, launch, request, func() error { released = true; return nil }, func(ctx context.Context, value prerequisites.NativePreparation) error {
+		if !released {
+			t.Error("preparation preceded loaded handoff")
+		}
+		published = true
+		return nil
+	}, boundary)
+	if err != nil || result.Outcome != "unchanged" || !released || !published {
+		t.Fatalf("completion lost: %s %v", result.Outcome, err)
+	}
+	entries, err := os.ReadDir(boundary.jobParent)
+	if err != nil || len(entries) != 0 {
+		t.Fatal("invocation files retained")
+	}
+}
+
+func TestRunnerRefusesCancellationAtDurablePreparation(t *testing.T) {
+	launch, request, boundary := runnerFixture(t, "complete")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { cancel(); return nil }, boundary)
+	if !errors.Is(err, context.Canceled) || result.Outcome != "unknown" {
+		t.Fatalf("cancellation lost durable intent: %s %v", result.Outcome, err)
+	}
+}
+
+func TestRunnerSanitizesInvalidProtocol(t *testing.T) {
+	launch, request, boundary := runnerFixture(t, "mixed")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error {
+		t.Error("invalid phase published intent")
+		return nil
+	}, boundary)
+	if err == nil || result.Outcome != "failed" || strings.Contains(err.Error(), "private-child-diagnostic") {
+		t.Fatalf("invalid protocol accepted: %s %v", result.Outcome, err)
+	}
+}
+
+func TestRunnerAcknowledgesFrozenNativeRecoveryWithoutNewPreparation(t *testing.T) {
+	launch, request, boundary := runnerFixture(t, "recover-native")
+	request.Operation = "recover"
+	request.Native = &prerequisites.NativeResolvedPlan{Digest: strings.Repeat("c", 64), BeforeSHA256: strings.Repeat("a", 64), AfterSHA256: strings.Repeat("b", 64), Actions: []prerequisites.NativeAction{{SourceID: "native-one"}}}
+	transitions, err := prerequisites.NativeTransitionsDigest(request.Native.Actions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Preparation = &prerequisites.NativePreparation{InventorySHA256: request.Native.BeforeSHA256, AfterInventorySHA256: request.Native.AfterSHA256, PlanDigest: request.Native.Digest, TransitionsSHA256: transitions, AddedSources: []string{"native-one"}}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	result, err := runProcess(ctx, launch, request, func() error { return nil }, nil, boundary)
+	if err != nil || result.Outcome != "changed" {
+		t.Fatalf("frozen native recovery failed: %s %v", result.Outcome, err)
+	}
+}
+
+// Cancellation before an authorized native transaction must reap the process
+// group. A recovery run begins with durable intent already recorded, so intent
+// must not be mistaken for installation in progress.
+func TestRunnerReapsUnauthorizedChildOnCancellationDuringRecovery(t *testing.T) {
+	for _, operation := range []string{"setup", "recover"} {
+		t.Run(operation, func(t *testing.T) {
+			launch, request, boundary := runnerFixture(t, "hang")
+			request.Operation = operation
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			// Cancel only after the child is past its handshake, so the closed
+			// authorization pipe cannot end it instead of the reap.
+			go func() { time.Sleep(500 * time.Millisecond); cancel() }()
+			started := time.Now()
+			result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, boundary)
+			if elapsed := time.Since(started); elapsed > 10*time.Second {
+				t.Fatalf("unauthorized child was not reaped: %s took %s", operation, elapsed)
+			}
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("%s cancellation = %v (outcome %s)", operation, err, result.Outcome)
+			}
+		})
+	}
+}
+
+// Package staging must not land in the ambient temporary directory: the child
+// gets private durable scratch that is removed when the run ends.
+func TestRunnerStagesInPrivateDurableScratch(t *testing.T) {
+	launch, request, boundary := runnerFixture(t, "complete")
+	parent := boundary.scratchParent
+	var child *exec.Cmd
+	inner := boundary.command
+	boundary.command = func(path string, arguments ...string) *exec.Cmd {
+		child = inner(path, arguments...)
+		return child
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, boundary); err != nil {
+		t.Fatal(err)
+	}
+	var scratch string
+	for _, entry := range child.Env {
+		if strings.HasPrefix(entry, "TMPDIR=") {
+			scratch = strings.TrimPrefix(entry, "TMPDIR=")
+		}
+	}
+	if scratch == "" || filepath.Dir(scratch) != parent {
+		t.Fatalf("child TMPDIR = %q, want a directory under %q", scratch, parent)
+	}
+	if _, err := os.Stat(scratch); !os.IsNotExist(err) {
+		t.Fatalf("staging scratch survived the run: %v", err)
+	}
+	entries, err := os.ReadDir(parent)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("staging parent retained %v (%v)", entries, err)
+	}
+}
+
+func TestStagingCapacityRefusesBeforeEffects(t *testing.T) {
+	scratch := t.TempDir()
+	if err := requireScratchCapacity(scratch, capabilityRequest{}); err != nil {
+		t.Fatalf("an empty closure was refused: %v", err)
+	}
+	small := capabilityRequest{Packages: []prerequisites.NativePackage{{Source: prerequisites.DependencySource{Bytes: 1}}}}
+	if err := requireScratchCapacity(scratch, small); err != nil {
+		t.Fatalf("a one-byte closure was refused: %v", err)
+	}
+	huge := capabilityRequest{Packages: []prerequisites.NativePackage{{Source: prerequisites.DependencySource{Bytes: 1 << 60}}}}
+	if err := requireScratchCapacity(scratch, huge); err == nil {
+		t.Fatal("a closure larger than the filesystem was accepted")
+	}
+	tools := capabilityRequest{Tools: []prerequisites.ToolDefinition{{Source: prerequisites.DependencySource{Bytes: 1 << 60}}}}
+	if err := requireScratchCapacity(scratch, tools); err == nil {
+		t.Fatal("target client payloads were excluded from the capacity check")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/encryption"
@@ -23,6 +24,7 @@ type commandResult struct {
 	current    *contexts.CurrentResult
 	deletion   *contexts.DeleteResult
 	effective  *compilation.EffectiveResult
+	controller *prerequisites.Report
 
 	secretMutation     *custody.MutationResult
 	secretCheck        *custody.CheckResult
@@ -60,7 +62,7 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 	case "validate", "render effective":
 		return s.invokeDesiredState(ctx, path, &values, args)
 	case "preflight bastion", "bastion setup":
-		return commandResult{}, s.invokeController(ctx, path, &values, args)
+		return s.invokeController(ctx, path, &values, args)
 	case "preflight infra", "preflight clusters", "preflight all":
 		return commandResult{}, s.invokeEnvironmentPreflight(ctx, path, &values, args)
 	case "cluster list", "cluster info":

@@ -48,11 +48,27 @@ type DeleteResult struct {
 // Registry is an atomic context snapshot. Identities is retained only while
 // reading the legacy registry; current allocation uses a namespace and counter.
 type Registry struct {
-	Version      int        `json:"version"`
-	Identities   []Identity `json:"identities"`
-	Contexts     []Record   `json:"contexts"`
-	IDNamespace  string     `json:"-"`
-	NextIdentity uint64     `json:"-"`
+	Version      int                  `json:"version"`
+	Identities   []Identity           `json:"identities"`
+	Contexts     []Record             `json:"contexts"`
+	IDNamespace  string               `json:"-"`
+	NextIdentity uint64               `json:"-"`
+	Controller   ControllerDescriptor `json:"-"`
+}
+
+// ControllerDescriptor attributes the independently versioned shared subtree.
+// Only confirmed setup may introduce it; ordinary context writes preserve it.
+type ControllerDescriptor struct {
+	Version         int    `json:"version"`
+	Mode            string `json:"mode"`
+	DirectoryDevice uint64 `json:"directoryDevice"`
+	DirectoryInode  uint64 `json:"directoryInode"`
+}
+
+// ControllerInputGuard preserves an existing controller Machine binding when
+// replacing admitted input. The registry v4 capability is transaction-scoped.
+type ControllerInputGuard interface {
+	CheckControllerInput(context.Context, string, string) error
 }
 
 type Identity struct {

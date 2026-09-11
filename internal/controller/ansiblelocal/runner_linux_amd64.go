@@ -1,0 +1,267 @@
+//go:build linux && amd64
+
+package ansiblelocal
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+)
+
+const entrypoint = `import sys, os
+root = os.path.dirname(os.path.dirname(sys.executable))
+version = str(sys.version_info.major) + '.' + str(sys.version_info.minor)
+stdlib = root + '/lib/python' + version
+sys.path[:] = [root + '/lib/python' + version.replace('.', '') + '.zip', stdlib, stdlib + '/lib-dynload', stdlib + '/site-packages']
+assert sys.flags.isolated and sys.flags.no_site and sys.flags.dont_write_bytecode
+path = sys.argv.pop(1)
+with open(path, 'rb') as stream:
+    code = compile(stream.read(), path, 'exec')
+exec(code, {'__name__': '__main__', '__file__': path})
+`
+
+func run(ctx context.Context, launch prerequisites.PythonLaunch, request capabilityRequest, release func() error, publish func(context.Context, prerequisites.NativePreparation) error) (prerequisites.ActionResult, error) {
+	// Invocation state is small and must not survive a reboot, so it lives on
+	// the runtime filesystem. Package staging is large and must not, so it goes
+	// to durable temporary storage instead.
+	return runProcess(ctx, launch, request, release, publish, processBoundary{owner: 0, jobParent: "/run", scratchParent: "/var/tmp", command: exec.Command})
+}
+
+type processBoundary struct {
+	owner         int
+	jobParent     string
+	scratchParent string
+	command       func(string, ...string) *exec.Cmd
+}
+
+func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request capabilityRequest, release func() error, publish func(context.Context, prerequisites.NativePreparation) error, boundary processBoundary) (prerequisites.ActionResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+	result := actionResult("failed", false)
+	if os.Geteuid() != boundary.owner || boundary.command == nil || release == nil || !filepath.IsAbs(launch.Loader) || !filepath.IsAbs(launch.Directory) || len(request.Packages) > 512 || len(request.Tools) > 128 {
+		return result, failure("controller.setup", "the authorized Ansible execution boundary is unavailable")
+	}
+	job, err := os.MkdirTemp(boundary.jobParent, "bootwright-controller-")
+	if err != nil {
+		return result, failure("controller.setup", "private Ansible invocation storage is unavailable")
+	}
+	defer os.RemoveAll(job)
+	scratch, err := os.MkdirTemp(boundary.scratchParent, "bootwright-scratch-")
+	if err != nil {
+		return result, failure("controller.setup", "private Ansible staging storage is unavailable")
+	}
+	defer os.RemoveAll(scratch)
+	if err := requireScratchCapacity(scratch, request); err != nil {
+		return result, err
+	}
+	interpreterArguments := append([]string{launch.Loader}, launch.Arguments...)
+	interpreterArguments = append(interpreterArguments, "-I", "-B", "-S")
+	for index, argument := range interpreterArguments {
+		interpreterArguments[index] = "'" + strings.ReplaceAll(argument, "'", "'\"'\"'") + "'"
+	}
+	interpreter := strings.Join(interpreterArguments, " ")
+	inventory := map[string]any{"all": map[string]any{"children": map[string]any{"bootwright_controller": map[string]any{"hosts": map[string]any{"bastion": map[string]any{"ansible_connection": "local", "ansible_python_interpreter": interpreter, "ansible_host": "localhost"}}}}}}
+	variables := map[string]any{"bootwright_controller_request": request}
+	for name, value := range map[string]any{"inventory.json": inventory, "request.json": variables} {
+		encoded, err := json.Marshal(value)
+		if err != nil || len(encoded) > 4<<20 || os.WriteFile(filepath.Join(job, name), encoded, 0600) != nil {
+			return result, failure("controller.setup", "the frozen Ansible invocation could not be materialized")
+		}
+	}
+	output, childOutput, err := os.Pipe()
+	if err != nil {
+		return result, failure("controller.setup", "the Ansible result channel could not be opened")
+	}
+	defer output.Close()
+	defer childOutput.Close()
+	childInput, input, err := os.Pipe()
+	if err != nil {
+		return result, failure("controller.setup", "the Ansible authorization channel could not be opened")
+	}
+	defer childInput.Close()
+	defer input.Close()
+	automation := filepath.Join(request.Bundle.Path, "automation")
+	arguments := append(slices.Clone(launch.Arguments), "-I", "-B", "-S", "-c", entrypoint, filepath.Join(automation, "collections/ansible_collections/bootwright/core/plugins/module_utils/controller_supervisor.py"),
+		"-i", filepath.Join(job, "inventory.json"), "--extra-vars", "@"+filepath.Join(job, "request.json"),
+		filepath.Join(automation, "collections/ansible_collections/bootwright/core/playbooks/controller/setup.yml"))
+	command := boundary.command(launch.Loader, arguments...)
+	command.Dir = automation
+	command.Env = append(slices.Clone(launch.Environment),
+		"ANSIBLE_CONFIG="+filepath.Join(automation, "ansible.cfg"),
+		"ANSIBLE_COLLECTIONS_PATH="+filepath.Join(automation, "collections"),
+		"ANSIBLE_LOCAL_TEMP="+filepath.Join(job, "local"), "ANSIBLE_REMOTE_TEMP="+filepath.Join(job, "remote"),
+		"ANSIBLE_NOCOLOR=1", "ANSIBLE_FORCE_COLOR=0", "ANSIBLE_LOAD_CALLBACK_PLUGINS=0",
+		"TMPDIR="+scratch,
+		"PATH=/usr/bin:/usr/sbin")
+	command.ExtraFiles = []*os.File{childOutput, childInput}
+	command.Stdout, command.Stderr = io.Discard, io.Discard
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
+	if err := command.Start(); err != nil {
+		return result, failure("controller.setup", "the qualified Ansible process could not start")
+	}
+	childOutput.Close()
+	childInput.Close()
+	waited := make(chan error, 1)
+	go func() { waited <- command.Wait() }()
+	messages := make(chan protocolMessage, 8)
+	readResult := make(chan error, 1)
+	go func() {
+		readResult <- readProtocol(output, messages)
+		close(messages)
+	}()
+	loaded, prepared, completed, canceled := false, request.Operation == "recover", false, false
+	preparation := request.Preparation
+	continuations := 0
+	nativeAuthorized := false
+	var drain <-chan time.Time
+	var drainTimer *time.Timer
+	defer func() {
+		if drainTimer != nil {
+			drainTimer.Stop()
+		}
+	}()
+	cancelled := ctx.Done()
+	var operationErr error
+	for messages != nil || waited != nil {
+		select {
+		case <-cancelled:
+			cancelled = nil
+			if !canceled {
+				canceled = true
+				input.Close()
+				// Only an authorized native transaction may outlive
+				// cancellation. Durable intent alone is not installation, and a
+				// recovery run starts already prepared.
+				if !nativeAuthorized {
+					_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+				}
+			}
+		case <-drain:
+			drain = nil
+			output.Close()
+			if operationErr == nil {
+				operationErr = failure("controller.unknown", "Ansible descendants retained the result channel after completion")
+			}
+		case waitErr := <-waited:
+			waited = nil
+			if !prepared {
+				drainTimer = time.NewTimer(5 * time.Second)
+				drain = drainTimer.C
+			}
+			if waitErr != nil && operationErr == nil {
+				operationErr = failure("controller.setup", "Ansible did not complete the authorized dependency operation")
+			}
+		case message, open := <-messages:
+			if !open {
+				messages = nil
+				if err := <-readResult; err != nil && operationErr == nil {
+					operationErr = failure("controller.unknown", "the Ansible structured result was incomplete")
+				}
+				continue
+			}
+			valid := !completed && operationErr == nil && !canceled
+			switch message.Phase {
+			case "loaded":
+				valid = valid && !loaded && message.Preparation == nil && message.Outcome == "" && len(message.Evidence) == 0
+				if valid {
+					operationErr = release()
+					loaded = operationErr == nil
+				}
+			case "prepared":
+				valid = valid && loaded && !prepared && message.Preparation != nil && publish != nil && validPreparation(*message.Preparation, request)
+				if valid {
+					operationErr = publish(ctx, *message.Preparation)
+					prepared = operationErr == nil
+					if prepared {
+						copy := *message.Preparation
+						copy.AddedSources = slices.Clone(copy.AddedSources)
+						preparation = &copy
+					}
+				}
+			case "native":
+				valid = valid && loaded && prepared && !nativeAuthorized && preparation != nil && nativeChanges(request) > 0
+				if valid {
+					nativeAuthorized = true
+				}
+			case "continue":
+				valid = valid && loaded && prepared && continuations < len(request.Tools)
+				if valid {
+					continuations++
+				}
+			case "completed":
+				valid = valid && loaded && prepared && (message.Outcome == "changed" || message.Outcome == "unchanged" && !nativeAuthorized) && continuations == len(request.Tools) && (request.Operation == "recover" || nativeAuthorized == (preparation != nil && nativeChanges(request) > 0)) && validEvidence(message.Evidence, request, preparation, nativeAuthorized)
+				if valid {
+					completed = true
+					result = prerequisites.ActionResult{Outcome: message.Outcome, Evidence: slices.Clone(message.Evidence)}
+				}
+			default:
+				valid = false
+			}
+			if !valid && operationErr == nil {
+				operationErr = failure("controller.unknown", "the Ansible capability protocol was invalid")
+			}
+			if ctx.Err() != nil {
+				canceled = true
+				cancelled = nil
+			}
+			if operationErr != nil || canceled {
+				input.Close()
+			} else if message.Phase != "completed" {
+				if _, err := input.Write([]byte("proceed\n")); err != nil {
+					operationErr = failure("controller.unknown", "Ansible authorization delivery was uncertain")
+				}
+			}
+		}
+	}
+	if canceled {
+		return actionResult("unknown", prepared), ctx.Err()
+	}
+	if operationErr != nil || !completed {
+		if operationErr == nil {
+			operationErr = failure("controller.unknown", "the Ansible operation has no complete result")
+		}
+		if prepared {
+			return actionResult("unknown", true), operationErr
+		}
+		return result, operationErr
+	}
+	return result, nil
+}
+
+// requireScratchCapacity refuses before any effect when the staging filesystem
+// cannot hold the approved payloads. A package transaction that runs out of
+// space mid-apply is an unknown outcome, so this is checked up front.
+func requireScratchCapacity(scratch string, request capabilityRequest) error {
+	var staged int64
+	for _, pkg := range request.Packages {
+		staged += pkg.Source.Bytes
+	}
+	for _, tool := range request.Tools {
+		staged += tool.Source.Bytes
+	}
+	if staged == 0 {
+		return nil
+	}
+	var statistics syscall.Statfs_t
+	if err := syscall.Statfs(scratch, &statistics); err != nil {
+		return failure("controller.setup", "Ansible staging storage cannot be measured")
+	}
+	// Keep headroom for expansion and the package manager's own metadata.
+	available := int64(statistics.Bavail) * statistics.Bsize
+	if available < staged+staged/4+(64<<20) {
+		return failure("controller.unsupported", "the staging filesystem has too little free space for the approved dependency payloads")
+	}
+	return nil
+}

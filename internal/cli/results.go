@@ -33,6 +33,10 @@ func encodingFailure(ctx context.Context, err error) error {
 func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path string, result commandResult) (bool, error) {
 	out, errOut := r.config.Out, r.config.ErrOut
 	switch path {
+	case "bastion setup", "preflight bastion":
+		if validControllerReport(result.controller) && successfulControllerReport(path, result.controller) {
+			return true, writeControllerReport(out, path, result.controller)
+		}
 	case "validate":
 		if result.validation != nil {
 			return true, writeValidation(out, errOut, path, result.validation, selectedJSON(command))

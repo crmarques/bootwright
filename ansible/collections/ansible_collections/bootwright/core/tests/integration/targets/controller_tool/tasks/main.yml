@@ -1,0 +1,82 @@
+---
+- name: Create a private synthetic bundle
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: controller-tool
+  register: controller_tool_temporary
+
+- name: Verify controller tool publication on this operating system
+  block:
+    - name: Prepare private retained source directory
+      ansible.builtin.file:
+        path: '{{ controller_tool_temporary.path }}/sources'
+        state: directory
+        mode: '0700'
+
+    - name: Retain synthetic bytes that will never be executed
+      ansible.builtin.copy:
+        dest: '{{ controller_tool_temporary.path }}/sources/tool-kubectl-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-v1.36.1'
+        content: 'synthetic client fixture'
+        mode: '0600'
+
+    - name: Observe the private directory identity
+      ansible.builtin.stat:
+        path: '{{ controller_tool_temporary.path }}'
+      register: controller_tool_directory
+
+    - name: Freeze the synthetic tool request
+      ansible.builtin.set_fact:
+        controller_tool_bundle:
+          path: '{{ controller_tool_temporary.path }}'
+          device: '{{ controller_tool_directory.stat.dev }}'
+          inode: '{{ controller_tool_directory.stat.inode }}'
+          writable: true
+          sealed: false
+        controller_tool_definition:
+          kind: kubectl
+          version: v1.36.1
+          compatibility: ''
+          archive: binary
+          source:
+            id: tool-kubectl-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-v1.36.1
+            url: https://downloads.example.test/exact
+            sha256: '{{ "synthetic client fixture" | hash("sha256") }}'
+            bytes: 24
+          files:
+            - member: kubectl
+              path: tools/kubectl/v1.36.1/kubectl
+        controller_tool_egress:
+          httpProxy: ''
+          httpsProxy: ''
+          noProxy: []
+
+    - name: Publish the exact synthetic client
+      bootwright.core.controller_tool:
+        bundle: '{{ controller_tool_bundle }}'
+        tool: '{{ controller_tool_definition }}'
+        egress: '{{ controller_tool_egress }}'
+        inspect_only: false
+      register: controller_tool_first
+      no_log: true
+
+    - name: Verify replay preserves the exact client
+      bootwright.core.controller_tool:
+        bundle: '{{ controller_tool_bundle }}'
+        tool: '{{ controller_tool_definition }}'
+        egress: '{{ controller_tool_egress }}'
+        inspect_only: false
+      register: controller_tool_second
+      no_log: true
+
+    - name: Verify publication and unchanged replay evidence
+      ansible.builtin.assert:
+        that:
+          - controller_tool_first.changed
+          - not controller_tool_second.changed
+          - controller_tool_first.evidence == controller_tool_second.evidence
+        quiet: true
+  always:
+    - name: Remove only the synthetic temporary bundle
+      ansible.builtin.file:
+        path: '{{ controller_tool_temporary.path }}'
+        state: absent

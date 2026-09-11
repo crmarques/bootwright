@@ -1,0 +1,61 @@
+"""Acquire the reviewed Ansible sanity artifacts into a development cache."""
+
+import hashlib
+import json
+from pathlib import Path
+import sys
+from urllib.parse import urlsplit
+from urllib.request import HTTPRedirectHandler, build_opener
+
+
+class PublisherRedirect(HTTPRedirectHandler):
+    """Keep the artifact acquisition within its declared HTTPS publisher."""
+
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        original, target = urlsplit(request.full_url), urlsplit(new_url)
+        if (
+            target.scheme != "https"
+            or target.hostname != original.hostname
+            or target.username is not None
+            or target.password is not None
+        ):
+            raise ValueError("Unexpected artifact publisher redirect")
+        return super().redirect_request(
+            request, response, code, message, headers, new_url
+        )
+
+
+def main() -> None:
+    if len(sys.argv) > 2:
+        raise SystemExit("Usage: ansible_test_prepare.py [cache-directory]")
+    root = Path(__file__).resolve().parents[2]
+    destination = (
+        Path(sys.argv[1])
+        if len(sys.argv) == 2
+        else root / ".cache/ansible-test-artifacts"
+    )
+    destination.mkdir(parents=True, exist_ok=True)
+    artifacts = json.loads(
+        (root / "scripts/tools/ansible-test-artifacts.json").read_text()
+    )
+    opener = build_opener(PublisherRedirect())
+    for artifact in artifacts:
+        target = destination / artifact["filename"]
+        if target.exists():
+            data = target.read_bytes()
+        else:
+            with opener.open(artifact["url"], timeout=60) as response:
+                data = response.read(artifact["bytes"] + 1)
+        if (
+            len(data) != artifact["bytes"]
+            or hashlib.sha256(data).hexdigest() != artifact["sha256"]
+        ):
+            raise SystemExit("Ansible test artifact does not match its lock")
+        if not target.exists():
+            with target.open("xb") as stream:
+                stream.write(data)
+    print(f"Verified {len(artifacts)} Ansible test artifacts")
+
+
+if __name__ == "__main__":
+    main()

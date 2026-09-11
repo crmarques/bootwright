@@ -76,6 +76,12 @@ func (t *transaction) Publish(ctx context.Context, id, environment string, sourc
 	if err := t.available(ctx); err != nil {
 		return "", err
 	}
+	if err := t.checkControllerRecovery(ctx, id); err != nil {
+		return "", err
+	}
+	if err := t.checkControllerPublication(ctx, id); err != nil {
+		return "", err
+	}
 	dir, held := t.leases[id]
 	if !held {
 		return "", state("input publication requires the context mutation lease")

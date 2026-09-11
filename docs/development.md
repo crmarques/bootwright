@@ -43,13 +43,17 @@ dependencies, keeping check tooling out of the application module graph.
 | `make modules-check` | Verify both module locks. |
 | `make completion-test` | Source and exercise all four shell integrations. |
 | `make vulncheck` | Scan for known reachable vulnerabilities. |
+| `make ansible-check` | Run pinned Ansible syntax, lint, collection sanity, unit and safe integration checks. |
 | `make check` | Run all verification gates, including completion. |
 
-Completion tests require `bash`, `zsh`, `fish`, and `pwsh` on the test runner's
-`PATH`. Alternatively, set `BOOTWRIGHT_TEST_BASH`, `BOOTWRIGHT_TEST_ZSH`,
-`BOOTWRIGHT_TEST_FISH`, and `BOOTWRIGHT_TEST_POWERSHELL` to absolute executable
-paths. These variables belong only to the test harness. The Bootwright CLI
-does not read them. The shell integration gate fails if a runtime is missing.
+Completion tests require `bash` on the test runner's `PATH`, or
+`BOOTWRIGHT_TEST_BASH` set to an absolute executable path. The other generated
+integrations still ship and are covered by the same cases; select them with
+`BOOTWRIGHT_TEST_ALL_SHELLS=1`, which additionally requires `zsh`, `fish` and
+`pwsh` or their `BOOTWRIGHT_TEST_ZSH`, `BOOTWRIGHT_TEST_FISH` and
+`BOOTWRIGHT_TEST_POWERSHELL` overrides. These variables belong only to the test
+harness; the Bootwright CLI does not read them. The gate fails if a selected
+runtime is missing.
 
 The M1a shell checks use Bash `5.3.0`, Zsh `5.9`, Fish `4.0.2`, and PowerShell
 `7.7.0-preview.2` on Linux/amd64. PowerShell completion requires that preview
@@ -58,14 +62,50 @@ release or later because stable `7.6` lacks the
 generated script rejects older versions; it does not enable filename fallback.
 A broader release-platform matrix remains part of release qualification.
 
+M1d qualifies Bash only. The other shells keep their M1a versions above and are
+verified with `BOOTWRIGHT_TEST_ALL_SHELLS=1` when a runner provides them.
+
 Package tests exercise command dispatch, parsing and help precedence, output,
 cancellation, and effect boundaries. Completion verification additionally
-sources and exercises generated scripts in Bash, Zsh, Fish, and PowerShell.
-Unavailable shell runtimes are missing verification evidence, not passes.
+sources and exercises the generated Bash script, and the other shells when they
+are selected. An unavailable selected runtime is missing verification evidence,
+not a pass.
 
-The active [M1b delivery](../specs/milestones.md#first-delivery-context-free-desired-state-admission)
-implements context-free `validate -f`. Durable contexts, context-backed
-validation, public effective rendering, secrets and lifecycle/remote work
-remain in their owning delivery slices. Unavailable stub requests remain
-internal scaffolding; admission's public grammar and successful report belong
-to the API and CLI specifications.
+The current [M1d delivery](../specs/milestones.md#m1d--bastion-setup) adds
+bastion dependency preparation and preflight to the existing admission,
+context, rendering and Secret journeys. Go selects and freezes dependencies,
+owns confirmation/recovery and orchestrates the embedded Ansible collection.
+Ansible installs the selected host packages and target CLIs. The private
+Python/Ansible bootstrap is materialized by Go so the playbooks can run.
+Setup resolves latest stable dependencies by default; Environment
+`spec.dependencyVersions` overrides individual roots, including Python and
+Ansible. Public resolver downloads and maintained pip/DNF resolution use
+disposable unprivileged staging before the installation plan is confirmed.
+Retries use the frozen result. Development checks retain their separate pinned
+tool versions for reproducible verification.
+The [Ansible check tool lock and setup](../scripts/tools/ansible-check.md)
+is separate from the product execution bundle and builds its own pinned
+interpreter on first use, so the gate does not depend on the host's Python. `make check` includes its
+unprivileged collection gate; it never installs bastion packages.
+
+Bastion tests are unitary and host-independent, following the
+[M1d verification model](../specs/milestones.md#m1d--bastion-setup): no package
+manager, network, privilege or second operating system, and no virtual machines.
+End-to-end acceptance against a real bastion is operator-run. Deferred
+lifecycle commands keep their unavailable result until their owning milestone.
+
+Operator-run bastion harnesses are carried in the tree but excluded from
+`make test`, so they never report a silent skip as acceptance. They resolve
+real publisher metadata or touch the running host and are run by hand as the
+code evolves:
+
+| Harness | Selected by |
+| --- | --- |
+| Current-OS native metadata resolution and frozen file verification | `BOOTWRIGHT_NATIVE_RESOLVE_QUALIFY=1`, `BOOTWRIGHT_NATIVE_INSPECT_PLAN` |
+| Bundle acquisition, projection and readiness against real sources | `-tags controllerqualification`, `BOOTWRIGHT_BUNDLE_FIXTURES` |
+| Bootstrap publisher resolution and root-invocation isolation | `-tags controllerqualification`, `BOOTWRIGHT_QUALIFY_DYNAMIC_BOOTSTRAP`, `BOOTWRIGHT_QUALIFY_ROOT_RESOLVER` |
+| Ansible `controller_native` target, which builds an RPM and drives the host package manager | `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1` with `make ansible-check` |
+| Ansible `controller_prerequisites` target, which runs the shipped setup playbook and role over the real runner protocol against the host inventory | `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1` with `make ansible-check` |
+
+Executed native installation is not covered by any of these; it is a manual
+`bastion setup` on a prepared host.

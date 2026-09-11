@@ -189,6 +189,15 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 	}
 	result, err := r.config.Services.invoke(ctx, path, command.Flags(), command.Flags().Args())
 	defer result.clearSensitive()
+	var controllerOutput *controllerOutputFailure
+	if errors.As(err, &controllerOutput) {
+		return 1
+	}
+	if err != nil && (path == "bastion setup" || path == "preflight bastion") && validControllerReport(result.controller) {
+		if presentErr := writeControllerReport(r.config.Out, path, result.controller); presentErr != nil {
+			return 1
+		}
+	}
 	if canceled := ctx.Err(); canceled != nil {
 		err = canceled
 	}
