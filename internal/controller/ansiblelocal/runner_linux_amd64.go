@@ -29,6 +29,15 @@ with open(path, 'rb') as stream:
 exec(code, {'__name__': '__main__', '__file__': path})
 `
 
+// Bounded drains for the structured result channel. A completed run only has
+// to flush what Ansible already wrote; a run whose authorized native
+// transaction was left running is given longer before its result is declared
+// unproved.
+const (
+	completedResultDrain  = 5 * time.Second
+	authorizedResultDrain = 60 * time.Second
+)
+
 func run(ctx context.Context, launch prerequisites.PythonLaunch, request capabilityRequest, release func() error, publish func(context.Context, prerequisites.NativePreparation) error) (prerequisites.ActionResult, error) {
 	// Invocation state is small and must not survive a reboot, so it lives on
 	// the runtime filesystem. Package staging is large and must not, so it goes
@@ -41,11 +50,21 @@ type processBoundary struct {
 	jobParent     string
 	scratchParent string
 	command       func(string, ...string) *exec.Cmd
+	// Drain bounds are injectable so the retained-channel path can be proved
+	// without waiting out the production grace periods.
+	completedDrain  time.Duration
+	authorizedDrain time.Duration
 }
 
 func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request capabilityRequest, release func() error, publish func(context.Context, prerequisites.NativePreparation) error, boundary processBoundary) (prerequisites.ActionResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
+	if boundary.completedDrain <= 0 {
+		boundary.completedDrain = completedResultDrain
+	}
+	if boundary.authorizedDrain <= 0 {
+		boundary.authorizedDrain = authorizedResultDrain
+	}
 	result := actionResult("failed", false)
 	if os.Geteuid() != boundary.owner || boundary.command == nil || release == nil || !filepath.IsAbs(launch.Loader) || !filepath.IsAbs(launch.Directory) || len(request.Packages) > 512 || len(request.Tools) > 128 {
 		return result, failure("controller.setup", "the authorized Ansible execution boundary is unavailable")
@@ -132,6 +151,17 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 			drainTimer.Stop()
 		}
 	}()
+	// A descendant that inherited the result channel keeps it open after the
+	// Ansible process itself is gone, so every path that ends the operation
+	// arms a bounded drain. Without one this loop waits on that descendant
+	// forever, outliving even the operation deadline.
+	armDrain := func(grace time.Duration) {
+		if drainTimer != nil {
+			return
+		}
+		drainTimer = time.NewTimer(grace)
+		drain = drainTimer.C
+	}
 	cancelled := ctx.Done()
 	var operationErr error
 	for messages != nil || waited != nil {
@@ -148,6 +178,9 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 					_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
 				}
 			}
+			// An authorized native transaction is left running, so its channel
+			// is drained on a grace period rather than closed immediately.
+			armDrain(boundary.authorizedDrain)
 		case <-drain:
 			drain = nil
 			output.Close()
@@ -156,9 +189,12 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 			}
 		case waitErr := <-waited:
 			waited = nil
-			if !prepared {
-				drainTimer = time.NewTimer(5 * time.Second)
-				drain = drainTimer.C
+			// A prepared run may still have an authorized native transaction
+			// holding the channel, so it drains on the longer grace period.
+			if prepared {
+				armDrain(boundary.authorizedDrain)
+			} else {
+				armDrain(boundary.completedDrain)
 			}
 			if waitErr != nil && operationErr == nil {
 				operationErr = failure("controller.setup", "Ansible did not complete the authorized dependency operation")

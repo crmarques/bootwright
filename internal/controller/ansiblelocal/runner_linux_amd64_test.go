@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/desiredstate"
 )
 
 func TestRunnerProtocolChild(t *testing.T) {
@@ -40,6 +41,17 @@ func TestRunnerProtocolChild(t *testing.T) {
 		// process group ends this child.
 		emit(map[string]any{"phase": "loaded"}, true)
 		time.Sleep(30 * time.Second)
+		os.Exit(0)
+	}
+	if mode == "leak" {
+		emit(map[string]any{"phase": "loaded"}, true)
+		emit(map[string]any{"phase": "prepared", "preparation": prerequisites.NativePreparation{InventorySHA256: sha, AddedSources: []string{}}}, true)
+		emit(map[string]any{"phase": "completed", "outcome": "unchanged", "evidence": map[string]any{"request": sha, "before": sha, "after": sha, "planDigest": "", "added": []string{}, "tools": []string{}, "postcondition": true}}, false)
+		// A descendant inherits the result channel and outlives this process,
+		// so the channel never reaches end of file on its own.
+		descendant := exec.Command("/bin/sleep", "3")
+		descendant.ExtraFiles = []*os.File{output}
+		_ = descendant.Start()
 		os.Exit(0)
 	}
 	emit(map[string]any{"phase": "loaded"}, true)
@@ -211,5 +223,30 @@ func TestStagingCapacityRefusesBeforeEffects(t *testing.T) {
 	tools := capabilityRequest{Tools: []prerequisites.ToolDefinition{{Source: prerequisites.DependencySource{Bytes: 1 << 60}}}}
 	if err := requireScratchCapacity(scratch, tools); err == nil {
 		t.Fatal("target client payloads were excluded from the capacity check")
+	}
+}
+
+// A leaked descendant keeps the result channel open after Ansible exits. The
+// run must still end on its own bound instead of waiting for that descendant.
+func TestRunnerBoundsDrainWhenDescendantRetainsResultChannel(t *testing.T) {
+	launch, request, boundary := runnerFixture(t, "leak")
+	boundary.authorizedDrain, boundary.completedDrain = 200*time.Millisecond, 200*time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	started := time.Now()
+	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, boundary)
+	elapsed := time.Since(started)
+	if ctx.Err() != nil {
+		t.Fatal("run outlived its own drain bound and hit the test deadline")
+	}
+	var classified *desiredstate.Failure
+	if !errors.As(err, &classified) || len(classified.Diagnostics) == 0 || !strings.Contains(classified.Diagnostics[0].Message, "retained the result channel") {
+		t.Fatalf("retained channel was not reported: %s %v", result.Outcome, err)
+	}
+	if result.Outcome != "unknown" {
+		t.Fatalf("retained channel claimed a proved outcome: %s", result.Outcome)
+	}
+	if elapsed > 10*time.Second {
+		t.Fatalf("drain bound was not applied: %s", elapsed)
 	}
 }
