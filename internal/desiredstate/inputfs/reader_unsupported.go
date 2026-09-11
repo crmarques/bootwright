@@ -6,13 +6,14 @@ import (
 	"context"
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func (Reader) Read(ctx context.Context, _ []string) (desiredstate.Sources, error) {
 	if err := ctx.Err(); err != nil {
 		return desiredstate.Sources{}, err
 	}
-	return desiredstate.Sources{}, desiredstate.NewFailure("input.read", "desired-state input requires Linux on amd64", "")
+	return desiredstate.Sources{}, diagnostics.NewFailure("input.read", "desired-state input requires Linux on amd64", "")
 }
 
 func (r Reader) ReadDirectory(ctx context.Context, path string) (desiredstate.Sources, error) {

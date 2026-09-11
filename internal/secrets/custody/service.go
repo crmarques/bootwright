@@ -5,9 +5,9 @@ import (
 	"crypto/subtle"
 	"slices"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
 type Service struct {
@@ -19,30 +19,6 @@ type Service struct {
 
 func New(access StoreAccess, compiler Compiler, material Materializer, confirmer Confirmer) *Service {
 	return &Service{access: access, compiler: compiler, material: material, confirmer: confirmer}
-}
-
-type SetRequest struct {
-	ContextName      string
-	Name             string
-	Input            secrets.Input
-	SkipConfirmation bool
-}
-type GenerateRequest struct {
-	ContextName string
-	Name        string
-	Renew       bool
-}
-type CheckRequest struct{ ContextName string }
-type ListRequest struct{ ContextName string }
-type ShowRequest struct {
-	ContextName string
-	Name        string
-	Part        secrets.Part
-}
-type DeleteRequest struct {
-	ContextName      string
-	Name             string
-	SkipConfirmation bool
 }
 
 func (s Service) Set(ctx context.Context, request SetRequest) (*MutationResult, error) {
@@ -58,13 +34,13 @@ func (s Service) Set(ctx context.Context, request SetRequest) (*MutationResult, 
 		return nil, err
 	}
 	if d.Source != "contextStore" {
-		return nil, storage.Failure("source", "set requires a declared contextStore source")
+		return nil, secretstore.Failure("source", "set requires a declared contextStore source")
 	}
 	if err = validateInput(d.Type, request.Input); err != nil {
 		return nil, err
 	}
 	result := &MutationResult{Context: selected, Name: request.Name, Parts: d.Parts()}
-	err = s.access.Mutate(ctx, selected, func(session storage.StoreSession, _ storage.Selection) error {
+	err = s.access.Mutate(ctx, selected, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 		snapshot, err := session.Inspect(ctx)
 		if err != nil {
 			return err
@@ -72,7 +48,7 @@ func (s Service) Set(ctx context.Context, request SetRequest) (*MutationResult, 
 		previous, exists := currentVersion(snapshot, request.Name)
 		if exists && !request.SkipConfirmation {
 			if request.Input.UsesStdin() {
-				return storage.Failure("input", "stdin replacement requires --yes before reading material")
+				return secretstore.Failure("input", "stdin replacement requires --yes before reading material")
 			}
 			if err := s.confirm(ctx, "replace secret", request.Name); err != nil {
 				return err
@@ -95,7 +71,7 @@ func (s Service) Set(ctx context.Context, request SetRequest) (*MutationResult, 
 				return nil
 			}
 		}
-		_, err = session.PutBatch(ctx, []storage.Put{{Declaration: d, Material: material}})
+		_, err = session.PutBatch(ctx, []secretstore.Put{{Declaration: d, Material: material}})
 		if err == nil {
 			result.Changed = 1
 		}
@@ -121,17 +97,17 @@ func (s Service) Generate(ctx context.Context, request GenerateRequest) (*Mutati
 			return nil, err
 		}
 		if d.Source != "generated" {
-			return nil, storage.Failure("source", "generate requires a generated source declaration")
+			return nil, secretstore.Failure("source", "generate requires a generated source declaration")
 		}
 		declarations = []secrets.Declaration{d}
 	}
 	result := &MutationResult{Context: selected, Name: request.Name}
-	err = s.access.Mutate(ctx, selected, func(session storage.StoreSession, _ storage.Selection) error {
+	err = s.access.Mutate(ctx, selected, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 		snapshot, err := session.Inspect(ctx)
 		if err != nil {
 			return err
 		}
-		var writes []storage.Put
+		var writes []secretstore.Put
 		materialBytes := 0
 		defer func() {
 			for _, write := range writes {
@@ -151,7 +127,7 @@ func (s Service) Generate(ctx context.Context, request GenerateRequest) (*Mutati
 				continue
 			}
 			if len(writes) >= secrets.MaxVersions {
-				return storage.Failure("store.limit", "generated selection exceeds the logical version limit")
+				return secretstore.Failure("store.limit", "generated selection exceeds the logical version limit")
 			}
 			material, err := s.material.Generate(ctx, d)
 			if err != nil {
@@ -159,10 +135,10 @@ func (s Service) Generate(ctx context.Context, request GenerateRequest) (*Mutati
 			}
 			if material.Size() > secrets.MaxMaterialBytes-materialBytes {
 				material.Clear()
-				return storage.Failure("store.limit", "generated selection exceeds the material byte limit")
+				return secretstore.Failure("store.limit", "generated selection exceeds the material byte limit")
 			}
 			materialBytes += material.Size()
-			writes = append(writes, storage.Put{Declaration: d, Material: material})
+			writes = append(writes, secretstore.Put{Declaration: d, Material: material})
 		}
 		if len(writes) == 0 {
 			return nil
@@ -185,9 +161,9 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*CheckResult,
 		return nil, err
 	}
 	result := &CheckResult{Context: selected, Secrets: []CheckRow{}}
-	var diagnostics []desiredstate.Diagnostic
-	err = s.access.View(ctx, selected, true, func(session storage.StoreSession, _ storage.Selection) error {
-		var snapshot storage.Snapshot
+	var found []diagnostics.Diagnostic
+	err = s.access.View(ctx, selected, true, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+		var snapshot secretstore.Snapshot
 		if session != nil {
 			var err error
 			snapshot, err = session.Inspect(ctx)
@@ -206,7 +182,7 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*CheckResult,
 				material, err = s.material.File(ctx, d)
 				if err != nil {
 					row.Status = "unreadable"
-					for _, diagnostic := range desiredstate.DiagnosticsOf(err) {
+					for _, diagnostic := range diagnostics.Of(err) {
 						if diagnostic.Code == "secret.input" {
 							row.Status = "invalid"
 						}
@@ -236,7 +212,7 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*CheckResult,
 				return ctx.Err()
 			}
 			if row.Status != "available" {
-				diagnostics = append(diagnostics, desiredstate.Diagnostic{Severity: "error", Code: "secret.input", Message: "secret " + d.Name + " is " + row.Status})
+				found = append(found, diagnostics.Diagnostic{Severity: "error", Code: "secret.input", Message: "secret " + d.Name + " is " + row.Status})
 			}
 			result.Secrets = append(result.Secrets, row)
 		}
@@ -245,9 +221,9 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*CheckResult,
 	if err != nil {
 		return nil, err
 	}
-	if len(diagnostics) > 0 {
-		desiredstate.SortDiagnostics(diagnostics)
-		return result, &desiredstate.Failure{Diagnostics: diagnostics}
+	if len(found) > 0 {
+		diagnostics.Sort(found)
+		return result, &diagnostics.Failure{Diagnostics: found}
 	}
 	return result, nil
 }
@@ -258,7 +234,7 @@ func (s Service) List(ctx context.Context, request ListRequest) (*ListResult, er
 		return nil, err
 	}
 	result := &ListResult{Context: selected, Secrets: []ListRow{}}
-	err = s.access.View(ctx, selected, true, func(session storage.StoreSession, _ storage.Selection) error {
+	err = s.access.View(ctx, selected, true, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 		if session == nil {
 			return nil
 		}
@@ -332,16 +308,16 @@ func (s Service) Show(ctx context.Context, request ShowRequest) (*RevealResult, 
 		return nil, err
 	}
 	if !slices.Contains(d.Parts(), request.Part) {
-		return nil, storage.Failure("part", "requested part is not applicable to this declared secret source")
+		return nil, secretstore.Failure("part", "requested part is not applicable to this declared secret source")
 	}
 	var material secrets.Material
-	err = s.access.View(ctx, selected, true, func(session storage.StoreSession, _ storage.Selection) error {
+	err = s.access.View(ctx, selected, true, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 		if d.Source == "file" {
 			material, err = s.material.File(ctx, d)
 			return err
 		}
 		if session == nil {
-			return storage.Failure("store.uninitialized", "secret store is not initialized")
+			return secretstore.Failure("store.uninitialized", "secret store is not initialized")
 		}
 		snapshot, err := session.Inspect(ctx)
 		if err != nil {
@@ -349,10 +325,10 @@ func (s Service) Show(ctx context.Context, request ShowRequest) (*RevealResult, 
 		}
 		v, exists := currentVersion(snapshot, d.Name)
 		if !exists {
-			return storage.Failure("input", "declared secret has no current material")
+			return secretstore.Failure("input", "declared secret has no current material")
 		}
 		if v.Declaration.Fingerprint != d.Fingerprint {
-			return storage.Failure("source", "stored secret is stale for its current declaration")
+			return secretstore.Failure("source", "stored secret is stale for its current declaration")
 		}
 		material, err = session.Read(ctx, v.ID)
 		return err
@@ -377,10 +353,10 @@ func (s Service) Delete(ctx context.Context, request DeleteRequest) (*MutationRe
 		return nil, err
 	}
 	if !validName(request.Name) {
-		return nil, storage.Failure("declaration", "secret name is invalid")
+		return nil, secretstore.Failure("declaration", "secret name is invalid")
 	}
 	result := &MutationResult{Context: selected, Name: request.Name}
-	err = s.access.Mutate(ctx, selected, func(session storage.StoreSession, _ storage.Selection) error {
+	err = s.access.Mutate(ctx, selected, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 		snapshot, err := session.Inspect(ctx)
 		if err != nil {
 			return err
@@ -410,25 +386,25 @@ func (s Service) Delete(ctx context.Context, request DeleteRequest) (*MutationRe
 
 func (s Service) confirm(ctx context.Context, action, name string) error {
 	if s.confirmer == nil {
-		return storage.Failure("store.conflict", "secret mutation requires confirmation; use --yes after review")
+		return secretstore.Failure("store.conflict", "secret mutation requires confirmation; use --yes after review")
 	}
 	if err := s.confirmer.Confirm(ctx, action, name); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return storage.Failure("store.conflict", "secret mutation was not confirmed")
+		return secretstore.Failure("store.conflict", "secret mutation was not confirmed")
 	}
 	return nil
 }
 
-func requireActive(selected storage.Context) error {
+func requireActive(selected secretstore.Context) error {
 	if selected.Mode != "ready" {
-		return storage.Failure("store.conflict", "secret mutation requires a ready context")
+		return secretstore.Failure("store.conflict", "secret mutation requires a ready context")
 	}
 	return nil
 }
 
-func currentVersion(snapshot storage.Snapshot, name string) (storage.Version, bool) {
+func currentVersion(snapshot secretstore.Snapshot, name string) (secretstore.Version, bool) {
 	for _, current := range snapshot.Current {
 		if current.Name == name {
 			for _, version := range snapshot.Versions {
@@ -438,7 +414,7 @@ func currentVersion(snapshot storage.Snapshot, name string) (storage.Version, bo
 			}
 		}
 	}
-	return storage.Version{}, false
+	return secretstore.Version{}, false
 }
 
 func equalMaterial(a, b secrets.Material) bool {

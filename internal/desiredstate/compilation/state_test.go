@@ -8,6 +8,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type alternativeCompiler struct {
@@ -21,8 +22,8 @@ func (c alternativeCompiler) Compile(ctx context.Context, sources desiredstate.S
 func TestServiceAcceptsIndependentlyConstructedCompilerState(t *testing.T) {
 	environment := api.NewObject(api.Environment, "sample", api.Value{}, api.MapValue())
 	effective := environment.WithSpec(api.MapValue(api.FieldValue{Name: "domains", Value: api.MapValue(api.FieldValue{Name: "base", Value: api.StringValue("example.test")})}))
-	origin := desiredstate.SourceLocation{Path: "/synthetic/environment.yaml", Document: 1}
-	origins := map[string]desiredstate.SourceLocation{environment.Identity(): origin}
+	origin := diagnostics.SourceLocation{Path: "/synthetic/environment.yaml", Document: 1}
+	origins := map[string]diagnostics.SourceLocation{environment.Identity(): origin}
 	counts := compilation.Counts{FilesSeen: 1, ObjectsDecoded: 1}
 	sources := desiredstate.Sources{Files: []desiredstate.SourceFile{desiredstate.NewSourceFile(origin.Path, []byte("alternate input"))}}
 	ctx := context.Background()
@@ -50,12 +51,12 @@ func TestConstructedStateOwnsCanonicalCatalogsAndProvenance(t *testing.T) {
 	authored := api.NewCatalog([]api.Object{secret, environment})
 	effectiveEnvironment := environment.WithSpec(api.MapValue(api.FieldValue{Name: "domains", Value: api.MapValue(api.FieldValue{Name: "base", Value: api.StringValue("example.test")})}))
 	effective := api.NewCatalog([]api.Object{secret, effectiveEnvironment})
-	origin := desiredstate.SourceLocation{Path: "/synthetic/environment.yaml", Document: 1}
-	origins := map[string]desiredstate.SourceLocation{environment.Identity(): origin}
+	origin := diagnostics.SourceLocation{Path: "/synthetic/environment.yaml", Document: 1}
+	origins := map[string]diagnostics.SourceLocation{environment.Identity(): origin}
 	state := compilation.NewState(authored, effective, origins)
 
-	origins[environment.Identity()] = desiredstate.SourceLocation{Path: "/synthetic/changed.yaml"}
-	origins[secret.Identity()] = desiredstate.SourceLocation{Path: "/synthetic/secret.yaml"}
+	origins[environment.Identity()] = diagnostics.SourceLocation{Path: "/synthetic/changed.yaml"}
+	origins[secret.Identity()] = diagnostics.SourceLocation{Path: "/synthetic/secret.yaml"}
 	state.Authored().Objects()[0] = api.Object{}
 	state.Effective().Objects()[0] = api.Object{}
 	if got, ok := state.Origin(environment.Identity()); !ok || got != origin {

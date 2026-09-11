@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func TestRunnerProtocolChild(t *testing.T) {
@@ -239,7 +239,7 @@ func TestRunnerBoundsDrainWhenDescendantRetainsResultChannel(t *testing.T) {
 	if ctx.Err() != nil {
 		t.Fatal("run outlived its own drain bound and hit the test deadline")
 	}
-	var classified *desiredstate.Failure
+	var classified *diagnostics.Failure
 	if !errors.As(err, &classified) || len(classified.Diagnostics) == 0 || !strings.Contains(classified.Diagnostics[0].Message, "retained the result channel") {
 		t.Fatalf("retained channel was not reported: %s %v", result.Outcome, err)
 	}

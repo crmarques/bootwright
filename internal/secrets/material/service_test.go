@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
@@ -72,7 +72,7 @@ func TestAcquireStdinNormalizesTypedLinesAndPreservesOpaqueBytes(t *testing.T) {
 			input := &testInput{reader: bytes.NewReader(test.bytes)}
 			value, err := New(input).Acquire(context.Background(), test.declaration, test.input)
 			if err != nil {
-				t.Fatalf("Acquire: %v (%+v)", err, desiredstate.DiagnosticsOf(err))
+				t.Fatalf("Acquire: %v (%+v)", err, diagnostics.Of(err))
 			}
 			defer value.Clear()
 			got, exists := value.Part(test.part)
@@ -410,14 +410,14 @@ func FuzzSecretJSONParsers(f *testing.F) {
 
 func assertFailureCode(t *testing.T, err error, want string) {
 	t.Helper()
-	diagnostics := desiredstate.DiagnosticsOf(err)
+	diagnostics := diagnostics.Of(err)
 	if len(diagnostics) != 1 || diagnostics[0].Code != want {
 		t.Fatalf("failure = %v (%+v), want %s", err, diagnostics, want)
 	}
 }
 
 func diagnosticMessage(err error) string {
-	diagnostics := desiredstate.DiagnosticsOf(err)
+	diagnostics := diagnostics.Of(err)
 	if len(diagnostics) == 0 {
 		return ""
 	}

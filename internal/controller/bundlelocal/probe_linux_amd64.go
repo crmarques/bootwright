@@ -38,11 +38,11 @@ assert cipher.decrypt(bytes(12), sealed, None) == b'bootwright-controller'
 print('bootwright-controller-ready-v1')
 `
 
-func probeBundle(ctx context.Context, area prerequisites.BundleArea, definition prerequisites.Definition) error {
+func probeBundle(ctx context.Context, guard prerequisites.PythonExecutionGuard, area prerequisites.BundleArea, definition prerequisites.Definition) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return (ExecutionGuard{}).WithPython(ctx, area, definition.Execution, func(launch prerequisites.PythonLaunch, _ func() error) error {
+	return guard.WithPython(ctx, area, definition.Execution, func(launch prerequisites.PythonLaunch, _ func() error) error {
 		return runImportProbe(ctx, area, launch, definition)
 	})
 }

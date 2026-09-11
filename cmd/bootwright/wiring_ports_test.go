@@ -5,16 +5,18 @@ package main
 import (
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
 type contextRepositoryPort struct{ contexts.Repository }
-type secretWorkspacePort struct{ storage.Workspace }
+type secretWorkspacePort struct{ secretstore.Workspace }
 
 func TestCompositionAcceptsIndependentWorkspacePorts(t *testing.T) {
 	_, repository, input, root := contextFixture(t)
-	services := wireContextServices(contextRepositoryPort{repository}, secretWorkspacePort{repository}, nil, nil, testContextWiring(t, root))
+	deps := testContextWiring(t, root)
+	deps.Repository, deps.Workspace = contextRepositoryPort{repository}, secretWorkspacePort{repository}
+	services := assembleServices(deps)
 	contextRun(t, services, 0, "context", "init", "--name", "synthetic", "--input-dir", input)
 	contextRun(t, services, 0, "validate")
 	contextRun(t, services, 0, "secret", "encryption", "init")

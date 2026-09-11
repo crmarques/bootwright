@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 const pathHandle = 0x200000
@@ -285,7 +286,7 @@ func (s *discovery) candidate(path string, stat syscall.Stat_t, marker bool) err
 func (s *discovery) optionalMarker(path string) error {
 	file, stat, err := s.openPath(path, pathHandle)
 	if err != nil {
-		var problem *desiredstate.Failure
+		var problem *diagnostics.Failure
 		if errors.As(err, &problem) && len(problem.Diagnostics) == 1 && problem.Diagnostics[0].Code == "input.not-found" {
 			return nil
 		}
@@ -517,7 +518,7 @@ func skippedDirectory(name string) bool {
 }
 
 func failure(code, message, path string) error {
-	return desiredstate.NewFailure(code, message, path)
+	return diagnostics.NewFailure(code, message, path)
 }
 
 func limit(resource string, ceiling int, path string) error {

@@ -17,7 +17,7 @@ import (
 func TestComposedBaselineDryRunUsesOnlyPlatformAndCatalog(t *testing.T) {
 	for _, flag := range []string{"", "--context="} {
 		ports := &controllerPorts{}
-		services := wireContextServices(nil, nil, nil, nil, contextWiringOptions{ControllerStorage: ports, ControllerHost: ports, ControllerCatalog: ports, ControllerBundle: ports})
+		services := assembleServices(serviceDependencies{Controller: controllerDependencies{Storage: ports, Host: ports, Catalog: ports, Bundle: ports}})
 		args := []string{"bastion", "setup", "--dry-run"}
 		if flag != "" {
 			args = append(args, flag)
@@ -67,26 +67,21 @@ func (p *controllerPorts) Prepare(context.Context, prerequisites.BundleArea, pre
 }
 
 func TestComposedControllerSuppliesEveryPort(t *testing.T) {
-	options := reflect.ValueOf(localWiringOptions(testRepository(t.TempDir()), cli.NewControllerProgressPresenter(io.Discard), cli.NewControllerPlanPresenter(io.Discard)))
-	fields := options.Type()
-	supplied := 0
+	process := processDependencies{Progress: cli.NewControllerProgressPresenter(io.Discard), Presenter: cli.NewControllerPlanPresenter(io.Discard)}
+	deps := reflect.ValueOf(localControllerDependencies(testRepository(t.TempDir()), process))
+	fields := deps.Type()
 	for index := range fields.NumField() {
-		name := fields.Field(index).Name
-		if !strings.HasPrefix(name, "Controller") {
-			continue
-		}
-		supplied++
-		if options.Field(index).IsNil() {
-			t.Fatalf("composition left %s unsupplied", name)
+		if deps.Field(index).IsNil() {
+			t.Fatalf("composition left %s unsupplied", fields.Field(index).Name)
 		}
 	}
-	if supplied != 11 {
-		t.Fatalf("controller port count = %d; update this gate with the port it covers", supplied)
+	if fields.NumField() != 11 {
+		t.Fatalf("controller port count = %d; update this gate with the port it covers", fields.NumField())
 	}
 }
 
 func TestUnsuppliedControllerPortsRemainUnavailable(t *testing.T) {
-	services := wireContextServices(nil, nil, nil, nil, contextWiringOptions{})
+	services := assembleServices(serviceDependencies{})
 	for _, args := range [][]string{{"bastion", "setup"}, {"bastion", "setup", "--dry-run"}, {"preflight", "bastion"}} {
 		var out, errOut bytes.Buffer
 		code := runServices(context.Background(), args, &out, &errOut, services)

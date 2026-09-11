@@ -12,7 +12,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 )
@@ -24,19 +24,9 @@ type Options struct {
 	Operator     Operator
 }
 
-// Operator resolves the authenticated invoking account only when file material
-// is acquired. Runtime-store ownership remains independent of this identity.
-type Operator interface {
-	FileIdentity(context.Context) (FileIdentity, error)
-}
-
 type FileIdentity struct {
 	UID  int
 	Home string
-}
-
-type InputReader interface {
-	Read(context.Context, []byte) (int, error)
 }
 
 type Service struct {
@@ -530,5 +520,5 @@ func (s *Service) now() time.Time {
 }
 
 func failure(code, message, path string) error {
-	return desiredstate.NewFailure("secret."+code, message, path)
+	return diagnostics.NewFailure("secret."+code, message, path)
 }

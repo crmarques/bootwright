@@ -9,17 +9,8 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
-
-// Storage owns host-wide setup coordination and durable evidence. ExplicitName
-// is empty for baseline scope; no method consults current-context selection.
-// Callbacks hold the root lock and must consume input before returning.
-type Storage interface {
-	ReadController(context.Context, string, func(StorageView) error) error
-	// Create authorizes root/empty-registry bootstrap and requires prior ordinary
-	// confirmation. Mutations additionally hold the selected context's lease.
-	MutateController(context.Context, SetupContext, bool, func(StorageTransaction) error) error
-}
 
 type SetupContext struct {
 	Name     string `json:"name"`
@@ -35,26 +26,6 @@ type StorageView struct {
 	Sources     desiredstate.Sources
 	State       HostState
 	OpenBundle  func(context.Context, string) (BundleArea, error)
-}
-
-// StorageTransaction is invocation-scoped. Publish revalidates exact stored
-// evidence before atomic replacement; Unknown disables all further publication.
-type StorageTransaction interface {
-	Snapshot() StorageView
-	Publish(context.Context, HostState) (Publication, error)
-	Bundle(context.Context, string) (BundleArea, error)
-}
-
-// BundleArea confines the qualified bundle adapter to one catalog namespace.
-// It is valid only while its storage callback holds coordination. Caller paths
-// come from the embedded dependency closure, never authored desired state.
-type BundleArea interface {
-	Read(context.Context, string, int) ([]byte, error)
-	Write(context.Context, string, []byte, bool) error
-	EnsureDirectory(context.Context, string) error
-	Entries(context.Context) ([]BundleEntry, error)
-	Verify(context.Context) error
-	Location(context.Context) (BundleLocation, error)
 }
 
 type BundleEntry struct {
@@ -157,7 +128,7 @@ func (r SetupReceipt) Incomplete() bool {
 // approved plan. Inputs must satisfy the storage contract before publication.
 func SetupPlanDigest(host controller.InstalledHostIdentity, receipt SetupReceipt) (string, error) {
 	invalid := func() (string, error) {
-		return "", desiredstate.NewFailure("controller.identity", "setup plan exceeds its canonical evidence bounds", "")
+		return "", diagnostics.NewFailure("controller.identity", "setup plan exceeds its canonical evidence bounds", "")
 	}
 	if len(receipt.Actions) > 128 || len(receipt.Sources) > 512 || len(receipt.Egress.NoProxy) > 128 || len(receipt.CatalogDigest) > 64 {
 		return invalid()
@@ -208,7 +179,7 @@ func SetupPlanDigest(host controller.InstalledHostIdentity, receipt SetupReceipt
 	}
 	data, err := json.Marshal(plan)
 	if err != nil {
-		return "", desiredstate.NewFailure("controller.identity", "setup plan cannot be canonically represented", "")
+		return "", diagnostics.NewFailure("controller.identity", "setup plan cannot be canonically represented", "")
 	}
 	digest := sha256.Sum256(append(data, '\n'))
 	return hex.EncodeToString(digest[:]), nil

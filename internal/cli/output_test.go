@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func TestFailureRepresentations(t *testing.T) {
@@ -32,13 +32,13 @@ func TestDiagnosticRemediationRepresentations(t *testing.T) {
 		Severity: "error",
 		Code:     "api.required",
 		Message:  "metadata.name is required",
-		Source: &desiredstate.SourceLocation{
+		Source: &diagnostics.SourceLocation{
 			Path:     "input.yaml",
 			Document: 1,
 			Line:     4,
 			Column:   3,
 		},
-		Object: &desiredstate.ObjectIdentity{
+		Object: &diagnostics.ObjectIdentity{
 			APIVersion: "bootwright.io/v1alpha1",
 			Kind:       "NetworkConfig",
 			Name:       "management",

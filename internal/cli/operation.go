@@ -8,13 +8,17 @@ var ErrInterrupted = errors.New("operation interrupted")
 
 // Only implemented application paths may acquire the operation cancellation
 // capability. Informational and invalid invocations finish before this boundary.
-func implementedOperation(path string) bool {
-	switch path {
-	case "context init", "context update", "context use", "context list", "context current", "context delete", "validate", "render effective",
-		"secret set", "secret generate", "secret check", "secret list", "secret show", "secret delete",
-		"secret encryption init", "secret encryption status", "secret encryption rotate", "bastion setup", "preflight bastion":
-		return true
-	default:
-		return false
+func implementedOperation(path string) bool { return specFor(path).implemented }
+
+// Commands that reach the privileged context store re-execute as root. The two
+// flag-dependent exceptions are resolved by ClassifyInvocation.
+func privilegedOperation(path string) bool { return specFor(path).privileged }
+
+func specFor(path string) commandSpec {
+	for _, spec := range commandCatalog() {
+		if spec.path == path {
+			return spec
+		}
 	}
+	return commandSpec{}
 }

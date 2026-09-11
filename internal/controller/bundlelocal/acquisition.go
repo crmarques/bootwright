@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type sourceFetcher func(context.Context, prerequisites.DependencySource, prerequisites.SetupEgress) ([]byte, error)
@@ -124,7 +124,7 @@ func receiveSource(ctx context.Context, source prerequisites.DependencySource, s
 // transportFailure publishes only the endpoint host and one fixed condition:
 // transport, library and operating-system text is never a public result.
 func transportFailure(subject, endpoint string, err error) error {
-	var classified *desiredstate.Failure
+	var classified *diagnostics.Failure
 	if errors.As(err, &classified) {
 		return classified
 	}
@@ -150,7 +150,7 @@ func transportFailure(subject, endpoint string, err error) error {
 	case errors.As(err, &expired) && expired.Timeout():
 		condition = "did not answer within its bounded acquisition timeout"
 	}
-	return desiredstate.NewFailureWithRemediation("controller.setup", subject+" "+host+" "+condition, "", remediation)
+	return diagnostics.NewFailureWithRemediation("controller.setup", subject+" "+host+" "+condition, "", remediation)
 }
 
 func approvedOrigin(value *url.URL) bool {

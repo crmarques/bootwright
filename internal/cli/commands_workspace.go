@@ -9,12 +9,12 @@ import (
 
 func workspaceCommands() []commandSpec {
 	return []commandSpec{
-		{path: "context init", short: "Initialize a configured context and select it", flags: []flagSpec{nameFlag(), contextFileFlag(), directoryFlag("input-dir", "Import an Environment input directory")}},
-		{path: "context update", short: "Update Context configuration or Environment input", flags: []flagSpec{nameFlag(), contextFileFlag(), directoryFlag("input-dir", "Replace the Environment input directory"), confirmationFlag()}},
-		{path: "context use", short: "Select the current context", flags: []flagSpec{nameFlag()}},
-		{path: "context list", short: "List contexts"},
-		{path: "context current", short: "Show the current context", flags: []flagSpec{boolFlag("short", "Print only the context name")}},
-		{path: "context delete", short: "Permanently delete a context and its local files", flags: []flagSpec{nameFlag(), boolFlag("purge", "Acknowledge permanent context data deletion"), confirmationFlag()}, long: "Permanently delete a context and its verified local files with --purge=true. --yes skips ordinary confirmation. Protected lifecycle state must be resolved before deletion."},
+		available(commandSpec{path: "context init", short: "Initialize a configured context and select it", flags: []flagSpec{nameFlag(), contextFileFlag(), directoryFlag("input-dir", "Import an Environment input directory")}}),
+		available(commandSpec{path: "context update", short: "Update Context configuration or Environment input", flags: []flagSpec{nameFlag(), contextFileFlag(), directoryFlag("input-dir", "Replace the Environment input directory"), confirmationFlag()}}),
+		available(commandSpec{path: "context use", short: "Select the current context", flags: []flagSpec{nameFlag()}}),
+		available(commandSpec{path: "context list", short: "List contexts"}),
+		available(commandSpec{path: "context current", short: "Show the current context", flags: []flagSpec{boolFlag("short", "Print only the context name")}}),
+		available(commandSpec{path: "context delete", short: "Permanently delete a context and its local files", flags: []flagSpec{nameFlag(), boolFlag("purge", "Acknowledge permanent context data deletion"), confirmationFlag()}, long: "Permanently delete a context and its verified local files with --purge=true. --yes skips ordinary confirmation. Protected lifecycle state must be resolved before deletion."}),
 	}
 }
 

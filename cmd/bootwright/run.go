@@ -8,23 +8,23 @@ import (
 	"runtime"
 
 	"github.com/crmarques/bootwright/internal/cli"
-	"github.com/crmarques/bootwright/internal/controller/invocation"
+	"github.com/crmarques/bootwright/internal/controller/privilege"
 	"github.com/crmarques/bootwright/internal/desiredstate/encoding"
 )
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	return runServices(ctx, args, stdout, stderr, wireServices())
+	return runServices(ctx, args, stdout, stderr, wireServices(processDependencies{}))
 }
 
 func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	classification := cli.ClassifyInvocation(args)
 	if classification.RequiresRoot {
-		account, err := (invocation.Resolver{}).Resolve(ctx)
+		account, err := (privilege.Resolver{}).Resolve(ctx)
 		if err != nil {
 			return classification.Failure(stdout, stderr, "runtime.privilege", "invoking account cannot be verified", 1)
 		}
 		if account.SudoParentPID != 0 {
-			release, err := invocation.GuardParent(account.SudoParentPID)
+			release, err := privilege.GuardParent(account.SudoParentPID)
 			if err != nil {
 				return classification.Failure(stdout, stderr, "runtime.privilege", "sudo parent lifetime cannot be guarded", 1)
 			}
@@ -32,13 +32,13 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 		}
 	}
 	if classification.RequiresRoot && os.Geteuid() != 0 {
-		operation, finish := invocation.Begin(ctx)
+		operation, finish := privilege.Begin(ctx)
 		defer finish()
-		executable, err := invocation.ReexecutionPath()
+		executable, err := privilege.ReexecutionPath()
 		if err != nil {
 			return classification.Failure(stdout, stderr, "runtime.privilege", "invocation executable cannot be verified", 1)
 		}
-		sudo, err := invocation.QualifiedSudo()
+		sudo, err := privilege.QualifiedSudo()
 		if err != nil {
 			return classification.Failure(stdout, stderr, "runtime.privilege", "sudo is unavailable; run Bootwright as root", 1)
 		}
@@ -48,7 +48,7 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 		// Without a terminal sudo cannot prompt, so its refusal text carries no
 		// operator action and is not a product result.
 		errOut := &invocationError{writer: stderr, withhold: noninteractive}
-		supervisor := invocation.NewSupervisor(invocation.SudoOptions{Executable: executable, Sudo: sudo, Executor: invocation.ProcessExecutor{}, Delay: invocation.Timer{}, NonInteractive: noninteractive, Input: os.Stdin, Output: output, Error: errOut})
+		supervisor := privilege.NewSupervisor(privilege.SudoOptions{Executable: executable, Sudo: sudo, Executor: privilege.ProcessExecutor{}, Delay: privilege.Timer{}, NonInteractive: noninteractive, Input: os.Stdin, Output: output, Error: errOut})
 		code, err := supervisor.Run(operation, args)
 		errOut.Close()
 		if err != nil {
@@ -58,7 +58,7 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 				}
 				return 1
 			}
-			if code := invocation.ExitCode(operation, 0); code != 0 {
+			if code := privilege.ExitCode(operation, 0); code != 0 {
 				return classification.Failure(stdout, stderr, "runtime.interrupted", "operation interrupted", code)
 			}
 			return classification.Failure(stdout, stderr, "runtime.privilege", "sudo invocation failed", 1)
@@ -69,7 +69,13 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 		return code
 	}
 	confirmer := cli.NewConfirmation(readStdin, stderr, stdinTerminal)
-	return runServices(ctx, args, stdout, stderr, wireLocalServices(confirmer, secretInputFunc(readStdin), cli.NewControllerProgressPresenter(stdout), cli.NewControllerPlanPresenter(stdout)), beginSignalOperation)
+	process := processDependencies{
+		Confirmer:   confirmer,
+		SecretInput: secretInputFunc(readStdin),
+		Progress:    cli.NewControllerProgressPresenter(stdout),
+		Presenter:   cli.NewControllerPlanPresenter(stdout),
+	}
+	return runServices(ctx, args, stdout, stderr, wireServices(process), beginSignalOperation)
 }
 
 type invocationOutput struct {

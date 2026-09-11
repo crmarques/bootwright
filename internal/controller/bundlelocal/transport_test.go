@@ -11,12 +11,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-func singleDiagnostic(t *testing.T, err error) desiredstate.Diagnostic {
+func singleDiagnostic(t *testing.T, err error) diagnostics.Diagnostic {
 	t.Helper()
-	diagnostics := desiredstate.DiagnosticsOf(err)
+	diagnostics := diagnostics.Of(err)
 	if len(diagnostics) != 1 {
 		t.Fatalf("expected one diagnostic, got %d from %v", len(diagnostics), err)
 	}

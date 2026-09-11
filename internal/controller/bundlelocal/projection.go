@@ -17,7 +17,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	automation "github.com/crmarques/bootwright/ansible"
+	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
@@ -82,7 +82,7 @@ func (p *projection) matches(value *prerequisites.BootstrapDefinition) bool {
 // The baseline bootstrap carries the compiled Ansible roles beside the private
 // Python runtime. Target dependency installation remains owned by those roles.
 func (p *projection) automation(ctx context.Context) error {
-	assets := automation.Assets()
+	assets := ansible.Assets()
 	names := make([]string, 0, len(assets))
 	for name := range assets {
 		names = append(names, name)

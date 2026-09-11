@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func controllerReport(outcome string, dryRun bool) *prerequisites.Report {
@@ -63,7 +63,7 @@ func TestControllerReportsAndExplicitContextDispatch(t *testing.T) {
 }
 
 func TestControllerNegativeReportPreservesStreamsAndSafeDiagnostics(t *testing.T) {
-	record := &dispatchRecord{result: commandResult{controller: controllerReport("not-ready", false)}, err: desiredstate.NewFailure("controller.prerequisites", "required prerequisites are missing", "")}
+	record := &dispatchRecord{result: commandResult{controller: controllerReport("not-ready", false)}, err: diagnostics.NewFailure("controller.prerequisites", "required prerequisites are missing", "")}
 	var out, errOut bytes.Buffer
 	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"preflight", "bastion"})
 	if code != 1 || !strings.Contains(out.String(), "Outcome  not-ready") || !strings.Contains(errOut.String(), "controller.prerequisites") {
@@ -87,7 +87,7 @@ func TestControllerConfirmationUsesSetupScope(t *testing.T) {
 	var out bytes.Buffer
 	confirmation := NewConfirmation(func(context.Context, []byte) (int, error) { return 0, errors.New("unexpected input") }, &out, func() (bool, error) { return false, nil })
 	err := confirmation.Confirm(context.Background(), "bastion setup", "baseline")
-	diagnostics := desiredstate.DiagnosticsOf(err)
+	diagnostics := diagnostics.Of(err)
 	if len(diagnostics) != 1 || diagnostics[0].Code != "controller.setup" || !strings.Contains(diagnostics[0].Message, "--yes") || out.Len() != 0 {
 		t.Fatal(diagnostics, out.String())
 	}
@@ -146,7 +146,7 @@ func TestControllerSetupConfirmationJourneys(t *testing.T) {
 				}
 				return
 			}
-			diagnostics := desiredstate.DiagnosticsOf(err)
+			diagnostics := diagnostics.Of(err)
 			if len(diagnostics) != 1 || diagnostics[0].Code != "controller.setup" {
 				t.Fatalf("declined answer %q = %v", testCase.answer, diagnostics)
 			}
@@ -162,7 +162,7 @@ func TestControllerSetupConfirmationStopsOnCancellation(t *testing.T) {
 	cancel()
 	var out bytes.Buffer
 	confirmation := NewConfirmation(func(context.Context, []byte) (int, error) { return 0, errors.New("unexpected input") }, &out, func() (bool, error) { return true, nil })
-	diagnostics := desiredstate.DiagnosticsOf(confirmation.Confirm(ctx, "bastion setup", "baseline"))
+	diagnostics := diagnostics.Of(confirmation.Confirm(ctx, "bastion setup", "baseline"))
 	if len(diagnostics) != 1 || diagnostics[0].Code != "controller.setup" || out.Len() != 0 {
 		t.Fatal(diagnostics, out.String())
 	}
@@ -227,7 +227,7 @@ func TestControllerIncompleteSetupReportsPerActionProgress(t *testing.T) {
 		{ID: "container-runtime", Phase: "intent"},
 		{ID: "controller-binding", Phase: "planned"},
 	}
-	record := &dispatchRecord{result: commandResult{controller: report}, err: desiredstate.NewFailure("controller.unknown", "a setup action has an unresolved effect outcome", "")}
+	record := &dispatchRecord{result: commandResult{controller: report}, err: diagnostics.NewFailure("controller.unknown", "a setup action has an unresolved effect outcome", "")}
 	var out, errOut bytes.Buffer
 	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"bastion", "setup"})
 	if code != 1 {

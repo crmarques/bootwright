@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	automation "github.com/crmarques/bootwright/ansible"
+	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
@@ -15,7 +15,7 @@ type authorityArea struct {
 }
 
 func (area authorityArea) Read(ctx context.Context, path string, maximum int) ([]byte, error) {
-	return automation.Assets()[strings.TrimPrefix(path, "automation/")], nil
+	return ansible.Assets()[strings.TrimPrefix(path, "automation/")], nil
 }
 func (area authorityArea) Location(context.Context) (prerequisites.BundleLocation, error) {
 	return area.location, nil

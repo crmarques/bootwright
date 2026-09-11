@@ -5,7 +5,7 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
@@ -203,9 +203,9 @@ func selectRoute(machine api.Object, catalog api.Catalog) (Route, error) {
 }
 
 func selectionFailure(object api.Object, code, field, message string) error {
-	diagnostic := desiredstate.Diagnostic{Severity: "error", Code: code, Field: field, Message: message}
+	diagnostic := diagnostics.Diagnostic{Severity: "error", Code: code, Field: field, Message: message}
 	if object.Kind() != "" {
-		diagnostic.Object = &desiredstate.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(object.Kind()), Name: object.Name()}
+		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(object.Kind()), Name: object.Name()}
 	}
-	return &desiredstate.Failure{Diagnostics: []desiredstate.Diagnostic{diagnostic}}
+	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{diagnostic}}
 }

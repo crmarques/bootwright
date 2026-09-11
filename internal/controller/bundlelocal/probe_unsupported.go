@@ -8,7 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
-func probeBundle(ctx context.Context, _ prerequisites.BundleArea, _ prerequisites.Definition) error {
+func probeBundle(ctx context.Context, _ prerequisites.PythonExecutionGuard, _ prerequisites.BundleArea, _ prerequisites.Definition) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}

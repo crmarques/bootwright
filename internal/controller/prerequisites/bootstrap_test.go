@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func TestBootstrapAnsibleMinimum(t *testing.T) {
@@ -14,7 +14,7 @@ func TestBootstrapAnsibleMinimum(t *testing.T) {
 		}
 	}
 	for _, version := range []string{"1.99.99", "2.18.99", "2.19.0rc1", "02.19.0", "latest"} {
-		diagnostics := desiredstate.DiagnosticsOf(ValidateBootstrapAnsibleVersion(version))
+		diagnostics := diagnostics.Of(ValidateBootstrapAnsibleVersion(version))
 		if len(diagnostics) != 1 || !strings.Contains(diagnostics[0].Message, MinimumBootstrapAnsibleVersion) {
 			t.Fatalf("incompatible release %s lacks minimum-version diagnostic: %+v", version, diagnostics)
 		}
@@ -24,7 +24,7 @@ func TestBootstrapAnsibleMinimum(t *testing.T) {
 	value.AnsibleVersion = "2.18.99"
 	value.AnsibleIntent = "latest"
 	_, err := CanonicalBootstrap(value)
-	diagnostics := desiredstate.DiagnosticsOf(err)
+	diagnostics := diagnostics.Of(err)
 	if len(diagnostics) != 1 || !strings.Contains(diagnostics[0].Message, MinimumBootstrapAnsibleVersion) {
 		t.Fatalf("frozen bootstrap accepted unsupported Ansible: %+v", diagnostics)
 	}

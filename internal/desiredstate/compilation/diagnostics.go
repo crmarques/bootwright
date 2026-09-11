@@ -6,11 +6,12 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-type diagnostics struct {
+type diagnosticSink struct {
 	ctx     context.Context
-	items   []desiredstate.Diagnostic
+	items   []diagnostics.Diagnostic
 	seen    map[diagnosticKey]bool
 	limited bool
 }
@@ -19,16 +20,16 @@ type diagnostics struct {
 // diagnostics, so repeated provenance does not multiply its byte footprint.
 type diagnosticKey struct {
 	severity, code, message, field, remediation string
-	source                                      desiredstate.SourceLocation
-	object                                      desiredstate.ObjectIdentity
+	source                                      diagnostics.SourceLocation
+	object                                      diagnostics.ObjectIdentity
 	hasSource, hasObject                        bool
 }
 
-func newDiagnostics(ctx context.Context) *diagnostics {
-	return &diagnostics{ctx: ctx, seen: map[diagnosticKey]bool{}}
+func newDiagnostics(ctx context.Context) *diagnosticSink {
+	return &diagnosticSink{ctx: ctx, seen: map[diagnosticKey]bool{}}
 }
 
-func (d *diagnostics) add(item desiredstate.Diagnostic) bool {
+func (d *diagnosticSink) add(item diagnostics.Diagnostic) bool {
 	if d.limited || d.ctx.Err() != nil {
 		return false
 	}
@@ -43,7 +44,7 @@ func (d *diagnostics) add(item desiredstate.Diagnostic) bool {
 		return true
 	}
 	if len(d.items) >= desiredstate.MaxDiagnostics-1 {
-		d.items = append(d.items, desiredstate.Diagnostic{Severity: "error", Code: "input.limit", Message: "diagnostics exceed the ceiling of 1000"})
+		d.items = append(d.items, diagnostics.Diagnostic{Severity: "error", Code: "input.limit", Message: "diagnostics exceed the ceiling of 1000"})
 		d.limited = true
 		return false
 	}
@@ -56,8 +57,8 @@ func (d *diagnostics) add(item desiredstate.Diagnostic) bool {
 	return true
 }
 
-func (d *diagnostics) issue(record *objectRecord, issue api.Issue) bool {
-	item := desiredstate.Diagnostic{Severity: "error", Code: issue.Code, Message: issue.Message, Field: issue.Field, Remediation: issue.Remediation}
+func (d *diagnosticSink) issue(record *objectRecord, issue api.Issue) bool {
+	item := diagnostics.Diagnostic{Severity: "error", Code: issue.Code, Message: issue.Message, Field: issue.Field, Remediation: issue.Remediation}
 	if item.Code == "" {
 		item.Code = "api.invariant"
 	}
@@ -66,7 +67,7 @@ func (d *diagnostics) issue(record *objectRecord, issue api.Issue) bool {
 	}
 	if record != nil {
 		if api.ValidLexical("name", record.object.Name()) {
-			item.Object = &desiredstate.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(record.object.Kind()), Name: record.object.Name()}
+			item.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(record.object.Kind()), Name: record.object.Name()}
 		}
 		if location, ok := record.location(issue.Field); ok {
 			item.Source = &location
@@ -105,7 +106,7 @@ func (r *objectRecord) isInherited(field string) bool {
 	}
 }
 
-func (d *diagnostics) hasErrors() bool {
+func (d *diagnosticSink) hasErrors() bool {
 	for _, item := range d.items {
 		if item.Severity == "error" {
 			return true
@@ -113,10 +114,10 @@ func (d *diagnostics) hasErrors() bool {
 	}
 	return false
 }
-func (d *diagnostics) stopped() bool { return d.limited || d.ctx.Err() != nil }
-func (d *diagnostics) sorted() []desiredstate.Diagnostic {
-	out := append([]desiredstate.Diagnostic{}, d.items...)
-	desiredstate.SortDiagnostics(out)
+func (d *diagnosticSink) stopped() bool { return d.limited || d.ctx.Err() != nil }
+func (d *diagnosticSink) sorted() []diagnostics.Diagnostic {
+	out := append([]diagnostics.Diagnostic{}, d.items...)
+	diagnostics.Sort(out)
 	return out
 }
 
@@ -125,14 +126,14 @@ type objectRecord struct {
 	authored             api.Object
 	path                 string
 	document             int
-	locations            map[string]desiredstate.SourceLocation
-	inherited            map[string]desiredstate.SourceLocation
+	locations            map[string]diagnostics.SourceLocation
+	inherited            map[string]diagnostics.SourceLocation
 	inheritedEnvironment *objectRecord
 	remappings           []map[string]string
 	derived              map[string]fieldSource
 }
 
-func (r *objectRecord) location(field string) (desiredstate.SourceLocation, bool) {
+func (r *objectRecord) location(field string) (diagnostics.SourceLocation, bool) {
 	if origin, sourceField, ok := r.derivedOrigin(field); ok {
 		return origin.location(sourceField)
 	}
@@ -157,5 +158,5 @@ func (r *objectRecord) location(field string) (desiredstate.SourceLocation, bool
 		}
 		field = field[:at]
 	}
-	return desiredstate.SourceLocation{Path: r.path, Document: r.document}, true
+	return diagnostics.SourceLocation{Path: r.path, Document: r.document}, true
 }

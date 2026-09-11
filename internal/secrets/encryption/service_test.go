@@ -6,12 +6,12 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
 type serviceAccess struct {
-	selected        storage.Context
-	selection       storage.Selection
+	selected        secretstore.Context
+	selection       secretstore.Selection
 	session         *serviceSession
 	contextFailure  error
 	failure         error
@@ -20,14 +20,14 @@ type serviceAccess struct {
 	initializations int
 }
 
-func (a *serviceAccess) Context(_ context.Context, name string) (storage.ContextSnapshot, error) {
+func (a *serviceAccess) Context(_ context.Context, name string) (secretstore.ContextSnapshot, error) {
 	if name != a.selected.Name {
-		return storage.ContextSnapshot{}, errors.New("unexpected context name")
+		return secretstore.ContextSnapshot{}, errors.New("unexpected context name")
 	}
-	return storage.ContextSnapshot{Context: a.selected, SecretStoreType: a.selection.Type}, a.contextFailure
+	return secretstore.ContextSnapshot{Context: a.selected, SecretStoreType: a.selection.Type}, a.contextFailure
 }
 func (a *serviceAccess) Types() []string { return []string{a.selection.Type} }
-func (a *serviceAccess) View(_ context.Context, selected storage.Context, unlock bool, callback func(storage.StoreSession, storage.Selection) error) error {
+func (a *serviceAccess) View(_ context.Context, selected secretstore.Context, unlock bool, callback func(secretstore.StoreSession, secretstore.Selection) error) error {
 	if selected != a.selected {
 		return errors.New("unexpected context identity")
 	}
@@ -37,7 +37,7 @@ func (a *serviceAccess) View(_ context.Context, selected storage.Context, unlock
 	}
 	return callback(a.session, a.selection)
 }
-func (a *serviceAccess) Mutate(_ context.Context, selected storage.Context, callback func(storage.StoreSession, storage.Selection) error) error {
+func (a *serviceAccess) Mutate(_ context.Context, selected secretstore.Context, callback func(secretstore.StoreSession, secretstore.Selection) error) error {
 	if selected != a.selected {
 		return errors.New("unexpected context identity")
 	}
@@ -47,7 +47,7 @@ func (a *serviceAccess) Mutate(_ context.Context, selected storage.Context, call
 	}
 	return callback(a.session, a.selection)
 }
-func (a *serviceAccess) Initialize(_ context.Context, selected storage.Context, kind string, callback func(storage.StoreSession, storage.Selection, bool) error) error {
+func (a *serviceAccess) Initialize(_ context.Context, selected secretstore.Context, kind string, callback func(secretstore.StoreSession, secretstore.Selection, bool) error) error {
 	if selected != a.selected || kind != a.selection.Type {
 		return errors.New("unexpected context identity or implementation type")
 	}
@@ -59,14 +59,14 @@ func (a *serviceAccess) Initialize(_ context.Context, selected storage.Context, 
 }
 
 type serviceSession struct {
-	storage.StoreSession
+	secretstore.StoreSession
 	inspections int
 	rotations   int
 }
 
-func (s *serviceSession) Inspect(context.Context) (storage.Snapshot, error) {
+func (s *serviceSession) Inspect(context.Context) (secretstore.Snapshot, error) {
 	s.inspections++
-	return storage.Snapshot{ActiveKey: "fixture-key", Keys: []storage.Key{{ID: "fixture-key", State: "active"}}}, nil
+	return secretstore.Snapshot{ActiveKey: "fixture-key", Keys: []secretstore.Key{{ID: "fixture-key", State: "active"}}}, nil
 }
 func (s *serviceSession) Rotate(context.Context) (string, error) {
 	s.rotations++
@@ -74,10 +74,10 @@ func (s *serviceSession) Rotate(context.Context) (string, error) {
 }
 
 func serviceFixture() (*Service, *serviceAccess) {
-	ref := storage.ComponentRef{ID: "independent", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1}
+	ref := secretstore.ComponentRef{ID: "independent", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1}
 	access := &serviceAccess{
-		selected:  storage.Context{Name: "fixture", ID: "ctx-fixture", Mode: "ready", Revision: "rev-fixture"},
-		selection: storage.Selection{Type: "independent", Store: ref, KeyCustody: ref},
+		selected:  secretstore.Context{Name: "fixture", ID: "ctx-fixture", Mode: "ready", Revision: "rev-fixture"},
+		selection: secretstore.Selection{Type: "independent", Store: ref, KeyCustody: ref},
 		session:   &serviceSession{},
 	}
 	return New(access, nil), access
@@ -137,7 +137,7 @@ func TestStoreAccessFailuresStopEncryptionBeforeSession(t *testing.T) {
 		for _, stage := range []string{"context", "session"} {
 			t.Run(name+"/"+stage, func(t *testing.T) {
 				service, access := serviceFixture()
-				want := storage.Failure("store.conflict", "injected access refused context")
+				want := secretstore.Failure("store.conflict", "injected access refused context")
 				if stage == "context" {
 					access.contextFailure = want
 				} else {

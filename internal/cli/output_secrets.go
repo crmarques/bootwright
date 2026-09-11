@@ -11,10 +11,10 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/encryption"
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
-func validSecretContext(value storage.Context) bool {
+func validSecretContext(value secretstore.Context) bool {
 	return value.Name != "" && value.ID != "" && value.Mode == "ready"
 }
 
@@ -123,7 +123,7 @@ func validSecretMutation(path string, result *custody.MutationResult) bool {
 	return path == "secret generate" || result.Name != ""
 }
 
-func validComponentRef(value storage.ComponentRef) bool {
+func validComponentRef(value secretstore.ComponentRef) bool {
 	return value.ID != "" && value.InterfaceVersion > 0 && value.StateVersion > 0 && value.ConfigVersion > 0
 }
 
@@ -131,7 +131,7 @@ func validComponentStatus(value encryption.ComponentStatus) bool {
 	return value.ID != "" && value.InterfaceVersion > 0 && value.StateVersion > 0 && value.ConfigVersion > 0
 }
 
-func validSelection(value storage.Selection) bool {
+func validSelection(value secretstore.Selection) bool {
 	return api.ValidLexical("name", value.Type) && validComponentRef(value.Store) && validComponentRef(value.KeyCustody)
 }
 
@@ -342,8 +342,8 @@ func sortedSecretListRows(rows []custody.ListRow) []custody.ListRow {
 	return rows
 }
 
-func displaySecretContext(value storage.Context) storage.Context {
-	return storage.Context{Name: escapeDisplayLine(value.Name), ID: escapeDisplayLine(value.ID), Mode: escapeDisplayLine(value.Mode)}
+func displaySecretContext(value secretstore.Context) secretstore.Context {
+	return secretstore.Context{Name: escapeDisplayLine(value.Name), ID: escapeDisplayLine(value.ID), Mode: escapeDisplayLine(value.Mode)}
 }
 
 func displaySecretParts(parts []secrets.Part) string {
@@ -402,20 +402,20 @@ type encryptionStatusResult struct {
 	Initialized    bool                  `json:"initialized"`
 	Implementation *implementationStatus `json:"implementation"`
 	ActiveKey      *string               `json:"activeKey"`
-	Keys           []storage.Key         `json:"keys"`
+	Keys           []secretstore.Key     `json:"keys"`
 	Items          encryption.ItemStatus `json:"items"`
 }
 
 func displayEncryptionStatus(result *encryption.StatusResult) *encryptionStatusResult {
-	out := &encryptionStatusResult{Initialized: result.Initialized, ActiveKey: displayOptionalIdentifierPointer(result.ActiveKey), Keys: make([]storage.Key, len(result.Keys)), Items: result.Items}
+	out := &encryptionStatusResult{Initialized: result.Initialized, ActiveKey: displayOptionalIdentifierPointer(result.ActiveKey), Keys: make([]secretstore.Key, len(result.Keys)), Items: result.Items}
 	if result.Implementation != nil {
 		implementation := result.Implementation
 		out.Implementation = &implementationStatus{Type: escapeDisplayLine(implementation.Type), Store: displayComponent(implementation.Store), KeyCustody: displayComponent(implementation.KeyCustody), State: escapeDisplayLine(implementation.State)}
 	}
 	for i, key := range result.Keys {
-		out.Keys[i] = storage.Key{ID: escapeDisplayLine(key.ID), State: escapeDisplayLine(key.State), Seals: key.Seals}
+		out.Keys[i] = secretstore.Key{ID: escapeDisplayLine(key.ID), State: escapeDisplayLine(key.State), Seals: key.Seals}
 	}
-	slices.SortStableFunc(out.Keys, func(a, b storage.Key) int { return strings.Compare(a.ID, b.ID) })
+	slices.SortStableFunc(out.Keys, func(a, b secretstore.Key) int { return strings.Compare(a.ID, b.ID) })
 	return out
 }
 

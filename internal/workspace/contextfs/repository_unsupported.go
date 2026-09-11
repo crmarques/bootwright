@@ -7,7 +7,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -39,14 +39,14 @@ func (*Store) Transact(ctx context.Context, _ bool, _ []string, _ func(contexts.
 	return unsupported(ctx)
 }
 
-func (*Store) SecretContext(ctx context.Context, _ string) (storage.ContextSnapshot, error) {
-	return storage.ContextSnapshot{}, unsupported(ctx)
+func (*Store) SecretContext(ctx context.Context, _ string) (secretstore.ContextSnapshot, error) {
+	return secretstore.ContextSnapshot{}, unsupported(ctx)
 }
 
-func (*Store) ReadSecrets(ctx context.Context, _ storage.Context, _ func(storage.Area) error) error {
+func (*Store) ReadSecrets(ctx context.Context, _ secretstore.Context, _ func(secretstore.Area) error) error {
 	return unsupported(ctx)
 }
 
-func (*Store) MutateSecrets(ctx context.Context, _ storage.Context, _ func(storage.Area) error) error {
+func (*Store) MutateSecrets(ctx context.Context, _ secretstore.Context, _ func(secretstore.Area) error) error {
 	return unsupported(ctx)
 }

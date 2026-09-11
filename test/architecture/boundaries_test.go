@@ -29,19 +29,20 @@ func packageRoles() map[string]packageRole {
 		"api/v1alpha1":                          domainRole,
 		"internal/substrate":                    domainRole,
 		"internal/infrastructureservices":       domainRole,
+		"internal/diagnostics":                  technicalRole,
 		"internal/desiredstate/customplaybooks": domainRole,
 		"internal/desiredstate/inputfs":         adapterRole,
 		"internal/desiredstate/yamlstream":      adapterRole,
 		"internal/desiredstate/encoding":        adapterRole,
 		"internal/workspace/contextfs":          adapterRole,
 		"internal/workspace/selectionfs":        adapterRole,
-		"internal/controller/invocation":        adapterRole,
+		"internal/controller/privilege":         adapterRole,
 		"internal/controller/hostlinux":         adapterRole,
 		"internal/controller/bundlelocal":       adapterRole,
 		"internal/controller/ansiblelocal":      adapterRole,
 		"internal/controller/nativelocal":       adapterRole,
-		"internal/secrets/storage":              applicationRole,
-		"internal/secrets/localstore":           adapterRole,
+		"internal/secrets/secretstore":          applicationRole,
+		"internal/secrets/localkeyring":         adapterRole,
 		"internal/secrets/material":             adapterRole,
 		"internal/reconciliation/contextguard":  applicationRole,
 		"cmd/bootwright":                        compositionRole,
@@ -174,10 +175,10 @@ func TestAdmissionEffectBoundary(t *testing.T) {
 		input := source.owner == "internal/desiredstate/inputfs"
 		storage := source.owner == "internal/workspace/contextfs"
 		secretMaterial := source.owner == "internal/secrets/material"
-		secretStore := source.owner == "internal/secrets/localstore"
+		secretStore := source.owner == "internal/secrets/localkeyring"
 		guard := source.owner == "internal/reconciliation/contextguard"
 		selection := source.owner == "internal/workspace/selectionfs"
-		invocation := source.owner == "internal/controller/invocation"
+		invocation := source.owner == "internal/controller/privilege"
 		controllerHost := source.owner == "internal/controller/hostlinux"
 		controllerBundle := source.owner == "internal/controller/bundlelocal"
 		controllerPackages := source.owner == "internal/controller/ansiblelocal"
@@ -229,12 +230,12 @@ func TestSecretImplementationsRemainBehindPorts(t *testing.T) {
 			if strings.HasPrefix(imported.path, "golang.org/x/crypto/") && (source.owner != "internal/secrets/material" || imported.path != "golang.org/x/crypto/ssh") {
 				t.Errorf("%s imports an unqualified cryptographic dependency %s", source.path, imported.path)
 			}
-			concrete := strings.HasSuffix(imported.path, "/internal/secrets/localstore") || strings.HasSuffix(imported.path, "/internal/secrets/material")
+			concrete := strings.HasSuffix(imported.path, "/internal/secrets/localkeyring") || strings.HasSuffix(imported.path, "/internal/secrets/material")
 			if concrete && source.owner != "cmd/bootwright" {
 				t.Errorf("%s imports a concrete secret implementation", source.path)
 			}
 		}
-		if source.owner == "internal/secrets/storage" || source.owner == "internal/secrets/custody" || source.owner == "internal/secrets/encryption" {
+		if source.owner == "internal/secrets/secretstore" || source.owner == "internal/secrets/custody" || source.owner == "internal/secrets/encryption" {
 			ast.Inspect(source.syntax, func(node ast.Node) bool {
 				if literal, ok := node.(*ast.BasicLit); ok && literal.Kind == token.STRING {
 					value, _ := strconv.Unquote(literal.Value)

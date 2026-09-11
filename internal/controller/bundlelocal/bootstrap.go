@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	automation "github.com/crmarques/bootwright/ansible"
+	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
@@ -90,7 +90,7 @@ func (c *BootstrapCatalog) Resolve(ctx context.Context, platform prerequisites.P
 		PythonVersion: pythonVersion, AnsibleVersion: ansibleVersion, PythonExecutable: "python/bin/python" + minor,
 		SitePackages: "python/lib/python" + minor + "/site-packages/", Sources: []prerequisites.DependencySource{source},
 		Metadata:  []prerequisites.DependencySource{bootstrapMetadataSource("python-metadata", pythonMetadataURL, pythonMetadata.data), bootstrapMetadataSource("ansible-metadata", ansibleURL, ansibleMetadata.data)},
-		Execution: cloneExecution(native.Execution), AutomationDigest: automation.Digest(),
+		Execution: cloneExecution(native.Execution), AutomationDigest: ansible.Digest(),
 	}
 	value.Execution.PythonExecutable = value.PythonExecutable
 	value.ExecutionPackages = executionPackageOwners()

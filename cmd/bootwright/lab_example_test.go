@@ -19,6 +19,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/desiredstate/inputfs"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 const labExampleFiles = 14
@@ -31,7 +32,7 @@ func labExampleSources(t *testing.T) desiredstate.Sources {
 	}
 	sources, err := (inputfs.Reader{}).Read(context.Background(), []string{root})
 	if err != nil {
-		t.Fatal(desiredstate.DiagnosticsOf(err))
+		t.Fatal(diagnostics.Of(err))
 	}
 	return sources
 }
@@ -176,12 +177,9 @@ func labContextServices(t *testing.T) (cli.Services, string, *labControllerPorts
 		t.Fatal(err)
 	}
 	options := testContextWiring(t, root)
-	options.ControllerStorage = repository
-	options.ControllerHost = ports
-	options.ControllerCatalog = ports
-	options.ControllerBundle = ports
-	options.ControllerTools = labToolCatalog{ports}
-	return wireContextServices(repository, repository, nil, nil, options), input, ports
+	options.Repository, options.Workspace = repository, repository
+	options.Controller = controllerDependencies{Storage: repository, Host: ports, Catalog: ports, Bundle: ports, Tools: labToolCatalog{ports}}
+	return assembleServices(options), input, ports
 }
 
 func TestLabExampleContextAndBastionPreparationJourney(t *testing.T) {

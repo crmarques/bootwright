@@ -7,7 +7,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
 type secretConfirmationFunc func(context.Context, string, string) error
@@ -26,15 +26,18 @@ func TestSecretConfirmationsHoldMutationLeaseAndReleaseItOnRefusal(t *testing.T)
 		t.Fatal(err)
 	}
 	confirmations := 0
-	services = wireContextServices(repository, repository, secretConfirmationFunc(func(ctx context.Context, _, _ string) error {
+	deps := testContextWiring(t, root)
+	deps.Repository, deps.Workspace = repository, repository
+	deps.Confirmer = secretConfirmationFunc(func(ctx context.Context, _, _ string) error {
 		confirmations++
 		entered := false
-		err := repository.MutateSecrets(ctx, snapshot.Context, func(storage.Area) error { entered = true; return nil })
+		err := repository.MutateSecrets(ctx, snapshot.Context, func(secretstore.Area) error { entered = true; return nil })
 		if err == nil || entered {
 			t.Fatal("confirmation did not hold the mutation lease")
 		}
 		return errors.New("synthetic confirmation refusal")
-	}), nil, testContextWiring(t, root))
+	})
+	services = assembleServices(deps)
 	value := addSecretInput(t, t.TempDir(), "value", "synthetic-lease-canary")
 	contextRun(t, services, 0, "secret", "set", "--name", "payload", "--value-file", value)
 	if confirmations != 0 {
@@ -50,7 +53,7 @@ func TestSecretConfirmationsHoldMutationLeaseAndReleaseItOnRefusal(t *testing.T)
 		if !sameFingerprints(before, stateFingerprint(t, root)) {
 			t.Fatal("refused confirmation changed state")
 		}
-		if err := repository.MutateSecrets(context.Background(), snapshot.Context, func(storage.Area) error { return nil }); err != nil {
+		if err := repository.MutateSecrets(context.Background(), snapshot.Context, func(secretstore.Area) error { return nil }); err != nil {
 			t.Fatal("refused confirmation retained a lease", err)
 		}
 	}
@@ -70,7 +73,7 @@ func TestSecretExpectedSnapshotRefusesContextUpdateBeforeEffects(t *testing.T) {
 	addSecretInput(t, input, "secret.yaml", secretDocument("payload", "token", ""))
 	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
 	before := stateFingerprint(t, root)
-	callback := func(storage.Area) error { t.Fatal("stale snapshot reached secret effects"); return nil }
+	callback := func(secretstore.Area) error { t.Fatal("stale snapshot reached secret effects"); return nil }
 	if err := repository.ReadSecrets(context.Background(), snapshot.Context, callback); err == nil {
 		t.Fatal("stale read token was accepted")
 	}

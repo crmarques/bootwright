@@ -39,7 +39,7 @@ func contextFixture(t *testing.T) (cli.Services, *contextfs.Store, string, strin
 		t.Fatal(err)
 	}
 	repository := testRepository(root)
-	return wireContextServices(repository, repository, nil, nil, testContextWiring(t, root)), repository, input, root
+	return testServices(t, repository, root), repository, input, root
 }
 
 func contextRun(t *testing.T, services cli.Services, want int, args ...string) (string, string) {
@@ -360,7 +360,7 @@ func TestInvalidAdmissionAndUnavailableRoutesDoNotWrite(t *testing.T) {
 	}
 	nested := filepath.Join(input, "state")
 	nestedRepository := testRepository(nested)
-	nestedServices := wireContextServices(nestedRepository, nestedRepository, nil, nil, testContextWiring(t, nested))
+	nestedServices := testServices(t, nestedRepository, nested)
 	_, stderr = contextRun(t, nestedServices, 1, "context", "init", "--name", "alpha", "--input-dir", input)
 	if !strings.Contains(stderr, "context.state") {
 		t.Fatal("nested store did not fail before parsing input", stderr)

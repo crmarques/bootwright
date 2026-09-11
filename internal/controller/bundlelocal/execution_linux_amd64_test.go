@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"golang.org/x/sys/unix"
 )
 
@@ -185,7 +185,7 @@ func TestExecutionGuardRefusesActiveNativeTransactionBeforeBundleAccess(t *testi
 		t.Fatal("execution proceeded during native transaction")
 		return nil
 	})
-	diagnostics := desiredstate.DiagnosticsOf(err)
+	diagnostics := diagnostics.Of(err)
 	if len(diagnostics) != 1 || diagnostics[0].Code != "controller.conflict" || f.area.checks != 0 {
 		t.Fatalf("native transaction conflict was not preserved: %v", err)
 	}

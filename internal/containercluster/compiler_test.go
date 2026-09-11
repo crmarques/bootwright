@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/desiredstate/yamlstream"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -174,20 +175,20 @@ spec:
 			content := strings.Replace(clusterYAML, "spec:\n  domains:", "spec:\n  containerClusters: [cluster]\n  domains:", 1) + deferred
 			state, _, err := c.Compile(context.Background(), sources(content))
 			if err != nil {
-				t.Fatal("excluded Machine references failed selected graph", desiredstate.DiagnosticsOf(err))
+				t.Fatal("excluded Machine references failed selected graph", diagnostics.Of(err))
 			}
 			if _, retained := state.Effective().Find(api.Machine, "deferred"); retained {
 				t.Fatal("unconsumed Machine was retained by cluster selection")
 			}
 			_, _, err = c.Compile(context.Background(), sources(clusterYAML+deferred))
 			found := false
-			for _, diagnostic := range desiredstate.DiagnosticsOf(err) {
+			for _, diagnostic := range diagnostics.Of(err) {
 				if diagnostic.Object != nil && diagnostic.Object.Kind == string(api.Machine) && diagnostic.Object.Name == "deferred" && diagnostic.Field == tc.field {
 					found = true
 				}
 			}
 			if !found {
-				t.Fatal("retained Machine did not validate its service reference", desiredstate.DiagnosticsOf(err))
+				t.Fatal("retained Machine did not validate its service reference", diagnostics.Of(err))
 			}
 		})
 	}
@@ -199,7 +200,7 @@ func sources(content string) desiredstate.Sources {
 func TestCompleteContainerGraphCompilation(t *testing.T) {
 	state, _, err := compiler().Compile(context.Background(), sources(clusterYAML))
 	if err != nil {
-		t.Fatal(desiredstate.DiagnosticsOf(err))
+		t.Fatal(diagnostics.Of(err))
 	}
 	cluster, ok := state.Effective().Find(api.ContainerCluster, "cluster")
 	if !ok {
@@ -241,7 +242,7 @@ func TestSplitPublicSSHAndNativeExternalPlatform(t *testing.T) {
 	content := strings.Replace(clusterYAML, "  install:\n    endpoints:", "  install:\n    nodeSSH:\n      publicKeyRef: cluster-cluster-admin-ssh-key\n    platform:\n      type: external\n      external:\n        name: custom\n        settings:\n          enabled: true\n          count: 2\n          ratio: 0.25\n    endpoints:", 1)
 	state, _, err := compiler().Compile(context.Background(), sources(content))
 	if err != nil {
-		t.Fatal(desiredstate.DiagnosticsOf(err))
+		t.Fatal(diagnostics.Of(err))
 	}
 	cluster, _ := state.Effective().Find(api.ContainerCluster, "cluster")
 	if cluster.Spec().Get("install", "nodeSSH").Has("keyPairRef") || cluster.Spec().Get("install", "nodeSSH").Has("privateKeyRef") {
@@ -278,7 +279,7 @@ func TestExplicitEndpointAndPlatformChoicesSuppressDefaults(t *testing.T) {
 	content = strings.Replace(content, "  install:\n    endpoints:", "  install:\n    platform:\n      type: none\n    endpoints:", 1)
 	state, _, err := compiler().Compile(context.Background(), sources(content))
 	if err != nil {
-		t.Fatal(desiredstate.DiagnosticsOf(err))
+		t.Fatal(diagnostics.Of(err))
 	}
 	cluster, _ := state.Effective().Find(api.ContainerCluster, "cluster")
 	if cluster.Spec().Get("install", "platform").Has("baremetal") {

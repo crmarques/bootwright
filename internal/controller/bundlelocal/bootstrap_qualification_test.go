@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/hostlinux"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 // This current-OS check runs only the unprivileged disposable resolver. It does
@@ -55,7 +55,7 @@ func TestQualifiedLatestBootstrapResolution(t *testing.T) {
 	}
 	resolved, err := resolver.Resolve(ctx, platform, controller.DefaultDependencyVersions(), prerequisites.SetupEgress{})
 	if err != nil {
-		t.Fatalf("%v: %+v", err, desiredstate.DiagnosticsOf(err))
+		t.Fatalf("%v: %+v", err, diagnostics.Of(err))
 	}
 	if err := prerequisites.ValidateBootstrap(resolved); err != nil {
 		t.Fatal(err)
@@ -96,7 +96,7 @@ func TestQualifiedResolvedBootstrapPreparation(t *testing.T) {
 		t.Fatal(err)
 	}
 	area := newQualificationArea(t)
-	manager := New()
+	manager := New(ExecutionGuard{})
 	fetches := 0
 	manager.fetch = func(ctx context.Context, source prerequisites.DependencySource, _ prerequisites.SetupEgress) ([]byte, error) {
 		fetches++
@@ -119,7 +119,7 @@ func TestQualifiedResolvedBootstrapPreparation(t *testing.T) {
 		return runImportProbe(ctx, area, prerequisites.PythonLaunch{Loader: definition.Execution.Loader, Arguments: []string{"--inhibit-cache", "--glibc-hwcaps-mask", "", "--library-path", filepath.Join(location.Path, "python/lib"), "--preload", strings.Join(definition.Execution.Preload, ":"), filepath.Join(location.Path, definition.Bootstrap.PythonExecutable)}, Directory: location.Path, Environment: []string{"LC_ALL=C.UTF-8", "LANG=C.UTF-8", "HOME=" + location.Path, "OPENSSL_CONF=/dev/null"}}, definition)
 	}
 	if err := manager.Prepare(t.Context(), area, definition, prerequisites.SetupEgress{}, nil); err != nil {
-		t.Fatalf("%v: %+v", err, desiredstate.DiagnosticsOf(err))
+		t.Fatalf("%v: %+v", err, diagnostics.Of(err))
 	}
 	before, err := area.Entries(t.Context())
 	if err != nil {

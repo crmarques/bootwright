@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func assertConfirmationRefusal(t *testing.T, err error) {
 	t.Helper()
-	diagnostics := desiredstate.DiagnosticsOf(err)
+	diagnostics := diagnostics.Of(err)
 	if len(diagnostics) != 1 || diagnostics[0].Code != "context.state" {
 		t.Fatalf("confirmation refusal was not typed: %v", err)
 	}

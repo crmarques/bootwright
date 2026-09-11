@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
 func TestSecretContainmentPrimitiveRefusesExistingMountCrossing(t *testing.T) {
@@ -53,9 +53,9 @@ func TestSecretSubtreeRefusesUnsafeEntriesBeforeCallback(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, access := range []func(context.Context, storage.Context, func(storage.Area) error) error{store.ReadSecrets, store.MutateSecrets} {
+			for _, access := range []func(context.Context, secretstore.Context, func(secretstore.Area) error) error{store.ReadSecrets, store.MutateSecrets} {
 				called := false
-				err := access(context.Background(), token, func(storage.Area) error { called = true; return nil })
+				err := access(context.Background(), token, func(secretstore.Area) error { called = true; return nil })
 				if err == nil || called {
 					t.Fatal("unsafe secret entry reached an authorized callback")
 				}

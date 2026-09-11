@@ -1,8 +1,6 @@
 package prerequisites
 
 import (
-	"context"
-
 	"github.com/crmarques/bootwright/internal/controller"
 )
 
@@ -57,16 +55,4 @@ type NativeResolvedPlan struct {
 	BeforeSHA256  string                        `json:"beforeSHA256"`
 	AfterSHA256   string                        `json:"afterSHA256"`
 	Digest        string                        `json:"digest"`
-}
-
-// NativeResolver may use disposable unprivileged staging for repository
-// metadata and maintained solver caches. It never applies a host transaction.
-type NativeResolver interface {
-	Resolve(context.Context, Platform, NativeRequirements, controller.DependencyVersions, SetupEgress) (NativeResolvedPlan, error)
-}
-
-// NativeInspector performs bounded local package and file verification without
-// consulting repository metadata or modifying installed state.
-type NativeInspector interface {
-	Check(context.Context, NativeResolvedPlan) (bool, error)
 }

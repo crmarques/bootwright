@@ -1,4 +1,4 @@
-package automation
+package ansible
 
 import (
 	"crypto/sha256"

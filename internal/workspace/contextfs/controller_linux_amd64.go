@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -24,7 +24,7 @@ type controllerStored struct {
 }
 
 func controllerFailure(code, message string) error {
-	return desiredstate.NewFailureWithRemediation(code, message, "", "repeat the same bastion setup command with its original input and compatible executable")
+	return diagnostics.NewFailureWithRemediation(code, message, "", "repeat the same bastion setup command with its original input and compatible executable")
 }
 
 func verifyControllerRootEntries(ctx context.Context, root *directory, registry contexts.Registry) error {
@@ -166,7 +166,7 @@ func controllerSnapshot(ctx context.Context, root *directory, registry contexts.
 			return prerequisites.StorageView{}, controllerStored{}, state("controller setup requires a ready context")
 		}
 		if record.Revision == "" {
-			return prerequisites.StorageView{}, controllerStored{}, desiredstate.NewFailure("context.input", "context has no desired state; run context update --name "+record.Name+" --input-dir <dir>", "")
+			return prerequisites.StorageView{}, controllerStored{}, diagnostics.NewFailure("context.input", "context has no desired state; run context update --name "+record.Name+" --input-dir <dir>", "")
 		}
 		sources, err := readSnapshot(ctx, root, record)
 		if err != nil {

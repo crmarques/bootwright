@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func TestUnconfiguredServiceAndCancellation(t *testing.T) {
@@ -26,7 +26,7 @@ func TestUnconfiguredServiceAndCancellation(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := tt.invoke(context.Background()); len(desiredstate.DiagnosticsOf(err)) != 1 {
+			if err := tt.invoke(context.Background()); len(diagnostics.Of(err)) != 1 {
 				t.Fatalf("unavailable result = %v", err)
 			}
 			ctx, cancel := context.WithCancel(context.Background())

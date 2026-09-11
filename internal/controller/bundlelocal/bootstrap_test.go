@@ -8,7 +8,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func pythonMetadataFixture(t *testing.T, versions ...string) []byte {
@@ -77,9 +77,9 @@ func TestAnsibleMinimumRefusesBeforeResolverEffects(t *testing.T) {
 	versions := controller.DefaultDependencyVersions()
 	versions.Ansible = "2.18.99"
 	_, err := resolver.Resolve(context.Background(), prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, versions, prerequisites.SetupEgress{})
-	diagnostics := desiredstate.DiagnosticsOf(err)
-	if len(diagnostics) != 1 || !strings.Contains(diagnostics[0].Message, prerequisites.MinimumBootstrapAnsibleVersion) {
-		t.Fatalf("unsupported override lacks minimum diagnostic: %+v", diagnostics)
+	found := diagnostics.Of(err)
+	if len(found) != 1 || !strings.Contains(found[0].Message, prerequisites.MinimumBootstrapAnsibleVersion) {
+		t.Fatalf("unsupported override lacks minimum diagnostic: %+v", found)
 	}
 	for _, version := range []string{"2.18.99", "2.19.0"} {
 		data := []byte(`{"info":{"version":"` + version + `","classifiers":["Programming Language :: Python :: 3.13"]}}`)
@@ -90,9 +90,9 @@ func TestAnsibleMinimumRefusesBeforeResolverEffects(t *testing.T) {
 					t.Fatalf("minimum compatible release rejected: %s %v", got, err)
 				}
 			} else {
-				diagnostics := desiredstate.DiagnosticsOf(err)
-				if len(diagnostics) != 1 || !strings.Contains(diagnostics[0].Message, prerequisites.MinimumBootstrapAnsibleVersion) {
-					t.Fatalf("unsupported publisher release lacks minimum diagnostic: %+v", diagnostics)
+				found := diagnostics.Of(err)
+				if len(found) != 1 || !strings.Contains(found[0].Message, prerequisites.MinimumBootstrapAnsibleVersion) {
+					t.Fatalf("unsupported publisher release lacks minimum diagnostic: %+v", found)
 				}
 			}
 		}

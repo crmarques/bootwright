@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"slices"
 
-	automation "github.com/crmarques/bootwright/ansible"
+	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type Installer struct {
@@ -59,7 +59,7 @@ func (installer Installer) invoke(ctx context.Context, area prerequisites.Bundle
 	if installer.ExecutionGuard == nil || area == nil || publish == nil && preparation == nil {
 		return result, failure("controller.setup", "the Ansible controller adapter is incomplete")
 	}
-	for name, expected := range automation.Assets() {
+	for name, expected := range ansible.Assets() {
 		actual, err := area.Read(ctx, "automation/"+name, len(expected)+1)
 		if err != nil || !slices.Equal(actual, expected) {
 			return result, failure("controller.identity", "the embedded controller automation does not match the approved execution bundle")
@@ -117,5 +117,5 @@ func actionResult(outcome string, intentRecorded bool) prerequisites.ActionResul
 }
 
 func failure(code, message string) error {
-	return desiredstate.NewFailureWithRemediation(code, message, "", "Preserve the exact dependency receipt and restore the qualified execution environment before retrying setup.")
+	return diagnostics.NewFailureWithRemediation(code, message, "", "Preserve the exact dependency receipt and restore the qualified execution environment before retrying setup.")
 }

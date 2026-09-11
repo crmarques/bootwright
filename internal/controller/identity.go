@@ -4,7 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 // LinuxInstalledIdentityV1 identifies the canonical installed-host evidence
@@ -108,5 +108,5 @@ func validInstalledIdentifier(value string, uuid bool) bool {
 }
 
 func invalidInstalledIdentity() error {
-	return desiredstate.NewFailure("controller.identity", "installed-host evidence is malformed or its provider is unsupported", "")
+	return diagnostics.NewFailure("controller.identity", "installed-host evidence is malformed or its provider is unsupported", "")
 }

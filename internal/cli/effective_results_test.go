@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	stateencoding "github.com/crmarques/bootwright/internal/desiredstate/encoding"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -66,7 +66,7 @@ func TestEffectiveSuccessPreservesCanonicalBytesAndNativeValues(t *testing.T) {
 }
 
 func TestEffectiveFailuresHaveNoPartialResult(t *testing.T) {
-	for _, failure := range []error{nil, contexts.StateError("context does not exist"), errors.New("private failure detail"), context.Canceled, context.DeadlineExceeded, desiredstate.NewFailure("api.required", "required field missing", "input.yaml")} {
+	for _, failure := range []error{nil, contexts.StateError("context does not exist"), errors.New("private failure detail"), context.Canceled, context.DeadlineExceeded, diagnostics.NewFailure("api.required", "required field missing", "input.yaml")} {
 		for _, mode := range []string{"text", "json"} {
 			record := &dispatchRecord{err: failure}
 			if failure != nil {

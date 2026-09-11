@@ -2,7 +2,6 @@ package prerequisites
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -13,8 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/crmarques/bootwright/internal/controller"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 // ErrBootstrapIncompatible means an otherwise valid retained resolution needs
@@ -37,13 +35,7 @@ func ValidateBootstrapAnsibleVersion(version string) error {
 			return nil
 		}
 	}
-	return desiredstate.NewFailure("controller.unsupported", "controller automation requires stable ansible-core "+MinimumBootstrapAnsibleVersion+" or newer for templating trust and strict Boolean semantics; set a compatible Environment dependencyVersions.ansible", "")
-}
-
-// BootstrapResolver may stage and execute a wheel-only resolver in a disposable
-// unprivileged workspace. It has no installed-host or shared-store authority.
-type BootstrapResolver interface {
-	Resolve(context.Context, Platform, controller.DependencyVersions, SetupEgress) (BootstrapDefinition, error)
+	return diagnostics.NewFailure("controller.unsupported", "controller automation requires stable ansible-core "+MinimumBootstrapAnsibleVersion+" or newer for templating trust and strict Boolean semantics; set a compatible Environment dependencyVersions.ansible", "")
 }
 
 // BootstrapDefinition freezes one authenticated publisher resolution. Source
@@ -94,7 +86,7 @@ func CanonicalBootstrap(value BootstrapDefinition) (BootstrapDefinition, error) 
 		value.Execution.Preload = []string{}
 	}
 	invalid := func() (BootstrapDefinition, error) {
-		return BootstrapDefinition{}, desiredstate.NewFailure("controller.unsupported", "resolved Python and Ansible bootstrap is malformed or exceeds its bounds", "")
+		return BootstrapDefinition{}, diagnostics.NewFailure("controller.unsupported", "resolved Python and Ansible bootstrap is malformed or exceeds its bounds", "")
 	}
 	if value.Format != "bootwright.controller.bootstrap-v1" || value.Platform.Architecture != "amd64" ||
 		(value.Platform.OS != "fedora" && value.Platform.OS != "rhel") || value.Platform.Release == "" ||
@@ -203,7 +195,7 @@ func ValidateBootstrap(value BootstrapDefinition) error {
 	actualJSON, _ := json.Marshal(value)
 	canonicalJSON, _ := json.Marshal(canonical)
 	if canonical.Digest != value.Digest || !bytes.Equal(actualJSON, canonicalJSON) {
-		return desiredstate.NewFailure("controller.state", "retained bootstrap resolution differs from its immutable digest", "")
+		return diagnostics.NewFailure("controller.state", "retained bootstrap resolution differs from its immutable digest", "")
 	}
 	return nil
 }

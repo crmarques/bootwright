@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	automation "github.com/crmarques/bootwright/ansible"
+	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
@@ -22,7 +22,11 @@ type Manager struct {
 	probe bundleProbe
 }
 
-func New() *Manager { return &Manager{fetch: fetchSource, probe: probeBundle} }
+func New(guard prerequisites.PythonExecutionGuard) *Manager {
+	return &Manager{fetch: fetchSource, probe: func(ctx context.Context, area prerequisites.BundleArea, definition prerequisites.Definition) error {
+		return probeBundle(ctx, guard, area, definition)
+	}}
+}
 
 func (m *Manager) Inspect(ctx context.Context, area prerequisites.BundleArea, definition prerequisites.Definition, execute bool) (inspection prerequisites.BundleInspection, err error) {
 	if area == nil {
@@ -158,7 +162,7 @@ func validateDefinition(definition prerequisites.Definition) (catalogRecord, err
 			return catalogRecord{}, err
 		}
 		bootstrap := definition.Bootstrap
-		if bootstrap.AutomationDigest != automation.Digest() {
+		if bootstrap.AutomationDigest != ansible.Digest() {
 			return catalogRecord{}, errors.Join(prerequisites.ErrBootstrapIncompatible, bundleFailure("retained bootstrap automation is incompatible with the current executable"))
 		}
 		foundation, _, err := compiledCatalog()

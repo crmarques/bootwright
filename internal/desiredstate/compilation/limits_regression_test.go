@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/desiredstate/yamlstream"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func nestedNativeValue(levels int) api.Value {
@@ -47,9 +48,9 @@ func TestExpandedDepthCeilingIsInclusiveAndStopsLaterNormalizers(t *testing.T) {
 				}
 				return
 			}
-			diagnostics := requireCompilationFailure(t, state, report, err)
-			if len(diagnostics) != 1 || diagnostics[0].Code != "input.limit" || !strings.Contains(diagnostics[0].Message, "64") || later != 0 {
-				t.Fatalf("expanded depth failed to stop admission: %#v, callbacks=%d", diagnostics, later)
+			sink := requireCompilationFailure(t, state, report, err)
+			if len(sink) != 1 || sink[0].Code != "input.limit" || !strings.Contains(sink[0].Message, "64") || later != 0 {
+				t.Fatalf("expanded depth failed to stop admission: %#v, callbacks=%d", sink, later)
 			}
 		})
 	}
@@ -74,9 +75,9 @@ func TestInheritedCopiesConsumeAggregateRepresentationBudget(t *testing.T) {
 				}
 				return
 			}
-			diagnostics := requireCompilationFailure(t, state, report, err)
-			if len(diagnostics) != 1 || diagnostics[0].Code != "input.limit" || !strings.Contains(diagnostics[0].Message, "1000000") || calls != 0 {
-				t.Fatalf("inherited copies escaped the pre-normalization ceiling: %#v, callbacks=%d", diagnostics, calls)
+			sink := requireCompilationFailure(t, state, report, err)
+			if len(sink) != 1 || sink[0].Code != "input.limit" || !strings.Contains(sink[0].Message, "1000000") || calls != 0 {
+				t.Fatalf("inherited copies escaped the pre-normalization ceiling: %#v, callbacks=%d", sink, calls)
 			}
 		})
 	}
@@ -109,12 +110,12 @@ func TestDiagnosticCeilingDeduplicatesAndStopsLaterValidators(t *testing.T) {
 					return nil
 				}})
 			state, report, err := compiler.Compile(context.Background(), sources(environmentYAML))
-			diagnostics := requireCompilationFailure(t, state, report, err)
-			if len(diagnostics) != min(count, desiredstate.MaxDiagnostics) {
-				t.Fatalf("distinct diagnostic count=%d", len(diagnostics))
+			sink := requireCompilationFailure(t, state, report, err)
+			if len(sink) != min(count, desiredstate.MaxDiagnostics) {
+				t.Fatalf("distinct diagnostic count=%d", len(sink))
 			}
 			limits := 0
-			for _, d := range diagnostics {
+			for _, d := range sink {
 				if d.Code == "input.limit" {
 					limits++
 					if d.Source != nil || d.Object != nil {
@@ -138,15 +139,15 @@ func TestDiagnosticCeilingStopsLaterPartialValidators(t *testing.T) {
 		compilation.Rules{ValidatePartial: func(api.Object, api.Catalog) []api.Issue { return repeatedIssues(1000) }},
 		compilation.Rules{ValidatePartial: func(api.Object, api.Catalog) []api.Issue { later++; return nil }})
 	state, report, err := compiler.Compile(context.Background(), sources(environmentYAML+"  defaults:\n    Secret: {type: opaque}\n"))
-	diagnostics := requireCompilationFailure(t, state, report, err)
-	if len(diagnostics) != desiredstate.MaxDiagnostics || later != 0 {
-		t.Fatal("partial validation continued past its ceiling", len(diagnostics), later)
+	sink := requireCompilationFailure(t, state, report, err)
+	if len(sink) != desiredstate.MaxDiagnostics || later != 0 {
+		t.Fatal("partial validation continued past its ceiling", len(sink), later)
 	}
 }
 
-type regressionParserFunc func(context.Context, []desiredstate.SourceFile) ([]desiredstate.Document, []desiredstate.Diagnostic, error)
+type regressionParserFunc func(context.Context, []desiredstate.SourceFile) ([]desiredstate.Document, []diagnostics.Diagnostic, error)
 
-func (f regressionParserFunc) Parse(ctx context.Context, files []desiredstate.SourceFile) ([]desiredstate.Document, []desiredstate.Diagnostic, error) {
+func (f regressionParserFunc) Parse(ctx context.Context, files []desiredstate.SourceFile) ([]desiredstate.Document, []diagnostics.Diagnostic, error) {
 	return f(ctx, files)
 }
 
@@ -162,10 +163,10 @@ func TestCompilerCancellationStopsAtEveryCallbackBoundary(t *testing.T) {
 			var parser compilation.SyntaxParser = yamlstream.Parser{}
 			switch phase {
 			case "parse":
-				parser = regressionParserFunc(func(ctx context.Context, files []desiredstate.SourceFile) ([]desiredstate.Document, []desiredstate.Diagnostic, error) {
-					documents, diagnostics, err := (yamlstream.Parser{}).Parse(ctx, files)
+				parser = regressionParserFunc(func(ctx context.Context, files []desiredstate.SourceFile) ([]desiredstate.Document, []diagnostics.Diagnostic, error) {
+					documents, sink, err := (yamlstream.Parser{}).Parse(ctx, files)
 					cancel()
-					return documents, diagnostics, err
+					return documents, sink, err
 				})
 				second.ValidatePartial = next
 			case "partial":

@@ -1,7 +1,6 @@
 package prerequisites
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -10,8 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/crmarques/bootwright/internal/controller"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 // ToolDefinition freezes publisher metadata for the Ansible dependency role.
@@ -30,20 +28,11 @@ type ToolFile struct {
 	Path   string `json:"path"`
 }
 
-type TargetToolCatalog interface {
-	// Select is pure: recover exact retained identities without metadata reads.
-	// Complete is false when setup must resolve a previously unseen requirement.
-	Select([]controller.ToolRequest, []DependencySource) ([]ToolDefinition, bool, error)
-	// Resolve reads bounded publisher metadata through the explicit route. It
-	// does not acquire payloads, create files, run tools, or mutate host state.
-	Resolve(context.Context, []controller.ToolRequest, SetupEgress) ([]ToolDefinition, error)
-}
-
 // WithTools creates a fresh immutable dependency closure. The base catalog
 // stays identifiable while exact resolved tool metadata names its own bundle.
 func WithTools(base Definition, tools []ToolDefinition) (Definition, error) {
 	invalid := func() (Definition, error) {
-		return Definition{}, desiredstate.NewFailure("controller.unsupported", "resolved target tool closure is malformed or exceeds its bound", "")
+		return Definition{}, diagnostics.NewFailure("controller.unsupported", "resolved target tool closure is malformed or exceeds its bound", "")
 	}
 	if len(tools) > 128 || len(base.Tools) != 0 {
 		return invalid()

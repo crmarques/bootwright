@@ -9,11 +9,8 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
-
-type SyntaxParser interface {
-	Parse(context.Context, []desiredstate.SourceFile) ([]desiredstate.Document, []desiredstate.Diagnostic, error)
-}
 
 // Rules are pure, component-owned transformations and admission constraints.
 type Rules struct {
@@ -47,28 +44,15 @@ func NewCompiler(parser SyntaxParser, selection SelectGraph, rules ...Rules) Com
 	return Compiler{parser: parser, rules: slices.Clone(rules), selectGraph: selection}
 }
 
-type Counts struct {
-	FilesSeen      int `json:"filesSeen"`
-	ObjectsDecoded int `json:"objectsDecoded"`
-}
-type Report struct {
-	Diagnostics               []desiredstate.Diagnostic `json:"-"`
-	Counts                    Counts                    `json:"counts"`
-	ExcludedContainerClusters []string                  `json:"excludedContainerClusters"`
-	ExcludedStorageClusters   []string                  `json:"excludedStorageClusters"`
-	ExcludedResourceFiles     []string                  `json:"excludedResourceFiles"`
-	Advisories                []desiredstate.Diagnostic `json:"advisories"`
-}
-
 // State exposes immutable authored and effective values separately. Provenance
 // stays outside both representations and never conveys execution authority.
 type State struct {
 	authored  api.Catalog
 	effective api.Catalog
-	origins   map[string]desiredstate.SourceLocation
+	origins   map[string]diagnostics.SourceLocation
 }
 
-func NewState(authored, effective api.Catalog, origins map[string]desiredstate.SourceLocation) *State {
+func NewState(authored, effective api.Catalog, origins map[string]diagnostics.SourceLocation) *State {
 	return &State{
 		authored:  canonicalCatalog(authored.Objects()),
 		effective: canonicalCatalog(effective.Objects()),
@@ -78,7 +62,7 @@ func NewState(authored, effective api.Catalog, origins map[string]desiredstate.S
 
 func (s *State) Authored() api.Catalog  { return s.authored }
 func (s *State) Effective() api.Catalog { return s.effective }
-func (s *State) Origin(identity string) (desiredstate.SourceLocation, bool) {
+func (s *State) Origin(identity string) (diagnostics.SourceLocation, bool) {
 	origin, ok := s.origins[identity]
 	return origin, ok
 }
@@ -96,7 +80,7 @@ func (c Compiler) Compile(ctx context.Context, sources desiredstate.Sources) (*S
 	}
 	ds := newDiagnostics(ctx)
 	if err != nil {
-		failures := desiredstate.DiagnosticsOf(err)
+		failures := diagnostics.Of(err)
 		if len(failures) == 0 {
 			return nil, nil, err
 		}
@@ -108,7 +92,7 @@ func (c Compiler) Compile(ctx context.Context, sources desiredstate.Sources) (*S
 		}
 		return compilationFailure(ctx, ds)
 	}
-	report := &Report{Counts: Counts{FilesSeen: len(sources.Files)}, ExcludedContainerClusters: []string{}, ExcludedStorageClusters: []string{}, ExcludedResourceFiles: []string{}, Advisories: []desiredstate.Diagnostic{}}
+	report := &Report{Counts: Counts{FilesSeen: len(sources.Files)}, ExcludedContainerClusters: []string{}, ExcludedStorageClusters: []string{}, ExcludedResourceFiles: []string{}, Advisories: []diagnostics.Diagnostic{}}
 	environment := selectingEnvironment(documents, parseDiagnostics, ds)
 	if environment == nil {
 		return compilationFailure(ctx, ds)
@@ -319,19 +303,19 @@ func (c Compiler) Compile(ctx context.Context, sources desiredstate.Sources) (*S
 		}
 	}
 	authored := []api.Object{}
-	origins := map[string]desiredstate.SourceLocation{}
+	origins := map[string]diagnostics.SourceLocation{}
 	for _, record := range records {
 		authored = append(authored, record.authored)
-		origins[record.object.Identity()] = desiredstate.SourceLocation{Path: record.path, Document: record.document}
+		origins[record.object.Identity()] = diagnostics.SourceLocation{Path: record.path, Document: record.document}
 	}
 	return NewState(api.NewCatalog(authored), catalog, origins), report, nil
 }
 
-func compilationFailure(ctx context.Context, ds *diagnostics) (*State, *Report, error) {
+func compilationFailure(ctx context.Context, ds *diagnosticSink) (*State, *Report, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
-	return nil, nil, &desiredstate.Failure{Diagnostics: ds.sorted()}
+	return nil, nil, &diagnostics.Failure{Diagnostics: ds.sorted()}
 }
 func catalogOf(records []*objectRecord) api.Catalog {
 	objects := make([]api.Object, 0, len(records))

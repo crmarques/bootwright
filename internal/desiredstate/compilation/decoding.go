@@ -8,23 +8,24 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 var decimalInteger = regexp.MustCompile(`^[+-]?[0-9]+$`)
 var decimalNumber = regexp.MustCompile(`^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$`)
 
 type decoder struct {
-	document    desiredstate.Document
-	diagnostics *diagnostics
-	locations   map[string]desiredstate.SourceLocation
-	failed      bool
+	document  desiredstate.Document
+	sink      *diagnosticSink
+	locations map[string]diagnostics.SourceLocation
+	failed    bool
 }
 
-func decodeDocument(document desiredstate.Document, diagnostics *diagnostics) *objectRecord {
+func decodeDocument(document desiredstate.Document, sink *diagnosticSink) *objectRecord {
 	if document.IsEmpty() {
 		return nil
 	}
-	d := decoder{document: document, diagnostics: diagnostics, locations: map[string]desiredstate.SourceLocation{}}
+	d := decoder{document: document, sink: sink, locations: map[string]diagnostics.SourceLocation{}}
 	root := documentBody(document)
 	if root == nil || root.Kind != desiredstate.MappingKind {
 		d.fail(root, "yaml.shape", "$", "a desired-state document must be a mapping")
@@ -71,7 +72,7 @@ func decodeDocument(document desiredstate.Document, diagnostics *diagnostics) *o
 		return nil
 	}
 	o := api.NewObject(kind, value.Get("metadata", "name").Text(), value.Get("metadata", "labels"), value.Get("spec"))
-	return &objectRecord{object: o, authored: o, path: document.Path, document: document.Index, locations: d.locations, inherited: map[string]desiredstate.SourceLocation{}}
+	return &objectRecord{object: o, authored: o, path: document.Path, document: document.Index, locations: d.locations, inherited: map[string]diagnostics.SourceLocation{}}
 }
 
 func documentBody(doc desiredstate.Document) *desiredstate.Node {
@@ -102,20 +103,20 @@ func nodeText(node *desiredstate.Node) string {
 
 func (d *decoder) fail(node *desiredstate.Node, code, field, message string) {
 	d.failed = true
-	location := desiredstate.SourceLocation{Path: d.document.Path, Document: d.document.Index}
+	location := diagnostics.SourceLocation{Path: d.document.Path, Document: d.document.Index}
 	if node != nil {
 		location.Line = node.Line
 		location.Column = node.Column
 	}
-	d.diagnostics.add(desiredstate.Diagnostic{Severity: "error", Code: code, Message: message, Source: &location, Field: field})
+	d.sink.add(diagnostics.Diagnostic{Severity: "error", Code: code, Message: message, Source: &location, Field: field})
 }
 
 func (d *decoder) value(node *desiredstate.Node, shape *api.Shape, path string) api.Value {
-	if node == nil || d.diagnostics.stopped() {
+	if node == nil || d.sink.stopped() {
 		return api.Value{}
 	}
 	if _, recorded := d.locations[path]; !recorded {
-		d.locations[path] = desiredstate.SourceLocation{Path: d.document.Path, Document: d.document.Index, Line: node.Line, Column: node.Column}
+		d.locations[path] = diagnostics.SourceLocation{Path: d.document.Path, Document: d.document.Index, Line: node.Line, Column: node.Column}
 	}
 	if node.Kind == desiredstate.AliasKind || node.Anchor != "" {
 		d.fail(node, "yaml.alias", path, "anchors and aliases are not permitted")
@@ -150,7 +151,7 @@ func (d *decoder) value(node *desiredstate.Node, shape *api.Shape, path string) 
 		}
 		fields := []api.FieldValue{}
 		seen := map[string]bool{}
-		for i := 0; i+1 < len(node.Content) && !d.diagnostics.stopped(); i += 2 {
+		for i := 0; i+1 < len(node.Content) && !d.sink.stopped(); i += 2 {
 			key, n := node.Content[i], node.Content[i+1]
 			if key.Kind != desiredstate.ScalarKind || scalarType(key) != api.String {
 				d.fail(key, "yaml.shape", path, "mapping keys must be strings")
@@ -215,7 +216,7 @@ func (d *decoder) value(node *desiredstate.Node, shape *api.Shape, path string) 
 		}
 		items := make([]api.Value, 0, len(node.Content))
 		for i, n := range node.Content {
-			if d.diagnostics.stopped() {
+			if d.sink.stopped() {
 				break
 			}
 			childPath := path

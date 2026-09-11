@@ -12,15 +12,15 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
-func secretCleanupFixture(t *testing.T) (*Store, storage.Context, string) {
+func secretCleanupFixture(t *testing.T) (*Store, secretstore.Context, string) {
 	t.Helper()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	token := secretToken(record)
-	err := store.MutateSecrets(context.Background(), token, func(area storage.Area) error {
+	err := store.MutateSecrets(context.Background(), token, func(area secretstore.Area) error {
 		if err := area.EnsureDirectory(context.Background(), "parts"); err != nil {
 			return err
 		}
@@ -32,7 +32,7 @@ func secretCleanupFixture(t *testing.T) (*Store, storage.Context, string) {
 			return err
 		}
 		outcome, err := area.Replace(context.Background(), "store.json", []byte("published metadata\n"), expected)
-		if err == nil && outcome != storage.Committed {
+		if err == nil && outcome != secretstore.Committed {
 			return errors.New("fixture store was not durably committed")
 		}
 		return err
@@ -43,7 +43,7 @@ func secretCleanupFixture(t *testing.T) (*Store, storage.Context, string) {
 	return store, token, filepath.Join(store.options.Root, "contexts", token.Name, "secrets")
 }
 
-func observeSecretCleanup(ctx context.Context, area storage.Area) ([]byte, error) {
+func observeSecretCleanup(ctx context.Context, area secretstore.Area) ([]byte, error) {
 	data, exists, err := area.ReadMutable(ctx, "store.json", 8<<20)
 	if err != nil || !exists {
 		return nil, errors.New("cleanup store is missing")
@@ -59,7 +59,7 @@ func observeSecretCleanup(ctx context.Context, area storage.Area) ([]byte, error
 func TestSecretPrunePreservesPublicationPhases(t *testing.T) {
 	store, token, root := secretCleanupFixture(t)
 	ctx := context.Background()
-	err := store.MutateSecrets(ctx, token, func(area storage.Area) error {
+	err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 		expected, err := observeSecretCleanup(ctx, area)
 		if err != nil {
 			return err
@@ -78,7 +78,7 @@ func TestSecretPrunePreservesPublicationPhases(t *testing.T) {
 		}
 		replacement := []byte("replacement metadata\n")
 		outcome, err := area.Replace(ctx, "store.json", replacement, expected)
-		if err != nil || outcome != storage.Committed {
+		if err != nil || outcome != secretstore.Committed {
 			return errors.New("replacement was not durably committed")
 		}
 		if err := area.WriteExclusive(ctx, "after-publication", nil); err == nil {
@@ -102,7 +102,7 @@ func TestSecretPruneRejectsUnobservedUnsafeAndReadOnlyTargets(t *testing.T) {
 		t.Run(strings.ReplaceAll(target, "/", "_"), func(t *testing.T) {
 			store, token, root := secretCleanupFixture(t)
 			ctx := context.Background()
-			err := store.MutateSecrets(ctx, token, func(area storage.Area) error {
+			err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 				expected, _, err := area.ReadMutable(ctx, "store.json", 8<<20)
 				if err != nil {
 					return err
@@ -119,7 +119,7 @@ func TestSecretPruneRejectsUnobservedUnsafeAndReadOnlyTargets(t *testing.T) {
 	}
 	store, token, root := secretCleanupFixture(t)
 	ctx := context.Background()
-	err := store.ReadSecrets(ctx, token, func(area storage.Area) error {
+	err := store.ReadSecrets(ctx, token, func(area secretstore.Area) error {
 		expected, err := observeSecretCleanup(ctx, area)
 		if err != nil {
 			return err
@@ -180,7 +180,7 @@ func TestSecretPruneRejectsSubstitution(t *testing.T) {
 					return os.WriteFile(path, []byte("old encrypted artifact"), 0600)
 				}
 			}
-			err := store.MutateSecrets(ctx, token, func(area storage.Area) error {
+			err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 				expected, err := observeSecretCleanup(ctx, area)
 				if err != nil {
 					return err
@@ -217,7 +217,7 @@ func TestSecretPruneRequiresDurabilityBeforeUnlink(t *testing.T) {
 				}
 				return nil
 			}
-			err := store.MutateSecrets(ctx, token, func(area storage.Area) error {
+			err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 				expected, err := observeSecretCleanup(ctx, area)
 				if err != nil {
 					return err
@@ -238,7 +238,7 @@ func TestSecretPruneRequiresDurabilityBeforeUnlink(t *testing.T) {
 func TestSecretPruneRejectsUncertainPublication(t *testing.T) {
 	store, token, root := secretCleanupFixture(t)
 	ctx := context.Background()
-	err := store.MutateSecrets(ctx, token, func(area storage.Area) error {
+	err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 		expected, err := observeSecretCleanup(ctx, area)
 		if err != nil {
 			return err
@@ -252,7 +252,7 @@ func TestSecretPruneRejectsUncertainPublication(t *testing.T) {
 		replacement := []byte("replacement metadata\n")
 		outcome, err := area.Replace(ctx, "store.json", replacement, expected)
 		store.fail = nil
-		if err == nil || outcome != storage.Uncertain {
+		if err == nil || outcome != secretstore.Uncertain {
 			return errors.New("publication was not uncertain")
 		}
 		if _, _, err := area.ReadMutable(ctx, "store.json", 8<<20); err != nil {
@@ -272,7 +272,7 @@ func TestSecretPruneRejectsUncertainPublication(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "parts", "old.enc")); err != nil {
 		t.Fatal("uncertain publication removed prior material", err)
 	}
-	if err := store.MutateSecrets(ctx, token, func(area storage.Area) error {
+	if err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 		expected, err := observeSecretCleanup(ctx, area)
 		if err != nil {
 			return err
@@ -295,14 +295,14 @@ func TestSecretPruneRunsUnderExclusiveRootLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	called := false
-	err = store.MutateSecrets(ctx, token, func(storage.Area) error { called = true; return nil })
+	err = store.MutateSecrets(ctx, token, func(secretstore.Area) error { called = true; return nil })
 	if err == nil || called {
 		t.Fatal("mutator entered cleanup while a root reader was active")
 	}
 	if err := syscall.Flock(int(root.Fd()), syscall.LOCK_UN); err != nil {
 		t.Fatal(err)
 	}
-	err = store.MutateSecrets(ctx, token, func(area storage.Area) error {
+	err = store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 		expected, err := observeSecretCleanup(ctx, area)
 		if err != nil {
 			return err
@@ -321,7 +321,7 @@ func TestSecretPruneRunsUnderExclusiveRootLock(t *testing.T) {
 func TestSecretPruneInterruptedRemovalCanResume(t *testing.T) {
 	store, token, root := secretCleanupFixture(t)
 	ctx := context.Background()
-	if err := store.MutateSecrets(ctx, token, func(area storage.Area) error {
+	if err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 		return area.WriteExclusive(ctx, "parts/second.enc", []byte("another unused artifact"))
 	}); err != nil {
 		t.Fatal(err)
@@ -332,7 +332,7 @@ func TestSecretPruneInterruptedRemovalCanResume(t *testing.T) {
 		}
 		return nil
 	}
-	err := store.MutateSecrets(ctx, token, func(area storage.Area) error {
+	err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 		expected, err := observeSecretCleanup(ctx, area)
 		if err != nil {
 			return err
@@ -349,7 +349,7 @@ func TestSecretPruneInterruptedRemovalCanResume(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "parts", "second.enc")); err != nil {
 		t.Fatal("interrupted cleanup continued removing artifacts", err)
 	}
-	err = store.MutateSecrets(ctx, token, func(area storage.Area) error {
+	err = store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 		expected, err := observeSecretCleanup(ctx, area)
 		if err != nil {
 			return err
@@ -383,7 +383,7 @@ func TestSecretPruneFreesCapacityWithoutAnotherArtifact(t *testing.T) {
 	if err := orphan.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.MutateSecrets(ctx, token, func(area storage.Area) error {
+	if err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 		return area.WriteExclusive(ctx, "parts/no-capacity.enc", []byte("cannot fit"))
 	}); err == nil {
 		t.Fatal("publication exceeded the total physical limit")
@@ -393,7 +393,7 @@ func TestSecretPruneFreesCapacityWithoutAnotherArtifact(t *testing.T) {
 		created = created || point == "create-file"
 		return nil
 	}
-	err = store.MutateSecrets(ctx, token, func(area storage.Area) error {
+	err = store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 		expected, err := observeSecretCleanup(ctx, area)
 		if err != nil {
 			return err

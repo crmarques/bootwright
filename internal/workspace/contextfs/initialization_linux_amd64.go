@@ -8,7 +8,7 @@ import (
 	"errors"
 	"syscall"
 
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -193,7 +193,7 @@ func (t *transaction) Configuration(ctx context.Context, id string) ([]byte, err
 	return data, nil
 }
 
-func (t *transaction) InitializeSecrets(ctx context.Context, id string, callback func(storage.Area) error) error {
+func (t *transaction) InitializeSecrets(ctx context.Context, id string, callback func(secretstore.Area) error) error {
 	if err := t.available(ctx); err != nil {
 		return err
 	}

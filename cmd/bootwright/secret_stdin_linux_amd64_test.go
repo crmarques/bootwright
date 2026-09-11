@@ -52,10 +52,13 @@ func TestComposedSecretStdinIsLazyAndExact(t *testing.T) {
 	}
 	writer.Close()
 	reads := 0
-	services := wireContextServices(repository, repository, nil, secretInputFunc(func(ctx context.Context, buffer []byte) (int, error) {
+	deps := testContextWiring(t, root)
+	deps.Repository, deps.Workspace = repository, repository
+	deps.SecretInput = secretInputFunc(func(ctx context.Context, buffer []byte) (int, error) {
 		reads++
 		return readInputFD(ctx, int(reader.Fd()), buffer)
-	}), testContextWiring(t, root))
+	})
+	services := assembleServices(deps)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	contextRun(t, services, 0, "secret", "encryption", "init")
 	stdout, stderr := contextRun(t, services, 0, "secret", "set", "--name", "opaque", "--value-stdin")

@@ -8,7 +8,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/availability"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/spf13/cobra"
 )
 
@@ -217,7 +217,7 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return r.failure(command, path, "runtime.deadline", "operation deadline exceeded", 1, selectedJSON(command))
 	}
-	if diagnostics := desiredstate.DiagnosticsOf(err); len(diagnostics) != 0 {
+	if diagnostics := diagnostics.Of(err); len(diagnostics) != 0 {
 		if handled, presentErr := r.writeNegativeSecretCheck(command, path, result, diagnostics); handled {
 			if presentErr != nil {
 				return 1

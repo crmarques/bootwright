@@ -3,9 +3,10 @@ package compilation
 import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-func selectingEnvironment(documents []desiredstate.Document, parseDiagnostics []desiredstate.Diagnostic, ds *diagnostics) *objectRecord {
+func selectingEnvironment(documents []desiredstate.Document, parseDiagnostics []diagnostics.Diagnostic, ds *diagnosticSink) *objectRecord {
 	var selected *objectRecord
 	candidates := []desiredstate.Document{}
 	invalid := []desiredstate.Document{}
@@ -45,12 +46,12 @@ func selectingEnvironment(documents []desiredstate.Document, parseDiagnostics []
 			decodeDocument(document, ds)
 		}
 		if len(invalid) == 0 {
-			ds.add(desiredstate.Diagnostic{Severity: "error", Code: "api.environment", Message: "exactly one Environment is required"})
+			ds.add(diagnostics.Diagnostic{Severity: "error", Code: "api.environment", Message: "exactly one Environment is required"})
 		}
 	} else {
 		for _, document := range candidates {
-			location := desiredstate.SourceLocation{Path: document.Path, Document: document.Index}
-			if !ds.add(desiredstate.Diagnostic{Severity: "error", Code: "api.environment", Message: "exactly one Environment is required", Source: &location}) {
+			location := diagnostics.SourceLocation{Path: document.Path, Document: document.Index}
+			if !ds.add(diagnostics.Diagnostic{Severity: "error", Code: "api.environment", Message: "exactly one Environment is required", Source: &location}) {
 				break
 			}
 		}

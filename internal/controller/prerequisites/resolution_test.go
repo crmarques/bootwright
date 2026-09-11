@@ -9,7 +9,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type resolvingFixture struct {
@@ -316,7 +316,7 @@ func TestSelectedNativeClientIsAdmittedBeforeAcquisition(t *testing.T) {
 	if err == nil {
 		t.Fatal("unqualified native client was accepted")
 	}
-	if diagnostics := desiredstate.DiagnosticsOf(err); len(diagnostics) != 1 || diagnostics[0].Code != "controller.unsupported" {
+	if diagnostics := diagnostics.Of(err); len(diagnostics) != 1 || diagnostics[0].Code != "controller.unsupported" {
 		t.Fatalf("refusal code = %#v", diagnostics)
 	}
 	if len(f.catalog.admitted) == 0 || !f.catalog.admitted[0].LibvirtClient || !f.catalog.admitted[0].ContainerRuntime {

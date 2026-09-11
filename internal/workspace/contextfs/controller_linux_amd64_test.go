@@ -16,7 +16,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -48,7 +48,7 @@ func publishControllerState(t *testing.T, store *Store, scope prerequisites.Setu
 		return err
 	})
 	if err != nil {
-		t.Fatalf("controller publication failed: %#v", desiredstate.DiagnosticsOf(err))
+		t.Fatalf("controller publication failed: %#v", diagnostics.Of(err))
 	}
 }
 
@@ -426,7 +426,7 @@ func TestControllerBundleCapabilityBoundsModesSealAndLifetime(t *testing.T) {
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("bundle operation failed: %#v", desiredstate.DiagnosticsOf(err))
+		t.Fatalf("bundle operation failed: %#v", diagnostics.Of(err))
 	}
 	if err := escaped.Verify(context.Background()); err == nil {
 		t.Fatal("escaped bundle capability remained usable")

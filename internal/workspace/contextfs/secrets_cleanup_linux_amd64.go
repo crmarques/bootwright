@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
 func (a *secretArea) observe(path string, parent, identity syscall.Stat_t) {
@@ -115,7 +115,7 @@ func (a *secretArea) Prune(ctx context.Context, expectedStore []byte, paths []st
 	return nil
 }
 
-func (a *secretArea) PruneUnpublished(ctx context.Context, guards []storage.RecordExpectation, paths []string) error {
+func (a *secretArea) PruneUnpublished(ctx context.Context, guards []secretstore.RecordExpectation, paths []string) error {
 	if err := a.available(ctx, true); err != nil {
 		return err
 	}

@@ -13,6 +13,7 @@ import (
 	"syscall"
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -53,7 +54,7 @@ func safeError(err error) error {
 	if err == nil {
 		return nil
 	}
-	var failure *desiredstate.Failure
+	var failure *diagnostics.Failure
 	if errors.As(err, &failure) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
@@ -517,7 +518,7 @@ func (s *Store) ReadInputs(ctx context.Context, name, expectedID string) (desire
 				return desiredstate.Sources{}, state("context is incomplete; repeat its init or delete command")
 			}
 			if record.Revision == "" {
-				return desiredstate.Sources{}, desiredstate.NewFailure("context.input", "context has no desired state; run context update --name "+record.Name+" --input-dir <dir>", "")
+				return desiredstate.Sources{}, diagnostics.NewFailure("context.input", "context has no desired state; run context update --name "+record.Name+" --input-dir <dir>", "")
 			}
 			result, err := readSnapshot(ctx, root, record)
 			return result, safeError(err)

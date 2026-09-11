@@ -13,9 +13,9 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
-	"github.com/crmarques/bootwright/internal/secrets/localstore"
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/secrets/localkeyring"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -317,8 +317,8 @@ func TestEagerSecretInitializationNeedsNoDesiredInput(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		err = tx.InitializeSecrets(context.Background(), record.ID, func(area storage.Area) error {
-			session, err := localstore.New().Initialize(context.Background(), secretToken(record), area, nil)
+		err = tx.InitializeSecrets(context.Background(), record.ID, func(area secretstore.Area) error {
+			session, err := localkeyring.New().Initialize(context.Background(), secretToken(record), area, nil)
 			if err != nil {
 				return err
 			}
@@ -344,7 +344,7 @@ func TestEagerSecretInitializationNeedsNoDesiredInput(t *testing.T) {
 	if err != nil || snapshot.Context != secretToken(ready) || snapshot.SecretStoreType != "local-keyring" || len(snapshot.Inputs.Files) != 0 {
 		t.Fatalf("empty snapshot: %#v %v", snapshot, err)
 	}
-	err = storage.NewAccess(store, storage.NewCatalog(localstore.New()), nil).View(context.Background(), snapshot.Context, true, func(session storage.StoreSession, _ storage.Selection) error {
+	err = secretstore.NewAccess(store, secretstore.NewCatalog(localkeyring.New()), nil).View(context.Background(), snapshot.Context, true, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 		_, err := session.Inspect(context.Background())
 		return err
 	})
@@ -352,7 +352,7 @@ func TestEagerSecretInitializationNeedsNoDesiredInput(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = store.ReadInputs(context.Background(), "empty", ready.ID)
-	diagnostics := desiredstate.DiagnosticsOf(err)
+	diagnostics := diagnostics.Of(err)
 	if len(diagnostics) != 1 || diagnostics[0].Code != "context.input" || diagnostics[0].Message != "context has no desired state; run context update --name empty --input-dir <dir>" {
 		t.Fatalf("missing-input guidance: %#v", diagnostics)
 	}

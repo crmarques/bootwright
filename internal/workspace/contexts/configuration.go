@@ -6,14 +6,14 @@ import (
 	"io"
 	"unicode/utf8"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"go.yaml.in/yaml/v3"
 )
 
 const MaxConfigurationBytes = 64 << 10
 
 func ConfigurationError(message string) error {
-	return desiredstate.NewFailure("context.configuration", message, "")
+	return diagnostics.NewFailure("context.configuration", message, "")
 }
 
 func DefaultConfiguration(name string) Configuration {

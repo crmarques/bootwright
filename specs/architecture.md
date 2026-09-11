@@ -589,23 +589,6 @@ Define successful result schemas and concrete effect interfaces with the first
 implemented use case, following the
 [communication contract](#dependency-direction-and-communication).
 
-### Transition
-
-The map and catalog above name the target layout. These packages still carry
-their earlier names until [milestones](milestones.md#candidates) candidate C18
-lands; that work removes this table.
-
-| Current | Target |
-| --- | --- |
-| diagnostics and typed failures in `internal/desiredstate` | `internal/diagnostics` |
-| `internal/secrets/storage` | `internal/secrets/secretstore` |
-| `internal/secrets/localstore` | `internal/secrets/localkeyring` |
-| `internal/controller/invocation` | `internal/controller/privilege` |
-| `ansible` directory declaring `package automation` | `package ansible` |
-| `cmd/bootwright/context_ports.go` and one `wiring.go` | `wiring_account.go` and per-domain `wiring_<domain>.go` |
-| ports and requests spread across service files | `contracts.go` and `requests.go` in every service package |
-| command paths repeated in `operation.go` and `invocation.go` | `privileged` and `implemented` flags on the catalog |
-
 ## Go and Ansible responsibility boundary
 
 Go owns:

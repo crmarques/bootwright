@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -112,7 +113,7 @@ func TestInputCleanupWaitsForDurableSelectionAndResumes(t *testing.T) {
 				}
 			}
 			if strings.HasPrefix(point, "before-revision-") || point == "before-context-unlink" {
-				if !strings.Contains(desiredstate.DiagnosticsOf(err)[0].Message, "was published") {
+				if !strings.Contains(diagnostics.Of(err)[0].Message, "was published") {
 					t.Fatal("post-publication failure did not report committed input")
 				}
 			}

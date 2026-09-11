@@ -7,7 +7,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type Inspector struct{}
@@ -30,5 +30,5 @@ func unsupported(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return desiredstate.NewFailure("controller.unsupported", "local host inspection requires Linux/amd64", "")
+	return diagnostics.NewFailure("controller.unsupported", "local host inspection requires Linux/amd64", "")
 }

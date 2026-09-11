@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/secrets/localstore"
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/localkeyring"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -135,8 +135,8 @@ func TestInitializationFlushesReusedFilesBeforeReady(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if err := tx.InitializeSecrets(ctx, record.ID, func(area storage.Area) error {
-				session, err := localstore.New().Initialize(ctx, secretToken(record), area, nil)
+			if err := tx.InitializeSecrets(ctx, record.ID, func(area secretstore.Area) error {
+				session, err := localkeyring.New().Initialize(ctx, secretToken(record), area, nil)
 				if err != nil {
 					return err
 				}

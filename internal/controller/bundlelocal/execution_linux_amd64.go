@@ -16,7 +16,7 @@ import (
 	"sync"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"golang.org/x/sys/unix"
 )
 
@@ -408,5 +408,5 @@ func (reader executionReader) Read(data []byte) (int, error) {
 }
 
 func executionFailure(code, message string) error {
-	return desiredstate.NewFailureWithRemediation(code, message, "", "Restore the qualified host execution foundation before retrying setup or preflight.")
+	return diagnostics.NewFailureWithRemediation(code, message, "", "Restore the qualified host execution foundation before retrying setup or preflight.")
 }

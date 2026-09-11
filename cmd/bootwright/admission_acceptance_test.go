@@ -16,6 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	effectiveencoding "github.com/crmarques/bootwright/internal/desiredstate/encoding"
 	"github.com/crmarques/bootwright/internal/desiredstate/inputfs"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func exampleSources(t *testing.T) desiredstate.Sources {
@@ -29,7 +30,7 @@ func exampleSources(t *testing.T) desiredstate.Sources {
 	}
 	sources, err := (inputfs.Reader{}).Read(context.Background(), []string{root})
 	if err != nil {
-		t.Fatal(desiredstate.DiagnosticsOf(err))
+		t.Fatal(diagnostics.Of(err))
 	}
 	return sources
 }
@@ -54,7 +55,7 @@ func compileAcceptance(t *testing.T, sources desiredstate.Sources) (*compilation
 	t.Helper()
 	state, report, err := wireCompiler().Compile(context.Background(), sources)
 	if err != nil {
-		t.Fatal(desiredstate.DiagnosticsOf(err))
+		t.Fatal(diagnostics.Of(err))
 	}
 	return state, report
 }
@@ -238,11 +239,11 @@ func TestActualCompilerCanonicalEffectiveOutputIsInspectionOnly(t *testing.T) {
 		t.Fatal("effective access incorrectly became ordinary authored input")
 	} else {
 		found := false
-		for _, d := range desiredstate.DiagnosticsOf(err) {
+		for _, d := range diagnostics.Of(err) {
 			found = found || d.Object != nil && d.Object.Kind == string(api.Machine) && d.Field == "$.spec.access"
 		}
 		if !found {
-			t.Fatal("effective reload did not reject authored Machine access", desiredstate.DiagnosticsOf(err))
+			t.Fatal("effective reload did not reject authored Machine access", diagnostics.Of(err))
 		}
 	}
 	// Machine network declarations remain present; composed native addresses
@@ -360,7 +361,7 @@ func admissionFingerprint(t *testing.T, sources desiredstate.Sources) []byte {
 		if state != nil || report != nil {
 			t.Fatal("failed compilation returned partial successful state")
 		}
-		data, jsonErr := json.Marshal(desiredstate.DiagnosticsOf(err))
+		data, jsonErr := json.Marshal(diagnostics.Of(err))
 		if jsonErr != nil {
 			t.Fatal(jsonErr)
 		}

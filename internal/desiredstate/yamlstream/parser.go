@@ -12,44 +12,45 @@ import (
 	"unicode/utf8"
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"go.yaml.in/yaml/v3"
 )
 
 type Parser struct{}
 
-func (Parser) Parse(ctx context.Context, files []desiredstate.SourceFile) ([]desiredstate.Document, []desiredstate.Diagnostic, error) {
+func (Parser) Parse(ctx context.Context, files []desiredstate.SourceFile) ([]desiredstate.Document, []diagnostics.Diagnostic, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
 	if len(files) > desiredstate.MaxFiles {
-		err := desiredstate.NewFailure("input.limit", "YAML source files exceeds the ceiling of 4096", "")
-		return nil, desiredstate.DiagnosticsOf(err), err
+		err := diagnostics.NewFailure("input.limit", "YAML source files exceeds the ceiling of 4096", "")
+		return nil, diagnostics.Of(err), err
 	}
 	ordered := slices.Clone(files)
 	slices.SortStableFunc(ordered, func(a, b desiredstate.SourceFile) int {
 		return strings.Compare(a.Path(), b.Path())
 	})
 	if err := checkFileSizes(ctx, ordered); err != nil {
-		return nil, desiredstate.DiagnosticsOf(err), err
+		return nil, diagnostics.Of(err), err
 	}
 	p := parseSession{ctx: ctx}
 	for _, file := range ordered {
 		if err := p.parseFile(file); err != nil {
-			if failure := desiredstate.DiagnosticsOf(err); len(failure) != 0 {
+			if failure := diagnostics.Of(err); len(failure) != 0 {
 				p.diagnostics = append(p.diagnostics, failure...)
 			}
-			desiredstate.SortDiagnostics(p.diagnostics)
+			diagnostics.Sort(p.diagnostics)
 			return nil, p.diagnostics, err
 		}
 	}
-	desiredstate.SortDiagnostics(p.diagnostics)
+	diagnostics.Sort(p.diagnostics)
 	return p.documents, p.diagnostics, nil
 }
 
 type parseSession struct {
 	ctx         context.Context
 	documents   []desiredstate.Document
-	diagnostics []desiredstate.Diagnostic
+	diagnostics []diagnostics.Diagnostic
 	documentNum int
 	nodes       int
 }
@@ -118,9 +119,9 @@ func (p *parseSession) addSyntax(path string, document, line int) error {
 	// At most one syntax failure is retained per byte-bounded source file.
 	// The compiler applies the returned-diagnostic ceiling after resource
 	// selection, so excluded files cannot consume its diagnostic allowance.
-	p.diagnostics = append(p.diagnostics, desiredstate.Diagnostic{
+	p.diagnostics = append(p.diagnostics, diagnostics.Diagnostic{
 		Severity: "error", Code: "yaml.syntax", Message: "Input is not valid UTF-8 YAML.",
-		Source: &desiredstate.SourceLocation{Path: path, Document: document, Line: line},
+		Source: &diagnostics.SourceLocation{Path: path, Document: document, Line: line},
 	})
 	return nil
 }
@@ -163,11 +164,11 @@ func (p *parseSession) checkRepresentation(path string, document int, root *yaml
 }
 
 func limitFailure(resource string, ceiling int, path string, document int, node *yaml.Node) error {
-	source := &desiredstate.SourceLocation{Path: path, Document: document}
+	source := &diagnostics.SourceLocation{Path: path, Document: document}
 	if node != nil {
 		source.Line, source.Column = node.Line, node.Column
 	}
-	return &desiredstate.Failure{Diagnostics: []desiredstate.Diagnostic{{
+	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
 		Severity: "error", Code: "input.limit",
 		Message: fmt.Sprintf("%s exceeds the ceiling of %d", resource, ceiling), Source: source,
 	}}}

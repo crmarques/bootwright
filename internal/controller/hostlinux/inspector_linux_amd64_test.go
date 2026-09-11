@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
@@ -215,7 +215,7 @@ func assertDiagnostic(t *testing.T, err error, code string) {
 	if err == nil {
 		t.Fatal("unsafe inspection succeeded")
 	}
-	diagnostics := desiredstate.DiagnosticsOf(err)
+	diagnostics := diagnostics.Of(err)
 	if len(diagnostics) != 1 || diagnostics[0].Code != code {
 		t.Fatalf("unexpected diagnostic: %#v", diagnostics)
 	}

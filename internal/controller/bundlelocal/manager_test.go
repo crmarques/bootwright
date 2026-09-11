@@ -2,7 +2,7 @@ package bundlelocal
 
 import (
 	"errors"
-	automation "github.com/crmarques/bootwright/ansible"
+	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller"
 	"net/url"
 	"path"
@@ -25,7 +25,7 @@ func resolvedDefinitionFixture(t *testing.T) prerequisites.Definition {
 		t.Fatal("fixture platform missing")
 	}
 	versions := controller.DefaultDependencyVersions()
-	bootstrap := prerequisites.BootstrapDefinition{Format: "bootwright.controller.bootstrap-v1", Platform: platform, PythonIntent: "latest", AnsibleIntent: "latest", PythonVersion: record.PythonVersion, AnsibleVersion: record.AnsibleVersion, PythonExecutable: "python/bin/python3.13", SitePackages: sitePackages, Sources: slices.Clone(record.Baseline), Execution: cloneExecution(profile.Execution), ExecutionPackages: executionPackageOwners(), AutomationDigest: automation.Digest(), ProjectionSHA256: strings.Repeat("a", 64), FileCount: 1, ExpandedBytes: 1}
+	bootstrap := prerequisites.BootstrapDefinition{Format: "bootwright.controller.bootstrap-v1", Platform: platform, PythonIntent: "latest", AnsibleIntent: "latest", PythonVersion: record.PythonVersion, AnsibleVersion: record.AnsibleVersion, PythonExecutable: "python/bin/python3.13", SitePackages: sitePackages, Sources: slices.Clone(record.Baseline), Execution: cloneExecution(profile.Execution), ExecutionPackages: executionPackageOwners(), AutomationDigest: ansible.Digest(), ProjectionSHA256: strings.Repeat("a", 64), FileCount: 1, ExpandedBytes: 1}
 	bootstrap.Execution.PythonExecutable = bootstrap.PythonExecutable
 	for _, source := range bootstrap.Sources[1:] {
 		endpoint, _ := url.Parse(source.URL)

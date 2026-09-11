@@ -7,6 +7,16 @@ type commandSpec struct {
 	flags         []flagSpec
 	payload       bool
 	stopAtPayload bool
+	// implemented marks a command whose application use case is available.
+	// Every such command also needs the privileged context store, so available
+	// records both facts with the declaration instead of a separate list.
+	implemented bool
+	privileged  bool
+}
+
+func available(spec commandSpec) commandSpec {
+	spec.implemented, spec.privileged = true, true
+	return spec
 }
 
 type flagSpec struct {

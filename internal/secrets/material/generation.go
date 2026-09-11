@@ -26,14 +26,6 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// Cryptography isolates non-context-aware key and certificate operations whose
-// production implementations always use the standard library's OS entropy.
-type Cryptography interface {
-	GenerateECDSA(elliptic.Curve) (*ecdsa.PrivateKey, error)
-	GenerateRSA(int) (*rsa.PrivateKey, error)
-	CreateCertificate(*x509.Certificate, *x509.Certificate, crypto.PublicKey, crypto.Signer) ([]byte, error)
-}
-
 type standardCryptography struct{}
 
 func (standardCryptography) GenerateECDSA(curve elliptic.Curve) (*ecdsa.PrivateKey, error) {

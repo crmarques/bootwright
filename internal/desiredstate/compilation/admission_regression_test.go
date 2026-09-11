@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/desiredstate/yamlstream"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -34,21 +35,21 @@ func regressionCompiler() compilation.Compiler {
 		compilation.Rules{Normalize: substrate.Normalize, ValidateAuthored: substrate.ValidateAuthored, ValidatePartial: substrate.ValidatePartial, Validate: substrate.Validate})
 }
 
-func requireCompilationFailure(t *testing.T, state *compilation.State, report *compilation.Report, err error) []desiredstate.Diagnostic {
+func requireCompilationFailure(t *testing.T, state *compilation.State, report *compilation.Report, err error) []diagnostics.Diagnostic {
 	t.Helper()
 	if state != nil || report != nil || err == nil {
 		t.Fatalf("failed admission exposed a result: state=%v report=%v err=%v", state, report, err)
 	}
-	diagnostics := desiredstate.DiagnosticsOf(err)
-	if len(diagnostics) == 0 {
+	sink := diagnostics.Of(err)
+	if len(sink) == 0 {
 		t.Fatalf("admission failure has no typed diagnostics: %v", err)
 	}
-	for i := 1; i < len(diagnostics); i++ {
-		if desiredstate.CompareDiagnostics(diagnostics[i-1], diagnostics[i]) > 0 {
+	for i := 1; i < len(sink); i++ {
+		if diagnostics.Compare(sink[i-1], sink[i]) > 0 {
 			t.Fatal("admission diagnostics are not canonically ordered")
 		}
 	}
-	return diagnostics
+	return sink
 }
 
 func TestUnusedDefaultsRejectPresentContradictions(t *testing.T) {
@@ -60,13 +61,13 @@ func TestUnusedDefaultsRejectPresentContradictions(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			state, report, err := regressionCompiler().Compile(context.Background(), sources(environmentYAML+test.fields))
-			diagnostics := requireCompilationFailure(t, state, report, err)
-			for _, d := range diagnostics {
+			sink := requireCompilationFailure(t, state, report, err)
+			for _, d := range sink {
 				if d.Code == "api.invariant" && d.Field == test.field && d.Object != nil && d.Object.Kind == string(api.Environment) {
 					return
 				}
 			}
-			t.Fatalf("missing partial-default diagnostic for %s: %#v", test.field, diagnostics)
+			t.Fatalf("missing partial-default diagnostic for %s: %#v", test.field, sink)
 		})
 	}
 }
@@ -88,10 +89,10 @@ func TestSelectedDuplicateRootsRemainAmbiguousAndEachReceiveDiagnostics(t *testi
 	cluster := "apiVersion: bootwright.io/v1alpha1\nkind: StorageCluster\nmetadata: {name: storage}\nspec: {type: ceph, management: external}\n"
 	input := sources(environmentYAML + "  storageClusters: [storage]\n---\n" + cluster + "---\n" + cluster)
 	state, report, err := regressionCompiler().Compile(context.Background(), input)
-	diagnostics := requireCompilationFailure(t, state, report, err)
+	sink := requireCompilationFailure(t, state, report, err)
 	documents := map[int]bool{}
 	selectionFailed := false
-	for _, d := range diagnostics {
+	for _, d := range sink {
 		if d.Code == "api.reference" && d.Field == "$.spec.storageClusters" {
 			selectionFailed = true
 		}
@@ -103,7 +104,7 @@ func TestSelectedDuplicateRootsRemainAmbiguousAndEachReceiveDiagnostics(t *testi
 		}
 	}
 	if !selectionFailed || !reflect.DeepEqual(documents, map[int]bool{2: true, 3: true}) {
-		t.Fatalf("duplicate identity evidence was lost: %#v", diagnostics)
+		t.Fatalf("duplicate identity evidence was lost: %#v", sink)
 	}
 }
 
@@ -123,15 +124,15 @@ func TestEnvironmentSelectionUsesBootwrightAPIVersion(t *testing.T) {
 			}
 			continue
 		}
-		diagnostics := requireCompilationFailure(t, state, report, err)
-		if len(diagnostics) != 1 || diagnostics[0].Code != "api.version" || diagnostics[0].Source.Path != native.Path() {
-			t.Fatalf("selected foreign document escaped strict admission: %#v", diagnostics)
+		sink := requireCompilationFailure(t, state, report, err)
+		if len(sink) != 1 || sink[0].Code != "api.version" || sink[0].Source.Path != native.Path() {
+			t.Fatalf("selected foreign document escaped strict admission: %#v", sink)
 		}
 	}
 	state, report, err := regressionCompiler().Compile(context.Background(), desiredstate.Sources{Files: []desiredstate.SourceFile{native}})
-	diagnostics := requireCompilationFailure(t, state, report, err)
-	if len(diagnostics) != 1 || diagnostics[0].Code != "api.version" {
-		t.Fatalf("sole malformed Environment lost its version error: %#v", diagnostics)
+	sink := requireCompilationFailure(t, state, report, err)
+	if len(sink) != 1 || sink[0].Code != "api.version" {
+		t.Fatalf("sole malformed Environment lost its version error: %#v", sink)
 	}
 }
 
@@ -142,11 +143,11 @@ func TestInheritedReferenceProvenanceAndImmutableSourceState(t *testing.T) {
 	input.Files = append(input.Files, desiredstate.NewSourceFile("/synthetic/exports/consumer.yaml", []byte(consumer)))
 	before := append([]desiredstate.SourceFile{}, input.Files...)
 	state, report, err := regressionCompiler().Compile(context.Background(), input)
-	diagnostics := requireCompilationFailure(t, state, report, err)
-	if len(diagnostics) != 1 {
-		t.Fatalf("missing owner caused dependent failures: %#v", diagnostics)
+	sink := requireCompilationFailure(t, state, report, err)
+	if len(sink) != 1 {
+		t.Fatalf("missing owner caused dependent failures: %#v", sink)
 	}
-	d := diagnostics[0]
+	d := sink[0]
 	line := 1 + strings.Count(env[:strings.Index(env, "clusterRef:")], "\n")
 	if d.Code != "api.reference" || d.Field != "$.spec.clusterRef" || d.Object == nil || d.Object.Kind != string(api.StorageExport) || d.Object.Name != "consumer" || d.Source == nil || d.Source.Path != "/synthetic/environment.yaml" || d.Source.Line != line || !strings.Contains(d.Message, "Environment defaults") || d.Remediation == "" {
 		t.Fatalf("inherited reference provenance is incomplete: %#v", d)
@@ -158,7 +159,7 @@ func TestInheritedReferenceProvenanceAndImmutableSourceState(t *testing.T) {
 	input.Files[0] = desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(resolved+controllerYAML))
 	state, _, err = regressionCompiler().Compile(context.Background(), input)
 	if err != nil {
-		t.Fatal(desiredstate.DiagnosticsOf(err))
+		t.Fatal(diagnostics.Of(err))
 	}
 	authored, _ := state.Authored().Find(api.StorageExport, "consumer")
 	effective, _ := state.Effective().Find(api.StorageExport, "consumer")
@@ -215,7 +216,7 @@ spec:
 	// runtime prerequisites are tested by their owning admission suites.
 	state, _, err := compilation.NewCompiler(yamlstream.Parser{}, nil).Compile(context.Background(), input)
 	if err != nil {
-		t.Fatal(desiredstate.DiagnosticsOf(err))
+		t.Fatal(diagnostics.Of(err))
 	}
 	cluster, _ := state.Effective().Find(api.ContainerCluster, "cluster")
 	spec := cluster.Spec()

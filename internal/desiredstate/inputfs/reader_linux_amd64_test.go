@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func TestReadOrdersAndDeduplicatesAcquiredSources(t *testing.T) {
@@ -391,7 +392,7 @@ func TestReadDiagnosticsPreserveRawPathForPresentation(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "\x1b[31m\nmissing.yaml")
 	result, err := (Reader{}).Read(context.Background(), []string{path})
 	assertFailure(t, result, err, "input.not-found")
-	diagnostics := desiredstate.DiagnosticsOf(err)
+	diagnostics := diagnostics.Of(err)
 	if diagnostics[0].Source.Path != path || strings.ContainsAny(diagnostics[0].Message, "\x1b\n") || strings.Contains(diagnostics[0].Message, "open ") {
 		t.Fatalf("unsafe diagnostic = %#v", diagnostics[0])
 	}
@@ -456,7 +457,7 @@ func mustLink(t *testing.T, target, link string, symbolic bool) {
 
 func assertFailure(t *testing.T, result desiredstate.Sources, err error, code string) {
 	t.Helper()
-	diagnostics := desiredstate.DiagnosticsOf(err)
+	diagnostics := diagnostics.Of(err)
 	if len(diagnostics) != 1 || diagnostics[0].Code != code {
 		t.Fatalf("diagnostics = %#v, error = %v; want %s", diagnostics, err, code)
 	}
@@ -468,7 +469,7 @@ func assertFailure(t *testing.T, result desiredstate.Sources, err error, code st
 func assertLimit(t *testing.T, result desiredstate.Sources, err error, resource string, ceiling int) {
 	t.Helper()
 	assertFailure(t, result, err, "input.limit")
-	message := desiredstate.DiagnosticsOf(err)[0].Message
+	message := diagnostics.Of(err)[0].Message
 	if !strings.Contains(message, resource) || !strings.Contains(message, fmt.Sprint(ceiling)) {
 		t.Fatalf("limit diagnostic = %q", message)
 	}

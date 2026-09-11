@@ -27,7 +27,7 @@ func ClassifyInvocation(args []string) InvocationClass {
 	}
 	command := resolved.command
 	path := strings.TrimSpace(strings.TrimPrefix(command.CommandPath(), "bootwright"))
-	if command.ParseFlags(resolved.arguments) != nil || boolValue(command.Flags(), "help") || validateInvocation(command, path) != "" || !implementedOperation(path) {
+	if command.ParseFlags(resolved.arguments) != nil || boolValue(command.Flags(), "help") || validateInvocation(command, path) != "" || !privilegedOperation(path) {
 		return InvocationClass{}
 	}
 	if path == "validate" {

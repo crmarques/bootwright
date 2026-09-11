@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func TestValidationSuccessHasExactStableRepresentations(t *testing.T) {
@@ -39,8 +39,8 @@ func TestValidationSuccessHasExactStableRepresentations(t *testing.T) {
 func TestValidationWarningsAreSortedEscapedOnceAndPreserved(t *testing.T) {
 	raw := "<value>\\path\n\x1b\xff"
 	warnings := []diagnostic{
-		{Severity: "warning", Code: "api.deferred", Message: raw, Source: &desiredstate.SourceLocation{Path: "z" + raw, Document: 2, Line: 4, Column: 3}, Object: &desiredstate.ObjectIdentity{APIVersion: raw, Kind: raw, Name: raw}, Field: raw, Remediation: raw},
-		{Severity: "warning", Code: "api.excluded", Message: "excluded", Source: &desiredstate.SourceLocation{Path: "a.yaml"}},
+		{Severity: "warning", Code: "api.deferred", Message: raw, Source: &diagnostics.SourceLocation{Path: "z" + raw, Document: 2, Line: 4, Column: 3}, Object: &diagnostics.ObjectIdentity{APIVersion: raw, Kind: raw, Name: raw}, Field: raw, Remediation: raw},
+		{Severity: "warning", Code: "api.excluded", Message: "excluded", Source: &diagnostics.SourceLocation{Path: "a.yaml"}},
 	}
 	report := &compilation.Report{Counts: compilation.Counts{FilesSeen: 3, ObjectsDecoded: 2}, ExcludedContainerClusters: []string{"z", "a", "a"}, ExcludedStorageClusters: []string{raw}, ExcludedResourceFiles: []string{"z.yaml", "a.yaml"}, Advisories: warnings[:1], Diagnostics: warnings}
 	before, _ := json.Marshal(report)
@@ -85,7 +85,7 @@ func TestValidationWarningsAreSortedEscapedOnceAndPreserved(t *testing.T) {
 }
 
 func TestValidationFailuresNeverExposePartialReports(t *testing.T) {
-	for _, failure := range []error{nil, errors.New("untrusted internal details"), &desiredstate.Failure{}, &desiredstate.Failure{Diagnostics: []diagnostic{{Severity: "error", Code: "api.required", Message: "required field", Source: &desiredstate.SourceLocation{Path: "input.yaml", Line: 2, Column: 3}, Field: "$.spec", Remediation: "supply the field"}}}, context.Canceled, context.DeadlineExceeded} {
+	for _, failure := range []error{nil, errors.New("untrusted internal details"), &diagnostics.Failure{}, &diagnostics.Failure{Diagnostics: []diagnostic{{Severity: "error", Code: "api.required", Message: "required field", Source: &diagnostics.SourceLocation{Path: "input.yaml", Line: 2, Column: 3}, Field: "$.spec", Remediation: "supply the field"}}}, context.Canceled, context.DeadlineExceeded} {
 		var out, errOut bytes.Buffer
 		record := &dispatchRecord{err: failure}
 		if failure != nil {
@@ -103,7 +103,7 @@ func TestValidationFailuresNeverExposePartialReports(t *testing.T) {
 		if code != 1 || envelope.OK || envelope.Result != nil || errOut.Len() != 0 || strings.Contains(out.String(), "999") || strings.Contains(out.String(), "untrusted internal details") {
 			t.Fatalf("failure leaked result: %d %s %s", code, out.String(), errOut.String())
 		}
-		if len(desiredstate.DiagnosticsOf(failure)) > 0 && envelope.Diagnostics[0].Remediation != "supply the field" {
+		if len(diagnostics.Of(failure)) > 0 && envelope.Diagnostics[0].Remediation != "supply the field" {
 			t.Fatal("typed diagnostic lost", envelope)
 		}
 	}

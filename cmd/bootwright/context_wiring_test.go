@@ -16,10 +16,10 @@ func testRepository(root string) *contextfs.Store {
 	return contextfs.New(contextfs.Options{Root: root, Owner: &contextfs.Ownership{UID: uint32(os.Getuid()), GID: uint32(os.Getgid())}})
 }
 
-func testContextWiring(t *testing.T, root string) contextWiringOptions {
+func testContextWiring(t *testing.T, root string) serviceDependencies {
 	t.Helper()
 	home := filepath.Dir(root)
-	return contextWiringOptions{
+	return serviceDependencies{
 		Selection: selectionfs.New(selectionfs.Options{UID: os.Getuid(), GID: os.Getgid(), Home: home}),
 		Operator:  testMaterialOperator{home: home},
 	}
@@ -35,5 +35,14 @@ func isolatedServices(t *testing.T) cli.Services {
 	t.Helper()
 	root := filepath.Join(t.TempDir(), "state")
 	repository := testRepository(root)
-	return wireContextServices(repository, repository, nil, nil, testContextWiring(t, root))
+	return testServices(t, repository, root)
+}
+
+// testServices binds the complete graph to an isolated store, exactly as the
+// composition root does for a real invocation.
+func testServices(t *testing.T, repository *contextfs.Store, root string) cli.Services {
+	t.Helper()
+	deps := testContextWiring(t, root)
+	deps.Repository, deps.Workspace = repository, repository
+	return assembleServices(deps)
 }

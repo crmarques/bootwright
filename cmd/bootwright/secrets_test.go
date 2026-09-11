@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -127,8 +127,8 @@ func secretCommandAndBindingJourney(t *testing.T, implementation string) {
 		}
 	}
 	bindings, ok := services.Secrets.(interface {
-		Bind(context.Context, custody.BindRequest) (storage.Binding, error)
-		Reopen(context.Context, custody.BindingRequest) ([]storage.BoundMaterial, error)
+		Bind(context.Context, custody.BindRequest) (secretstore.Binding, error)
+		Reopen(context.Context, custody.BindingRequest) ([]secretstore.BoundMaterial, error)
 		Release(context.Context, custody.BindingRequest) (bool, error)
 	})
 	if !ok {

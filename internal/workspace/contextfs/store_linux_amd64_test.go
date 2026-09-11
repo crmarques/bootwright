@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -82,7 +83,7 @@ func expectState(t *testing.T, err error) {
 	if err == nil {
 		t.Fatal("expected context.state refusal")
 	}
-	var failure *desiredstate.Failure
+	var failure *diagnostics.Failure
 	if !errors.As(err, &failure) || len(failure.Diagnostics) != 1 || failure.Diagnostics[0].Code != "context.state" {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -90,7 +91,7 @@ func expectState(t *testing.T, err error) {
 
 func expectMissingRegistry(t *testing.T, err error) {
 	t.Helper()
-	diagnostics := desiredstate.DiagnosticsOf(err)
+	diagnostics := diagnostics.Of(err)
 	if len(diagnostics) != 1 || diagnostics[0].Code != "context.state" || diagnostics[0].Message != missingRegistryMessage || diagnostics[0].Remediation != storeRecoveryRemediation {
 		t.Fatalf("unexpected missing-registry diagnostic: %#v", diagnostics)
 	}
@@ -98,7 +99,7 @@ func expectMissingRegistry(t *testing.T, err error) {
 
 func expectPendingRegistry(t *testing.T, err error) {
 	t.Helper()
-	diagnostics := desiredstate.DiagnosticsOf(err)
+	diagnostics := diagnostics.Of(err)
 	if len(diagnostics) != 1 || diagnostics[0].Code != "context.state" || diagnostics[0].Message != pendingRegistryMessage || diagnostics[0].Remediation != pendingRegistryRemediation {
 		t.Fatalf("unexpected pending-registry diagnostic: %#v", diagnostics)
 	}
@@ -106,7 +107,7 @@ func expectPendingRegistry(t *testing.T, err error) {
 
 func expectInconsistentEmptyRegistry(t *testing.T, err error) {
 	t.Helper()
-	diagnostics := desiredstate.DiagnosticsOf(err)
+	diagnostics := diagnostics.Of(err)
 	if len(diagnostics) != 1 || diagnostics[0].Code != "context.state" || diagnostics[0].Message != "registry.json is empty but the context store is not" || diagnostics[0].Remediation != storeRecoveryRemediation {
 		t.Fatalf("unexpected empty-registry diagnostic: %#v", diagnostics)
 	}
@@ -519,7 +520,7 @@ func TestInitialRegistryRecoveryReportsUncertainDurability(t *testing.T) {
 		callbackCalled = true
 		return nil
 	})
-	diagnostics := desiredstate.DiagnosticsOf(err)
+	diagnostics := diagnostics.Of(err)
 	if len(diagnostics) != 1 || diagnostics[0].Message != "context initialization may have completed" || diagnostics[0].Remediation != pendingRegistryRemediation {
 		t.Fatalf("unexpected uncertain-recovery diagnostic: %#v", diagnostics)
 	}
@@ -569,7 +570,7 @@ func TestInitialRegistryRecoveryRejectsPostRenameRootChange(t *testing.T) {
 		callbackCalled = true
 		return nil
 	})
-	diagnostics := desiredstate.DiagnosticsOf(err)
+	diagnostics := diagnostics.Of(err)
 	if len(diagnostics) != 1 || diagnostics[0].Message != "context initialization may have completed" || diagnostics[0].Remediation != pendingRegistryRemediation {
 		t.Fatalf("unexpected changed-root diagnostic: %#v", diagnostics)
 	}
@@ -1194,7 +1195,7 @@ func TestAggregateManifestBytesPrecedeDecoding(t *testing.T) {
 	}
 	_, err := store.View(context.Background())
 	expectState(t, err)
-	var failure *desiredstate.Failure
+	var failure *diagnostics.Failure
 	errors.As(err, &failure)
 	if !strings.Contains(failure.Diagnostics[0].Message, "aggregate") {
 		t.Fatal("manifest decoding began before aggregate bounds")

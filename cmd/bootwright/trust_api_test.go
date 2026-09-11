@@ -8,6 +8,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 const trustClusterPrefix = `apiVersion: bootwright.io/v1alpha1
@@ -103,20 +104,20 @@ func trustInputs(environment, trustList string, extras ...string) desiredstate.S
 	}
 }
 
-func trustFailure(t *testing.T, inputs desiredstate.Sources, code, field string) desiredstate.Diagnostic {
+func trustFailure(t *testing.T, inputs desiredstate.Sources, code, field string) diagnostics.Diagnostic {
 	t.Helper()
 	state, report, err := wireCompiler().Compile(context.Background(), inputs)
 	if err == nil || state != nil || report != nil {
 		t.Fatal("invalid trust declaration exposed a compilation result")
 	}
-	diagnostics := desiredstate.DiagnosticsOf(err)
-	for _, diagnostic := range diagnostics {
+	found := diagnostics.Of(err)
+	for _, diagnostic := range found {
 		if diagnostic.Code == code && diagnostic.Field == field {
 			return diagnostic
 		}
 	}
-	t.Fatalf("missing %s at %s: %#v", code, field, diagnostics)
-	return desiredstate.Diagnostic{}
+	t.Fatalf("missing %s at %s: %#v", code, field, found)
+	return diagnostics.Diagnostic{}
 }
 
 func TestClusterInstallTrustStaysOnItsConsumer(t *testing.T) {

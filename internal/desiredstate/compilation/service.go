@@ -5,24 +5,9 @@ import (
 	"errors"
 	"slices"
 
-	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 )
-
-type SourceReader interface {
-	Read(context.Context, []string) (desiredstate.Sources, error)
-}
-
-type InputCompiler interface {
-	Compile(context.Context, desiredstate.Sources) (*State, *Report, error)
-}
-
-// ContextInputs returns the selected immutable acquisition with its original
-// logical paths. Reading an input view grants no context mutation authority.
-type ContextInputs interface {
-	ReadInputs(context.Context, string) (desiredstate.Sources, error)
-}
 
 type Service struct {
 	reader   SourceReader
@@ -40,23 +25,9 @@ func New(reader SourceReader, compiler InputCompiler, inputs ...ContextInputs) S
 	return service
 }
 
-type ValidateRequest struct {
-	ContextName string
-	Files       []string
-}
-
 func (s Service) Validate(ctx context.Context, request ValidateRequest) (*Report, error) {
 	_, report, err := s.compile(ctx, request.ContextName, request.Files)
 	return report, err
-}
-
-type EffectiveRequest struct {
-	ContextName string
-}
-
-type EffectiveResult struct {
-	Counts    Counts
-	Effective api.Catalog
 }
 
 func (s Service) RenderEffective(ctx context.Context, request EffectiveRequest) (*EffectiveResult, error) {

@@ -11,7 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
 type Service struct {
@@ -29,31 +29,6 @@ func New(reader DirectoryReader, compiler Compiler, repository Repository, guard
 		s.options = options[0]
 	}
 	return s
-}
-
-type InitRequest struct {
-	Name              string
-	ConfigurationFile string
-	InputDirectory    string
-}
-
-type UpdateRequest struct {
-	ConfigurationFile string
-	Name              string
-	InputDirectory    string
-	SkipConfirmation  bool
-}
-
-type UseRequest struct{ Name string }
-
-type ListRequest struct{}
-
-type CurrentRequest struct{ Short bool }
-
-type DeleteRequest struct {
-	Name             string
-	Purge            bool
-	SkipConfirmation bool
 }
 
 var namePattern = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
@@ -175,7 +150,7 @@ func (s Service) configuration(ctx context.Context, name, path string) (Configur
 		if s.options.ConfigurationReader == nil {
 			return Configuration{}, ConfigurationError("Context configuration reader is not configured")
 		}
-		data, err := s.options.ConfigurationReader.ReadConfiguration(ctx, path)
+		data, err := s.options.ConfigurationReader.ReadFile(ctx, path, MaxConfigurationBytes)
 		if err != nil {
 			return Configuration{}, err
 		}
@@ -259,7 +234,7 @@ func (s Service) Init(ctx context.Context, request InitRequest) (*AdmissionResul
 		if err != nil {
 			return err
 		}
-		if err := tx.InitializeSecrets(ctx, record.ID, func(area storage.Area) error {
+		if err := tx.InitializeSecrets(ctx, record.ID, func(area secretstore.Area) error {
 			return s.options.InitializeSecrets(ctx, record, area)
 		}); err != nil {
 			return err

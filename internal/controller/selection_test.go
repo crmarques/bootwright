@@ -5,7 +5,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func selectionObjects() []api.Object {
@@ -19,7 +19,7 @@ func TestExplicitControllerRequiresDeclaredContainerRuntime(t *testing.T) {
 	for _, capabilities := range []api.Value{api.Value{}, api.ListValue(), api.StringList("unsupported"), api.StringList("libvirt"), api.StringList("container-runtime", "container-runtime"), api.StringList("container-runtime", "libvirt", "libvirt")} {
 		objects := selectionObjects()
 		objects[1] = objects[1].WithSpec(objects[1].Spec().With("capabilities", capabilities))
-		if _, err := controller.Select(api.NewCatalog(objects)); len(desiredstate.DiagnosticsOf(err)) != 1 {
+		if _, err := controller.Select(api.NewCatalog(objects)); len(diagnostics.Of(err)) != 1 {
 			t.Fatal("invalid controller capabilities accepted", capabilities)
 		}
 	}
@@ -86,7 +86,7 @@ func TestUnsupportedControllerRouteRefusesBeforeAcquisition(t *testing.T) {
 			objects[1] = objects[1].WithSpec(objects[1].Spec().With("proxy", api.MapValue().With("proxyRef", api.StringValue("egress"))))
 			objects = append(objects, api.NewObject(api.Proxy, "egress", api.Value{}, testCase.proxy))
 			selected, err := controller.Select(api.NewCatalog(objects))
-			diagnostics := desiredstate.DiagnosticsOf(err)
+			diagnostics := diagnostics.Of(err)
 			if len(diagnostics) != 1 || diagnostics[0].Code != "controller.unsupported" || diagnostics[0].Field != testCase.field {
 				t.Fatal("unsupported route did not refuse with its exact field", diagnostics)
 			}
@@ -101,7 +101,7 @@ func TestUnsupportedControllerRouteRefusesBeforeAcquisition(t *testing.T) {
 func TestMissingControllerProxyReferenceRefuses(t *testing.T) {
 	objects := selectionObjects()
 	objects[1] = objects[1].WithSpec(objects[1].Spec().With("proxy", api.MapValue().With("proxyRef", api.StringValue("absent"))))
-	if diagnostics := desiredstate.DiagnosticsOf(func() error { _, err := controller.Select(api.NewCatalog(objects)); return err }()); len(diagnostics) != 1 || diagnostics[0].Code != "api.reference" {
+	if diagnostics := diagnostics.Of(func() error { _, err := controller.Select(api.NewCatalog(objects)); return err }()); len(diagnostics) != 1 || diagnostics[0].Code != "api.reference" {
 		t.Fatal("unresolved proxy reference was accepted", diagnostics)
 	}
 }

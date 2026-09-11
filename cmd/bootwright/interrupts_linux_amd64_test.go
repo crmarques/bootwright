@@ -61,7 +61,7 @@ func TestInterruptDuringRealConfirmationPreservesSelection(t *testing.T) {
 		t.Fatal(err)
 	}
 	repository := testRepository(root)
-	services := wireContextServices(repository, repository, nil, nil, testContextWiring(t, root))
+	services := testServices(t, repository, root)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	before, err := repository.View(context.Background())
 	if err != nil {
@@ -140,7 +140,10 @@ func TestInteractiveInterruptHelper(t *testing.T) {
 	root := os.Getenv("BOOTWRIGHT_INTERRUPT_STATE")
 	repository := testRepository(root)
 	confirmer := cli.NewConfirmation(readStdin, os.Stderr, stdinTerminal)
-	services := wireContextServices(repository, repository, confirmer, secretInputFunc(readStdin), testContextWiring(t, root))
+	deps := testContextWiring(t, root)
+	deps.Repository, deps.Workspace = repository, repository
+	deps.Confirmer, deps.SecretInput = confirmer, secretInputFunc(readStdin)
+	services := assembleServices(deps)
 	os.Exit(runServices(context.Background(), []string{"context", "update", "--name", "alpha", "--input-dir", os.Getenv("BOOTWRIGHT_INTERRUPT_INPUT")}, os.Stdout, os.Stderr, services, beginSignalOperation))
 }
 

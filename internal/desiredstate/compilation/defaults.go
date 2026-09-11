@@ -6,6 +6,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func inherit(value, fallback api.Value, shape *api.Shape, path string, root bool, recipient, environment *objectRecord) api.Value {
@@ -122,19 +123,19 @@ func builtInDefaults(value api.Value, shape *api.Shape) api.Value {
 
 type expansionBudget struct{ nodes int }
 
-func (budget *expansionBudget) admit(record *objectRecord, diagnostics *diagnostics) bool {
+func (budget *expansionBudget) admit(record *objectRecord, sink *diagnosticSink) bool {
 	var visit func(api.Value, int) bool
 	visit = func(value api.Value, depth int) bool {
-		if diagnostics.stopped() {
+		if sink.stopped() {
 			return false
 		}
 		if depth > desiredstate.MaxDepth {
-			diagnostics.add(desiredstate.Diagnostic{Severity: "error", Code: "input.limit", Message: "expanded representation depth exceeds the ceiling of 64"})
+			sink.add(diagnostics.Diagnostic{Severity: "error", Code: "input.limit", Message: "expanded representation depth exceeds the ceiling of 64"})
 			return false
 		}
 		budget.nodes++
 		if budget.nodes > desiredstate.MaxNodes {
-			diagnostics.add(desiredstate.Diagnostic{Severity: "error", Code: "input.limit", Message: "expanded representation nodes exceed the ceiling of 1000000"})
+			sink.add(diagnostics.Diagnostic{Severity: "error", Code: "input.limit", Message: "expanded representation nodes exceed the ceiling of 1000000"})
 			return false
 		}
 		for _, field := range value.Fields() {
@@ -153,10 +154,10 @@ func (budget *expansionBudget) admit(record *objectRecord, diagnostics *diagnost
 	return visit(record.object.Value(), 1)
 }
 
-func withinExpansionBudget(records []*objectRecord, diagnostics *diagnostics) bool {
+func withinExpansionBudget(records []*objectRecord, sink *diagnosticSink) bool {
 	budget := expansionBudget{}
 	for _, record := range records {
-		if !budget.admit(record, diagnostics) {
+		if !budget.admit(record, sink) {
 			return false
 		}
 	}

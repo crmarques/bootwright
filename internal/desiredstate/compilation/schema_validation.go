@@ -8,13 +8,13 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func validateShape(record *objectRecord, value api.Value, shape *api.Shape, path string, partial, references bool, catalog api.Catalog, diagnostics *diagnostics) {
-	if shape == nil || diagnostics.stopped() || !value.Present() {
+func validateShape(record *objectRecord, value api.Value, shape *api.Shape, path string, partial, references bool, catalog api.Catalog, sink *diagnosticSink) {
+	if shape == nil || sink.stopped() || !value.Present() {
 		return
 	}
 	shape = shapeForValue(shape, value)
 	issue := func(code, message string) {
-		diagnostics.issue(record, api.Issue{Code: code, Field: path, Message: message})
+		sink.issue(record, api.Issue{Code: code, Field: path, Message: message})
 	}
 	if shape.Type != api.Absent && shape.Type != value.Type() && !(shape.Type == api.Number && value.Type() == api.Integer) {
 		return
@@ -76,14 +76,14 @@ func validateShape(record *objectRecord, value api.Value, shape *api.Shape, path
 	if value.Type() == api.Mapping {
 		if shape.KindDefaults {
 			for _, f := range value.Fields() {
-				validateShape(record, f.Value, api.Schema(api.Kind(f.Name)), path+"."+f.Name, true, false, catalog, diagnostics)
+				validateShape(record, f.Value, api.Schema(api.Kind(f.Name)), path+"."+f.Name, true, false, catalog, sink)
 			}
 			return
 		}
 		if shape.Open || shape.Type == api.Absent {
 			if shape.Element != nil {
 				for _, f := range value.Fields() {
-					validateShape(record, f.Value, shape.Element, path, partial, references, catalog, diagnostics)
+					validateShape(record, f.Value, shape.Element, path, partial, references, catalog, sink)
 				}
 			}
 			return
@@ -95,7 +95,7 @@ func validateShape(record *objectRecord, value api.Value, shape *api.Shape, path
 				if value.Has(arm) && !(slices.Contains(shape.InertArms, arm) && unpopulated(value.Get(arm))) {
 					count++
 					if selected && !slices.Contains(allowed, arm) {
-						diagnostics.issue(record, api.Issue{Code: "api.invariant", Field: path + "." + arm, Message: "configuration arm does not match the selected discriminator"})
+						sink.issue(record, api.Issue{Code: "api.invariant", Field: path + "." + arm, Message: "configuration arm does not match the selected discriminator"})
 					}
 				}
 			}
@@ -104,21 +104,21 @@ func validateShape(record *objectRecord, value api.Value, shape *api.Shape, path
 			}
 		}
 		for _, field := range shape.Fields {
-			if diagnostics.stopped() {
+			if sink.stopped() {
 				break
 			}
 			childPath := path + "." + field.Name
 			if field.Required && !partial && !value.Has(field.Name) {
-				diagnostics.issue(record, api.Issue{Code: "api.required", Field: childPath, Message: "required field is absent"})
+				sink.issue(record, api.Issue{Code: "api.required", Field: childPath, Message: "required field is absent"})
 				continue
 			}
-			validateShape(record, value.Get(field.Name), field.Shape, childPath, partial, references, catalog, diagnostics)
+			validateShape(record, value.Get(field.Name), field.Shape, childPath, partial, references, catalog, sink)
 		}
 	}
 	if value.Type() == api.Sequence {
 		seen := map[string]bool{}
 		for i, item := range value.Items() {
-			if diagnostics.stopped() {
+			if sink.stopped() {
 				break
 			}
 			childPath := path + "[" + strconv.Itoa(i) + "]"
@@ -130,11 +130,11 @@ func validateShape(record *objectRecord, value api.Value, shape *api.Shape, path
 			}
 			if key != "" {
 				if seen[key] {
-					diagnostics.issue(record, api.Issue{Code: "api.duplicate", Field: childPath, Message: "collection entries must be unique"})
+					sink.issue(record, api.Issue{Code: "api.duplicate", Field: childPath, Message: "collection entries must be unique"})
 				}
 				seen[key] = true
 			}
-			validateShape(record, item, shape.Element, childPath, partial, references, catalog, diagnostics)
+			validateShape(record, item, shape.Element, childPath, partial, references, catalog, sink)
 		}
 	}
 }

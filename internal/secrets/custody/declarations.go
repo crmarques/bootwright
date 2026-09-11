@@ -8,36 +8,31 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/desiredstate"
-	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
-type Compiler interface {
-	Compile(context.Context, desiredstate.Sources) (*compilation.State, *compilation.Report, error)
-}
-
-func (s Service) resolve(ctx context.Context, name string) (storage.Context, []secrets.Declaration, error) {
+func (s Service) resolve(ctx context.Context, name string) (secretstore.Context, []secrets.Declaration, error) {
 	if err := ctx.Err(); err != nil {
-		return storage.Context{}, nil, err
+		return secretstore.Context{}, nil, err
 	}
 	if s.access == nil || s.compiler == nil || s.material == nil {
-		return storage.Context{}, nil, storage.Failure("store.implementation", "secret service is not configured")
+		return secretstore.Context{}, nil, secretstore.Failure("store.implementation", "secret service is not configured")
 	}
 	snapshot, err := s.access.Context(ctx, name)
 	if err != nil {
-		return storage.Context{}, nil, err
+		return secretstore.Context{}, nil, err
 	}
 	if snapshot.Context.Revision == "" {
-		return storage.Context{}, nil, desiredstate.NewFailure("context.input", "context has no desired state; run context update --name "+snapshot.Context.Name+" --input-dir <dir>", "")
+		return secretstore.Context{}, nil, diagnostics.NewFailure("context.input", "context has no desired state; run context update --name "+snapshot.Context.Name+" --input-dir <dir>", "")
 	}
 	state, _, err := s.compiler.Compile(ctx, snapshot.Inputs)
 	if err != nil {
-		return storage.Context{}, nil, err
+		return secretstore.Context{}, nil, err
 	}
 	if state == nil {
-		return storage.Context{}, nil, storage.Failure("declaration", "secret declarations could not be compiled")
+		return secretstore.Context{}, nil, secretstore.Failure("declaration", "secret declarations could not be compiled")
 	}
 	declarations := []secrets.Declaration{}
 	for _, object := range state.Effective().Objects() {
@@ -46,7 +41,7 @@ func (s Service) resolve(ctx context.Context, name string) (storage.Context, []s
 		}
 		origin, ok := state.Origin(object.Identity())
 		if !ok {
-			return storage.Context{}, nil, storage.Failure("declaration", "secret declaration provenance is unavailable")
+			return secretstore.Context{}, nil, secretstore.Failure("declaration", "secret declaration provenance is unavailable")
 		}
 		declarations = append(declarations, declarationOf(object, origin))
 	}
@@ -62,7 +57,7 @@ func (s Service) resolve(ctx context.Context, name string) (storage.Context, []s
 	return snapshot.Context, declarations, nil
 }
 
-func declarationOf(object api.Object, origin desiredstate.SourceLocation) secrets.Declaration {
+func declarationOf(object api.Object, origin diagnostics.SourceLocation) secrets.Declaration {
 	spec := object.Spec()
 	d := secrets.Declaration{Name: object.Name(), Type: spec.Get("type").Text(), Source: "contextStore", Origin: origin.Path, Document: origin.Document}
 	if file := spec.Get("source", "file"); file.Present() {
@@ -99,12 +94,12 @@ func findDeclaration(declarations []secrets.Declaration, name string) (secrets.D
 			}
 		}
 	}
-	return secrets.Declaration{}, storage.Failure("declaration", "name must identify an effective Secret declaration")
+	return secrets.Declaration{}, secretstore.Failure("declaration", "name must identify an effective Secret declaration")
 }
 
 func validateInput(kind string, input secrets.Input) error {
 	if input.Provided & ^secrets.AllowedInputFields(kind) != 0 {
-		return storage.Failure("input", "an explicitly supplied input flag is not applicable to the declared secret type")
+		return secretstore.Failure("input", "an explicitly supplied input flag is not applicable to the declared secret type")
 	}
 	value := (input.ValueFile != "") != input.ValueStdin
 	password := (input.PasswordFile != "") != input.PasswordStdin
@@ -125,7 +120,7 @@ func validateInput(kind string, input secrets.Input) error {
 		valid = input.PrivateKeyFile != "" && input.CertificateFile == "" && noValue && noPassword
 	}
 	if !valid {
-		return storage.Failure("source", "input flags do not match the declared secret type")
+		return secretstore.Failure("source", "input flags do not match the declared secret type")
 	}
 	return nil
 }

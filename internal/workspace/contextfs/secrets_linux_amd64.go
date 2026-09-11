@@ -12,15 +12,16 @@ import (
 	"syscall"
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
-var _ storage.Workspace = (*Store)(nil)
+var _ secretstore.Workspace = (*Store)(nil)
 
-func secretCorrupt(message string) error { return storage.Failure("store.corrupt", message) }
+func secretCorrupt(message string) error { return secretstore.Failure("store.corrupt", message) }
 
-func secretLimit(message string) error { return storage.Failure("store.limit", message) }
+func secretLimit(message string) error { return secretstore.Failure("store.limit", message) }
 
 func secretCorruption(ctx context.Context, message string, err error) error {
 	if err != nil && ctx.Err() != nil {
@@ -33,31 +34,31 @@ func secretConflict(ctx context.Context, message string, err error) error {
 	if err != nil && ctx.Err() != nil {
 		return ctx.Err()
 	}
-	return storage.Failure("store.conflict", message)
+	return secretstore.Failure("store.conflict", message)
 }
 
 func secretEffectFailure(ctx context.Context, message string, err error) error {
 	if err != nil && ctx.Err() != nil {
 		return ctx.Err()
 	}
-	var failure *desiredstate.Failure
+	var failure *diagnostics.Failure
 	if errors.As(err, &failure) {
 		if len(failure.Diagnostics) == 1 && strings.HasPrefix(failure.Diagnostics[0].Code, "secret.store.") {
 			return err
 		}
 		return secretCorrupt(message)
 	}
-	return storage.Failure("store.conflict", message)
+	return secretstore.Failure("store.conflict", message)
 }
 
-func (s *Store) SecretContext(ctx context.Context, name string) (storage.ContextSnapshot, error) {
+func (s *Store) SecretContext(ctx context.Context, name string) (secretstore.ContextSnapshot, error) {
 	root, err := s.openRoot(ctx, false, nil)
 	if err != nil {
-		return storage.ContextSnapshot{}, safeError(err)
+		return secretstore.ContextSnapshot{}, safeError(err)
 	}
 	defer root.file.Close()
 	if err := lockShared(root); err != nil {
-		return storage.ContextSnapshot{}, err
+		return secretstore.ContextSnapshot{}, err
 	}
 	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
 	registry, _, err := readRegistry(ctx, root)
@@ -65,29 +66,29 @@ func (s *Store) SecretContext(ctx context.Context, name string) (storage.Context
 		err = verifyMappings(ctx, root, registry)
 	}
 	if err != nil {
-		return storage.ContextSnapshot{}, safeError(err)
+		return secretstore.ContextSnapshot{}, safeError(err)
 	}
 
 	record, err := namedSecretRecord(registry, name)
 	if err != nil {
-		return storage.ContextSnapshot{}, err
+		return secretstore.ContextSnapshot{}, err
 	}
 	if record.Mode != contexts.Ready {
-		return storage.ContextSnapshot{}, state("context is incomplete; repeat its init or delete command")
+		return secretstore.ContextSnapshot{}, state("context is incomplete; repeat its init or delete command")
 	}
 	inputs := desiredstate.Sources{}
 	if record.Revision != "" {
 		inputs, err = readSnapshot(ctx, root, record)
 		if err != nil {
-			return storage.ContextSnapshot{}, safeError(err)
+			return secretstore.ContextSnapshot{}, safeError(err)
 		}
 	}
-	return storage.ContextSnapshot{Context: secretContext(record), Inputs: inputs, SecretStoreType: record.SecretStoreType}, nil
+	return secretstore.ContextSnapshot{Context: secretContext(record), Inputs: inputs, SecretStoreType: record.SecretStoreType}, nil
 }
 
-func (s *Store) ReadSecrets(ctx context.Context, expected storage.Context, callback func(storage.Area) error) error {
+func (s *Store) ReadSecrets(ctx context.Context, expected secretstore.Context, callback func(secretstore.Area) error) error {
 	if callback == nil {
-		return storage.Failure("store.implementation", "secret storage callback is missing")
+		return secretstore.Failure("store.implementation", "secret storage callback is missing")
 	}
 	root, err := s.openRoot(ctx, false, nil)
 	if err != nil {
@@ -137,9 +138,9 @@ func (s *Store) ReadSecrets(ctx context.Context, expected storage.Context, callb
 	return safeError(err)
 }
 
-func (s *Store) MutateSecrets(ctx context.Context, expected storage.Context, callback func(storage.Area) error) error {
+func (s *Store) MutateSecrets(ctx context.Context, expected secretstore.Context, callback func(secretstore.Area) error) error {
 	if callback == nil {
-		return storage.Failure("store.implementation", "secret storage callback is missing")
+		return secretstore.Failure("store.implementation", "secret storage callback is missing")
 	}
 	root, err := s.openRoot(ctx, false, nil)
 	if err != nil {
@@ -200,8 +201,8 @@ func (s *Store) MutateSecrets(ctx context.Context, expected storage.Context, cal
 	return safeError(err)
 }
 
-func secretContext(record contexts.Record) storage.Context {
-	return storage.Context{Name: record.Name, ID: record.ID, Mode: string(record.Mode), Revision: record.Revision}
+func secretContext(record contexts.Record) secretstore.Context {
+	return secretstore.Context{Name: record.Name, ID: record.ID, Mode: string(record.Mode), Revision: record.Revision}
 }
 
 func namedSecretRecord(registry contexts.Registry, name string) (contexts.Record, error) {
@@ -216,13 +217,13 @@ func namedSecretRecord(registry contexts.Registry, name string) (contexts.Record
 	return contexts.Record{}, state("requested context does not exist")
 }
 
-func exactSecretRecord(registry contexts.Registry, expected storage.Context) (contexts.Record, error) {
+func exactSecretRecord(registry contexts.Registry, expected secretstore.Context) (contexts.Record, error) {
 	record, err := namedSecretRecord(registry, expected.Name)
 	if err != nil {
 		return contexts.Record{}, err
 	}
 	if secretContext(record) != expected {
-		return contexts.Record{}, storage.Failure("store.conflict", "context identity changed before secret access")
+		return contexts.Record{}, secretstore.Failure("store.conflict", "context identity changed before secret access")
 	}
 	return record, nil
 }
@@ -347,7 +348,7 @@ type secretArea struct {
 	context  *directory
 	secrets  *directory
 	expected *expectedRegistry
-	token    storage.Context
+	token    secretstore.Context
 	mutable  map[string]secretExpectation
 	observed map[string]secretExpectation
 	readOnly bool
@@ -511,7 +512,7 @@ func (a *secretArea) read(ctx context.Context, path string, maximum int, mutable
 	return data, true, nil
 }
 
-func (a *secretArea) Entries(ctx context.Context, path string) ([]storage.Entry, error) {
+func (a *secretArea) Entries(ctx context.Context, path string) ([]secretstore.Entry, error) {
 	if err := a.available(ctx, false); err != nil {
 		return nil, err
 	}
@@ -521,7 +522,7 @@ func (a *secretArea) Entries(ctx context.Context, path string) ([]storage.Entry,
 	}
 	if a.secrets == nil {
 		if len(parts) == 0 {
-			return []storage.Entry{}, nil
+			return []secretstore.Entry{}, nil
 		}
 		return nil, secretCorrupt("secret storage directory does not exist")
 	}
@@ -556,7 +557,7 @@ func (a *secretArea) Entries(ctx context.Context, path string) ([]storage.Entry,
 	return entries, nil
 }
 
-func listSecretDirectory(ctx context.Context, dir *directory, allowDirectories, allowVanishedPending bool) ([]storage.Entry, error) {
+func listSecretDirectory(ctx context.Context, dir *directory, allowDirectories, allowVanishedPending bool) ([]secretstore.Entry, error) {
 	names, err := secretDirectoryNames(ctx, dir, maxSecretEntries)
 	if err != nil {
 		return nil, err
@@ -564,12 +565,12 @@ func listSecretDirectory(ctx context.Context, dir *directory, allowDirectories, 
 	return inspectSecretDirectoryNames(ctx, dir, names, allowDirectories, allowVanishedPending)
 }
 
-func inspectSecretDirectoryNames(ctx context.Context, dir *directory, names []string, allowDirectories, allowVanishedPending bool) ([]storage.Entry, error) {
+func inspectSecretDirectoryNames(ctx context.Context, dir *directory, names []string, allowDirectories, allowVanishedPending bool) ([]secretstore.Entry, error) {
 	return inspectSecretDirectoryNamesObserved(ctx, dir, names, allowDirectories, allowVanishedPending, nil)
 }
 
-func inspectSecretDirectoryNamesObserved(ctx context.Context, dir *directory, names []string, allowDirectories, allowVanishedPending bool, observe func(string, syscall.Stat_t)) ([]storage.Entry, error) {
-	entries := make([]storage.Entry, 0, len(names))
+func inspectSecretDirectoryNamesObserved(ctx context.Context, dir *directory, names []string, allowDirectories, allowVanishedPending bool, observe func(string, syscall.Stat_t)) ([]secretstore.Entry, error) {
+	entries := make([]secretstore.Entry, 0, len(names))
 	for _, name := range names {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -602,12 +603,12 @@ func inspectSecretDirectoryNamesObserved(ctx context.Context, dir *directory, na
 				return nil, secretCorruption(ctx, "secret storage directory is unsafe", err)
 			}
 			child.file.Close()
-			entries = append(entries, storage.Entry{Name: name, Directory: true})
+			entries = append(entries, secretstore.Entry{Name: name, Directory: true})
 		case syscall.S_IFREG:
 			if !private(stat, syscall.S_IFREG, dir.identity.Uid, dir.identity.Gid) || stat.Mode&0777 != 0600 || stat.Size < 0 || stat.Size > maxSecretBytes {
 				return nil, secretCorrupt("secret storage file is unsafe")
 			}
-			entries = append(entries, storage.Entry{Name: name, Size: stat.Size})
+			entries = append(entries, secretstore.Entry{Name: name, Size: stat.Size})
 		default:
 			return nil, secretCorrupt("secret storage entry type is unsafe")
 		}
@@ -805,31 +806,31 @@ func (a *secretArea) rememberPublishedFile(ctx context.Context, parent *director
 	return nil
 }
 
-func (a *secretArea) Replace(ctx context.Context, path string, data, expected []byte) (storage.Outcome, error) {
+func (a *secretArea) Replace(ctx context.Context, path string, data, expected []byte) (secretstore.Outcome, error) {
 	if err := a.available(ctx, true); err != nil {
-		return storage.NotCommitted, err
+		return secretstore.NotCommitted, err
 	}
 	parts, err := secretPath(path, 1, 2)
 	if err != nil {
-		return storage.NotCommitted, err
+		return secretstore.NotCommitted, err
 	}
 	expectation, ok := a.mutable[path]
 	if !ok || !bytes.Equal(expectation.data, expected) {
-		return storage.NotCommitted, state("secret storage replacement lacks its exact read expectation")
+		return secretstore.NotCommitted, state("secret storage replacement lacks its exact read expectation")
 	}
 	if len(data) > maxSecretBytes {
-		return storage.NotCommitted, secretLimit("secret storage file exceeds its byte limit")
+		return secretstore.NotCommitted, secretLimit("secret storage file exceeds its byte limit")
 	}
 	a.phase = secretPublishing
 	if err := a.ensureRoot(ctx); err != nil {
-		return storage.NotCommitted, err
+		return secretstore.NotCommitted, err
 	}
 	if err := a.capacity(ctx, 1, int64(len(data))); err != nil {
-		return storage.NotCommitted, err
+		return secretstore.NotCommitted, err
 	}
 	parent, name, close, err := a.parent(ctx, parts)
 	if err != nil {
-		return storage.NotCommitted, secretCorruption(ctx, "secret storage parent directory is unsafe", err)
+		return secretstore.NotCommitted, secretCorruption(ctx, "secret storage parent directory is unsafe", err)
 	}
 	defer close()
 	var pending string
@@ -837,7 +838,7 @@ func (a *secretArea) Replace(ctx context.Context, path string, data, expected []
 	for range 16 {
 		candidate, err := a.store.candidate("pending-")
 		if err != nil {
-			return storage.NotCommitted, err
+			return secretstore.NotCommitted, err
 		}
 		pending = candidate
 		err = a.store.writeExclusive(ctx, parent, pending, data)
@@ -845,57 +846,57 @@ func (a *secretArea) Replace(ctx context.Context, path string, data, expected []
 			continue
 		}
 		if err != nil {
-			return storage.NotCommitted, err
+			return secretstore.NotCommitted, err
 		}
 		written = true
 		break
 	}
 	if !written {
-		return storage.NotCommitted, state("secret storage replacement exhausted its collision limit")
+		return secretstore.NotCommitted, state("secret storage replacement exhausted its collision limit")
 	}
 	pendingIdentity, err := verifySecretPending(ctx, parent, pending, data)
 	if err != nil {
-		return storage.NotCommitted, err
+		return secretstore.NotCommitted, err
 	}
 	if err := a.store.checkpoint(ctx, "before-secret-rename"); err != nil {
-		return storage.NotCommitted, err
+		return secretstore.NotCommitted, err
 	}
 	if err := a.verifyExpectedContext(ctx); err != nil {
-		return storage.NotCommitted, err
+		return secretstore.NotCommitted, err
 	}
 	if err := verifySecretExpectation(ctx, parent, name, expectation); err != nil {
-		return storage.NotCommitted, err
+		return secretstore.NotCommitted, err
 	}
-	if path == storage.RecordPath {
+	if path == secretstore.RecordPath {
 		if err := a.verifyReadDependencies(ctx, path); err != nil {
-			return storage.NotCommitted, err
+			return secretstore.NotCommitted, err
 		}
 	}
 	currentPending, err := verifySecretPending(ctx, parent, pending, data)
 	if err != nil || !sameFile(pendingIdentity, currentPending) {
-		return storage.NotCommitted, state("pending secret state changed before publication")
+		return secretstore.NotCommitted, state("pending secret state changed before publication")
 	}
 	if err := syscall.Renameat(int(parent.file.Fd()), pending, int(parent.file.Fd()), name); err != nil {
-		return storage.NotCommitted, state("secret state could not be atomically published")
+		return secretstore.NotCommitted, state("secret state could not be atomically published")
 	}
 	a.forgetExpectation(path)
-	if path == storage.RecordPath {
+	if path == secretstore.RecordPath {
 		a.phase = secretUncertain
 	}
 	if err := a.store.checkpoint(ctx, "after-secret-rename"); err != nil {
-		return storage.Uncertain, state("secret state publication has uncertain durability; inspect it before retrying")
+		return secretstore.Uncertain, state("secret state publication has uncertain durability; inspect it before retrying")
 	}
 	if err := a.store.syncDirectory(ctx, parent); err != nil {
-		return storage.Uncertain, state("secret state publication has uncertain durability; inspect it before retrying")
+		return secretstore.Uncertain, state("secret state publication has uncertain durability; inspect it before retrying")
 	}
 	if err := a.rememberPublishedFile(ctx, parent, name, path, data); err != nil {
 		a.phase = secretUncertain
-		return storage.Committed, err
+		return secretstore.Committed, err
 	}
-	if path == storage.RecordPath {
+	if path == secretstore.RecordPath {
 		a.phase = secretCommitted
 	}
-	return storage.Committed, nil
+	return secretstore.Committed, nil
 }
 
 func verifySecretExpectation(ctx context.Context, parent *directory, name string, expected secretExpectation) error {

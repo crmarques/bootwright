@@ -59,16 +59,17 @@ To find the code behind a command, start at `internal/cli/commands_<domain>.go`
 (grep the command path, such as `"secret set"`); its consumer interface names
 the service package `internal/<context>/<capability>/`, where `service.go` is the
 use case, `contracts.go` lists the ports it consumes and `requests.go` is what the
-CLI sees; `cmd/bootwright/wiring.go` binds each port to an adapter package.
+CLI sees; `cmd/bootwright/wiring_<domain>.go` binds each port to an adapter package.
 
 | Path | Responsibility |
 | --- | --- |
-| `cmd/bootwright/` | The only composition root: `main.go` entry/exit and linker metadata; `run.go` privilege boundary and CLI invocation; `wiring.go` constructs the service bundle. |
+| `cmd/bootwright/` | The only composition root: `main.go` entry/exit and linker metadata; `run.go` privilege boundary and CLI invocation; `wiring.go` assembles the bundle from one `wiring_<domain>.go` per domain. |
 | `api/v1alpha1/` | Presence-preserving immutable values and closed kind schemas. |
 | `internal/cli/` | Driving adapter: `catalog.go` (the single command list), `runner.go`, `dispatch.go`, `results.go`, per-domain `commands_*.go` and `output_*.go`. |
 | `internal/<context>/` | Pure domain values and kind admission rules; shared values such as SSH options and secret material. |
 | `internal/<context>/<capability>/` | One application `Service` per command family with its requests and ports: `workspace/contexts`, `secrets/custody`, `secrets/encryption`, `desiredstate/compilation`, `controller/prerequisites`; the others are typed stubs. |
-| `internal/<context>/<adapter>/` | Driven adapters named by what they bind: `contextfs`, `selectionfs`, `inputfs`, `yamlstream`, `encoding`, `localstore`, `material`, `hostlinux`, `bundlelocal`, `ansiblelocal`, `nativelocal`, `invocation`. |
+| `internal/<context>/<adapter>/` | Driven adapters named by what they bind: `contextfs`, `selectionfs`, `inputfs`, `yamlstream`, `encoding`, `localkeyring`, `material`, `hostlinux`, `bundlelocal`, `ansiblelocal`, `nativelocal`, `privilege`. |
+| `internal/diagnostics/` | Diagnostics and typed failures; imports nothing first-party. |
 | `internal/availability/` | Shared unavailable-capability error; no presentation or effects. |
 | `test/architecture/` | Fitness checks: dependency direction, effect boundaries, composition-only binding. |
 | `scripts/` | Reproducible build and verification entrypoints. |
@@ -76,10 +77,8 @@ CLI sees; `cmd/bootwright/wiring.go` binds each port to an adapter package.
 The [command and package map](specs/architecture.md#command-and-package-map)
 lists every command with its CLI file, service package, adapters and status, and
 the [communication graph](specs/architecture.md#domain-communication-graph)
-shows which interface each domain uses to reach another. The map names the
-target package layout; the pending renames are listed in its
-[transition table](specs/architecture.md#transition). Application packages are
-independent of Cobra and terminal output. The compiler receives verified source
+shows which interface each domain uses to reach another. Application packages
+are independent of Cobra and terminal output. The compiler receives verified source
 bytes through its input adapter; pure domain owners supply admission rules under
 the [package contract](specs/architecture.md#go-package-structure).
 

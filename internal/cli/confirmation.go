@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -28,7 +28,7 @@ func NewConfirmation(read func(context.Context, []byte) (int, error), out io.Wri
 func (c *Confirmation) Confirm(ctx context.Context, action, name string) error {
 	failure := func(reason string) error {
 		if action == "bastion setup" {
-			return desiredstate.NewFailure("controller.setup", "setup confirmation "+reason, "")
+			return diagnostics.NewFailure("controller.setup", "setup confirmation "+reason, "")
 		}
 		return contexts.StateError("context confirmation " + reason)
 	}

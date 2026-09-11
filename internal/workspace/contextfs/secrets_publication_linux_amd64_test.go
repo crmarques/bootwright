@@ -15,17 +15,17 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/secrets/localstore"
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/localkeyring"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
-func secretPublicationFixture(t *testing.T) (*Store, storage.Context) {
+func secretPublicationFixture(t *testing.T) (*Store, secretstore.Context) {
 	t.Helper()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
-	token := storage.Context{Name: record.Name, ID: record.ID, Revision: record.Revision, Mode: string(record.Mode)}
-	access := storage.NewAccess(store, storage.NewCatalog(localstore.New()), nil)
-	if err := access.Initialize(context.Background(), token, "local-keyring", func(storage.StoreSession, storage.Selection, bool) error { return nil }); err != nil {
+	token := secretstore.Context{Name: record.Name, ID: record.ID, Revision: record.Revision, Mode: string(record.Mode)}
+	access := secretstore.NewAccess(store, secretstore.NewCatalog(localkeyring.New()), nil)
+	if err := access.Initialize(context.Background(), token, "local-keyring", func(secretstore.StoreSession, secretstore.Selection, bool) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	if err := publishTestSecret(store, token, "original-canary"); err != nil {
@@ -34,7 +34,7 @@ func secretPublicationFixture(t *testing.T) (*Store, storage.Context) {
 	return store, token
 }
 
-func publishTestSecret(store *Store, token storage.Context, value string) error {
+func publishTestSecret(store *Store, token secretstore.Context, value string) error {
 	declaration := secrets.Declaration{Name: "payload", Type: "opaque", Source: "contextStore"}
 	encoded, err := json.Marshal(declaration)
 	if err != nil {
@@ -44,18 +44,18 @@ func publishTestSecret(store *Store, token storage.Context, value string) error 
 	declaration.Fingerprint = hex.EncodeToString(digest[:])
 	material := secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(value)})
 	defer material.Clear()
-	access := storage.NewAccess(store, storage.NewCatalog(localstore.New()), nil)
-	return access.Mutate(context.Background(), token, func(session storage.StoreSession, _ storage.Selection) error {
-		_, err := session.PutBatch(context.Background(), []storage.Put{{Declaration: declaration, Material: material}})
+	access := secretstore.NewAccess(store, secretstore.NewCatalog(localkeyring.New()), nil)
+	return access.Mutate(context.Background(), token, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+		_, err := session.PutBatch(context.Background(), []secretstore.Put{{Declaration: declaration, Material: material}})
 		return err
 	})
 }
 
-func readTestSecret(t *testing.T, store *Store, token storage.Context) string {
+func readTestSecret(t *testing.T, store *Store, token secretstore.Context) string {
 	t.Helper()
-	access := storage.NewAccess(store, storage.NewCatalog(localstore.New()), nil)
+	access := secretstore.NewAccess(store, secretstore.NewCatalog(localkeyring.New()), nil)
 	result := ""
-	err := access.View(context.Background(), token, true, func(session storage.StoreSession, _ storage.Selection) error {
+	err := access.View(context.Background(), token, true, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 		snapshot, err := session.Inspect(context.Background())
 		if err != nil {
 			return err
@@ -129,18 +129,18 @@ func TestSecretEveryPublicationEffectIsAtomic(t *testing.T) {
 }
 
 func TestSecretEveryRotationEffectPreservesCompleteMaterial(t *testing.T) {
-	rotate := func(store *Store, token storage.Context) error {
-		access := storage.NewAccess(store, storage.NewCatalog(localstore.New()), nil)
-		return access.Mutate(context.Background(), token, func(session storage.StoreSession, _ storage.Selection) error {
+	rotate := func(store *Store, token secretstore.Context) error {
+		access := secretstore.NewAccess(store, secretstore.NewCatalog(localkeyring.New()), nil)
+		return access.Mutate(context.Background(), token, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 			_, err := session.Rotate(context.Background())
 			return err
 		})
 	}
-	key := func(t *testing.T, store *Store, token storage.Context) string {
+	key := func(t *testing.T, store *Store, token secretstore.Context) string {
 		t.Helper()
-		access := storage.NewAccess(store, storage.NewCatalog(localstore.New()), nil)
+		access := secretstore.NewAccess(store, secretstore.NewCatalog(localkeyring.New()), nil)
 		active := ""
-		err := access.View(context.Background(), token, false, func(session storage.StoreSession, _ storage.Selection) error {
+		err := access.View(context.Background(), token, false, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 			snapshot, err := session.Inspect(context.Background())
 			active = snapshot.ActiveKey
 			return err

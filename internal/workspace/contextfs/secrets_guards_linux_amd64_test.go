@@ -11,16 +11,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/secrets/localstore"
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/localkeyring"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
-func unpublishedSecretFixture(t *testing.T) (*Store, storage.Context, string) {
+func unpublishedSecretFixture(t *testing.T) (*Store, secretstore.Context, string) {
 	t.Helper()
 	store, sources := fixture(t)
 	token := secretToken(publish(t, store, "example", sources))
 	ctx := context.Background()
-	err := store.MutateSecrets(ctx, token, func(area storage.Area) error {
+	err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 		if err := area.EnsureDirectory(ctx, "parts"); err != nil {
 			return err
 		}
@@ -37,17 +37,17 @@ func unpublishedSecretFixture(t *testing.T) (*Store, storage.Context, string) {
 	return store, token, filepath.Join(store.options.Root, "contexts", token.Name, "secrets")
 }
 
-func observeUnpublishedSecrets(ctx context.Context, area storage.Area) ([]storage.RecordExpectation, error) {
+func observeUnpublishedSecrets(ctx context.Context, area secretstore.Area) ([]secretstore.RecordExpectation, error) {
 	if _, exists, err := area.ReadMutable(ctx, "store.json", 8<<20); err != nil || exists {
 		return nil, errors.New("published metadata unexpectedly exists")
 	}
-	guards := []storage.RecordExpectation{}
+	guards := []secretstore.RecordExpectation{}
 	for _, path := range []string{"source.json", "intent.json"} {
 		data, exists, err := area.ReadMutable(ctx, path, 4096)
 		if err != nil || !exists {
 			return nil, errors.New("publication guard is missing")
 		}
-		guards = append(guards, storage.RecordExpectation{Path: path, Data: data})
+		guards = append(guards, secretstore.RecordExpectation{Path: path, Data: data})
 	}
 	if _, err := area.Entries(ctx, "parts"); err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func observeUnpublishedSecrets(ctx context.Context, area storage.Area) ([]storag
 func TestSecretUnpublishedPruneAllowsNextPublication(t *testing.T) {
 	store, token, root := unpublishedSecretFixture(t)
 	ctx := context.Background()
-	err := store.MutateSecrets(ctx, token, func(area storage.Area) error {
+	err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 		guards, err := observeUnpublishedSecrets(ctx, area)
 		if err != nil {
 			return err
@@ -70,14 +70,14 @@ func TestSecretUnpublishedPruneAllowsNextPublication(t *testing.T) {
 			return err
 		}
 		outcome, err := area.Replace(ctx, "intent.json", []byte("next intent"), guards[1].Data)
-		if err != nil || outcome != storage.Committed {
+		if err != nil || outcome != secretstore.Committed {
 			return errors.New("replacement intent was not committed")
 		}
 		if _, _, err := area.ReadMutable(ctx, "intent.json", 4096); err != nil {
 			return err
 		}
 		outcome, err = area.Replace(ctx, "store.json", []byte("published metadata"), nil)
-		if err != nil || outcome != storage.Committed {
+		if err != nil || outcome != secretstore.Committed {
 			return errors.New("metadata was not committed after guarded cleanup")
 		}
 		return nil
@@ -114,7 +114,7 @@ func TestSecretUnpublishedPruneRejectsChangedProof(t *testing.T) {
 				}
 				return os.WriteFile(path, []byte("synthetic "+target), 0600)
 			}
-			err := store.MutateSecrets(ctx, token, func(area storage.Area) error {
+			err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 				guards, err := observeUnpublishedSecrets(ctx, area)
 				if err != nil {
 					return err
@@ -149,7 +149,7 @@ func TestSecretUnpublishedPruneRequiresBoundedDurableGuards(t *testing.T) {
 				}
 				return nil
 			}
-			err := access(ctx, token, func(area storage.Area) error {
+			err := access(ctx, token, func(area secretstore.Area) error {
 				guards, err := observeUnpublishedSecrets(ctx, area)
 				if err != nil {
 					return err
@@ -159,7 +159,7 @@ func TestSecretUnpublishedPruneRequiresBoundedDurableGuards(t *testing.T) {
 				case "no-guards":
 					guards = nil
 				case "too-many-guards":
-					guards = make([]storage.RecordExpectation, 9)
+					guards = make([]secretstore.RecordExpectation, 9)
 				case "wrong-bytes":
 					guards[0].Data = []byte("unrelated proof")
 				case "guard-target":
@@ -199,8 +199,8 @@ func TestSecretMetadataCommitRejectsChangedReadDependency(t *testing.T) {
 		}
 		return os.WriteFile(path, []byte("synthetic source.json"), 0600)
 	}
-	var outcome storage.Outcome
-	err := store.MutateSecrets(ctx, token, func(area storage.Area) error {
+	var outcome secretstore.Outcome
+	err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 		if _, err := observeUnpublishedSecrets(ctx, area); err != nil {
 			return err
 		}
@@ -209,7 +209,7 @@ func TestSecretMetadataCommitRejectsChangedReadDependency(t *testing.T) {
 		return err
 	})
 	store.fail = nil
-	if err == nil || !fired || outcome != storage.NotCommitted {
+	if err == nil || !fired || outcome != secretstore.NotCommitted {
 		t.Fatal("metadata committed after a source identity changed", outcome, err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "store.json")); !errors.Is(err, os.ErrNotExist) {
@@ -234,7 +234,7 @@ func TestSecretMetadataCommitGuardsNewArtifactsAndReplacements(t *testing.T) {
 			t.Run(artifact.name+"/"+change, func(t *testing.T) {
 				store, token, root := secretCleanupFixture(t)
 				ctx := context.Background()
-				if err := store.MutateSecrets(ctx, token, func(area storage.Area) error {
+				if err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 					if parent, _, hasParent := strings.Cut(artifact.path, "/"); hasParent {
 						if err := area.EnsureDirectory(ctx, parent); err != nil {
 							return err
@@ -248,9 +248,9 @@ func TestSecretMetadataCommitGuardsNewArtifactsAndReplacements(t *testing.T) {
 					t.Fatal(err)
 				}
 				fired := false
-				var outcome storage.Outcome
+				var outcome secretstore.Outcome
 				var held []byte
-				err := store.MutateSecrets(ctx, token, func(area storage.Area) error {
+				err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 					metadata, _, err := area.ReadMutable(ctx, "store.json", 8<<20)
 					if err != nil {
 						return err
@@ -265,9 +265,9 @@ func TestSecretMetadataCommitGuardsNewArtifactsAndReplacements(t *testing.T) {
 						if readErr != nil {
 							return readErr
 						}
-						var replaced storage.Outcome
+						var replaced secretstore.Outcome
 						replaced, err = area.Replace(ctx, artifact.path, artifact.data, previous)
-						if err == nil && replaced != storage.Committed {
+						if err == nil && replaced != secretstore.Committed {
 							return errors.New("dependency replacement was not committed")
 						}
 					}
@@ -297,7 +297,7 @@ func TestSecretMetadataCommitGuardsNewArtifactsAndReplacements(t *testing.T) {
 					return err
 				})
 				store.fail = nil
-				if err == nil || !fired || outcome != storage.NotCommitted {
+				if err == nil || !fired || outcome != secretstore.NotCommitted {
 					t.Fatal("metadata committed after a destination dependency changed", outcome, err)
 				}
 				if data, err := os.ReadFile(filepath.Join(root, "store.json")); err != nil || !bytes.Equal(data, []byte("published metadata\n")) {
@@ -317,7 +317,7 @@ func TestSecretMetadataCommitGuardsNewArtifactsAndReplacements(t *testing.T) {
 func TestSecretReadExpectationCannotBeRefreshedAfterSubstitution(t *testing.T) {
 	store, token, root := unpublishedSecretFixture(t)
 	ctx := context.Background()
-	err := store.MutateSecrets(ctx, token, func(area storage.Area) error {
+	err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
 		original, _, err := area.ReadMutable(ctx, "source.json", 4096)
 		if err != nil {
 			return err
@@ -343,7 +343,7 @@ func TestSecretReadExpectationBytesClearAfterCallback(t *testing.T) {
 	for _, fail := range []bool{false, true} {
 		store, token, _ := unpublishedSecretFixture(t)
 		var held []byte
-		err := store.ReadSecrets(context.Background(), token, func(area storage.Area) error {
+		err := store.ReadSecrets(context.Background(), token, func(area secretstore.Area) error {
 			if _, _, err := area.ReadMutable(context.Background(), "source.json", 4096); err != nil {
 				return err
 			}
@@ -394,7 +394,7 @@ func TestSecretSyncFileRequiresObservedStableFile(t *testing.T) {
 				}
 				return os.WriteFile(file, []byte("synthetic "+path), 0600)
 			}
-			err := access(ctx, token, func(area storage.Area) error {
+			err := access(ctx, token, func(area secretstore.Area) error {
 				if failure != "unobserved" {
 					if _, _, err := area.ReadMutable(ctx, path, 4096); err != nil {
 						return err
@@ -413,12 +413,12 @@ func TestSecretSyncFileRequiresObservedStableFile(t *testing.T) {
 	}
 }
 
-func interruptedSecretKeyFixture(t *testing.T) (*Store, storage.Context, string, *storage.Access) {
+func interruptedSecretKeyFixture(t *testing.T) (*Store, secretstore.Context, string, *secretstore.Access) {
 	t.Helper()
 	store, sources := fixture(t)
 	token := secretToken(publish(t, store, "example", sources))
 	root := filepath.Join(store.options.Root, "contexts", token.Name, "secrets")
-	access := storage.NewAccess(store, storage.NewCatalog(localstore.New()), nil)
+	access := secretstore.NewAccess(store, secretstore.NewCatalog(localkeyring.New()), nil)
 	fired := false
 	store.fail = func(point string) error {
 		if point != "sync-file" || fired {
@@ -436,7 +436,7 @@ func interruptedSecretKeyFixture(t *testing.T) (*Store, storage.Context, string,
 		}
 		return nil
 	}
-	err := access.Initialize(context.Background(), token, "local-keyring", func(storage.StoreSession, storage.Selection, bool) error { return nil })
+	err := access.Initialize(context.Background(), token, "local-keyring", func(secretstore.StoreSession, secretstore.Selection, bool) error { return nil })
 	store.fail = nil
 	if err == nil || !fired {
 		t.Fatal("initialization did not stop before key durability", err)
@@ -466,7 +466,7 @@ func TestSecretInitializationRetrySynchronizesRecoveredKey(t *testing.T) {
 			}
 			return nil
 		}
-		err := access.Initialize(context.Background(), token, "local-keyring", func(storage.StoreSession, storage.Selection, bool) error { return nil })
+		err := access.Initialize(context.Background(), token, "local-keyring", func(secretstore.StoreSession, secretstore.Selection, bool) error { return nil })
 		store.fail = nil
 		if publishedBeforeSync || (err != nil) != failSync || !failSync && !parentSynchronized {
 			t.Fatalf("recovered-key durability: err=%v earlyPublication=%v parentSync=%v", err, publishedBeforeSync, parentSynchronized)
@@ -475,7 +475,7 @@ func TestSecretInitializationRetrySynchronizesRecoveredKey(t *testing.T) {
 			if _, err := os.Stat(filepath.Join(root, "store.json")); !errors.Is(err, os.ErrNotExist) {
 				t.Fatal("failed key synchronization published metadata", err)
 			}
-			if err := access.Initialize(context.Background(), token, "local-keyring", func(storage.StoreSession, storage.Selection, bool) error { return nil }); err != nil {
+			if err := access.Initialize(context.Background(), token, "local-keyring", func(secretstore.StoreSession, secretstore.Selection, bool) error { return nil }); err != nil {
 				t.Fatal("key synchronization retry did not recover", err)
 			}
 		}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type sourceReaderFunc func(context.Context, []string) (desiredstate.Sources, error)
@@ -77,7 +78,7 @@ func TestServiceFailuresHideReportsAndStopLaterStages(t *testing.T) {
 		t.Run(stage, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			failure := desiredstate.NewFailure("input.read", "unreadable input", "input.yaml")
+			failure := diagnostics.NewFailure("input.read", "unreadable input", "input.yaml")
 			compiled := 0
 			service := New(sourceReaderFunc(func(context.Context, []string) (desiredstate.Sources, error) {
 				if stage == "canceled-read" {
@@ -191,7 +192,7 @@ func TestServiceContextFailuresAndCancellationNeverReturnPartialResults(t *testi
 			t.Run(operation+"/"+stage, func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				failure := desiredstate.NewFailure("context.state", "immutable input cannot be read", "")
+				failure := diagnostics.NewFailure("context.state", "immutable input cannot be read", "")
 				reads, compiles := 0, 0
 				inputs := contextInputsFunc(func(got context.Context, _ string) (desiredstate.Sources, error) {
 					reads++

@@ -17,7 +17,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"golang.org/x/sys/unix"
 )
 
@@ -291,5 +291,5 @@ func inspectionFailure(ctx context.Context, code, message string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return desiredstate.NewFailure(code, message, "")
+	return diagnostics.NewFailure(code, message, "")
 }

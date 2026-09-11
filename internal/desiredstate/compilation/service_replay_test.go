@@ -9,6 +9,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type frozenContextInputs struct{ sources desiredstate.Sources }
@@ -68,7 +69,7 @@ spec:
 	service := compilation.New(nil, compiler(), frozenContextInputs{input})
 	report, err := service.Validate(context.Background(), compilation.ValidateRequest{ContextName: "frozen"})
 	if err != nil {
-		t.Fatal(desiredstate.DiagnosticsOf(err))
+		t.Fatal(diagnostics.Of(err))
 	}
 	if report.Counts != (compilation.Counts{FilesSeen: 3, ObjectsDecoded: 3}) || !reflect.DeepEqual(report.ExcludedResourceFiles, []string{"excluded.yaml"}) || len(report.Diagnostics) != 1 || len(report.Advisories) != 1 {
 		t.Fatalf("replay lost counts or exclusions: %#v", report)
@@ -104,7 +105,7 @@ spec:
 		t.Fatal("recipient-relative payload containment was lost")
 	}
 	found := false
-	for _, diagnostic := range desiredstate.DiagnosticsOf(err) {
+	for _, diagnostic := range diagnostics.Of(err) {
 		if diagnostic.Code == "api.invariant" && diagnostic.Field == "$.spec.source.file.path" {
 			found = true
 			line := strings.Count(badEnvironment[:strings.Index(badEnvironment, "          path:")], "\n") + 1
@@ -114,6 +115,6 @@ spec:
 		}
 	}
 	if !found {
-		t.Fatal("missing recipient path diagnostic", desiredstate.DiagnosticsOf(err))
+		t.Fatal("missing recipient path diagnostic", diagnostics.Of(err))
 	}
 }

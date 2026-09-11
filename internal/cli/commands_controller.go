@@ -8,11 +8,11 @@ import (
 )
 
 func controllerPreflightCommand() commandSpec {
-	return commandSpec{path: "preflight bastion", short: "Check controller prerequisites", long: "Verify local bastion prerequisites without installing or changing state. Omit --context for baseline checks; only an explicit nonempty --context selects Environment requirements."}
+	return available(commandSpec{path: "preflight bastion", short: "Check controller prerequisites", long: "Verify local bastion prerequisites without installing or changing state. Omit --context for baseline checks; only an explicit nonempty --context selects Environment requirements."})
 }
 
 func controllerSetupCommand() commandSpec {
-	return commandSpec{path: "bastion setup", short: "Set up controller prerequisites", flags: []flagSpec{dryRunFlag(), confirmationFlag()}, long: "Prepare qualified local bastion prerequisites. Omit --context for baseline setup; only an explicit nonempty --context selects Environment requirements. --dry-run previews the plan with unverified checks and makes no changes. Review the plan before confirming; --yes skips ordinary confirmation."}
+	return available(commandSpec{path: "bastion setup", short: "Set up controller prerequisites", flags: []flagSpec{dryRunFlag(), confirmationFlag()}, long: "Prepare qualified local bastion prerequisites. Omit --context for baseline setup; only an explicit nonempty --context selects Environment requirements. --dry-run previews the plan with unverified checks and makes no changes. Review the plan before confirming; --yes skips ordinary confirmation."})
 }
 
 type ControllerService interface {

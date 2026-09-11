@@ -10,9 +10,9 @@ import (
 	"encoding/json"
 	"slices"
 
-	automation "github.com/crmarques/bootwright/ansible"
+	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 //go:embed catalog.json
@@ -121,7 +121,7 @@ func uniqueLinks(links []prerequisites.InstalledLink) []prerequisites.InstalledL
 
 func selectedNativePackages(native nativeRecord, requirements prerequisites.NativeRequirements) ([]prerequisites.NativePackage, error) {
 	if requirements.LibvirtClient && (!requirements.ContainerRuntime || len(native.LibvirtPackages) == 0) {
-		return nil, desiredstate.NewFailureWithRemediation("controller.unsupported", "selected libvirt controller dependencies have no qualified native source for this bastion release", "", "Use the qualified Fedora bastion profile for libvirt preparation; authenticated RHEL AppStream acquisition is not implemented.")
+		return nil, diagnostics.NewFailureWithRemediation("controller.unsupported", "selected libvirt controller dependencies have no qualified native source for this bastion release", "", "Use the qualified Fedora bastion profile for libvirt preparation; authenticated RHEL AppStream acquisition is not implemented.")
 	}
 	if !requirements.ContainerRuntime {
 		return nil, nil
@@ -168,7 +168,7 @@ func compiledCatalog() (catalogRecord, string, error) {
 	digest.Write([]byte("bootwright.controller.catalog-with-automation-v1\x00"))
 	digest.Write(catalogData)
 	digest.Write([]byte{0})
-	digest.Write([]byte(automation.Digest()))
+	digest.Write([]byte(ansible.Digest()))
 	return record, hex.EncodeToString(digest.Sum(nil)), nil
 }
 
@@ -182,9 +182,9 @@ func selectNative(record catalogRecord, platform prerequisites.Platform) (native
 }
 
 func unsupportedPlatform() error {
-	return desiredstate.NewFailureWithRemediation("controller.unsupported", "controller setup requires qualified RHEL 9.8 or Fedora 43 on Linux amd64", "", "Use a qualified installed bastion release and architecture.")
+	return diagnostics.NewFailureWithRemediation("controller.unsupported", "controller setup requires qualified RHEL 9.8 or Fedora 43 on Linux amd64", "", "Use a qualified installed bastion release and architecture.")
 }
 
 func bundleFailure(message string) error {
-	return desiredstate.NewFailureWithRemediation("controller.setup", message, "", "Restore approved dependency sources or the exact retained bundle, then rerun setup with the same explicit context.")
+	return diagnostics.NewFailureWithRemediation("controller.setup", message, "", "Restore approved dependency sources or the exact retained bundle, then rerun setup with the same explicit context.")
 }

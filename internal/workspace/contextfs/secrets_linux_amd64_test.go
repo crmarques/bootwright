@@ -10,12 +10,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
-func secretToken(record contexts.Record) storage.Context {
-	return storage.Context{Name: record.Name, ID: record.ID, Mode: string(record.Mode), Revision: record.Revision}
+func secretToken(record contexts.Record) secretstore.Context {
+	return secretstore.Context{Name: record.Name, ID: record.ID, Mode: string(record.Mode), Revision: record.Revision}
 }
 
 func TestSecretAreaIsAbsentReadOnlyAndAtomicallyPublished(t *testing.T) {
@@ -27,7 +27,7 @@ func TestSecretAreaIsAbsentReadOnlyAndAtomicallyPublished(t *testing.T) {
 		t.Fatalf("secret context: %#v %v", snapshot, err)
 	}
 	secretDirectory := filepath.Join(store.options.Root, "contexts", record.Name, "secrets")
-	err = store.ReadSecrets(context.Background(), token, func(area storage.Area) error {
+	err = store.ReadSecrets(context.Background(), token, func(area secretstore.Area) error {
 		entries, err := area.Entries(context.Background(), "")
 		if err != nil || len(entries) != 0 {
 			t.Fatalf("absent entries: %#v %v", entries, err)
@@ -47,7 +47,7 @@ func TestSecretAreaIsAbsentReadOnlyAndAtomicallyPublished(t *testing.T) {
 		t.Fatal("read-only secret access changed empty state")
 	}
 	original := []byte("{\"version\":1}\n")
-	err = store.MutateSecrets(context.Background(), token, func(area storage.Area) error {
+	err = store.MutateSecrets(context.Background(), token, func(area secretstore.Area) error {
 		if err := area.EnsureDirectory(context.Background(), "parts"); err != nil {
 			return err
 		}
@@ -59,7 +59,7 @@ func TestSecretAreaIsAbsentReadOnlyAndAtomicallyPublished(t *testing.T) {
 			return errors.New("unexpected store")
 		}
 		outcome, err := area.Replace(context.Background(), "store.json", original, expected)
-		if err != nil || outcome != storage.Committed {
+		if err != nil || outcome != secretstore.Committed {
 			return errors.New("store was not committed")
 		}
 		if data, exists, err := area.Read(context.Background(), "store.json", 8<<20); err != nil || !exists || !bytes.Equal(data, original) {
@@ -73,7 +73,7 @@ func TestSecretAreaIsAbsentReadOnlyAndAtomicallyPublished(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.ReadSecrets(context.Background(), token, func(area storage.Area) error {
+	if err := store.ReadSecrets(context.Background(), token, func(area secretstore.Area) error {
 		data, exists, err := area.Read(context.Background(), "store.json", 8<<20)
 		if err != nil || !exists || !bytes.Equal(data, original) {
 			t.Fatalf("published store: %q %v %v", data, exists, err)
@@ -94,7 +94,7 @@ func TestSecretReplaceRejectsSameByteInodeSubstitution(t *testing.T) {
 	record := publish(t, store, "example", sources)
 	token := secretToken(record)
 	original := []byte("original\n")
-	if err := store.MutateSecrets(context.Background(), token, func(area storage.Area) error {
+	if err := store.MutateSecrets(context.Background(), token, func(area secretstore.Area) error {
 		expected, _, err := area.ReadMutable(context.Background(), "store.json", 64)
 		if err != nil {
 			return err
@@ -116,8 +116,8 @@ func TestSecretReplaceRejectsSameByteInodeSubstitution(t *testing.T) {
 		}
 		return os.WriteFile(storePath, original, 0600)
 	}
-	var outcome storage.Outcome
-	err := store.MutateSecrets(context.Background(), token, func(area storage.Area) error {
+	var outcome secretstore.Outcome
+	err := store.MutateSecrets(context.Background(), token, func(area secretstore.Area) error {
 		expected, exists, err := area.ReadMutable(context.Background(), "store.json", 64)
 		if err != nil || !exists {
 			return errors.New("missing selector")
@@ -127,7 +127,7 @@ func TestSecretReplaceRejectsSameByteInodeSubstitution(t *testing.T) {
 	})
 	store.fail = nil
 	expectState(t, err)
-	if outcome != storage.NotCommitted || !replaced {
+	if outcome != secretstore.NotCommitted || !replaced {
 		t.Fatalf("replacement outcome: %s", outcome)
 	}
 	data, err := os.ReadFile(storePath)
@@ -148,8 +148,8 @@ func TestSecretReplaceReportsPostRenameUncertainty(t *testing.T) {
 		}
 		return nil
 	}
-	var outcome storage.Outcome
-	err := store.MutateSecrets(context.Background(), token, func(area storage.Area) error {
+	var outcome secretstore.Outcome
+	err := store.MutateSecrets(context.Background(), token, func(area secretstore.Area) error {
 		expected, _, err := area.ReadMutable(context.Background(), "store.json", 64)
 		if err != nil {
 			return err
@@ -159,10 +159,10 @@ func TestSecretReplaceReportsPostRenameUncertainty(t *testing.T) {
 	})
 	store.fail = nil
 	expectState(t, err)
-	if outcome != storage.Uncertain || !fired {
+	if outcome != secretstore.Uncertain || !fired {
 		t.Fatalf("post-rename outcome: %s", outcome)
 	}
-	if err := store.ReadSecrets(context.Background(), token, func(area storage.Area) error {
+	if err := store.ReadSecrets(context.Background(), token, func(area secretstore.Area) error {
 		data, exists, err := area.Read(context.Background(), "store.json", 64)
 		if err != nil || !exists || string(data) != "published\n" {
 			t.Fatalf("uncertain publication visibility: %q %v %v", data, exists, err)
@@ -176,14 +176,14 @@ func TestSecretReplaceReportsPostRenameUncertainty(t *testing.T) {
 func TestSecretAreaCannotEscapePanickingCallback(t *testing.T) {
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
-	var escaped storage.Area
+	var escaped secretstore.Area
 	func() {
 		defer func() {
 			if recover() == nil {
 				t.Fatal("callback panic did not propagate")
 			}
 		}()
-		_ = store.MutateSecrets(context.Background(), secretToken(record), func(area storage.Area) error {
+		_ = store.MutateSecrets(context.Background(), secretToken(record), func(area secretstore.Area) error {
 			escaped = area
 			panic("fixture panic")
 		})

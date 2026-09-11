@@ -21,10 +21,10 @@ import (
 	"syscall"
 	"time"
 
-	automation "github.com/crmarques/bootwright/ansible"
+	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"golang.org/x/sys/unix"
 )
 
@@ -149,7 +149,7 @@ func profiles(platform prerequisites.Platform, requirements prerequisites.Native
 		return []repository{{ID: "fedora", BaseURL: "https://dl.fedoraproject.org/pub/fedora/linux/releases/43/Everything/x86_64/os", Signer: signer}, {ID: "updates", BaseURL: "https://dl.fedoraproject.org/pub/fedora/linux/updates/43/Everything/x86_64", Signer: signer}}, nil
 	case platform.OS == "rhel" && platform.Release == "9.8":
 		if requirements.LibvirtClient {
-			return nil, desiredstate.NewFailureWithRemediation("controller.unsupported", "RHEL libvirt requires an authenticated AppStream source adapter", "", "Use a Fedora bastion for libvirt preparation until RHEL AppStream credential acquisition is configured.")
+			return nil, diagnostics.NewFailureWithRemediation("controller.unsupported", "RHEL libvirt requires an authenticated AppStream source adapter", "", "Use a Fedora bastion for libvirt preparation until RHEL AppStream credential acquisition is configured.")
 		}
 		signer := "567e347ad0044ade55ba8a5f199e2f91fd431d51"
 		return []repository{{ID: "ubi-baseos", BaseURL: "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os", Signer: signer}, {ID: "ubi-appstream", BaseURL: "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/appstream/os", Signer: signer}}, nil
@@ -242,7 +242,7 @@ func newStage(platform prerequisites.Platform) (*nativeStage, error) {
 			_ = os.RemoveAll(root)
 		}
 	}()
-	asset := automation.Assets()["collections/ansible_collections/bootwright/core/plugins/module_utils/native_resolution.py"]
+	asset := ansible.Assets()["collections/ansible_collections/bootwright/core/plugins/module_utils/native_resolution.py"]
 	if len(asset) == 0 || os.Mkdir(stage.work, 0700) != nil || os.WriteFile(stage.script, asset, 0600) != nil {
 		return nil, failure("native resolution helper is unavailable")
 	}
@@ -417,5 +417,5 @@ func strictDecode(data []byte, target any) error {
 	return nil
 }
 func failure(message string) error {
-	return desiredstate.NewFailureWithRemediation("controller.setup", message, "", "Restore the provided OS package-manager foundation and approved repository access, then retry setup.")
+	return diagnostics.NewFailureWithRemediation("controller.setup", message, "", "Restore the provided OS package-manager foundation and approved repository access, then retry setup.")
 }

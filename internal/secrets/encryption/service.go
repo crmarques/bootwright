@@ -3,12 +3,9 @@ package encryption
 import (
 	"context"
 
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
-type Confirmer interface {
-	Confirm(context.Context, string, string) error
-}
 type Service struct {
 	access    StoreAccess
 	confirmer Confirmer
@@ -24,21 +21,12 @@ func (s Service) Types() []string {
 	return s.access.Types()
 }
 
-type EncryptionInitRequest struct {
-	ContextName string
-}
-type EncryptionStatusRequest struct{ ContextName string }
-type EncryptionRotateRequest struct {
-	ContextName      string
-	SkipConfirmation bool
-}
-
 func (s Service) Init(ctx context.Context, request EncryptionInitRequest) (*MutationResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if s.access == nil {
-		return nil, storage.Failure("store.implementation", "secret encryption service is not configured")
+		return nil, secretstore.Failure("store.implementation", "secret encryption service is not configured")
 	}
 	selected, err := s.access.Context(ctx, request.ContextName)
 	if err != nil {
@@ -46,9 +34,9 @@ func (s Service) Init(ctx context.Context, request EncryptionInitRequest) (*Muta
 	}
 	result := &MutationResult{Context: selected.Context}
 	if selected.SecretStoreType == "" {
-		return nil, storage.Failure("store.implementation", "context secret store configuration is missing")
+		return nil, secretstore.Failure("store.implementation", "context secret store configuration is missing")
 	}
-	err = s.access.Initialize(ctx, selected.Context, selected.SecretStoreType, func(session storage.StoreSession, selection storage.Selection, created bool) error {
+	err = s.access.Initialize(ctx, selected.Context, selected.SecretStoreType, func(session secretstore.StoreSession, selection secretstore.Selection, created bool) error {
 		snapshot, err := session.Inspect(ctx)
 		if err != nil {
 			return err
@@ -69,14 +57,14 @@ func (s Service) Status(ctx context.Context, request EncryptionStatusRequest) (*
 		return nil, err
 	}
 	if s.access == nil {
-		return nil, storage.Failure("store.implementation", "secret encryption service is not configured")
+		return nil, secretstore.Failure("store.implementation", "secret encryption service is not configured")
 	}
 	selected, err := s.access.Context(ctx, request.ContextName)
 	if err != nil {
 		return nil, err
 	}
-	result := &StatusResult{Keys: []storage.Key{}}
-	err = s.access.View(ctx, selected.Context, false, func(session storage.StoreSession, selection storage.Selection) error {
+	result := &StatusResult{Keys: []secretstore.Key{}}
+	err = s.access.View(ctx, selected.Context, false, func(session secretstore.StoreSession, selection secretstore.Selection) error {
 		if session == nil {
 			return nil
 		}
@@ -88,7 +76,7 @@ func (s Service) Status(ctx context.Context, request EncryptionStatusRequest) (*
 		result.Implementation = &ImplementationStatus{Type: selection.Type, Store: componentStatus(selection.Store), KeyCustody: componentStatus(selection.KeyCustody), State: "ready"}
 		active := snapshot.ActiveKey
 		result.ActiveKey = &active
-		result.Keys = append([]storage.Key{}, snapshot.Keys...)
+		result.Keys = append([]secretstore.Key{}, snapshot.Keys...)
 		result.Items.CurrentVersions = len(snapshot.Current)
 		bound := map[string]bool{}
 		for _, binding := range snapshot.Bindings {
@@ -115,23 +103,23 @@ func (s Service) Rotate(ctx context.Context, request EncryptionRotateRequest) (*
 		return nil, err
 	}
 	if s.access == nil {
-		return nil, storage.Failure("store.implementation", "secret encryption service is not configured")
+		return nil, secretstore.Failure("store.implementation", "secret encryption service is not configured")
 	}
 	selected, err := s.access.Context(ctx, request.ContextName)
 	if err != nil {
 		return nil, err
 	}
 	result := &MutationResult{Context: selected.Context}
-	err = s.access.Mutate(ctx, selected.Context, func(session storage.StoreSession, selection storage.Selection) error {
+	err = s.access.Mutate(ctx, selected.Context, func(session secretstore.StoreSession, selection secretstore.Selection) error {
 		if !request.SkipConfirmation {
 			if s.confirmer == nil {
-				return storage.Failure("store.conflict", "key rotation requires confirmation; use --yes after review")
+				return secretstore.Failure("store.conflict", "key rotation requires confirmation; use --yes after review")
 			}
 			if err := s.confirmer.Confirm(ctx, "rotate secret encryption", selected.Context.Name); err != nil {
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
-				return storage.Failure("store.conflict", "key rotation was not confirmed")
+				return secretstore.Failure("store.conflict", "key rotation was not confirmed")
 			}
 		}
 		active, err := session.Rotate(ctx)

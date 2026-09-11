@@ -10,11 +10,11 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-type diagnostic = desiredstate.Diagnostic
+type diagnostic = diagnostics.Diagnostic
 
 type commandEnvelope struct {
 	SchemaVersion string       `json:"schemaVersion"`
@@ -85,7 +85,7 @@ func displayNames(values []string) []string {
 
 func displayDiagnostics(values []diagnostic) []diagnostic {
 	values = append([]diagnostic{}, values...)
-	desiredstate.SortDiagnostics(values)
+	diagnostics.Sort(values)
 	for i, d := range values {
 		d.Severity = escapeDisplayLine(d.Severity)
 		d.Code = escapeDisplayLine(d.Code)

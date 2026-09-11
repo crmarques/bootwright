@@ -9,7 +9,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/controller"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type Options struct {
@@ -34,14 +34,6 @@ type Service struct {
 
 func New(storage Storage, compiler Compiler, host HostInspector, catalog DependencyCatalog, bundle BundleManager, runtime RuntimeInstaller, options Options) Service {
 	return Service{storage, compiler, host, catalog, bundle, runtime, options}
-}
-
-type CheckRequest struct{ ContextName string }
-
-type SetupRequest struct {
-	ContextName      string
-	DryRun           bool
-	SkipConfirmation bool
 }
 
 type inspection struct {
@@ -473,5 +465,5 @@ func setupCommand(name string) string {
 }
 
 func failure(code, message, remediation string) error {
-	return desiredstate.NewFailureWithRemediation(code, message, "", remediation)
+	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
 }

@@ -11,15 +11,15 @@ import (
 
 func secretCommands() []commandSpec {
 	return []commandSpec{
-		{path: "secret set", short: "Store confidential material", flags: []flagSpec{nameFlag(), fileFlag("value-file", "Read a value from a file"), boolFlag("value-stdin", "Read a value from standard input"), stringFlag("username", "Store this username with a password"), fileFlag("password-file", "Read a password from a file"), boolFlag("password-stdin", "Read a password from standard input"), fileFlag("certificate-file", "Read a certificate or CA bundle from a file"), fileFlag("private-key-file", "Read a private key from a file"), fileFlag("public-key-file", "Read an SSH public key from a file"), confirmationFlag()}, long: "Store one declared contextStore secret using the exact input flags for its type. Stdin-backed replacement requires --yes."},
-		{path: "secret generate", short: "Generate declared secret material", flags: []flagSpec{stringFlag("name", "Select one generated secret (default: all)"), boolFlag("renew", "Renew selected generated material")}},
-		{path: "secret check", short: "Check secret availability and types", flags: []flagSpec{outputFlag()}},
-		{path: "secret list", short: "List secret metadata", flags: []flagSpec{outputFlag()}},
-		{path: "secret show", short: "Export raw sensitive secret bytes to standard output", flags: []flagSpec{nameFlag(), requiredEnumFlag("part", "Select the secret part", "value", "username", "password", "certificate", "private-key", "public-key")}},
-		{path: "secret delete", short: "Remove an active secret mapping, retaining bound versions", flags: []flagSpec{nameFlag(), confirmationFlag()}},
-		{path: "secret encryption init", short: "Initialize or recover the configured confidential store"},
-		{path: "secret encryption status", short: "Show encryption metadata", flags: []flagSpec{outputFlag()}},
-		{path: "secret encryption rotate", short: "Rotate the active encryption key", flags: []flagSpec{confirmationFlag()}},
+		available(commandSpec{path: "secret set", short: "Store confidential material", flags: []flagSpec{nameFlag(), fileFlag("value-file", "Read a value from a file"), boolFlag("value-stdin", "Read a value from standard input"), stringFlag("username", "Store this username with a password"), fileFlag("password-file", "Read a password from a file"), boolFlag("password-stdin", "Read a password from standard input"), fileFlag("certificate-file", "Read a certificate or CA bundle from a file"), fileFlag("private-key-file", "Read a private key from a file"), fileFlag("public-key-file", "Read an SSH public key from a file"), confirmationFlag()}, long: "Store one declared contextStore secret using the exact input flags for its type. Stdin-backed replacement requires --yes."}),
+		available(commandSpec{path: "secret generate", short: "Generate declared secret material", flags: []flagSpec{stringFlag("name", "Select one generated secret (default: all)"), boolFlag("renew", "Renew selected generated material")}}),
+		available(commandSpec{path: "secret check", short: "Check secret availability and types", flags: []flagSpec{outputFlag()}}),
+		available(commandSpec{path: "secret list", short: "List secret metadata", flags: []flagSpec{outputFlag()}}),
+		available(commandSpec{path: "secret show", short: "Export raw sensitive secret bytes to standard output", flags: []flagSpec{nameFlag(), requiredEnumFlag("part", "Select the secret part", "value", "username", "password", "certificate", "private-key", "public-key")}}),
+		available(commandSpec{path: "secret delete", short: "Remove an active secret mapping, retaining bound versions", flags: []flagSpec{nameFlag(), confirmationFlag()}}),
+		available(commandSpec{path: "secret encryption init", short: "Initialize or recover the configured confidential store"}),
+		available(commandSpec{path: "secret encryption status", short: "Show encryption metadata", flags: []flagSpec{outputFlag()}}),
+		available(commandSpec{path: "secret encryption rotate", short: "Rotate the active encryption key", flags: []flagSpec{confirmationFlag()}}),
 	}
 }
 

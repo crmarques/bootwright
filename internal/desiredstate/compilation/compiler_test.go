@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/desiredstate/yamlstream"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
@@ -65,13 +66,13 @@ func TestCompilerRejectsStrictSyntaxAndScalarViolations(t *testing.T) {
 				t.Fatalf("invalid success: %#v %#v %v", state, report, err)
 			}
 			found := false
-			for _, d := range desiredstate.DiagnosticsOf(err) {
+			for _, d := range diagnostics.Of(err) {
 				if d.Code == test.code {
 					found = true
 				}
 			}
 			if !found {
-				t.Fatalf("wanted %s: %#v", test.code, desiredstate.DiagnosticsOf(err))
+				t.Fatalf("wanted %s: %#v", test.code, diagnostics.Of(err))
 			}
 		})
 	}
@@ -83,7 +84,7 @@ func TestCompilerDefaultPrecedenceAndRecipientPaths(t *testing.T) {
 	input := desiredstate.Sources{Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(env+controllerYAML)), desiredstate.NewSourceFile("/synthetic/nested/secret.yaml", []byte(secret))}, Roots: []string{"/synthetic"}}
 	state, _, err := compiler().Compile(context.Background(), input)
 	if err != nil {
-		t.Fatal(desiredstate.DiagnosticsOf(err))
+		t.Fatal(diagnostics.Of(err))
 	}
 	object, _ := state.Effective().Find(api.Secret, "material")
 	if !object.Spec().Has("source", "contextStore") || object.Spec().Has("source", "generated") {
@@ -91,7 +92,7 @@ func TestCompilerDefaultPrecedenceAndRecipientPaths(t *testing.T) {
 	}
 	input.Files[1] = desiredstate.NewSourceFile("/synthetic/nested/secret.yaml", []byte(strings.Replace(secret, "source: {}", "source:\n    file:\n      path: secrets/material", 1)))
 	if _, _, err := compiler().Compile(context.Background(), input); err != nil {
-		t.Fatal(desiredstate.DiagnosticsOf(err))
+		t.Fatal(diagnostics.Of(err))
 	}
 }
 

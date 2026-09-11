@@ -124,7 +124,7 @@ func TestComposedExplicitValidationIsContextFree(t *testing.T) {
 	}
 	state := filepath.Join(home, "store")
 	repository := testRepository(state)
-	services := wireContextServices(repository, repository, nil, nil, testContextWiring(t, state))
+	services := testServices(t, repository, state)
 	for _, args := range [][]string{
 		{"validate", "-f", input, "--context", "missing"},
 		{"validate", "-f", input, "--context", "missing", "--output", "json"},

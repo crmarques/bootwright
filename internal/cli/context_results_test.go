@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -102,8 +102,8 @@ func TestContextEmptyListAndPermanentDeletion(t *testing.T) {
 func TestContextAdmissionWarningsArePrintedOnceAndEscaped(t *testing.T) {
 	raw := "<value>\\path\n\x1b\xff"
 	warnings := []diagnostic{
-		{Severity: "warning", Code: "api.deferred", Message: raw, Source: &desiredstate.SourceLocation{Path: "z" + raw}, Field: raw, Remediation: raw},
-		{Severity: "warning", Code: "api.selection", Message: "excluded", Source: &desiredstate.SourceLocation{Path: "a.yaml"}},
+		{Severity: "warning", Code: "api.deferred", Message: raw, Source: &diagnostics.SourceLocation{Path: "z" + raw}, Field: raw, Remediation: raw},
+		{Severity: "warning", Code: "api.selection", Message: "excluded", Source: &diagnostics.SourceLocation{Path: "a.yaml"}},
 	}
 	for _, args := range contextInvocations()[:2] {
 		record := &dispatchRecord{result: syntheticContextResults()}
@@ -144,7 +144,7 @@ func TestContextFailuresNeverPrintPartialResults(t *testing.T) {
 			if failure == nil && !strings.Contains(errOut.String(), "runtime.internal") {
 				t.Fatal("nil result was not an internal failure", errOut.String())
 			}
-			if ds := desiredstate.DiagnosticsOf(failure); len(ds) > 0 && !strings.Contains(errOut.String(), ds[0].Code) {
+			if ds := diagnostics.Of(failure); len(ds) > 0 && !strings.Contains(errOut.String(), ds[0].Code) {
 				t.Fatal("typed failure lost", errOut.String())
 			}
 		}

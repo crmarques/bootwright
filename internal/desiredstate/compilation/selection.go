@@ -8,9 +8,10 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/customplaybooks"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-func selectResources(sources desiredstate.Sources, documents []desiredstate.Document, env *objectRecord, ds *diagnostics) (map[string]bool, []string) {
+func selectResources(sources desiredstate.Sources, documents []desiredstate.Document, env *objectRecord, ds *diagnosticSink) (map[string]bool, []string) {
 	selected := map[string]bool{env.path: true}
 	base := filepath.Dir(env.path)
 	resources := env.object.Spec().Get("resources")
@@ -107,8 +108,8 @@ func selectResources(sources desiredstate.Sources, documents []desiredstate.Docu
 		if !pathWithin(file.Path(), base) {
 			remediation = "relocate the declaration inside the Environment directory before adding its relative path to resources"
 		}
-		location := desiredstate.SourceLocation{Path: file.Path()}
-		ds.add(desiredstate.Diagnostic{Severity: "warning", Code: "api.deferred", Message: "resource file is excluded: " + strings.Join(sortedNames(identities), ", "), Source: &location, Remediation: remediation})
+		location := diagnostics.SourceLocation{Path: file.Path()}
+		ds.add(diagnostics.Diagnostic{Severity: "warning", Code: "api.deferred", Message: "resource file is excluded: " + strings.Join(sortedNames(identities), ", "), Source: &location, Remediation: remediation})
 	}
 	slices.Sort(excluded)
 	return selected, excluded
@@ -119,7 +120,7 @@ func pathWithin(path, base string) bool {
 	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
-func validateIdentities(records []*objectRecord, ds *diagnostics) {
+func validateIdentities(records []*objectRecord, ds *diagnosticSink) {
 	identities := map[string][]*objectRecord{}
 	clusters := map[string][]*objectRecord{}
 	for _, record := range records {
@@ -177,7 +178,7 @@ func clusterNodes(object api.Object) api.Value {
 	return object.Spec().Get("nodes")
 }
 
-func validateSourcePaths(record *objectRecord, sources desiredstate.Sources, ds *diagnostics) {
+func validateSourcePaths(record *objectRecord, sources desiredstate.Sources, ds *diagnosticSink) {
 	roots := append([]string{}, sources.Roots...)
 	for i, root := range roots {
 		for _, file := range sources.Files {

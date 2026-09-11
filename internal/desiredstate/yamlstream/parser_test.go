@@ -11,6 +11,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/yamlstream"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func TestParserPreservesAuthoredScalarsAndProvenance(t *testing.T) {
@@ -128,9 +129,9 @@ func TestParserPreservesRejectedGrammarWithoutExpansion(t *testing.T) {
 
 func TestParserReleasesCompletedTreesWithoutBreakingLaterAliases(t *testing.T) {
 	data := "---\n&a {value: first}\n---\n*b\n"
-	documents, diagnostics, err := (yamlstream.Parser{}).Parse(context.Background(), sources("input.yaml", data))
-	if err != nil || len(documents) != 1 || len(diagnostics) != 1 || diagnostics[0].Source.Document != 2 {
-		t.Fatalf("unexpected unknown-anchor result: docs=%d diagnostics=%+v err=%v", len(documents), diagnostics, err)
+	documents, found, err := (yamlstream.Parser{}).Parse(context.Background(), sources("input.yaml", data))
+	if err != nil || len(documents) != 1 || len(found) != 1 || found[0].Source.Document != 2 {
+		t.Fatalf("unexpected unknown-anchor result: docs=%d diagnostics=%+v err=%v", len(documents), found, err)
 	}
 	data = "---\n&a {value: first}\n---\n*a\n---\n&b {nested: *a}\n---\n*b\n"
 	documents = parseOK(t, sources("input.yaml", data))
@@ -141,12 +142,12 @@ func TestParserReleasesCompletedTreesWithoutBreakingLaterAliases(t *testing.T) {
 
 func TestParserStopsMalformedFileAndContinuesLexically(t *testing.T) {
 	files := append(sources("z.yaml", "value: final\n"), sources("a.yaml", "value: first\n---\n[\n---\nvalue: hidden\n")...)
-	documents, diagnostics, err := (yamlstream.Parser{}).Parse(context.Background(), files)
-	if err != nil || len(documents) != 2 || len(diagnostics) != 1 {
-		t.Fatalf("docs=%d diagnostics=%+v err=%v", len(documents), diagnostics, err)
+	documents, found, err := (yamlstream.Parser{}).Parse(context.Background(), files)
+	if err != nil || len(documents) != 2 || len(found) != 1 {
+		t.Fatalf("docs=%d diagnostics=%+v err=%v", len(documents), found, err)
 	}
-	if documents[0].Path != "a.yaml" || documents[1].Path != "z.yaml" || diagnostics[0].Code != "yaml.syntax" || diagnostics[0].Source.Document != 2 {
-		t.Fatalf("wrong processing order: documents=%+v diagnostics=%+v", documents, diagnostics)
+	if documents[0].Path != "a.yaml" || documents[1].Path != "z.yaml" || found[0].Code != "yaml.syntax" || found[0].Source.Document != 2 {
+		t.Fatalf("wrong processing order: documents=%+v diagnostics=%+v", documents, found)
 	}
 	if files[0].Path() != "z.yaml" {
 		t.Fatal("parser reordered the caller's files")
@@ -155,11 +156,11 @@ func TestParserStopsMalformedFileAndContinuesLexically(t *testing.T) {
 
 func TestParserNeverDisclosesSourceInSyntaxDiagnostics(t *testing.T) {
 	for _, data := range []string{"*sensitive-synthetic-marker\n", "!!sensitive-synthetic-marker [\n", "a: \"\xff\"\n"} {
-		documents, diagnostics, err := (yamlstream.Parser{}).Parse(context.Background(), sources("input.yaml", data))
-		if err != nil || len(documents) != 0 || len(diagnostics) != 1 || diagnostics[0].Code != "yaml.syntax" {
-			t.Fatalf("unexpected syntax result: docs=%d diagnostics=%+v err=%v", len(documents), diagnostics, err)
+		documents, found, err := (yamlstream.Parser{}).Parse(context.Background(), sources("input.yaml", data))
+		if err != nil || len(documents) != 0 || len(found) != 1 || found[0].Code != "yaml.syntax" {
+			t.Fatalf("unexpected syntax result: docs=%d diagnostics=%+v err=%v", len(documents), found, err)
 		}
-		if strings.Contains(fmt.Sprint(diagnostics), "sensitive-synthetic-marker") || strings.Contains(fmt.Sprint(diagnostics), "\xff") {
+		if strings.Contains(fmt.Sprint(found), "sensitive-synthetic-marker") || strings.Contains(fmt.Sprint(found), "\xff") {
 			t.Fatal("diagnostic disclosed authored scalar content")
 		}
 	}
@@ -167,9 +168,9 @@ func TestParserNeverDisclosesSourceInSyntaxDiagnostics(t *testing.T) {
 
 func TestParserVersionDirectiveBoundary(t *testing.T) {
 	parseOK(t, sources("input.yaml", "%YAML 1.1\n---\nvalue: true\n"))
-	documents, diagnostics, err := (yamlstream.Parser{}).Parse(context.Background(), sources("input.yaml", "%YAML 1.2\n---\nvalue: true\n"))
-	if err != nil || len(documents) != 0 || len(diagnostics) != 1 || diagnostics[0].Code != "yaml.syntax" {
-		t.Fatalf("unmodified parser directive boundary: docs=%d diagnostics=%+v err=%v", len(documents), diagnostics, err)
+	documents, found, err := (yamlstream.Parser{}).Parse(context.Background(), sources("input.yaml", "%YAML 1.2\n---\nvalue: true\n"))
+	if err != nil || len(documents) != 0 || len(found) != 1 || found[0].Code != "yaml.syntax" {
+		t.Fatalf("unmodified parser directive boundary: docs=%d diagnostics=%+v err=%v", len(documents), found, err)
 	}
 }
 
@@ -179,9 +180,9 @@ func TestParserIndependentConcurrentSessions(t *testing.T) {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			t.Parallel()
 			value := fmt.Sprintf("session-%d", i)
-			documents, diagnostics, err := parser.Parse(context.Background(), sources("input.yaml", "value: "+value+"\n"))
-			if err != nil || len(diagnostics) != 0 || len(documents) != 1 || documents[0].Root.Content[0].Content[1].Value != value {
-				t.Fatalf("concurrent parse: docs=%d diagnostics=%+v err=%v", len(documents), diagnostics, err)
+			documents, found, err := parser.Parse(context.Background(), sources("input.yaml", "value: "+value+"\n"))
+			if err != nil || len(found) != 0 || len(documents) != 1 || documents[0].Root.Content[0].Content[1].Value != value {
+				t.Fatalf("concurrent parse: docs=%d diagnostics=%+v err=%v", len(documents), found, err)
 			}
 		})
 	}
@@ -237,9 +238,9 @@ func TestParserChecksInclusiveDocumentLimits(t *testing.T) {
 
 func TestParserSyntaxFailurePrecedesOverLimitDocumentCheck(t *testing.T) {
 	data := strings.Repeat("---\n", desiredstate.MaxFileDocuments) + "---\n[\n"
-	documents, diagnostics, err := (yamlstream.Parser{}).Parse(context.Background(), sources("input.yaml", data))
-	if err != nil || len(documents) != desiredstate.MaxFileDocuments || len(diagnostics) != 1 || diagnostics[0].Code != "yaml.syntax" || diagnostics[0].Source.Document != desiredstate.MaxFileDocuments+1 {
-		t.Fatalf("unexpected precedence: docs=%d diagnostics=%+v err=%v", len(documents), diagnostics, err)
+	documents, found, err := (yamlstream.Parser{}).Parse(context.Background(), sources("input.yaml", data))
+	if err != nil || len(documents) != desiredstate.MaxFileDocuments || len(found) != 1 || found[0].Code != "yaml.syntax" || found[0].Source.Document != desiredstate.MaxFileDocuments+1 {
+		t.Fatalf("unexpected precedence: docs=%d diagnostics=%+v err=%v", len(documents), found, err)
 	}
 }
 
@@ -278,10 +279,10 @@ func TestParserChecksAggregateRepresentationNodes(t *testing.T) {
 func TestParserLimitsDiscardAllDocumentsAndStopOtherFiles(t *testing.T) {
 	files := append(sources("a.yaml", "["), sources("b.yaml", strings.Repeat("- ", desiredstate.MaxDepth)+"x")...)
 	files = append(files, sources("c.yaml", "[synthetic-hidden-diagnostic")...)
-	documents, diagnostics, err := (yamlstream.Parser{}).Parse(context.Background(), files)
-	var failure *desiredstate.Failure
-	if documents != nil || !errors.As(err, &failure) || len(diagnostics) != 2 || diagnostics[0].Code != "yaml.syntax" || diagnostics[1].Code != "input.limit" {
-		t.Fatalf("docs=%d diagnostics=%+v err=%v", len(documents), diagnostics, err)
+	documents, found, err := (yamlstream.Parser{}).Parse(context.Background(), files)
+	var failure *diagnostics.Failure
+	if documents != nil || !errors.As(err, &failure) || len(found) != 2 || found[0].Code != "yaml.syntax" || found[1].Code != "input.limit" {
+		t.Fatalf("docs=%d diagnostics=%+v err=%v", len(documents), found, err)
 	}
 }
 
@@ -290,18 +291,18 @@ func TestParserRetainsSyntaxFailuresForResourceSelection(t *testing.T) {
 	for i := range files {
 		files[i] = desiredstate.NewSourceFile(fmt.Sprintf("%04d.yaml", i), []byte("["))
 	}
-	documents, diagnostics, err := (yamlstream.Parser{}).Parse(context.Background(), files)
-	if len(documents) != 0 || err != nil || len(diagnostics) != len(files) || diagnostics[len(diagnostics)-1].Code != "yaml.syntax" {
-		t.Fatalf("docs=%d diagnostics=%d err=%v", len(documents), len(diagnostics), err)
+	documents, found, err := (yamlstream.Parser{}).Parse(context.Background(), files)
+	if len(documents) != 0 || err != nil || len(found) != len(files) || found[len(found)-1].Code != "yaml.syntax" {
+		t.Fatalf("docs=%d diagnostics=%d err=%v", len(documents), len(found), err)
 	}
 }
 
 func TestParserCancellationDiscardsPartialDocuments(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	documents, diagnostics, err := (yamlstream.Parser{}).Parse(ctx, sources("input.yaml", "value"))
-	if !errors.Is(err, context.Canceled) || documents != nil || len(diagnostics) != 0 {
-		t.Fatalf("docs=%d diagnostics=%+v err=%v", len(documents), diagnostics, err)
+	documents, found, err := (yamlstream.Parser{}).Parse(ctx, sources("input.yaml", "value"))
+	if !errors.Is(err, context.Canceled) || documents != nil || len(found) != 0 {
+		t.Fatalf("docs=%d diagnostics=%+v err=%v", len(documents), found, err)
 	}
 	ctx, cancel = context.WithDeadline(context.Background(), time.Time{})
 	defer cancel()
@@ -314,9 +315,9 @@ func TestParserCancellationDiscardsPartialDocuments(t *testing.T) {
 	defer cancel()
 	progress := &cancelAfterChecks{Context: ctx, remaining: 30, cancel: cancel}
 	data := "---\nvalue\n---\n\"" + strings.Repeat("x", desiredstate.MaxFileBytes/2) + "\"\n"
-	documents, diagnostics, err = (yamlstream.Parser{}).Parse(progress, sources("input.yaml", data))
-	if !errors.Is(err, context.Canceled) || documents != nil || len(diagnostics) != 0 || progress.remaining > 0 {
-		t.Fatalf("in-progress cancellation: docs=%d diagnostics=%+v err=%v", len(documents), diagnostics, err)
+	documents, found, err = (yamlstream.Parser{}).Parse(progress, sources("input.yaml", data))
+	if !errors.Is(err, context.Canceled) || documents != nil || len(found) != 0 || progress.remaining > 0 {
+		t.Fatalf("in-progress cancellation: docs=%d diagnostics=%+v err=%v", len(documents), found, err)
 	}
 }
 
@@ -343,9 +344,9 @@ func FuzzParserBoundedInput(f *testing.F) {
 			t.Skip()
 		}
 		files := []desiredstate.SourceFile{desiredstate.NewSourceFile("input.yaml", data)}
-		first, diagnostics, err := (yamlstream.Parser{}).Parse(context.Background(), files)
+		first, found, err := (yamlstream.Parser{}).Parse(context.Background(), files)
 		second, again, repeatedErr := (yamlstream.Parser{}).Parse(context.Background(), files)
-		if !reflect.DeepEqual(first, second) || !reflect.DeepEqual(diagnostics, again) || fmt.Sprint(err) != fmt.Sprint(repeatedErr) {
+		if !reflect.DeepEqual(first, second) || !reflect.DeepEqual(found, again) || fmt.Sprint(err) != fmt.Sprint(repeatedErr) {
 			t.Fatal("parsing is nondeterministic")
 		}
 		if !reflect.DeepEqual(files[0].Bytes(), data) && len(data) != 0 {
@@ -363,18 +364,18 @@ func sources(path, data string) []desiredstate.SourceFile {
 
 func parseOK(t testing.TB, files []desiredstate.SourceFile) []desiredstate.Document {
 	t.Helper()
-	documents, diagnostics, err := (yamlstream.Parser{}).Parse(context.Background(), files)
-	if err != nil || len(diagnostics) != 0 {
-		t.Fatalf("parse failed: diagnostics=%+v err=%v", diagnostics, err)
+	documents, found, err := (yamlstream.Parser{}).Parse(context.Background(), files)
+	if err != nil || len(found) != 0 {
+		t.Fatalf("parse failed: diagnostics=%+v err=%v", found, err)
 	}
 	return documents
 }
 
 func assertLimit(t testing.TB, files []desiredstate.SourceFile, resource string, ceiling int) {
 	t.Helper()
-	documents, diagnostics, err := (yamlstream.Parser{}).Parse(context.Background(), files)
-	var failure *desiredstate.Failure
-	if documents != nil || !errors.As(err, &failure) || len(diagnostics) != 1 || diagnostics[0].Code != "input.limit" || !strings.Contains(diagnostics[0].Message, resource) || !strings.Contains(diagnostics[0].Message, fmt.Sprint(ceiling)) {
-		t.Fatalf("expected %s limit %d: docs=%d diagnostics=%+v err=%v", resource, ceiling, len(documents), diagnostics, err)
+	documents, found, err := (yamlstream.Parser{}).Parse(context.Background(), files)
+	var failure *diagnostics.Failure
+	if documents != nil || !errors.As(err, &failure) || len(found) != 1 || found[0].Code != "input.limit" || !strings.Contains(found[0].Message, resource) || !strings.Contains(found[0].Message, fmt.Sprint(ceiling)) {
+		t.Fatalf("expected %s limit %d: docs=%d diagnostics=%+v err=%v", resource, ceiling, len(documents), found, err)
 	}
 }

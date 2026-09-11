@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
-	"github.com/crmarques/bootwright/internal/secrets/localstore"
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/secrets/localkeyring"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
 const immutableCrashRootEnvironment = "BOOTWRIGHT_TEST_IMMUTABLE_CRASH_ROOT"
@@ -37,7 +37,7 @@ func TestSecretImmutableWritePublishesOnlyCompleteFinalName(t *testing.T) {
 		}
 		return nil
 	}
-	err := store.MutateSecrets(context.Background(), token, func(area storage.Area) error {
+	err := store.MutateSecrets(context.Background(), token, func(area secretstore.Area) error {
 		if err := area.EnsureDirectory(context.Background(), "identities"); err != nil {
 			return err
 		}
@@ -67,12 +67,12 @@ func TestReadOnlySecretScanToleratesCompletedPendingRename(t *testing.T) {
 	initializeImmutableTestStore(t, store, token)
 	const pending = "pending-00000000000000000000000000000000"
 	const final = "ver-00000000000000000000000000000000.json"
-	if err := store.MutateSecrets(context.Background(), token, func(area storage.Area) error {
+	if err := store.MutateSecrets(context.Background(), token, func(area secretstore.Area) error {
 		return area.WriteExclusive(context.Background(), "identities/"+pending, []byte("staged"))
 	}); err != nil {
 		t.Fatal(err)
 	}
-	err := store.ReadSecrets(context.Background(), token, func(area storage.Area) error {
+	err := store.ReadSecrets(context.Background(), token, func(area secretstore.Area) error {
 		concrete := area.(*secretArea)
 		directory, err := openDirectory(concrete.secrets, "identities")
 		if err != nil {
@@ -112,7 +112,7 @@ func TestSecretImmutableWriteDoesNotReplaceExistingFinalName(t *testing.T) {
 	token := secretToken(record)
 	path := immutableIdentityPath
 	var firstErr, secondErr error
-	err := store.MutateSecrets(context.Background(), token, func(area storage.Area) error {
+	err := store.MutateSecrets(context.Background(), token, func(area secretstore.Area) error {
 		if err := area.EnsureDirectory(context.Background(), "identities"); err != nil {
 			return err
 		}
@@ -141,8 +141,8 @@ func TestSecretReadSessionPreventsConcurrentMutation(t *testing.T) {
 	record := publish(t, store, "example", sources)
 	token := secretToken(record)
 	implementation := initializeImmutableTestStore(t, store, token)
-	err := store.ReadSecrets(context.Background(), token, func(area storage.Area) error {
-		selector, exists, err := storage.ReadSelector(context.Background(), area, token.ID)
+	err := store.ReadSecrets(context.Background(), token, func(area secretstore.Area) error {
+		selector, exists, err := secretstore.ReadSelector(context.Background(), area, token.ID)
 		if err != nil || !exists {
 			return errors.New("initialized selector is unavailable")
 		}
@@ -154,7 +154,7 @@ func TestSecretReadSessionPreventsConcurrentMutation(t *testing.T) {
 		writer := make(chan error, 1)
 		var entered atomic.Bool
 		go func() {
-			writer <- store.MutateSecrets(context.Background(), token, func(storage.Area) error {
+			writer <- store.MutateSecrets(context.Background(), token, func(secretstore.Area) error {
 				entered.Store(true)
 				return nil
 			})
@@ -195,8 +195,8 @@ func TestSecretImmutableWriteSurvivesSubprocessDeathMidWrite(t *testing.T) {
 	if err != nil || len(entries) != 1 || !strings.HasPrefix(entries[0].Name(), "pending-") {
 		t.Fatalf("subprocess staging evidence: %#v %v", entries, err)
 	}
-	err = store.ReadSecrets(context.Background(), token, func(area storage.Area) error {
-		selector, exists, err := storage.ReadSelector(context.Background(), area, token.ID)
+	err = store.ReadSecrets(context.Background(), token, func(area secretstore.Area) error {
+		selector, exists, err := secretstore.ReadSelector(context.Background(), area, token.ID)
 		if err != nil || !exists {
 			return errors.New("initialized selector is unavailable after subprocess death")
 		}
@@ -239,7 +239,7 @@ func TestSecretImmutableWriteSubprocessHelper(t *testing.T) {
 		}
 		return nil
 	}
-	err = store.MutateSecrets(context.Background(), snapshot.Context, func(area storage.Area) error {
+	err = store.MutateSecrets(context.Background(), snapshot.Context, func(area secretstore.Area) error {
 		return area.PublishExclusive(context.Background(), immutableIdentityPath, []byte(strings.Repeat("partial", 16384)))
 	})
 	if err != nil {
@@ -248,10 +248,10 @@ func TestSecretImmutableWriteSubprocessHelper(t *testing.T) {
 	t.Fatal("immutable write unexpectedly completed")
 }
 
-func initializeImmutableTestStore(t *testing.T, store *Store, token storage.Context) *localstore.Implementation {
+func initializeImmutableTestStore(t *testing.T, store *Store, token secretstore.Context) *localkeyring.Implementation {
 	t.Helper()
-	implementation := localstore.New()
-	err := store.MutateSecrets(context.Background(), token, func(area storage.Area) error {
+	implementation := localkeyring.New()
+	err := store.MutateSecrets(context.Background(), token, func(area secretstore.Area) error {
 		session, err := implementation.Initialize(context.Background(), token, area, nil)
 		if session != nil {
 			defer session.Close()
@@ -266,7 +266,7 @@ func initializeImmutableTestStore(t *testing.T, store *Store, token storage.Cont
 
 func expectSecretFailureCode(t *testing.T, err error, want string) {
 	t.Helper()
-	diagnostics := desiredstate.DiagnosticsOf(err)
+	diagnostics := diagnostics.Of(err)
 	if len(diagnostics) != 1 || diagnostics[0].Code != want {
 		t.Fatalf("failure diagnostics = %+v, want code %q", diagnostics, want)
 	}

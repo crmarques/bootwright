@@ -9,19 +9,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/encryption"
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
-func secretResultContext() storage.Context {
-	return storage.Context{Name: "example", ID: "ctx-00000000000000000000000000000001", Mode: "ready"}
+func secretResultContext() secretstore.Context {
+	return secretstore.Context{Name: "example", ID: "ctx-00000000000000000000000000000001", Mode: "ready"}
 }
 
-func secretResultComponent(id string) storage.ComponentRef {
-	return storage.ComponentRef{ID: id, InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1}
+func secretResultComponent(id string) secretstore.ComponentRef {
+	return secretstore.ComponentRef{ID: id, InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1}
 }
 
 func runSecretResult(args []string, record *dispatchRecord) (int, string, string) {
@@ -58,7 +58,7 @@ func TestSecretCheckAndListResultsAreCanonical(t *testing.T) {
 
 func TestCompleteNegativeSecretCheckKeepsStructuredResult(t *testing.T) {
 	result := &custody.CheckResult{Context: secretResultContext(), Secrets: []custody.CheckRow{{Name: "token", Type: "token", Source: "contextStore", Parts: []secrets.Part{secrets.ValuePart}, Status: "missing"}}}
-	failure := &desiredstate.Failure{Diagnostics: []desiredstate.Diagnostic{{Severity: "error", Code: "secret.input", Message: "secret token is missing"}}}
+	failure := &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "secret.input", Message: "secret token is missing"}}}
 	for _, mode := range []string{"text", "json"} {
 		record := &dispatchRecord{result: commandResult{secretCheck: result}, err: failure}
 		code, out, errOut := runSecretResult([]string{"secret", "check", "--output", mode}, record)
@@ -86,7 +86,7 @@ func TestCompleteNegativeSecretCheckKeepsStructuredResult(t *testing.T) {
 
 func TestIncompleteNegativeSecretCheckDoesNotPublishPartialResult(t *testing.T) {
 	partial := &custody.CheckResult{Secrets: []custody.CheckRow{{Name: "token", Type: "token", Source: "contextStore", Parts: []secrets.Part{secrets.ValuePart}, Status: "missing"}}}
-	failure := desiredstate.NewFailure("secret.input", "safe failure", "")
+	failure := diagnostics.NewFailure("secret.input", "safe failure", "")
 	record := &dispatchRecord{result: commandResult{secretCheck: partial}, err: failure}
 	code, out, errOut := runSecretResult([]string{"secret", "check", "--output", "json"}, record)
 	if code != 1 || errOut != "" || strings.Contains(out, "token") || !strings.Contains(out, "\"result\":null") || !strings.Contains(out, "secret.input") {
@@ -177,7 +177,7 @@ func TestSecretRevealMaterialIsClearedWhenServiceFailsOrIsInterrupted(t *testing
 			}
 			record.afterCall = func() { cancel(ErrInterrupted) }
 		} else {
-			record.err = desiredstate.NewFailure("secret.input", "reveal failed safely", "")
+			record.err = diagnostics.NewFailure("secret.input", "reveal failed safely", "")
 		}
 		var out, errOut bytes.Buffer
 		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record), BeginOperation: begin}).Run(context.Background(), []string{"secret", "show", "--name", "sample", "--part", "value"})
@@ -199,7 +199,7 @@ func TestSecretMutationAndEncryptionResults(t *testing.T) {
 		t.Fatalf("mutation code=%d stdout=%q stderr=%q", code, out, errOut)
 	}
 
-	selection := storage.Selection{Type: "local-keyring", Store: secretResultComponent("local-v1"), KeyCustody: secretResultComponent("local-keyfile-v1")}
+	selection := secretstore.Selection{Type: "local-keyring", Store: secretResultComponent("local-v1"), KeyCustody: secretResultComponent("local-keyfile-v1")}
 	encryptionMutation := &encryption.MutationResult{Context: secretResultContext(), Implementation: selection, ActiveKey: "key-1", Changed: true}
 	record = &dispatchRecord{result: commandResult{encryptionMutation: encryptionMutation}}
 	code, out, errOut = runSecretResult([]string{"secret", "encryption", "init"}, record)
@@ -219,7 +219,7 @@ func TestEncryptionStatusOmitsImplementationConfiguration(t *testing.T) {
 			State:      "ready",
 		},
 		ActiveKey: &active,
-		Keys:      []storage.Key{{ID: "key-2", State: "active", Seals: 3}, {ID: "key-1", State: "retired", Seals: 8}},
+		Keys:      []secretstore.Key{{ID: "key-2", State: "active", Seals: 3}, {ID: "key-1", State: "retired", Seals: 8}},
 		Items:     encryption.ItemStatus{CurrentVersions: 2, BoundVersions: 1, MaterialParts: 4, RetainedArtifacts: 7, CleanupRequired: true},
 	}
 	record := &dispatchRecord{result: commandResult{encryptionStatus: status}}
@@ -231,7 +231,7 @@ func TestEncryptionStatusOmitsImplementationConfiguration(t *testing.T) {
 }
 
 func TestUninitializedEncryptionStatusHasStableEmptyShape(t *testing.T) {
-	record := &dispatchRecord{result: commandResult{encryptionStatus: &encryption.StatusResult{Keys: []storage.Key{}}}}
+	record := &dispatchRecord{result: commandResult{encryptionStatus: &encryption.StatusResult{Keys: []secretstore.Key{}}}}
 	code, out, errOut := runSecretResult([]string{"secret", "encryption", "status", "--output", "json"}, record)
 	wantResult := "\"result\":{\"initialized\":false,\"implementation\":null,\"activeKey\":null,\"keys\":[],\"items\":{\"currentVersions\":0,\"boundVersions\":0,\"materialParts\":0,\"retainedArtifacts\":0,\"cleanupRequired\":false}}"
 	if code != 0 || errOut != "" || !strings.Contains(out, wantResult) {

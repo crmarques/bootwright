@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type fixture struct {
@@ -372,7 +373,7 @@ func TestPendingReceiptRejectsChangedCatalogWithoutEffects(t *testing.T) {
 }
 
 func code(err error) string {
-	values := desiredstate.DiagnosticsOf(err)
+	values := diagnostics.Of(err)
 	if len(values) == 0 {
 		return ""
 	}

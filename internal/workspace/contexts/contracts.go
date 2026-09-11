@@ -5,7 +5,8 @@ import (
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
 type Mode string
@@ -15,35 +16,6 @@ const (
 	Ready        Mode = "ready"
 	Deleting     Mode = "deleting"
 )
-
-type Summary struct {
-	Name       string
-	ID         string
-	Mode       Mode
-	Current    bool
-	Configured bool
-}
-
-type AdmissionResult struct {
-	Context      Summary
-	Counts       compilation.Counts
-	FilesCopied  int
-	InputChanged bool
-	Diagnostics  []desiredstate.Diagnostic
-}
-
-type UseResult struct{ Context Summary }
-
-type ListResult struct{ Contexts []Summary }
-
-type CurrentResult struct{ Context Summary }
-
-type DeleteResult struct {
-	Name           string
-	ID             string
-	Outcome        string
-	CurrentCleared bool
-}
 
 // Registry is an atomic context snapshot. Identities is retained only while
 // reading the legacy registry; current allocation uses a namespace and counter.
@@ -112,7 +84,7 @@ type Transaction interface {
 	Registry() Registry
 	Reserve(context.Context, string, string, []byte) (Record, error)
 	Configuration(context.Context, string) ([]byte, error)
-	InitializeSecrets(context.Context, string, func(storage.Area) error) error
+	InitializeSecrets(context.Context, string, func(secretstore.Area) error) error
 	Publish(context.Context, string, string, desiredstate.Sources) (string, error)
 	// MutationState acquires and holds the context lease until transaction
 	// completion, then returns bounded Reconciliation-owned evidence bytes.
@@ -147,13 +119,13 @@ type SelectionStore interface {
 }
 
 type ConfigurationReader interface {
-	ReadConfiguration(context.Context, string) ([]byte, error)
+	ReadFile(context.Context, string, int) ([]byte, error)
 }
 
 type Options struct {
 	Selection             SelectionStore
 	ConfigurationReader   ConfigurationReader
-	InitializeSecrets     func(context.Context, Record, storage.Area) error
+	InitializeSecrets     func(context.Context, Record, secretstore.Area) error
 	ValidateConfiguration func(context.Context, Configuration) error
 }
 
@@ -187,14 +159,14 @@ func (i Inputs) ReadInputs(ctx context.Context, name string) (desiredstate.Sourc
 	return i.Repository.ReadInputs(ctx, name, id)
 }
 
-func StateError(message string) error { return desiredstate.NewFailure("context.state", message, "") }
+func StateError(message string) error { return diagnostics.NewFailure("context.state", message, "") }
 
 func StateErrorWithRemediation(message, remediation string) error {
-	return desiredstate.NewFailureWithRemediation("context.state", message, "", remediation)
+	return diagnostics.NewFailureWithRemediation("context.state", message, "", remediation)
 }
 
 func UnsafeDelete(message string) error {
-	return desiredstate.NewFailure("context.unsafe-delete", message, "")
+	return diagnostics.NewFailure("context.unsafe-delete", message, "")
 }
 
 // Configuration is controller configuration, separate from Environment input.

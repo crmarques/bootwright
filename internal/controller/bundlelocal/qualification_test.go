@@ -38,7 +38,7 @@ func TestQualifiedUnprivilegedBundlePreparationAndReadOnlyReuse(t *testing.T) {
 		t.Fatal(err)
 	}
 	area := newQualificationArea(t)
-	manager := New()
+	manager := New(ExecutionGuard{})
 	// This explicit artifact gate executes as the invoking user. Production
 	// ownership and native-lock boundaries are covered by the guard contract
 	// tests; this probe qualifies the exact projected artifacts and imports.

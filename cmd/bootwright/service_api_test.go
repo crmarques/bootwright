@@ -7,6 +7,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 const serviceEnvironment = "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata: {name: synthetic}\nspec:\n  controller: {machineRef: service-host}\n  domains: {base: example.test}\n"
@@ -93,7 +94,7 @@ func TestServiceReferenceDiagnosticsPreserveProfileOrigins(t *testing.T) {
 				t.Fatal("missing inherited proxy was admitted")
 			}
 			found := false
-			for _, diagnostic := range desiredstate.DiagnosticsOf(err) {
+			for _, diagnostic := range diagnostics.Of(err) {
 				if diagnostic.Object == nil || diagnostic.Object.Kind != string(api.Machine) || diagnostic.Field != "$.spec.proxy.proxyRef" {
 					continue
 				}
@@ -116,7 +117,7 @@ func TestServiceReferenceDiagnosticsPreserveProfileOrigins(t *testing.T) {
 				}
 			}
 			if !found {
-				t.Fatalf("no Machine diagnostic for inherited missing Proxy: %#v", desiredstate.DiagnosticsOf(err))
+				t.Fatalf("no Machine diagnostic for inherited missing Proxy: %#v", diagnostics.Of(err))
 			}
 		})
 	}
@@ -130,7 +131,7 @@ func TestRetiredInfrastructureInputExplainsReplacement(t *testing.T) {
 		if state != nil || err == nil {
 			t.Fatal("retired service kind was accepted")
 		}
-		diagnostics := desiredstate.DiagnosticsOf(err)
+		diagnostics := diagnostics.Of(err)
 		if len(diagnostics) != 1 || diagnostics[0].Code != "api.kind" || !strings.Contains(diagnostics[0].Message, "ArtifactServer") || !strings.Contains(diagnostics[0].Message, "management") {
 			t.Fatalf("retired kind lacks replacement guidance: %#v", diagnostics)
 		}
@@ -151,7 +152,7 @@ func TestUnusedProxyDefaultsRejectLocalContradictionsWithoutResolvingReferences(
 				state, _, err := wireCompiler().Compile(context.Background(), inputs)
 				if strings.Contains(choice, "missing-egress") {
 					if err != nil || state == nil {
-						t.Fatalf("unused partial defaults resolved their references: %v", desiredstate.DiagnosticsOf(err))
+						t.Fatalf("unused partial defaults resolved their references: %v", diagnostics.Of(err))
 					}
 					continue
 				}
@@ -159,13 +160,13 @@ func TestUnusedProxyDefaultsRejectLocalContradictionsWithoutResolvingReferences(
 					t.Fatal("unused contradictory proxy default was admitted")
 				}
 				found := false
-				for _, diagnostic := range desiredstate.DiagnosticsOf(err) {
+				for _, diagnostic := range diagnostics.Of(err) {
 					if diagnostic.Field == "$.spec.defaults."+owner.kind+"."+owner.field && diagnostic.Code == "api.invariant" {
 						found = true
 					}
 				}
 				if !found {
-					t.Fatalf("partial default lost its contradiction diagnostic: %#v", desiredstate.DiagnosticsOf(err))
+					t.Fatalf("partial default lost its contradiction diagnostic: %#v", diagnostics.Of(err))
 				}
 			}
 		})

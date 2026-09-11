@@ -18,7 +18,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/hostlinux"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 // The trusted Go probe establishes the kernel's actual UID mapping and chroot
@@ -124,7 +124,7 @@ func TestQualifiedRootInvocationResolver(t *testing.T) {
 	}
 	resolved, err := NewBootstrapResolver().Resolve(ctx, platform, controller.DefaultDependencyVersions(), prerequisites.SetupEgress{})
 	if err != nil {
-		t.Fatalf("%v: %+v", err, desiredstate.DiagnosticsOf(err))
+		t.Fatalf("%v: %+v", err, diagnostics.Of(err))
 	}
 	t.Logf("trusted root Go invocation verified non-root child mapping before resolving Python %s / Ansible %s; %d exact sources; no host package effects", resolved.PythonVersion, resolved.AnsibleVersion, len(resolved.Sources))
 }

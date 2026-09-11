@@ -8,6 +8,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 // Controller-negative tests use explicit documents without serviceSources'
@@ -201,6 +202,6 @@ func TestControllerAdmissionDoesNotProbeLocalMachine(t *testing.T) {
 	host := strings.Replace(serviceHost, "192.0.2.10", "203.0.113.254", 1)
 	state, _, err := wireCompiler().Compile(context.Background(), controllerInputs(serviceEnvironment, host))
 	if err != nil || state == nil {
-		t.Fatal("declarative controller identity required live-host evidence", desiredstate.DiagnosticsOf(err))
+		t.Fatal("declarative controller identity required live-host evidence", diagnostics.Of(err))
 	}
 }

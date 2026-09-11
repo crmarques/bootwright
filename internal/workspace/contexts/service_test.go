@@ -13,10 +13,11 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/desiredstate/yamlstream"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/reconciliation/contextguard"
 	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/secrets/storage"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -180,7 +181,7 @@ func (tx transaction) Configuration(ctx context.Context, id string) ([]byte, err
 	return slices.Clone(tx.r.configurations[id]), nil
 }
 
-func (tx transaction) InitializeSecrets(ctx context.Context, id string, callback func(storage.Area) error) error {
+func (tx transaction) InitializeSecrets(ctx context.Context, id string, callback func(secretstore.Area) error) error {
 	tx.requireLock()
 	tx.r.leased = true
 	if err := tx.r.step(ctx, "initialize"); err != nil {
@@ -319,12 +320,12 @@ func existingRepository(t *testing.T) *repository {
 
 func requireCode(t *testing.T, err error, code string) {
 	t.Helper()
-	for _, diagnostic := range desiredstate.DiagnosticsOf(err) {
+	for _, diagnostic := range diagnostics.Of(err) {
 		if diagnostic.Code == code {
 			return
 		}
 	}
-	t.Fatalf("wanted %s, got %v: %#v", code, err, desiredstate.DiagnosticsOf(err))
+	t.Fatalf("wanted %s, got %v: %#v", code, err, diagnostics.Of(err))
 }
 
 func TestInitCompilesBeforeTransactionAndPublishesOriginalAcquisition(t *testing.T) {
@@ -350,7 +351,7 @@ func TestInitCompilesBeforeTransactionAndPublishesOriginalAcquisition(t *testing
 	input.Markers = []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/input/add-ons/_store/example/.bootwright-addon", []byte("example\n"))}
 	got, err := service(t, r, input).Init(context.Background(), contexts.InitRequest{Name: "example", InputDirectory: "/synthetic/input"})
 	if err != nil {
-		t.Fatal(desiredstate.DiagnosticsOf(err))
+		t.Fatal(diagnostics.Of(err))
 	}
 	if got.Counts != (compilation.Counts{FilesSeen: 4, ObjectsDecoded: 3}) || got.FilesCopied != 5 || len(got.Diagnostics) != 1 || got.Diagnostics[0].Source.Path != "/synthetic/input/excluded.yaml" {
 		t.Fatalf("admission result lost counts or warnings: %#v", got)
@@ -717,7 +718,7 @@ func (s selectionStore) Clear(ctx context.Context, expected contexts.Selection) 
 
 type configurationReader struct{ r *repository }
 
-func (c configurationReader) ReadConfiguration(ctx context.Context, path string) ([]byte, error) {
+func (c configurationReader) ReadFile(ctx context.Context, path string, maximum int) ([]byte, error) {
 	if err := c.r.step(ctx, "read-config"); err != nil {
 		return nil, err
 	}
@@ -730,7 +731,7 @@ func options(r *repository) contexts.Options {
 			return contexts.ConfigurationError("unavailable implementation")
 		}
 		return ctx.Err()
-	}, InitializeSecrets: func(ctx context.Context, record contexts.Record, area storage.Area) error { return ctx.Err() }}
+	}, InitializeSecrets: func(ctx context.Context, record contexts.Record, area secretstore.Area) error { return ctx.Err() }}
 }
 
 func TestDefaultInitThenFirstInputImport(t *testing.T) {
@@ -817,7 +818,7 @@ func TestSelectionFailureAfterInitializationPreservesReadyContext(t *testing.T) 
 	if got != nil || err == nil || len(r.registry.Contexts) != 1 || r.registry.Contexts[0].Mode != contexts.Ready || r.selection.Name != "prior" {
 		t.Fatal("selection failure destroyed or misreported published context", got, err, r.registry)
 	}
-	if !strings.Contains(desiredstate.DiagnosticsOf(err)[0].Message, "context was created") {
+	if !strings.Contains(diagnostics.Of(err)[0].Message, "context was created") {
 		t.Fatal("partial success lacks recovery guidance", err)
 	}
 }
