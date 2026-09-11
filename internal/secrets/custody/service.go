@@ -216,7 +216,7 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*CheckResult,
 				row.Status = "missing"
 			} else {
 				id := version.ID
-				row.Version = &id
+				row.Version, row.Sequence = &id, version.Sequence
 				if version.Declaration.Fingerprint != d.Fingerprint {
 					row.Status = "stale"
 				} else {
@@ -291,7 +291,7 @@ func (s Service) List(ctx context.Context, request ListRequest) (*ListResult, er
 			}
 			if exists && current.ID == v.ID {
 				id := v.ID
-				row.CurrentVersion = &id
+				row.CurrentVersion, row.CurrentSequence = &id, v.Sequence
 				row.Type, row.Source, row.Parts = d.Type, d.Source, slices.Clone(v.Parts)
 				if declared, err := findDeclaration(declarations, d.Name); err == nil {
 					row.State = "current"

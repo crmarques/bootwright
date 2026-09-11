@@ -8,7 +8,7 @@ import (
 )
 
 func validationCommand() commandSpec {
-	return commandSpec{path: "validate", short: "Validate a complete desired-state input universe", flags: []flagSpec{{name: "file", short: "f", help: "Supply an input file or directory (repeatable)", kind: "stringArray"}, outputFlag()}}
+	return commandSpec{path: "validate", short: "Validate a complete desired-state input universe", flags: []flagSpec{{name: "file", short: "f", help: "Supply an input file or directory (repeatable)", kind: "stringArray", path: "file"}, outputFlag()}}
 }
 
 func effectiveStateCommand() commandSpec {

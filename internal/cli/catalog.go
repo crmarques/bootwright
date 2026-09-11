@@ -18,9 +18,24 @@ type flagSpec struct {
 	required     bool
 	enum         []string
 	catalog      string
+	path         string
 }
 
 func stringFlag(name, help string) flagSpec { return flagSpec{name: name, help: help, kind: "string"} }
+
+// directoryFlag and fileFlag mark a path-valued flag so completion offers
+// real filesystem candidates instead of refusing every value.
+func directoryFlag(name, help string) flagSpec {
+	f := stringFlag(name, help)
+	f.path = "directory"
+	return f
+}
+
+func fileFlag(name, help string) flagSpec {
+	f := stringFlag(name, help)
+	f.path = "file"
+	return f
+}
 
 func boolFlag(name, help string) flagSpec {
 	return flagSpec{name: name, help: help, kind: "bool", defaultValue: "false"}
@@ -118,7 +133,7 @@ func sensitiveFlag() flagSpec {
 }
 
 func contextFileFlag() flagSpec {
-	flag := stringFlag("file", "Read one standalone Context YAML file")
+	flag := fileFlag("file", "Read one standalone Context YAML file")
 	flag.short, flag.kind = "f", "stringArray"
 	return flag
 }

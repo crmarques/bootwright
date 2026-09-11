@@ -43,7 +43,7 @@ func TestControllerReportsAndExplicitContextDispatch(t *testing.T) {
 			record := &dispatchRecord{result: commandResult{controller: report}}
 			var out, errOut bytes.Buffer
 			code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), args)
-			if code != 0 || errOut.Len() != 0 || !strings.Contains(out.String(), "outcome: "+outcome) {
+			if code != 0 || errOut.Len() != 0 || !strings.Contains(out.String(), "Outcome  "+outcome) {
 				t.Fatal(args, code, out.String(), errOut.String())
 			}
 			switch request := record.request.(type) {
@@ -66,7 +66,7 @@ func TestControllerNegativeReportPreservesStreamsAndSafeDiagnostics(t *testing.T
 	record := &dispatchRecord{result: commandResult{controller: controllerReport("not-ready", false)}, err: desiredstate.NewFailure("controller.prerequisites", "required prerequisites are missing", "")}
 	var out, errOut bytes.Buffer
 	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"preflight", "bastion"})
-	if code != 1 || !strings.Contains(out.String(), "outcome: not-ready") || !strings.Contains(errOut.String(), "controller.prerequisites") {
+	if code != 1 || !strings.Contains(out.String(), "Outcome  not-ready") || !strings.Contains(errOut.String(), "controller.prerequisites") {
 		t.Fatal(code, out.String(), errOut.String())
 	}
 }
@@ -190,7 +190,7 @@ func TestControllerSetupForwardsConfirmationSuppressionAndNoOp(t *testing.T) {
 			t.Fatal(testCase.args, record.request)
 		}
 		// A verified no-op still reports its ordered result at success.
-		if code != 0 || errOut.Len() != 0 || !strings.Contains(out.String(), "outcome: unchanged") {
+		if code != 0 || errOut.Len() != 0 || !strings.Contains(out.String(), "Outcome  unchanged") {
 			t.Fatal(testCase.args, code, out.String(), errOut.String())
 		}
 	}
@@ -206,7 +206,7 @@ func TestControllerChecksUseContractStatusTokens(t *testing.T) {
 		if err := NewControllerPlanPresenter(&out).PresentControllerPlan(context.Background(), *report); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(out.String(), "  "+token+" execution-bundle:") {
+		if !strings.Contains(out.String(), "  "+token+"  execution-bundle  ") {
 			t.Fatalf("status %q rendered as %q, want %s", status, out.String(), token)
 		}
 		for _, internal := range []string{"[ready]", "[not-ready]", "[unverified]"} {
@@ -233,7 +233,7 @@ func TestControllerIncompleteSetupReportsPerActionProgress(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit = %d", code)
 	}
-	for _, want := range []string{"progress:\n", "  [DONE] execution-bundle\n", "  [UNKNOWN] container-runtime\n", "  [SKIPPED] controller-binding\n"} {
+	for _, want := range []string{"Progress\n", "  [DONE]     execution-bundle\n", "  [UNKNOWN]  container-runtime\n", "  [SKIPPED]  controller-binding\n"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("result %q lacks %q", out.String(), want)
 		}
@@ -253,7 +253,7 @@ func TestControllerCompletedSetupReportsReadinessOnly(t *testing.T) {
 	if code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"bastion", "setup"}); code != 0 || errOut.Len() != 0 {
 		t.Fatal(code, errOut.String())
 	}
-	if strings.Contains(out.String(), "progress:") || !strings.Contains(out.String(), "readiness: all required prerequisites verified") {
+	if strings.Contains(out.String(), "Progress\n") || !strings.Contains(out.String(), "Readiness  all required prerequisites verified") {
 		t.Fatalf("result = %q", out.String())
 	}
 }

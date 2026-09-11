@@ -165,13 +165,17 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 					return err
 				}
 			}
+			s.report(ctx, ProgressEvent{Action: action.ID, Status: "running", Step: index + 1, Steps: len(state.Receipt.Actions)})
 			var err error
 			switch action.ID {
 			case "execution-bundle":
 				var area BundleArea
 				area, err = tx.Bundle(ctx, current.definition.CatalogDigest)
 				if err == nil {
-					err = s.bundle.Prepare(ctx, area, current.definition, current.route())
+					err = s.bundle.Prepare(ctx, area, current.definition, current.route(), func(event ProgressEvent) {
+						event.Action = action.ID
+						s.report(ctx, event)
+					})
 				}
 				if err == nil {
 					current.bundle, err = s.bundle.Inspect(ctx, area, current.definition, true)
@@ -230,10 +234,12 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 				err = failure("controller.unknown", "setup contains an unsupported retained action", "restore the original compatible executable")
 			}
 			if err != nil {
+				s.report(ctx, ProgressEvent{Action: action.ID, Status: "failed", Step: index + 1, Steps: len(state.Receipt.Actions)})
 				return err
 			}
 			outcome = "changed"
 		}
+		s.report(ctx, ProgressEvent{Action: action.ID, Status: outcome, Step: index + 1, Steps: len(state.Receipt.Actions)})
 		action.Phase, action.Outcome = "observed", outcome
 		action.Evidence = evidence
 		if action.ID != "controller-binding" {
@@ -249,6 +255,15 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 	}
 	state.Receipt.Status = "complete"
 	return publish(ctx, tx, state)
+}
+
+// report never fails an operation: progress is presentation, and a setup that
+// could not describe itself has still done exactly what it recorded.
+func (s Service) report(ctx context.Context, event ProgressEvent) {
+	if s.options.Progress == nil || ctx.Err() != nil {
+		return
+	}
+	s.options.Progress.ReportProgress(ctx, event)
 }
 
 func publish(ctx context.Context, tx StorageTransaction, state HostState) error {

@@ -37,6 +37,9 @@ func registerFlags(flags *pflag.FlagSet, specs []flagSpec) {
 		if spec.catalog != "" {
 			annotations["bootwright.catalog"] = []string{spec.catalog}
 		}
+		if spec.path != "" {
+			annotations["bootwright.path"] = []string{spec.path}
+		}
 		if len(annotations) > 0 {
 			flags.Lookup(spec.name).Annotations = annotations
 		}

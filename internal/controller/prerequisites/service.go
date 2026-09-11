@@ -15,6 +15,7 @@ import (
 type Options struct {
 	Confirmer       Confirmer
 	Presenter       PlanPresenter
+	Progress        ProgressReporter
 	Tools           TargetToolCatalog
 	Bootstrap       BootstrapResolver
 	Native          NativeResolver

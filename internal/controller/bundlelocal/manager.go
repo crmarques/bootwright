@@ -52,7 +52,7 @@ func (m *Manager) Inspect(ctx context.Context, area prerequisites.BundleArea, de
 	return inspection, nil
 }
 
-func (m *Manager) Prepare(ctx context.Context, area prerequisites.BundleArea, definition prerequisites.Definition, egress prerequisites.SetupEgress) error {
+func (m *Manager) Prepare(ctx context.Context, area prerequisites.BundleArea, definition prerequisites.Definition, egress prerequisites.SetupEgress, progress func(prerequisites.ProgressEvent)) error {
 	record, err := validateDefinition(definition)
 	if err != nil {
 		return err
@@ -86,6 +86,11 @@ func (m *Manager) Prepare(ctx context.Context, area prerequisites.BundleArea, de
 		if _, found := entries[name]; found {
 			data, err = area.Read(ctx, name, int(source.Bytes))
 		} else {
+			// Acquisition is the slow part of setup, so each dependency is
+			// announced before the transfer rather than after it.
+			if progress != nil {
+				progress(prerequisites.ProgressEvent{Status: "running", Detail: "acquiring " + path.Base(source.ID), Step: index + 1, Steps: len(record.Baseline)})
+			}
 			data, err = m.fetch(ctx, source, egress)
 		}
 		if err != nil {

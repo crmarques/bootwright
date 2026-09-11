@@ -29,6 +29,18 @@ func TestGeneratedIntegrations(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(workspace, "forbidden-filesystem-candidate"), nil, 0600); err != nil {
 		t.Fatal(err)
 	}
+	// Path candidates come from the executable, never from shell expansion, so
+	// these fixtures prove the executable enumerated them. The shared prefix
+	// keeps each expectation independent of everything else in the workspace.
+	if err := os.MkdirAll(filepath.Join(workspace, "fixture-alpha", "nested"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(workspace, "fixture-beta"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, "fixture-alpha", "input.yaml"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
 	// Bash is the qualified shell for this delivery. The other generated
 	// integrations still ship and are still exercised by the same cases; select
 	// them with BOOTWRIGHT_TEST_ALL_SHELLS=1 on a runner that provides them.
@@ -84,8 +96,10 @@ func TestGeneratedIntegrations(t *testing.T) {
 						{"no removed backend flag", []string{"secret", "encryption", "init", "--type", ""}, nil},
 						{"no attached removed backend flag", []string{"secret", "encryption", "init", "--type=loc"}, nil},
 						{"input directory flag", []string{"context", "init", "--input"}, []string{"--input-dir"}},
-						{"no input directory paths", []string{"context", "init", "--input-dir", ""}, nil},
-						{"no paths", []string{"validate", "--file", ""}, nil},
+						{"directory paths", []string{"context", "init", "--input-dir", "fixture"}, []string{"fixture-alpha/", "fixture-beta/"}},
+						{"directory paths exclude files", []string{"context", "init", "--input-dir", "fixture-alpha/"}, []string{"fixture-alpha/nested/"}},
+						{"file paths include directories", []string{"validate", "--file", "fixture-alpha/"}, []string{"fixture-alpha/input.yaml", "fixture-alpha/nested/"}},
+						{"no paths for value flags", []string{"context", "use", "--name", "forbidden"}, nil},
 						{"no names", []string{"context", "use", "--name", ""}, nil},
 						{"no hidden handlers", []string{"__"}, nil},
 						{"no removed roots", []string{"example", ""}, nil},

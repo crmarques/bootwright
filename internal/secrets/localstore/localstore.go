@@ -112,6 +112,7 @@ func (i *Implementation) open(ctx context.Context, selected storage.Context, are
 		return nil, storage.Failure("store.corrupt", "decrypted secret metadata is invalid")
 	}
 	index.FormatVersion, index.Algorithm, index.Selector = formatVersion, algorithm, selector
+	assignLegacySequences(&index)
 	if validateIndex(index, selector) != nil || index.ActiveKey != wrapped.KeyID {
 		return nil, storage.Failure("store.corrupt", "decrypted secret metadata is inconsistent")
 	}
@@ -358,6 +359,26 @@ func entryNames(ctx context.Context, area storage.Area, directory string) (map[s
 		result[entry.Name] = true
 	}
 	return result, nil
+}
+
+// assignLegacySequences numbers versions stored before ordinals existed. Their
+// creation order was never recorded, so the stable identifier order is used;
+// the result is deterministic and every later version carries its own ordinal.
+// Filling only zero values keeps this idempotent.
+func assignLegacySequences(index *indexRecord) {
+	pending := map[string][]int{}
+	for position, version := range index.Versions {
+		if version.Sequence == 0 {
+			pending[version.Declaration.Name] = append(pending[version.Declaration.Name], position)
+		}
+	}
+	for name, positions := range pending {
+		sequence := nextSequence(*index, name)
+		for _, position := range positions {
+			index.Versions[position].Sequence = sequence
+			sequence++
+		}
+	}
 }
 
 func validateIndex(index indexRecord, selector storage.Selector) error {

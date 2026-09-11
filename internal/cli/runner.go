@@ -22,6 +22,9 @@ type Config struct {
 	// BeginOperation derives an invocation context and returns a cleanup that
 	// releases and joins its cancellation resources before Run returns.
 	BeginOperation func(context.Context) (context.Context, func())
+	// CompletionPaths supplies filesystem candidates for path-valued flags.
+	// Completion offers none when it is absent.
+	CompletionPaths PathCandidates
 }
 
 type Runner struct{ config Config }
@@ -90,6 +93,7 @@ func newCommandTree(r *Runner) (*cobra.Command, error) {
 	if r.config.Services.Encryption != nil {
 		catalog.secretEncryptionTypes = r.config.Services.Encryption.Types
 	}
+	catalog.paths = r.config.CompletionPaths
 	if err := configureCompletion(root, catalog); err != nil {
 		return nil, err
 	}

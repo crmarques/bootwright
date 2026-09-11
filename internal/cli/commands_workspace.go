@@ -9,8 +9,8 @@ import (
 
 func workspaceCommands() []commandSpec {
 	return []commandSpec{
-		{path: "context init", short: "Initialize a configured context and select it", flags: []flagSpec{nameFlag(), contextFileFlag(), stringFlag("input-dir", "Import an Environment input directory")}},
-		{path: "context update", short: "Update Context configuration or Environment input", flags: []flagSpec{nameFlag(), contextFileFlag(), stringFlag("input-dir", "Replace the Environment input directory"), confirmationFlag()}},
+		{path: "context init", short: "Initialize a configured context and select it", flags: []flagSpec{nameFlag(), contextFileFlag(), directoryFlag("input-dir", "Import an Environment input directory")}},
+		{path: "context update", short: "Update Context configuration or Environment input", flags: []flagSpec{nameFlag(), contextFileFlag(), directoryFlag("input-dir", "Replace the Environment input directory"), confirmationFlag()}},
 		{path: "context use", short: "Select the current context", flags: []flagSpec{nameFlag()}},
 		{path: "context list", short: "List contexts"},
 		{path: "context current", short: "Show the current context", flags: []flagSpec{boolFlag("short", "Print only the context name")}},

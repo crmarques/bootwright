@@ -18,7 +18,14 @@ const (
 
 type completionCatalog struct {
 	secretEncryptionTypes func() []string
+	paths                 PathCandidates
 }
+
+// PathCandidates lists completion candidates for a path-valued flag, where kind
+// is exactly "directory" or "file". The CLI performs no filesystem access of
+// its own, so the shell scripts never expand a word and the binary stays the
+// single authority on what a candidate is.
+type PathCandidates func(kind, prefix string) []string
 
 func configureCompletion(root *cobra.Command, catalog completionCatalog) error {
 	for _, name := range []string{completionRequest, completionRequestNoDescriptions} {
@@ -30,7 +37,7 @@ func configureCompletion(root *cobra.Command, catalog completionCatalog) error {
 						return err
 					}
 				}
-				_, err := fmt.Fprintf(cmd.OutOrStdout(), ":%d\n", cobra.ShellCompDirectiveNoFileComp|cobra.ShellCompDirectiveKeepOrder)
+				_, err := fmt.Fprintf(cmd.OutOrStdout(), ":%d\n", completionDirective(root, args))
 				return err
 			},
 		})
@@ -43,8 +50,36 @@ func completionCandidates(root *cobra.Command, words []string, descriptions bool
 }
 
 func completionCandidatesWithCatalog(root *cobra.Command, words []string, descriptions bool, catalog completionCatalog) []string {
+	candidates, _ := completionResolve(root, words, descriptions, catalog)
+	return candidates
+}
+
+// completionDirective tells the shell what it may add to the fixed candidates.
+// Only a path-valued flag opens filesystem completion, and it opens exactly the
+// kind of entry that flag accepts.
+func completionDirective(root *cobra.Command, words []string) cobra.ShellCompDirective {
+	if _, flag := completionResolve(root, words, false, completionCatalog{}); flag != nil && flagPathKind(flag) != "" {
+		// Candidates are supplied in full, so the shell must still add nothing
+		// of its own. A directory candidate keeps its trailing separator, which
+		// only reads correctly without an appended space.
+		return cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace | cobra.ShellCompDirectiveKeepOrder
+	}
+	return cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveKeepOrder
+}
+
+func flagPathKind(flag *pflag.Flag) string {
+	if values := flag.Annotations["bootwright.path"]; len(values) == 1 {
+		return values[0]
+	}
+	return ""
+}
+
+// completionResolve returns the candidates for the word being completed and,
+// when that word is a flag's value, the flag it belongs to. The flag decides
+// whether the shell may offer filesystem paths.
+func completionResolve(root *cobra.Command, words []string, descriptions bool, catalog completionCatalog) ([]string, *pflag.Flag) {
 	if len(words) == 0 {
-		return nil
+		return nil, nil
 	}
 	completeWords, incompleteWord := words[:len(words)-1], words[len(words)-1]
 	cmd := root
@@ -57,7 +92,7 @@ func completionCandidatesWithCatalog(root *cobra.Command, words []string, descri
 			continue
 		}
 		if token == "--" {
-			return nil
+			return nil, nil
 		}
 		if strings.HasPrefix(token, "-") {
 			flagCommand := cmd
@@ -66,7 +101,7 @@ func completionCandidatesWithCatalog(root *cobra.Command, words []string, descri
 			}
 			flag, _, attached := completionFlag(flagCommand, token)
 			if flag == nil {
-				return nil
+				return nil, nil
 			}
 			if cmd.LocalNonPersistentFlags().Lookup(flag.Name) != nil && !helpMode {
 				localFlagUsed = true
@@ -81,7 +116,7 @@ func completionCandidatesWithCatalog(root *cobra.Command, words []string, descri
 			continue
 		}
 		if localFlagUsed {
-			return nil
+			return nil, nil
 		}
 		var next *cobra.Command
 		for _, child := range cmd.Commands() {
@@ -91,13 +126,13 @@ func completionCandidatesWithCatalog(root *cobra.Command, words []string, descri
 			}
 		}
 		if next == nil {
-			return nil
+			return nil, nil
 		}
 		cmd = next
 	}
 
 	if awaiting != nil {
-		return completionValues(awaiting, incompleteWord, "", catalog)
+		return completionValues(awaiting, incompleteWord, "", catalog), awaiting
 	}
 	if strings.HasPrefix(incompleteWord, "-") {
 		flagCommand := cmd
@@ -105,7 +140,7 @@ func completionCandidatesWithCatalog(root *cobra.Command, words []string, descri
 			flagCommand = root
 		}
 		if flag, value, attached := completionFlag(flagCommand, incompleteWord); flag != nil && attached {
-			return completionValues(flag, value, strings.TrimSuffix(incompleteWord, value), catalog)
+			return completionValues(flag, value, strings.TrimSuffix(incompleteWord, value), catalog), flag
 		}
 		var candidates []string
 		for _, flag := range completionFlags(flagCommand) {
@@ -116,10 +151,10 @@ func completionCandidatesWithCatalog(root *cobra.Command, words []string, descri
 			}
 		}
 		slices.Sort(candidates)
-		return candidates
+		return candidates, nil
 	}
 	if localFlagUsed {
-		return nil
+		return nil, nil
 	}
 	var candidates []string
 	for _, child := range cmd.Commands() {
@@ -128,7 +163,7 @@ func completionCandidatesWithCatalog(root *cobra.Command, words []string, descri
 		}
 	}
 	slices.Sort(candidates)
-	return candidates
+	return candidates, nil
 }
 
 func completionFlags(cmd *cobra.Command) []*pflag.Flag {
@@ -171,6 +206,17 @@ func completionFlag(cmd *cobra.Command, token string) (*pflag.Flag, string, bool
 }
 
 func completionValues(flag *pflag.Flag, prefix, attached string, catalog completionCatalog) []string {
+	if kind := flagPathKind(flag); kind != "" {
+		if catalog.paths == nil {
+			return nil
+		}
+		var candidates []string
+		for _, value := range catalog.paths(kind, prefix) {
+			candidates = append(candidates, attached+value)
+		}
+		slices.Sort(candidates)
+		return slices.Compact(candidates)
+	}
 	values := flag.Annotations["bootwright.enum"]
 	dynamic := false
 	if names := flag.Annotations["bootwright.catalog"]; len(names) == 1 && names[0] == secretEncryptionTypeCatalog && catalog.secretEncryptionTypes != nil {

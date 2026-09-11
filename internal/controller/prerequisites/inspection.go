@@ -74,3 +74,20 @@ type ActionProgress struct {
 type PlanPresenter interface {
 	PresentControllerPlan(context.Context, Report) error
 }
+
+// ProgressEvent is one operator-visible step of an authorized setup. Detail is
+// safe display text naming the work in flight; Step and Steps are present only
+// when the action knows its own extent.
+type ProgressEvent struct {
+	Action string
+	Status string
+	Detail string
+	Step   int
+	Steps  int
+}
+
+// ProgressReporter receives events while setup runs. Reporting is best effort:
+// a reporting failure never changes an effect or its recorded outcome.
+type ProgressReporter interface {
+	ReportProgress(context.Context, ProgressEvent)
+}

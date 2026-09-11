@@ -125,7 +125,11 @@ type SecretStoreImplementation interface {
 }
 
 type Version struct {
-	ID          string                     `json:"id"`
+	ID string `json:"id"`
+	// Sequence is the version's durable per-secret ordinal, counting from one.
+	// The identifier remains the only durable reference; the ordinal exists so
+	// a person can name a version without reading a digest.
+	Sequence    int                        `json:"sequence"`
 	Declaration secrets.VersionDeclaration `json:"declaration"`
 	Parts       []secrets.Part             `json:"parts"`
 }

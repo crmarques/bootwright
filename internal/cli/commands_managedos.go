@@ -9,7 +9,7 @@ import (
 
 func mediaCommands() []commandSpec {
 	return []commandSpec{
-		{path: "media add", short: "Import and verify an installer image", flags: []flagSpec{nameFlag(), stringFlag("from-file", "Import a local image"), stringFlag("from-url", "Import an HTTP or HTTPS image"), stringFlag("sha256", "Verify a SHA-256 digest"), confirmationFlag()}},
+		{path: "media add", short: "Import and verify an installer image", flags: []flagSpec{nameFlag(), fileFlag("from-file", "Import a local image"), stringFlag("from-url", "Import an HTTP or HTTPS image"), stringFlag("sha256", "Verify a SHA-256 digest"), confirmationFlag()}},
 		{path: "media list", short: "List installer images", flags: []flagSpec{boolFlag("checksums", "Compute image checksums"), outputFlag()}},
 		{path: "media delete", short: "Delete an unbound installer image", flags: []flagSpec{nameFlag(), confirmationFlag()}},
 	}

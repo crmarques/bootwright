@@ -63,17 +63,18 @@ func wireCompiler() compilation.Compiler {
 		compilation.Rules{Normalize: infrastructureservices.Normalize, ValidateAuthored: infrastructureservices.ValidateAuthored, ValidatePartial: infrastructureservices.ValidatePartial, Validate: infrastructureservices.Validate})
 }
 
-func wireServices() cli.Services { return wireLocalServices(nil, nil) }
+func wireServices() cli.Services { return wireLocalServices(nil, nil, nil) }
 
-func wireLocalServices(confirmer contexts.Confirmer, input secretmaterial.InputReader, presenters ...prerequisites.PlanPresenter) cli.Services {
+func wireLocalServices(confirmer contexts.Confirmer, input secretmaterial.InputReader, progress prerequisites.ProgressReporter, presenters ...prerequisites.PlanPresenter) cli.Services {
 	repository := contextfs.New(contextfs.Options{})
-	return wireContextServices(repository, repository, confirmer, input, localWiringOptions(repository, presenters...))
+	return wireContextServices(repository, repository, confirmer, input, localWiringOptions(repository, progress, presenters...))
 }
 
-func localWiringOptions(repository *contextfs.Store, presenters ...prerequisites.PlanPresenter) contextWiringOptions {
+func localWiringOptions(repository *contextfs.Store, progress prerequisites.ProgressReporter, presenters ...prerequisites.PlanPresenter) contextWiringOptions {
 	account := invokingAccount{resolver: invocation.Resolver{}}
 	native := nativelocal.New(bundlelocal.FetchMetadata)
 	options := contextWiringOptions{Selection: account, Operator: account, ControllerStorage: repository, ControllerHost: hostlinux.New(), ControllerCatalog: bundlelocal.Catalog{}, ControllerBundle: bundlelocal.New(), ControllerTools: bundlelocal.NewToolCatalog(), ControllerRuntime: ansiblelocal.New(bundlelocal.ExecutionGuard{}), ControllerBootstrap: bundlelocal.NewBootstrapResolver(), ControllerNative: native, ControllerNativeInspector: native}
+	options.ControllerProgress = progress
 	if len(presenters) != 0 {
 		options.ControllerPresenter = presenters[0]
 	}
@@ -91,6 +92,7 @@ type contextWiringOptions struct {
 	ControllerBundle          prerequisites.BundleManager
 	ControllerRuntime         prerequisites.RuntimeInstaller
 	ControllerPresenter       prerequisites.PlanPresenter
+	ControllerProgress        prerequisites.ProgressReporter
 	ControllerTools           prerequisites.TargetToolCatalog
 	ControllerBootstrap       prerequisites.BootstrapResolver
 	ControllerNative          prerequisites.NativeResolver
@@ -132,7 +134,7 @@ func wireContextServices(repository contexts.Repository, workspace secretstorage
 		Encryption:            encryption.New(access, confirmer),
 		Media:                 media.Service{},
 		DesiredState:          compilation.New(inputfs.Reader{}, compiler, contexts.Inputs{Repository: repository, Selection: configuration.Selection}),
-		Controller:            prerequisites.New(configuration.ControllerStorage, compiler, configuration.ControllerHost, configuration.ControllerCatalog, configuration.ControllerBundle, configuration.ControllerRuntime, prerequisites.Options{Confirmer: confirmer, Presenter: configuration.ControllerPresenter, Tools: configuration.ControllerTools, Bootstrap: configuration.ControllerBootstrap, Native: configuration.ControllerNative, NativeInspector: configuration.ControllerNativeInspector}),
+		Controller:            prerequisites.New(configuration.ControllerStorage, compiler, configuration.ControllerHost, configuration.ControllerCatalog, configuration.ControllerBundle, configuration.ControllerRuntime, prerequisites.Options{Confirmer: confirmer, Presenter: configuration.ControllerPresenter, Progress: configuration.ControllerProgress, Tools: configuration.ControllerTools, Bootstrap: configuration.ControllerBootstrap, Native: configuration.ControllerNative, NativeInspector: configuration.ControllerNativeInspector}),
 		EnvironmentPreflight:  environmentpreflight.Service{},
 		EnvironmentInspection: inspection.Service{},
 		EnvironmentAccess:     environmentaccess.Service{},

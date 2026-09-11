@@ -118,7 +118,7 @@ func TestQualifiedResolvedBootstrapPreparation(t *testing.T) {
 		}
 		return runImportProbe(ctx, area, prerequisites.PythonLaunch{Loader: definition.Execution.Loader, Arguments: []string{"--inhibit-cache", "--glibc-hwcaps-mask", "", "--library-path", filepath.Join(location.Path, "python/lib"), "--preload", strings.Join(definition.Execution.Preload, ":"), filepath.Join(location.Path, definition.Bootstrap.PythonExecutable)}, Directory: location.Path, Environment: []string{"LC_ALL=C.UTF-8", "LANG=C.UTF-8", "HOME=" + location.Path, "OPENSSL_CONF=/dev/null"}}, definition)
 	}
-	if err := manager.Prepare(t.Context(), area, definition, prerequisites.SetupEgress{}); err != nil {
+	if err := manager.Prepare(t.Context(), area, definition, prerequisites.SetupEgress{}, nil); err != nil {
 		t.Fatalf("%v: %+v", err, desiredstate.DiagnosticsOf(err))
 	}
 	before, err := area.Entries(t.Context())
@@ -132,7 +132,7 @@ func TestQualifiedResolvedBootstrapPreparation(t *testing.T) {
 			t.Fatalf("resolved inspection failed: %+v %v", inspection, err)
 		}
 	}
-	if err := manager.Prepare(t.Context(), area, definition, prerequisites.SetupEgress{}); err != nil {
+	if err := manager.Prepare(t.Context(), area, definition, prerequisites.SetupEgress{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	after, err := area.Entries(t.Context())

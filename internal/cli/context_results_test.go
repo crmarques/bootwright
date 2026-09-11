@@ -60,21 +60,21 @@ func TestContextSuccessJourneysHaveCompleteTextResults(t *testing.T) {
 			}
 			switch args[1] {
 			case "init", "update":
-				for _, count := range []string{"files copied: 5", "files seen: 3", "objects decoded: 4"} {
+				for _, count := range []string{"Files copied     5", "Files seen       3", "Objects decoded  4"} {
 					if !strings.Contains(out.String(), count) {
 						t.Fatalf("missing count %q: %q", count, out.String())
 					}
 				}
 			case "list":
-				if strings.Index(out.String(), "example\t") > strings.Index(out.String(), "z\t") || !strings.Contains(out.String(), "initializing") || !reflect.DeepEqual(before, record.result.list.Contexts) {
+				if strings.Index(out.String(), "example ") > strings.Index(out.String(), "z ") || !strings.Contains(out.String(), "initializing") || !reflect.DeepEqual(before, record.result.list.Contexts) {
 					t.Fatal("list order, mode or immutability", out.String())
 				}
 			case "delete":
-				if !strings.Contains(out.String(), "deleted") || !strings.Contains(out.String(), "current cleared: true") {
+				if !strings.Contains(out.String(), "deleted") || !strings.Contains(out.String(), "Current cleared  true") {
 					t.Fatal(out.String())
 				}
 			default:
-				if !strings.Contains(out.String(), "mode: ready\ncurrent: true\n") {
+				if !strings.Contains(out.String(), "Mode              ready\n  Current           true\n") {
 					t.Fatal("missing current details", out.String())
 				}
 			}
@@ -120,8 +120,12 @@ func TestContextAdmissionWarningsArePrintedOnceAndEscaped(t *testing.T) {
 	result.current.Context.Name = raw
 	result.current.Context.ID = raw
 	var out bytes.Buffer
-	if err := writeContextCurrent(&out, result.current, false); err != nil || !strings.Contains(out.String(), "name: "+escapeDisplayLine(raw)+"\nid: "+escapeDisplayLine(raw)+"\n") {
+	escaped := escapeDisplayLine(raw)
+	if err := writeContextCurrent(&out, result.current, false); err != nil {
 		t.Fatal("context identity display", out.String(), err)
+	}
+	if strings.Count(out.String(), escaped) != 2 || strings.Contains(out.String(), raw) {
+		t.Fatal("context identity display", out.String())
 	}
 }
 
@@ -215,7 +219,7 @@ func TestContextInitWithoutInputUsesDefaults(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"context", "init", "--name", "test"})
 	request, ok := record.request.(contexts.InitRequest)
-	if code != 0 || !ok || request != (contexts.InitRequest{Name: "test"}) || errOut.Len() != 0 || !strings.Contains(out.String(), "input configured: false") || strings.Contains(out.String(), "files copied") {
+	if code != 0 || !ok || request != (contexts.InitRequest{Name: "test"}) || errOut.Len() != 0 || !strings.Contains(out.String(), "Input configured  false") || strings.Contains(out.String(), "Files copied") {
 		t.Fatalf("default init contract: code=%d request=%#v stdout=%q stderr=%q", code, record.request, out.String(), errOut.String())
 	}
 }

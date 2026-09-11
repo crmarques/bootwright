@@ -14,17 +14,17 @@ func TestVersionOutput(t *testing.T) {
 	}{
 		{
 			name: "defaults",
-			want: "version: devel\ncommit: unknown\ngo: unknown\ntarget: unknown/unknown\ndependency bundle: none\n",
+			want: "Bootwright\n\n  Version            devel\n  Commit             unknown\n  Go                 unknown\n  Target             unknown/unknown\n  Dependency bundle  none\n",
 		},
 		{
 			name: "normalized",
 			info: BuildInfo{Version: " v0.1.0 ", Commit: " ABCDEF0 ", GoVersion: " go1.26.7 ", GOOS: " linux ", GOARCH: " amd64 ", DependencyBundle: " sha256:" + strings.Repeat("a", 64) + " "},
-			want: "version: v0.1.0\ncommit: abcdef0\ngo: go1.26.7\ntarget: linux/amd64\ndependency bundle: sha256:" + strings.Repeat("a", 64) + "\n",
+			want: "Bootwright\n\n  Version            v0.1.0\n  Commit             abcdef0\n  Go                 go1.26.7\n  Target             linux/amd64\n  Dependency bundle  sha256:" + strings.Repeat("a", 64) + "\n",
 		},
 		{
 			name: "unsafe build values",
 			info: BuildInfo{Version: "v1\n\x1b[2J", Commit: "not-a-commit", GoVersion: "go\xff", GOOS: "x\\y", DependencyBundle: "sha256:" + strings.Repeat("A", 64)},
-			want: "version: v1\\n\\u001b[2J\ncommit: unknown\ngo: go\\xff\ntarget: x\\\\y/unknown\ndependency bundle: none\n",
+			want: "Bootwright\n\n  Version            v1\\n\\u001b[2J\n  Commit             unknown\n  Go                 go\\xff\n  Target             x\\\\y/unknown\n  Dependency bundle  none\n",
 		},
 	}
 	for _, tt := range tests {
@@ -51,7 +51,7 @@ func TestVersionIdentityBounds(t *testing.T) {
 		if n >= 7 && n <= 64 {
 			want = commit
 		}
-		if !strings.Contains(out.String(), "commit: "+want+"\n") {
+		if !strings.Contains(out.String(), "Commit             "+want+"\n") {
 			t.Fatalf("commit length %d: %q", n, out.String())
 		}
 	}

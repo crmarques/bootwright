@@ -56,6 +56,56 @@ blocks against the frozen total and continues to display completed blocks so the
 resume boundary is explicit. Human wording may evolve, but status meaning,
 group membership, order, safe target identity, and next action remain stable.
 
+### Shared human layout
+
+Every command composes its result from the same blocks, so an unfamiliar
+command is readable from a familiar one. One shared renderer owns this layout;
+a command supplies content and never its own spacing, padding, or separators.
+
+- An optional **headline** opens the result: either a status line
+  (`[OK] Context initialized`) or a plain title (`Bastion setup plan`). It is
+  the only line at column zero besides section headings and table headers.
+- A **section** is an optional capitalized heading followed by its body. One
+  blank line separates a section from the block before it. A section with no
+  heading groups trailing fields, such as the closing outcome and next action.
+- **Fields** are `Label` and value pairs indented by two spaces, with labels
+  padded so every value in one group starts at the same column. Labels are
+  capitalized prose, not identifiers.
+- **Rows** align every column to its widest cell, separated by two spaces, and
+  are indented by two spaces. Status rows lead with a status token.
+- A **table** adds an uppercase column header above unindented rows. The header
+  participates in column width.
+- **Steps** number an ordered list of planned changes from `1.`.
+
+Trailing padding is never written, so no line ends in whitespace. Column width
+is measured in Unicode code points after display escaping. Values cross the
+display boundary inside the renderer, so alignment can never be widened by an
+unescaped control sequence. Layout adds no color, cursor control, or box
+drawing, and does not vary with terminal width.
+
+### Long-running progress
+
+A command whose authorized work can take minutes reports progress as it runs,
+because a silent process is indistinguishable from a stuck one. Each step is one
+`[RUNNING]` status row naming the action, the work in flight, and its position
+in the known total; the step is then reported again with the outcome it proved.
+Rows appear under a `Progress` heading opened by the first step. Progress is
+written unbuffered so it is visible while the work is still in flight.
+
+Progress is presentation only. A failure to report never changes an effect, an
+outcome, or a recorded receipt, and progress rows never replace the ordered
+result that follows them. Reporting stops at cancellation rather than claiming a
+step whose outcome is no longer observable.
+
+### Context identity
+
+Context identity is presented by the commands that own it. `context init`,
+`context update`, `context use`, `context current`, `context list`, and
+`context delete` present the selected context's name, identifier, and mode.
+Every other human result omits the context block; the selected context is
+already addressable through `context current`. JSON results keep their
+documented `context` field unchanged, so machine consumers lose nothing.
+
 Human diagnostics have one of these forms:
 
 ```text
@@ -133,6 +183,13 @@ diagnostic shape below. Those warnings also remain in envelope `diagnostics`;
 human output presents each diagnostic only once. All four arrays are always
 present, including when empty. Every failed `validate` invocation returns
 `result: null`; partial loader counts remain internal.
+
+Each `secret check` entry carries both `version`, the durable identifier or
+`null`, and `sequence`, its per-secret ordinal or `0` when no version applies.
+Each `secret list` entry carries `currentVersion` and `currentSequence` on the
+same terms. Human output shows only `v<sequence>`, and `-` when none applies;
+the identifier is reserved for machine consumers, which must reference it rather
+than the ordinal.
 
 `render effective` returns admission `counts` and `effectiveState`, the canonical
 ordered array of complete effective objects. Successful `diagnostics` and

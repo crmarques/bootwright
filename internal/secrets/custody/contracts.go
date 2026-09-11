@@ -39,6 +39,9 @@ type CheckRow struct {
 	Parts   []secrets.Part `json:"parts"`
 	Status  string         `json:"status"`
 	Version *string        `json:"version"`
+	// Sequence is the version's per-secret ordinal, zero when no version
+	// applies. The identifier stays the durable reference.
+	Sequence int `json:"sequence"`
 }
 type CheckResult struct {
 	Context storage.Context `json:"context"`
@@ -51,7 +54,10 @@ type ListRow struct {
 	Parts          []secrets.Part `json:"parts"`
 	State          string         `json:"state"`
 	CurrentVersion *string        `json:"currentVersion"`
-	BoundVersions  int            `json:"boundVersions"`
+	// CurrentSequence is the current version's per-secret ordinal, zero when no
+	// current version applies.
+	CurrentSequence int `json:"currentSequence"`
+	BoundVersions   int `json:"boundVersions"`
 }
 type ListResult struct {
 	Context storage.Context `json:"context"`

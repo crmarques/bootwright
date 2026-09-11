@@ -20,8 +20,8 @@ func TestCompositionSuppliesRuntimeBuildInformation(t *testing.T) {
 		t.Fatalf("version stderr = %q", stderr.String())
 	}
 	for _, line := range []string{
-		"go: " + runtime.Version() + "\n",
-		"target: " + runtime.GOOS + "/" + runtime.GOARCH + "\n",
+		"Go                 " + runtime.Version() + "\n",
+		"Target             " + runtime.GOOS + "/" + runtime.GOARCH + "\n",
 	} {
 		if !strings.Contains(stdout.String(), line) {
 			t.Fatalf("version %q does not contain linked runtime %q", stdout.String(), line)

@@ -2,9 +2,9 @@ package cli
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"slices"
+	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -168,8 +168,16 @@ func writeSecretMutation(out io.Writer, path string, result *custody.MutationRes
 	if name == "" {
 		name = "all"
 	}
-	_, err := fmt.Fprintf(out, "[OK] Secret %s complete\ncontext: %s\nname: %s\nchanged: %d\nunchanged: %d\nparts: %s\n", action, escapeDisplayLine(result.Context.Name), escapeDisplayLine(name), result.Changed, result.Unchanged, displaySecretParts(result.Parts))
-	return err
+	var text display
+	text.headline("OK", "Secret "+action+" complete")
+	text.section("")
+	text.fields(
+		field{Label: "Name", Value: name},
+		field{Label: "Changed", Value: strconv.Itoa(result.Changed)},
+		field{Label: "Unchanged", Value: strconv.Itoa(result.Unchanged)},
+		field{Label: "Parts", Value: displaySecretParts(result.Parts)},
+	)
+	return text.writeTo(out)
 }
 
 func writeSecretCheck(out, errOut io.Writer, command string, result *custody.CheckResult, diagnostics []diagnostic, exitCode int, jsonMode bool) error {
@@ -197,46 +205,31 @@ func writeSecretList(out io.Writer, command string, result *custody.ListResult, 
 }
 
 func writeSecretCheckText(out io.Writer, result *custody.CheckResult) error {
-	if err := writeSecretContext(out, result.Context); err != nil {
-		return err
-	}
+	var text display
 	if len(result.Secrets) == 0 {
-		_, err := io.WriteString(out, "[OK] No declared secrets\n")
-		return err
+		text.headline("OK", "No declared secrets")
+		return text.writeTo(out)
 	}
-	if _, err := io.WriteString(out, "NAME\tTYPE\tSOURCE\tPARTS\tSTATUS\tVERSION\n"); err != nil {
-		return err
-	}
+	rows := make([][]string, 0, len(result.Secrets))
 	for _, row := range sortedSecretCheckRows(result.Secrets) {
-		if _, err := fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%s\t%s\n", escapeDisplayLine(row.Name), escapeDisplayLine(row.Type), escapeDisplayLine(row.Source), displaySecretParts(row.Parts), escapeDisplayLine(row.Status), displayOptionalIdentifier(row.Version)); err != nil {
-			return err
-		}
+		rows = append(rows, []string{row.Name, row.Type, row.Source, displaySecretParts(row.Parts), row.Status, displayVersionOrdinal(row.Version, row.Sequence)})
 	}
-	return nil
+	text.table([]string{"NAME", "TYPE", "SOURCE", "PARTS", "STATUS", "VERSION"}, rows)
+	return text.writeTo(out)
 }
 
 func writeSecretListText(out io.Writer, result *custody.ListResult) error {
-	if err := writeSecretContext(out, result.Context); err != nil {
-		return err
-	}
+	var text display
 	if len(result.Secrets) == 0 {
-		_, err := io.WriteString(out, "[OK] No stored secrets\n")
-		return err
+		text.headline("OK", "No stored secrets")
+		return text.writeTo(out)
 	}
-	if _, err := io.WriteString(out, "NAME\tTYPE\tSOURCE\tPARTS\tSTATE\tCURRENT-VERSION\tBOUND-VERSIONS\n"); err != nil {
-		return err
-	}
+	rows := make([][]string, 0, len(result.Secrets))
 	for _, row := range sortedSecretListRows(result.Secrets) {
-		if _, err := fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%s\t%s\t%d\n", escapeDisplayLine(row.Name), escapeDisplayLine(row.Type), escapeDisplayLine(row.Source), displaySecretParts(row.Parts), escapeDisplayLine(row.State), displayOptionalIdentifier(row.CurrentVersion), row.BoundVersions); err != nil {
-			return err
-		}
+		rows = append(rows, []string{row.Name, row.Type, row.Source, displaySecretParts(row.Parts), row.State, displayVersionOrdinal(row.CurrentVersion, row.CurrentSequence), strconv.Itoa(row.BoundVersions)})
 	}
-	return nil
-}
-
-func writeSecretContext(out io.Writer, value storage.Context) error {
-	_, err := fmt.Fprintf(out, "context: %s\ncontext-id: %s\ncontext-mode: %s\n", escapeDisplayLine(value.Name), escapeDisplayLine(value.ID), escapeDisplayLine(value.Mode))
-	return err
+	text.table([]string{"NAME", "TYPE", "SOURCE", "PARTS", "STATE", "CURRENT-VERSION", "BOUND-VERSIONS"}, rows)
+	return text.writeTo(out)
 }
 
 func writeSecretReveal(out io.Writer, result *custody.RevealResult, requested secrets.Part) error {
@@ -260,8 +253,16 @@ func writeEncryptionMutation(out io.Writer, path string, result *encryption.Muta
 	} else if !result.Changed {
 		action = "already initialized"
 	}
-	_, err := fmt.Fprintf(out, "[OK] Secret encryption %s\ncontext: %s\ntype: %s\nstore: %s\nkey-custody: %s\nactive-key: %s\n", action, escapeDisplayLine(result.Context.Name), escapeDisplayLine(result.Implementation.Type), escapeDisplayLine(result.Implementation.Store.ID), escapeDisplayLine(result.Implementation.KeyCustody.ID), escapeDisplayLine(result.ActiveKey))
-	return err
+	var text display
+	text.headline("OK", "Secret encryption "+action)
+	text.section("")
+	text.fields(
+		field{Label: "Type", Value: result.Implementation.Type},
+		field{Label: "Store", Value: result.Implementation.Store.ID},
+		field{Label: "Key custody", Value: result.Implementation.KeyCustody.ID},
+		field{Label: "Active key", Value: result.ActiveKey},
+	)
+	return text.writeTo(out)
 }
 
 func writeEncryptionStatus(out io.Writer, command string, result *encryption.StatusResult, jsonMode bool) error {
@@ -271,39 +272,46 @@ func writeEncryptionStatus(out io.Writer, command string, result *encryption.Sta
 		encoder.SetEscapeHTML(false)
 		return encoder.Encode(commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0, Result: presentation, Diagnostics: []diagnostic{}, Logs: []string{}})
 	}
-	if _, err := fmt.Fprintf(out, "initialized: %t\n", presentation.Initialized); err != nil {
-		return err
-	}
+	var text display
+	text.headline("", "Secret encryption")
+	text.section("")
+	status := []field{{Label: "Initialized", Value: strconv.FormatBool(presentation.Initialized)}}
 	if presentation.Implementation == nil {
-		if _, err := io.WriteString(out, "implementation: -\nactive-key: -\n"); err != nil {
-			return err
-		}
+		status = append(status, field{Label: "Implementation", Value: "-"}, field{Label: "Active key", Value: "-"})
 	} else {
 		implementation := presentation.Implementation
 		activeKey := "-"
 		if presentation.ActiveKey != nil {
 			activeKey = *presentation.ActiveKey
 		}
-		if _, err := fmt.Fprintf(out, "implementation: %s\nimplementation-state: %s\nstore: %s\nkey-custody: %s\nactive-key: %s\n", implementation.Type, implementation.State, implementation.Store.ID, implementation.KeyCustody.ID, activeKey); err != nil {
-			return err
-		}
+		status = append(status,
+			field{Label: "Implementation", Value: implementation.Type},
+			field{Label: "State", Value: implementation.State},
+			field{Label: "Store", Value: implementation.Store.ID},
+			field{Label: "Key custody", Value: implementation.KeyCustody.ID},
+			field{Label: "Active key", Value: activeKey},
+		)
 	}
+	text.fields(status...)
+	text.section("Keys")
 	if len(presentation.Keys) == 0 {
-		if _, err := io.WriteString(out, "keys: none\n"); err != nil {
-			return err
-		}
+		text.lines([]string{"none"})
 	} else {
-		if _, err := io.WriteString(out, "KEY\tSTATE\tSEALS\n"); err != nil {
-			return err
-		}
+		rows := make([][]string, 0, len(presentation.Keys))
 		for _, key := range presentation.Keys {
-			if _, err := fmt.Fprintf(out, "%s\t%s\t%d\n", key.ID, key.State, key.Seals); err != nil {
-				return err
-			}
+			rows = append(rows, []string{key.ID, key.State, strconv.FormatUint(key.Seals, 10)})
 		}
+		text.rows(rows)
 	}
-	_, err := fmt.Fprintf(out, "current-versions: %d\nbound-versions: %d\nmaterial-parts: %d\nretained-artifacts: %d\ncleanup-required: %t\n", presentation.Items.CurrentVersions, presentation.Items.BoundVersions, presentation.Items.MaterialParts, presentation.Items.RetainedArtifacts, presentation.Items.CleanupRequired)
-	return err
+	text.section("Items")
+	text.fields(
+		field{Label: "Current versions", Value: strconv.Itoa(presentation.Items.CurrentVersions)},
+		field{Label: "Bound versions", Value: strconv.Itoa(presentation.Items.BoundVersions)},
+		field{Label: "Material parts", Value: strconv.Itoa(presentation.Items.MaterialParts)},
+		field{Label: "Retained artifacts", Value: strconv.Itoa(presentation.Items.RetainedArtifacts)},
+		field{Label: "Cleanup required", Value: strconv.FormatBool(presentation.Items.CleanupRequired)},
+	)
+	return text.writeTo(out)
 }
 
 func displaySecretCheck(result *custody.CheckResult) *custody.CheckResult {
@@ -359,11 +367,13 @@ func displaySecretPartValues(parts []secrets.Part) []secrets.Part {
 	return values
 }
 
-func displayOptionalIdentifier(value *string) string {
-	if value == nil {
+// A version is shown to a person by its per-secret ordinal. The durable
+// identifier stays in JSON, which is what any tool should reference.
+func displayVersionOrdinal(value *string, sequence int) string {
+	if value == nil || sequence <= 0 {
 		return "-"
 	}
-	return escapeDisplayLine(*value)
+	return "v" + strconv.Itoa(sequence)
 }
 
 func displayOptionalIdentifierPointer(value *string) *string {

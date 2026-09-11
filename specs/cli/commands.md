@@ -174,15 +174,28 @@ lookup, random generation, or other effect.
 ### Completion
 
 Completion generation and the private completion protocol derive solely from
-the closed declarative command catalog and the bounded argument prefix. They
-perform no standard-input, environment, filesystem, context, state, secret,
-process, network, random, prompt, privilege, or remote access, and the
-completion path starts no concurrent work. A generated shell integration may
-invoke only the Bootwright executable's private completion protocol; it
-performs no filesystem fallback or other subprocess. Completion
-offers exactly the applicable public command paths, public flags and shorthands,
-and closed enum values defined by this contract. It does not offer filenames or
-inspect the filesystem for path-valued flags, and offers no dynamic candidate
+the closed declarative command catalog, the bounded argument prefix, and — for a
+path-valued flag alone — the directory that prefix names. They perform no
+standard-input, environment, context, state, secret, process, network, random,
+prompt, privilege, or remote access, and the completion path starts no
+concurrent work. A generated shell integration may invoke only the Bootwright
+executable's private completion protocol; it performs no filesystem fallback,
+word expansion, or other subprocess, so a partly typed value is never evaluated
+by the shell. Completion offers exactly the applicable public command paths,
+public flags and shorthands, and closed enum values defined by this contract.
+
+A flag declared as directory-valued or file-valued additionally offers
+filesystem candidates, which the executable alone enumerates. It reads only the
+single directory named by the completed prefix, never recursively. A
+directory-valued flag offers directories; a file-valued flag offers files and
+directories, so a path can be completed one segment at a time. A directory
+candidate carries a trailing separator and the request reports that the shell
+must append nothing of its own. Candidates are bounded in count and in entry
+length; a dot entry is offered only once the prefix names one; and any entry
+carrying a control character, whitespace, or a character significant to a shell
+word is withheld rather than escaped, because such a candidate could not be
+inserted unchanged. An unreadable directory yields no candidates and no
+diagnostic. Completion offers no dynamic candidate
 for context, object, catalog, target, or other name or free-form value. The
 private protocol entries remain hidden and are never themselves candidates. A
 generated integration presents descriptions only when the shell provides a

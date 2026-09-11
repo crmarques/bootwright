@@ -69,6 +69,7 @@ type storedKey struct {
 
 type storedVersion struct {
 	ID          string                     `json:"id"`
+	Sequence    int                        `json:"sequence,omitempty"`
 	Declaration secrets.VersionDeclaration `json:"declaration"`
 	Parts       []storedPart               `json:"parts"`
 }
@@ -243,9 +244,23 @@ func canonicalValueSize(value reflect.Value, maximum, depth int) (int, bool) {
 			if name == "-" {
 				continue
 			}
-			if options == "omitempty" && value.Field(index).Kind() == reflect.Bool {
-				if !value.Field(index).Bool() {
-					continue
+			// Only omissions this size calculation can predict exactly are
+			// supported, because the predicted size must equal the encoding.
+			// An omitted zero also lets a record written before a counted
+			// field existed still round-trip byte for byte.
+			if options == "omitempty" {
+				fieldValue := value.Field(index)
+				switch fieldValue.Kind() {
+				case reflect.Bool:
+					if !fieldValue.Bool() {
+						continue
+					}
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					if fieldValue.Int() == 0 {
+						continue
+					}
+				default:
+					return 0, false
 				}
 			} else if options != "" {
 				return 0, false

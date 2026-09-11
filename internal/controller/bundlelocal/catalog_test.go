@@ -173,7 +173,7 @@ func TestPreparationRejectsUnapprovedBytesBeforeFilePublication(t *testing.T) {
 		},
 	}
 	area := newMemoryArea()
-	if err := m.Prepare(t.Context(), area, definition, prerequisites.SetupEgress{}); err == nil {
+	if err := m.Prepare(t.Context(), area, definition, prerequisites.SetupEgress{}, nil); err == nil {
 		t.Fatal("accepted source integrity failure")
 	}
 	if len(area.files) != 0 {

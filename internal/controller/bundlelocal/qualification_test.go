@@ -76,7 +76,7 @@ func TestQualifiedUnprivilegedBundlePreparationAndReadOnlyReuse(t *testing.T) {
 		defer file.Close()
 		return io.ReadAll(io.LimitReader(file, source.Bytes+1))
 	}
-	if err := manager.Prepare(t.Context(), area, definition, prerequisites.SetupEgress{}); err != nil {
+	if err := manager.Prepare(t.Context(), area, definition, prerequisites.SetupEgress{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	before, err := area.Entries(t.Context())
@@ -90,7 +90,7 @@ func TestQualifiedUnprivilegedBundlePreparationAndReadOnlyReuse(t *testing.T) {
 			t.Fatalf("qualified inspection failed: %+v %v", inspection, err)
 		}
 	}
-	if err := manager.Prepare(t.Context(), area, definition, prerequisites.SetupEgress{}); err != nil {
+	if err := manager.Prepare(t.Context(), area, definition, prerequisites.SetupEgress{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	after, err := area.Entries(t.Context())

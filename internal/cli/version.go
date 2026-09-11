@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"io"
 	"strings"
 )
@@ -25,11 +24,17 @@ func writeVersion(out io.Writer, info BuildInfo) error {
 		!isHex(bundle[7:]) || bundle != strings.ToLower(bundle) {
 		bundle = "none"
 	}
-	_, err := fmt.Fprintf(out, "version: %s\ncommit: %s\ngo: %s\ntarget: %s/%s\ndependency bundle: %s\n",
-		buildValue(info.Version, "devel"), commit,
-		buildValue(info.GoVersion, "unknown"), buildValue(info.GOOS, "unknown"),
-		buildValue(info.GOARCH, "unknown"), bundle)
-	return err
+	var text display
+	text.headline("", "Bootwright")
+	text.section("")
+	text.fields(
+		field{Label: "Version", Value: buildValue(info.Version, "devel")},
+		field{Label: "Commit", Value: commit},
+		field{Label: "Go", Value: buildValue(info.GoVersion, "unknown")},
+		field{Label: "Target", Value: buildValue(info.GOOS, "unknown") + "/" + buildValue(info.GOARCH, "unknown")},
+		field{Label: "Dependency bundle", Value: bundle},
+	)
+	return text.writeTo(out)
 }
 
 func buildValue(value, fallback string) string {
@@ -37,7 +42,7 @@ func buildValue(value, fallback string) string {
 	if value == "" {
 		return fallback
 	}
-	return escapeDisplayLine(value)
+	return value
 }
 
 func isHex(value string) bool {

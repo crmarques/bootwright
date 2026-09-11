@@ -78,7 +78,7 @@ func (s *session) PutBatch(ctx context.Context, puts []storage.Put) ([]storage.V
 		}
 		knownIDs[id] = true
 		newIdentities = append(newIdentities, id)
-		version := storedVersion{ID: id, Declaration: put.Declaration.Summary(), Parts: make([]storedPart, 0, len(put.Declaration.Parts()))}
+		version := storedVersion{ID: id, Sequence: nextSequence(next, put.Declaration.Name), Declaration: put.Declaration.Summary(), Parts: make([]storedPart, 0, len(put.Declaration.Parts()))}
 		for _, part := range put.Declaration.Parts() {
 			value, _ := put.Material.Part(part)
 			version.Parts = append(version.Parts, storedPart{Part: part, Size: len(value)})
@@ -200,7 +200,7 @@ func (s *session) Bind(ctx context.Context, inputs []storage.BoundInput) (storag
 		}
 		knownVersions[id] = true
 		newIdentities = append(newIdentities, id)
-		version := storedVersion{ID: id, Declaration: input.Declaration.Summary(), Parts: make([]storedPart, 0, len(input.Declaration.Parts()))}
+		version := storedVersion{ID: id, Sequence: nextSequence(next, input.Declaration.Name), Declaration: input.Declaration.Summary(), Parts: make([]storedPart, 0, len(input.Declaration.Parts()))}
 		for _, part := range input.Declaration.Parts() {
 			value, _ := input.Material.Part(part)
 			version.Parts = append(version.Parts, storedPart{Part: part, Size: len(value)})
@@ -652,12 +652,25 @@ func keySeals(index indexRecord, id string) (uint64, bool) {
 	return 0, false
 }
 
+// nextSequence continues a secret's own ordinal series. Deleting a version
+// never renumbers the ones that remain, so an ordinal always names the same
+// material for as long as it exists.
+func nextSequence(index indexRecord, name string) int {
+	highest := 0
+	for _, version := range index.Versions {
+		if version.Declaration.Name == name && version.Sequence > highest {
+			highest = version.Sequence
+		}
+	}
+	return highest + 1
+}
+
 func publicVersion(version storedVersion) storage.Version {
 	parts := make([]secrets.Part, len(version.Parts))
 	for i, part := range version.Parts {
 		parts[i] = part.Part
 	}
-	return storage.Version{ID: version.ID, Declaration: version.Declaration, Parts: parts}
+	return storage.Version{ID: version.ID, Sequence: version.Sequence, Declaration: version.Declaration, Parts: parts}
 }
 
 func clearPlain(parts []plainPart) {

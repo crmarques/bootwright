@@ -69,7 +69,7 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 		return code
 	}
 	confirmer := cli.NewConfirmation(readStdin, stderr, stdinTerminal)
-	return runServices(ctx, args, stdout, stderr, wireLocalServices(confirmer, secretInputFunc(readStdin), cli.NewControllerPlanPresenter(stdout)), beginSignalOperation)
+	return runServices(ctx, args, stdout, stderr, wireLocalServices(confirmer, secretInputFunc(readStdin), cli.NewControllerProgressPresenter(stdout), cli.NewControllerPlanPresenter(stdout)), beginSignalOperation)
 }
 
 type invocationOutput struct {
@@ -146,6 +146,7 @@ func runServices(ctx context.Context, args []string, stdout, stderr io.Writer, s
 			DependencyBundle: dependencyBundle,
 		},
 		Services:            services,
+		CompletionPaths:     completionPaths,
 		BeginOperation:      operation,
 		EncodeEffectiveYAML: encoding.YAML,
 		EncodeEffectiveJSON: encoding.JSON,

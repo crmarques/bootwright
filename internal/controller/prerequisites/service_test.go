@@ -184,7 +184,7 @@ func (b *testBundle) Inspect(context.Context, BundleArea, Definition, bool) (Bun
 	b.inspections++
 	return BundleInspection{Ready: b.ready, ToolsReady: b.toolsReady, Sealed: b.sealed, Recoverable: b.recoverable}, nil
 }
-func (b *testBundle) Prepare(ctx context.Context, _ BundleArea, _ Definition, _ SetupEgress) error {
+func (b *testBundle) Prepare(ctx context.Context, _ BundleArea, _ Definition, _ SetupEgress, _ func(ProgressEvent)) error {
 	b.prepares++
 	b.owner.events = append(b.owner.events, "prepare")
 	if b.owner.store.state.Receipt.Actions[0].Phase != "intent" {

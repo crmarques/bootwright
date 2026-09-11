@@ -24,7 +24,7 @@ func TestComposedBaselineDryRunUsesOnlyPlatformAndCatalog(t *testing.T) {
 		}
 		var out, errOut bytes.Buffer
 		code := runServices(context.Background(), args, &out, &errOut, services)
-		if code != 0 || errOut.Len() != 0 || ports.platform != 1 || ports.catalog != 1 || ports.egress != 1 || ports.effects != 0 || !strings.Contains(out.String(), "scope: baseline") || !strings.Contains(out.String(), "outcome: planned") {
+		if code != 0 || errOut.Len() != 0 || ports.platform != 1 || ports.catalog != 1 || ports.egress != 1 || ports.effects != 0 || !strings.Contains(out.String(), "Scope     baseline") || !strings.Contains(out.String(), "Outcome  planned") {
 			t.Fatal(code, out.String(), errOut.String(), ports)
 		}
 	}
@@ -61,13 +61,13 @@ func (p *controllerPorts) Inspect(context.Context, prerequisites.BundleArea, pre
 	p.effects++
 	return prerequisites.BundleInspection{}, errors.New("unexpected bundle inspection")
 }
-func (p *controllerPorts) Prepare(context.Context, prerequisites.BundleArea, prerequisites.Definition, prerequisites.SetupEgress) error {
+func (p *controllerPorts) Prepare(context.Context, prerequisites.BundleArea, prerequisites.Definition, prerequisites.SetupEgress, func(prerequisites.ProgressEvent)) error {
 	p.effects++
 	return errors.New("unexpected bundle preparation")
 }
 
 func TestComposedControllerSuppliesEveryPort(t *testing.T) {
-	options := reflect.ValueOf(localWiringOptions(testRepository(t.TempDir()), cli.NewControllerPlanPresenter(io.Discard)))
+	options := reflect.ValueOf(localWiringOptions(testRepository(t.TempDir()), cli.NewControllerProgressPresenter(io.Discard), cli.NewControllerPlanPresenter(io.Discard)))
 	fields := options.Type()
 	supplied := 0
 	for index := range fields.NumField() {
@@ -80,7 +80,7 @@ func TestComposedControllerSuppliesEveryPort(t *testing.T) {
 			t.Fatalf("composition left %s unsupplied", name)
 		}
 	}
-	if supplied != 10 {
+	if supplied != 11 {
 		t.Fatalf("controller port count = %d; update this gate with the port it covers", supplied)
 	}
 }

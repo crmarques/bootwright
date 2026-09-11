@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
@@ -24,13 +23,13 @@ func (p *ControllerPlanPresenter) PresentControllerPlan(ctx context.Context, rep
 	if p == nil || p.out == nil || !validControllerReport(&report) {
 		return &controllerOutputFailure{}
 	}
-	var text strings.Builder
-	text.WriteString("bastion setup plan\n")
+	var text display
+	text.headline("", controllerHeadline("bastion setup", &report))
 	controllerPlanText(&text, &report)
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if n, err := io.WriteString(p.out, text.String()); err != nil || n != text.Len() {
+	if err := text.writeTo(p.out); err != nil {
 		return &controllerOutputFailure{}
 	}
 	return nil
@@ -70,39 +69,59 @@ func successfulControllerReport(command string, report *prerequisites.Report) bo
 	return report.DryRun && report.Outcome == "planned" || !report.DryRun && (report.Outcome == "unchanged" || report.Outcome == "changed")
 }
 
-func writeControllerReport(out io.Writer, command string, report *prerequisites.Report) error {
-	var text strings.Builder
-	if !report.PlanPresented {
-		controllerPlanText(&text, report)
+// controllerHeadline names what the reader is looking at. Readiness inspection
+// never presents a plan, so only setup announces one.
+func controllerHeadline(command string, report *prerequisites.Report) string {
+	if command == "preflight bastion" {
+		return "Bastion readiness"
 	}
-	fmt.Fprintf(&text, "outcome: %s\n", report.Outcome)
-	if report.PlanPresented && (report.Outcome == "changed" || report.Outcome == "unchanged") {
-		text.WriteString("readiness: all required prerequisites verified\n")
+	if report.PlanPresented || !report.DryRun {
+		return "Bastion setup"
+	}
+	return "Bastion setup plan"
+}
+
+func writeControllerReport(out io.Writer, command string, report *prerequisites.Report) error {
+	var text display
+	if !report.PlanPresented {
+		text.headline("", controllerHeadline(command, report))
+		controllerPlanText(&text, report)
 	}
 	// After the plan was presented, an unfinished setup must still say which of
 	// its approved actions took effect.
 	if report.PlanPresented && report.Outcome != "changed" && report.Outcome != "unchanged" && len(report.Progress) != 0 {
-		text.WriteString("progress:\n")
+		text.section("Progress")
+		rows := make([][]string, 0, len(report.Progress))
 		for _, action := range report.Progress {
-			fmt.Fprintf(&text, "  %s %s\n", progressToken(action), escapeDisplayLine(action.ID))
+			rows = append(rows, []string{progressToken(action), action.ID})
 		}
+		text.rows(rows)
 	}
+	text.section("")
+	text.fields(controllerOutcomeFields(command, report)...)
+	return text.writeTo(out)
+}
+
+func controllerOutcomeFields(command string, report *prerequisites.Report) []field {
+	outcome := report.Outcome
 	if report.DryRun {
-		text.WriteString("dry-run: prerequisite verification and setup remain pending\n")
+		outcome += " (dry run)"
+	}
+	fields := []field{{Label: "Outcome", Value: outcome}}
+	if report.PlanPresented && (report.Outcome == "changed" || report.Outcome == "unchanged") {
+		fields = append(fields, field{Label: "Readiness", Value: "all required prerequisites verified"})
 	}
 	if report.Outcome != "ready" {
-		next := "bastion setup"
+		next := "bootwright bastion setup"
 		if report.Outcome == "changed" || report.Outcome == "unchanged" {
-			next = "preflight bastion"
+			next = "bootwright preflight bastion"
 		}
-		fmt.Fprintf(&text, "next: bootwright %s", next)
 		if report.ContextName != "" {
-			fmt.Fprintf(&text, " --context %s", escapeDisplayLine(report.ContextName))
+			next += " --context " + report.ContextName
 		}
-		text.WriteByte('\n')
+		fields = append(fields, field{Label: "Next", Value: next})
 	}
-	_, err := io.WriteString(out, text.String())
-	return err
+	return fields
 }
 
 // Progress uses the same status vocabulary: an observed action reports its
@@ -143,28 +162,91 @@ func checkToken(status string) string {
 	}
 }
 
-func controllerPlanText(text *strings.Builder, report *prerequisites.Report) {
-	if report.ContextName == "" {
-		text.WriteString("scope: baseline\n")
-	} else {
-		fmt.Fprintf(text, "scope: context %s\ncontroller: %s\n", escapeDisplayLine(report.ContextName), escapeDisplayLine(report.Machine))
+// A satisfied check reports only what was observed. Any other check states the
+// requirement beside it, because the difference is the actionable part.
+func checkDetail(check prerequisites.Check) string {
+	if check.Status == "ready" {
+		return check.Observed
 	}
-	fmt.Fprintf(text, "platform: %s %s/%s\nchecks:\n", escapeDisplayLine(report.Platform.OS), escapeDisplayLine(report.Platform.Release), escapeDisplayLine(report.Platform.Architecture))
+	return "required " + check.Required + "; observed " + check.Observed
+}
+
+func controllerPlanText(text *display, report *prerequisites.Report) {
+	scope := []field{{Label: "Scope", Value: "baseline"}}
+	if report.ContextName != "" {
+		scope = []field{
+			{Label: "Scope", Value: "context " + report.ContextName},
+			{Label: "Controller", Value: report.Machine},
+		}
+	}
+	scope = append(scope, field{Label: "Platform", Value: report.Platform.OS + " " + report.Platform.Release + "/" + report.Platform.Architecture})
+	text.section("")
+	text.fields(scope...)
+
+	text.section("Checks")
+	rows := make([][]string, 0, len(report.Checks))
 	for _, check := range report.Checks {
-		fmt.Fprintf(text, "  %s %s: required %s; observed %s\n", checkToken(check.Status), escapeDisplayLine(check.ID), escapeDisplayLine(check.Required), escapeDisplayLine(check.Observed))
+		rows = append(rows, []string{checkToken(check.Status), check.ID, checkDetail(check)})
 	}
+	text.rows(rows)
+
 	if len(report.Actions) == 0 {
-		text.WriteString("planned changes: none\n")
-	} else {
-		if len(report.Dependencies) != 0 {
-			text.WriteString("dependencies:\n")
-			for _, dependency := range report.Dependencies {
-				fmt.Fprintf(text, "  %s\n", escapeDisplayLine(dependency))
-			}
-		}
-		text.WriteString("planned changes:\n")
-		for index, action := range report.Actions {
-			fmt.Fprintf(text, "  %d. %s\n", index+1, escapeDisplayLine(action))
-		}
+		text.section("Planned changes")
+		text.lines([]string{"none"})
+		return
+	}
+	if len(report.Dependencies) != 0 {
+		text.section("Dependencies")
+		text.lines(report.Dependencies)
+	}
+	text.section("Planned changes")
+	text.steps(report.Actions)
+}
+
+// ControllerProgressPresenter writes one line per setup step while setup runs,
+// so a long acquisition is visibly working rather than silent. It writes to the
+// same stream as the plan and never buffers, because an unflushed line during a
+// ten-minute transfer would defeat its only purpose.
+type ControllerProgressPresenter struct {
+	out     io.Writer
+	started bool
+}
+
+func NewControllerProgressPresenter(out io.Writer) *ControllerProgressPresenter {
+	return &ControllerProgressPresenter{out: out}
+}
+
+func (p *ControllerProgressPresenter) ReportProgress(ctx context.Context, event prerequisites.ProgressEvent) {
+	if p == nil || p.out == nil || ctx.Err() != nil || event.Action == "" {
+		return
+	}
+	if !p.started {
+		p.started = true
+		io.WriteString(p.out, "\nProgress\n")
+	}
+	subject := event.Action
+	if event.Detail != "" {
+		subject = event.Action + ": " + event.Detail
+	}
+	if event.Steps > 0 && event.Step > 0 {
+		subject += fmt.Sprintf(" (%d/%d)", event.Step, event.Steps)
+	}
+	io.WriteString(p.out, "  "+progressStatusToken(event.Status)+" "+escapeDisplayLine(subject)+"\n")
+}
+
+// Progress reuses the output contract's status tokens: work in flight has no
+// terminal outcome, and a finished step reports the outcome it proved.
+func progressStatusToken(status string) string {
+	switch status {
+	case "running":
+		return "[RUNNING]"
+	case "changed":
+		return "[DONE]"
+	case "unchanged":
+		return "[OK]"
+	case "failed":
+		return "[FAIL]"
+	default:
+		return "[UNKNOWN]"
 	}
 }

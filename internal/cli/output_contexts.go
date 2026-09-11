@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -14,8 +15,22 @@ func validContextSummary(summary contexts.Summary) bool {
 }
 
 func writeContextSummary(out io.Writer, summary contexts.Summary) error {
-	_, err := fmt.Fprintf(out, "name: %s\nid: %s\nmode: %s\ncurrent: %t\ninput configured: %t\n", escapeDisplayLine(summary.Name), escapeDisplayLine(summary.ID), escapeDisplayLine(string(summary.Mode)), summary.Current, summary.Configured)
-	return err
+	var text display
+	contextSummaryFields(&text, summary)
+	return text.writeTo(out)
+}
+
+// The context commands own context identity, so they are the one place that
+// still presents it in full.
+func contextSummaryFields(text *display, summary contexts.Summary) {
+	text.section("")
+	text.fields(
+		field{Label: "Name", Value: summary.Name},
+		field{Label: "ID", Value: summary.ID},
+		field{Label: "Mode", Value: string(summary.Mode)},
+		field{Label: "Current", Value: strconv.FormatBool(summary.Current)},
+		field{Label: "Input configured", Value: strconv.FormatBool(summary.Configured)},
+	)
 }
 
 func writeAdmission(out, errOut io.Writer, command string, result *contexts.AdmissionResult) error {
@@ -26,44 +41,47 @@ func writeAdmission(out, errOut io.Writer, command string, result *contexts.Admi
 	if command == "context update" {
 		action = "updated"
 	}
+	var text display
 	if !result.InputChanged {
 		if command == "context update" {
 			action = "unchanged"
 		}
-		if _, err := fmt.Fprintf(out, "[OK] Context %s\n", action); err != nil {
-			return err
-		}
-		return writeContextSummary(out, result.Context)
+		text.headline("OK", "Context "+action)
+		contextSummaryFields(&text, result.Context)
+		return text.writeTo(out)
 	}
-	if _, err := fmt.Fprintf(out, "[OK] Context %s (files copied: %d, files seen: %d, objects decoded: %d)\n", action, result.FilesCopied, result.Counts.FilesSeen, result.Counts.ObjectsDecoded); err != nil {
-		return err
-	}
-	return writeContextSummary(out, result.Context)
+	text.headline("OK", "Context "+action)
+	contextSummaryFields(&text, result.Context)
+	text.section("Admitted input")
+	text.fields(
+		field{Label: "Files copied", Value: strconv.Itoa(result.FilesCopied)},
+		field{Label: "Files seen", Value: strconv.Itoa(result.Counts.FilesSeen)},
+		field{Label: "Objects decoded", Value: strconv.Itoa(result.Counts.ObjectsDecoded)},
+	)
+	return text.writeTo(out)
 }
 
 func writeContextUse(out io.Writer, result *contexts.UseResult) error {
-	if _, err := io.WriteString(out, "[OK] Current context selected\n"); err != nil {
-		return err
-	}
-	return writeContextSummary(out, result.Context)
+	var text display
+	text.headline("OK", "Current context selected")
+	contextSummaryFields(&text, result.Context)
+	return text.writeTo(out)
 }
 
 func writeContextList(out io.Writer, result *contexts.ListResult) error {
+	var text display
 	if len(result.Contexts) == 0 {
-		_, err := io.WriteString(out, "[OK] No contexts\n")
-		return err
+		text.headline("OK", "No contexts")
+		return text.writeTo(out)
 	}
 	summaries := slices.Clone(result.Contexts)
 	slices.SortStableFunc(summaries, func(a, b contexts.Summary) int { return strings.Compare(a.Name, b.Name) })
-	if _, err := io.WriteString(out, "NAME\tID\tMODE\tCURRENT\tINPUT\n"); err != nil {
-		return err
-	}
+	rows := make([][]string, 0, len(summaries))
 	for _, summary := range summaries {
-		if _, err := fmt.Fprintf(out, "%s\t%s\t%s\t%t\t%t\n", escapeDisplayLine(summary.Name), escapeDisplayLine(summary.ID), escapeDisplayLine(string(summary.Mode)), summary.Current, summary.Configured); err != nil {
-			return err
-		}
+		rows = append(rows, []string{summary.Name, summary.ID, string(summary.Mode), strconv.FormatBool(summary.Current), strconv.FormatBool(summary.Configured)})
 	}
-	return nil
+	text.table([]string{"NAME", "ID", "MODE", "CURRENT", "INPUT"}, rows)
+	return text.writeTo(out)
 }
 
 func writeContextCurrent(out io.Writer, result *contexts.CurrentResult, short bool) error {
@@ -75,6 +93,13 @@ func writeContextCurrent(out io.Writer, result *contexts.CurrentResult, short bo
 }
 
 func writeContextDelete(out io.Writer, result *contexts.DeleteResult) error {
-	_, err := fmt.Fprintf(out, "[OK] Context deleted (name: %s, id: %s, current cleared: %t)\n", escapeDisplayLine(result.Name), escapeDisplayLine(result.ID), result.CurrentCleared)
-	return err
+	var text display
+	text.headline("OK", "Context deleted")
+	text.section("")
+	text.fields(
+		field{Label: "Name", Value: result.Name},
+		field{Label: "ID", Value: result.ID},
+		field{Label: "Current cleared", Value: strconv.FormatBool(result.CurrentCleared)},
+	)
+	return text.writeTo(out)
 }

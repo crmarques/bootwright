@@ -166,9 +166,20 @@ acquisition. The encrypted metadata contains `activeKey`, `keys`, `versions`,
 published upgrade authorizes removal of remaining version-1 artifacts.
 
 Each key record stores `id` and committed `seals`; presentation derives its
-active/retired state. Each immutable version stores `id`, a declaration summary
-(`name`, `type`, `source`, `fingerprint`), and parts (`part`, `blobId`, `keyId`,
-`generation`, `size`). Compute the declaration fingerprint from full canonical
+active/retired state. Each immutable version stores `id`, a `sequence`, a
+declaration summary (`name`, `type`, `source`, `fingerprint`), and parts
+(`part`, `blobId`, `keyId`, `generation`, `size`).
+
+`sequence` is the version's ordinal within its own secret, counting from one.
+A new version takes one more than the highest ordinal that secret has ever
+reached, so deleting a version never renumbers the ones that remain and an
+ordinal keeps naming the same material for as long as it exists. The ordinal is
+how a person names a version: human output shows `v<sequence>` and never the
+identifier. The identifier remains the only durable reference, so current
+mappings, bindings, and every JSON result continue to carry it. A version stored
+before ordinals existed has none; it is numbered on read, in identifier order,
+because its creation order was never recorded. An absent ordinal is omitted from
+the encoded record, so such a record still reopens byte for byte. Compute the declaration fingerprint from full canonical
 parameters and provenance at acquisition, then authenticate the summary.
 Original paths, source fields and generation options are not copied into each
 version. Current mappings contain `name` and `version`; bindings contain `id`

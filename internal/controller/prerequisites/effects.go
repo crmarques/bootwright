@@ -101,7 +101,7 @@ type BundleInspection struct {
 
 type BundleManager interface {
 	Inspect(context.Context, BundleArea, Definition, bool) (BundleInspection, error)
-	Prepare(context.Context, BundleArea, Definition, SetupEgress) error
+	Prepare(context.Context, BundleArea, Definition, SetupEgress, func(ProgressEvent)) error
 }
 
 type RuntimeInstaller interface {
