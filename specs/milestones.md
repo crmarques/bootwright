@@ -1,24 +1,28 @@
 # Milestones
 
-**Current milestone: M1d — bastion setup. Delivery: completed.**
-M1a–M1d are completed: admission for all 26 API kinds, durable contexts,
-context-backed validation, public `render effective`, context Secret
-management, and `bastion setup` with `preflight bastion` on RHEL 9 and Fedora
-for Linux/amd64 are implemented. Existing unavailable-command guarantees remain
-in force for deferred commands. M1e stays deferred and needs its own explicit
-implementation authorization before it becomes current.
+**No milestone is currently authorized for implementation.** M1a–M1d are
+complete: the full command catalog with help and completion; admission of all
+26 API kinds; durable contexts with immutable input; context-backed `validate`
+and public `render effective`; the complete `secret` tree over `local-keyring`;
+and `bastion setup` with `preflight bastion` on RHEL 9 and Fedora for
+Linux/amd64. Every other catalogued command retains the
+[unavailable result](cli.md#recognized-but-unavailable-commands). The next
+milestone is M1e; it needs definition and its own explicit authorization
+before it becomes current.
 
 This file owns delivery scope and deferred work. Product specs describe target
-behavior; they do not claim availability. The current milestone includes its
-bounded implementation plan; later work retains only the definitions,
-dependencies and exit evidence needed to preserve its scope.
+behavior; they do not claim availability. A completed milestone keeps only its
+owner, delivered outcome, the tests that guard it and the constraints it left
+behind; the current milestone carries its bounded implementation plan; later
+work retains only the definitions, dependencies and exit evidence needed to
+preserve its scope. Further delivery evidence lives in Git history.
 
 ## Scope rules
 
 - Implement the prompt-authorized outcome within the current milestone. An
   explicit out-of-sequence request authorizes only its named slice. A spec or
   backlog entry does not authorize implementation or effects.
-- Keep exactly one milestone current. Completion requires all its exit evidence;
+- Keep at most one milestone current. Completion requires all its exit evidence;
   moving to another milestone requires an explicit user-requested scope change.
 - Record discovered work outside the authorized outcome under the earliest
   fitting future milestone. Give it an owner, bounded outcome, reason for
@@ -36,577 +40,123 @@ dependencies and exit evidence needed to preserve its scope.
   introduced by M1a. Their explicitly scoped application stubs add no successful
   placeholders or adjacent effects. Cross-cutting safety constraints apply
   from the start.
+- A gate is reported as passing only with the command and result that produced
+  it. Failed, skipped, flaky, unavailable and unrun gates are not passes.
 
-## M1a — complete CLI skeleton
+## Completed milestones
 
-**Owner:** CLI; composition root supplies process inputs and build metadata.
-**Requires:** specification foundation. **Definition:** Specified.
+### M1a — complete CLI skeleton
 
-Implement `version` plus the complete [command catalog](cli/commands.md), help
-and shell completion. All unavailable application commands call their typed,
-injected stub and return `cli.not-implemented` without I/O or other effects.
+**Owner:** CLI; the composition root supplies process inputs and build
+metadata. **Delivery:** completed.
 
-Implementation order:
+Delivered `version`, the complete [command catalog](cli/commands.md), help and
+shell completion for Bash, Zsh, Fish and PowerShell. Every unavailable command
+calls its typed injected stub and returns `cli.not-implemented` without I/O.
 
-1. Qualify the requested Cobra CLI framework under the
-   [dependency selection rule](architecture.md#dependency-selection-and-reuse),
-   using its completion support or a suitable dependency when needed.
-2. Add the Go module, reproducible locks and pinned development/check toolchain.
-   Create `cmd/bootwright` and `internal/cli` under the
-   [package contract](architecture.md#go-package-structure).
-3. Define the command/flag/default/relationship catalog once; configure the
-   framework and any completion dependency from it. Keep parsing and
-   presentation in the CLI adapter. Define the consuming CLI interfaces and
-   context-owned request types and stubs; wire every command at composition.
-4. Implement help, version, output and usage contracts; test the composed
-   command and the provider boundaries before exposing any domain capability.
+Guarded by the `internal/cli` package tests (catalog fixture, dispatch,
+parsing, help precedence, output and cancellation), `test/architecture`
+(dependency direction, effect boundaries and composition-only binding) and
+`test/completion` (generated shell integrations; Bash in `make check`, the
+other shells behind `BOOTWRIGHT_TEST_ALL_SHELLS=1`, see
+[development](../docs/development.md)).
 
-Exit evidence:
+### M1b — durable contexts and desired-state admission
 
-- Every public path, flag, shorthand, operand, enum, default and relationship
-  follows the catalog. Framework defaults add no public surface.
-- Root and explicit help, bare render/completion, version, malformed usage and
-  unavailable human/JSON results match the [CLI](cli.md) and
-  [output contract](cli/output.md). Source and exercise generated completion
-  scripts under every supported shell runtime.
-- Removed root groups fail resolution, including explicit help, and appear in
-  neither help nor completion. The consolidated cluster paths and payload
-  parsing, including flag-shaped payloads after `--`, follow the catalog.
-  Access help explains descriptor-only success and static applicability.
-  `machine list --silent=true --output json` produces the JSON usage envelope;
-  cover reversed flag order, repeated scalar flags, `--silent=false`, and help
-  precedence. Cluster commands remain unavailable without resolving targets.
-- Effect sentinels prove help, completion, version, and invalid requests call no
-  application service, while valid application requests call only their injected
-  stub. All skeleton paths perform only authorized output: no
-  discovery, stdin or filesystem access, context lookup,
-  secret access, randomness, prompt, privilege, process, network or remote work.
-- Only the command-consumed interfaces, requests, and stubs are introduced;
-  no domain policy, persistence or remote adapters are implemented.
-- On the integrated commit: `gofmt`, `go mod verify`, `go test ./...`,
-  `go vet ./...`, the pinned vulnerability check, and
-  `git diff --check` pass; full diff review is complete.
+**Owners:** Workspace, Desired state, Environment, Infrastructure services,
+Machine, Managed OS and Container cluster. **Delivery:** completed.
 
-Delivered evidence:
+Delivered in three slices: context-free `validate -f` for every API kind
+under the [parser boundary](api.md#parser-boundary); durable contexts (the
+`context` tree), context-backed `validate` and public `render effective`
+under [Contexts](contexts.md); and the admission update that replaced the
+former shared-service union with the six
+[infrastructure service kinds](api/infrastructure-services.md) and the
+explicit controller Machine, taking the catalog to 26 kinds with no alias,
+conversion command or silent frozen-input rewrite.
 
-- `make check` covers formatting, both module locks, package tests, vet,
-  generated shell integrations, the pinned vulnerability scan, and diff
-  whitespace. `make build` produces `bin/bootwright`.
-- The independent catalog fixture checks every public command, local flag,
-  shorthand, and output enum. All 49 composed application routes and all stub
-  cancellation/deadline paths are covered, alongside parsing, normalization,
-  help precedence, output failure, and payload preservation regressions.
-- First-party import checks forbid ambient effect capabilities in the skeleton;
-  injected call sentinels and completion environment/file sentinels verify the
-  no-effect boundary. `go test -race ./...` passes, and a 10-second
-  `FuzzInvocation` run completed more than 87,000 executions without failure.
-- Both module graphs pass `go mod tidy -diff`. The pinned `govulncheck` reports
-  no known reachable vulnerabilities. Full source, dependency, prospective
-  tree, and Git-diff reviews are complete.
-- Bash, Zsh, Fish, and PowerShell runtime tests pass with and without
-  descriptions; see [development](../docs/development.md) for the exact tested
-  versions and the required PowerShell preview release.
+Guarded by [`cmd/bootwright/admission_acceptance_test.go`](../cmd/bootwright/admission_acceptance_test.go)
+and the `internal/desiredstate` package tests (all-kind and cross-kind
+fixtures, determinism, non-mutation, bounded fuzzing), the isolated parser
+qualification in
+[`internal/desiredstate/yamlstream/qualification_linux_test.go`](../internal/desiredstate/yamlstream/qualification_linux_test.go)
+(1 GiB RSS and 120-second budgets), the context journeys in
+`cmd/bootwright/contexts_test.go`, and the `internal/workspace/contextfs`
+fault-injection tests (publication checkpoints, interrupted creation and
+deletion, concurrent replacement, subprocess exits on both sides of the
+registry commit).
 
-## M1b — durable contexts and desired-state admission
+Not qualified: local filesystems other than tmpfs and Btrfs, power loss and
+remote filesystems.
 
-**Owners:** Workspace (context state), Desired state and Environment (compiler
-and immutable admitted input). **Requires:** M1a.
+### M1c — context secret management
 
-### First delivery: context-free desired-state admission
+**Owner:** Secrets; Workspace owns the enclosing path boundary. **Delivery:**
+completed.
 
-**Definition:** Specified. **Delivery:** Completed.
+Delivered the complete `secret` tree through the immutable implementation
+catalog with one production implementation, `local-keyring`, plus a test-only
+session-unlock implementation that qualifies the extension seam. Two
+authorized replacements followed: direct root context storage (the fixed root
+store with per-user selection and registry v3 namespace/counter identities,
+without migration from earlier formats) and storage simplification
+(local-keyring v2 with one authenticated metadata file, explicit v1 upgrade and
+guarded cleanup). Platform, entitlement and lifecycle effects remain deferred.
 
-Implement `validate` only when at least one `-f/--file` source is supplied,
-with all 21 [API kinds](api.md), on Linux/amd64 with the existing Go 1.26.7
-toolchain. Use unmodified `go.yaml.in/yaml/v3` v3.0.5 under the
-[parser boundary](api.md#parser-boundary). The CLI returns a typed validation
-report through the existing text/JSON modes. Without `-f`, `validate` retains
-the unavailable result before any state-root or context lookup. Every other
-unavailable use case retains its typed stub and no-effect boundary.
+Guarded by [`cmd/bootwright/secrets_conformance_test.go`](../cmd/bootwright/secrets_conformance_test.go)
+(the shared port suite over both implementations),
+`cmd/bootwright/secrets_test.go`, `cmd/bootwright/secrets_disclosure_test.go`,
+the real-PTY interrupt tests in
+[`cmd/bootwright/interrupts_linux_amd64_test.go`](../cmd/bootwright/interrupts_linux_amd64_test.go),
+and the `internal/secrets` tamper, fault-injection, seal-reservation and
+upgrade tests.
 
-The compiler owns immutable authored input, provenance, normalization and an
-internal effective inspection representation. This delivery adds neither
-context persistence nor public effective rendering, payload access, native
-rendering, process or network work.
+Not qualified: real-store migration, secure erasure, power loss and actual
+host sudo password authentication. Complete-store restore and bounded lifetime
+ID allocation remain C14 and C15.
 
-Admission coverage must include kind-default precedence, empty/atomic values,
-variant/conditional-arm inheritance, internal effective-state serialization
-stability for empty and zero values, self-default rejection, expansion bounds,
-recipient path bases and dependency closure; unified Machine IP/prefix assignments,
-installation eligibility and exact NIC binding; native NMState composition;
-storage child ownership and endpoint TLS; and typed add-on inputs and OLM
-readiness. The specifications and examples do not constitute this compiler.
+### M1d — bastion setup
 
-Exit evidence, required before claiming this delivery complete:
+**Owners:** Controller (prerequisites, local adapters and verified host
+evidence) and Workspace (shared setup state and context binding), using
+Machine, Desired state and the invocation boundary. **Delivery:** completed;
+end-to-end acceptance against a real bastion is operator-run.
 
-- Deterministic rooted discovery, strict decoding, all fixed bounds, complete
-  normalization, reference and graph validation, and ordered text/JSON reports.
-- Immutable authored and normalized representations, retained safe provenance,
-  and canonical encoder fixtures without an authored-input trust bypass.
-- Parser qualification against malformed, oversized, deeply nested and
-  high-cardinality fixtures in an isolated helper with a 1 GiB RSS ceiling and
-  120-second watchdog, including the documented composition lookahead and
-  cooperative cancellation limits.
-- All-kind and cross-kind positive/negative fixtures, determinism and
-  non-mutation tests, bounded fuzzing, injected CLI/application tests, and
-  proof of no state lookup, payload/secret reads, writes, processes or network
-  access. Help, completion, version, invalid usage and unavailable commands
-  retain their stricter no-effect tests.
-- Repository verification and dependency review on the integrated commit;
-  passed checks are recorded only after they have run.
-
-Delivered evidence:
-
-- `make check`, `make build`, and `./scripts/go test -race ./...` pass with
-  Go 1.26.7 on Linux/amd64. Both module graphs pass `go mod tidy -diff` and
-  verification. The complete official vulnerability database was mirrored
-  locally for the pinned scanner; no known reachable vulnerabilities were found.
-  All four [qualified shell integrations](../docs/development.md) pass.
-- The composed CLI validates the unchanged synthetic example as 93 files and
-  93 objects. The expanded acceptance fixture admits 113 objects spanning all
-  21 kinds, including StorageNFSExport and reserved CustomPlaybook declarations.
-  [Acceptance tests](../cmd/bootwright/admission_acceptance_test.go) cover
-  precedence, order independence, derived values and authored restrictions.
-- [Parser qualification](../internal/desiredstate/yamlstream/qualification_linux_test.go)
-  passed all seven isolated adversarial cases within the 1 GiB/120-second
-  budgets. The measured maximum RSS was 423,936,000 bytes; the suite took
-  2.848 seconds. These measurements do not change the cooperative parser
-  cancellation contract.
-- A 20-second `FuzzAdmissionCompiler` run with two workers completed 112,854
-  executions without failure. Parser and reserved-content fuzzing, strict
-  decoding, graph/default/cancellation/limit regressions, safe acquisition,
-  immutable provenance, effective codec round trips and CLI output-failure
-  checks also pass. Independent effect, dependency, full-tree and diff reviews
-  are complete.
-
-### Second delivery: durable contexts and admitted input
-
-**Definition:** Complete in [Contexts](contexts.md). **Delivery:** Completed.
-
-All `context` commands, context-backed `validate`, and public `render effective`
-use the versioned registry, frozen acquisition manifests, original provenance,
-mutation leases and atomic publication. Authored input remains separate from
-effective inspection output.
-
-Exit: complete context journeys; canonical public YAML/JSON; concurrent access,
-rooted atomic durable publication, interrupted creation/deletion and guarded
-permanent removal tests. Input inspection proves no payload/secret acquisition
-or state writes; privileged store and invoking-user access follow the CLI boundary.
-
-Delivered evidence:
-
-- Complete init/update/use/list/current/delete journeys, identity-preserving
-  input replacement, interrupted initialization retry, per-user selection
-  clearing, ordinary confirmation and guarded permanent disposal pass.
-- The synthetic 93-object example imports, survives removal of its original
-  tree, validates equivalently and renders complete canonical YAML/JSON.
-  Frozen excluded streams, markers and original Secret path bases are retained.
-  FIFO payload and lifecycle fixtures prove inspection does not open them.
-- Closed metadata, duplicate/null/unknown-field refusal, preallocation bounds,
-  immutable blob digests, unsafe paths/types/modes/links, input/state overlap,
-  concurrent replacement and complete old/new reader observations pass.
-  Every publication checkpoint admits injected interruption; subprocess exits
-  on both sides of the registry commit prove safe selection and lock release.
-- A real PTY confirmation interrupted by an OS signal returns exit `130`, keeps
-  selection unchanged and releases leases. Input descriptor flags, cancellation,
-  output failures and informational/unavailable effect boundaries pass.
-- Final `make check` (including four-shell completion and the complete local
-  vulnerability database), `make build`, `./scripts/go test -race ./...`, both
-  modules' `go mod tidy -diff`, and `git diff --check` pass. The ordinary suite
-  includes parser qualification under its 1 GiB/120-second acceptance budgets.
-- Final 20-second, two-worker fuzz runs pass: `FuzzAdmissionCompiler` completes
-  51,507 executions and `FuzzPersistedRecords` completes 364,043 executions.
-  Storage qualification passes on available tmpfs and Btrfs filesystems. Other
-  allowlisted local filesystem types were not individually exercised; no
-  power-loss or remote-filesystem qualification is claimed.
-
-### Admission API update — independent infrastructure services
-
-**Owners:** Desired state, Environment, Infrastructure services, Machine,
-Managed OS and Container cluster. **Definition:** Specified.
-**Delivery:** Completed. At delivery, this admission update retained M1c as
-the current milestone and kept `bootwright.io/v1alpha1`.
-
-Replace the former shared-service union and Environment catalogs with the six
-[infrastructure service kinds](api/infrastructure-services.md), taking the
-catalog from 21 to 26 kinds. Consumers own typed proxy, DNS, NTP, artifact and
-registry selections; Environment explicitly selects its controller Machine. Kind
-defaults supply shared values, while external service connection facts and
-managed service deployment/image intent each have one object identity.
-Cluster installation owns its direct CA Secret references; the former
-Environment trust list is retired without broadening other trust boundaries.
-
-Require `Environment.spec.controller.machineRef` to identify one provided,
-local Machine outside selected cluster node membership. Retain that Machine
-through cluster selection, while honoring resource-file selection. Its ordinary
-`Machine.spec.proxy` owns controller egress; the former controller and Machine
-installation proxy fields are retired. Provided Machines and Bootwright-installed
-Machines share the host-level choice, with profile fallback for the latter;
-downstream-installed nodes continue to use cluster installation policy.
-Admission checks declared locality without probing the running host. Runtime
-host binding, controller protection and local service execution remain future
-work under M1d (controller setup/binding) and M1e (service execution) below.
-
-Update schemas, strict admission, normalization, graph retention, effective
-encoding, examples and context-backed validation together. Old kinds and
-fields refuse; there is no alias, input-conversion command, silent frozen-input
-rewrite or new runtime capability. The historical counts and evidence above
-record the earlier 21-kind deliveries and are not the revised catalog's counts.
-M1e and all later native rendering or platform lifecycle work remain deferred.
-
-Delivered evidence:
-
-- All six managed/external service schemas, explicit management changes and
-  kind defaults; consumer references and endpoint selection; atomic proxy
-  opt-out; ordered DNS/NTP replacement; and profile/default diagnostic origins.
-- Consumer-owned installation CA references, whole-list defaults and explicit
-  empty-list opt-out; Secret type/reference checks; and actionable refusal of
-  retired Environment trust fields, including kind-default fragments.
-- Required controller references, provided/local identity, sole retained local
-  Machine, cluster membership refusal and controller retention under filtering;
-  Machine proxy applicability, atomic replacement, profile/default provenance
-  and actionable refusal of both retired proxy locations.
-- Registry trust, artifact bootstrap and rescue constraints; service-root/host
-  retention; reference checks after cluster selection; canonical effective
-  round trips; and the 100-object synthetic example plus all-kind fixtures.
-- Frozen retired-input refusal leaves context state unchanged. Explicit
-  context input replacement retains context identity and stored Secret data.
-- `make check` passed, including formatting, module verification, all Go tests,
-  vet, four-shell completion and the official online vulnerability database.
-  The scanner found no reachable or imported-package vulnerabilities; one
-  advisory affects an unused package in a required module.
-- `make build`, `go test -race ./...`, and 100,000 executions of
-  `FuzzAdmissionCompiler` passed. Changed documentation's local file and
-  heading links were checked.
-
-## M1c — context secret management
-
-**Owner:** Secrets; Workspace owns the enclosing path boundary. **Requires:**
-M1b. **Definition:** Specified in [Secrets](secrets.md). **Delivery:** Completed.
-
-Implement the complete `secret` tree through the immutable implementation
-catalog and semantic store sessions in [Secrets](secrets.md), with one production
-implementation, `local-keyring`. Qualify a test-only session-unlock implementation
-without changing core command or binding logic. No platform, entitlement or
-lifecycle effects; M1e owns the future lifecycle consumer port.
-
-Exit evidence:
-
-- Shared semantic conformance for selected/persisted implementations, typed
-  acquisition and generation, immutable bindings and protected-context policy.
-- Complete CLI/help/completion and machine-result journeys, exact raw reveal,
-  lazy input, confirmation leases and canary non-disclosure checks.
-- Owner-only race-resistant storage, inclusive bounds, authenticated records,
-  tamper refusal without fallback, reservation ceilings, atomic publication,
-  process-death/retry/uncertainty and rotation-failure tests.
-- Integrated `make check`, `make build`, `go test -race ./...`, both module
-  tidy/verification checks, the pinned vulnerability scan, all four completion
-  runtimes, bounded record/material fuzz runs and `git diff --check`. The real
-  PTY tests must pass without skips on a PTY-capable runner.
-
-Delivered evidence:
-
-- All nine secret routes are composed through the immutable implementation
-  catalog. The [shared conformance journey](../cmd/bootwright/secrets_conformance_test.go)
-  exercises local-keyring and a test-only session-unlock implementation through
-  the same core services. Desired-state Secret schemas remain unchanged; M1e
-  and every platform, entitlement and lifecycle effect remain unavailable.
-- [Command journeys](../cmd/bootwright/secrets_test.go) and
-  [disclosure checks](../cmd/bootwright/secrets_disclosure_test.go) cover current
-  source/part access, stale/orphan handling, protected-context refusal, fresh IDs
-  after context-name reuse, immutable bindings, rotation and non-disclosure.
-  Confirmation and expected-snapshot tests cover the context mutation boundary.
-- [Publication tests](../internal/workspace/contextfs/secrets_publication_linux_amd64_test.go)
-  inject every mutation/rotation checkpoint and kill subprocesses before/after
-  selector publication. Held-reader, inode-substitution, mount-containment,
-  unsafe-file, canonical-bound, seal-ceiling, and
-  [AAD/envelope tamper tests](../internal/secrets/localstore/tamper_linux_amd64_test.go)
-  pass without older-generation fallback. These are not power-loss or secure
-  erasure qualification.
-- Complete `make check` and `./scripts/go test -race ./... -count=1` pass
-  without test exclusions.
-  `make build`, `make fmt-check`, `make vet`, both module `go mod tidy -diff`
-  checks and both `go mod verify` checks pass using `./scripts/go`.
-  `make completion-test` passes all 104 cases across Bash 5.3.0, Zsh 5.9,
-  Fish 4.2.0 and PowerShell 7.7.0-preview.2, without skips. The pinned
-  scanner reports no reachable or imported-package vulnerabilities; it reports
-  the unimported x/crypto OpenPGP advisory GO-2026-5932 at module level. The final
-  scan uses a complete official database copy freshly acquired and validated
-  on 2026-09-09, modified `2026-09-02T19:12:04Z`. All 4,378 referenced advisory
-  identities, modification times and affected modules match the indexes;
-  both official indexes remain unchanged across acquisition. Direct scanner
-  DNS lookup fails, so the final gate uses this verified local copy.
-- Independent bounded-count fuzz runs pass on their first attempts for canonical
-  selectors, private store records, canonical-size preflight, material JSON and
-  strict PEM parsers, each with `-fuzztime=100000x -parallel=2 -timeout=3m`.
-  Initial 20-second size-preflight and strict-PEM runs exited with
-  `context deadline exceeded`; unchanged timed retries passed, but those initial failures
-  are not counted as acceptance passes. The independent execution-count runs
-  provide the final bounded-fuzz evidence. Focused storage, material, CLI and
-  conformance tests and race checks pass; `git diff --check` passes.
-
-Real-terminal qualification is complete: the
-[test helper](../cmd/bootwright/interrupts_linux_amd64_test.go) allocates through
-the documented Linux PTY multiplexer, retaining all interruption, input,
-cancellation, unchanged-selection and descriptor-flag assertions. Both
-`TestInterruptDuringRealConfirmationPreservesSelection` and
-`TestTerminalFlagsAreRestoredAfterReadyAndEmptyReads` pass in the complete normal
-and race gates. Neither real-terminal test was skipped; no device permissions
-were changed.
-M1c delivery is completed. M1d now owns the next setup delivery; M1e remains
-deferred. Setup and lifecycle commands stay unavailable until implemented.
-
-### Direct root context storage
-
-The authorized replacement of M1b/M1c context persistence uses the fixed root
-store and independent user selection defined in [Contexts](contexts.md).
-It removes prior formats and archival behavior without migration. Context
-configuration and desired-state import are separate; plain initialization
-creates an eager keyring and may remain without Environment input.
-
-Verification covers no-file creation, immutable imports, configuration-only
-no-ops, fresh identities after name reuse, stale/independent selections,
-protected deletion and explicit pending-mutation retry. Filesystem tests inject
-publication/synchronization failures and substitutions, including resuming
-only after registry intent and reused initialization files are durable.
-Sudo tests cover pre-effect classification, argument/stdin preservation,
-timeout policies, signal forwarding and refresh cleanup. Privileged fixtures
-run in isolated user/mount namespaces with synthetic account data and homes;
-they exercise actual credential drops and the production default store path.
-Normal unprivileged test runs skip those explicitly privileged fixtures; the
-isolated acceptance runs execute them separately.
-
-Final `make check`, `make build` and `./scripts/go test -race ./... -count=1`
-pass. Completion executes all four shell runtimes without skips. The scanner
-uses the complete official database validated on 2026-09-09, with all 4,380
-file hashes rechecked; direct online scanning fails on DNS lookup. It reports
-no reachable or imported-package vulnerabilities. The production-default
-plain-init/current/encryption-status/delete journey passes in a synthetic
-root filesystem, including every UID/GID and private-mode assertion. Actual
-host sudo password authentication and power-loss behavior were not qualified.
-
-### Storage simplification
-
-Registry v3 uses a fixed-size namespace/counter allocator, preserving existing
-IDs through an authorized v2 upgrade. Pristine input updates collect verified
-unselected revisions after durable publication. Local-keyring v2 uses one
-authenticated metadata file, compact declaration summaries and three artifact
-directories. Cleanup retains current/bound material and identity reservations,
-removes retired custody, and resumes explicitly after interruption. Supported
-v1 conversion preserves logical material and preflights peak storage capacity.
-
-Final `make check`, `make build` and
-`./scripts/go test -race ./... -count=1` pass. Completion uses all four qualified
-shell runtimes. The pinned vulnerability scan uses the official database copy
-validated on 2026-09-09 with all 4,380 hashes rechecked; it finds no reachable
-or imported-package vulnerabilities. The existing unimported module advisory
-remains outside reachable code. Bounded 100,000-execution fuzz runs pass for
-the shared store record, private store records and canonical size preflight;
-the registry record run passes 100,027 executions.
-
-Fault tests cover original and newly written file substitution at metadata
-commit, recovered-key synchronization, guarded cleanup at physical ceilings,
-commit uncertainty, interrupted conversion and cleanup, seal reservations,
-missing live identity reservations, and repeated rotations/input updates.
-Real-store migration and power-loss qualification were not performed. A source
-without conversion headroom safely refuses; complete-store restore and bounded
-lifetime secret-ID allocation remain C14/C15 outcomes below.
-
-## M1d — bastion setup
-
-**Owners:** Controller (prerequisites, local adapters and verified host evidence),
-Workspace (shared setup state and context binding), using Machine, Desired
-state and the existing invocation boundary. **Requires:** M1c.
-**Definition:** Specified in [Controller](controller.md) and
-[Contexts](contexts.md#controller-relationship-and-host-binding), with exact
-implementation locks. **Delivery:** completed. End-to-end acceptance against a
-real bastion remains operator-run and deferred.
-
-The implementation includes desired-state dependency selection and version
-overrides, frozen resolution and retry evidence, shared bundles and host binding,
-and the Go-orchestrated Ansible setup entrypoint.
+Delivered `bastion setup`, `bastion setup --dry-run` and `preflight bastion`
+for RHEL 9 and Fedora on Linux/amd64 under [Controller](controller.md) and the
+[host-binding contract](contexts.md#controller-relationship-and-host-binding):
+desired-state dependency selection with version overrides, frozen resolution
+and retry evidence, shared immutable bundles, host binding, and the
+Go-orchestrated Ansible setup entrypoint in the embedded `bootwright.core`
+collection. Setup installs every dependency the admitted desired state
+selects, including target clients whose consuming lifecycle command is still
+deferred.
 
 **Verification model.** Every test carried in this repository is unitary and
 host-independent: it runs without a package manager, network, privilege or a
-second operating system, and creates no virtual machine. Such tests qualify the
+second operating system, and creates no virtual machine. Such tests qualify
 contracts, refusals and recovery semantics, never an executed native installer.
-End-to-end acceptance on a real bastion is run by the operator as the code
-evolves and is not a condition of this milestone. A gate is reported as passing
-only with the command and result that produced it; an unavailable gate is
-recorded as unexecuted. These results do not promote M1e.
+End-to-end acceptance on a real bastion is operator-run and is not a gate of
+any milestone. The operator-run harnesses and their selectors are listed in
+[development](../docs/development.md).
 
-Deliver `bastion setup`, `bastion setup --dry-run`, and `preflight bastion`
-for **RHEL 9 and Fedora on Linux/amd64**. Setup prepares the provided local OS for Bootwright:
-verified baseline execution dependencies, mandatory `container-runtime`
-capability, Podman installation when absent, all native target CLIs and local
-dependencies selected by desired state, and an explicit context's host binding. It does not install the OS,
-start managed services or enable plan/apply/destroy. This promotes C16's setup
-and binding scope; service-specific shared-host ownership remains with M1e.
+Guarded by the `internal/controller` package tests (both host matrices through
+one request/result suite: clean install, no-op, overrides, frozen retry,
+contention, cancellation, package failure, unknown outcome and exact retry),
+`cmd/bootwright/controller_*_test.go`, the
+`internal/workspace/contextfs/controller_*_test.go` checkpoint tests and
+`make ansible-check` (pinned syntax, lint, sanity, unit and host-independent
+integration targets).
 
-Without explicit `--context`, prepare or inspect the baseline before context
-creation/import and ignore the current-context marker. With an explicit
-context, use its admitted controller intent, egress and required capabilities.
-The [command journeys](controller.md#selection-and-command-journeys) own exact
-selection, dry-run, preflight, confirmation, no-op and effect boundaries.
-Required shared prerequisites are the qualified isolated Python/Ansible
-bundle, qualified Podman and native flow dependencies. Go orchestrates the
-fixed Ansible roles/playbooks that install packages and target clients. All configurable dependencies, including Python, Ansible and native packages,
-resolve latest stable or explicit Environment overrides before confirmation.
-OpenShift installer and clients stay tied to the target release. Exact
-selections are retained for retries; a fresh setup resolves latest again. Service-adapter execution remains consumer-owned.
-
-Implementation order:
-
-1. **S1 — define both host matrices.** Record an exact RHEL 9
-   minor release and Fedora release, architecture, tested kernel/filesystems,
-   sudo/package-manager interfaces, approved repository identities, complete
-   package builds, Python/Ansible bundle, Podman variant, digests, publisher
-   trust and acquisition limits. Both matrices are defined from published
-   publisher metadata; neither requires an executed host to be recorded. Compare native
-   package and isolated-bundle mechanisms under the dependency selection rule;
-   use their standard lock formats. Qualify package hooks and solver behavior,
-   including selected upgrades, explicit root downgrades, refusal of unrelated
-   removals/downgrades and changes to protected dependencies.
-   Record the supported matrix in Controller and locks with their owning
-   implementation. Do not infer a tested release or use floating versions inside execution.
-   Resolve latest or overridden roots with maintained pip and DNF resolvers in
-   disposable unprivileged staging before confirmation. Freeze complete
-   versions, metadata, checksums, sizes and native before/after action evidence.
-2. **S2 — close host identity and durable recovery definitions.** Specify and
-   qualify the installed-host evidence provider for both distributions,
-   ordinary reboot continuity, clone/namespace/copy refusal and same-host
-   verification. Freeze the canonical versioned shared receipt, per-context
-   binding and root-layout compatibility, bounds, lock order, mutation-guard
-   integration, publication commit points and crash/retry rules in
-   [Contexts](contexts.md#controller-relationship-and-host-binding).
-   Explicit baseline setup must bootstrap a valid empty registry before any
-   shared controller files. Context inspection/deletion must recognize and
-   preserve host state, and pending setup must protect its referenced input.
-   S1/S2 close the definition gate before effect implementation begins.
-3. **S3 — implement pure selection and capability contracts.** Extend
-   `controller/prerequisites` with immutable requests/results and consuming
-   ports for host inspection, dependency catalog/selection, local package
-   transactions, acquisition and publication. Define typed failures,
-   cancellation and complete postcondition evidence. Reuse Workspace input and
-   invocation services through their published interfaces. Cover baseline vs
-   explicit context, mandatory runtime, desired-state tool closure, unsupported routes and bootstrap cycles,
-   deterministic dependency order, dry-run unknowns and no-effect refusals.
-4. **S4 — implement Workspace binding and shared setup state.** Add versioned
-   storage and guarded publication under the fixed root, context-free store
-   bootstrap, cross-context serialization and binding mismatch refusal.
-   Protect pending input/recovery and all shared bundles through context update
-   and purge. Test old-store compatibility, interruption at every commit point,
-   non-adoption of unrelated files, no-op reads, bounds and process death.
-5. **S5 — implement the Ansible bastion skeleton and roles.** Add controlled
-   `ansible.cfg`, exact controller locks, embedded `bootwright.core` collection,
-   fixed `playbooks/controller/setup.yml`, and the `controller_prerequisites`
-   role with argument specs and structured results. Go bootstraps the private
-   execution runtime and orchestrates these entrypoints. Ansible performs actual
-   RHEL 9/Fedora package and native target CLI installation through one frozen
-   request/result/failure contract. Implement bounded trusted acquisition,
-   complete transaction inspection, dependency installation/update, immutable bundle
-   publication and exact readiness probes. Implement cancellation/reaping,
-   unknown-outcome resolution and explicit retry; test native installer locks
-   and children surviving parent death. No lifecycle adapter or managed remote
-   interaction is introduced by this step.
-6. **S6 — expose complete CLI journeys.** Wire only the two Controller routes,
-   reuse ordinary confirmation and verified sudo, and render ordered text plans,
-   readiness, partial progress and safe recovery guidance. Update help and
-   catalog tests for the explicit-context exception, dry-run privilege boundary,
-   unsupported host/dependency diagnostics and stable streams/exit status.
-   Setup and preflight create no lifecycle identity or lifecycle receipt/log;
-   setup retains its separate private recovery receipt.
-7. **S7 — qualify and deliver.** Run the exit evidence below on the integrated
-   tree and record each gate's command and result, including every gate that
-   could not execute and why. Include the pinned Ansible syntax/lint and
-   collection sanity, unit and local integration gates. M1e remains unavailable and needs its own
-   explicit implementation authorization.
-
-S1's two distribution investigations can run in parallel. S2 can draft state
-semantics alongside them but must use the qualified identity evidence. After
-S3 fixes the shared contracts, S4 and independent distribution adapters can be
-implemented concurrently with disjoint ownership and separate test fixtures.
-S6 integration and S7 acceptance follow those prerequisites. Never run parallel
-host mutations against the same machine or shared store.
-
-Exit evidence, required before claiming M1d complete:
-
-- Exact supported RHEL 9 and Fedora releases and complete dependency closures
-  are locked and authenticity/integrity verified. Both matrices are covered by
-  the same host-independent tests: clean setup, pre-existing exact dependencies,
-  selected upgrades, explicit overrides including Python/Ansible and native root
-  downgrades, frozen retry and unchanged rerun when latest has not changed.
-  Unsupported releases and package transactions refuse before installation.
-- Complete context-free setup/preflight before any context exists; empty and
-  imported contexts; explicit controller selection; no implicit current-context
-  reads; required `container-runtime` and installation of absent Podman; first binding, same-host retry/reboot and
-  wrong-host refusal. Desired-state tool selection covers the complete retained graph without
-  activating cluster/service effects. Missing target release metadata refuses
-  before installation; placeholder fixture versions are not real releases.
-- Dry-run and preflight effect sentinels prove their exact boundaries, including
-  no Secret material or managed endpoint access. Check direct and qualified
-  external-proxy routing, absent dependencies, unsupported authenticated/private
-  trust or managed proxies, bootstrap cycles and refusal without route fallback.
-- Confirmation, `--yes`, decline, noninteractive refusal, verified no-op,
-  privilege failure, output failure and interrupts preserve ordered text and
-  correct exit status. All other unavailable commands retain M1a's no-effect
-  gate; imported-input validation and secret journeys retain M1b/M1c behavior.
-- Multi-context contention, protected shared prerequisites, package locks,
-  unsafe root/file/path substitution, changed bundle/dependency identities,
-  input update/purge during pending setup, root bootstrap, interrupted binding
-  and every setup publication checkpoint have failure-injection coverage.
-  Prove exact retry or safe refusal after OS process death, surviving children,
-  partial package success, unknown outcomes and uncertain durable publication.
-- Final `make check`, `make build`, `./scripts/go test -race ./...`, both module
-  tidy/verification checks and `git diff --check` are run, with each result
-  recorded and each unavailable gate named. A skipped case is never counted as
-  acceptance. Review the complete diff, dependency closure and retained recovery
-  evidence.
-
-Recorded gate results, on Fedora 43 / linux-amd64:
-
-| Gate | Result |
-| --- | --- |
-| `make build` | pass |
-| `make test` | pass |
-| `./scripts/go test -race ./...` | pass; 49 packages, no data race |
-| `make vet` | pass |
-| `make fmt-check` | pass |
-| `make modules-check` | pass; both module locks verified |
-| `make vulncheck` | pass; no reachable vulnerability |
-| `git diff --check` | pass |
-| `make completion-test` | pass; Bash only, the shell this milestone qualifies |
-| `make ansible-check` | pass; syntax, lint, sanity, units and the host-independent integration targets |
-| `make check` | pass; the complete gate chain above |
-| `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1 make ansible-check` | pass; adds the two host-backed targets, including the shipped setup playbook and role over the real runner protocol |
-
-The Ansible gate builds its own pinned interpreter, so it does not depend on the
-development host's Python. Completion is qualified for Bash; the other shells
-ship and stay covered behind an explicit selection.
-
-Deliberately outside the unitary gate, and run by the operator on a qualified
-Fedora or RHEL host with `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1`: the
-`controller_native` target, which drives the host package manager, and the
-`controller_prerequisites` target, which runs the shipped setup playbook and
-role over the real runner protocol. Both exercise shipped entrypoints that no
-host-independent test can reach. A successful `preflight bastion` prints no next
-command, because this slice exposes no follow-on command to name.
-
-Deferred boundaries: Controller and Secrets own authenticated/private-trust
-setup acquisition (**Needs definition**; requires M1d). It is deferred because
-setup has no immutable Secret consumer/recovery contract; exit evidence must
-cover exact binding/reopen/release, certificate validation, non-disclosure and
-interrupted acquisition with changed or unavailable credentials. Additional
-host families and architectures need separate matrices; controller
-relocation/restore remains C14. M1e owns service images, its pinned Ansible
-adapter closure, full-context lifecycle state, local service reservations, readiness and qualified inverse.
-There is no host uninstall or automatic OS upgrade. Native dependency
-preparation belongs to M1d even when the consuming lifecycle command is
-deferred: setup installs every dependency the admitted desired state selects,
-which reverses this slice's earlier deferral of target clients to their first
-consuming milestone. End-to-end acceptance against a real bastion, including
-executed native installation on either distribution, is operator-run work
-outside this repository's test suite and outside M1d's exit gate.
+Constraints left for later work: authenticated or private-trust setup
+acquisition needs its own Secrets consumer and recovery contract before
+promotion, with exit evidence covering exact binding, reopen and release,
+certificate validation, non-disclosure and interrupted acquisition with
+changed or unavailable credentials; additional host families and
+architectures need separate matrices; controller relocation and restore
+remain C14; there is no host uninstall or automatic OS upgrade; service images,
+the pinned service Ansible closure, local service reservations, readiness and
+their qualified inverse belong to M1e.
 
 ## M1e — managed artifact-server apply
 
@@ -647,6 +197,8 @@ with interchangeable Go capability implementations and Ansible bindings using
 the same request/result/failure/evidence contract. Verify fixed entrypoint,
 role and plugin resolution and refusal of authored executable selection before
 effects. Ansible service-adapter evidence extends M1d's bastion dependency contracts.
+The [planned lifecycle ports](architecture.md#planned-lifecycle-ports) name
+the consumer-owned interfaces this milestone introduces.
 
 Exit: deterministic complete plans/digests; immutable input and credentials;
 versioned snapshots, leases, logs, ownership, sequential execution and exact
@@ -672,7 +224,7 @@ implementation. Each must qualify exact releases and close its own contracts.
 | M2b — Ceph native files | Storage and Native artifacts: render typed storage intent into one release-specific declarative file set. | M1e, N3 | Qualify release schemas and reject unprovable fields; revise the API deliberately if needed. **N5:** define each storage secret consumer's validation, immutable binding and sensitive publication (M1c, N3), or prove outputs secret-free. Native goldens and negative disclosure tests. |
 | M3 — Ceph-pool script | Storage and Native artifacts: generate one deterministic native-CLI pool script. | M1e | **N4:** define the script manifest, bytes, fixed command structure, destination and generation journey (M1b). Prove argument encoding, replay semantics, diagnostics, sensitive classification, publication and goldens. No authored shell fragments, inline secrets or execution. |
 | M4 — OCP bare-metal lifecycle | State reconciliation, Substrate and Container cluster: extend full-context apply and enable destroy for artifact-server and OCP effects. | M1e, M2a | **L2:** extend pure plans, impacts, dependencies and digests. **L5:** add consumer-owned OCP remote ports. **L4:** extend durable execution, readiness and removal, preserving the M1e inverse and safely refusing incompatible state. **L6:** qualify exact implementations with contract, crash/lease, identity/ownership, replay, cancellation and real-system tests. Destroy a completed M1e snapshot before a fresh expanded apply. |
-| M5 — managed RHEL installation | Managed OS and Substrate: install one RHEL release using typed image, profile, entitlement, Secret and Machine intent. | M4 | Extend L2/L4/L5; apply L6. Prove renderer/executor parity, identity, ownership, replay, secret custody and real-system acceptance. |
+| M5 — managed RHEL installation | Managed OS and Substrate: install one RHEL release using typed image, profile, entitlement, Secret and Machine intent. | M4, C17 | Extend L2/L4/L5; apply L6. Prove renderer/executor parity, identity, ownership, replay, secret custody and real-system acceptance. |
 | M6 — managed Ceph bare metal | Storage, Managed OS, Substrate and State reconciliation: provision one Ceph cluster slice. | M2b and required M5 OS-readiness slice | Extend L2/L4/L5; apply L6 to each implementation. Prove storage identity, ownership, destructive authorization, replay, secret custody and real-system acceptance. |
 
 Independent execution of M2a/M2b/M3 artifacts creates no Bootwright operation,
@@ -695,13 +247,16 @@ fill its concrete version, journey and evidence gaps when requested.
 | C7 | State reconciliation: bounded parallel block execution. | Sequential execution must be qualified first; requires L4. | Ordering/exclusion, deterministic scheduling, cancellation, persistence, partial-failure and replay tests. |
 | C8 | Custom automation: one typed, invertible executable playbook journey. **Needs definition.** | Reserved schema cannot prove effects/ownership/non-exfiltration; requires M1e, L2/L4/L5 and a named journey. | Same-change API replacement, immutable source/dependencies, exact targets, bounded secrets, authorization, continuation, failure injection and isolated-runner qualification. |
 | C9 | Bare-metal safety: physical offline disk erase and managed-machine destroy. **Blocked.** | Exact disk identity is unproved during the controller-to-installer interval; needs new safety evidence that closes or explicitly bounds it. | Separate safety contract, immutable target proof at erase, failure injection and real-hardware qualification. |
-| C10 | Add-ons, Workspace and CLI: custom-catalog acquisition, immutable publication, selection and removal. **Needs definition.** | No source/trust/storage/selection contract; requires M1b and C4. | Closed schemas and formats, fixed bounds, authenticity, atomic/crash-safe storage, deterministic selection, retention through destroy and security/acceptance tests. |
+| C10 | Add-ons, Workspace and CLI: custom-catalog acquisition, immutable publication, selection and removal, including the storage location and record format of `add-ons add` registrations and the meaning of the [`add-ons/_store` selection exception](api/environment.md#resource-and-cluster-selection). **Needs definition.** | No source/trust/storage/selection contract; requires M1b and C4. The three `add-ons` commands stay unavailable until promoted. | Closed schemas and formats, fixed bounds, authenticity, atomic/crash-safe storage, deterministic selection, retention through destroy and security/acceptance tests. |
 | C11 | Add-ons: one declarative custom-package lifecycle. | No package/target/driver selected; requires C4, C10 and a supported cluster. | Exact identities, qualified driver, host-contract suite, code-content refusal and apply/readiness/replay/destroy acceptance. |
 | C12 | Container cluster and Native artifacts: one local bootable installer ISO from M2a inputs and declared server endpoints. **Needs definition.** | No builder journey; requires M1e and M2a. No remote publication. | Exact builder/dependencies, bounded inputs, sensitive classification, typed manifest/digest, atomic publication, metadata goldens, negative effect tests and boot evidence. |
 | C13 | Release engineering: one source/binary distribution with licensing and notices. **Needs definition.** | Buildability does not define redistribution; requires M1a and one release channel. | Project license, direct/transitive license review, exact release toolchain/platform/shell matrix, non-skipping completion tests, reproducible archives, notices, dependency inventory, checksums, provenance, SBOM and clean-room packaging verification. |
 | C14 | Workspace and Secrets: explicit complete-store restore with logical identity preservation. **Needs definition.** | Copy restoration changes physical identities and may roll back allocation/seal reservations; storage simplification provides upgrades and safe refusal, not a backup/restore command. Requires M1b/M1c and a selected restore journey. | Coherent snapshot validation, authorized inode rebinding, fresh allocation epoch/key before writes after rollback, interruption/retry and wrong-store refusal tests; preserve lifecycle recovery evidence. |
 | C15 | Secrets: replace per-ID reservations with bounded lifetime allocation. **Needs definition.** | Current opaque random version/binding IDs retain historical reservation files; a new allocation scheme must preserve issued-ID non-reuse across crashes and restore. Requires M1c and C14 restore semantics. | Bounded allocator state, reservation-before-use, counter/namespace exhaustion, migration of existing bindings and failed attempts, non-reuse and crash tests. |
-| C16 | Controller setup and host binding: **promoted to M1d**. | Tracked in the current milestone rather than as an additional candidate. Local service ownership/conflicts remain M1e; relocation requires C14 and a separately defined journey. | M1d owns setup/binding evidence; M1e owns local service qualification. |
+| C16 | Controller setup and host binding: **delivered by M1d**. | Local service ownership/conflicts remain M1e; relocation requires C14 and a separately defined journey. | M1d owns setup/binding evidence; M1e owns local service qualification. |
+| C17 | Managed OS and Workspace: the media store for `media add`, `media list` and `media delete`: layout under the context root, record format, bounds, digest verification and retention while an operation freezes an image. **Needs definition.** | No storage contract exists behind the catalogued commands; requires M1b and M5's first media consumer. The three `media` commands stay unavailable until promoted. | Closed layout and record formats, fixed bounds, atomic publication, frozen-by-operation refusal, bounded download and negative effect tests. |
+| C18 | Engineering: align the package tree with the [command and package map](architecture.md#command-and-package-map): extract `internal/diagnostics`; rename `secrets/storage` to `secretstore`, `secrets/localstore` to `localkeyring`, `controller/invocation` to `privilege` and the `ansible` package clause; move selection policy and the configuration reader out of `cmd/bootwright`; per-domain wiring files; `privileged` and `implemented` on the command catalog; remove the unwired `SourceAcquirer` port; the `contracts.go`/`requests.go` convention with fitness tests. **Specified** by the [transition table](architecture.md#transition). | Engineering work that needs its own authorization; changes no product behavior; requires nothing. | `make check` green; byte-identical output for help, `version`, `validate`, an unavailable command and `bastion setup --dry-run` before and after; the layout fitness tests green; the transition table removed from Architecture. |
+| C19 | Secrets: one additional secret-store implementation (passphrase-protected store, external broker or KDF-based custody). | `local-keyring` meets the current scope; requires M1c and a named operator need. | Shared conformance suite pass, session-material contract, rotation, tamper refusal and non-disclosure tests. |
 
 When a cluster inspection or access slice under C6 is promoted, its exit evidence
 must exercise the [cluster discovery](cli/output.md#cluster-discovery) and

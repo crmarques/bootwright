@@ -55,25 +55,33 @@ flags. Completion scripts are available through `bootwright completion bash`,
 
 ## Code layout
 
+To find the code behind a command, start at `internal/cli/commands_<domain>.go`
+(grep the command path, such as `"secret set"`); its consumer interface names
+the service package `internal/<context>/<capability>/`, where `service.go` is the
+use case, `contracts.go` lists the ports it consumes and `requests.go` is what the
+CLI sees; `cmd/bootwright/wiring.go` binds each port to an adapter package.
+
 | Path | Responsibility |
 | --- | --- |
-| `cmd/bootwright/` | `main.go` owns entry/exit and linker metadata; `run.go` assembles the CLI invocation; `wiring.go` constructs the service bundle. |
+| `cmd/bootwright/` | The only composition root: `main.go` entry/exit and linker metadata; `run.go` privilege boundary and CLI invocation; `wiring.go` constructs the service bundle. |
 | `api/v1alpha1/` | Presence-preserving immutable values and closed kind schemas. |
-| `internal/cli/` | Command-family declarations, consumer interfaces, and request translation; shared parsing, help, completion, dispatch, and output. |
-| `internal/<context>/` | Pure domain values and rules, including shared SSH options and secret declarations/material. |
-| `internal/<context>/<capability>/` | Concrete `Service`, typed requests, and consumed interfaces, such as `workspace/contexts` and `reconciliation/lifecycle`. |
+| `internal/cli/` | Driving adapter: `catalog.go` (the single command list), `runner.go`, `dispatch.go`, `results.go`, per-domain `commands_*.go` and `output_*.go`. |
+| `internal/<context>/` | Pure domain values and kind admission rules; shared values such as SSH options and secret material. |
+| `internal/<context>/<capability>/` | One application `Service` per command family with its requests and ports: `workspace/contexts`, `secrets/custody`, `secrets/encryption`, `desiredstate/compilation`, `controller/prerequisites`; the others are typed stubs. |
+| `internal/<context>/<adapter>/` | Driven adapters named by what they bind: `contextfs`, `selectionfs`, `inputfs`, `yamlstream`, `encoding`, `localstore`, `material`, `hostlinux`, `bundlelocal`, `ansiblelocal`, `nativelocal`, `invocation`. |
 | `internal/availability/` | Shared unavailable-capability error; no presentation or effects. |
-| `test/architecture/` | Checks dependency direction and admission effect boundaries. |
+| `test/architecture/` | Fitness checks: dependency direction, effect boundaries, composition-only binding. |
 | `scripts/` | Reproducible build and verification entrypoints. |
 
-The [service ownership map](specs/architecture.md#application-service-ownership)
-identifies each capability and its CLI dependency. The
-[interaction contracts](specs/architecture.md#service-interactions) describe
-explicit-input compilation and future context admission, lifecycle, and
-artifact publication. Application packages are independent of Cobra and
-terminal output. The compiler receives verified source bytes through its
-input adapter; pure domain owners supply admission rules under the
-[package contract](specs/architecture.md#go-package-structure).
+The [command and package map](specs/architecture.md#command-and-package-map)
+lists every command with its CLI file, service package, adapters and status, and
+the [communication graph](specs/architecture.md#domain-communication-graph)
+shows which interface each domain uses to reach another. The map names the
+target package layout; the pending renames are listed in its
+[transition table](specs/architecture.md#transition). Application packages are
+independent of Cobra and terminal output. The compiler receives verified source
+bytes through its input adapter; pure domain owners supply admission rules under
+the [package contract](specs/architecture.md#go-package-structure).
 
 ## Development
 

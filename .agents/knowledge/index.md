@@ -11,6 +11,7 @@ investigating or designing, then open only the relevant page.
 | CLI, Cobra, completion effects, `BASH_COMP_DEBUG_FILE`, `ExecuteContext`, local `--output`, nil/empty cluster selection, Zsh `compadd`, PowerShell `-File` | [cli-adapter-constraints.md](cli-adapter-constraints.md) |
 | Go toolchain pin, `GOTOOLCHAIN`, `govulncheck`, release version metadata, `-ldflags -X`, Go 1.26 crypto Reader injection | [build-toolchain.md](build-toolchain.md) |
 | OpenShift agent installer, bare-metal disk identity, pre-wipe proof, Redfish-to-installer race | [openshift-agent-disk-safety.md](openshift-agent-disk-safety.md) |
+| Bastion private Python/Ansible runtime, isolated interpreter, ELF loader invocation, preload list, glibc/libgcc foundation, native package read lock | [controller-runtime-isolation.md](controller-runtime-isolation.md) |
 
 Add one focused page for each durable lesson and index it with searchable topic
 terms, affected symbols, or error text. Each new or revised entry identifies the

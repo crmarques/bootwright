@@ -8,8 +8,9 @@ constraints.
 
 Specs own required behavior; milestones own delivery state and deferred work;
 knowledge owns lessons. Keep each fact in one place and link to it. Implement
-only the prompt-authorized slice of the current milestone, or the exact
-out-of-sequence slice the user requests. Record other discovered work in the
+only the slice the prompt authorizes: the current milestone's open work, or an
+explicitly requested out-of-sequence slice. With no open milestone, only an
+explicit request authorizes a tracked edit. Record other discovered work in the
 earliest fitting future milestone. Update the owning spec with any intentional
 contract change; add future detail when a requested feature needs it.
 

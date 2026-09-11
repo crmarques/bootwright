@@ -149,7 +149,9 @@ discovered under [the API input rules](../api.md#environment-directory-and-selec
 - omission selects every discovered YAML file, while an authored empty list is
   invalid.
 
-A context-generated native add-on descriptor is the sole selection exception.
+A native add-on descriptor published by the add-on registration journey
+([milestones](../milestones.md#candidates) candidate C10 owns its storage and
+publication) is the sole selection exception.
 `add-ons/_store/<name>/add-on.yaml` is selected when it contains exactly one
 `ClusterAddon/<name>` and the same directory contains the exact sibling basename
 `.bootwright-addon`. `<name>` is a DNS label of at most 63 ASCII bytes, and the
@@ -312,7 +314,7 @@ own expansion limits, canonical output, and immutable source provenance.
 
 URLs require scheme and host and reject embedded credentials. These fields
 select download sources; they do not fill attributes on cluster objects.
-M1d setup qualifies HTTPS mirrors on the default port or port 443, without
+Setup qualifies HTTPS mirrors on the default port or port 443, without
 query strings or fragments. Helm archives reside directly under the base URL;
 OpenShift archives and `virtctl` binaries reside under `<base>/<exact-version>/`.
 The `virtctl` directory and filename include the release's `v` prefix.

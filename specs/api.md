@@ -192,8 +192,8 @@ Cancellation is cooperative: check the supplied context around each decode,
 in the context-aware reader, during node traversal and between later phases.
 A decoder already processing buffered bytes is not forcibly interrupted.
 Do not abandon parser goroutines or claim an in-process hard time or memory
-limit. The isolated resource-qualification gate belongs to the
-[M1b delivery evidence](milestones.md#first-delivery-context-free-desired-state-admission).
+limit. The isolated resource-qualification gate is recorded in
+[milestones](milestones.md#m1b--durable-contexts-and-desired-state-admission).
 
 ## YAML streams and decoding
 

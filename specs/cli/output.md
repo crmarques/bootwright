@@ -437,10 +437,10 @@ their resolution attempts in numeric order.
 
 ## Multi-machine presentation
 
-Ansible is an adapter, not the product interface. Bootwright consumes bounded
-structured events and does not forward or parse Ansible prose, banners, recap,
-color, callback formatting, play names, or task names as managed-operation
-output.
+Under the [Go/Ansible boundary](../architecture.md#go-and-ansible-responsibility-boundary),
+Bootwright consumes bounded structured events and does not forward or parse
+Ansible prose, banners, recap, color, callback formatting, play names, or task
+names as managed-operation output.
 
 A multi-machine presentation group is a domain-owned step frozen into a plan
 block. Its stable ID, safe description, non-empty Machine target set, order, and

@@ -2,8 +2,9 @@
 
 Secrets owns runtime custody, materialization, generation, immutable binding and
 disclosure. Workspace owns context identity, private paths and atomic publication.
-The [Secret API](api/secrets.md) remains declarative. M1c implements local
-management without platform, entitlement or lifecycle effects.
+The [Secret API](api/secrets.md) remains declarative. This contract covers local
+management without platform, entitlement or lifecycle effects; availability
+follows [milestones](milestones.md).
 
 ## Implementation selection
 
@@ -41,9 +42,8 @@ branches. Implementations declare session requirements, acquired through an
 injected confidential capability after target authorization. Capabilities are
 invocation-owned, non-serializable and closed with best-effort memory clearing.
 Local keyring requires no input. A second test implementation qualifies this
-extension seam. Production passphrase stores, brokers and KDFs are deferred.
-No dynamic plugins, executable paths, ambient discovery, mutable global registry
-or generic option maps are permitted.
+extension seam. No dynamic plugins, executable paths, ambient discovery,
+mutable global registry or generic option maps are permitted.
 
 ## Acquisition and commands
 
@@ -112,17 +112,18 @@ changing core material services. Production uses standard-library OS entropy;
 do not rely on Go's ignored key-generation Reader arguments or a process-global
 compatibility setting for this seam.
 
-SSH parsing and public-key codecs use `golang.org/x/crypto v0.57.0`; its
-[declared module graph](https://proxy.golang.org/golang.org/x/crypto/@v/v0.57.0.mod)
-is reviewed with the selected build graph. The standard library owns AES-GCM,
-X.509, key generation and entropy. Do not import unrelated x/crypto packages.
+SSH parsing and public-key codecs use the selected `golang.org/x/crypto` SSH
+package at the version locked in `go.mod`; its declared module graph is reviewed
+with the selected build graph. The standard library owns AES-GCM, X.509, key
+generation and entropy. Do not import unrelated x/crypto packages.
 
 ## Immutable binding and contexts
 
 Bind/Reopen/Release operate on whole versions with opaque IDs. File binding
 freezes one validated read without changing source or importing a named entry.
 Reopen never rereads the source. Replacement/deletion/rotation preserve bound
-versions; release drops only its references. M1e owns the future lifecycle port.
+versions; release drops only its references. The lifecycle consumer of these
+operations is a [planned port](architecture.md#planned-lifecycle-ports).
 
 Canonical non-secret declaration fingerprints cover type/source/parameters and
 provenance. Changed declarations make retained values stale/orphaned, never

@@ -76,8 +76,8 @@ to the secret type; weak fallback randomness is forbidden.
 The [Secrets runtime contract](secrets.md) qualifies local key custody,
 cryptography, rotation, material input and sensitive reveal.
 
-`version`, `validate`, and `render effective` are read-only. They create no
-cache, temporary file, state record, output path, or log.
+Read-only commands create no cache, temporary file, state record, output path,
+or log; [the output contract](cli/output.md#private-operation-logs) lists them.
 
 API discovery rejects a symlink root and discovered YAML symlinks, never
 descends through a symlink, and excludes the exact directory classes and
@@ -247,11 +247,11 @@ privilege authority. Package-carried executable content is never loaded or run;
 a driver may enter only its pinned embedded adapter and locked dependency
 closure under [architecture](architecture.md#go-and-ansible-responsibility-boundary).
 
-`CustomPlaybook` is a reserved reference-schema shape, not an executable
-Bootwright adapter. Read-only commands strictly decode, validate, default, and
-render its declaration without reading a local source, fetching Git content,
-resolving credentials, or inspecting playbook bytes. An enabled object must be
-rejected before external content access, operation registration, or effects;
+[`CustomPlaybook`](api/custom-playbooks.md) is a reserved, non-executable
+shape. Read-only commands strictly decode, validate, default, and render its
+declaration without reading a local source, fetching Git content, resolving
+credentials, or inspecting playbook bytes. An enabled object must be rejected
+before external content access, operation registration, or effects;
 `enabled: false` produces no work.
 
 An exit status, source revision, signature, or sandbox alone cannot prove the

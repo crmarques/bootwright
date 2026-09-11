@@ -2,18 +2,20 @@
 
 Controller owns inspection and preparation of the local host on which
 Bootwright runs. This contract defines `bastion setup` and `preflight bastion`;
-[M1d](milestones.md#m1d--bastion-setup) owns delivery and qualification status.
-The bastion is the [Environment-selected controller Machine](api/environment.md#controller-machine)
+[milestones](milestones.md#m1d--bastion-setup) own delivery and qualification
+status. The bastion is the [Environment-selected controller Machine](api/environment.md#controller-machine)
 when a context is supplied. Setup never provisions that Machine's OS or
 executes a managed service's lifecycle.
 
 ## Supported host and dependency selection
 
-M1d supports **RHEL 9 and Fedora on Linux/amd64**. Each supported
+Setup supports **RHEL 9 and Fedora on Linux/amd64**. Each supported
 combination identifies an exact OS release, tested kernel/filesystem and
 privilege primitives, package repositories, native package-manager version,
-package builds, and immutable execution bundle. The implementation matrix is
-RHEL 9.8 and Fedora 43 on Linux/amd64. Each setup
+package builds, and immutable execution bundle. The exact qualified releases
+are recorded with the compiled dependency catalog
+(`internal/controller/bundlelocal/catalog.go`) and in
+[development](../docs/development.md), never in this contract. Each setup
 freezes source identities, byte counts and SHA-256 values. A family name alone does not
 qualify all minor releases, Fedora releases or future updates. Unsupported or
 unprovable combinations refuse before installation. The exact matrix and
@@ -35,26 +37,17 @@ directory links and escape/cycle attempts refuse. Retained source bytes derive
 the complete expected file inventory, including executable modes, so readiness
 rejects additions and substitutions rather than trusting a version string.
 
-The private interpreter uses isolated mode, disables bytecode and `site`
-initialization, and imports only its four explicit private roots. Its readiness
-probe verifies every locked distribution, required standard-library modules,
-and the cryptographic extension. System Python, pip configuration, user site,
-Ansible configuration and environment search paths cannot alter this closure.
-The provided host supplies qualified glibc and libgcc support; setup does not
-replace those shared libraries to make an incompatible bundle work.
-Freeze their package ownership with the execution profile and refuse any native
-transaction that changes those packages before presenting the plan. A dependency
-release that requires a different foundation needs a separately qualified profile.
-
-Execution verifies the catalogued host loader, ELF library files and aliases
-under the native package read lock. It invokes that loader directly with the
-cache disabled, hardware-capability selection disabled, a fixed library path
-and an explicit dependency-ordered preload list. A nonempty system loader
-preload configuration refuses. The baseline probe retains the read lock until
-it has exited. The Ansible runner acknowledges its loaded state before Go releases that
-read lock; package installation then acquires native transaction coordination
-and revalidates the selected foundation. No ambient loader cache,
-library search variable or preload configuration selects executable code.
+The private interpreter runs isolated from ambient Python, loader and Ansible
+configuration: no system or user Python, pip configuration, Ansible
+configuration, environment search path, loader cache, library search variable
+or preload configuration can alter the closure or select executable code, and
+readiness rejects additions and substitutions. The provided host supplies the
+qualified glibc and libgcc foundation; setup never replaces those shared
+libraries, freezes their package ownership with the execution profile, and
+refuses any native transaction that would change them before presenting the
+plan. A dependency release that requires a different foundation needs a
+separately qualified profile. The mechanisms that achieve this are recorded in
+[controller runtime isolation](../.agents/knowledge/controller-runtime-isolation.md).
 
 The publisher and platform policies are compiled into the executable; exact
 releases are resolved by explicit setup. Dependency selection follows
@@ -67,7 +60,7 @@ releases are resolved by explicit setup. Dependency selection follows
 | Baseline execution bundle | Publish the resolved exact Python and `ansible-core` closure in an isolated Bootwright-owned location. Do not use system/user Python imports or ambient Ansible configuration. |
 | Container runtime | Require the controller to declare `container-runtime`; context-free baseline setup also selects Podman. Install or update the approved dependency set and verify an existing exact runtime without taking ownership of its containers or configuration. Do not start a service, pull a managed-service image or create a container. |
 | Native target clients | Select the complete controller-side tool closure from the admitted desired-state graph. OpenShift/OKD clients (`oc`, `kubectl`) and installer match the selected release; Kubernetes consumers select Helm; referenced vSphere providers select `govc`; virtualization selects upstream `virtctl`. Native SSH clients and NMState support the baseline flows. A declared `libvirt` capability or referenced libvirt provider selects `virsh` and its native client dependencies. Install these with the fixed Ansible bastion role. |
-| Service execution | Service images, containers and lifecycle configuration remain with their service consumer; M1e owns artifact-server apply. Installing a client grants no authority to contact or change a target. |
+| Service execution | Service images, containers and lifecycle configuration remain with their service consumer. Installing a client grants no authority to contact or change a target. |
 
 Setup installs missing dependencies, updates selected dependencies to their
 resolved versions and publishes immutable private bundles. An explicit native
@@ -208,11 +201,11 @@ current-context selection nor Environment input.
 
 With an explicit context, the controller Machine's normalized
 [proxy choice](api/machines.md#machine-proxy) is the sole route selection.
-M1d supports direct access and qualified unauthenticated external proxies using
+Setup supports direct access and qualified unauthenticated external proxies using
 the qualified system trust store. A managed Proxy, `proxyAuthRef` or
-`trustBundleRef` is unsupported for setup in this slice and refuses before
-acquisition. Never fall back to direct access or read Secret material to probe
-an unsupported route. Authenticated/private-trust setup acquisition needs its
+`trustBundleRef` is unsupported for setup and refuses before acquisition.
+Never fall back to direct access or read Secret material to probe an
+unsupported route. Authenticated/private-trust setup acquisition needs its
 own Secrets consumer and recovery definition before promotion.
 
 Reject a bootstrap dependency on a proxy or other service whose readiness
@@ -276,10 +269,10 @@ package/runtime transaction that could alter dependencies in use or retained
 by another setup or frozen lifecycle. The OS package-manager lock is an
 additional requirement, not a replacement for Bootwright coordination.
 
-No service port or container name is reserved by setup. M1e must define those
-conflict identities and join this host coordination before local service
-effects become available. Dependency readiness never establishes service
-ownership or authorizes another context's resources.
+No service port or container name is reserved by setup. Local service
+execution must define those conflict identities and join this host
+coordination before its effects become available. Dependency readiness never
+establishes service ownership or authorizes another context's resources.
 
 ## Publication and interrupted setup
 
@@ -364,5 +357,5 @@ protected dependencies, cancellation, package failures, uncertain publication
 and exact retry. A fake adapter proves this contract and never proves an
 executed native installer. Collection syntax, pinned lint, sanity, unit and
 local integration checks qualify the shipped Ansible entrypoints as content.
-[M1d](milestones.md#m1d--bastion-setup) owns the verification model and which
-acceptance remains operator-run.
+[Milestones](milestones.md#m1d--bastion-setup) own the verification model and
+which acceptance remains operator-run.

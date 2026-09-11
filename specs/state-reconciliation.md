@@ -80,13 +80,10 @@ environment directory. It is never either directory, a descendant of either,
 or a path derived by appending to either. Desired-state discovery never enters
 it.
 
-The production root is exactly `/var/lib/bootwright`, owned by root with mode
-`0700`. Its directories and files are root:root with modes `0700` and `0600`;
-[Workspace](contexts.md#controller-relationship-and-host-binding) defines the
-narrow `0700` executable-file exception for immutable controller bundles.
-No XDG, home or other ambient value selects runtime storage. Workspace uses
-verified no-follow traversal and refuses unsafe existing objects without
-ownership or permission repair. The [CLI privilege boundary](cli.md#local-privilege-and-user-identity)
+[Contexts](contexts.md#storage-locking-and-publication) owns the production
+root path, its ownership and modes, the executable-file exception for immutable
+controller bundles, and the rule that no ambient value selects runtime storage.
+The [CLI privilege boundary](cli.md#local-privilege-and-user-identity)
 provides root execution only for valid available commands that require it.
 
 Context-free read-only commands do not access the root except available
@@ -116,19 +113,17 @@ validated before lookup or path construction and never comes from an Ansible
 role, play, task, host alias, or vendor response.
 
 Workspace allocates the context ID independently at creation, before input
-or operations exist, as `ctx-` followed by 32 lowercase hexadecimal characters
-from 128 OS cryptographically secure random bits. The registry maps each name
-to that ID. First input import binds its canonical original Environment
-directory; active contexts cannot share that source, and update preserves it.
-Name reuse after permanent deletion allocates a fresh ID. State reconciliation
-allocates operation IDs with the same entropy and the `op-` prefix.
+or operations exist, under the
+[context identity grammar](contexts.md#storage-locking-and-publication).
+State reconciliation allocates operation IDs as `op-` followed by 32 lowercase
+hexadecimal characters from 128 OS cryptographically secure random bits.
 
-Reserve candidates exclusively, checking existing identities; a collision
-retries with fresh entropy at most 16 times. Random failure has no clock,
-process-ID, hash or weaker fallback. Pending operations and initializations
-remain attributable to their original identity. Corruption or contradictory
-mapping refuses rather than allocating a replacement. Context data resides
-beneath `contexts/<name>`; runtime records reside beneath its `state/`.
+Reserve operation candidates exclusively, checking existing identities; a
+collision retries with fresh entropy at most 16 times. Random failure has no
+clock, process-ID, hash or weaker fallback. Pending operations remain
+attributable to their original identity. Corruption or contradictory mapping
+refuses rather than allocating a replacement. Context data resides beneath
+`contexts/<name>`; runtime records reside beneath its `state/`.
 
 ## State machine
 
@@ -149,7 +144,8 @@ digest, and required ownership evidence before doing work.
 ## Plan and execution
 
 [Secrets](secrets.md#immutable-binding-and-contexts) owns confidential immutable
-binding; the lifecycle consumer interface is introduced with M1e.
+binding; its lifecycle consumer is a
+[planned port](architecture.md#planned-lifecycle-ports).
 
 Planning is pure and read-only. It performs no downloads, remote mutations,
 cache or registry writes, cleanup, lock takeover, or secret materialization.

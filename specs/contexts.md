@@ -308,7 +308,7 @@ Manifest integrity failures never fall back to external input.
 
 | Record | Required fields in canonical order |
 | --- | --- |
-| Registry | `version` (3), `idNamespace`, `nextIdentity`, `contexts` |
+| Registry | `version` (3 or 4), `idNamespace`, `nextIdentity`, `contexts`, then `controller` (version 4 only) |
 | Context record | `name`, `id`, `environmentDirectory`, `revision`, `mode`, `secretStoreType`, `directoryDevice`, `directoryInode` |
 | Reservation | `version` (2), `id`, `name` |
 | Input manifest | `version` (2), `id`, `revision`, `inputDirectory`, `environmentDirectory`, `files` |

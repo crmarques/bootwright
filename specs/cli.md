@@ -195,7 +195,7 @@ before stdin-backed replacement. No command reads an ambient desired-state confi
 user's explicit current-context selection is defined by [Contexts](contexts.md).
 
 The fixed state root is defined by
-[state reconciliation](state-reconciliation.md#durable-identities-and-private-paths).
+[Contexts](contexts.md#storage-locking-and-publication).
 
 ### Local privilege and user identity
 

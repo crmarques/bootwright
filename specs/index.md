@@ -8,6 +8,7 @@ A specified capability is not necessarily implemented or authorized.
 | --- | --- |
 | Product purpose, scope and non-goals | [Project](project.md) |
 | Domain boundaries, Go/Ansible responsibilities and dependency policy | [Architecture](architecture.md) |
+| Which package and file implement a command, and which adapters it binds | [Command and package map](architecture.md#command-and-package-map), [communication graph](architecture.md#domain-communication-graph) |
 | Self-explanatory code, minimal comments and retained implementation knowledge | [Code clarity](architecture.md#self-explanatory-code-and-retained-knowledge), [knowledge catalog](../.agents/knowledge/index.md) |
 | Desired-state grammar, compilation and kind schemas | [API](api.md), with field tables under `api/` |
 | Command behavior, invocation and lifecycle journeys | [CLI](cli.md), [command catalog](cli/commands.md), [output](cli/output.md) |
