@@ -258,7 +258,10 @@ func fetchBootstrapMetadata(ctx context.Context, method, endpoint string, egress
 	request.Header.Set("Cache-Control", "no-cache")
 	response, err := client.Do(request)
 	if err != nil {
-		return toolMetadata{}, bundleFailure("bootstrap publisher metadata could not be acquired")
+		if ctx.Err() != nil {
+			return toolMetadata{}, ctx.Err()
+		}
+		return toolMetadata{}, transportFailure("bootstrap publisher", endpoint, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK || response.Header.Get("Content-Encoding") != "" {

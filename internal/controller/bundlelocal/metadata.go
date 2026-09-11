@@ -34,7 +34,10 @@ func FetchMetadata(ctx context.Context, method, endpoint string, limit int64, eg
 	request.Header.Set("Cache-Control", "no-cache")
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, 0, bundleFailure("publisher metadata acquisition failed")
+		if ctx.Err() != nil {
+			return nil, 0, ctx.Err()
+		}
+		return nil, 0, transportFailure("publisher metadata source", endpoint, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK || response.Header.Get("Content-Encoding") != "" || response.ContentLength > limit {

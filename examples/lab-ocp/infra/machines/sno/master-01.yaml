@@ -1,0 +1,31 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: sno-master-01
+
+spec:
+  capabilities:
+    - openshift-node
+
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: sno
+
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+
+  network:
+    configRef: lab-network
+    attachmentRef: lab-network
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: sno-master-01.lab.example.test
+
+      - name: ip
+        address: 192.0.2.11/24
+        interface: enp1s0

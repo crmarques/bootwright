@@ -1,0 +1,15 @@
+apiVersion: bootwright.io/v1alpha1
+kind: DNSServer
+metadata:
+  name: lab-dns
+
+spec:
+  management: managed
+  machineRef: bastion
+  implementation: dnsmasq
+  bindAddress: 192.0.2.1
+  port: 53
+
+  endpoints:
+    - name: ip
+      addressRef: ip

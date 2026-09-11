@@ -347,7 +347,12 @@ results. No new JSON flag, lifecycle receipt or private operation log is added.
 The [diagnostic taxonomy](cli/output.md#diagnostic-taxonomy-and-order) owns
 `preflight.*` and `controller.*` failure codes; existing context, privilege,
 output and cancellation codes retain their meanings. Failures include a safe
-actionable next step. The [output contract](cli/output.md) owns streams and exit
+actionable next step. A failed acquisition names the publisher host it could
+not use and distinguishes unresolvable names, an untrusted certificate, an
+expired acquisition timeout and an unreachable endpoint, because each needs a
+different operator action and none of them is a corrupt retained dependency.
+Request paths, transport text and operating-system error strings stay private.
+The [output contract](cli/output.md) owns streams and exit
 status, including complete negative readiness reports and partial setup
 outcomes. No setup failure may imply that already verified effects rolled back.
 

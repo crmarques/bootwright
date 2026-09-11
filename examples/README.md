@@ -22,6 +22,12 @@ Validate the directory as a whole:
 bootwright validate -f examples/multidc-platform
 ```
 
+[`lab-ocp/`](lab-ocp/) is a small single-machine lab: the development
+machine is the bastion, hosts the managed proxy, DNS, NTP and artifact-server
+containers, and runs a single-node OpenShift guest on libvirt behind an
+emulated Redfish BMC. It uses documentation addresses and a synthetic domain,
+and its README lists the commands that prepare the bastion from it.
+
 ## Local work in progress
 
 `examples/wip/` is intentionally ignored. It is the place for complete

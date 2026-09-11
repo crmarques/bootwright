@@ -3,6 +3,8 @@ package bundlelocal
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/desiredstate"
 )
 
 type sourceFetcher func(context.Context, prerequisites.DependencySource, prerequisites.SetupEgress) ([]byte, error)
@@ -102,7 +105,7 @@ func receiveSource(ctx context.Context, source prerequisites.DependencySource, s
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, bundleFailure("approved dependency source could not be acquired")
+		return nil, transportFailure("approved dependency source", source.URL, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK || response.ContentLength > source.Bytes || response.Header.Get("Content-Encoding") != "" {
@@ -116,6 +119,38 @@ func receiveSource(ctx context.Context, source prerequisites.DependencySource, s
 		return nil, bundleFailure("acquired dependency does not match its approved size and SHA-256")
 	}
 	return data, nil
+}
+
+// transportFailure publishes only the endpoint host and one fixed condition:
+// transport, library and operating-system text is never a public result.
+func transportFailure(subject, endpoint string, err error) error {
+	var classified *desiredstate.Failure
+	if errors.As(err, &classified) {
+		return classified
+	}
+	host := "its approved publisher"
+	if parsed, parseErr := url.Parse(endpoint); parseErr == nil && parsed.Hostname() != "" {
+		host = parsed.Hostname()
+	}
+	condition := "could not be reached from this host"
+	remediation := "Restore this host's access to " + host + ", or select an external Proxy on the controller Machine, then repeat bastion setup."
+	var resolution *net.DNSError
+	var verification *tls.CertificateVerificationError
+	var expired interface{ Timeout() bool }
+	switch {
+	case errors.As(err, &resolution):
+		condition = "could not be resolved by this host's configured resolver"
+		if resolution.IsTimeout {
+			condition = "was not resolved before this host's resolver timed out"
+		}
+		remediation = "Make " + host + " resolvable before setup, or select an external Proxy on the controller Machine, then repeat bastion setup."
+	case errors.As(err, &verification), errors.As(err, new(x509.UnknownAuthorityError)):
+		condition = "presented a certificate the qualified system trust store does not accept"
+		remediation = "Install the required certificate authority in the system trust store, then repeat bastion setup."
+	case errors.As(err, &expired) && expired.Timeout():
+		condition = "did not answer within its bounded acquisition timeout"
+	}
+	return desiredstate.NewFailureWithRemediation("controller.setup", subject+" "+host+" "+condition, "", remediation)
 }
 
 func approvedOrigin(value *url.URL) bool {

@@ -58,7 +58,7 @@ func fetchToolMetadata(ctx context.Context, method, endpoint string, maximum int
 		if ctx.Err() != nil {
 			return toolMetadata{}, ctx.Err()
 		}
-		return toolMetadata{}, bundleFailure("target tool publisher metadata could not be acquired")
+		return toolMetadata{}, transportFailure("target tool publisher", endpoint, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode == http.StatusNotFound {

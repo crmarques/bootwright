@@ -1,0 +1,26 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: bastion
+
+spec:
+  capabilities:
+    - container-runtime
+    - libvirt
+
+  os:
+    provided: true
+
+  proxy:
+    direct: {}
+
+  network:
+    addresses:
+      - name: fqdn
+        address: bastion.lab.example.test
+
+      - name: ip
+        address: 192.0.2.1
+
+  access:
+    local: true
