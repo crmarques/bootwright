@@ -3,13 +3,142 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"syscall"
 	"testing"
 	"time"
+	"unsafe"
 )
+
+func TestTerminalFileSelectsOnlyTerminalStreams(t *testing.T) {
+	_, slave := openTestTerminal(t)
+	if file, ok := terminalFile(slave); !ok || file != slave {
+		t.Fatal("terminal stream not selected", ok, file)
+	}
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer read.Close()
+	defer write.Close()
+	if _, ok := terminalFile(write); ok {
+		t.Fatal("pipe selected as a terminal")
+	}
+	if _, ok := terminalFile(&bytes.Buffer{}); ok {
+		t.Fatal("buffer selected as a terminal")
+	}
+}
+
+// The monitor helper plays sudo's monitor: session leader in the foreground of
+// the pseudo-terminal, with the command helper parked in a background process
+// group exactly as sudo starts a command whose output is not the user's tty.
+func TestBackgroundConfirmationRequestsTerminalThroughJobControl(t *testing.T) {
+	master, slave := openTestTerminal(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	monitor := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestTerminalMonitorHelper$")
+	monitor.Env = append(os.Environ(), "BOOTWRIGHT_TERMINAL_MONITOR_HELPER=1")
+	monitor.Stdin = slave
+	var stderr bytes.Buffer
+	monitor.Stderr = &stderr
+	monitor.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
+	events, err := monitor.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := monitor.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if monitor.ProcessState == nil {
+			cancel()
+			_ = monitor.Wait()
+		}
+	})
+	reader := bufio.NewReader(events)
+	expect := func(want string) {
+		t.Helper()
+		line, err := reader.ReadString('\n')
+		if err != nil || line != want+"\n" {
+			cancel()
+			_ = monitor.Wait()
+			t.Fatalf("event %q want %q: %v stderr=%s", line, want, err, stderr.String())
+		}
+	}
+	expect("stopped:SIGTTIN")
+	if _, err := master.Write([]byte("y\n")); err != nil {
+		t.Fatal(err)
+	}
+	expect("read:y")
+	expect("exit:0")
+	if err := monitor.Wait(); err != nil {
+		t.Fatal(err, stderr.String())
+	}
+}
+
+func TestTerminalMonitorHelper(t *testing.T) {
+	if os.Getenv("BOOTWRIGHT_TERMINAL_MONITOR_HELPER") != "1" {
+		return
+	}
+	command := exec.Command(os.Args[0], "-test.run=^TestTerminalCommandHelper$")
+	command.Env = append(os.Environ(), "BOOTWRIGHT_TERMINAL_COMMAND_HELPER=1")
+	command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, os.Stderr
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := command.Start(); err != nil {
+		fmt.Println("start:", err)
+		os.Exit(1)
+	}
+	pid := command.Process.Pid
+	var status syscall.WaitStatus
+	if _, err := syscall.Wait4(pid, &status, syscall.WUNTRACED, nil); err != nil || !status.Stopped() || status.StopSignal() != syscall.SIGTTIN {
+		fmt.Printf("stopped:none %v %v\n", err, status)
+		os.Exit(1)
+	}
+	fmt.Println("stopped:SIGTTIN")
+	group := int32(pid)
+	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, os.Stdin.Fd(), syscall.TIOCSPGRP, uintptr(unsafe.Pointer(&group))); errno != 0 {
+		fmt.Println("grant:", errno)
+		os.Exit(1)
+	}
+	if err := syscall.Kill(pid, syscall.SIGCONT); err != nil {
+		fmt.Println("continue:", err)
+		os.Exit(1)
+	}
+	if _, err := syscall.Wait4(pid, &status, 0, nil); err != nil {
+		fmt.Println("wait:", err)
+		os.Exit(1)
+	}
+	fmt.Printf("exit:%d\n", status.ExitStatus())
+	os.Exit(0)
+}
+
+func TestTerminalCommandHelper(t *testing.T) {
+	if os.Getenv("BOOTWRIGHT_TERMINAL_COMMAND_HELPER") != "1" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var answer []byte
+	for {
+		var next [1]byte
+		if _, err := readStdin(ctx, next[:]); err != nil {
+			fmt.Println("error:", err)
+			os.Exit(1)
+		}
+		if next[0] == '\n' {
+			break
+		}
+		answer = append(answer, next[0])
+	}
+	fmt.Printf("read:%s\n", answer)
+	os.Exit(0)
+}
 
 func TestConfirmationInputHonorsCancellationAndReadsNoAhead(t *testing.T) {
 	read, write, err := os.Pipe()

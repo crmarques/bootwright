@@ -215,6 +215,11 @@ refuse that executable path fail closed. Sudo owns
 terminal password handling; Bootwright never captures the password. JSON or
 noninteractive invocation uses noninteractive sudo and fails without cached or
 passwordless authorization. Preserve argv, stdin payloads, outputs and status.
+An interactive invocation hands sudo the invoking terminal itself on every
+standard stream it occupies, so sudo's own terminal relay carries prompts and
+answers to the child. A confirmation read whose terminal belongs to another
+foreground process group requests the terminal through job control instead of
+waiting for input that cannot arrive.
 
 The supervisor owns bounded `sudo -n -v` refresh subprocesses during that child.
 Keep the same parent and terminal identity. An unambiguous positive effective

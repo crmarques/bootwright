@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -19,6 +20,38 @@ func (f executorFunc) Run(ctx context.Context, c Command) (int, error) { return 
 type delayFunc func(context.Context, time.Duration) error
 
 func (f delayFunc) Wait(ctx context.Context, d time.Duration) error { return f(ctx, d) }
+
+func TestSupervisorHandsFileStreamsToTheChildUnwrapped(t *testing.T) {
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer read.Close()
+	defer write.Close()
+	var buffered bytes.Buffer
+	var child Command
+	executor := executorFunc(func(_ context.Context, c Command) (int, error) {
+		if reflect.DeepEqual(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) {
+			return 1, nil
+		}
+		child = c
+		return 0, nil
+	})
+	delay := delayFunc(func(ctx context.Context, _ time.Duration) error {
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	options := SudoOptions{Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: executor, Delay: delay, Output: write, Error: &buffered}
+	if code, err := NewSupervisor(options).Run(context.Background(), nil); err != nil || code != 0 {
+		t.Fatal(code, err)
+	}
+	if child.Output != io.Writer(write) {
+		t.Fatalf("file stream wrapped as %T", child.Output)
+	}
+	if _, wrapped := child.Error.(synchronizedWriter); !wrapped {
+		t.Fatalf("buffered stream not synchronized: %T", child.Error)
+	}
+}
 
 func TestSupervisorRefreshUsesSameExecutorAndOriginalArgumentVector(t *testing.T) {
 	var mu sync.Mutex

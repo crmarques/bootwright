@@ -49,7 +49,19 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 		// Without a terminal sudo cannot prompt, so its refusal text carries no
 		// operator action and is not a product result.
 		errOut := &invocationError{writer: stderr, withhold: noninteractive}
-		supervisor := privilege.NewSupervisor(privilege.SudoOptions{Executable: executable, Sudo: sudo, Executor: privilege.ProcessExecutor{}, Delay: privilege.Timer{}, NonInteractive: noninteractive, Input: os.Stdin, Output: output, Error: errOut})
+		var childOutput, childError io.Writer = output, errOut
+		if !noninteractive {
+			// Sudo relays the terminal only while the child inherits it on stdin
+			// and stdout; behind a pipe it parks the child in the background of a
+			// new pseudo-terminal until the child claims it through job control.
+			if file, ok := terminalFile(stdout); ok {
+				childOutput = file
+			}
+			if file, ok := terminalFile(stderr); ok {
+				childError = file
+			}
+		}
+		supervisor := privilege.NewSupervisor(privilege.SudoOptions{Executable: executable, Sudo: sudo, Executor: privilege.ProcessExecutor{}, Delay: privilege.Timer{}, NonInteractive: noninteractive, Input: os.Stdin, Output: childOutput, Error: childError})
 		code, err := supervisor.Run(operation, args)
 		errOut.Close()
 		if err != nil {

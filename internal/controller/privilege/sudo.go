@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -57,10 +58,10 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 		return 1, err
 	}
 	var outputLock sync.Mutex
-	if options.Output != nil {
+	if options.Output != nil && !inheritedDescriptor(options.Output) {
 		options.Output = synchronizedWriter{lock: &outputLock, writer: options.Output}
 	}
-	if options.Error != nil {
+	if options.Error != nil && !inheritedDescriptor(options.Error) {
 		options.Error = synchronizedWriter{lock: &outputLock, writer: options.Error}
 	}
 	environment := []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C"}
@@ -212,6 +213,13 @@ func (b *limitedOutput) Write(p []byte) (int, error) {
 	}
 	b.data = append(b.data, p...)
 	return length, nil
+}
+
+// A file reaches the child as its own descriptor. Wrapping it would copy the
+// stream through this process and turn an inherited terminal into a pipe.
+func inheritedDescriptor(writer io.Writer) bool {
+	_, ok := writer.(*os.File)
+	return ok
 }
 
 type synchronizedWriter struct {

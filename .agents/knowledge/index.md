@@ -13,6 +13,7 @@ investigating or designing, then open only the relevant page.
 | OpenShift agent installer, bare-metal disk identity, pre-wipe proof, Redfish-to-installer race | [openshift-agent-disk-safety.md](openshift-agent-disk-safety.md) |
 | Bastion private Python/Ansible runtime, isolated interpreter, ELF loader invocation, preload list, glibc/libgcc foundation, native package read lock | [controller-runtime-isolation.md](controller-runtime-isolation.md) |
 | Managed artifact server, `ubi9/nginx-124`, Quadlet unit, `getgrnam` failure, container user and ports, empty-root 404, certificate fingerprint probe | [artifact-server-nginx-runtime.md](artifact-server-nginx-runtime.md) |
+| Sudo `use_pty`, confirmation hangs after `y`, elevated child in a background process group, `SIGTTIN`/`SIGTTOU` handoff, terminal streams through the supervisor | [sudo-pty-terminal-handoff.md](sudo-pty-terminal-handoff.md) |
 
 Add one focused page for each durable lesson and index it with searchable topic
 terms, affected symbols, or error text. Each new or revised entry identifies the

@@ -14,8 +14,12 @@ import (
 // These capabilities are acquired lazily after command safeguards authorize
 // confirmation or explicit secret input. Polling keeps cancellation synchronous.
 func stdinTerminal() (bool, error) {
+	return terminalDescriptor(os.Stdin.Fd())
+}
+
+func terminalDescriptor(fd uintptr) (bool, error) {
 	var terminal syscall.Termios
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, os.Stdin.Fd(), syscall.TCGETS, uintptr(unsafe.Pointer(&terminal)))
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, fd, syscall.TCGETS, uintptr(unsafe.Pointer(&terminal)))
 	if errno == syscall.ENOTTY {
 		return false, nil
 	}
@@ -25,6 +29,20 @@ func stdinTerminal() (bool, error) {
 	return true, nil
 }
 
+// terminalFile reports a stream an elevated child can inherit as the same
+// terminal descriptor; every other writer is copied through the supervisor.
+func terminalFile(writer io.Writer) (*os.File, bool) {
+	file, ok := writer.(*os.File)
+	if !ok {
+		return nil, false
+	}
+	terminal, err := terminalDescriptor(file.Fd())
+	if err != nil || !terminal {
+		return nil, false
+	}
+	return file, true
+}
+
 func readStdin(ctx context.Context, buffer []byte) (int, error) {
 	return readInputFD(ctx, int(os.Stdin.Fd()), buffer)
 }
@@ -32,6 +50,12 @@ func readStdin(ctx context.Context, buffer []byte) (int, error) {
 func readInputFD(ctx context.Context, fd int, buffer []byte) (int, error) {
 	if len(buffer) == 0 {
 		return 0, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	if n, err := requestBackgroundTerminal(fd, buffer); n != 0 || err != nil {
+		return n, err
 	}
 	descriptor := struct {
 		FD       int32
@@ -68,6 +92,25 @@ func readInputFD(ctx context.Context, fd int, buffer []byte) (int, error) {
 		}
 		return n, err
 	}
+}
+
+// A process group behind its controlling terminal receives nothing until job
+// control grants the terminal, and poll never asks for it. One real read from
+// the background raises SIGTTIN, so a foreground sudo or a shell's fg can hand
+// the terminal over before polling starts; an orphaned group reads EIO instead.
+func requestBackgroundTerminal(fd int, buffer []byte) (int, error) {
+	var foreground int32
+	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), syscall.TIOCGPGRP, uintptr(unsafe.Pointer(&foreground))); errno != 0 || int(foreground) == syscall.Getpgrp() {
+		return 0, nil
+	}
+	n, err := readReadyInput(fd, buffer)
+	if err == syscall.EINTR || err == syscall.EAGAIN {
+		return 0, nil
+	}
+	if n == 0 && err == nil {
+		return 0, io.EOF
+	}
+	return n, err
 }
 
 // A terminal can flush a ready byte when Ctrl-C arrives. A nonblocking read
