@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller/privilege"
 	"github.com/crmarques/bootwright/internal/desiredstate/encoding"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -70,10 +71,13 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 	}
 	confirmer := cli.NewConfirmation(readStdin, stderr, stdinTerminal)
 	process := processDependencies{
-		Confirmer:   confirmer,
-		SecretInput: secretInputFunc(readStdin),
-		Progress:    cli.NewControllerProgressPresenter(stdout),
-		Presenter:   cli.NewControllerPlanPresenter(stdout),
+		Confirmer:          confirmer,
+		SecretInput:        secretInputFunc(readStdin),
+		Progress:           cli.NewControllerProgressPresenter(stdout),
+		Presenter:          cli.NewControllerPlanPresenter(stdout),
+		LifecycleProgress:  cli.NewLifecycleProgressPresenter(stdout),
+		LifecyclePresenter: cli.NewLifecyclePlanPresenter(stdout),
+		Executable:         lifecycle.Executable{Version: version, Commit: commit},
 	}
 	return runServices(ctx, args, stdout, stderr, wireServices(process), beginSignalOperation)
 }

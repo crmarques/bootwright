@@ -1,0 +1,26 @@
+---
+- name: Complete the qualified execution handoff
+  bootwright.core.artifact_server_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Observe the managed artifact server without changing it
+  bootwright.core.artifact_server_inspect:
+    request: '{{ bootwright_artifact_server_request }}'
+    readiness: true
+    attempts: 1
+  register: infra_artifact_server_nginx_observation
+
+- name: Publish bounded artifact-server observation evidence
+  bootwright.core.artifact_server_protocol:
+    phase: completed
+    outcome: unchanged
+    digest: '{{ bootwright_artifact_server_digest }}'
+    request: '{{ bootwright_artifact_server_request }}'
+    observation: '{{ infra_artifact_server_nginx_observation.observation }}'
+    listeners: '{{ infra_artifact_server_nginx_observation.listeners }}'
+    removed: >-
+      {{ not infra_artifact_server_nginx_observation.observation.unit
+         and not infra_artifact_server_nginx_observation.observation.containerPresent
+         and not infra_artifact_server_nginx_observation.observation.contentRoot }}
+  no_log: true

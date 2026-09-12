@@ -24,6 +24,7 @@ type contextSecretHooks struct {
 type secretServices struct {
 	custody    cli.SecretService
 	encryption cli.EncryptionService
+	binder     *custody.Service
 	hooks      contextSecretHooks
 }
 
@@ -35,8 +36,10 @@ func wireSecrets(deps serviceDependencies, compiler compilation.Compiler) secret
 	selected := contexts.SelectionWorkspace{Workspace: deps.Workspace, Selection: deps.Selection}
 	access := secretstore.NewAccess(selected, resolver, deps.SessionMaterial)
 	acquisition := material.New(deps.SecretInput, material.Options{Operator: deps.Operator})
+	secrets := custody.New(access, compiler, acquisition, deps.Confirmer)
 	return secretServices{
-		custody:    custody.New(access, compiler, acquisition, deps.Confirmer),
+		custody:    secrets,
+		binder:     secrets,
 		encryption: encryption.New(access, deps.Confirmer),
 		hooks: contextSecretHooks{
 			Validate: func(ctx context.Context, configuration contexts.Configuration) error {

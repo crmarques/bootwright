@@ -6,6 +6,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/encryption"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -25,6 +26,10 @@ type commandResult struct {
 	deletion   *contexts.DeleteResult
 	effective  *compilation.EffectiveResult
 	controller *prerequisites.Report
+
+	lifecyclePlan      *lifecycle.PlanResult
+	lifecycleStatus    *lifecycle.StatusResult
+	lifecycleOperation *lifecycle.OperationResult
 
 	secretMutation     *custody.MutationResult
 	secretCheck        *custody.CheckResult
@@ -76,7 +81,7 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 	case "preflight add-ons":
 		return commandResult{}, s.invokeAddOnPreflight(ctx, path, &values, args)
 	case "plan", "status", "apply", "destroy":
-		return commandResult{}, s.invokeLifecycle(ctx, path, &values, args)
+		return s.invokeLifecycle(ctx, path, &values, args)
 	case "render":
 		return commandResult{}, s.invokeArtifacts(ctx, path, &values, args)
 	case "render installer":

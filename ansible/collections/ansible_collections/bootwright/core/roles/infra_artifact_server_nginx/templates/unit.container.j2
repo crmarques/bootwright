@@ -1,0 +1,29 @@
+{#
+  Quadlet definition for one managed artifact server. The container runs as root
+  so the authored listener ports are served exactly as declared; nginx drops its
+  workers to the image's application user through the configuration.
+#}
+[Unit]
+Description=Bootwright managed artifact server {{ bootwright_artifact_server_request.identity.service }}
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image={{ bootwright_artifact_server_request.image }}
+ContainerName={{ bootwright_artifact_server_request.unit }}
+Network=host
+User=0
+Entrypoint=/usr/sbin/nginx
+Exec=-g "daemon off;"
+Volume={{ infra_artifact_server_nginx_config_dir }}/nginx.conf:/etc/nginx/nginx.conf:ro,Z
+{% if bootwright_artifact_server_request.tls is defined and bootwright_artifact_server_request.tls %}
+Volume={{ infra_artifact_server_nginx_tls_dir }}:{{ infra_artifact_server_nginx_tls_dir }}:ro,Z
+{% endif %}
+Volume={{ infra_artifact_server_nginx_served_dir }}:{{ infra_artifact_server_nginx_served_dir }}:ro,Z
+
+[Service]
+Restart=always
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

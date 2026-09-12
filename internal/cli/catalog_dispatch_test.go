@@ -34,6 +34,7 @@ func TestCommandModesComeFromTheCatalog(t *testing.T) {
 		"secret encryption init": true, "secret encryption status": true,
 		"secret encryption rotate": true, "validate": true, "render effective": true,
 		"bastion setup": true, "preflight bastion": true,
+		"plan": true, "status": true, "apply": true, "destroy": true,
 	}
 	for _, spec := range commandCatalog() {
 		if implementedOperation(spec.path) != want[spec.path] {

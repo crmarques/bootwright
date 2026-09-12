@@ -27,6 +27,11 @@ func applicationValues() packageSymbols {
 		"internal/desiredstate/compilation": {"State": true},
 		"internal/workspace/contexts":       {"Configuration": true},
 		"internal/controller/prerequisites": {"SetupReceipt": true},
+		// Immutable request and evidence values an adapter must construct and
+		// read; they bind no replaceable service.
+		"internal/infrastructureservices/artifactserver": {"Request": true, "Evidence": true},
+		"internal/reconciliation":                        {"Plan": true, "Evidence": true},
+		"internal/reconciliation/operationstore":         {"Log": true},
 	}
 }
 

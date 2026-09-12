@@ -37,6 +37,18 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		if validControllerReport(result.controller) && successfulControllerReport(path, result.controller) {
 			return true, writeControllerReport(out, path, result.controller)
 		}
+	case "plan":
+		if result.lifecyclePlan != nil {
+			return true, writeLifecyclePlan(out, result.lifecyclePlan)
+		}
+	case "apply", "destroy":
+		if result.lifecycleOperation != nil {
+			return true, writeLifecycleOperation(out, result.lifecycleOperation)
+		}
+	case "status":
+		if result.lifecycleStatus != nil {
+			return true, writeLifecycleStatus(out, result.lifecycleStatus, selectedJSON(command))
+		}
 	case "validate":
 		if result.validation != nil {
 			return true, writeValidation(out, errOut, path, result.validation, selectedJSON(command))

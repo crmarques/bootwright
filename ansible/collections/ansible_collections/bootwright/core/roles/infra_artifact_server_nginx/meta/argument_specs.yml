@@ -1,0 +1,65 @@
+argument_specs:
+  apply:
+    short_description: Realize one frozen managed artifact server.
+    options: &request
+      bootwright_artifact_server_request:
+        type: dict
+        required: true
+        options:
+          bindAddress:
+            type: str
+            required: true
+          contentRoot:
+            type: str
+            required: true
+          egress:
+            type: dict
+            required: true
+          endpoints:
+            type: list
+            elements: dict
+            required: true
+          identity:
+            type: dict
+            required: true
+          image:
+            type: str
+            required: true
+          listeners:
+            type: list
+            elements: dict
+            required: true
+          placement:
+            type: dict
+            required: true
+          tls:
+            type: dict
+            required: false
+          unit:
+            type: str
+            required: true
+          version:
+            type: str
+            required: true
+            choices: [artifact-server-nginx-v1]
+      bootwright_artifact_server_material:
+        type: dict
+        required: true
+        options:
+          certificate:
+            type: str
+            required: false
+          privateKey:
+            type: str
+            required: false
+          fingerprint:
+            type: str
+            required: false
+
+  observe:
+    short_description: Observe one frozen managed artifact server without changing it.
+    options: *request
+
+  destroy:
+    short_description: Remove one frozen managed artifact server and prove its absence.
+    options: *request

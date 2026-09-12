@@ -88,7 +88,9 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 			prefix := "[FAIL] cli.not-implemented: bootwright "
 			if args[0] == "validate" && len(args) > 1 || args[0] == "context" && (args[1] == "init" || args[1] == "update") {
 				prefix = "[FAIL] input.not-found "
-			} else if args[0] == "context" || args[0] == "secret" || args[0] == "validate" || args[0] == "render" && len(args) > 1 && args[1] == "effective" {
+			} else if args[0] == "context" || args[0] == "secret" || args[0] == "validate" ||
+				args[0] == "plan" || args[0] == "status" || args[0] == "apply" || args[0] == "destroy" ||
+				args[0] == "render" && len(args) > 1 && args[1] == "effective" {
 				prefix = "[FAIL] context.state:"
 			}
 			if args[0] == "context" && args[1] == "list" {

@@ -1,0 +1,234 @@
+---
+- name: Validate the frozen artifact-server request
+  ansible.builtin.assert:
+    that:
+      - bootwright_artifact_server_request.version == 'artifact-server-nginx-v1'
+      - bootwright_artifact_server_request.unit is string
+      - bootwright_artifact_server_request.contentRoot.startswith('/var/lib/bootwright-services/')
+      - bootwright_artifact_server_request.image is search('@sha256:[0-9a-f]{64}$')
+      - bootwright_artifact_server_request.listeners | length > 0
+      - bootwright_artifact_server_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.artifact_server_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Report image acquisition
+  bootwright.core.artifact_server_protocol:
+    phase: group
+    group: pull-image
+    status: running
+  no_log: true
+
+- name: Check whether the pinned server image is already present
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - image
+      - exists
+      - '{{ bootwright_artifact_server_request.image }}'
+  register: infra_artifact_server_nginx_image_present
+  failed_when: false
+  changed_when: false
+
+- name: Acquire the pinned server image
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - pull
+      - '{{ bootwright_artifact_server_request.image }}'
+  environment:
+    HTTP_PROXY: '{{ bootwright_artifact_server_request.egress.httpProxy | default("") }}'
+    HTTPS_PROXY: '{{ bootwright_artifact_server_request.egress.httpsProxy | default("") }}'
+    NO_PROXY: '{{ bootwright_artifact_server_request.egress.noProxy | default([]) | join(",") }}'
+  register: infra_artifact_server_nginx_pull
+  when: infra_artifact_server_nginx_image_present.rc != 0
+  changed_when: infra_artifact_server_nginx_image_present.rc != 0
+
+- name: Report image acquisition completion
+  bootwright.core.artifact_server_protocol:
+    phase: group
+    group: pull-image
+    status: ok
+  no_log: true
+
+- name: Report configuration publication
+  bootwright.core.artifact_server_protocol:
+    phase: group
+    group: publish-configuration
+    status: running
+  no_log: true
+
+- name: Create the owned service directories
+  ansible.builtin.file:
+    path: '{{ item.path }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '{{ item.mode }}'
+  loop:
+    - path: '{{ bootwright_artifact_server_request.contentRoot }}'
+      mode: '0755'
+    - path: '{{ infra_artifact_server_nginx_config_dir }}'
+      mode: '0755'
+    - path: '{{ infra_artifact_server_nginx_served_dir }}'
+      mode: '0755'
+  loop_control:
+    label: '{{ item.path }}'
+  register: infra_artifact_server_nginx_directories
+
+- name: Create the private serving material directory
+  ansible.builtin.file:
+    path: '{{ infra_artifact_server_nginx_tls_dir }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  when: bootwright_artifact_server_material.certificate | default('') | length > 0
+  register: infra_artifact_server_nginx_tls_directory
+
+- name: Publish the serving certificate
+  ansible.builtin.copy:
+    src: '{{ bootwright_artifact_server_material.certificate }}'
+    dest: '{{ infra_artifact_server_nginx_tls_dir }}/server.crt'
+    owner: root
+    group: root
+    mode: '0644'
+  when: bootwright_artifact_server_material.certificate | default('') | length > 0
+  register: infra_artifact_server_nginx_certificate
+  no_log: true
+  diff: false
+
+- name: Publish the serving private key
+  ansible.builtin.copy:
+    src: '{{ bootwright_artifact_server_material.privateKey }}'
+    dest: '{{ infra_artifact_server_nginx_tls_dir }}/server.key'
+    owner: root
+    group: root
+    mode: '0600'
+  when: bootwright_artifact_server_material.privateKey | default('') | length > 0
+  register: infra_artifact_server_nginx_key
+  no_log: true
+  diff: false
+
+- name: Publish the server configuration
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: '{{ infra_artifact_server_nginx_config_dir }}/nginx.conf'
+    owner: root
+    group: root
+    mode: '0644'
+  register: infra_artifact_server_nginx_configuration
+
+- name: Publish the container unit definition
+  ansible.builtin.template:
+    src: unit.container.j2
+    dest: '{{ infra_artifact_server_nginx_unit_path }}'
+    owner: root
+    group: root
+    mode: '0644'
+  register: infra_artifact_server_nginx_unit
+
+- name: Reload the host service manager so the unit generator runs
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - daemon-reload
+  changed_when: false
+
+- name: Report configuration publication completion
+  bootwright.core.artifact_server_protocol:
+    phase: group
+    group: publish-configuration
+    status: ok
+  no_log: true
+
+- name: Report service start
+  bootwright.core.artifact_server_protocol:
+    phase: group
+    group: start-service
+    status: running
+  no_log: true
+
+- name: Observe the service before starting it
+  bootwright.core.artifact_server_inspect:
+    request: '{{ bootwright_artifact_server_request }}'
+  register: infra_artifact_server_nginx_before
+
+- name: Start the managed service
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - start
+      - '{{ infra_artifact_server_nginx_service }}'
+  when: infra_artifact_server_nginx_before.observation.unit != 'active'
+  changed_when: infra_artifact_server_nginx_before.observation.unit != 'active'
+
+- name: Restart the managed service after a configuration change
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - restart
+      - '{{ infra_artifact_server_nginx_service }}'
+  when:
+    - infra_artifact_server_nginx_before.observation.unit == 'active'
+    - infra_artifact_server_nginx_configuration is changed or infra_artifact_server_nginx_unit is changed
+      or infra_artifact_server_nginx_certificate is changed or infra_artifact_server_nginx_key is changed
+  changed_when: true
+
+- name: Report service start completion
+  bootwright.core.artifact_server_protocol:
+    phase: group
+    group: start-service
+    status: ok
+  no_log: true
+
+- name: Report readiness verification
+  bootwright.core.artifact_server_protocol:
+    phase: group
+    group: verify-readiness
+    status: running
+  no_log: true
+
+- name: Prove every declared listener answers
+  bootwright.core.artifact_server_inspect:
+    request: '{{ bootwright_artifact_server_request }}'
+    readiness: true
+  register: infra_artifact_server_nginx_after
+
+- name: Refuse an unproved listener
+  ansible.builtin.assert:
+    that:
+      - infra_artifact_server_nginx_after.unproved | length == 0
+    fail_msg: a declared artifact-server listener did not answer within its readiness window
+    quiet: true
+
+- name: Report readiness completion
+  bootwright.core.artifact_server_protocol:
+    phase: group
+    group: verify-readiness
+    status: ok
+  no_log: true
+
+- name: Publish bounded artifact-server completion evidence
+  bootwright.core.artifact_server_protocol:
+    phase: completed
+    outcome: >-
+      {{ 'changed'
+         if (infra_artifact_server_nginx_directories is changed
+             or infra_artifact_server_nginx_tls_directory is changed
+             or infra_artifact_server_nginx_certificate is changed
+             or infra_artifact_server_nginx_key is changed
+             or infra_artifact_server_nginx_configuration is changed
+             or infra_artifact_server_nginx_unit is changed
+             or infra_artifact_server_nginx_pull is changed
+             or infra_artifact_server_nginx_before.observation.unit != 'active')
+         else 'unchanged' }}
+    digest: '{{ bootwright_artifact_server_digest }}'
+    request: '{{ bootwright_artifact_server_request }}'
+    observation: '{{ infra_artifact_server_nginx_after.observation }}'
+    listeners: '{{ infra_artifact_server_nginx_after.listeners }}'
+  no_log: true

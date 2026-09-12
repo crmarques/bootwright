@@ -24,7 +24,6 @@ func stubCapabilities() map[string]bool {
 		"internal/machine/inventory":             true,
 		"internal/managedos/media":               true,
 		"internal/nativeartifacts/rendering":     true,
-		"internal/reconciliation/lifecycle":      true,
 		"internal/storage/preflight":             true,
 		"internal/storage/rendering":             true,
 		"internal/trust/enrollment":              true,

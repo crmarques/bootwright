@@ -1,0 +1,272 @@
+package lifecycle
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
+	"github.com/crmarques/bootwright/internal/secrets"
+)
+
+// attempt runs one block: it allocates and records the attempt before the
+// first side effect, executes it inside the controller's private runtime, then
+// records the durable outcome its evidence justifies.
+func (s Service) attempt(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, position, total int) (reconciliation.BlockState, error) {
+	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
+	if !ok {
+		return reconciliation.BlockFailed, failure("lifecycle.state",
+			"this executable does not offer the implementation this block froze",
+			"install the executable that registered this operation")
+	}
+	number, err := store.StartAttempt(ctx, operation.ID, block.ID)
+	if err != nil {
+		return reconciliation.BlockPending, err
+	}
+	logPath, err := operationstore.AttemptLogPath(operation.ID, block.ID, number, 0)
+	if err != nil {
+		return reconciliation.BlockPending, err
+	}
+	log, err := store.OpenLog(ctx, logPath)
+	if err != nil {
+		return reconciliation.BlockUnknown, logFault(err)
+	}
+	defer func() { _ = log.Close(ctx) }()
+	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: "running", Position: position, Total: total})
+	result, runErr := s.invoke(ctx, tx, operation, block, material, log, func(inner context.Context, execution Execution) (Result, error) {
+		if operation.Verb == reconciliation.Destroy {
+			return capability.Destroy(inner, execution)
+		}
+		return capability.Apply(inner, execution)
+	})
+	outcome := result.Outcome
+	if !reconciliation.ValidOutcome(outcome) {
+		outcome = reconciliation.OutcomeUnknown
+	}
+	if runErr != nil && errors.Is(runErr, context.Canceled) {
+		outcome = reconciliation.OutcomeCanceled
+	}
+	effect, state, err := reconciliation.AttemptTransition(outcome)
+	if err != nil {
+		return reconciliation.BlockUnknown, err
+	}
+	_ = log.Append(ctx, operationstore.LogRecord{Event: "outcome", Block: block.ID, Detail: string(outcome)})
+	if err := store.CompleteAttempt(ctx, operation.ID, block.ID, number, outcome, effect, state, result.Evidence); err != nil {
+		return reconciliation.BlockUnknown, err
+	}
+	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: string(state), Position: position, Total: total})
+	return state, runErr
+}
+
+// resolveUnknown observes the exact frozen request read-only under a freshly
+// allocated resolution identity and log, before any observation begins.
+func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material) (reconciliation.BlockState, error) {
+	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
+	if !ok {
+		return reconciliation.BlockUnknown, failure("lifecycle.state",
+			"this executable cannot observe the implementation this block froze",
+			"install the executable that registered this operation")
+	}
+	attemptNumber, err := store.LastAttempt(ctx, operation.ID, block.ID)
+	if err != nil {
+		return reconciliation.BlockUnknown, err
+	}
+	number, err := store.StartResolution(ctx, operation.ID, block.ID, attemptNumber)
+	if err != nil {
+		return reconciliation.BlockUnknown, err
+	}
+	logPath, err := operationstore.AttemptLogPath(operation.ID, block.ID, attemptNumber, number)
+	if err != nil {
+		return reconciliation.BlockUnknown, err
+	}
+	log, err := store.OpenLog(ctx, logPath)
+	if err != nil {
+		return reconciliation.BlockUnknown, logFault(err)
+	}
+	defer func() { _ = log.Close(ctx) }()
+	var observation Observation
+	_, runErr := s.invoke(ctx, tx, operation, block, material, log, func(inner context.Context, execution Execution) (Result, error) {
+		execution.Resolution = number
+		value, err := capability.Observe(inner, execution)
+		observation = value
+		return Result{Outcome: reconciliation.OutcomeUnknown}, err
+	})
+	effect := observation.Effect
+	if !reconciliation.ValidEffectState(effect) || runErr != nil {
+		effect = reconciliation.EffectUnknown
+	}
+	resolvedEffect, state, _, err := reconciliation.ResolutionTransition(effect)
+	if err != nil {
+		return reconciliation.BlockUnknown, err
+	}
+	_ = log.Append(ctx, operationstore.LogRecord{Event: "resolution", Block: block.ID, Detail: string(resolvedEffect)})
+	if err := store.CompleteResolution(ctx, operation.ID, block.ID, attemptNumber, number, resolvedEffect, state, observation.Evidence); err != nil {
+		return reconciliation.BlockUnknown, err
+	}
+	if state != reconciliation.BlockDone {
+		return state, failure("lifecycle.unknown",
+			"the frozen effect could not be resolved from live evidence",
+			"repeat the operation once the target is reachable, or restore the host it ran against")
+	}
+	return state, nil
+}
+
+// invoke opens the controller's approved bundle and runs the capability inside
+// the private Python execution boundary, exactly as bastion setup does.
+func (s Service) invoke(ctx context.Context, tx Transaction, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, log *operationstore.Log, call func(context.Context, Execution) (Result, error)) (Result, error) {
+	view := tx.Controller()
+	receipt := view.State.Receipt
+	if receipt.Definition == nil {
+		return Result{Outcome: reconciliation.OutcomeFailed}, failure("controller.state",
+			"the retained bastion setup has no execution definition",
+			"run bastion setup --context "+tx.Identity().Name)
+	}
+	if view.OpenBundle == nil {
+		return Result{Outcome: reconciliation.OutcomeFailed}, failure("controller.state", "the approved execution bundle is unavailable", "run bastion setup --context "+tx.Identity().Name)
+	}
+	area, err := view.OpenBundle(ctx, receipt.CatalogDigest)
+	if err != nil {
+		return Result{Outcome: reconciliation.OutcomeFailed}, err
+	}
+	if area == nil {
+		return Result{Outcome: reconciliation.OutcomeFailed}, failure("controller.state", "the approved execution bundle is missing", "run bastion setup --context "+tx.Identity().Name)
+	}
+	location, err := area.Location(ctx)
+	if err != nil {
+		return Result{Outcome: reconciliation.OutcomeFailed}, err
+	}
+	result := Result{Outcome: reconciliation.OutcomeUnknown}
+	err = s.guard.WithPython(ctx, area, receipt.Definition.Execution, func(launch prerequisites.PythonLaunch, _ func() error) error {
+		execution := Execution{
+			Operation: operation.ID, Attempt: 0, Block: block, Launch: launch, Bundle: location, Area: area,
+			Material: material,
+			Log: func(inner context.Context, record operationstore.LogRecord) error {
+				return log.Append(inner, record)
+			},
+			Progress: func(inner context.Context, group, status string) {
+				s.report(inner, ProgressEvent{Block: block.ID, Group: group, Status: status})
+			},
+		}
+		value, callErr := call(ctx, execution)
+		result = value
+		return callErr
+	})
+	return result, err
+}
+
+func (s Service) report(ctx context.Context, event ProgressEvent) {
+	if s.options.Progress != nil {
+		s.options.Progress.ReportProgress(ctx, event)
+	}
+}
+
+// project publishes the context mutation evidence the operation state implies.
+// The operation record is authoritative; the evidence is its projection.
+func (s Service) project(ctx context.Context, tx Transaction, verb reconciliation.Verb, state reconciliation.OperationState) error {
+	evidence, err := reconciliation.EvidenceFor(verb, state)
+	if err != nil {
+		return err
+	}
+	data, err := evidence.Bytes()
+	if err != nil {
+		return err
+	}
+	return tx.PublishEvidence(ctx, data)
+}
+
+// finish records the operation's terminal state, releases what a completed
+// removal no longer owns, and assembles the result the CLI renders.
+func (s Service) finish(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, result *OperationResult) (*OperationResult, error) {
+	ordered := make([]reconciliation.BlockState, 0, len(plan.Blocks))
+	for _, block := range plan.Blocks {
+		state := states[block.ID]
+		if state == "" {
+			state = reconciliation.BlockPending
+		}
+		ordered = append(ordered, state)
+	}
+	next, err := reconciliation.NextOperationState(ordered)
+	if err != nil {
+		return result, err
+	}
+	current, err := store.ReadOperation(ctx, operation.ID)
+	if err != nil {
+		return result, err
+	}
+	current.State = next
+	if err := store.UpdateOperation(ctx, current); err != nil {
+		return result, err
+	}
+	if next == reconciliation.OperationDone && operation.Verb == reconciliation.Destroy {
+		if err := tx.ReleaseReservations(ctx); err != nil {
+			return result, err
+		}
+	}
+	if err := s.project(ctx, tx, operation.Verb, next); err != nil {
+		return result, err
+	}
+	result.Blocks = blockResults(plan, states)
+	logs, err := store.LogPaths(ctx, operation.ID, plan)
+	if err == nil {
+		result.Logs = logs
+	}
+	result.Receipt = Receipt{Operation: operation.ID, Verb: string(operation.Verb), State: string(next), Next: nextAction(operation.Verb, next, states)}
+	if next == reconciliation.OperationDone {
+		return result, nil
+	}
+	return result, terminalFailure(next)
+}
+
+func terminalFailure(state reconciliation.OperationState) error {
+	if state == reconciliation.OperationUnknown {
+		return failure("lifecycle.unknown",
+			"an effect has an unresolved outcome",
+			"repeat the operation to resolve it from live evidence")
+	}
+	return failure("lifecycle.state",
+		"the operation did not complete",
+		"repeat the operation to continue it")
+}
+
+func nextAction(verb reconciliation.Verb, state reconciliation.OperationState, states map[string]reconciliation.BlockState) string {
+	switch state {
+	case reconciliation.OperationDone:
+		if verb == reconciliation.Apply {
+			return "destroy"
+		}
+		return "none"
+	case reconciliation.OperationUnknown:
+		return "resolve"
+	}
+	_ = states
+	return "continue-" + string(verb)
+}
+
+func blockResults(plan reconciliation.Plan, states map[string]reconciliation.BlockState) []BlockResult {
+	out := make([]BlockResult, 0, len(plan.Blocks))
+	for _, block := range plan.Blocks {
+		state := states[block.ID]
+		if state == "" {
+			state = reconciliation.BlockPending
+		}
+		out = append(out, BlockResult{ID: block.ID, Description: block.Description, State: string(state)})
+	}
+	return out
+}
+
+func logFault(err error) error {
+	if err == nil {
+		return nil
+	}
+	return failure("runtime.log",
+		"a required private operation log could not be maintained",
+		"restore the context store's private log tree before repeating the operation")
+}
+
+func digestOf(value string) string {
+	digest := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(digest[:])
+}

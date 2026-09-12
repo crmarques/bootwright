@@ -218,20 +218,20 @@ func (s addOnPreflightSpy) Check(ctx context.Context, request addonpreflight.Pre
 
 type lifecycleSpy struct{ record *dispatchRecord }
 
-func (s lifecycleSpy) Plan(ctx context.Context, request lifecycle.PlanRequest) error {
-	return s.record.called(ctx, "plan", request)
+func (s lifecycleSpy) Plan(ctx context.Context, request lifecycle.PlanRequest) (*lifecycle.PlanResult, error) {
+	return nil, s.record.called(ctx, "plan", request)
 }
 
-func (s lifecycleSpy) Status(ctx context.Context, request lifecycle.StatusRequest) error {
-	return s.record.called(ctx, "status", request)
+func (s lifecycleSpy) Status(ctx context.Context, request lifecycle.StatusRequest) (*lifecycle.StatusResult, error) {
+	return nil, s.record.called(ctx, "status", request)
 }
 
-func (s lifecycleSpy) Apply(ctx context.Context, request lifecycle.ApplyRequest) error {
-	return s.record.called(ctx, "apply", request)
+func (s lifecycleSpy) Apply(ctx context.Context, request lifecycle.ApplyRequest) (*lifecycle.OperationResult, error) {
+	return nil, s.record.called(ctx, "apply", request)
 }
 
-func (s lifecycleSpy) Destroy(ctx context.Context, request lifecycle.DestroyRequest) error {
-	return s.record.called(ctx, "destroy", request)
+func (s lifecycleSpy) Destroy(ctx context.Context, request lifecycle.DestroyRequest) (*lifecycle.OperationResult, error) {
+	return nil, s.record.called(ctx, "destroy", request)
 }
 
 type artifactsSpy struct{ record *dispatchRecord }

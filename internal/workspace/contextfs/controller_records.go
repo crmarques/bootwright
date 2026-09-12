@@ -20,6 +20,8 @@ const (
 	maxControllerSources         = 512
 	maxControllerRetainedSources = 4096
 	maxControllerStages          = 32
+	maxControllerReservations    = 256
+	maxControllerReservationKeys = 64
 )
 
 type controllerHostRecord struct {
@@ -37,6 +39,7 @@ type controllerStateRecord struct {
 	RetainedSources     []prerequisites.DependencySource  `json:"retainedSources"`
 	RetainedDefinitions []prerequisites.Definition        `json:"retainedDefinitions,omitempty"`
 	Bundles             []controllerBundleReservation     `json:"bundles"`
+	Reservations        []prerequisites.HostReservation   `json:"reservations,omitempty"`
 }
 
 type controllerBundleReservation struct {
@@ -47,7 +50,7 @@ type controllerBundleReservation struct {
 }
 
 func controllerRecord(value prerequisites.HostState) controllerStateRecord {
-	return controllerStateRecord{Version: 1, Host: controllerHostRecord{value.Host.Provider(), value.Host.MachineID(), value.Host.ProductUUID(), value.Host.FilesystemUUID()}, Receipt: value.Receipt, Bindings: value.Bindings, RetainedSources: value.RetainedSources, RetainedDefinitions: value.RetainedDefinitions, Bundles: []controllerBundleReservation{}}
+	return controllerStateRecord{Version: 1, Host: controllerHostRecord{value.Host.Provider(), value.Host.MachineID(), value.Host.ProductUUID(), value.Host.FilesystemUUID()}, Receipt: value.Receipt, Bindings: value.Bindings, RetainedSources: value.RetainedSources, RetainedDefinitions: value.RetainedDefinitions, Bundles: []controllerBundleReservation{}, Reservations: value.Reservations}
 }
 
 func decodeControllerRecord(data []byte) (prerequisites.HostState, []controllerBundleReservation, error) {
@@ -62,7 +65,7 @@ func decodeControllerRecord(data []byte) (prerequisites.HostState, []controllerB
 	if err != nil {
 		return prerequisites.HostState{}, nil, state("controller host evidence is malformed")
 	}
-	value := prerequisites.HostState{Host: host, Receipt: record.Receipt, Bindings: record.Bindings, RetainedSources: record.RetainedSources, RetainedDefinitions: record.RetainedDefinitions}
+	value := prerequisites.HostState{Host: host, Receipt: record.Receipt, Bindings: record.Bindings, RetainedSources: record.RetainedSources, RetainedDefinitions: record.RetainedDefinitions, Reservations: record.Reservations}
 	if err := validateControllerState(value); err != nil {
 		return prerequisites.HostState{}, nil, err
 	}
@@ -81,6 +84,10 @@ func decodeControllerRecord(data []byte) (prerequisites.HostState, []controllerB
 
 func cloneControllerState(value prerequisites.HostState) prerequisites.HostState {
 	value.Bindings = slices.Clone(value.Bindings)
+	value.Reservations = slices.Clone(value.Reservations)
+	for index := range value.Reservations {
+		value.Reservations[index].Keys = slices.Clone(value.Reservations[index].Keys)
+	}
 	value.RetainedSources = slices.Clone(value.RetainedSources)
 	value.RetainedDefinitions = slices.Clone(value.RetainedDefinitions)
 	for index := range value.RetainedDefinitions {
@@ -218,6 +225,9 @@ func validateControllerState(value prerequisites.HostState) error {
 	}
 	if len(value.RetainedDefinitions) > maxControllerBundles {
 		return state("retained controller resolutions exceed their bound")
+	}
+	if err := validateControllerReservations(value.Reservations); err != nil {
+		return err
 	}
 	seenDefinitions := map[string]bool{}
 	for _, definition := range value.RetainedDefinitions {
@@ -368,4 +378,43 @@ func retainControllerSources(before, next prerequisites.HostState) (prerequisite
 	}
 	slices.SortFunc(next.RetainedSources, func(a, b prerequisites.DependencySource) int { return strings.Compare(a.ID, b.ID) })
 	return next, nil
+}
+
+// validateControllerReservations keeps the stored claim set canonical so two
+// contexts can be compared for conflict without interpreting a key.
+func validateControllerReservations(values []prerequisites.HostReservation) error {
+	if len(values) > maxControllerReservations {
+		return state("controller host reservations exceed their bound")
+	}
+	previous := [3]string{}
+	claimed := map[string]string{}
+	for _, reservation := range values {
+		if !identifier(reservation.ContextID, "ctx-") || !contextName(reservation.Kind) || !contextName(reservation.Service) {
+			return state("controller host reservation identity is invalid")
+		}
+		current := [3]string{reservation.ContextID, reservation.Kind, reservation.Service}
+		if current[0] < previous[0] || current[0] == previous[0] && (current[1] < previous[1] || current[1] == previous[1] && current[2] <= previous[2]) {
+			return state("controller host reservations are unordered or duplicated")
+		}
+		previous = current
+		if len(reservation.Keys) == 0 || len(reservation.Keys) > maxControllerReservationKeys {
+			return state("controller host reservation key count is invalid")
+		}
+		if !slices.IsSorted(reservation.Keys) {
+			return state("controller host reservation keys are unordered")
+		}
+		for _, key := range reservation.Keys {
+			if !controllerToken(key) {
+				return state("controller host reservation key is invalid")
+			}
+			if owner, taken := claimed[key]; taken && owner != reservation.ContextID {
+				return state("controller host reservation key is claimed by two contexts")
+			}
+			claimed[key] = reservation.ContextID
+		}
+		if len(slices.Compact(slices.Clone(reservation.Keys))) != len(reservation.Keys) {
+			return state("controller host reservation keys must be unique")
+		}
+	}
+	return nil
 }

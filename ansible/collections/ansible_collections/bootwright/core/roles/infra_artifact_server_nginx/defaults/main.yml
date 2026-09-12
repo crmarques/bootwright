@@ -1,0 +1,16 @@
+---
+# Derived from the frozen request only. Nothing here is authored by desired
+# state, and no value selects an executable, a role or a task file.
+infra_artifact_server_nginx_config_dir: '{{ bootwright_artifact_server_request.contentRoot }}/config'
+infra_artifact_server_nginx_tls_dir: '{{ bootwright_artifact_server_request.contentRoot }}/tls'
+infra_artifact_server_nginx_served_dir: '{{ bootwright_artifact_server_request.contentRoot }}/public'
+infra_artifact_server_nginx_unit_path: /etc/containers/systemd/{{ bootwright_artifact_server_request.unit }}.container
+infra_artifact_server_nginx_service: '{{ bootwright_artifact_server_request.unit }}.service'
+infra_artifact_server_nginx_listen: >-
+  {{ '[' ~ bootwright_artifact_server_request.bindAddress ~ ']'
+     if ':' in bootwright_artifact_server_request.bindAddress
+     else bootwright_artifact_server_request.bindAddress }}
+infra_artifact_server_nginx_protocols: >-
+  {{ 'TLSv1.3'
+     if (bootwright_artifact_server_request.tls | default({})).get('minVersion', 'TLSv1.2') == 'TLSv1.3'
+     else 'TLSv1.2 TLSv1.3' }}

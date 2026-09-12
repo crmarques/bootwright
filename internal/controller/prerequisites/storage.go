@@ -64,12 +64,23 @@ type HostState struct {
 	Bindings            []ControllerBinding
 	RetainedSources     []DependencySource
 	RetainedDefinitions []Definition
+	Reservations        []HostReservation
 }
 
 type ControllerBinding struct {
 	ContextID  string `json:"contextID"`
 	Machine    string `json:"machine"`
 	HostDigest string `json:"hostDigest"`
+}
+
+// HostReservation records the exclusive host resources one context's locally
+// hosted service claims. Workspace stores and compares the keys; only the
+// owning capability knows what a key means. Setup reserves nothing.
+type HostReservation struct {
+	ContextID string   `json:"contextID"`
+	Kind      string   `json:"kind"`
+	Service   string   `json:"service"`
+	Keys      []string `json:"keys"`
 }
 
 type SetupEgress struct {

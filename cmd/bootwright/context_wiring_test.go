@@ -7,8 +7,12 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/cli"
+	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	secretmaterial "github.com/crmarques/bootwright/internal/secrets/material"
 	"github.com/crmarques/bootwright/internal/workspace/contextfs"
+	"github.com/crmarques/bootwright/internal/workspace/contexts"
 	"github.com/crmarques/bootwright/internal/workspace/selectionfs"
 )
 
@@ -44,5 +48,40 @@ func testServices(t *testing.T, repository *contextfs.Store, root string) cli.Se
 	t.Helper()
 	deps := testContextWiring(t, root)
 	deps.Repository, deps.Workspace = repository, repository
+	deps.Lifecycle = lifecycleDependencies{
+		Workspace: repository,
+		Inputs:    contexts.Inputs{Repository: repository, Selection: deps.Selection},
+		Host:      testLifecycleHost{}, Guard: testLifecycleGuard{}, Selection: deps.Selection,
+		Presenter: testLifecyclePresenter{}, Confirmer: deps.Confirmer,
+		Capabilities: testLifecycleCapabilities{},
+	}
 	return assembleServices(deps)
+}
+
+// The lifecycle harness binds the real context store with substituted host,
+// execution and capability ports, so a journey exercises the durable boundary
+// without a bastion, a container runtime or a second host.
+type testLifecycleHost struct{}
+
+func (testLifecycleHost) Identity(ctx context.Context) (controller.InstalledHostIdentity, error) {
+	return controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1,
+		"0123456789abcdef0123456789abcdef", "12345678-1234-5678-9abc-def012345678", "fedcba98-7654-3210-fedc-ba9876543210")
+}
+
+type testLifecycleGuard struct{}
+
+func (testLifecycleGuard) WithPython(_ context.Context, _ prerequisites.BundleArea, _ prerequisites.ExecutionRequirement, use func(prerequisites.PythonLaunch, func() error) error) error {
+	return use(prerequisites.PythonLaunch{Loader: "/loader"}, func() error { return nil })
+}
+
+type testLifecyclePresenter struct{}
+
+func (testLifecyclePresenter) PresentLifecyclePlan(context.Context, lifecycle.PlanResult) error {
+	return nil
+}
+
+type testLifecycleCapabilities struct{}
+
+func (testLifecycleCapabilities) Resolve(string, string) (lifecycle.Capability, bool) {
+	return nil, false
 }

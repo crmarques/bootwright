@@ -4,8 +4,11 @@ import (
 	"context"
 
 	"github.com/crmarques/bootwright/internal/cli"
+	"github.com/crmarques/bootwright/internal/controller/bundlelocal"
+	"github.com/crmarques/bootwright/internal/controller/hostlinux"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/controller/privilege"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/material"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contextfs"
@@ -17,10 +20,13 @@ import (
 // and explicit-input validation, which acquire no terminal, account or process
 // capability.
 type processDependencies struct {
-	Confirmer   contexts.Confirmer
-	SecretInput material.InputReader
-	Progress    prerequisites.ProgressReporter
-	Presenter   prerequisites.PlanPresenter
+	Confirmer          contexts.Confirmer
+	SecretInput        material.InputReader
+	Progress           prerequisites.ProgressReporter
+	Presenter          prerequisites.PlanPresenter
+	LifecycleProgress  lifecycle.ProgressReporter
+	LifecyclePresenter lifecycle.PlanPresenter
+	Executable         lifecycle.Executable
 }
 
 // serviceDependencies names every replaceable implementation the application
@@ -36,6 +42,7 @@ type serviceDependencies struct {
 	Resolver        secretstore.ImplementationResolver
 	SessionMaterial secretstore.SessionMaterialSource
 	Controller      controllerDependencies
+	Lifecycle       lifecycleDependencies
 }
 
 func wireServices(process processDependencies) cli.Services {
@@ -49,6 +56,12 @@ func wireServices(process processDependencies) cli.Services {
 		Confirmer:   process.Confirmer,
 		SecretInput: process.SecretInput,
 		Controller:  localControllerDependencies(repository, process),
+		Lifecycle: lifecycleDependencies{
+			Workspace: repository, Inputs: contexts.Inputs{Repository: repository, Selection: account},
+			Host: hostlinux.New(), Guard: bundlelocal.ExecutionGuard{}, Selection: account,
+			Presenter: process.LifecyclePresenter, Progress: process.LifecycleProgress,
+			Confirmer: process.Confirmer, Executable: process.Executable,
+		},
 	})
 }
 
@@ -62,6 +75,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	services.Secrets, services.Encryption = secrets.custody, secrets.encryption
 	services.DesiredState = wireDesiredState(deps, compiler)
 	services.Controller = wireController(deps.Controller, compiler, deps.Confirmer)
+	services.Lifecycle = wireLifecycle(deps.Lifecycle, compiler, secrets.binder)
 	return services
 }
 

@@ -25,32 +25,36 @@ const (
 
 func packageRoles() map[string]packageRole {
 	roles := map[string]packageRole{
-		"ansible":                               embeddedRole,
-		"api/v1alpha1":                          domainRole,
-		"internal/substrate":                    domainRole,
-		"internal/infrastructureservices":       domainRole,
-		"internal/diagnostics":                  technicalRole,
-		"internal/desiredstate/customplaybooks": domainRole,
-		"internal/desiredstate/inputfs":         adapterRole,
-		"internal/desiredstate/yamlstream":      adapterRole,
-		"internal/desiredstate/encoding":        adapterRole,
-		"internal/workspace/contextfs":          adapterRole,
-		"internal/workspace/selectionfs":        adapterRole,
-		"internal/controller/privilege":         adapterRole,
-		"internal/controller/hostlinux":         adapterRole,
-		"internal/controller/bundlelocal":       adapterRole,
-		"internal/controller/ansiblelocal":      adapterRole,
-		"internal/controller/nativelocal":       adapterRole,
-		"internal/secrets/secretstore":          applicationRole,
-		"internal/secrets/localkeyring":         adapterRole,
-		"internal/secrets/material":             adapterRole,
-		"internal/reconciliation/contextguard":  applicationRole,
-		"cmd/bootwright":                        compositionRole,
-		"internal/cli":                          cliRole,
-		"internal/availability":                 technicalRole,
+		"ansible":                                        embeddedRole,
+		"api/v1alpha1":                                   domainRole,
+		"internal/substrate":                             domainRole,
+		"internal/reconciliation":                        domainRole,
+		"internal/infrastructureservices":                domainRole,
+		"internal/diagnostics":                           technicalRole,
+		"internal/desiredstate/customplaybooks":          domainRole,
+		"internal/desiredstate/inputfs":                  adapterRole,
+		"internal/desiredstate/yamlstream":               adapterRole,
+		"internal/desiredstate/encoding":                 adapterRole,
+		"internal/workspace/contextfs":                   adapterRole,
+		"internal/workspace/selectionfs":                 adapterRole,
+		"internal/controller/privilege":                  adapterRole,
+		"internal/controller/hostlinux":                  adapterRole,
+		"internal/controller/bundlelocal":                adapterRole,
+		"internal/controller/ansiblelocal":               adapterRole,
+		"internal/controller/nativelocal":                adapterRole,
+		"internal/infrastructureservices/ansibleservice": adapterRole,
+		"internal/secrets/secretstore":                   applicationRole,
+		"internal/secrets/localkeyring":                  adapterRole,
+		"internal/secrets/material":                      adapterRole,
+		"internal/reconciliation/contextguard":           applicationRole,
+		"internal/reconciliation/operationstore":         applicationRole,
+		"cmd/bootwright":                                 compositionRole,
+		"internal/cli":                                   cliRole,
+		"internal/availability":                          technicalRole,
 	}
 	for _, capability := range []string{
 		"addons/catalog", "addons/preflight",
+		"infrastructureservices/artifactserver",
 		"containercluster/access", "containercluster/installation", "containercluster/preflight",
 		"controller/prerequisites", "desiredstate/compilation",
 		"environment/access", "environment/inspection", "environment/preflight",
@@ -184,8 +188,9 @@ func TestAdmissionEffectBoundary(t *testing.T) {
 		controllerPackages := source.owner == "internal/controller/ansiblelocal"
 		controllerNative := source.owner == "internal/controller/nativelocal"
 		controllerEffects := controllerBundle || controllerPackages || controllerNative
+		serviceEffects := source.owner == "internal/infrastructureservices/ansibleservice"
 		configuration := source.owner == "internal/workspace/contexts"
-		localProcess := selection || invocation || controllerEffects
+		localProcess := selection || invocation || controllerEffects || serviceEffects
 		codec := source.owner == "internal/desiredstate/yamlstream" || source.owner == "internal/desiredstate/encoding"
 		for _, imported := range source.imports {
 			name := imported.path

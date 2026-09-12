@@ -1,0 +1,211 @@
+package artifactserver
+
+import (
+	"bytes"
+	"encoding/json"
+	"slices"
+	"strings"
+)
+
+const requestVersion = "artifact-server-nginx-v1"
+
+// Request is the complete frozen intent for one managed artifact server. Its
+// fields are declared in the canonical key order the plan digest requires, and
+// it carries no secret value: TLS names a declaration and its non-secret
+// fingerprint, never material or a material digest.
+type Request struct {
+	BindAddress string     `json:"bindAddress"`
+	ContentRoot string     `json:"contentRoot"`
+	Egress      Egress     `json:"egress"`
+	Endpoints   []Endpoint `json:"endpoints"`
+	Identity    Identity   `json:"identity"`
+	Image       string     `json:"image"`
+	Listeners   []Listener `json:"listeners"`
+	Placement   Placement  `json:"placement"`
+	TLS         *TLS       `json:"tls,omitempty"`
+	Unit        string     `json:"unit"`
+	Version     string     `json:"version"`
+}
+
+type Identity struct {
+	Block   string `json:"block"`
+	Context string `json:"context"`
+	Service string `json:"service"`
+}
+
+// Placement fixes where the effect runs. The local arm needs no address or
+// credential; the SSH arm names exactly one target and account.
+type Placement struct {
+	Address         string `json:"address,omitempty"`
+	Connection      string `json:"connection"`
+	KnownHostsRef   string `json:"knownHostsRef,omitempty"`
+	Machine         string `json:"machine"`
+	Port            int    `json:"port,omitempty"`
+	PrivateKeyRef   string `json:"privateKeyRef,omitempty"`
+	SudoPasswordRef string `json:"sudoPasswordRef,omitempty"`
+	User            string `json:"user,omitempty"`
+}
+
+type Listener struct {
+	Name     string `json:"name"`
+	Port     int    `json:"port"`
+	Protocol string `json:"protocol"`
+}
+
+type Endpoint struct {
+	Address  string `json:"address"`
+	Listener string `json:"listener"`
+	Name     string `json:"name"`
+}
+
+type TLS struct {
+	Fingerprint string `json:"fingerprint"`
+	MinVersion  string `json:"minVersion"`
+	Secret      string `json:"secret"`
+}
+
+type Egress struct {
+	HTTPProxy  string   `json:"httpProxy,omitempty"`
+	HTTPSProxy string   `json:"httpsProxy,omitempty"`
+	NoProxy    []string `json:"noProxy"`
+}
+
+const (
+	connectionLocal = "local"
+	connectionSSH   = "ssh"
+)
+
+// Canonical encodes the request exactly as the plan digest and the adapter
+// both consume it. It refuses anything a reader could interpret differently.
+func (r Request) Canonical() ([]byte, error) {
+	data, err := json.Marshal(r)
+	if err != nil {
+		return nil, failure("lifecycle.state", "the artifact-server request cannot be encoded", "")
+	}
+	var probe map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&probe); err != nil {
+		return nil, failure("lifecycle.state", "the artifact-server request cannot be decoded", "")
+	}
+	canonical, err := json.Marshal(probe)
+	if err != nil || !bytes.Equal(data, canonical) {
+		return nil, failure("lifecycle.state", "the artifact-server request is not canonically ordered", "")
+	}
+	return data, nil
+}
+
+func DecodeRequest(data []byte) (Request, error) {
+	var request Request
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		return Request{}, failure("lifecycle.state", "the frozen artifact-server request is malformed", "")
+	}
+	if decoder.More() {
+		return Request{}, failure("lifecycle.state", "the frozen artifact-server request contains trailing data", "")
+	}
+	if request.Version != requestVersion {
+		return Request{}, failure("lifecycle.state", "the frozen artifact-server request has an unsupported version", "")
+	}
+	canonical, err := request.Canonical()
+	if err != nil {
+		return Request{}, err
+	}
+	if !bytes.Equal(canonical, data) {
+		return Request{}, failure("lifecycle.state", "the frozen artifact-server request is not canonical", "")
+	}
+	return request, nil
+}
+
+func (r Request) listener(name string) (Listener, bool) {
+	for _, listener := range r.Listeners {
+		if listener.Name == name {
+			return listener, true
+		}
+	}
+	return Listener{}, false
+}
+
+// servedAddresses lists every address an HTTPS endpoint answers on, which is
+// exactly what the serving certificate must cover.
+func (r Request) servedAddresses(protocol string) []string {
+	var addresses []string
+	for _, endpoint := range r.Endpoints {
+		listener, ok := r.listener(endpoint.Listener)
+		if !ok || listener.Protocol != protocol {
+			continue
+		}
+		if !slices.Contains(addresses, endpoint.Address) {
+			addresses = append(addresses, endpoint.Address)
+		}
+	}
+	slices.Sort(addresses)
+	return addresses
+}
+
+func (r Request) usesTLS() bool {
+	return slices.ContainsFunc(r.Listeners, func(listener Listener) bool { return listener.Protocol == "https" })
+}
+
+// reservationKeys are the exclusive host resources this request claims. A
+// wildcard bind claims every endpoint address at that port as well, because
+// the socket it opens conflicts with each of them.
+func (r Request) reservationKeys() []string {
+	keys := []string{"unit:" + r.Unit, "path:" + r.ContentRoot}
+	for _, listener := range r.Listeners {
+		port := formatPort(listener.Port)
+		keys = append(keys, "socket:"+r.BindAddress+":"+port)
+		if r.BindAddress != "0.0.0.0" && r.BindAddress != "::" {
+			continue
+		}
+		for _, endpoint := range r.Endpoints {
+			if endpoint.Listener == listener.Name {
+				keys = append(keys, "socket:"+endpoint.Address+":"+port)
+			}
+		}
+	}
+	slices.Sort(keys)
+	return slices.Compact(keys)
+}
+
+func formatPort(value int) string {
+	if value <= 0 {
+		return "0"
+	}
+	digits := ""
+	for value > 0 {
+		digits = string(rune('0'+value%10)) + digits
+		value /= 10
+	}
+	return digits
+}
+
+func safeSegment(value string) bool {
+	if value == "" || len(value) > 63 || strings.ContainsAny(value, "/\x00 ") {
+		return false
+	}
+	for index, c := range value {
+		alphanumeric := c >= 'a' && c <= 'z' || c >= '0' && c <= '9'
+		if !alphanumeric && !(c == '-' && index != 0 && index != len(value)-1) {
+			return false
+		}
+	}
+	return true
+}
+
+// secretReferences names every declaration this request's execution needs
+// bound, so the operation freezes them before it registers.
+func (r Request) secretReferences() []string {
+	var references []string
+	if r.TLS != nil {
+		references = append(references, r.TLS.Secret)
+	}
+	for _, reference := range []string{r.Placement.PrivateKeyRef, r.Placement.KnownHostsRef, r.Placement.SudoPasswordRef} {
+		if reference != "" {
+			references = append(references, reference)
+		}
+	}
+	slices.Sort(references)
+	return slices.Compact(references)
+}

@@ -14,7 +14,6 @@ import (
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
-	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	storagepreflight "github.com/crmarques/bootwright/internal/storage/preflight"
 	storagerendering "github.com/crmarques/bootwright/internal/storage/rendering"
 	"github.com/crmarques/bootwright/internal/trust/enrollment"
@@ -36,7 +35,6 @@ func wireStubs() cli.Services {
 		ClusterAccess:         containeraccess.Service{},
 		StoragePreflight:      storagepreflight.Service{},
 		StorageArtifacts:      storagerendering.Service{},
-		Lifecycle:             lifecycle.Service{},
 		Artifacts:             artifactrendering.Service{},
 		MachineInventory:      inventory.Service{},
 		MachineAccess:         machineaccess.Service{},

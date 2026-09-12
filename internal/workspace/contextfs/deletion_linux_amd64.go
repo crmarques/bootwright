@@ -32,7 +32,10 @@ func contextEntryAllowed(path, name string, directory bool) bool {
 	case "":
 		return directory && (name == "state" || name == "desired-state" || name == "secrets") || !directory && name == "context.yaml"
 	case "state":
-		return !directory && (name == "reservation.json" || name == "mutation.json")
+		if directory {
+			return name == "operations"
+		}
+		return name == "reservation.json" || name == "mutation.json"
 	case "desired-state":
 		return directory && name == "revisions"
 	case "desired-state/revisions":

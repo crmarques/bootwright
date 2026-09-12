@@ -24,7 +24,9 @@ func TestPrivilegeClassificationHasNoInformationOrInvalidEffects(t *testing.T) {
 		{[]string{"validate", "--file", "fixtures"}, false},
 		{[]string{"validate"}, true},
 		{[]string{"render", "effective"}, true},
-		{[]string{"apply"}, false},
+		{[]string{"apply"}, true},
+		{[]string{"apply", "--help"}, false},
+		{[]string{"plan"}, true},
 		{[]string{"controller", "prerequisites"}, false},
 		{[]string{"secret", "encryption", "types"}, false},
 	} {

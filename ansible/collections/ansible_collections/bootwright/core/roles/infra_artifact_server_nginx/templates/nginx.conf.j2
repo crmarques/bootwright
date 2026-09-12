@@ -1,0 +1,44 @@
+{#
+  Serving configuration for one managed artifact server. The worker identity is
+  the image's own application user and its root group, because the image's
+  writable runtime paths are group-0 owned and no group named for that user
+  exists.
+#}
+user default root;
+worker_processes auto;
+error_log /dev/stderr warn;
+pid /run/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    access_log off;
+    server_tokens off;
+    sendfile on;
+    keepalive_timeout 30;
+
+{% for listener in bootwright_artifact_server_request.listeners %}
+    server {
+        listen {{ infra_artifact_server_nginx_listen }}:{{ listener.port }}{% if listener.protocol == 'https' %} ssl{% endif %};
+
+{% if listener.protocol == 'https' %}
+        ssl_certificate {{ infra_artifact_server_nginx_tls_dir }}/server.crt;
+        ssl_certificate_key {{ infra_artifact_server_nginx_tls_dir }}/server.key;
+        ssl_protocols {{ infra_artifact_server_nginx_protocols }};
+        ssl_prefer_server_ciphers off;
+        ssl_session_timeout 10m;
+{% endif %}
+        root {{ infra_artifact_server_nginx_served_dir }};
+        autoindex off;
+
+        location / {
+            try_files $uri =404;
+        }
+    }
+
+{% endfor %}
+}

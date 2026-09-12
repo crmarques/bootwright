@@ -345,9 +345,17 @@ func TestInvalidAdmissionAndUnavailableRoutesDoNotWrite(t *testing.T) {
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Fatalf("failed admission created state: %v", err)
 	}
-	for _, args := range [][]string{{"apply", "--context", "alpha", "--yes"}, {"destroy", "--context", "alpha", "--yes"}, {"render", "installer", "--context", "alpha"}, {"status", "--context", "alpha"}} {
+	for _, args := range [][]string{{"render", "installer", "--context", "alpha"}, {"machine", "list", "--context", "alpha"}} {
 		_, stderr := contextRun(t, services, 1, args...)
 		if !strings.Contains(stderr, "cli.not-implemented") {
+			t.Fatal(stderr)
+		}
+	}
+	// An implemented lifecycle route validates the context instead, and a
+	// failed admission still leaves no state behind.
+	for _, args := range [][]string{{"apply", "--context", "alpha", "--yes"}, {"destroy", "--context", "alpha", "--yes"}, {"status", "--context", "alpha"}, {"plan", "--context", "alpha"}} {
+		_, stderr := contextRun(t, services, 1, args...)
+		if !strings.Contains(stderr, "context.state") {
 			t.Fatal(stderr)
 		}
 	}
