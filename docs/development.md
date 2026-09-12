@@ -109,3 +109,39 @@ code evolves:
 
 Executed native installation is not covered by any of these; it is a manual
 `bastion setup` on a prepared host.
+
+## M1e lifecycle and managed artifact serving
+
+The current [M1e delivery](../specs/milestones.md#m1e--lifecycle-engine-and-managed-artifact-serving)
+adds the lifecycle engine and one capability behind it, so `plan`, `status`,
+`apply` and `destroy` act on an Environment whose only lifecycle objects are
+persistent managed artifact servers. Go owns plans, operation records, leases,
+continuation and authorization; the embedded collection installs and removes
+the service. The verification model is M1d's: every in-tree test is unitary and
+host-independent, creates no container and needs no second host, and
+real-system acceptance is operator-run.
+
+The managed artifact server runs `registry.access.redhat.com/ubi9/nginx-124`,
+pinned by content digest in
+`internal/infrastructureservices/artifactserver/catalog.go`. The compiled
+default was resolved from the publisher's `latest` tag on 2026-09-11 and
+qualified with podman 5.8.4 on Fedora 43; its runtime constraints are recorded
+in [artifact-server knowledge](../.agents/knowledge/artifact-server-nginx-runtime.md).
+An `ArtifactServer` that pins `spec.image` uses that reference instead, and any
+reference must resolve to an immutable digest.
+
+The embedded collection participates in the dependency-bundle identity, so a
+build that changes `ansible/` changes the bundle a context is bound to. Run
+`bastion setup --context <name>` again after such a build; `preflight bastion`
+reports the incompatible retained bundle and `apply` refuses rather than
+executing automation the receipt does not cover.
+
+`make ansible-check` covers the new collection content with the same pinned
+syntax, lint, sanity and unit gates as the controller entrypoints. Executed
+service effects are not covered by any in-tree gate; these remain operator-run
+and are not selectable from a test runner:
+
+| Acceptance | How it is run |
+| --- | --- |
+| The complete journey in [`examples/lab-artifacts`](../examples/lab-artifacts/README.md): apply, replay, interrupt, continue and destroy against a real container runtime | by hand as root on a prepared bastion |
+| SSH placement against a second OS-ready host | by hand, with that host's authored access and bound host key |

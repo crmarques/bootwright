@@ -125,6 +125,45 @@ attributable to their original identity. Corruption or contradictory mapping
 refuses rather than allocating a replacement. Context data resides beneath
 `contexts/<name>`; runtime records reside beneath its `state/`.
 
+### Operation records
+
+Reconciliation owns one operation subtree per context, beside the mutation
+evidence it maintains:
+
+```text
+contexts/<name>/state/operations/
+  index.json
+  <operation-id>/
+    operation.json
+    plan.json
+    blocks/<block-id>/state.json
+    blocks/<block-id>/attempt-NNNNNN.json
+    blocks/<block-id>/attempt-NNNNNN-resolution-NNNNNN.json
+    logs/
+```
+
+`index.json` names at most one current operation and the completed operations
+retained for audit. `operation.json` binds the operation to its verb, context
+identity, input revision and digest, plan digest, selected implementation and
+automation identities, executable identity, secret bindings, durable state and
+log-fault flag. `plan.json` is the immutable frozen plan: every block with its
+description, dependencies, impacts, presentation groups, resolved
+implementation identity, content digest and canonical secret-free request.
+Block records carry the block state and its next attempt number; attempt and
+resolution records carry their request, phase, outcome and bounded evidence.
+[The output contract](cli/output.md#private-operation-logs) owns the `logs/`
+tree.
+
+Records are closed, canonical, bounded JSON published atomically beneath held
+verified handles, with the directory and file modes of
+[the context store](contexts.md#storage-locking-and-publication). An operation
+or plan record is at most 1 MiB, an attempt or resolution record at most
+64 KiB, and an index at most 256 KiB. Unknown fields, duplicate keys,
+noncanonical encodings and unsupported versions refuse; there is no repair,
+migration or scan-based adoption of an unpublished record. An attempt record
+is created exclusively, so a reused attempt number refuses rather than
+overwriting durable evidence.
+
 ## State machine
 
 | Durable state | Allowed lifecycle transition |
@@ -144,8 +183,8 @@ digest, and required ownership evidence before doing work.
 ## Plan and execution
 
 [Secrets](secrets.md#immutable-binding-and-contexts) owns confidential immutable
-binding; its lifecycle consumer is a
-[planned port](architecture.md#planned-lifecycle-ports).
+binding; this contract is its lifecycle consumer, through the
+[lifecycle ports](architecture.md#lifecycle-ports).
 
 Planning is pure and read-only. It performs no downloads, remote mutations,
 cache or registry writes, cleanup, lock takeover, or secret materialization.
@@ -357,8 +396,11 @@ loss but does not select a target or relax validation, identity, ownership,
 power, probe, or digest checks.
 
 `data-loss` is the only authorization token. `all`, unknown, duplicate, empty,
-and inapplicable values are errors. An enabled `CustomPlaybook` refuses before
-planning and has no authorization bypass.
+and inapplicable values are errors. A token the frozen plan does not require is
+inapplicable and refuses with `lifecycle.authorization` before registration, so
+a habitual authorization cannot pre-authorize a future destructive plan. An
+enabled `CustomPlaybook` refuses before planning and has no authorization
+bypass.
 
 Before operational exposure, every supported substrate/component/version must
 pass the shared port suite, safety tests, and real-system qualification with

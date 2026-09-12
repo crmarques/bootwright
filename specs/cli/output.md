@@ -297,6 +297,37 @@ These inspection statuses do not alter invocation precedence: invoking an
 unavailable command still follows the no-context-read
 [unavailable-command gate](../cli.md#recognized-but-unavailable-commands).
 
+## Lifecycle and status results
+
+`plan`, `apply` and `destroy` are text only. Their human result composes the
+[shared layout](#shared-human-layout): an optional headline, a `Plan` section
+whose steps are the frozen blocks in plan order, a `Progress` section while
+effects run, a `Result` section of status rows, the `details: <path>` log
+reference when an operation log exists, and the receipt as the final four
+lines. A block row leads with its status token and names the block description
+and its outcome; group rows follow their block under
+[multi-machine presentation](#multi-machine-presentation). A preview and a
+refusal have no progress, result rows or log reference.
+
+`status` is the machine-readable view of the same durable state and performs no
+probe. Its result orders these fields:
+
+| Field | Contract |
+| --- | --- |
+| `context` | `name`, `id`, `mode` of the resolved context. |
+| `setupChecks` | Ordered `{id, status}` rows derived from stored controller evidence alone, without host probes. `status` uses the check vocabulary of [controller readiness](../controller.md#results-and-qualification). |
+| `desired` | `revision`, `environment` and admission `counts` of the selected immutable input, or nulls when no revision is imported. |
+| `clusters`, `storageClusters` | Ordered `{name, kind, status}` rows for selected cluster roots. `status` is `unsupported` until a milestone implements that cluster's lifecycle. |
+| `shared` | Ordered `{kind, name, machine, status}` rows for selected shared services. `status` is `unsupported`, `pending`, `done` or `unknown`, derived from the frozen plan and its durable evidence. |
+| `secrets` | `declared` and `bound` counts. |
+| `nextSteps` | Ordered safe command strings, empty when no action is available. |
+| `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, ordered `blocks` of `{id, description, state, attempts}`, and `logs` of safe relative paths. |
+
+Rows sort by their documented key: checks and blocks in frozen order,
+everything else in ascending bytewise name order. Human `status` presents the
+same membership and order, omitting empty sections. `--watch` repeats the read
+at its interval and preserves no partial structured result across an interrupt.
+
 ## Diagnostic taxonomy and order
 
 Diagnostic codes are stable machine identifiers. Include an object identity

@@ -84,8 +84,8 @@ unattributable directory after a crash is preserved and refuses adoption.
 Only explicit setup can finish an attributable initialization.
 
 The private Controller record version is `1`. Its fields are `version`, `host`,
-`receipt`, `bindings`, `retainedSources`, optional `retainedDefinitions` and
-`bundles`, encoded as compact JSON
+`receipt`, `bindings`, `retainedSources`, optional `retainedDefinitions`,
+`bundles` and optional `reservations`, encoded as compact JSON
 in schema order followed by LF. Unknown fields, duplicate keys, noncanonical
 records and versions refuse. The host contains the confidential
 [`linux-installed-v1` tuple](controller.md#host-identity-and-shared-prerequisites).
@@ -97,6 +97,16 @@ credential-free URL, SHA-256 and exact byte count. Bindings contain immutable
 context ID, Machine name and the private host digest, ordered by context ID;
 sources are ordered by source ID. Reusing a source ID with different bytes or
 origin refuses, including after replacing a terminal receipt.
+
+Reservations record the exclusive host resources that locally hosted services
+claim, under the
+[Infrastructure services conflict contract](infrastructure-services.md#host-reservations).
+Each entry contains immutable context ID, capability kind, service name and a
+sorted unique key list; entries are ordered by context ID then kind then name.
+Workspace stores and compares them without interpreting a key's meaning.
+Publishing a key another context holds refuses; a context replaces only its own
+entries, and its completed removal drops them. The record is absent when empty,
+so a store that never hosted a service is unchanged.
 
 Action requests and evidence are canonical compact JSON objects with sorted
 keys. Each action records `planned`, `intent` or `observed`; an observed action
@@ -137,7 +147,8 @@ verify the complete expected after-state without repeating native effects.
 An intermediate or contradictory inventory remains unknown.
 
 The state record is bounded to 4 MiB, with at most 128 actions, 512 current
-sources, 4096 retained source identities and 4096 bindings. Each request,
+sources, 4096 retained source identities, 4096 bindings and 256 reservations of
+at most 64 keys of 256 bytes each. Each request,
 preparation or evidence object is at most 64 KiB. A full resolved definition is
 at most 512 KiB, with at most 16 retained definitions subject to the aggregate
 state bound. Controller records allow nesting depth 16 and 32 fields per object;
@@ -270,6 +281,7 @@ Controller subtree exists only after confirmed setup:
     state/
       reservation.json
       mutation.json
+      operations/
     secrets/
       store.json
       identities/
@@ -286,6 +298,7 @@ Controller subtree exists only after confirmed setup:
 | `file-NNNN` | Exact acquired descriptor or marker bytes; authored filenames never become storage paths. |
 | `state/reservation.json` | Durable name/ID ownership evidence for interrupted creation and guarded deletion. |
 | `state/mutation.json` | Lifecycle ownership and operation evidence; missing or unknown evidence prevents destructive cleanup. |
+| `state/operations/` | [Reconciliation-owned operation records and logs](state-reconciliation.md#operation-records). Workspace supplies the held area and its publication primitives; it never interprets their content. |
 | `secrets/` | Context-bound encrypted custody with its own independently versioned [storage contract](secrets.md#local-keyring-v2). |
 
 Every directory is owned by `root:root` with mode `0700`; every file is owned
@@ -326,6 +339,16 @@ inode until all stored input or secret-session files have been consumed.
 Mutators hold its exclusive lock plus the context lease where applicable;
 contention fails safely. Revalidate target, identity and evidence under those
 locks. Read-only operations perform no repair, initialization or publication.
+
+A lifecycle operation is one such mutator: it holds the exclusive root lock and
+the selected context's lease for its entire execution, because its host
+reservations, controller evidence and operation records must stay coherent
+while its effects run. Concurrent context reads therefore wait for it, and a
+second mutator refuses rather than waiting indefinitely. Narrowing that
+boundary is [deferred work](milestones.md#candidates). Within it, Workspace
+supplies the operation area, the mutation-evidence replacement primitive and
+the reservation publication; Reconciliation owns what they contain and when
+they advance.
 
 Init validates supplied configuration/input before effects, records its
 initializing name/ID, and creates the final named directory directly. It

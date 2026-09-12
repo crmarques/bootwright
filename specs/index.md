@@ -16,6 +16,7 @@ A specified capability is not necessarily implemented or authorized.
 | Named contexts, immutable input, current selection and durable publication | [Contexts](contexts.md) |
 | Secret implementations, custody, immutable bindings and reveal | [Secrets](secrets.md) |
 | Apply, destroy, continuation, ownership and GitOps readiness | [State reconciliation](state-reconciliation.md) |
+| Managed shared-service placement, host claims, readiness and inverse | [Infrastructure services](infrastructure-services.md) |
 | Trust, secrets, filesystem, process, network and supply-chain boundaries | [Security](security.md) |
 | Declarative add-on packages and driver contract | [Add-ons](add-ons.md) |
 

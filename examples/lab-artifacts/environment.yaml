@@ -1,0 +1,11 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: lab-artifacts
+
+spec:
+  domains:
+    base: lab.example.test
+
+  controller:
+    machineRef: bastion

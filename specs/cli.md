@@ -362,7 +362,26 @@ two phases, stream, lock meaning, and safe-next-action content are stable. The
 public `destroy` invocation itself retains the `cli.not-implemented` behavior.
 
 `plan` is a pure text preview of the next legal full operation or frozen
-continuation point. `apply` and `destroy` follow the state owner's
+continuation point. With no operation it previews the fresh operation the
+current state would start, listing every block in frozen order with its
+description and impacts. With an incomplete operation it previews that exact
+continuation point instead, showing which blocks are already done and which
+block resumes, and never a re-planned alternative. With a completed apply it
+previews the destroy that the recorded ownership evidence defines. It reads
+context state, allocates no identity, writes nothing and creates no log.
+
+`apply` and `destroy` present the frozen plan, then any required
+authorizations, then the ordinary confirmation. During execution they report
+[progress](cli/output.md#long-running-progress) per block and
+[presentation group](cli/output.md#multi-machine-presentation), and they close
+with the ordered result, the safe log reference and the receipt below. A
+refusal before registration reports `refused` with no operation. An
+authorization token the frozen plan does not require fails
+`lifecycle.authorization` before registration. A root lock or context lease
+that cannot be acquired fails `lifecycle.lease`, naming the safe retry;
+Bootwright never takes a lease over.
+
+`apply` and `destroy` follow the state owner's
 [transitions](state-reconciliation.md#state-machine),
 [execution rules](state-reconciliation.md#plan-and-execution) and
 [authorization gates](state-reconciliation.md#confirmation-and-authorization).

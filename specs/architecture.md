@@ -218,7 +218,7 @@ where a behavior lives:
 | --- | --- |
 | `internal/<context>` | Pure domain values, invariants and the kind admission rules (`Normalize`, `Validate`, `ValidateAuthored`, `ValidatePartial`) that the compiler composes, plus shared values such as `machine.SSHOptions` and `secrets.Material`. No ports and no I/O. |
 | `internal/<context>/<capability>` | One application service package per command family. `service.go` declares `Service`, its constructor and one exported method per command; `requests.go` declares the request and result types the CLI consumes; `contracts.go` declares every interface the package consumes, and no other file declares an exported interface; remaining files hold private use-case logic. |
-| `internal/<context>/<implementation>` | A driven adapter named by what it binds: `contextfs`, `selectionfs`, `inputfs`, `yamlstream`, `encoding`, `localkeyring`, `material`, `hostlinux`, `bundlelocal`, `ansiblelocal`, `nativelocal`, `privilege`. It implements another package's contract and never calls another adapter. |
+| `internal/<context>/<implementation>` | A driven adapter named by what it binds: `contextfs`, `selectionfs`, `inputfs`, `yamlstream`, `encoding`, `localkeyring`, `material`, `hostlinux`, `bundlelocal`, `ansiblelocal`, `nativelocal`, `privilege`, `ansibleservice`. It implements another package's contract and never calls another adapter. |
 | `internal/diagnostics` | The diagnostic and typed-failure vocabulary every layer emits; it imports nothing first-party. |
 | `internal/availability` | The single unavailable-capability sentinel. |
 
@@ -316,7 +316,7 @@ that implements a row updates the row and the stub fitness test together.
 | `validate`, `render effective` (Desired state) | `commands_desiredstate.go` | `desiredstate/compilation` | `desiredstate/inputfs`, `desiredstate/yamlstream`, `desiredstate/encoding` | I |
 | `bastion setup`, `preflight bastion` (Controller) | `commands_controller.go` | `controller/prerequisites` | `controller/hostlinux`, `controller/bundlelocal`, `controller/ansiblelocal`, `controller/nativelocal`, `workspace/contextfs` | I |
 | Local privilege boundary for every root-requiring command (Controller) | `invocation.go` classifies only | — | `controller/privilege`, bound in `run.go` | I |
-| `plan`, `status`, `apply`, `destroy` (State reconciliation) | `commands_reconciliation.go` | `reconciliation/lifecycle` | — | S |
+| `plan`, `status`, `apply`, `destroy` (State reconciliation) | `commands_reconciliation.go` | `reconciliation/lifecycle` | `reconciliation/operationstore`, `workspace/contextfs`, `desiredstate/compilation`, `secrets/custody`, `controller/hostlinux`, `controller/bundlelocal`, `infrastructureservices/artifactserver` | I |
 | `render` (Native artifacts) | `commands_nativeartifacts.go` | `nativeartifacts/rendering` | — | S |
 | `render installer` (Container cluster) | `commands_containercluster.go` | `containercluster/installation` | — | S |
 | `render storage` (Storage) | `commands_storage.go` | `storage/rendering` | — | S |
@@ -357,7 +357,8 @@ internal/cli ─SecretService───────→ secrets/custody.Service
 internal/cli ─EncryptionService───→ secrets/encryption.Service
 internal/cli ─DesiredStateService─→ desiredstate/compilation.Service
 internal/cli ─ControllerService───→ controller/prerequisites.Service
-internal/cli ─sixteen stub ports──→ <capability>.Service{} returning availability.ErrNotImplemented
+internal/cli ─LifecycleService────→ reconciliation/lifecycle.Service
+internal/cli ─fifteen stub ports──→ <capability>.Service{} returning availability.ErrNotImplemented
 
 workspace/contexts.Service
    ─Repository, Transaction, ControllerInputGuard→ workspace/contextfs.Store
@@ -403,6 +404,22 @@ controller/prerequisites.Service
    ─Confirmer, PlanPresenter, ProgressReporter→ internal/cli
    pure: controller.Select and controller.SelectTools at the context root
 
+reconciliation/lifecycle.Service
+   ─Inputs────────────────────────→ workspace/contexts.Inputs
+   ─Compiler──────────────────────→ desiredstate/compilation.Compiler
+   ─SecretBinder──────────────────→ secrets/custody.Service
+   ─Workspace, LifecycleTransaction→ workspace/contextfs.Store
+        ─OperationStore───────────→ reconciliation/operationstore.Store ─Area→ contextfs operation area
+   ─HostIdentity──────────────────→ controller/hostlinux.Inspector
+   ─AutomationIdentity────────────→ controller/bundlelocal catalog identity
+   ─ExecutionGuard────────────────→ controller/bundlelocal.ExecutionGuard
+   ─CapabilityResolver, Capability→ infrastructureservices/artifactserver.Capability
+        ─Runner───────────────────→ infrastructureservices/ansibleservice.Runner
+             ─process boundary────→ embedded bootwright.core collection
+   ─Confirmer, PlanPresenter, ProgressReporter→ internal/cli
+   ─Clock, Entropy────────────────→ composition
+   pure: reconciliation plan, state machine and identity allocation at the context root
+
 reconciliation/contextguard.Guard implements workspace/contexts.ContextMutationGuard and consumes no port
 cmd/bootwright/run.go ─→ controller/privilege for the invoking account, sudo supervision and executable pinning, before any service exists
 ```
@@ -419,7 +436,22 @@ production binding; tests substitute fakes through the same interface.
 | `internal/cli` | `EncryptionService` | Types, Init, Status, Rotate | `secrets/encryption.Service` |
 | `internal/cli` | `DesiredStateService` | Validate, RenderEffective | `desiredstate/compilation.Service` |
 | `internal/cli` | `ControllerService` | Check, Setup | `controller/prerequisites.Service` |
-| `internal/cli` | sixteen stub ports, one per `S` row of the map | one method per command | `<capability>.Service{}` |
+| `internal/cli` | `LifecycleService` | Plan, Status, Apply, Destroy | `reconciliation/lifecycle.Service` |
+| `internal/cli` | fifteen stub ports, one per `S` row of the map | one method per command | `<capability>.Service{}` |
+| `reconciliation/lifecycle` | `Inputs` | ReadInputs | `workspace/contexts.Inputs` |
+| `reconciliation/lifecycle` | `Compiler` | Compile | `desiredstate/compilation.Compiler` |
+| `reconciliation/lifecycle` | `SecretBinder` | Bind, Reopen, Release | `secrets/custody.Service` |
+| `reconciliation/lifecycle` | `Workspace` | ReadLifecycle, MutateLifecycle | `workspace/contextfs.Store` |
+| `reconciliation/lifecycle` | `LifecycleTransaction` | Context, Inputs, Controller, Operations, Evidence, PublishEvidence, Reserve, Release | `contextfs` lifecycle transaction |
+| `reconciliation/lifecycle` | `OperationStore` | Index, Register, ReadOperation, ReadPlan, BlockState, PublishBlock, PublishAttempt, OpenLog, Complete | `reconciliation/operationstore.Store` |
+| `reconciliation/lifecycle` | `HostIdentity` | Identity | `controller/hostlinux.Inspector` |
+| `reconciliation/lifecycle` | `AutomationIdentity` | CatalogDigest | composition value over `controller/bundlelocal` and the embedded collection |
+| `reconciliation/lifecycle` | `ExecutionGuard` | WithPython | `controller/bundlelocal.ExecutionGuard` |
+| `reconciliation/lifecycle` | `CapabilityResolver`, `Capability` | Resolve; Plan, Apply, Observe, Destroy | immutable composition map over `infrastructureservices/artifactserver.Capability` |
+| `reconciliation/lifecycle` | `Confirmer`, `PlanPresenter`, `ProgressReporter` | Confirm; PresentLifecyclePlan; ReportProgress | `internal/cli` |
+| `reconciliation/lifecycle` | `Clock`, `Entropy` | Now; Read | composition |
+| `reconciliation/operationstore` | `Area` | Read, Entries, EnsureDirectory, WriteExclusive, Replace, Append, Sync | `contextfs` operation area |
+| `infrastructureservices/artifactserver` | `Runner` | Run | `infrastructureservices/ansibleservice.Runner` |
 | `workspace/contexts` | `Repository` (embeds `InputRepository`) | ReadInputs, CheckInputDirectory, View, Transact | `workspace/contextfs.Store` |
 | `workspace/contexts` | `Transaction` | Registry, Reserve, Configuration, InitializeSecrets, Publish, MutationState, Delete, Commit | `contextfs` transaction |
 | `workspace/contexts` | `ControllerInputGuard` | CheckControllerInput | `contextfs` transaction |
@@ -523,10 +555,11 @@ local setup, inspection and host-evidence requirements:
   controller host, following the
   [binding and publication contract](contexts.md#controller-relationship-and-host-binding).
   Desired state never supplies a storage-root override or runtime identity token.
-- Infrastructure services own local service effects and their readiness,
-  replay and inverse evidence. A local adapter must preserve the same logical
-  capability contract as its qualified remote counterpart; local execution
-  does not bypass Go authorization, privileged-process or Ansible boundaries.
+- [Infrastructure services](infrastructure-services.md) own local service
+  effects, their host reservations and their readiness, replay and inverse
+  evidence. A local adapter must preserve the same logical capability contract
+  as its qualified remote counterpart; local execution does not bypass Go
+  authorization, privileged-process or Ansible boundaries.
 - Reconciliation freezes the required controller and implementation evidence
   and owns ordering and
   [controller-host protection](state-reconciliation.md#controller-host-protection).
@@ -548,28 +581,30 @@ decisions. Machine owns SSH descriptor construction; Container cluster owns
 and export boundaries defined by
 [the access contract](cli.md#resource-inspection-and-explicit-access).
 
-### Planned lifecycle ports
+### Lifecycle ports
 
-These are placement contracts for the lifecycle milestones, not implemented
-code. When authorized, `reconciliation/lifecycle.Service` declares in its
-`contracts.go`: `Inputs` (immutable context input, bound to `contexts.Inputs`),
-`Compiler`, `SecretBinder` (`Bind`, `Reopen`, `Release`, bound to
-`custody.Service`, which already exposes them), `HostBinding` (the verified
-controller binding, read through a Controller-owned view of `contextfs`),
-`OperationStore` (operation allocation, lease, immutable plan publication,
-attempt and resolution records and logs, provided by a Reconciliation-owned
-adapter such as `reconciliation/operationfs`), one `Capability` port per
-platform block (`Plan`, `Apply`, `Observe`, `Destroy` over a frozen request;
-the first implementer is an Infrastructure services artifact-server capability
-backed by an Ansible adapter), a Trust `HostKeyVerifier`, and the
-CLI-implemented `Confirmer`, `PlanPresenter` and `ProgressReporter`.
+`reconciliation/lifecycle.Service` owns the operation; every platform effect
+reaches it through the `Capability` port. The interface catalog above lists the
+complete set. Three rules constrain how that set grows.
+
 Composition injects an immutable resolver of the available capability
-implementations; no global registry is introduced. Reconciliation owns
-cross-domain ordering; a cluster service cannot schedule storage or OS
-installation independently. Platform services own the meaning of completion
-evidence and return it through typed results; adapters return bounded results
-to their application service; Reconciliation owns operation transitions and
-their durable records under [the lifecycle contract](state-reconciliation.md).
+implementations, keyed by the API kind and the resolved implementation
+identity. No global registry, ambient discovery or runtime plugin path exists,
+and application policy never switches on a concrete implementation.
+
+Reconciliation owns cross-domain ordering, operation transitions and durable
+records. A capability plans its own blocks and owns the meaning of their
+completion, readiness and absence evidence, returning it through typed results;
+it cannot schedule another domain's work, allocate an operation identity or
+write lifecycle state. A cluster capability therefore cannot drive storage or
+OS installation, and an adapter returns bounded results only to its own
+application service.
+
+Workspace owns the durable boundary: the lifecycle transaction, the operation
+area and the reservation record are Workspace primitives, and Reconciliation
+alone decides what they contain. Secret custody, controller host evidence and
+the private execution runtime are consumed through their owning contexts'
+published capabilities rather than reimplemented here.
 
 ### Native projection and publication
 

@@ -122,8 +122,14 @@ generation and entropy. Do not import unrelated x/crypto packages.
 Bind/Reopen/Release operate on whole versions with opaque IDs. File binding
 freezes one validated read without changing source or importing a named entry.
 Reopen never rereads the source. Replacement/deletion/rotation preserve bound
-versions; release drops only its references. The lifecycle consumer of these
-operations is a [planned port](architecture.md#planned-lifecycle-ports).
+versions; release drops only its references.
+[State reconciliation](state-reconciliation.md#plan-and-execution) is the
+lifecycle consumer: it binds every consumed declaration before operation
+registration, reopens bound material for each attempt, and releases the binding
+only after a completed destroy has removed the effects that needed it. A failed
+registration releases the binding it just created. Binding and release occur
+outside the lifecycle operation's own store transaction, because acquisition
+holds the same store lock.
 
 Canonical non-secret declaration fingerprints cover type/source/parameters and
 provenance. Changed declarations make retained values stale/orphaned, never

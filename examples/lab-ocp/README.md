@@ -81,6 +81,15 @@ A repeated setup with unchanged intent reports `unchanged`. Preflight verifies
 the retained bundle, the native runtime, the target clients and the
 controller binding of this context to this host without installing anything.
 
-Managed services, the libvirt guest and the cluster remain declarations only;
-their lifecycle commands keep the `cli.not-implemented` result until the owning
-[milestones](../../specs/milestones.md) deliver them.
+## Lifecycle availability
+
+`plan`, `apply` and `destroy` are available, but this Environment is outside
+the shape [M1e](../../specs/milestones.md#m1e--lifecycle-engine-and-managed-artifact-serving)
+supports: it declares managed Proxy, DNS and NTP services, a libvirt guest and
+a container cluster, whose capabilities arrive with M1f, M2a and M4. An apply
+therefore refuses before registering an operation, naming every object it
+cannot realize, and changes nothing. Use [`examples/lab-artifacts`](../lab-artifacts)
+to exercise the lifecycle engine today.
+
+The setup journeys above are unaffected: this example remains the input for
+context creation, Secret custody, `bastion setup` and `preflight bastion`.

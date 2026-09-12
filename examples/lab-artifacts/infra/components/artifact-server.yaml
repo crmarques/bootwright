@@ -1,0 +1,32 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ArtifactServer
+metadata:
+  name: lab-artifacts
+
+spec:
+  management: managed
+  machineRef: bastion
+  bindAddress: 192.0.2.1
+  retention: persistent
+
+  tls:
+    secretRef: artifact-server-tls
+    minVersion: TLSv1.2
+
+  listeners:
+    - name: https
+      protocol: https
+      port: 8443
+
+    - name: http
+      protocol: http
+      port: 8080
+
+  endpoints:
+    - name: ip-https
+      listenerRef: https
+      addressRef: ip
+
+    - name: ip-http
+      listenerRef: http
+      addressRef: ip

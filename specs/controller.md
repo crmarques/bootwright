@@ -269,9 +269,10 @@ package/runtime transaction that could alter dependencies in use or retained
 by another setup or frozen lifecycle. The OS package-manager lock is an
 additional requirement, not a replacement for Bootwright coordination.
 
-No service port or container name is reserved by setup. Local service
-execution must define those conflict identities and join this host
-coordination before its effects become available. Dependency readiness never
+No service port or container name is reserved by setup.
+[Infrastructure services](infrastructure-services.md#host-reservations) defines
+those conflict identities and joins this host coordination through the shared
+root lock and the stored reservation record. Dependency readiness never
 establishes service ownership or authorizes another context's resources.
 
 ## Publication and interrupted setup
