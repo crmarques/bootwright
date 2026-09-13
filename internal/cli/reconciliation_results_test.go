@@ -98,7 +98,7 @@ func TestOperationResultLeadsWithItsOutcomeAndNamesItsLog(t *testing.T) {
 
 func TestProgressReportsEachBlockAndGroupUnbuffered(t *testing.T) {
 	var out bytes.Buffer
-	presenter := NewLifecycleProgressPresenter(&out)
+	presenter := NewLifecycleProgressPresenter(&out, false)
 	presenter.ReportProgress(context.Background(), lifecycle.ProgressEvent{Block: "artifact-server-lab", Description: "serve artifacts on lab", Status: "running", Position: 1, Total: 2})
 	presenter.ReportProgress(context.Background(), lifecycle.ProgressEvent{Block: "artifact-server-lab", Description: "serve artifacts on lab", Group: "pull-image", Detail: "acquire the pinned server image", Status: "ok", Position: 1, Total: 2})
 	presenter.ReportProgress(context.Background(), lifecycle.ProgressEvent{Block: "artifact-server-lab", Description: "serve artifacts on lab", Status: "done", Position: 1, Total: 2})

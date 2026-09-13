@@ -73,7 +73,7 @@ func TestControllerNegativeReportPreservesStreamsAndSafeDiagnostics(t *testing.T
 
 func TestControllerPlanFailureStopsOutputWithoutFallback(t *testing.T) {
 	var errOut bytes.Buffer
-	presenter := NewControllerPresenter(rejectingWriter{})
+	presenter := NewControllerPresenter(rejectingWriter{}, false)
 	err := presenter.PresentControllerPlan(context.Background(), *controllerReport("planned", true))
 	record := &dispatchRecord{result: commandResult{controller: controllerReport("incomplete", false)}, err: err}
 	var out bytes.Buffer
@@ -203,10 +203,10 @@ func TestControllerChecksUseContractStatusTokens(t *testing.T) {
 		report := controllerReport("planned", false)
 		report.Checks[0].Status = status
 		var out bytes.Buffer
-		if err := NewControllerPresenter(&out).PresentControllerPlan(context.Background(), *report); err != nil {
+		if err := NewControllerPresenter(&out, false).PresentControllerPlan(context.Background(), *report); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(out.String(), "  "+token+"  execution-bundle  ") {
+		if !strings.Contains(out.String(), "  "+token+"  Execution bundle  ") {
 			t.Fatalf("status %q rendered as %q, want %s", status, out.String(), token)
 		}
 		for _, internal := range []string{"[ready]", "[not-ready]", "[unverified]"} {
@@ -262,7 +262,7 @@ func TestControllerCompletedSetupReportsReadinessOnly(t *testing.T) {
 // them as its own block without repeating it.
 func TestControllerResolutionRowsPrecedeThePlanUnderOneHeadline(t *testing.T) {
 	var out bytes.Buffer
-	presenter := NewControllerPresenter(&out)
+	presenter := NewControllerPresenter(&out, false)
 	ctx := context.Background()
 	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.ResolutionPhase, Action: "Python and Ansible", Status: "running", Step: 1, Steps: 2})
 	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.ResolutionPhase, Action: "Python and Ansible", Status: "ok", Detail: "Python 3.14.7, Ansible 2.21.4", Step: 1, Steps: 2})
@@ -288,6 +288,69 @@ func TestControllerResolutionRowsPrecedeThePlanUnderOneHeadline(t *testing.T) {
 		"  [DONE]     Execution bundle (1/1)\n"
 	if strings.Count(rendered, "Bastion setup\n") != 1 || !strings.Contains(rendered, "\nChecks\n") || !strings.HasSuffix(rendered, suffix) {
 		t.Fatalf("result = %q", rendered)
+	}
+}
+
+// A setup opens with its scope, streams each check as it settles, resolves,
+// and only then presents the plan, which repeats neither the scope nor the
+// checks.
+func TestControllerScopeChecksResolutionAndPlanStreamInOrder(t *testing.T) {
+	var out bytes.Buffer
+	presenter := NewControllerPresenter(&out, false)
+	ctx := context.Background()
+	report := controllerReport("planned", false)
+	if err := presenter.PresentControllerScope(ctx, prerequisites.InspectionPhase, *report); err != nil {
+		t.Fatal(err)
+	}
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.InspectionPhase, Action: "host", Status: "ok", Detail: "fedora 43/amd64"})
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.InspectionPhase, Action: "execution-bundle", Status: "running", Detail: "verifying the retained bundle"})
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.InspectionPhase, Action: "execution-bundle", Status: "failed", Detail: "required qualified Python and Ansible; observed missing or unverified"})
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.ResolutionPhase, Action: "Native packages", Status: "ok", Detail: "no changes", Step: 1, Steps: 1})
+	if err := presenter.PresentControllerPlan(ctx, *report); err != nil {
+		t.Fatal(err)
+	}
+	want := "Bastion setup\n\n  Scope     baseline\n  Platform  fedora 43/amd64\n" +
+		"\nChecks\n" +
+		"  [OK]       Host: fedora 43/amd64\n" +
+		"  [RUNNING]  Execution bundle: verifying the retained bundle\n" +
+		"  [FAIL]     Execution bundle: required qualified Python and Ansible; observed missing or unverified\n" +
+		"\nResolving\n" +
+		"  [OK]       Native packages: no changes (1/1)\n" +
+		"\nDependencies\n  qualified-source.tar.gz\n" +
+		"\nPlanned changes\n  1. Prepare the qualified execution bundle\n"
+	if out.String() != want {
+		t.Fatalf("result = %q, want %q", out.String(), want)
+	}
+}
+
+// Readiness streams the same checks under its own headline.
+func TestControllerReadinessStreamsUnderItsOwnHeadline(t *testing.T) {
+	var out bytes.Buffer
+	presenter := NewControllerPresenter(&out, false)
+	ctx := context.Background()
+	if err := presenter.PresentControllerScope(ctx, prerequisites.ReadinessPhase, *controllerReport("ready", false)); err != nil {
+		t.Fatal(err)
+	}
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.ReadinessPhase, Action: "host", Status: "ok", Detail: "fedora 43/amd64"})
+	want := "Bastion readiness\n\n  Scope     baseline\n  Platform  fedora 43/amd64\n\nChecks\n  [OK]       Host: fedora 43/amd64\n"
+	if out.String() != want {
+		t.Fatalf("result = %q, want %q", out.String(), want)
+	}
+}
+
+// The runner terminates a row a terminal is still rewriting before it writes
+// the result, and a ready setup adds only its plan and outcome to the streamed
+// checks.
+func TestRunnerFinishesProgressBeforeTheReadyResult(t *testing.T) {
+	report := controllerReport("unchanged", false)
+	report.Actions, report.ProgressPresented = nil, true
+	record := &dispatchRecord{result: commandResult{controller: report}}
+	var out bytes.Buffer
+	config := Config{Out: &out, Services: dispatchSpies(record), FinishProgress: func() { out.WriteString("<finished>") }}
+	code := New(config).Run(context.Background(), []string{"bastion", "setup"})
+	want := "<finished>\nPlanned changes\n  none\n\n  Outcome  unchanged\n  Next     bootwright preflight bastion\n"
+	if code != 0 || out.String() != want {
+		t.Fatalf("code=%d result=%q, want %q", code, out.String(), want)
 	}
 }
 

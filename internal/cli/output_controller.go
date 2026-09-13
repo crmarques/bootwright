@@ -9,18 +9,45 @@ import (
 
 const controllerSetupHeadline = "Bastion setup"
 
-// ControllerPresenter owns everything bastion setup shows while it works: the
-// resolution steps before the plan, the plan itself and the approved actions
-// after confirmation. One object presents all three so the headline is written
-// once and every row shares one layout. Construction performs no output; a
-// plan write failure prevents setup mutation.
+// ControllerPresenter owns everything bastion setup and readiness show while
+// they work: the scope, the host checks as they are verified, the resolution
+// steps, the plan and the approved actions after confirmation. One object
+// presents all of them so the headline and each section appear exactly once.
+// Construction performs no output; a scope or plan write failure prevents
+// setup mutation.
 type ControllerPresenter struct {
 	progress progressPresenter
 	headline bool
+	scope    bool
+	checks   bool
 }
 
-func NewControllerPresenter(out io.Writer) *ControllerPresenter {
-	return &ControllerPresenter{progress: progressPresenter{out: out, clock: systemProgressClock()}}
+// NewControllerPresenter streams to out. On a terminal the running row is
+// rewritten in place; anywhere else rows are appended.
+func NewControllerPresenter(out io.Writer, terminal bool) *ControllerPresenter {
+	return &ControllerPresenter{progress: progressPresenter{out: out, clock: systemProgressClock(), terminal: terminal}}
+}
+
+// PresentControllerScope opens the result before inspection starts streaming
+// its checks, so the operator knows what is being inspected while it runs.
+func (p *ControllerPresenter) PresentControllerScope(ctx context.Context, phase string, report prerequisites.Report) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if p == nil || p.progress.out == nil || !validControllerScope(&report) {
+		return &controllerOutputFailure{}
+	}
+	if p.headline {
+		return nil
+	}
+	var text display
+	text.headline("", phaseHeadline(phase))
+	controllerScopeText(&text, &report)
+	if err := text.writeTo(p.progress.out); err != nil {
+		return &controllerOutputFailure{}
+	}
+	p.headline, p.scope = true, true
+	return nil
 }
 
 func (p *ControllerPresenter) PresentControllerPlan(ctx context.Context, report prerequisites.Report) error {
@@ -34,12 +61,12 @@ func (p *ControllerPresenter) PresentControllerPlan(ctx context.Context, report 
 	if !p.headline {
 		text.headline("", controllerHeadline("bastion setup", &report))
 	}
-	controllerPlanText(&text, &report)
+	controllerPlanText(&text, &report, !p.scope, !p.checks)
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if p.headline {
-		// The plan follows the resolution rows as its own block.
+		// The plan follows the streamed rows as its own block.
 		if _, err := io.WriteString(p.progress.out, "\n"); err != nil {
 			return &controllerOutputFailure{}
 		}
@@ -51,19 +78,23 @@ func (p *ControllerPresenter) PresentControllerPlan(ctx context.Context, report 
 	return nil
 }
 
-// ReportProgress streams one setup row. Resolution rows precede the plan, so
-// the first one also opens the headline the plan would otherwise write.
+// ReportProgress streams one row under the heading its phase owns. A phase
+// that arrives before the scope also opens the headline.
 func (p *ControllerPresenter) ReportProgress(ctx context.Context, event prerequisites.ProgressEvent) {
 	if p == nil || p.progress.out == nil || ctx.Err() != nil || event.Action == "" {
 		return
 	}
 	heading, nested := "Progress", event.Detail != ""
-	if event.Phase == prerequisites.ResolutionPhase {
+	switch event.Phase {
+	case prerequisites.InspectionPhase, prerequisites.ReadinessPhase:
+		heading, nested = "Checks", false
+		p.checks = true
+	case prerequisites.ResolutionPhase:
 		heading, nested = "Resolving", false
-		if !p.headline {
-			p.headline = true
-			io.WriteString(p.progress.out, controllerSetupHeadline+"\n")
-		}
+	}
+	if !p.headline {
+		p.headline = true
+		io.WriteString(p.progress.out, phaseHeadline(event.Phase)+"\n")
 	}
 	p.progress.report(ctx, progressEvent{
 		Heading: heading, Label: controllerActionLabel(event.Action), Detail: event.Detail,
@@ -71,12 +102,24 @@ func (p *ControllerPresenter) ReportProgress(ctx context.Context, event prerequi
 	})
 }
 
+// Finish terminates a row a terminal is still rewriting. The runner calls it
+// once the operation returns, before any result or diagnostic is written.
+func (p *ControllerPresenter) Finish() {
+	if p != nil {
+		p.progress.finish()
+	}
+}
+
 type controllerOutputFailure struct{}
 
 func (*controllerOutputFailure) Error() string { return "controller plan output failed" }
 
+func validControllerScope(report *prerequisites.Report) bool {
+	return report != nil && report.Platform.OS != "" && report.Platform.Release != "" && report.Platform.Architecture != "" && (report.ContextName == "") == (report.Machine == "")
+}
+
 func validControllerReport(report *prerequisites.Report) bool {
-	if report == nil || report.Platform.OS == "" || report.Platform.Release == "" || report.Platform.Architecture == "" || len(report.Checks) == 0 || (report.ContextName == "") != (report.Machine == "") {
+	if !validControllerScope(report) || len(report.Checks) == 0 {
 		return false
 	}
 	switch report.Outcome {
@@ -117,26 +160,50 @@ func controllerHeadline(command string, report *prerequisites.Report) string {
 	return "Bastion setup plan"
 }
 
-// controllerActionLabel turns a receipt action identity into the prose the
-// operator reads; resolution steps already arrive as prose.
+func phaseHeadline(phase string) string {
+	if phase == prerequisites.ReadinessPhase {
+		return "Bastion readiness"
+	}
+	return controllerSetupHeadline
+}
+
+// controllerActionLabel turns a check or receipt action identity into the
+// prose the operator reads; resolution steps already arrive as prose.
 func controllerActionLabel(id string) string {
 	switch id {
+	case "host":
+		return "Host"
+	case "installed-host":
+		return "Installed host"
 	case "execution-bundle":
 		return "Execution bundle"
 	case "container-runtime":
 		return "Container runtime"
+	case "target-tools":
+		return "Target tools"
 	case "controller-binding":
 		return "Controller binding"
+	case "setup-recovery":
+		return "Setup recovery"
+	case "setup-state":
+		return "Setup state"
 	}
 	return id
 }
 
+// writeControllerReport closes the result. Whatever the presenter already
+// streamed is not repeated: the scope, checks and plan after a streamed
+// inspection, or everything but the outcome after a presented plan.
 func writeControllerReport(out io.Writer, command string, report *prerequisites.Report) error {
 	var text display
 	presented := report.PlanPresented || report.ProgressPresented
 	if !presented {
 		text.headline("", controllerHeadline(command, report))
-		controllerPlanText(&text, report)
+	}
+	// A setup that failed before its plan settled has nothing to plan; every
+	// other unpresented plan still names what would change.
+	if !report.PlanPresented && !(report.ProgressPresented && report.Outcome == "planned") {
+		controllerPlanText(&text, report, !presented, !presented)
 	}
 	// After the plan was presented, an unfinished setup must still say which of
 	// its approved actions took effect.
@@ -219,16 +286,7 @@ func checkToken(status string) string {
 	}
 }
 
-// A satisfied check reports only what was observed. Any other check states the
-// requirement beside it, because the difference is the actionable part.
-func checkDetail(check prerequisites.Check) string {
-	if check.Status == "ready" {
-		return check.Observed
-	}
-	return "required " + check.Required + "; observed " + check.Observed
-}
-
-func controllerPlanText(text *display, report *prerequisites.Report) {
+func controllerScopeText(text *display, report *prerequisites.Report) {
 	scope := []field{{Label: "Scope", Value: "baseline"}}
 	if report.ContextName != "" {
 		scope = []field{
@@ -239,14 +297,22 @@ func controllerPlanText(text *display, report *prerequisites.Report) {
 	scope = append(scope, field{Label: "Platform", Value: report.Platform.OS + " " + report.Platform.Release + "/" + report.Platform.Architecture})
 	text.section("")
 	text.fields(scope...)
+}
 
-	text.section("Checks")
-	rows := make([][]string, 0, len(report.Checks))
-	for _, check := range report.Checks {
-		rows = append(rows, []string{checkToken(check.Status), check.ID, checkDetail(check)})
+// controllerPlanText writes the plan body. The scope and checks are skipped
+// when the presenter already streamed them.
+func controllerPlanText(text *display, report *prerequisites.Report, scope, checks bool) {
+	if scope {
+		controllerScopeText(text, report)
 	}
-	text.rows(rows)
-
+	if checks {
+		text.section("Checks")
+		rows := make([][]string, 0, len(report.Checks))
+		for _, check := range report.Checks {
+			rows = append(rows, []string{checkToken(check.Status), controllerActionLabel(check.ID), check.Summary()})
+		}
+		text.rows(rows)
+	}
 	if len(report.Actions) == 0 {
 		text.section("Planned changes")
 		text.lines([]string{"none"})

@@ -15,6 +15,16 @@ type Check struct {
 	Status   string
 }
 
+// Summary is what the operator reads beside a check: the observation when it
+// holds, and the requirement beside the observation when it does not, because
+// the difference is the actionable part.
+func (c Check) Summary() string {
+	if c.Status == "ready" {
+		return c.Observed
+	}
+	return "required " + c.Required + "; observed " + c.Observed
+}
+
 type Report struct {
 	ContextName   string
 	Machine       string

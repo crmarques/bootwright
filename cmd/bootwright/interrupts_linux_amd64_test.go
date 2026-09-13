@@ -144,7 +144,7 @@ func TestInteractiveInterruptHelper(t *testing.T) {
 	deps.Repository, deps.Workspace = repository, repository
 	deps.Confirmer, deps.SecretInput = confirmer, secretInputFunc(readStdin)
 	services := assembleServices(deps)
-	os.Exit(runServices(context.Background(), []string{"context", "update", "--name", "alpha", "--input-dir", os.Getenv("BOOTWRIGHT_INTERRUPT_INPUT")}, os.Stdout, os.Stderr, services, beginSignalOperation))
+	os.Exit(runServices(context.Background(), []string{"context", "update", "--name", "alpha", "--input-dir", os.Getenv("BOOTWRIGHT_INTERRUPT_INPUT")}, os.Stdout, os.Stderr, services, invocationHooks{begin: beginSignalOperation}))
 }
 
 func TestTerminalFlagsAreRestoredAfterReadyAndEmptyReads(t *testing.T) {

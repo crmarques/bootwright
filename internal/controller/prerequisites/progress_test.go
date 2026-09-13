@@ -36,6 +36,7 @@ func TestResolutionReportsEachDependencyFamilyBeforeThePlan(t *testing.T) {
 	var resolution, setup []ProgressEvent
 	for _, event := range progress.events {
 		switch event.Phase {
+		case InspectionPhase:
 		case ResolutionPhase:
 			resolution = append(resolution, event)
 		case SetupPhase:
@@ -64,6 +65,65 @@ func TestResolutionReportsEachDependencyFamilyBeforeThePlan(t *testing.T) {
 	}
 	if len(setup) == 0 || setup[0].Action != "execution-bundle" || setup[0].Status != "running" || setup[0].Steps == 0 {
 		t.Fatalf("setup events = %#v", setup)
+	}
+}
+
+// settled lists a phase's rows without the running ones, after checking that
+// every running row is followed by its own outcome.
+func (r *recordingProgress) settled(t *testing.T, phase string) []string {
+	t.Helper()
+	var rows []string
+	pending := ""
+	for _, event := range r.events {
+		if event.Phase != phase {
+			continue
+		}
+		if pending != "" && event.Action != pending {
+			t.Fatalf("%s was left running before %s", pending, event.Action)
+		}
+		if event.Status == "running" {
+			pending = event.Action
+			continue
+		}
+		pending = ""
+		rows = append(rows, event.Action+":"+event.Status)
+	}
+	if pending != "" {
+		t.Fatalf("%s was left running", pending)
+	}
+	return rows
+}
+
+// Inspection is what a ready bastion spends its time on, so the scope opens
+// first and every check is shown as it settles, once, although setup inspects
+// again before it resolves and again under the transaction. Readiness streams
+// the same checks under its own phase.
+func TestInspectionStreamsEachCheckOnceAndReadinessUsesItsOwnPhase(t *testing.T) {
+	f := newFixture(t)
+	progress := &recordingProgress{owner: f}
+	f.service.options.Progress = progress
+	if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	fresh := []string{"host:ok", "installed-host:ok", "execution-bundle:failed", "container-runtime:ok", "setup-state:failed"}
+	if !slices.Equal(f.scopes, []string{InspectionPhase}) || !slices.Equal(progress.settled(t, InspectionPhase), fresh) {
+		t.Fatalf("scopes=%v inspection=%v", f.scopes, progress.settled(t, InspectionPhase))
+	}
+	f.scopes, progress.events = nil, nil
+	report, err := f.service.Setup(context.Background(), SetupRequest{})
+	if err != nil || report.Outcome != "unchanged" || !report.ProgressPresented {
+		t.Fatalf("ready setup=%#v err=%v", report, err)
+	}
+	ready := []string{"host:ok", "installed-host:ok", "execution-bundle:ok", "container-runtime:ok"}
+	if !slices.Equal(f.scopes, []string{InspectionPhase}) || !slices.Equal(progress.settled(t, InspectionPhase), ready) || len(progress.settled(t, ResolutionPhase)) != 0 {
+		t.Fatalf("scopes=%v inspection=%v events=%#v", f.scopes, progress.settled(t, InspectionPhase), progress.events)
+	}
+	f.scopes, progress.events = nil, nil
+	if _, err := f.service.Check(context.Background(), CheckRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(f.scopes, []string{ReadinessPhase}) || !slices.Equal(progress.settled(t, ReadinessPhase), ready) {
+		t.Fatalf("scopes=%v readiness=%v", f.scopes, progress.settled(t, ReadinessPhase))
 	}
 }
 

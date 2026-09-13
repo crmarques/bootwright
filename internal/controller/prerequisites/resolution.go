@@ -249,7 +249,7 @@ func (s Service) resolveDependencies(ctx context.Context, name string, before in
 	var after inspection
 	err = s.storage.ReadController(ctx, name, func(view StorageView) error {
 		var err error
-		after, err = s.inspect(ctx, view, false, inspectionResolution{Definition: &definition})
+		after, err = s.inspect(ctx, view, false, "", inspectionResolution{Definition: &definition})
 		if err != nil {
 			return err
 		}

@@ -82,17 +82,32 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 		return code
 	}
 	confirmer := cli.NewConfirmation(readStdin, stderr, stdinTerminal)
-	controllerPresenter := cli.NewControllerPresenter(stdout)
+	// A terminal gets its running progress row rewritten in place; a pipe or
+	// file receives every row appended.
+	_, terminal := terminalFile(stdout)
+	controllerPresenter := cli.NewControllerPresenter(stdout, terminal)
+	lifecycleProgress := cli.NewLifecycleProgressPresenter(stdout, terminal)
 	process := processDependencies{
 		Confirmer:          confirmer,
 		SecretInput:        secretInputFunc(readStdin),
 		Progress:           controllerPresenter,
 		Presenter:          controllerPresenter,
-		LifecycleProgress:  cli.NewLifecycleProgressPresenter(stdout),
+		LifecycleProgress:  lifecycleProgress,
 		LifecyclePresenter: cli.NewLifecyclePlanPresenter(stdout),
 		Executable:         lifecycle.Executable{Version: version, Commit: commit},
 	}
-	return runServices(ctx, args, stdout, stderr, wireServices(process), beginSignalOperation)
+	hooks := invocationHooks{begin: beginSignalOperation, finish: func() {
+		controllerPresenter.Finish()
+		lifecycleProgress.Finish()
+	}}
+	return runServices(ctx, args, stdout, stderr, wireServices(process), hooks)
+}
+
+// invocationHooks carries what only an interactive process supplies to the
+// runner: operation cancellation and the progress finisher.
+type invocationHooks struct {
+	begin  func(context.Context) (context.Context, func())
+	finish func()
 }
 
 type invocationOutput struct {
@@ -152,10 +167,10 @@ func (w *invocationError) emit() error {
 	return err
 }
 
-func runServices(ctx context.Context, args []string, stdout, stderr io.Writer, services cli.Services, operations ...func(context.Context) (context.Context, func())) int {
-	var operation func(context.Context) (context.Context, func())
-	if len(operations) > 0 {
-		operation = operations[0]
+func runServices(ctx context.Context, args []string, stdout, stderr io.Writer, services cli.Services, hooks ...invocationHooks) int {
+	var hook invocationHooks
+	if len(hooks) > 0 {
+		hook = hooks[0]
 	}
 	return cli.New(cli.Config{
 		Out:    stdout,
@@ -170,7 +185,8 @@ func runServices(ctx context.Context, args []string, stdout, stderr io.Writer, s
 		},
 		Services:            services,
 		CompletionPaths:     completionPaths,
-		BeginOperation:      operation,
+		BeginOperation:      hook.begin,
+		FinishProgress:      hook.finish,
 		EncodeEffectiveYAML: encoding.YAML,
 		EncodeEffectiveJSON: encoding.JSON,
 	}).Run(ctx, args)

@@ -169,6 +169,56 @@ func TestProgressStopsAtCancellation(t *testing.T) {
 	}
 }
 
+// A terminal shows each step as one line: the running row is redrawn in place
+// every second and its outcome overwrites it.
+func TestTerminalProgressRewritesTheRunningRowInPlace(t *testing.T) {
+	clock := newManualClock()
+	var out bytes.Buffer
+	presenter := &progressPresenter{out: &out, clock: clock.clock(), terminal: true}
+	ctx := context.Background()
+	presenter.report(ctx, progressEvent{Heading: "Resolving", Label: "Native packages", Status: "running", Position: 2, Total: 2})
+	clock.advance(2 * time.Second)
+	presenter.report(ctx, progressEvent{Heading: "Resolving", Label: "Native packages", Detail: "no changes", Status: "ok", Position: 2, Total: 2})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Execution bundle", Status: "running", Position: 1, Total: 1})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Execution bundle", Detail: "acquiring cpython, source 1 of 2", Status: "running", Position: 1, Total: 1, Nested: true})
+	presenter.finish()
+	want := "\nResolving\n" +
+		"  [RUNNING]  Native packages (2/2)" +
+		eraseLine + "  [RUNNING]  Native packages (2/2)  still running, 1s" +
+		eraseLine + "  [RUNNING]  Native packages (2/2)  still running, 2s" +
+		eraseLine + "  [OK]       Native packages: no changes (2/2)  2s\n" +
+		"\nProgress\n" +
+		"  [RUNNING]  Execution bundle (1/1)" +
+		eraseLine + "  [RUNNING]  Execution bundle: acquiring cpython, source 1 of 2 (1/1)\n"
+	if out.String() != want {
+		t.Fatalf("progress = %q, want %q", out.String(), want)
+	}
+}
+
+// A new step or heading never overwrites another step's row, and a nested
+// outcome leaves its block's line to the next refresh.
+func TestTerminalProgressClosesALineBeforeAnotherStepOrHeading(t *testing.T) {
+	clock := newManualClock()
+	var out bytes.Buffer
+	presenter := &progressPresenter{out: &out, clock: clock.clock(), terminal: true}
+	ctx := context.Background()
+	presenter.report(ctx, progressEvent{Heading: "Checks", Label: "Installed host", Detail: "verifying local identity", Status: "running"})
+	presenter.report(ctx, progressEvent{Heading: "Checks", Label: "Execution bundle", Detail: "verifying the retained bundle", Status: "running"})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Status: "running", Position: 1, Total: 1})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Detail: "acquire the pinned server image", Status: "ok", Position: 1, Total: 1, Nested: true})
+	clock.advance(time.Second)
+	want := "\nChecks\n" +
+		"  [RUNNING]  Installed host: verifying local identity\n" +
+		"  [RUNNING]  Execution bundle: verifying the retained bundle\n" +
+		"\nProgress\n" +
+		"  [RUNNING]  Serve artifacts (1/1)" +
+		eraseLine + "  [OK]       Serve artifacts: acquire the pinned server image (1/1)\n" +
+		"  [RUNNING]  Serve artifacts (1/1)  still running, 1s"
+	if out.String() != want {
+		t.Fatalf("progress = %q, want %q", out.String(), want)
+	}
+}
+
 // Presentation must never carry an attacker-chosen control sequence into the
 // operator's terminal, whichever field it arrives in.
 func TestProgressEscapesUntrustedText(t *testing.T) {

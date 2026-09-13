@@ -9,9 +9,17 @@ import (
 	"time"
 )
 
-// progressHeartbeat bounds how long a running step may stay silent before its
-// row is repeated with the time elapsed so far.
-const progressHeartbeat = 10 * time.Second
+// progressHeartbeat bounds how long an appended running row may stay silent
+// before it is repeated with the time elapsed so far. A terminal row is
+// redrawn in place every progressRefresh instead.
+const (
+	progressHeartbeat = 10 * time.Second
+	progressRefresh   = time.Second
+)
+
+// eraseLine returns the cursor to column zero and clears the row, so the
+// replacement overwrites the running row completely.
+const eraseLine = "\r\x1b[2K"
 
 // progressTokenWidth aligns streamed rows without knowing which tokens follow:
 // every token a running step can stream is at most as wide as [RUNNING].
@@ -45,15 +53,19 @@ type progressEvent struct {
 }
 
 // progressPresenter streams progress rows and repeats a silent step's row on
-// the heartbeat. It serializes its writes because the heartbeat fires on the
-// clock's goroutine while the operation keeps reporting on its own.
+// the heartbeat. On a terminal it rewrites the running row in place instead,
+// so each step settles as one line. Writes are serialized because the
+// heartbeat fires on the clock's goroutine while the operation keeps
+// reporting on its own.
 type progressPresenter struct {
-	out   io.Writer
-	clock progressClock
+	out      io.Writer
+	clock    progressClock
+	terminal bool
 
 	mu      sync.Mutex
 	heading string
 	step    *progressStep
+	open    bool
 }
 
 type progressStep struct {
@@ -74,14 +86,16 @@ func (p *progressPresenter) report(ctx context.Context, event progressEvent) {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.open(event.Heading)
 	now := p.clock.now()
 	step := p.step
 	if step == nil || step.label != event.Label || step.position != event.Position || step.total != event.Total {
+		// Only a step's own rows may overwrite its line.
 		p.stopHeartbeat()
+		p.closeLine()
 		step = &progressStep{label: event.Label, position: event.Position, total: event.Total, started: now, since: now}
 		p.step = step
 	}
+	p.openHeading(event.Heading)
 	step.ctx = ctx
 	suffix := ""
 	switch {
@@ -106,6 +120,19 @@ func (p *progressPresenter) report(ctx context.Context, event progressEvent) {
 	p.arm(step)
 }
 
+// finish terminates a row left open on the terminal and stops the heartbeat,
+// so whatever follows the operation starts on its own line.
+func (p *progressPresenter) finish() {
+	if p == nil || p.out == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.stopHeartbeat()
+	p.step = nil
+	p.closeLine()
+}
+
 // arm schedules the next heartbeat. The generation lets a fired timer detect
 // that a newer row already replaced the one it would repeat.
 func (p *progressPresenter) arm(step *progressStep) {
@@ -114,7 +141,11 @@ func (p *progressPresenter) arm(step *progressStep) {
 	}
 	step.generation++
 	generation := step.generation
-	step.stop = p.clock.after(progressHeartbeat, func() { p.beat(step, generation) })
+	interval := progressHeartbeat
+	if p.terminal {
+		interval = progressRefresh
+	}
+	step.stop = p.clock.after(interval, func() { p.beat(step, generation) })
 }
 
 func (p *progressPresenter) beat(step *progressStep, generation int) {
@@ -135,16 +166,28 @@ func (p *progressPresenter) stopHeartbeat() {
 	}
 }
 
-// open prints a heading the first time it is needed. The blank line separates
-// it from the headline or plan that every progress stream follows.
-func (p *progressPresenter) open(heading string) {
+// openHeading prints a heading the first time it is needed. The blank line
+// separates it from the headline or plan that every progress stream follows.
+func (p *progressPresenter) openHeading(heading string) {
 	if heading == "" || p.heading == heading {
 		return
 	}
+	p.closeLine()
 	p.heading = heading
 	io.WriteString(p.out, "\n"+escapeDisplayLine(heading)+"\n")
 }
 
+// closeLine terminates a running row a terminal is still rewriting.
+func (p *progressPresenter) closeLine() {
+	if p.open {
+		io.WriteString(p.out, "\n")
+		p.open = false
+	}
+}
+
+// write appends one row. On a terminal a running row stays unterminated and
+// its successor erases it first, so the step occupies one line until it
+// settles.
 func (p *progressPresenter) write(status, label, detail string, position, total int, suffix string) {
 	token := progressStatusToken(status)
 	subject := escapeDisplayLine(label)
@@ -157,7 +200,22 @@ func (p *progressPresenter) write(status, label, detail string, position, total 
 	if suffix != "" {
 		subject += strings.Repeat(" ", displayGap) + suffix
 	}
-	io.WriteString(p.out, displayIndent+token+strings.Repeat(" ", max(progressTokenWidth-len(token), 0)+displayGap)+subject+"\n")
+	row := displayIndent + token + strings.Repeat(" ", max(progressTokenWidth-len(token), 0)+displayGap) + subject
+	if !p.terminal {
+		io.WriteString(p.out, row+"\n")
+		return
+	}
+	prefix := ""
+	if p.open {
+		prefix = eraseLine
+	}
+	if status == "running" {
+		io.WriteString(p.out, prefix+row)
+		p.open = true
+		return
+	}
+	io.WriteString(p.out, prefix+row+"\n")
+	p.open = false
 }
 
 // formatElapsed truncates to whole seconds and omits anything shorter than one

@@ -105,7 +105,10 @@ type BundleArea interface {
 	Location(context.Context) (BundleLocation, error)
 }
 
+// PlanPresenter opens the result with its scope before inspection streams the
+// host checks, and presents the plan before confirmation.
 type PlanPresenter interface {
+	PresentControllerScope(context.Context, string, Report) error
 	PresentControllerPlan(context.Context, Report) error
 }
 

@@ -23,6 +23,7 @@ type fixture struct {
 	catalog           testCatalog
 	compiler          testCompiler
 	events            []string
+	scopes            []string
 	confirmationError error
 	presentationError error
 	beforeMutation    func()
@@ -52,6 +53,11 @@ func (f *fixture) Confirm(ctx context.Context, _, _ string) error {
 	f.events = append(f.events, "confirm")
 	return f.confirmationError
 }
+func (f *fixture) PresentControllerScope(_ context.Context, phase string, _ Report) error {
+	f.scopes = append(f.scopes, phase)
+	return nil
+}
+
 func (f *fixture) PresentControllerPlan(ctx context.Context, _ Report) error {
 	f.events = append(f.events, "present")
 	return f.presentationError

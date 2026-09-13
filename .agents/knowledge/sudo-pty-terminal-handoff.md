@@ -45,6 +45,12 @@ group differing from the pseudo-terminal's foreground group.
   `SIGTTIN`, so sudo's background mode (output redirected to a file or pipe)
   and a shell's `fg` both hand the terminal over; an orphaned group reads
   `EIO` and the confirmation fails instead of hanging.
+- The terminal redraw of [progress rows](../../specs/cli/output.md#long-running-progress)
+  decides from the child's own standard output. Sudo's pseudo-terminal mode
+  routes only descriptors that are terminals through the pseudo-terminal and
+  hands a redirected standard output to the command unchanged, so
+  `bastion setup > log` receives the appended-line form. This follows sudo's
+  `exec_pty` descriptor handling and is operator-verified, not gated in-tree.
 
 Evidence: `TestBackgroundConfirmationRequestsTerminalThroughJobControl`
 simulates sudo's monitor with a pseudo-terminal, a session leader in the

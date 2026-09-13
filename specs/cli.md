@@ -3,7 +3,7 @@
 `bootwright` exposes the [desired-state API](api.md) to operators and automation.
 Equivalent logical input produces the same ordered output regardless of TTY,
 locale, map iteration or discovery order. Prompts, explicit sensitive exports,
-watch displays and the elapsed times in
+watch displays, and the elapsed times and terminal redraw of
 [progress rows](cli/output.md#long-running-progress) are the named exceptions.
 
 Read this page with the [command and flag catalog](cli/commands.md) and

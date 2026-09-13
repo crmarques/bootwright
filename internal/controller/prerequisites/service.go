@@ -67,7 +67,7 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*Report, erro
 	}
 	var result *Report
 	err := s.storage.ReadController(ctx, request.ContextName, func(view StorageView) error {
-		current, err := s.inspect(ctx, view, false)
+		current, err := s.inspect(ctx, view, false, ReadinessPhase)
 		if err != nil {
 			if len(current.report.Checks) != 0 {
 				current.report.Outcome = "not-ready"
@@ -93,10 +93,14 @@ func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, erro
 	var current inspection
 	var err error
 	if request.DryRun && request.ContextName == "" {
-		current, err = s.inspect(ctx, StorageView{}, true)
+		current, err = s.inspect(ctx, StorageView{}, true, "")
 	} else {
+		phase := InspectionPhase
+		if request.DryRun {
+			phase = ""
+		}
 		err = s.storage.ReadController(ctx, request.ContextName, func(view StorageView) error {
-			current, err = s.inspect(ctx, view, request.DryRun)
+			current, err = s.inspect(ctx, view, request.DryRun, phase)
 			return err
 		})
 	}
@@ -169,7 +173,7 @@ func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, erro
 		if approved.definition.Bootstrap != nil {
 			frozen.Definition = &approved.definition
 		}
-		fresh, err := s.inspect(ctx, tx.Snapshot(), false, frozen)
+		fresh, err := s.inspect(ctx, tx.Snapshot(), false, "", frozen)
 		if err != nil {
 			return err
 		}
@@ -204,7 +208,10 @@ type inspectionResolution struct {
 	Definition *Definition
 }
 
-func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, frozen ...inspectionResolution) (inspection, error) {
+// inspect verifies the host. A non-empty phase streams the scope and each
+// check as it settles; the repeated inspections that bind a resolution and
+// guard the transaction pass no phase, so every check is shown exactly once.
+func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, phase string, frozen ...inspectionResolution) (inspection, error) {
 	current := inspection{view: view, selection: controller.Baseline(), bundle: BundleInspection{Recoverable: true}, toolsResolved: true}
 	if view.Context.Name != "" {
 		state, _, err := s.compiler.Compile(ctx, view.Sources)
@@ -283,7 +290,28 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, fro
 		}
 		current.report.Dependencies = append(current.report.Dependencies, path.Base(origin.Path))
 	}
-	current.report.Checks = append(current.report.Checks, Check{"host", platform.OS + " " + platform.Release + "/" + platform.Architecture, platform.OS + " " + platform.Release + "/" + platform.Architecture, "ready"})
+	stream := phase != "" && !dryRun
+	if stream && s.options.Presenter != nil {
+		if err := s.options.Presenter.PresentControllerScope(ctx, phase, cloneReport(current.report)); err != nil {
+			return current, err
+		}
+		current.report.ProgressPresented = true
+	}
+	// settle records a check's outcome and, while streaming, shows it the
+	// moment it is known; start announces the verification about to run.
+	settle := func(check Check) {
+		current.report.setCheck(check)
+		if stream {
+			s.report(ctx, &current.report, checkEvent(phase, check))
+		}
+	}
+	start := func(id, detail string) {
+		if stream {
+			s.report(ctx, &current.report, ProgressEvent{Phase: phase, Action: id, Status: "running", Detail: detail})
+		}
+	}
+	hostText := platform.OS + " " + platform.Release + "/" + platform.Architecture
+	settle(Check{"host", hostText, hostText, "ready"})
 	current.report.Checks = append(current.report.Checks, Check{"installed-host", "verified local identity", "unverified", "unverified"}, Check{"execution-bundle", current.versions(), "unverified", "unverified"})
 	if current.selection.ContainerRuntime() {
 		current.report.Checks = append(current.report.Checks, Check{"container-runtime", current.definition.Runtime.Version, "unverified", "unverified"})
@@ -307,51 +335,59 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, fro
 		}
 		return current, nil
 	}
+	start("installed-host", "verifying local identity")
 	current.host, err = s.host.Identity(ctx)
 	if err != nil {
+		settle(unverified("installed-host", "verified local identity"))
 		return current, err
 	}
 	if view.State.Host.Valid() && !view.State.Host.Equal(current.host) {
+		settle(unverified("installed-host", "verified local identity"))
 		return current, failure("controller.identity", "stored setup belongs to a different installed host", "restore the original host and state; setup cannot rebind it")
 	}
-	current.report.setCheck(readiness("installed-host", "verified local identity", true))
+	settle(readiness("installed-host", "verified local identity", true))
 	if view.State.Receipt.ID != "" && view.State.Receipt.Incomplete() {
 		if !current.compatibleReceipt(view.State.Receipt) || !current.matchesActions(view.State.Receipt.Actions) {
 			return current, failure("controller.unknown", "another exact setup attempt remains unresolved", "restore its original context, executable and acquisition route, then repeat bastion setup")
 		}
 	}
 	if view.OpenBundle != nil && current.toolsResolved {
+		start("execution-bundle", "verifying the retained bundle")
 		area, err := view.OpenBundle(ctx, current.definition.CatalogDigest)
 		if err != nil {
+			settle(unverified("execution-bundle", current.versions()))
 			return current, err
 		}
 		if area != nil {
 			current.bundle, err = s.bundle.Inspect(ctx, area, current.definition, true)
 			if err != nil {
+				settle(unverified("execution-bundle", current.versions()))
 				return current, err
 			}
 			current.reusable = current.definition.Bootstrap != nil
 		}
 	}
-	current.report.setCheck(readiness("execution-bundle", current.versions(), current.bundle.Ready))
+	settle(readiness("execution-bundle", current.versions(), current.bundle.Ready))
 	installTools := false
 	if len(current.toolRequests) != 0 {
-		current.report.setCheck(readiness("target-tools", "desired-state native clients", current.toolsResolved && current.bundle.ToolsReady))
+		settle(readiness("target-tools", "desired-state native clients", current.toolsResolved && current.bundle.ToolsReady))
 		installTools = !current.toolsResolved || !current.bundle.ToolsReady
 	}
 	if !current.bundle.Ready {
 		current.report.Actions = append(current.report.Actions, "Prepare and verify the pinned execution bundle")
 	}
 	if current.selection.ContainerRuntime() {
+		start("container-runtime", "inspecting native packages")
 		current.runtime, err = s.inspectRuntime(ctx, current.definition)
 		if err != nil {
+			settle(unverified("container-runtime", current.definition.Runtime.Version))
 			return current, err
 		}
 		check := readiness("container-runtime", current.definition.Runtime.Version, current.runtime.Ready)
 		if current.runtime.Version != "" {
 			check.Observed = current.runtime.Version
 		}
-		current.report.setCheck(check)
+		settle(check)
 		if !current.runtime.Ready {
 			current.report.Actions = append(current.report.Actions, "Run the Ansible bastion role to install and verify missing native prerequisites")
 		}
@@ -378,13 +414,13 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, fro
 		current.bound = true
 	}
 	if view.Context.Name != "" {
-		current.report.setCheck(readiness("controller-binding", current.selection.MachineName(), current.bound))
+		settle(readiness("controller-binding", current.selection.MachineName(), current.bound))
 		if !current.bound {
 			current.report.Actions = append(current.report.Actions, "Bind the selected controller Machine to this installed host")
 		}
 	}
 	if view.State.Receipt.ID != "" && view.State.Receipt.Incomplete() {
-		current.report.Checks = append(current.report.Checks, Check{"setup-recovery", "complete", "incomplete", "not-ready"})
+		settle(Check{"setup-recovery", "complete", "incomplete", "not-ready"})
 		current.report.Actions = append(current.report.Actions, "Resolve the exact pending setup receipt")
 	} else if view.State.Receipt.ID == "" || view.State.Receipt.Status != "complete" || !current.bundle.Sealed {
 		observed := view.State.Receipt.Status
@@ -393,7 +429,7 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, fro
 		} else if observed == "complete" && !current.bundle.Sealed {
 			observed = "selected bundle is not sealed"
 		}
-		current.report.Checks = append(current.report.Checks, Check{"setup-state", "complete", observed, "not-ready"})
+		settle(Check{"setup-state", "complete", observed, "not-ready"})
 		current.report.Actions = append(current.report.Actions, "Record verified setup completion")
 	}
 	return current, nil
@@ -460,6 +496,8 @@ func cloneReport(report Report) Report {
 	return report
 }
 
+// setCheck settles a check in place, or appends one that was not declared up
+// front, so the report keeps catalog order either way.
 func (r *Report) setCheck(check Check) {
 	for index := range r.Checks {
 		if r.Checks[index].ID == check.ID {
@@ -467,6 +505,26 @@ func (r *Report) setCheck(check Check) {
 			return
 		}
 	}
+	r.Checks = append(r.Checks, check)
+}
+
+// checkEvent is the progress row a settled check streams: its outcome in the
+// progress vocabulary and its summary as the detail.
+func checkEvent(phase string, check Check) ProgressEvent {
+	status := "unknown"
+	switch check.Status {
+	case "ready":
+		status = "ok"
+	case "not-ready":
+		status = "failed"
+	}
+	return ProgressEvent{Phase: phase, Action: check.ID, Status: status, Detail: check.Summary()}
+}
+
+// unverified settles a check whose verification itself failed, so the row
+// closes before the diagnostic explains why.
+func unverified(id, required string) Check {
+	return Check{id, required, "not verified", "not-ready"}
 }
 
 func readiness(id, required string, ready bool) Check {

@@ -214,13 +214,13 @@ func TestLabExampleContextAndBastionPreparationJourney(t *testing.T) {
 		}
 	}
 	plan, _ := contextRun(t, services, 0, "bastion", "setup", "--context", "lab-ocp", "--dry-run")
-	for _, expected := range []string{"Scope       context lab-ocp", "Controller  bastion", "[UNKNOWN]  container-runtime", "[UNKNOWN]  target-tools", "[UNKNOWN]  controller-binding  required bastion", "Outcome  planned", "Next     bootwright bastion setup --context lab-ocp"} {
+	for _, expected := range []string{"Scope       context lab-ocp", "Controller  bastion", "[UNKNOWN]  Container runtime", "[UNKNOWN]  Target tools", "[UNKNOWN]  Controller binding  required bastion", "Outcome  planned", "Next     bootwright bastion setup --context lab-ocp"} {
 		if !strings.Contains(plan, expected) {
 			t.Fatalf("context dry-run lacks %q:\n%s", expected, plan)
 		}
 	}
 	report, diagnostics := contextRun(t, services, 1, "preflight", "bastion", "--context", "lab-ocp")
-	if !strings.Contains(report, "[FAIL]  controller-binding  required bastion") || !strings.Contains(report, "Outcome  not-ready") || !strings.Contains(diagnostics, "preflight.failed") || !strings.Contains(diagnostics, "bastion setup --context lab-ocp") {
+	if !strings.Contains(report, "[FAIL]  Controller binding  required bastion") || !strings.Contains(report, "Outcome  not-ready") || !strings.Contains(diagnostics, "preflight.failed") || !strings.Contains(diagnostics, "bastion setup --context lab-ocp") {
 		t.Fatalf("preflight before setup must fail with setup guidance:\nstdout=%s\nstderr=%s", report, diagnostics)
 	}
 	_, diagnostics = contextRun(t, services, 1, "bastion", "setup", "--context", "missing", "--dry-run")

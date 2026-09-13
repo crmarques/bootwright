@@ -22,6 +22,10 @@ type Config struct {
 	// BeginOperation derives an invocation context and returns a cleanup that
 	// releases and joins its cancellation resources before Run returns.
 	BeginOperation func(context.Context) (context.Context, func())
+	// FinishProgress runs once the application service returns and before any
+	// result or diagnostic is written, so a progress row a terminal is still
+	// rewriting is terminated first.
+	FinishProgress func()
 	// CompletionPaths supplies filesystem candidates for path-valued flags.
 	// Completion offers none when it is absent.
 	CompletionPaths PathCandidates
@@ -193,6 +197,9 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 	}
 	result, err := r.config.Services.invoke(ctx, path, command.Flags(), command.Flags().Args())
 	defer result.clearSensitive()
+	if r.config.FinishProgress != nil {
+		r.config.FinishProgress()
+	}
 	var controllerOutput *controllerOutputFailure
 	if errors.As(err, &controllerOutput) {
 		return 1

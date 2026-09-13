@@ -40,9 +40,13 @@ type ActionProgress struct {
 	Outcome string
 }
 
-// Progress phases: resolution precedes the plan and discovers exact dependency
-// identities; setup follows confirmation and performs the approved actions.
+// Progress phases, in the order a setup runs them: inspection verifies each
+// host check, resolution discovers exact dependency identities before the
+// plan, and setup performs the approved actions after confirmation. Readiness
+// is preflight's inspection, which never plans.
 const (
+	InspectionPhase = "inspection"
+	ReadinessPhase  = "readiness"
 	ResolutionPhase = "resolution"
 	SetupPhase      = "setup"
 )

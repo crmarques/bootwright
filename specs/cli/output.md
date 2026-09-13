@@ -31,8 +31,9 @@ and never recursively emits a second representation or fallback on standard
 error. If any sensitive bytes were written, it emits no diagnostic that could
 be mistaken for part of that value. Structured text, JSON, help, and completion
 are UTF-8 with LF line endings; explicit sensitive results remain exact byte
-streams. Terminal detection may select a watch redraw or an interactive prompt
-only where defined; it never changes the bytes of a non-interactive structured
+streams. Terminal detection may select a watch redraw, the in-place redraw of a
+running [progress row](#long-running-progress) or an interactive prompt only
+where defined; it never changes the bytes of a non-interactive structured
 result. Color, cursor control, locale, and attacker-chosen styling are absent
 from deterministic output.
 
@@ -106,9 +107,12 @@ Four rules govern the stream:
 
 1. **Coverage.** Any unit of work that can exceed the heartbeat interval opens
    a `[RUNNING]` row before it starts, including work before confirmation.
-   `bastion setup` reports dependency resolution under a `Resolving` heading
-   before it presents the plan; every command reports confirmed effects under
-   a `Progress` heading. The first row opens its heading.
+   `bastion setup` and `preflight bastion` open with their scope and report
+   each host check under a `Checks` heading as it is verified; `bastion setup`
+   reports dependency resolution under `Resolving` before it presents the
+   plan; every command reports confirmed effects under `Progress`. The first
+   row opens its heading, and a section the stream already showed is not
+   repeated by the result that follows.
 2. **Silence bound.** While a step runs and ten seconds pass without a new
    row, the presenter repeats the current row with `still running` and the
    time since that row first appeared. The CLI presenter owns the timer;
@@ -126,9 +130,16 @@ outcome, or a recorded receipt, and progress rows never replace the ordered
 result that follows them. Reporting stops at cancellation rather than claiming a
 step whose outcome is no longer observable. Heartbeat notes and elapsed times
 are the only timing-dependent bytes in human output; contract tests drive the
-presenter through an injected clock. This mode uses no color, cursor control or
-in-place rewriting; a terminal-only redraw of the running row is a
-[candidate](../milestones.md#candidates), not part of this contract.
+presenter through an injected clock.
+
+When standard output is a terminal, the presenter rewrites the running row in
+place instead of appending: a carriage return and an erase-line sequence
+precede each replacement, the elapsed time refreshes every second, and the
+outcome overwrites the row, so each step settles as exactly one line. Only a
+step's own rows replace its line; another step, a heading, the result or a
+diagnostic first terminates it. The appended form above is what a pipe, a file
+and the privilege supervisor's non-interactive relay receive. No other color
+or cursor control is used.
 
 ### Context identity
 
