@@ -89,8 +89,10 @@ drawing, and does not vary with terminal width.
 A command whose authorized work can take minutes reports progress as it runs,
 because a silent process is indistinguishable from a stuck one. Progress is a
 stream of status rows in the shared layout, written unbuffered to standard
-output. The bytes are identical on a terminal, through a pipe and under the
-privilege supervisor, and JSON mode never emits them.
+output. The appended form below is identical through a pipe, a file and the
+privilege supervisor's non-interactive relay; a terminal redraws the running
+row in place as described at the end of this section; JSON mode never emits
+progress.
 
 Every row has this form. The status token is padded to the width of
 `[RUNNING]` so the subject column aligns without knowing which tokens follow;
