@@ -107,7 +107,14 @@ func TestCompleteContextJourney(t *testing.T) {
 		t.Fatal(short)
 	}
 	contextRun(t, services, 1, "context", "init", "--name", "alpha", "--input-dir", input)
-	contextRun(t, services, 1, "context", "init", "--name", "other", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "other", "--input-dir", input)
+	registry, err = repository.View(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(registry.Contexts) != 2 || registry.Contexts[0].ID == registry.Contexts[1].ID || registry.Contexts[0].EnvironmentDirectory != registry.Contexts[1].EnvironmentDirectory {
+		t.Fatal("second context from one input directory", registry)
+	}
 	contextRun(t, services, 1, "context", "update", "--name", "alpha", "--input-dir", input)
 	if err := os.WriteFile(filepath.Join(input, "environment.yaml"), []byte(strings.ReplaceAll(syntheticEnvironment, "example.test", "changed.test")), 0600); err != nil {
 		t.Fatal(err)
@@ -128,7 +135,14 @@ func TestCompleteContextJourney(t *testing.T) {
 		t.Fatal(err)
 	}
 	addSecretInput(t, other, "controller.yaml", serviceHost)
-	contextRun(t, services, 1, "context", "update", "--name", "alpha", "--input-dir", other, "--yes")
+	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", other, "--yes")
+	registry, err = repository.View(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if registry.Contexts[0].ID != first.ID || registry.Contexts[0].EnvironmentDirectory != filepath.Clean(other) {
+		t.Fatal("update from another directory changed identity or kept the old provenance", registry)
+	}
 	contextRun(t, services, 0, "context", "init", "--name", "beta", "--input-dir", other)
 	contextRun(t, services, 0, "context", "use", "--name", "alpha")
 	list, _ := contextRun(t, services, 0, "context", "list")

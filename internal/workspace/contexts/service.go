@@ -220,15 +220,8 @@ func (s Service) Init(ctx context.Context, request InitRequest) (*AdmissionResul
 	var result *AdmissionResult
 	err = s.repository.Transact(ctx, true, slices.Clone(sources.Roots), func(tx Transaction) error {
 		reg := tx.Registry()
-		existingID := ""
-		if index := findRecord(reg, request.Name); index >= 0 {
-			if reg.Contexts[index].Mode != Initializing {
-				return StateError("context name already exists; use context update or delete it explicitly")
-			}
-			existingID = reg.Contexts[index].ID
-		}
-		if err := uniqueEnvironment(reg, existingID, environment); err != nil {
-			return err
+		if index := findRecord(reg, request.Name); index >= 0 && reg.Contexts[index].Mode != Initializing {
+			return StateError("context name already exists; use context update or delete it explicitly")
 		}
 		record, err := tx.Reserve(ctx, request.Name, environment, config.Canonical())
 		if err != nil {
@@ -268,18 +261,6 @@ func (s Service) Init(ctx context.Context, request InitRequest) (*AdmissionResul
 		return nil, StateError("context publication returned no result")
 	}
 	return result, nil
-}
-
-func uniqueEnvironment(reg Registry, id, environment string) error {
-	if environment == "" {
-		return nil
-	}
-	for _, record := range reg.Contexts {
-		if record.ID != id && record.EnvironmentDirectory == environment {
-			return StateError("Environment directory already belongs to another named context")
-		}
-	}
-	return nil
 }
 
 func admissionResult(record Record, selected Selection, sources desiredstate.Sources, report *compilation.Report) *AdmissionResult {
@@ -344,12 +325,6 @@ func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionR
 		if request.InputDirectory == "" {
 			result = admissionResult(record, selected, sources, nil)
 			return nil
-		}
-		if record.EnvironmentDirectory != "" && record.EnvironmentDirectory != environment {
-			return StateError("replacement input changes the context Environment directory; create a separate context")
-		}
-		if err := uniqueEnvironment(reg, record.ID, environment); err != nil {
-			return err
 		}
 		if reg.Version == 4 {
 			guard, ok := tx.(ControllerInputGuard)

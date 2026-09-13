@@ -34,7 +34,7 @@ func (t *transaction) Reserve(ctx context.Context, name, environment string, con
 		}
 	}
 	fresh := record.ID == ""
-	if !fresh && (record.Mode != contexts.Initializing || record.EnvironmentDirectory != environment || record.SecretStoreType != configuration.SecretStore.Type) {
+	if !fresh && (record.Mode != contexts.Initializing || record.SecretStoreType != configuration.SecretStore.Type) {
 		return contexts.Record{}, state("context name is already reserved")
 	}
 	if !fresh {

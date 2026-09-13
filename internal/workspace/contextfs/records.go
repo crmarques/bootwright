@@ -419,7 +419,7 @@ func validateRegistry(r contexts.Registry) error {
 			return state("context status is invalid")
 		}
 		if record.EnvironmentDirectory != "" && !canonicalPath(record.EnvironmentDirectory) || record.Revision != "" && !identifier(record.Revision, "rev-") || record.Revision != "" && record.EnvironmentDirectory == "" {
-			return state("context input identity is invalid")
+			return state("context input provenance is invalid")
 		}
 		if record.DirectoryInode == 0 && record.DirectoryDevice != 0 || record.Mode != contexts.Initializing && record.DirectoryInode == 0 {
 			return state("context directory identity is missing")

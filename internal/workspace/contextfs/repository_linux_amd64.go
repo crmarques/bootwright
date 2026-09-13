@@ -957,8 +957,8 @@ func (t *transaction) Commit(ctx context.Context, registry contexts.Registry) er
 		if next.Name != prior.Name || next.DirectoryDevice != prior.DirectoryDevice || next.DirectoryInode != prior.DirectoryInode || next.SecretStoreType != prior.SecretStoreType {
 			return state("context identity or secret implementation cannot change")
 		}
-		if prior.EnvironmentDirectory != "" && next.EnvironmentDirectory != prior.EnvironmentDirectory || prior.Revision != "" && next.Revision == "" {
-			return state("context replacement cannot discard its bound input identity")
+		if prior.Revision != "" && next.Revision == "" {
+			return state("context replacement cannot discard its selected input")
 		}
 		if prior.Mode == contexts.Deleting || next.Mode != contexts.Ready {
 			return state("context status transition is invalid")

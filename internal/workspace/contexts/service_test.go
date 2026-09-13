@@ -154,9 +154,10 @@ func (tx transaction) Reserve(ctx context.Context, name, directory string, data 
 	}
 	for _, record := range tx.r.registry.Contexts {
 		if record.Name == name {
-			if record.Mode != contexts.Initializing || record.EnvironmentDirectory != directory || !reflect.DeepEqual(tx.r.configurations[record.ID], data) {
+			if record.Mode != contexts.Initializing || !reflect.DeepEqual(tx.r.configurations[record.ID], data) {
 				return contexts.Record{}, contexts.StateError("pending init differs")
 			}
+			record.EnvironmentDirectory = directory
 			return record, nil
 		}
 	}
@@ -847,11 +848,58 @@ func TestPerUserSelectionAndDeletedNameCannotRebindIdentity(t *testing.T) {
 	}
 }
 
+func recordNamed(t *testing.T, r *repository, name string) contexts.Record {
+	t.Helper()
+	for _, record := range r.registry.Contexts {
+		if record.Name == name {
+			return record
+		}
+	}
+	t.Fatal("context is missing from the registry", name, r.registry.Contexts)
+	return contexts.Record{}
+}
+
+func TestSharedSourceDirectoryNeverBindsContexts(t *testing.T) {
+	r := existingRepository(t)
+	original := recordNamed(t, r, "example")
+	got, err := service(t, r, sourceFixture("/synthetic/input")).Init(context.Background(), contexts.InitRequest{Name: "another", InputDirectory: "/synthetic/input"})
+	if err != nil || got == nil || got.Context.ID == original.ID || len(r.registry.Contexts) != 2 || !reflect.DeepEqual(recordNamed(t, r, "example"), original) {
+		t.Fatalf("second context from one directory: %#v %v %#v", got, err, r.registry)
+	}
+	if another := recordNamed(t, r, "another"); another.EnvironmentDirectory != original.EnvironmentDirectory || another.Revision == "" || another.Revision == original.Revision {
+		t.Fatal("copied input lost its provenance or shared a revision", another)
+	}
+	r.calls = nil
+	moved, err := service(t, r, sourceFixture("/synthetic/moved")).Update(context.Background(), contexts.UpdateRequest{Name: "example", InputDirectory: "/synthetic/moved", SkipConfirmation: true})
+	if err != nil || moved == nil || moved.Context.ID != original.ID || !slices.Contains(r.calls, "publish") {
+		t.Fatalf("update from another directory: %#v %v %v", moved, err, r.calls)
+	}
+	record := recordNamed(t, r, "example")
+	if record.Revision == original.Revision || record.EnvironmentDirectory != "/synthetic/moved" || !reflect.DeepEqual(r.published[record.Revision].Roots, []string{"/synthetic/moved"}) {
+		t.Fatal("replacement input did not follow its new source directory", record)
+	}
+}
+
+func TestIncompleteInitializationResumesWithReplacementInput(t *testing.T) {
+	r := newRepository(t)
+	r.failure = "initialize"
+	if result, err := service(t, r, sourceFixture("/synthetic/input")).Init(context.Background(), contexts.InitRequest{Name: "example", InputDirectory: "/synthetic/input"}); result != nil || err == nil {
+		t.Fatal("failed initializer claimed success")
+	}
+	id := recordNamed(t, r, "example").ID
+	r.failure, r.calls = "", nil
+	result, err := service(t, r, sourceFixture("/synthetic/moved")).Init(context.Background(), contexts.InitRequest{Name: "example", InputDirectory: "/synthetic/moved"})
+	if err != nil || result.Context.ID != id || result.Context.Mode != contexts.Ready || !result.Context.Configured {
+		t.Fatalf("retry with replacement input: %#v %v", result, err)
+	}
+	if record := recordNamed(t, r, "example"); record.EnvironmentDirectory != "/synthetic/moved" || record.Revision == "" || !reflect.DeepEqual(r.published[record.Revision].Roots, []string{"/synthetic/moved"}) {
+		t.Fatal("resumed initialization kept the first attempt's source directory", record)
+	}
+}
+
 func TestIdentityConflictsPreserveExistingContexts(t *testing.T) {
 	for _, tc := range []struct{ command, name, directory string }{
 		{"init", "example", ""},
-		{"init", "another", "/synthetic/input"},
-		{"update", "example", "/synthetic/moved"},
 		{"update", "missing", "/synthetic/input"},
 	} {
 		t.Run(tc.command+"/"+tc.name+"/"+tc.directory, func(t *testing.T) {

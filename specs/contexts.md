@@ -14,10 +14,15 @@ reserves a name and identity through `initializing`, `ready` and `deleting`.
 Only ready contexts are usable; lack of an input revision is a valid ready state.
 A successfully deleted name may be reused only with a fresh identity.
 
-First import binds the canonical original Environment directory. It must not
-belong to another context, and subsequent imports preserve it. Runtime state
-remains separate from authored input. Context identity is not derived from an
-Environment directory or a human-readable name.
+Import copies the admitted input into the store under the product's
+[copied-input rule](project.md#design-priorities-and-non-goals). The recorded
+original input and Environment directories are provenance for logical compiler
+paths and diagnostics: they are never context identity, are not unique across
+contexts and are never read again. Any number of contexts may import one
+directory, a later import may come from any directory, and the recorded
+directories follow the selected revision. Runtime state remains separate from
+authored input. Context identity is not derived from a source directory or a
+human-readable name.
 
 Current selection belongs to the invoking user in `~/.bootwright/context`, a
 bounded canonical JSON record containing `version: 1`, `name` and `id` (at most
@@ -248,8 +253,9 @@ payload paths. Authored `~` spelling remains unchanged during admission.
 
 The registry writes private format version 3, or version 4 once confirmed setup
 has introduced the shared Controller descriptor. Active records hold the name,
-immutable ID, initialization/deletion mode, selected revision, Environment
-directory, configured secret-store type and reserved directory device/inode.
+immutable ID, initialization/deletion mode, selected revision and its
+Environment directory, configured secret-store type and reserved directory
+device/inode.
 A fixed-size allocation namespace and counter prevent ID reuse within the store
 without retaining a lifetime history of deleted contexts. The 4096-name bound
 applies to active or reserved contexts, not past creations.
@@ -361,7 +367,8 @@ automatically generated.
 
 Interrupted initialization reserves its name and ID. Explicit init retry may
 resume only the exact attributable pending identity and configuration, using
-the keyring's authenticated initialization recovery. Unverifiable partial
+the keyring's authenticated initialization recovery; its input, if any, is
+supplied again and may come from any directory. Unverifiable partial
 state refuses; never adopt an unrelated directory or silently allocate a new
 identity. A filesystem create and recording its identity are not one atomic
 operation, so not every interruption is automatically resumable.
