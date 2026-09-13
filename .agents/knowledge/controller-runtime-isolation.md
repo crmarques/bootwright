@@ -8,7 +8,8 @@ and why each mechanism is necessary.
 
 - The private interpreter runs in isolated mode with bytecode and `site`
   initialization disabled and imports only its four explicit private roots.
-  Its readiness probe verifies every locked distribution, the required
+  Its publication probe, run when the bundle is published rather than on every
+  readiness check, verifies every locked distribution, the required
   standard-library modules and the cryptographic extension, so system Python,
   pip configuration, user site, Ansible configuration and environment search
   paths cannot alter the closure. Code:

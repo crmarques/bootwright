@@ -28,6 +28,7 @@ type RuntimeInspection struct {
 	Present  bool
 	Ready    bool
 	Conflict bool
+	Version  string
 }
 
 // ActionProgress is the operator-visible outcome of one planned setup action.

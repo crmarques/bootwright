@@ -105,8 +105,14 @@ func (s Service) inspectRuntime(ctx context.Context, definition Definition) (Run
 	if s.options.NativeInspector == nil {
 		return RuntimeInspection{}, failure("controller.unsupported", "native dependency inspection is unavailable", "use a compatible executable")
 	}
-	ready, err := s.options.NativeInspector.Check(ctx, *definition.Native)
-	return RuntimeInspection{Present: ready, Ready: ready}, err
+	presence, err := s.options.NativeInspector.Check(ctx, *definition.Native)
+	inspection := RuntimeInspection{Present: presence.Ready, Ready: presence.Ready}
+	for _, root := range presence.Installed {
+		if root.Key == "podman" {
+			inspection.Version = root.Package.Version + "-" + root.Package.Release
+		}
+	}
+	return inspection, err
 }
 
 func describeNativeAction(action NativeAction) string {

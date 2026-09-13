@@ -42,6 +42,12 @@ func (m *Manager) Inspect(ctx context.Context, area prerequisites.BundleArea, de
 	if err != nil {
 		return prerequisites.BundleInspection{}, err
 	}
+	// A sealed bundle was verified byte for byte and probed when it was
+	// published; its readiness confirms only that the published files remain.
+	if location.Sealed && record.Bootstrap != nil {
+		inspection, err = presentFiles(ctx, area, record, definition.Tools)
+		return inspection, err
+	}
 	inspection, _, err = inspectFiles(ctx, area, record, definition.Tools)
 	if err != nil || !inspection.Ready || !execute {
 		return inspection, err
@@ -55,6 +61,48 @@ func (m *Manager) Inspect(ctx context.Context, area prerequisites.BundleArea, de
 		return inspection, err
 	}
 	return inspection, nil
+}
+
+// presentFiles is the presence check for a sealed bundle: the retained sources
+// by size, the published projection by file count and total bytes, the private
+// interpreter, and each target tool's source and files. It reads no bytes.
+func presentFiles(ctx context.Context, area prerequisites.BundleArea, record catalogRecord, tools []prerequisites.ToolDefinition) (prerequisites.BundleInspection, error) {
+	if err := ctx.Err(); err != nil {
+		return prerequisites.BundleInspection{}, err
+	}
+	listed, err := area.Entries(ctx)
+	if err != nil {
+		return prerequisites.BundleInspection{}, err
+	}
+	entries := make(map[string]prerequisites.BundleEntry, len(listed))
+	for _, entry := range listed {
+		entries[entry.Path] = entry
+	}
+	present := func(name string, size int64) bool {
+		entry, found := entries[name]
+		return found && !entry.Directory && (size < 0 || entry.Size == size)
+	}
+	ready := present(record.Bootstrap.PythonExecutable, -1) && entries[record.Bootstrap.PythonExecutable].Executable
+	for _, source := range record.Baseline {
+		ready = ready && present(sourcePath(source), source.Bytes)
+	}
+	toolsReady := true
+	for _, tool := range tools {
+		toolsReady = toolsReady && present(sourcePath(tool.Source), tool.Source.Bytes)
+		for _, file := range tool.Files {
+			toolsReady = toolsReady && present(file.Path, -1)
+		}
+	}
+	files, size := 0, int64(0)
+	for name, entry := range entries {
+		if entry.Directory || strings.HasPrefix(name, "sources/") || strings.HasPrefix(name, "tools/") {
+			continue
+		}
+		files++
+		size += entry.Size
+	}
+	ready = ready && files == record.Bootstrap.FileCount && size == record.Bootstrap.ExpandedBytes
+	return prerequisites.BundleInspection{Ready: ready, ToolsReady: toolsReady, Recoverable: true}, nil
 }
 
 func (m *Manager) Prepare(ctx context.Context, area prerequisites.BundleArea, definition prerequisites.Definition, egress prerequisites.SetupEgress, progress func(prerequisites.ProgressEvent)) error {

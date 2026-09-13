@@ -19,6 +19,7 @@ type resolvingFixture struct {
 	bootstrapCalls, nativeCalls, inspections int
 	bootstrapError, nativeError              error
 	beforeResolve                            func()
+	installedRelease                         string
 }
 
 type resolvingNative struct{ owner *resolvingFixture }
@@ -45,9 +46,20 @@ func (n resolvingNative) Resolve(_ context.Context, platform Platform, requireme
 	return f.native, f.nativeError
 }
 
-func (f *resolvingFixture) Check(context.Context, NativeResolvedPlan) (bool, error) {
+func (f *resolvingFixture) Check(_ context.Context, plan NativeResolvedPlan) (NativePresence, error) {
 	f.inspections++
-	return f.owner.host.runtime.Ready, nil
+	presence := NativePresence{Ready: f.owner.host.runtime.Ready}
+	for _, root := range plan.Roots {
+		if !presence.Ready {
+			break
+		}
+		installed := root.Package
+		if f.installedRelease != "" {
+			installed.Release = f.installedRelease
+		}
+		presence.Installed = append(presence.Installed, NativeRootPresence{Key: root.Key, Package: installed})
+	}
+	return presence, nil
 }
 
 func dynamicFixture(t *testing.T, platform ...Platform) (*fixture, *resolvingFixture) {
@@ -369,10 +381,17 @@ func TestSetupJourneyCoversBothSupportedMatrices(t *testing.T) {
 			if solver := f.store.state.Receipt.Definition.Native.Solver; platform.OS == "fedora" && solver != "dnf5" || platform.OS == "rhel" && solver != "dnf4" {
 				t.Fatalf("%v froze the wrong native solver: %s", platform, solver)
 			}
-			// An unchanged rerun reuses the retained resolution as a no-op.
+			// An unchanged rerun reuses the retained resolution as a no-op. The host
+			// has since moved podman to a newer build: presence is by name, so the
+			// runtime stays ready and the report shows the installed release.
+			r.installedRelease = "9.newer"
 			report, err = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 			if err != nil || report.Outcome != "unchanged" || r.bootstrapCalls != 1 || r.nativeCalls != 1 {
 				t.Fatalf("%v rerun: %#v %v", platform, report, err)
+			}
+			index := slices.IndexFunc(report.Checks, func(check Check) bool { return check.ID == "container-runtime" })
+			if index == -1 || report.Checks[index].Status != "ready" || report.Checks[index].Observed != "1.2.3-9.newer" || report.Checks[index].Required == report.Checks[index].Observed {
+				t.Fatalf("%v runtime check = %#v", platform, report.Checks)
 			}
 		})
 	}

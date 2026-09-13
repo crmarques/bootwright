@@ -3,6 +3,7 @@
 import copy
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
     native_resolution as native,
@@ -118,3 +119,46 @@ class NativeResolution(unittest.TestCase):
         for requested in ("2.1.4", "2.1.3-6.fc43", "1:2.1.3-5.fc43"):
             self.assertFalse(native.version_matches(value, requested))
         self.assertEqual(native.inventory_digest([value]), native.digest([value]))
+
+    def test_present_reports_roots_by_name_without_verifying_files(self):
+        roots = [
+            {"key": key, "requested": "latest", "package": native.identity(root)}
+            for key, root in (
+                ("podman", package("podman", "5.8.4", "1.fc43")),
+                ("nmstate", package("nmstate", "2.2.0", "1.fc43")),
+            )
+        ]
+        content = {"format": native.FORMAT, "roots": roots}
+        plan = dict(content, digest=native.digest(content))
+        commands = []
+
+        def run(command, **_):
+            commands.append(command)
+            if command[-1] == "podman":
+                return SimpleNamespace(
+                    returncode=0, stdout=b"podman\t(none)\t5.8.5\t1.fc43\tx86_64\n"
+                )
+            return SimpleNamespace(returncode=1, stdout=b"")
+
+        request = {
+            "platform": {"os": "fedora", "release": "43", "architecture": "amd64"},
+            "snapshot": "/snapshot",
+            "plan": plan,
+        }
+        with patch.object(native.subprocess, "run", run):
+            result = native.present(request, "/scratch")
+        self.assertFalse(result["rootsReady"])
+        self.assertEqual(
+            result["roots"][0]["installed"],
+            native.identity(package("podman", "5.8.5", "1.fc43")),
+        )
+        self.assertIsNone(result["roots"][1]["installed"])
+        # Presence queries the snapshot by name only: no file verification.
+        self.assertEqual(len(commands), 2)
+        for command in commands:
+            self.assertEqual(command[0], "/usr/bin/rpm")
+            self.assertIn("-q", command)
+            self.assertNotIn("--verify", command)
+            self.assertEqual(command[2], "/snapshot/usr/lib/sysimage/rpm")
+        with self.assertRaises(ValueError):
+            native.installed_identity(b"other\t(none)\t1\t1\tx86_64\n", "podman")

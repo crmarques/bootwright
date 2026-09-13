@@ -347,7 +347,11 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, fro
 		if err != nil {
 			return current, err
 		}
-		current.report.setCheck(readiness("container-runtime", current.definition.Runtime.Version, current.runtime.Ready))
+		check := readiness("container-runtime", current.definition.Runtime.Version, current.runtime.Ready)
+		if current.runtime.Version != "" {
+			check.Observed = current.runtime.Version
+		}
+		current.report.setCheck(check)
 		if !current.runtime.Ready {
 			current.report.Actions = append(current.report.Actions, "Run the Ansible bastion role to install and verify missing native prerequisites")
 		}

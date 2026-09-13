@@ -17,6 +17,6 @@ func New(MetadataReader) *Resolver { return &Resolver{} }
 func (*Resolver) Resolve(context.Context, prerequisites.Platform, prerequisites.NativeRequirements, controller.DependencyVersions, prerequisites.SetupEgress) (prerequisites.NativeResolvedPlan, error) {
 	return prerequisites.NativeResolvedPlan{}, errors.New("native dependency setup requires Linux amd64")
 }
-func (*Resolver) Check(context.Context, prerequisites.NativeResolvedPlan) (bool, error) {
-	return false, errors.New("native dependency inspection requires Linux amd64")
+func (*Resolver) Check(context.Context, prerequisites.NativeResolvedPlan) (prerequisites.NativePresence, error) {
+	return prerequisites.NativePresence{}, errors.New("native dependency inspection requires Linux amd64")
 }

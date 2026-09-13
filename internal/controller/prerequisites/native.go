@@ -20,6 +20,19 @@ type NativeRoot struct {
 	Package   NativeIdentity `json:"package"`
 }
 
+// NativePresence reports whether every selected root package is installed by
+// name. Installed identities are display evidence for the report, never a
+// comparison against the frozen release.
+type NativePresence struct {
+	Ready     bool
+	Installed []NativeRootPresence
+}
+
+type NativeRootPresence struct {
+	Key     string
+	Package NativeIdentity
+}
+
 // NativeAction permits only a named install or replacement in the solved set.
 // A replacement must preserve the package name and architecture.
 type NativeAction struct {

@@ -1,6 +1,7 @@
 package bundlelocal
 
 import (
+	"context"
 	"errors"
 	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller"
@@ -162,5 +163,66 @@ func TestBaselineDefinitionDoesNotAttributeNativeRPMs(t *testing.T) {
 		if err != nil || len(record.Native) != 1 || len(record.Native[0].Packages) != 0 {
 			t.Fatal("baseline inspection admitted native RPM content", err)
 		}
+	}
+}
+
+type sealedArea struct {
+	entries []prerequisites.BundleEntry
+	reads   int
+}
+
+func (a *sealedArea) Read(context.Context, string, int) ([]byte, error) {
+	a.reads++
+	return nil, errors.New("sealed readiness must not read bundle bytes")
+}
+func (*sealedArea) Write(context.Context, string, []byte, bool) error { return errors.New("sealed") }
+func (*sealedArea) EnsureDirectory(context.Context, string) error     { return errors.New("sealed") }
+func (*sealedArea) Verify(context.Context) error                      { return nil }
+func (a *sealedArea) Entries(context.Context) ([]prerequisites.BundleEntry, error) {
+	return slices.Clone(a.entries), nil
+}
+func (*sealedArea) Location(context.Context) (prerequisites.BundleLocation, error) {
+	return prerequisites.BundleLocation{Path: "/sealed", Device: 1, Inode: 1, Sealed: true}, nil
+}
+
+// A sealed bundle was verified byte for byte and probed when it was published,
+// so readiness is presence only: it reads no bytes and launches no interpreter.
+func TestSealedBundleReadinessIsPresenceOnly(t *testing.T) {
+	definition := resolvedDefinitionFixture(t)
+	entries := []prerequisites.BundleEntry{{Path: "python", Directory: true}, {Path: "python/bin", Directory: true}, {Path: definition.Bootstrap.PythonExecutable, Executable: true, Size: 1}, {Path: "sources", Directory: true}}
+	for _, source := range definition.Bootstrap.Sources {
+		entries = append(entries, prerequisites.BundleEntry{Path: sourcePath(source), Size: source.Bytes})
+	}
+	manager := New(ExecutionGuard{})
+	manager.probe = func(context.Context, prerequisites.BundleArea, prerequisites.Definition) error {
+		return errors.New("sealed readiness must not launch the interpreter")
+	}
+	area := &sealedArea{entries: entries}
+	inspection, err := manager.Inspect(t.Context(), area, definition, true)
+	if err != nil || !inspection.Ready || !inspection.Sealed || !inspection.ToolsReady || area.reads != 0 {
+		t.Fatalf("sealed presence: %+v %v reads=%d", inspection, err, area.reads)
+	}
+	last := len(entries) - 1
+	for name, change := range map[string]func([]prerequisites.BundleEntry) []prerequisites.BundleEntry{
+		"missing-source": func(value []prerequisites.BundleEntry) []prerequisites.BundleEntry { return value[:last] },
+		"short-source": func(value []prerequisites.BundleEntry) []prerequisites.BundleEntry {
+			changed := slices.Clone(value)
+			changed[last].Size--
+			return changed
+		},
+		"missing-interpreter": func(value []prerequisites.BundleEntry) []prerequisites.BundleEntry {
+			return slices.DeleteFunc(slices.Clone(value), func(entry prerequisites.BundleEntry) bool { return entry.Path == definition.Bootstrap.PythonExecutable })
+		},
+		"extra-file": func(value []prerequisites.BundleEntry) []prerequisites.BundleEntry {
+			return append(slices.Clone(value), prerequisites.BundleEntry{Path: "python/extra", Size: 1})
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			area := &sealedArea{entries: change(entries)}
+			inspection, err := manager.Inspect(t.Context(), area, definition, true)
+			if err != nil || inspection.Ready || area.reads != 0 {
+				t.Fatalf("%s reported ready: %+v %v reads=%d", name, inspection, err, area.reads)
+			}
+		})
 	}
 }

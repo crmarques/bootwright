@@ -34,14 +34,16 @@ publishes the verified fixed file projection; unsupported scheme relocations,
 installation or retry, and entrypoints are repository-owned.
 The exact Python archive's internal file links become regular private files;
 directory links and escape/cycle attempts refuse. Retained source bytes derive
-the complete expected file inventory, including executable modes, so readiness
-rejects additions and substitutions rather than trusting a version string.
+the complete expected file inventory, including executable modes, so
+publication rejects additions and substitutions rather than trusting a version
+string. Once the bundle is sealed, readiness confirms only that its published
+files are still present.
 
 The private interpreter runs isolated from ambient Python, loader and Ansible
 configuration: no system or user Python, pip configuration, Ansible
 configuration, environment search path, loader cache, library search variable
 or preload configuration can alter the closure or select executable code, and
-readiness rejects additions and substitutions. The provided host supplies the
+publication rejects additions and substitutions. The provided host supplies the
 qualified glibc and libgcc foundation; setup never replaces those shared
 libraries, freezes their package ownership with the execution profile, and
 refuses any native transaction that would change them before presenting the
@@ -76,8 +78,10 @@ Ansible package role must run required hooks and verify their postconditions.
 It must not suppress required hooks and then claim a usable runtime. Existing
 operator SELinux policy remains operator-owned. The native package manager
 performs required labeling and policy hooks; setup does not toggle enforcement
-or replace local policy. Readiness checks installed nonconfiguration files and
-dependency identities. Workload access under that policy is verified by its
+or replace local policy. The native transaction verifies the identities and
+installed nonconfiguration files of what it installs; readiness afterwards
+confirms only that each selected root package is installed by name, whatever
+release the host carries. Workload access under that policy is verified by its
 flow consumer.
 A list of package names alone is not a complete plan.
 
@@ -114,10 +118,15 @@ setup reuses its exact frozen resolution without metadata refresh. Moving a
 `latest` dependency to a newer release requires declaring that release in
 `dependencyVersions`.
 
-An already installed dependency is usable only after identity, version and
-integrity checks against the catalog. Process exit status alone does not prove
-readiness. An older bundle needed for retry or a future frozen lifecycle is
-retained; setup supplies no uninstall or garbage-collection command.
+A dependency is checked for identity, version and integrity when setup
+acquires, publishes or installs it. Afterwards readiness is presence only, with
+no version comparison: the sealed bundle's published files by count and size,
+its retained sources by size, the private interpreter, each target tool's
+source and files, and each selected native root package by name. The report
+shows the frozen release as required and the installed release as observed.
+Process exit status alone does not prove readiness. An older bundle needed for
+retry or a future frozen lifecycle is retained; setup supplies no uninstall or
+garbage-collection command.
 
 ## Selection and command journeys
 

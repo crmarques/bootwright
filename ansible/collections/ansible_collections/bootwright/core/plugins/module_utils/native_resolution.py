@@ -613,6 +613,67 @@ def validate_plan(plan):
     return plan
 
 
+def installed_identity(output, name):
+    lines = output.decode("ascii", "replace").splitlines()
+    fields = lines[0].split("\t") if lines else []
+    if (
+        len(fields) != 5
+        or fields[0] != name
+        or any(not field or len(field) > 128 for field in fields)
+    ):
+        raise ValueError("installed package identity")
+    return {
+        "name": fields[0],
+        "epoch": 0 if fields[1] == "(none)" else int(fields[1]),
+        "version": fields[2],
+        "release": fields[3],
+        "architecture": fields[4],
+    }
+
+
+def present(request, scratch):
+    """Report which selected roots are installed by name; verify no files."""
+    root = request.get("snapshot") or snapshot_database(request["platform"], scratch)
+    plan = validate_plan(request["plan"])
+    dbpath = str(Path(root) / db_path(request["platform"]).lstrip("/"))
+    roots = []
+    for entry in plan["roots"]:
+        name = entry["package"]["name"]
+        # Standalone supplied-platform query; no remote module execution.
+        # pylint: disable-next=ansible-bad-function
+        result = subprocess.run(
+            [
+                "/usr/bin/rpm",
+                "--dbpath",
+                dbpath,
+                "-q",
+                "--queryformat",
+                "%{NAME}\t%{EPOCH}\t%{VERSION}\t%{RELEASE}\t%{ARCH}\n",
+                "--",
+                name,
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=30,
+            env={
+                "PATH": "/usr/sbin:/usr/bin",
+                "LANG": "C",
+                "LC_ALL": "C",
+                "HOME": str(Path(scratch) / "home"),
+            },
+        )
+        installed = None
+        if result.returncode == 0:
+            installed = installed_identity(result.stdout, name)
+        roots.append({"key": entry["key"], "name": name, "installed": installed})
+    return {
+        "roots": roots,
+        "rootsReady": all(root["installed"] is not None for root in roots),
+    }
+
+
 def inspect(request, scratch):
     root = request.get("snapshot") or snapshot_database(request["platform"], scratch)
     probe = {"platform": request["platform"], "snapshot": root}
@@ -697,6 +758,8 @@ def main():
             if request["platform"]["os"] == "fedora"
             else solve4(request, scratch)
         )
+    elif operation == "present":
+        result = present(request, scratch)
     elif operation == "apply":
         sys.path.insert(0, str(Path(__file__).resolve().parents[5]))
         from ansible_collections.bootwright.core.plugins.module_utils import (

@@ -59,10 +59,11 @@ type NativeResolver interface {
 	Resolve(context.Context, Platform, NativeRequirements, controller.DependencyVersions, SetupEgress) (NativeResolvedPlan, error)
 }
 
-// NativeInspector performs bounded local package and file verification without
-// consulting repository metadata or modifying installed state.
+// NativeInspector reports whether the selected native root packages are
+// installed by name, without consulting repository metadata, verifying
+// installed files or modifying installed state.
 type NativeInspector interface {
-	Check(context.Context, NativeResolvedPlan) (bool, error)
+	Check(context.Context, NativeResolvedPlan) (NativePresence, error)
 }
 
 type TargetToolCatalog interface {

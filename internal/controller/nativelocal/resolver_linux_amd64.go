@@ -110,33 +110,63 @@ func (r *Resolver) Resolve(ctx context.Context, platform prerequisites.Platform,
 	return plan, nil
 }
 
-func (r *Resolver) Check(ctx context.Context, plan prerequisites.NativeResolvedPlan) (bool, error) {
+func (r *Resolver) Check(ctx context.Context, plan prerequisites.NativeResolvedPlan) (prerequisites.NativePresence, error) {
 	if err := ctx.Err(); err != nil {
-		return false, err
+		return prerequisites.NativePresence{}, err
 	}
 	if prerequisites.ValidateNativePlan(plan) != nil {
-		return false, failure("native readiness requires an exact frozen plan")
+		return prerequisites.NativePresence{}, failure("native readiness requires an exact frozen plan")
 	}
 	stage, err := newStage(plan.Platform)
 	if err != nil {
-		return false, err
+		return prerequisites.NativePresence{}, err
 	}
 	defer os.RemoveAll(stage.root)
 	bounded, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	data, err := stage.run(bounded, helperRequest{Operation: "inspect", Platform: plan.Platform, Requirements: plan.Requirements, Versions: plan.Requests, Egress: prerequisites.SetupEgress{NoProxy: []string{}}, Snapshot: stage.snapshot, Repositories: []repository{}, Plan: &plan})
+	data, err := stage.run(bounded, helperRequest{Operation: "present", Platform: plan.Platform, Requirements: plan.Requirements, Versions: plan.Requests, Egress: prerequisites.SetupEgress{NoProxy: []string{}}, Snapshot: stage.snapshot, Repositories: []repository{}, Plan: &plan})
 	if err != nil {
-		return false, err
+		return prerequisites.NativePresence{}, err
 	}
+	return decodePresence(plan, data)
+}
+
+// decodePresence accepts only a report naming every selected root of the plan
+// in order. Installed identities are bounded display evidence.
+func decodePresence(plan prerequisites.NativeResolvedPlan, data []byte) (prerequisites.NativePresence, error) {
 	var result struct {
-		Inventory       []prerequisites.NativeIdentity `json:"inventory"`
-		InventorySHA256 string                         `json:"inventorySHA256"`
-		RootsReady      bool                           `json:"rootsReady"`
+		Roots []struct {
+			Key       string                        `json:"key"`
+			Name      string                        `json:"name"`
+			Installed *prerequisites.NativeIdentity `json:"installed"`
+		} `json:"roots"`
+		RootsReady bool `json:"rootsReady"`
 	}
-	if strictDecode(data, &result) != nil || len(result.Inventory) > 32768 || len(result.InventorySHA256) != 64 {
-		return false, failure("native readiness returned invalid inventory evidence")
+	invalid := func() (prerequisites.NativePresence, error) {
+		return prerequisites.NativePresence{}, failure("native readiness returned invalid presence evidence")
 	}
-	return result.RootsReady, nil
+	if strictDecode(data, &result) != nil || len(result.Roots) != len(plan.Roots) {
+		return invalid()
+	}
+	presence := prerequisites.NativePresence{Ready: result.RootsReady}
+	for index, root := range result.Roots {
+		expected := plan.Roots[index]
+		if root.Key != expected.Key || root.Name != expected.Package.Name {
+			return invalid()
+		}
+		if root.Installed == nil {
+			continue
+		}
+		installed := *root.Installed
+		if installed.Name != expected.Package.Name || installed.Version == "" || len(installed.Version) > 128 || installed.Release == "" || len(installed.Release) > 128 || installed.Architecture == "" || len(installed.Architecture) > 128 || installed.Epoch < 0 {
+			return invalid()
+		}
+		presence.Installed = append(presence.Installed, prerequisites.NativeRootPresence{Key: root.Key, Package: installed})
+	}
+	if presence.Ready != (len(presence.Installed) == len(plan.Roots)) {
+		return invalid()
+	}
+	return presence, nil
 }
 
 func profiles(platform prerequisites.Platform, requirements prerequisites.NativeRequirements) ([]repository, error) {

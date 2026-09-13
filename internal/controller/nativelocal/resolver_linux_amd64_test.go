@@ -110,9 +110,40 @@ func TestNativeCurrentOSInspection(t *testing.T) {
 	if json.Unmarshal(data, &plan) != nil || prerequisites.ValidateNativePlan(plan) != nil {
 		t.Fatal("invalid qualification plan")
 	}
-	ready, err := New(nil).Check(t.Context(), plan)
-	if err != nil || !ready {
-		t.Fatalf("frozen native dependency file verification ready=%t: %v", ready, err)
+	presence, err := New(nil).Check(t.Context(), plan)
+	if err != nil || !presence.Ready {
+		t.Fatalf("frozen native root presence ready=%t: %v", presence.Ready, err)
 	}
-	t.Logf("verified %d selected package identities and their installed nonconfiguration files", len(plan.Packages))
+	t.Logf("found %d selected root packages installed by name", len(presence.Installed))
+}
+
+// Presence evidence must name every selected root in plan order; installed
+// identities are display data and are bounded, never compared to the plan.
+func TestPresenceEvidenceNamesEverySelectedRoot(t *testing.T) {
+	plan := prerequisites.NativeResolvedPlan{Roots: []prerequisites.NativeRoot{
+		{Key: "podman", Package: prerequisites.NativeIdentity{Name: "podman", Version: "5.8.4", Release: "1.fc43", Architecture: "x86_64"}},
+		{Key: "nmstate", Package: prerequisites.NativeIdentity{Name: "nmstate", Version: "2.2.0", Release: "1.fc43", Architecture: "x86_64"}},
+	}}
+	newer := `{"key":"podman","name":"podman","installed":{"name":"podman","epoch":0,"version":"5.8.5","release":"1.fc43","architecture":"x86_64"}}`
+	nmstate := `{"key":"nmstate","name":"nmstate","installed":{"name":"nmstate","epoch":0,"version":"2.2.0","release":"1.fc43","architecture":"x86_64"}}`
+	presence, err := decodePresence(plan, []byte(`{"roots":[`+newer+`,`+nmstate+`],"rootsReady":true}`))
+	if err != nil || !presence.Ready || len(presence.Installed) != 2 || presence.Installed[0].Package.Version != "5.8.5" {
+		t.Fatalf("presence = %+v %v", presence, err)
+	}
+	presence, err = decodePresence(plan, []byte(`{"roots":[`+newer+`,{"key":"nmstate","name":"nmstate","installed":null}],"rootsReady":false}`))
+	if err != nil || presence.Ready || len(presence.Installed) != 1 {
+		t.Fatalf("missing root presence = %+v %v", presence, err)
+	}
+	for name, data := range map[string]string{
+		"omitted-root":     `{"roots":[` + newer + `],"rootsReady":true}`,
+		"reordered-root":   `{"roots":[` + nmstate + `,` + newer + `],"rootsReady":true}`,
+		"renamed-root":     `{"roots":[` + strings.Replace(newer, `"name":"podman","installed"`, `"name":"docker","installed"`, 1) + `,` + nmstate + `],"rootsReady":true}`,
+		"ready-without":    `{"roots":[` + newer + `,{"key":"nmstate","name":"nmstate","installed":null}],"rootsReady":true}`,
+		"unbounded":        `{"roots":[` + strings.Replace(newer, `"release":"1.fc43"`, `"release":"`+strings.Repeat("r", 129)+`"`, 1) + `,` + nmstate + `],"rootsReady":true}`,
+		"unknown-evidence": `{"roots":[` + newer + `,` + nmstate + `],"rootsReady":true,"inventory":[]}`,
+	} {
+		if _, err := decodePresence(plan, []byte(data)); err == nil {
+			t.Fatalf("%s was accepted", name)
+		}
+	}
 }
