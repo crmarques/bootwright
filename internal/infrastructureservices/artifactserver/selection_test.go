@@ -218,26 +218,22 @@ func TestEgressFollowsThePlacementMachineProxyChoice(t *testing.T) {
 	}
 }
 
-func TestUnsupportedObjectsAreListedInCanonicalOrder(t *testing.T) {
-	guest := api.NewObject(api.Machine, "sno-master-01", api.Value{}, api.MapValue(
-		field("os", api.MapValue(field("provided", api.BoolValue(false)))),
-	))
+// This capability reports only the artifact servers it cannot realize. Objects
+// of kinds no capability claims are the engine's refusal, not this one's.
+func TestUnsupportedArtifactServersAreListedInCanonicalOrder(t *testing.T) {
 	cluster := api.NewObject(api.ContainerCluster, "sno", api.Value{}, api.MapValue())
 	managedProxy := api.NewObject(api.Proxy, "lab-proxy", api.Value{}, api.MapValue(text("management", "managed")))
-	externalProxy := api.NewObject(api.Proxy, "corp-proxy", api.Value{}, api.MapValue(text("management", "external")))
-	playbook := api.NewObject(api.CustomPlaybook, "custom", api.Value{}, api.MapValue(field("enabled", api.BoolValue(true))))
+	external := api.NewObject(api.ArtifactServer, "published", api.Value{}, api.MapValue(
+		text("management", "external"), text("retention", "install-only"),
+	))
 	installOnly := api.NewObject(api.ArtifactServer, "temp", api.Value{}, api.MapValue(
 		text("management", "managed"), text("retention", "install-only"),
 	))
-	found := Unsupported(catalogOf(bastion(), guest, cluster, managedProxy, externalProxy, playbook, installOnly, artifactServer()))
-	want := []string{
-		"ArtifactServer/temp", "ContainerCluster/sno", "CustomPlaybook/custom",
-		"Machine/sno-master-01", "Proxy/lab-proxy",
+	found := Unsupported(catalogOf(bastion(), cluster, managedProxy, external, installOnly, artifactServer()))
+	if !slices.Equal(found, []string{"ArtifactServer/temp"}) {
+		t.Fatalf("unsupported = %v", found)
 	}
-	if !slices.Equal(found, want) {
-		t.Fatalf("unsupported = %v, want %v", found, want)
-	}
-	if len(Unsupported(catalogOf(bastion(), artifactServer(), externalProxy))) != 0 {
+	if len(Unsupported(catalogOf(bastion(), artifactServer()))) != 0 {
 		t.Fatal("a supported graph reported unsupported objects")
 	}
 }

@@ -43,8 +43,12 @@ func TestLabArtifactsExampleIsAdmissibleAndSupported(t *testing.T) {
 		t.Fatalf("validate: out=%q err=%q", out, errOut)
 	}
 	state, _ := compileAcceptance(t, sources)
+	claimed := buildCapabilities(systemClock{}).Kinds()
+	if unsupported := lifecycle.Unrealizable(state.Effective(), claimed); len(unsupported) != 0 {
+		t.Fatalf("the example declares objects no capability claims: %v", unsupported)
+	}
 	if unsupported := artifactserver.Unsupported(state.Effective()); len(unsupported) != 0 {
-		t.Fatalf("the M1e example declares unsupported objects: %v", unsupported)
+		t.Fatalf("the example declares an unsupported artifact server: %v", unsupported)
 	}
 	requireObject(t, state.Effective(), api.ArtifactServer, "lab-artifacts")
 	requireObject(t, state.Effective(), api.Machine, "bastion")
@@ -103,7 +107,7 @@ func TestLabArtifactsExamplePlansOneLocalBlock(t *testing.T) {
 func TestLabOCPExampleIsRefusedWithItsUnsupportedObjects(t *testing.T) {
 	sources := exampleDirectory(t, "lab-ocp")
 	state, _ := compileAcceptance(t, sources)
-	unsupported := artifactserver.Unsupported(state.Effective())
+	unsupported := lifecycle.Unrealizable(state.Effective(), buildCapabilities(systemClock{}).Kinds())
 	for _, want := range []string{
 		"ContainerCluster/sno", "DNSServer/lab-dns", "Machine/sno-master-01",
 		"NTPServer/lab-ntp", "Proxy/lab-proxy",

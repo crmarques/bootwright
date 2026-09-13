@@ -192,7 +192,7 @@ func (s Service) project(ctx context.Context, tx Transaction, verb reconciliatio
 
 // finish records the operation's terminal state, releases what a completed
 // removal no longer owns, and assembles the result the CLI renders.
-func (s Service) finish(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, result *OperationResult) (*OperationResult, error) {
+func (s Service) finish(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, boundary bool, result *OperationResult) (*OperationResult, error) {
 	ordered := make([]reconciliation.BlockState, 0, len(plan.Blocks))
 	for _, block := range plan.Blocks {
 		state := states[block.ID]
@@ -201,7 +201,7 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 		}
 		ordered = append(ordered, state)
 	}
-	next, err := reconciliation.NextOperationState(ordered)
+	next, err := reconciliation.NextOperationState(ordered, boundary)
 	if err != nil {
 		return result, err
 	}
@@ -226,8 +226,8 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 	if err == nil {
 		result.Logs = logs
 	}
-	result.Receipt = Receipt{Operation: operation.ID, Verb: string(operation.Verb), State: string(next), Next: nextAction(operation.Verb, next, states)}
-	if next == reconciliation.OperationDone {
+	result.Receipt = Receipt{Operation: operation.ID, Verb: string(operation.Verb), State: string(next), Next: nextAction(operation.Verb, next)}
+	if next == reconciliation.OperationDone || next == reconciliation.OperationPaused {
 		return result, nil
 	}
 	return result, terminalFailure(next)
@@ -244,7 +244,7 @@ func terminalFailure(state reconciliation.OperationState) error {
 		"repeat the operation to continue it")
 }
 
-func nextAction(verb reconciliation.Verb, state reconciliation.OperationState, states map[string]reconciliation.BlockState) string {
+func nextAction(verb reconciliation.Verb, state reconciliation.OperationState) string {
 	switch state {
 	case reconciliation.OperationDone:
 		if verb == reconciliation.Apply {
@@ -254,7 +254,6 @@ func nextAction(verb reconciliation.Verb, state reconciliation.OperationState, s
 	case reconciliation.OperationUnknown:
 		return "resolve"
 	}
-	_ = states
 	return "continue-" + string(verb)
 }
 
@@ -265,7 +264,7 @@ func blockResults(plan reconciliation.Plan, states map[string]reconciliation.Blo
 		if state == "" {
 			state = reconciliation.BlockPending
 		}
-		out = append(out, BlockResult{ID: block.ID, Description: block.Description, State: string(state)})
+		out = append(out, BlockResult{ID: block.ID, Description: block.Description, Stage: string(block.Stage), State: string(state)})
 	}
 	return out
 }

@@ -15,7 +15,7 @@ func previewResult() *lifecycle.PlanResult {
 		Verb:    "apply",
 		Steps: []lifecycle.PlanStep{{
 			ID: "artifact-server-lab", Description: "serve artifacts for lab on bastion",
-			Impacts: []string{"open-listener 192.0.2.1:8443"}, State: "pending",
+			Stage: "infra-components", Impacts: []string{"open-listener 192.0.2.1:8443"}, State: "pending",
 		}},
 		Receipt: lifecycle.Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "apply"},
 	}
@@ -168,5 +168,72 @@ func TestStatusRendersTextAndJSON(t *testing.T) {
 	}
 	if !strings.HasSuffix(line, "\n") || strings.Count(line, "\n") != 1 {
 		t.Fatal("status JSON is not one document followed by one newline")
+	}
+}
+
+// A selection never narrows the plan: every block stays listed, and each
+// pending one says whether this invocation would start it and why not.
+func TestPlanResultMarksWhatAStageSelectionWouldStart(t *testing.T) {
+	result := previewResult()
+	result.Stages = []string{"substrates"}
+	result.Steps[0].Selection = lifecycle.StepNotSelected
+	result.Steps = append(result.Steps,
+		lifecycle.PlanStep{ID: "provider-metal", Description: "realize metal", Stage: "substrates", State: "pending", Selection: lifecycle.StepStart},
+		lifecycle.PlanStep{ID: "provider-kubevirt", Description: "realize kubevirt", Stage: "substrates", State: "pending", Selection: lifecycle.StepWaiting, WaitsOn: "host-virtualization"})
+	result.Startable, result.Deferred = 1, 2
+	var out bytes.Buffer
+	if err := writeLifecyclePlan(&out, result); err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	for _, want := range []string{
+		"1. serve artifacts for lab on bastion [infra-components] [not selected]",
+		"2. realize metal [substrates] [start]",
+		"3. realize kubevirt [substrates] [deferred: waits on host-virtualization]",
+		"Stages  substrates",
+		"Starts  1 of 3 blocks, 2 deferred",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("plan text = %q, missing %q", rendered, want)
+		}
+	}
+}
+
+func TestPlanResultWithoutASelectionCarriesNoMarker(t *testing.T) {
+	var out bytes.Buffer
+	if err := writeLifecyclePlan(&out, previewResult()); err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	if !strings.Contains(rendered, "1. serve artifacts for lab on bastion [infra-components]") {
+		t.Fatalf("plan text = %q", rendered)
+	}
+	for _, absent := range []string{"[start]", "[not selected]", "Stages", "Starts"} {
+		if strings.Contains(rendered, absent) {
+			t.Fatalf("plan text = %q, unexpected %q", rendered, absent)
+		}
+	}
+}
+
+// A pause is a successful stop, so it leads with OK and names the continuation.
+func TestPausedOperationReportsSuccessAndItsContinuation(t *testing.T) {
+	var out bytes.Buffer
+	result := &lifecycle.OperationResult{
+		Context: lifecycle.ContextIdentity{Name: "lab"}, Verb: "apply",
+		Blocks: []lifecycle.BlockResult{
+			{ID: "artifact-server-lab", Description: "serve artifacts", Stage: "infra-components", State: "done"},
+			{ID: "provider-metal", Description: "realize metal", Stage: "substrates", State: "pending"},
+		},
+		Receipt: lifecycle.Receipt{Operation: "op-abc", Verb: "apply", State: "paused", Next: "continue-apply"},
+	}
+	if err := writeLifecycleOperation(&out, result); err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	if !strings.HasPrefix(rendered, "[OK] Apply paused") {
+		t.Fatalf("headline = %q", rendered)
+	}
+	if !strings.HasSuffix(rendered, "operation: op-abc\nverb: apply\nstate: paused\nnext: continue-apply\n") {
+		t.Fatalf("receipt = %q", rendered)
 	}
 }

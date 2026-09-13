@@ -304,5 +304,8 @@ result, and successful handoff/export preserves its payload and output boundary.
 These tests depend on the promoted use case and do not expand M1a availability.
 
 [Product non-goals](project.md#design-priorities-and-non-goals) remain excluded.
-Partial lifecycle selection, reconciliation, adoption, force behavior and day-2
-mutation require an explicit product/state-contract change before candidacy.
+Reconciliation, adoption, force behavior and day-2 mutation require an explicit
+product/state-contract change before candidacy. The
+[stage selection](state-reconciliation.md#stages-and-the-pause-boundary) is not
+one of them: it gates which blocks an invocation starts and leaves the plan,
+the lifecycle unit and ownership complete.

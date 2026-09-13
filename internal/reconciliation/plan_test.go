@@ -12,6 +12,7 @@ func definition(id string, dependencies ...string) BlockDefinition {
 	return BlockDefinition{
 		ID:             id,
 		Description:    "serve artifacts for " + id,
+		Stage:          StageInfraComponents,
 		Dependencies:   dependencies,
 		Impacts:        []string{"create-container-unit"},
 		Groups:         []Group{{ID: "start-service", Description: "start the service", Machines: []string{"bastion"}}},

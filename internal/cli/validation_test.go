@@ -126,3 +126,35 @@ func TestBooleanSpellings(t *testing.T) {
 		}
 	}
 }
+
+func TestStageSelectionIsAClosedCommaList(t *testing.T) {
+	command := parsedCommand(t, []string{"apply", "--stage", " clusters , infra-components ,, clusters "})
+	if got := stringValue(command.Flags(), "stage"); got != "clusters,infra-components" {
+		t.Fatalf("normalized stages = %q", got)
+	}
+	command = parsedCommand(t, []string{"plan", "--stage", "machines"})
+	if got := stringValue(command.Flags(), "stage"); got != "machines" {
+		t.Fatalf("plan stages = %q", got)
+	}
+	for _, args := range [][]string{
+		{"apply", "--stage", "storage"},
+		{"apply", "--stage", ",,"},
+		{"apply", "--stage="},
+		{"plan", "--stage", "Machines"},
+		{"destroy", "--stage", "machines"},
+	} {
+		code, _, _, record := runRecorded(args)
+		if code != 2 || record.calls != 0 {
+			t.Errorf("invalid stage selection dispatched: %v", args)
+		}
+	}
+}
+
+// An omitted selection means every stage, so it must not be rejected as an
+// unsupported enum value the way a scalar enum flag would be.
+func TestOmittedStageSelectionDispatches(t *testing.T) {
+	code, _, _, record := runRecorded([]string{"apply"})
+	if code != 1 || record.calls != 1 {
+		t.Fatalf("an omitted stage selection did not dispatch: code=%d calls=%d", code, record.calls)
+	}
+}

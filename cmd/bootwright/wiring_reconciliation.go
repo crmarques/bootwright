@@ -43,18 +43,43 @@ type systemClock struct{}
 
 func (systemClock) Now() time.Time { return time.Now() }
 
-// capabilityResolver is the immutable set of lifecycle capabilities this build
-// offers. There is no registry, discovery or runtime plugin path.
-type capabilityResolver struct{ artifactServer lifecycle.Capability }
+// capabilityResolver is the immutable, ordered set of lifecycle capabilities
+// this build offers. There is no registry, discovery or runtime plugin path.
+type capabilityResolver []boundCapability
+
+type boundCapability struct {
+	kind           string
+	implementation string
+	capability     lifecycle.Capability
+}
+
+func (r capabilityResolver) Kinds() []string {
+	kinds := make([]string, 0, len(r))
+	for _, bound := range r {
+		kinds = append(kinds, bound.kind)
+	}
+	return kinds
+}
 
 func (r capabilityResolver) Resolve(kind, implementation string) (lifecycle.Capability, bool) {
-	if kind != artifactserver.Kind || r.artifactServer == nil {
-		return nil, false
+	for _, bound := range r {
+		if bound.kind != kind || bound.capability == nil {
+			continue
+		}
+		if implementation != "" && implementation != bound.implementation {
+			return nil, false
+		}
+		return bound.capability, true
 	}
-	if implementation != "" && implementation != artifactserver.Implementation {
-		return nil, false
+	return nil, false
+}
+
+// buildCapabilities lists what this executable can realize, in the API's own
+// kind order, so a plan's block order never depends on wiring order.
+func buildCapabilities(clock systemClock) capabilityResolver {
+	return capabilityResolver{
+		{artifactserver.Kind, artifactserver.Implementation, artifactserver.New(ansibleservice.New(), clock)},
 	}
-	return r.artifactServer, true
 }
 
 func wireLifecycle(deps lifecycleDependencies, compiler compilation.Compiler, binder *custody.Service) cli.LifecycleService {
@@ -62,7 +87,7 @@ func wireLifecycle(deps lifecycleDependencies, compiler compilation.Compiler, bi
 		return lifecycle.Service{}
 	}
 	clock := systemClock{}
-	var capabilities lifecycle.CapabilityResolver = capabilityResolver{artifactServer: artifactserver.New(ansibleservice.New(), clock)}
+	var capabilities lifecycle.CapabilityResolver = buildCapabilities(clock)
 	if deps.Capabilities != nil {
 		capabilities = deps.Capabilities
 	}

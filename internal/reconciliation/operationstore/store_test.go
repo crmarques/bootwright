@@ -22,7 +22,8 @@ func testPlan(t *testing.T, ids ...string) reconciliation.Plan {
 	definitions := make([]reconciliation.BlockDefinition, 0, len(ids))
 	for _, id := range ids {
 		definitions = append(definitions, reconciliation.BlockDefinition{
-			ID: id, Description: "serve " + id, Kind: "ArtifactServer", Object: id,
+			ID: id, Description: "serve " + id, Stage: reconciliation.StageInfraComponents,
+			Kind: "ArtifactServer", Object: id,
 			Implementation: "artifact-server-nginx-v1", ContentDigest: strings.Repeat("a", 64),
 			Request: json.RawMessage(`{"name":"` + id + `"}`),
 		})

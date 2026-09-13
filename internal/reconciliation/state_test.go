@@ -53,48 +53,31 @@ func TestResolutionTransitionFollowsTheEvidenceTable(t *testing.T) {
 
 func TestNextOperationStateLetsUnknownDominate(t *testing.T) {
 	for name, tc := range map[string]struct {
-		states []BlockState
-		want   OperationState
+		states   []BlockState
+		boundary bool
+		want     OperationState
 	}{
-		"all done":            {[]BlockState{BlockDone, BlockDone}, OperationDone},
-		"pending remains":     {[]BlockState{BlockDone, BlockPending}, OperationRunning},
-		"failed":              {[]BlockState{BlockDone, BlockFailed}, OperationFailed},
-		"unknown over failed": {[]BlockState{BlockFailed, BlockUnknown}, OperationUnknown},
-		"unknown over done":   {[]BlockState{BlockDone, BlockUnknown}, OperationUnknown},
-		"running":             {[]BlockState{BlockRunning}, OperationRunning},
-		"empty":               {nil, OperationDone},
+		"all done":                       {[]BlockState{BlockDone, BlockDone}, false, OperationDone},
+		"pending remains":                {[]BlockState{BlockDone, BlockPending}, false, OperationRunning},
+		"failed":                         {[]BlockState{BlockDone, BlockFailed}, false, OperationFailed},
+		"unknown over failed":            {[]BlockState{BlockFailed, BlockUnknown}, false, OperationUnknown},
+		"unknown over done":              {[]BlockState{BlockDone, BlockUnknown}, false, OperationUnknown},
+		"running":                        {[]BlockState{BlockRunning}, false, OperationRunning},
+		"empty":                          {nil, false, OperationDone},
+		"stage boundary":                 {[]BlockState{BlockDone, BlockPending}, true, OperationPaused},
+		"boundary never hides a failure": {[]BlockState{BlockFailed, BlockPending}, true, OperationFailed},
+		"boundary never hides unknown":   {[]BlockState{BlockUnknown, BlockPending}, true, OperationUnknown},
+		"boundary with everything done":  {[]BlockState{BlockDone}, true, OperationDone},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got, err := NextOperationState(tc.states)
+			got, err := NextOperationState(tc.states, tc.boundary)
 			if err != nil || got != tc.want {
 				t.Fatalf("operation state = %s (%v), want %s", got, err, tc.want)
 			}
 		})
 	}
-	if _, err := NextOperationState([]BlockState{"partial"}); err == nil {
+	if _, err := NextOperationState([]BlockState{"partial"}, false); err == nil {
 		t.Fatal("an unrecognized block state produced an operation state")
-	}
-}
-
-func TestNextBlockFollowsFrozenOrderAndReportsUnknown(t *testing.T) {
-	plan, err := NewPlan(Apply, []BlockDefinition{definition("alpha"), definition("bravo", "alpha")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	block, state, ok := NextBlock(plan, map[string]BlockState{})
-	if !ok || block.ID != "alpha" || state != BlockPending {
-		t.Fatalf("first block = %s/%s/%t", block.ID, state, ok)
-	}
-	block, state, ok = NextBlock(plan, map[string]BlockState{"alpha": BlockDone})
-	if !ok || block.ID != "bravo" || state != BlockPending {
-		t.Fatalf("second block = %s/%s/%t", block.ID, state, ok)
-	}
-	block, state, ok = NextBlock(plan, map[string]BlockState{"alpha": BlockUnknown, "bravo": BlockDone})
-	if !ok || block.ID != "alpha" || state != BlockUnknown {
-		t.Fatal("an unknown block was skipped instead of reported")
-	}
-	if _, _, ok = NextBlock(plan, map[string]BlockState{"alpha": BlockDone, "bravo": BlockDone}); ok {
-		t.Fatal("a completed plan still offered a block")
 	}
 }
 

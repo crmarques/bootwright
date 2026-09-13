@@ -82,13 +82,13 @@ The required controller declaration and context-free setup boundary follow
 | `bootwright preflight storage-cluster` | same flags as `preflight infra`, with StorageCluster-only selection | storage-cluster readiness checks | observe unless `--dry-run` |
 | `bootwright preflight add-ons` | `--clusters <list>` default all ContainerClusters; `--output text\|json` default `text` | add-on prerequisite checks | bounded observation |
 | `bootwright preflight all` | `--dry-run` false; `--output text\|json` default `text`; `--trust-on-first-use=<bool>` default `true`; `-v, --verbose` false | all controller, infrastructure, cluster, storage, and add-on checks | observe unless `--dry-run` |
-| `bootwright plan` | none | next legal full-context plan or exact continuation point | none |
+| `bootwright plan` | `--stage <list>` default all stages | next legal full-context plan or exact continuation point, with the blocks a stage selection would start | none |
 | `bootwright status` | `--output text\|json` default `text`; `--watch` false; `--watch-interval <duration>` default `5s` | context readiness, lifecycle state, and next safe commands | read local state; watch repeats reads |
 | `bootwright render` | `--input-dir <file-or-dir>`; `--output-dir <dir>`; `--clusters <list>` default all; `--sensitive` false; `--output text\|json` default `text` | whole external-tool artifact manifest, or render help when neither path flag is supplied | local artifact writes only |
 | `bootwright render effective` | `--output text\|json` default `text` | normalized effective desired state and object counts | none |
 | `bootwright render installer` | `--clusters <list>` default all ContainerClusters; `--sensitive` false; `--output text\|json` default `text` | installer artifact manifest | local placeholder files and optional sensitive files |
 | `bootwright render storage` | `--clusters <list>` default all StorageClusters; `--output text\|json` default `text` | storage artifact manifest | local native files or scripts only; never execution |
-| `bootwright apply` | repeatable `--authorize <token>[,<token>...]`; `--yes` false; `-v, --verbose` false | completed full apply or exact continued state | complete planned mutation |
+| `bootwright apply` | repeatable `--authorize <token>[,<token>...]`; `--stage <list>` default all stages; `--yes` false; `-v, --verbose` false | completed full apply, a pause at the selected stage boundary, or exact continued state | complete planned mutation |
 | `bootwright destroy` | repeatable `--authorize <token>[,<token>...]`; `--yes` false; `-v, --verbose` false | completed full destroy or exact continued state | complete planned removal |
 
 ### Resource, access, and general commands
@@ -231,6 +231,15 @@ non-interactive, JSON output is selected, or a safe answer cannot be read.
 `--purge=false` fails without changing state. The flag acknowledges deletion of
 proven-disposable local context data, while `--yes` independently controls its
 ordinary confirmation. Protected or unknown state refuses deletion.
+
+`--stage` accepts only `infra-components`, `substrates`, `machines`,
+`clusters`, and `add-ons`, and only on `plan` and `apply`. Whitespace around
+comma-separated members is ignored, empty members are ignored, duplicates
+collapse, and the last occurrence wins. A supplied value that resolves to no
+member and an unrecognized member are both usage errors. Omission selects every
+stage. The flag gates which blocks an invocation starts and never narrows the
+frozen plan, the lifecycle unit, or ownership; the complete contract is owned by
+[state reconciliation](../state-reconciliation.md#stages-and-the-pause-boundary).
 
 `--authorize` accepts only `data-loss`, and only on `apply` and `destroy`.
 Unknown, empty, duplicate, or inapplicable tokens are usage errors; `all` is not

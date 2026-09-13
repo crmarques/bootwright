@@ -95,12 +95,23 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 	items := make([]string, 0, len(result.Steps))
 	for _, step := range result.Steps {
 		line := escapeDisplayLine(step.Description)
+		if step.Stage != "" {
+			line += " [" + escapeDisplayLine(step.Stage) + "]"
+		}
 		if result.Continuation {
 			line += " [" + escapeDisplayLine(step.State) + "]"
+		}
+		if marker := selectionMarker(step); marker != "" {
+			line += " [" + marker + "]"
 		}
 		items = append(items, line)
 	}
 	text.steps(items)
+	if len(result.Stages) != 0 {
+		text.section("")
+		text.fields(field{Label: "Stages", Value: escapeDisplayLine(strings.Join(result.Stages, ", "))},
+			field{Label: "Starts", Value: startSummary(result)})
+	}
 	impacts := []string{}
 	for _, step := range result.Steps {
 		for _, impact := range step.Impacts {
@@ -111,6 +122,24 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 		text.section("Impacts")
 		text.lines(impacts)
 	}
+}
+
+// selectionMarker says what a stage selection would do with one pending step,
+// so the operator sees the consequence of the selection before confirming it.
+func selectionMarker(step lifecycle.PlanStep) string {
+	switch step.Selection {
+	case lifecycle.StepStart:
+		return "start"
+	case lifecycle.StepNotSelected:
+		return "not selected"
+	case lifecycle.StepWaiting:
+		return "deferred: waits on " + escapeDisplayLine(step.WaitsOn)
+	}
+	return ""
+}
+
+func startSummary(result lifecycle.PlanResult) string {
+	return fmt.Sprintf("%d of %d blocks, %d deferred", result.Startable, len(result.Steps), result.Deferred)
 }
 
 func writeLifecyclePlan(out io.Writer, result *lifecycle.PlanResult) error {
@@ -126,7 +155,7 @@ func writeLifecyclePlan(out io.Writer, result *lifecycle.PlanResult) error {
 func writeLifecycleOperation(out io.Writer, result *lifecycle.OperationResult) error {
 	var text display
 	status := "OK"
-	if result.Receipt.State != "done" {
+	if result.Receipt.State != "done" && result.Receipt.State != "paused" {
 		status = "FAIL"
 	}
 	if result.Receipt.State == "unknown" {

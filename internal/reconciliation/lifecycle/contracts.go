@@ -88,7 +88,11 @@ type Capability interface {
 	Destroy(context.Context, Execution) (Result, error)
 }
 
+// CapabilityResolver is the immutable set of capabilities this executable
+// offers, in canonical API-kind order. Kinds names what it can realize so the
+// engine neither hard-codes a kind nor discovers one at runtime.
 type CapabilityResolver interface {
+	Kinds() []string
 	Resolve(kind, implementation string) (Capability, bool)
 }
 

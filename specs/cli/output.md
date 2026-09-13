@@ -347,10 +347,13 @@ unavailable command still follows the no-context-read
 
 `plan`, `apply` and `destroy` are text only. Their human result composes the
 [shared layout](#shared-human-layout): an optional headline, a `Plan` section
-whose steps are the frozen blocks in plan order, a `Progress` section while
-effects run, a `Result` section of status rows, the `details: <path>` log
-reference when an operation log exists, and the receipt as the final four
-lines. A block row leads with its status token and names the block description
+whose steps are the frozen blocks in plan order, each naming its stage, a
+`Progress` section while effects run, a `Result` section of status rows, the
+`details: <path>` log reference when an operation log exists, and the receipt as
+the final four lines. With a stage selection, each pending step also says
+whether this invocation would start it, that it is not selected, or which block
+it waits on, and a closing field reports how many blocks would start and how
+many are deferred. A block row leads with its status token and names the block description
 and its outcome; group rows follow their block under
 [multi-machine presentation](#multi-machine-presentation). A preview and a
 refusal have no progress, result rows or log reference.
@@ -367,7 +370,7 @@ probe. Its result orders these fields:
 | `shared` | Ordered `{kind, name, machine, status}` rows for selected shared services. `status` is `unsupported`, `pending`, `done` or `unknown`, derived from the frozen plan and its durable evidence. |
 | `secrets` | `declared` and `bound` counts. |
 | `nextSteps` | Ordered safe command strings, empty when no action is available. |
-| `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, ordered `blocks` of `{id, description, state, attempts}`, and `logs` of safe relative paths. |
+| `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe relative paths. |
 
 Rows sort by their documented key: checks and blocks in frozen order,
 everything else in ascending bytewise name order. Human `status` presents the
@@ -431,6 +434,7 @@ repeating unbounded authored text in every diagnostic. The shared codes are:
 | `controller.unknown` | A setup action has an unresolved effect outcome. |
 | `render.publish` | A requested artifact could not be safely rendered or published. |
 | `lifecycle.state` | Durable lifecycle state does not permit the requested transition or continuation. |
+| `lifecycle.stage` | The stage selection admits no startable block, or excludes the block the operation must retry. |
 | `lifecycle.destroy-unavailable` | Apply is operational but this executable cannot invoke the required future destroy. |
 | `lifecycle.authorization` | The frozen plan requires an authorization that was not validly supplied. |
 | `lifecycle.lease` | The context mutation lease cannot be safely acquired or recovered. |

@@ -82,6 +82,8 @@ func (testLifecyclePresenter) PresentLifecyclePlan(context.Context, lifecycle.Pl
 
 type testLifecycleCapabilities struct{}
 
+func (testLifecycleCapabilities) Kinds() []string { return []string{"ArtifactServer"} }
+
 func (testLifecycleCapabilities) Resolve(string, string) (lifecycle.Capability, bool) {
 	return nil, false
 }

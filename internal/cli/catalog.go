@@ -27,8 +27,11 @@ type flagSpec struct {
 	defaultValue string
 	required     bool
 	enum         []string
-	catalog      string
-	path         string
+	// enumList marks a comma-separated list whose members come from enum, so
+	// validation checks each member instead of the whole value.
+	enumList bool
+	catalog  string
+	path     string
 }
 
 func stringFlag(name, help string) flagSpec { return flagSpec{name: name, help: help, kind: "string"} }
@@ -145,6 +148,12 @@ func sensitiveFlag() flagSpec {
 func contextFileFlag() flagSpec {
 	flag := fileFlag("file", "Read one standalone Context YAML file")
 	flag.short, flag.kind = "f", "stringArray"
+	return flag
+}
+
+func stageFlag() flagSpec {
+	flag := stringFlag("stage", "Select comma-separated stages to start (default: all)")
+	flag.enum, flag.enumList = []string{"infra-components", "substrates", "machines", "clusters", "add-ons"}, true
 	return flag
 }
 

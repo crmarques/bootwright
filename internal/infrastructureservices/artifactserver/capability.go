@@ -76,6 +76,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		definition := reconciliation.BlockDefinition{
 			ID:             request.Identity.Block,
 			Description:    "serve artifacts for " + request.Identity.Service + " on " + request.Placement.Machine,
+			Stage:          reconciliation.StageInfraComponents,
 			Impacts:        impacts(request),
 			Groups:         groups(input.Verb, request),
 			Kind:           Kind,

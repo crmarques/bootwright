@@ -17,11 +17,17 @@ import (
 )
 
 func (s Service) Apply(ctx context.Context, request ApplyRequest) (*OperationResult, error) {
-	return s.mutate(ctx, reconciliation.Apply, request.ContextName, request.Authorizations, request.SkipConfirmation, request.SSH.Borrowed())
+	selection, err := reconciliation.ParseStages(request.Stages)
+	if err != nil {
+		return nil, err
+	}
+	return s.mutate(ctx, reconciliation.Apply, request.ContextName, selection, request.Authorizations, request.SkipConfirmation, request.SSH.Borrowed())
 }
 
+// Destroy removes what an apply recorded as owned. It accepts no stage
+// selection: a removal covers exactly the effects that exist.
 func (s Service) Destroy(ctx context.Context, request DestroyRequest) (*OperationResult, error) {
-	return s.mutate(ctx, reconciliation.Destroy, request.ContextName, request.Authorizations, request.SkipConfirmation, request.SSH.Borrowed())
+	return s.mutate(ctx, reconciliation.Destroy, request.ContextName, nil, request.Authorizations, request.SkipConfirmation, request.SSH.Borrowed())
 }
 
 // transition is the single legal next step the durable state permits.
@@ -34,9 +40,10 @@ type transition struct {
 	source    string
 	release   []string
 	states    map[string]reconciliation.BlockState
+	selection reconciliation.StageSelection
 }
 
-func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextName string, authorizations []string, skipConfirmation, borrowed bool) (*OperationResult, error) {
+func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextName string, selection reconciliation.StageSelection, authorizations []string, skipConfirmation, borrowed bool) (*OperationResult, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
@@ -59,7 +66,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 		if err := verifySelection(view, id); err != nil {
 			return err
 		}
-		decided, err = s.decide(ctx, view, verb)
+		decided, err = s.decide(ctx, view, verb, selection)
 		return err
 	})
 	if err != nil {
@@ -81,7 +88,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 
 // decide reads durable state and returns the one legal transition. Changed
 // desired state never turns a continuation into a reconciliation.
-func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb) (transition, error) {
+func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.StageSelection) (transition, error) {
 	store := s.store(view)
 	index, err := store.Index(ctx)
 	if err != nil {
@@ -91,7 +98,7 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 		if verb == reconciliation.Destroy {
 			return transition{}, failure("lifecycle.state", "this context owns no applied state to destroy", "run apply first")
 		}
-		return s.freshApply(ctx, view)
+		return s.freshApply(ctx, view, selection)
 	}
 	operation, err := store.ReadOperation(ctx, index.Current)
 	if err != nil {
@@ -105,13 +112,24 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 	if err != nil {
 		return transition{}, err
 	}
+	// A pause is a resumable boundary, not an interruption: the operation owns
+	// every block it completed, so a removal of those blocks is legal beside
+	// continuing it.
+	if operation.State == reconciliation.OperationPaused && operation.Verb == reconciliation.Apply && verb == reconciliation.Destroy {
+		return s.freshDestroy(ctx, view, operation, frozen, states)
+	}
 	if operation.State != reconciliation.OperationDone {
 		if operation.Verb != verb {
 			return transition{}, failure("lifecycle.state",
 				"an incomplete "+string(operation.Verb)+" must be continued before another operation",
 				"run "+string(operation.Verb)+" to continue it")
 		}
-		decided := transition{verb: verb, operation: operation, plan: frozen, states: states, source: operation.Source}
+		if verb == reconciliation.Apply {
+			if err := refuseStageBoundary(frozen, states, selection); err != nil {
+				return transition{}, err
+			}
+		}
+		decided := transition{verb: verb, operation: operation, plan: frozen, states: states, source: operation.Source, selection: selection}
 		if verb == reconciliation.Destroy && operation.Source != "" {
 			applied, err := store.ReadOperation(ctx, operation.Source)
 			if err != nil {
@@ -125,39 +143,97 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 		if verb == reconciliation.Apply {
 			return transition{}, failure("lifecycle.state", "this context already owns a completed apply", "destroy it before applying again")
 		}
-		return s.freshDestroy(ctx, view, operation, frozen)
+		return s.freshDestroy(ctx, view, operation, frozen, states)
 	}
 	if verb == reconciliation.Destroy {
 		return transition{}, failure("lifecycle.state", "this context owns no applied state to destroy", "run apply first")
 	}
-	return s.freshApply(ctx, view)
+	return s.freshApply(ctx, view, selection)
 }
 
-func (s Service) freshApply(ctx context.Context, view View) (transition, error) {
-	if err := s.refuseUnsupported(ctx, view); err != nil {
+// refuseStageBoundary refuses before any effect when the selected stages admit
+// no work. It names the stage that would unblock the operation, so a selection
+// mistake is corrected rather than silently doing nothing.
+func refuseStageBoundary(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.StageSelection) error {
+	for _, block := range plan.Blocks {
+		switch states[block.ID] {
+		case reconciliation.BlockUnknown, reconciliation.BlockRunning:
+			return nil
+		}
+	}
+	for _, block := range plan.Blocks {
+		if states[block.ID] != reconciliation.BlockFailed {
+			continue
+		}
+		if selection.Selects(block.Stage) {
+			return nil
+		}
+		return failure("lifecycle.stage",
+			"the block this operation must retry is outside the selected stages",
+			"repeat the operation including --stage "+string(block.Stage))
+	}
+	if len(reconciliation.Startable(plan, states, selection)) != 0 {
+		return nil
+	}
+	ready := reconciliation.Ready(plan, states)
+	if len(ready) == 0 {
+		return failure("lifecycle.stage", "the selected stages have nothing to start", "repeat the operation without --stage")
+	}
+	return failure("lifecycle.stage",
+		"the selected stages have nothing to start",
+		"repeat the operation including --stage "+string(ready[0].Stage))
+}
+
+func (s Service) freshApply(ctx context.Context, view View, selection reconciliation.StageSelection) (transition, error) {
+	state, err := s.compile(ctx, view)
+	if err != nil {
 		return transition{}, err
 	}
-	plan, binding, err := s.freshPlan(ctx, view, reconciliation.Apply)
+	if err := s.refuseUnsupported(state); err != nil {
+		return transition{}, err
+	}
+	plan, binding, err := s.planFrom(ctx, view, state, reconciliation.Apply)
 	if err != nil {
 		return transition{}, err
 	}
 	if len(plan.Blocks) == 0 {
-		return transition{}, failure("lifecycle.state", "the selected Environment declares nothing this executable would create", "declare a managed ArtifactServer, or see examples/lab-artifacts")
+		return transition{}, failure("lifecycle.state", "the selected Environment declares nothing this executable would create", "declare a managed infrastructure service, or see "+supportedExample)
 	}
-	return transition{fresh: true, verb: reconciliation.Apply, plan: plan, binding: binding}, nil
+	if err := refuseStageBoundary(plan, nil, selection); err != nil {
+		return transition{}, err
+	}
+	return transition{fresh: true, verb: reconciliation.Apply, plan: plan, binding: binding, selection: selection}, nil
 }
 
 // freshDestroy re-plans removal from the same frozen input the apply used and
-// proves it still describes exactly the effects that apply recorded.
-func (s Service) freshDestroy(ctx context.Context, view View, applied operationstore.Operation, appliedPlan reconciliation.Plan) (transition, error) {
+// proves it still describes exactly the effects that apply recorded. A paused
+// apply owns only its done blocks, so only those are removed.
+func (s Service) freshDestroy(ctx context.Context, view View, applied operationstore.Operation, appliedPlan reconciliation.Plan, states map[string]reconciliation.BlockState) (transition, error) {
+	owned := reconciliation.DoneSubset(appliedPlan, states)
+	if len(owned.Blocks) == 0 {
+		return transition{}, failure("lifecycle.state", "this context owns no applied state to destroy", "run apply first")
+	}
 	plan, binding, err := s.freshPlan(ctx, view, reconciliation.Destroy)
 	if err != nil {
 		return transition{}, err
 	}
-	if err := sameEffects(appliedPlan, plan); err != nil {
+	plan = removalOf(plan, owned)
+	if err := sameEffects(owned, plan); err != nil {
 		return transition{}, err
 	}
 	return transition{fresh: true, verb: reconciliation.Destroy, plan: plan, binding: binding, source: applied.ID, release: applied.Bindings}, nil
+}
+
+// removalOf narrows a freshly planned removal to the blocks an apply actually
+// completed, preserving the removal order the inverse already fixed.
+func removalOf(removal, owned reconciliation.Plan) reconciliation.Plan {
+	blocks := make([]reconciliation.Block, 0, len(owned.Blocks))
+	for _, block := range removal.Blocks {
+		if slices.ContainsFunc(owned.Blocks, func(candidate reconciliation.Block) bool { return candidate.ID == block.ID }) {
+			blocks = append(blocks, block)
+		}
+	}
+	return reconciliation.Plan{Verb: removal.Verb, Blocks: blocks}
 }
 
 // sameEffects proves a destroy removes exactly what its apply created.
@@ -181,13 +257,11 @@ func (s Service) present(ctx context.Context, name string, decided transition) e
 	if s.options.Presenter == nil {
 		return failure("lifecycle.state", "lifecycle plan presentation is not configured", "")
 	}
-	result := PlanResult{
-		Context:      ContextIdentity{Name: name},
-		Verb:         string(decided.verb),
-		Steps:        steps(decided.plan, decided.states),
-		Continuation: !decided.fresh,
-		Receipt:      Receipt{Operation: "none", Verb: string(decided.verb), State: "preview", Next: string(decided.verb)},
-	}
+	result := planPreview(decided.plan, decided.states, decided.selection)
+	result.Context = ContextIdentity{Name: name}
+	result.Verb = string(decided.verb)
+	result.Continuation = !decided.fresh
+	result.Receipt = Receipt{Operation: "none", Verb: string(decided.verb), State: "preview", Next: string(decided.verb)}
 	if !decided.fresh {
 		result.Receipt.Operation = decided.operation.ID
 		result.Receipt.Next = "continue-" + string(decided.verb)
@@ -278,34 +352,75 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 	if err != nil {
 		return result, err
 	}
-	for index, block := range plan.Blocks {
+	boundary := false
+	for {
 		if err := ctx.Err(); err != nil {
 			break
 		}
-		state := states[block.ID]
-		if state == reconciliation.BlockDone {
-			continue
+		block, index, ok := candidate(plan, states, decided.selection)
+		if !ok {
+			boundary = pendingRemains(plan, states)
+			break
 		}
-		if state == reconciliation.BlockUnknown {
+		var outcome reconciliation.BlockState
+		if unproved(states[block.ID]) {
 			// The resolution's durable transition is authoritative even when it
 			// reports a refusal, so the operation state matches what was recorded.
-			resolved, err := s.resolveUnknown(ctx, tx, store, operation, block, material, index+1, len(plan.Blocks))
-			if resolved == "" {
-				resolved = reconciliation.BlockUnknown
+			outcome, err = s.resolveUnknown(ctx, tx, store, operation, block, material, index+1, len(plan.Blocks))
+			if outcome == "" {
+				outcome = reconciliation.BlockUnknown
 			}
-			states[block.ID] = resolved
-			if err != nil || resolved != reconciliation.BlockDone {
-				break
-			}
-			continue
+		} else {
+			outcome, err = s.attempt(ctx, tx, store, operation, block, material, index+1, len(plan.Blocks))
 		}
-		outcome, err := s.attempt(ctx, tx, store, operation, block, material, index+1, len(plan.Blocks))
 		states[block.ID] = outcome
 		if err != nil || outcome != reconciliation.BlockDone {
 			break
 		}
 	}
-	return s.finish(ctx, tx, store, operation, plan, states, result)
+	return s.finish(ctx, tx, store, operation, plan, states, boundary, result)
+}
+
+// unproved covers both ways an effect loses its outcome: an attempt that
+// reported unknown, and one whose executor died before it reported anything.
+func unproved(state reconciliation.BlockState) bool {
+	return state == reconciliation.BlockUnknown || state == reconciliation.BlockRunning
+}
+
+// candidate selects the one block this invocation may work on next. An
+// unproved effect is resolved before anything else, a failed block is the only
+// retry and halts progress until it succeeds, and otherwise the first startable
+// pending block in frozen order runs.
+func candidate(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.StageSelection) (reconciliation.Block, int, bool) {
+	for index, block := range plan.Blocks {
+		if unproved(states[block.ID]) {
+			return block, index, true
+		}
+	}
+	for index, block := range plan.Blocks {
+		if states[block.ID] == reconciliation.BlockFailed {
+			return block, index, true
+		}
+	}
+	startable := reconciliation.Startable(plan, states, selection)
+	if len(startable) == 0 {
+		return reconciliation.Block{}, 0, false
+	}
+	for index, block := range plan.Blocks {
+		if block.ID == startable[0].ID {
+			return block, index, true
+		}
+	}
+	return reconciliation.Block{}, 0, false
+}
+
+func pendingRemains(plan reconciliation.Plan, states map[string]reconciliation.BlockState) bool {
+	for _, block := range plan.Blocks {
+		if states[block.ID] != reconciliation.BlockDone {
+			return true
+		}
+	}
+	return false
 }
 
 func (s Service) register(ctx context.Context, tx Transaction, store OperationStore, decided transition, binding string) (operationstore.Operation, reconciliation.Plan, error) {

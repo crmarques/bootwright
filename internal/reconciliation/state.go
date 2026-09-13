@@ -6,6 +6,7 @@ type OperationState string
 
 const (
 	OperationRunning OperationState = "running"
+	OperationPaused  OperationState = "paused"
 	OperationFailed  OperationState = "failed"
 	OperationUnknown OperationState = "unknown"
 	OperationDone    OperationState = "done"
@@ -44,7 +45,7 @@ const (
 
 func ValidOperationState(value OperationState) bool {
 	switch value {
-	case OperationRunning, OperationFailed, OperationUnknown, OperationDone:
+	case OperationRunning, OperationPaused, OperationFailed, OperationUnknown, OperationDone:
 		return true
 	}
 	return false
@@ -105,8 +106,10 @@ func ResolutionTransition(observed EffectState) (EffectState, BlockState, Operat
 
 // NextOperationState derives the operation from its blocks. An unknown block
 // dominates, because no retry, dependent block or replacement may start while
-// one effect remains unproved.
-func NextOperationState(states []BlockState) (OperationState, error) {
+// one effect remains unproved. A boundary means execution stopped because the
+// stage selection admitted nothing further, which is a pause rather than an
+// interruption, so the operation is resumable without recovery.
+func NextOperationState(states []BlockState, boundary bool) (OperationState, error) {
 	done, unknown, failed := 0, false, false
 	for _, state := range states {
 		if !ValidBlockState(state) {
@@ -128,24 +131,10 @@ func NextOperationState(states []BlockState) (OperationState, error) {
 		return OperationFailed, nil
 	case done == len(states):
 		return OperationDone, nil
+	case boundary:
+		return OperationPaused, nil
 	}
 	return OperationRunning, nil
-}
-
-// NextBlock selects the block an operation may work on next: the first that is
-// not done, in frozen plan order. An unknown block must be resolved first and
-// is reported as such rather than skipped.
-func NextBlock(plan Plan, states map[string]BlockState) (Block, BlockState, bool) {
-	for _, block := range plan.Blocks {
-		state := states[block.ID]
-		if state == "" {
-			state = BlockPending
-		}
-		if state != BlockDone {
-			return cloneBlock(block), state, true
-		}
-	}
-	return Block{}, "", false
 }
 
 func stateError(message string) error {

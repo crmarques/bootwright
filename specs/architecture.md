@@ -413,7 +413,7 @@ reconciliation/lifecycle.Service
    ─HostIdentity──────────────────→ controller/hostlinux.Inspector
    ─AutomationIdentity────────────→ controller/bundlelocal catalog identity
    ─ExecutionGuard────────────────→ controller/bundlelocal.ExecutionGuard
-   ─CapabilityResolver, Capability→ infrastructureservices/artifactserver.Capability
+   ─CapabilityResolver, Capability→ ordered set over infrastructureservices/artifactserver.Capability
         ─Runner───────────────────→ infrastructureservices/ansibleservice.Runner
              ─process boundary────→ embedded bootwright.core collection
    ─Confirmer, PlanPresenter, ProgressReporter→ internal/cli
@@ -447,7 +447,7 @@ production binding; tests substitute fakes through the same interface.
 | `reconciliation/lifecycle` | `HostIdentity` | Identity | `controller/hostlinux.Inspector` |
 | `reconciliation/lifecycle` | `AutomationIdentity` | CatalogDigest | composition value over `controller/bundlelocal` and the embedded collection |
 | `reconciliation/lifecycle` | `ExecutionGuard` | WithPython | `controller/bundlelocal.ExecutionGuard` |
-| `reconciliation/lifecycle` | `CapabilityResolver`, `Capability` | Resolve; Plan, Apply, Observe, Destroy | immutable composition map over `infrastructureservices/artifactserver.Capability` |
+| `reconciliation/lifecycle` | `CapabilityResolver`, `Capability` | Kinds, Resolve; Plan, Apply, Observe, Destroy | immutable ordered composition set over `infrastructureservices/artifactserver.Capability` |
 | `reconciliation/lifecycle` | `Confirmer`, `PlanPresenter`, `ProgressReporter` | Confirm; PresentLifecyclePlan; ReportProgress | `internal/cli` |
 | `reconciliation/lifecycle` | `Clock`, `Entropy` | Now; Read | composition |
 | `reconciliation/operationstore` | `Area` | Read, Entries, EnsureDirectory, WriteExclusive, Replace, Append, Sync | `contextfs` operation area |

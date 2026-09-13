@@ -50,6 +50,12 @@ func validateInvocation(command *cobra.Command, path string) string {
 		if flag.required && value == "" {
 			return "--" + flag.name + " is required"
 		}
+		if flag.enumList {
+			if message := validateEnumList(flag, normalizeNames(value), flags.Changed(flag.name)); message != "" {
+				return message
+			}
+			continue
+		}
 		if len(flag.enum) > 0 && !contains(flag.enum, value) {
 			return "--" + flag.name + " has an unsupported value"
 		}
@@ -70,7 +76,7 @@ func validateInvocation(command *cobra.Command, path string) string {
 	if boolValue(flags, "ssh-ask-sudo-password") && selectedJSON(command) {
 		return "--ssh-ask-sudo-password conflicts with JSON output"
 	}
-	for _, name := range []string{"clusters", "machines", "replace"} {
+	for _, name := range []string{"clusters", "machines", "replace", "stage"} {
 		if flags.Lookup(name) == nil {
 			continue
 		}
@@ -262,6 +268,24 @@ func validateMediaSource(flags *pflag.FlagSet) string {
 		parsed, err := url.Parse(sourceURL)
 		if err != nil || parsed.Hostname() == "" || parsed.User != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 			return "--from-url must be an HTTP or HTTPS URL without userinfo"
+		}
+	}
+	return ""
+}
+
+// validateEnumList checks each member of a comma-separated enum list. An
+// omitted flag selects the command's documented default; a supplied value that
+// resolves to no member is a usage error rather than a silent empty selection.
+func validateEnumList(flag flagSpec, members []string, supplied bool) string {
+	if !supplied {
+		return ""
+	}
+	if len(members) == 0 {
+		return "--" + flag.name + " must select at least one value"
+	}
+	for _, member := range members {
+		if !contains(flag.enum, member) {
+			return "--" + flag.name + " accepts " + strings.Join(flag.enum, ", ")
 		}
 	}
 	return ""

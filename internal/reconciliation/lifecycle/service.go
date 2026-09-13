@@ -83,6 +83,10 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
+	selection, err := reconciliation.ParseStages(request.Stages)
+	if err != nil {
+		return nil, err
+	}
 	name, id, err := s.resolve(ctx, request.ContextName)
 	if err != nil {
 		return nil, err
@@ -92,11 +96,11 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 		if err := verifySelection(view, id); err != nil {
 			return err
 		}
-		preview, err := s.preview(ctx, view)
+		previewed, err := s.preview(ctx, view, selection)
 		if err != nil {
 			return err
 		}
-		result = preview
+		result = previewed
 		return nil
 	})
 	if err != nil {
@@ -107,21 +111,24 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 
 // preview derives the next legal operation or the exact continuation point of
 // an incomplete one. It allocates no identity and writes nothing.
-func (s Service) preview(ctx context.Context, view View) (*PlanResult, error) {
+func (s Service) preview(ctx context.Context, view View, selection reconciliation.StageSelection) (*PlanResult, error) {
 	store := s.store(view)
 	index, err := store.Index(ctx)
 	if err != nil {
 		return nil, err
 	}
-	result := &PlanResult{Context: view.Identity()}
-	if index.Current == "" {
-		plan, _, err := s.freshPlan(ctx, view, reconciliation.Apply)
+	fresh := func(verb reconciliation.Verb, next string) (*PlanResult, error) {
+		plan, _, err := s.freshPlan(ctx, view, verb)
 		if err != nil {
 			return nil, err
 		}
-		result.Verb, result.Steps = string(reconciliation.Apply), steps(plan, nil)
-		result.Receipt = Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "apply"}
-		return result, nil
+		result := planPreview(plan, nil, selection)
+		result.Context, result.Verb = view.Identity(), string(verb)
+		result.Receipt = Receipt{Operation: "none", Verb: "plan", State: "preview", Next: next}
+		return &result, nil
+	}
+	if index.Current == "" {
+		return fresh(reconciliation.Apply, "apply")
 	}
 	operation, err := store.ReadOperation(ctx, index.Current)
 	if err != nil {
@@ -136,26 +143,15 @@ func (s Service) preview(ctx context.Context, view View) (*PlanResult, error) {
 		return nil, err
 	}
 	if operation.Verb == reconciliation.Apply && operation.State == reconciliation.OperationDone {
-		plan, _, err := s.freshPlan(ctx, view, reconciliation.Destroy)
-		if err != nil {
-			return nil, err
-		}
-		result.Verb, result.Steps = string(reconciliation.Destroy), steps(plan, nil)
-		result.Receipt = Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "destroy"}
-		return result, nil
+		return fresh(reconciliation.Destroy, "destroy")
 	}
 	if operation.Verb == reconciliation.Destroy && operation.State == reconciliation.OperationDone {
-		plan, _, err := s.freshPlan(ctx, view, reconciliation.Apply)
-		if err != nil {
-			return nil, err
-		}
-		result.Verb, result.Steps = string(reconciliation.Apply), steps(plan, nil)
-		result.Receipt = Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "apply"}
-		return result, nil
+		return fresh(reconciliation.Apply, "apply")
 	}
-	result.Verb, result.Steps, result.Continuation = string(operation.Verb), steps(frozen, states), true
+	result := planPreview(frozen, states, selection)
+	result.Context, result.Verb, result.Continuation = view.Identity(), string(operation.Verb), true
 	result.Receipt = Receipt{Operation: operation.ID, Verb: "plan", State: "preview", Next: continuationAction(operation, states)}
-	return result, nil
+	return &result, nil
 }
 
 func continuationAction(operation operationstore.Operation, states map[string]reconciliation.BlockState) string {
@@ -179,9 +175,42 @@ func steps(plan reconciliation.Plan, states map[string]reconciliation.BlockState
 				state = string(current)
 			}
 		}
-		out = append(out, PlanStep{ID: block.ID, Description: block.Description, Impacts: slices.Clone(block.Impacts), State: state})
+		out = append(out, PlanStep{
+			ID: block.ID, Description: block.Description, Stage: string(block.Stage),
+			Impacts: slices.Clone(block.Impacts), State: state,
+		})
 	}
 	return out
+}
+
+// planPreview marks what a stage selection would start and why it would leave
+// the rest, so an operator reads the consequence of the selection before
+// confirming it. Without a selection the steps carry no marker.
+func planPreview(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.StageSelection) PlanResult {
+	result := PlanResult{Steps: steps(plan, states), Stages: selection.Names()}
+	if len(selection) == 0 {
+		return result
+	}
+	deferrals := reconciliation.Deferrals(plan, states, selection)
+	startable := reconciliation.Startable(plan, states, selection)
+	for index, step := range result.Steps {
+		if step.State != string(reconciliation.BlockPending) {
+			continue
+		}
+		deferral, waiting := deferrals[step.ID]
+		switch {
+		case waiting && deferral.Reason == reconciliation.DeferredNotSelected:
+			result.Steps[index].Selection = StepNotSelected
+			result.Deferred++
+		case waiting:
+			result.Steps[index].Selection, result.Steps[index].WaitsOn = StepWaiting, deferral.Block
+			result.Deferred++
+		case slices.ContainsFunc(startable, func(block reconciliation.Block) bool { return block.ID == step.ID }):
+			result.Steps[index].Selection = StepStart
+			result.Startable++
+		}
+	}
+	return result
 }
 
 func verifySelection(view View, id string) error {

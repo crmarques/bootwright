@@ -8,6 +8,7 @@ import (
 
 type PlanRequest struct {
 	ContextName string
+	Stages      []string
 }
 
 type StatusRequest struct {
@@ -18,6 +19,7 @@ type StatusRequest struct {
 
 type ApplyRequest struct {
 	ContextName      string
+	Stages           []string
 	Authorizations   []string
 	SkipConfirmation bool
 	Verbose          bool
@@ -42,12 +44,24 @@ type Receipt struct {
 	Next      string
 }
 
+// PlanStep is one frozen block as a preview presents it. Selection is empty
+// when no stage selection is active, and otherwise says whether this
+// invocation would start the block or why it would not.
 type PlanStep struct {
 	ID          string
 	Description string
+	Stage       string
 	Impacts     []string
 	State       string
+	Selection   string
+	WaitsOn     string
 }
+
+const (
+	StepStart       = "start"
+	StepWaiting     = "waiting"
+	StepNotSelected = "not-selected"
+)
 
 // PlanResult previews the next legal operation or the exact continuation point
 // of an incomplete one. It allocates no identity and creates no log.
@@ -55,6 +69,9 @@ type PlanResult struct {
 	Context      ContextIdentity
 	Verb         string
 	Steps        []PlanStep
+	Stages       []string
+	Startable    int
+	Deferred     int
 	Continuation bool
 	Receipt      Receipt
 }
@@ -90,6 +107,7 @@ type GroupCounts struct {
 type BlockResult struct {
 	ID          string
 	Description string
+	Stage       string
 	State       string
 	Outcome     string
 	Attempts    int

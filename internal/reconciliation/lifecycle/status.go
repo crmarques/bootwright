@@ -89,7 +89,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	}
 	summary := &LifecycleSummary{
 		Operation: operation.ID, Verb: string(operation.Verb), State: string(operation.State),
-		Next: nextAction(operation.Verb, operation.State, states), Blocks: blockResults(plan, states), Logs: logs,
+		Next: nextAction(operation.Verb, operation.State), Blocks: blockResults(plan, states), Logs: logs,
 	}
 	if summary.Logs == nil {
 		summary.Logs = []string{}
@@ -98,6 +98,11 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	result.Secrets.Bound = len(operation.Bindings)
 	result.Shared = applyBlockStatus(result.Shared, plan, states)
 	result.NextSteps = append(result.NextSteps, "bootwright "+summary.Next)
+	// A pause owns everything it completed, so removal is a safe next action
+	// beside continuing the operation the selection stopped.
+	if operation.State == reconciliation.OperationPaused {
+		result.NextSteps = append(result.NextSteps, "bootwright destroy")
+	}
 	return result, nil
 }
 

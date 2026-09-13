@@ -238,11 +238,19 @@ func (c *testCapability) Observe(_ context.Context, execution Execution) (Observ
 
 type testResolver struct {
 	capability Capability
+	kinds      []string
 	missing    bool
 }
 
+func (r testResolver) Kinds() []string {
+	if len(r.kinds) != 0 {
+		return r.kinds
+	}
+	return []string{"ArtifactServer"}
+}
+
 func (r testResolver) Resolve(kind, implementation string) (Capability, bool) {
-	if r.missing || kind != "ArtifactServer" {
+	if r.missing || !slices.Contains(r.Kinds(), kind) {
 		return nil, false
 	}
 	return r.capability, true
@@ -360,7 +368,8 @@ type harness struct {
 
 func definition(id string) reconciliation.BlockDefinition {
 	return reconciliation.BlockDefinition{
-		ID: id, Description: "serve " + id, Kind: "ArtifactServer", Object: id,
+		ID: id, Description: "serve " + id, Stage: reconciliation.StageInfraComponents,
+		Kind: "ArtifactServer", Object: id,
 		Implementation: "artifact-server-nginx-v1", ContentDigest: strings.Repeat("c", 64),
 		Request: json.RawMessage(`{"name":"` + id + `"}`),
 		Groups:  []reconciliation.Group{{ID: "pull-image", Description: "acquire the pinned server image", Machines: []string{"bastion"}}},
@@ -373,6 +382,11 @@ func newHarness(t *testing.T, blocks ...string) *harness {
 	for _, id := range blocks {
 		definitions = append(definitions, definition(id))
 	}
+	return newPlannedHarness(t, definitions)
+}
+
+func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinition) *harness {
+	t.Helper()
 	host, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1,
 		"0123456789abcdef0123456789abcdef", "12345678-1234-5678-9abc-def012345678", "fedcba98-7654-3210-fedc-ba9876543210")
 	if err != nil {
@@ -538,7 +552,7 @@ func TestUnsupportedObjectsRefuseBeforeRegistration(t *testing.T) {
 	h.capability.unsupported = []string{"ContainerCluster/sno", "Machine/guest"}
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	reported := diagnostics.Of(err)
-	if err == nil || len(reported) != 1 || !strings.Contains(reported[0].Message, "ContainerCluster/sno") || !strings.Contains(reported[0].Remediation, "lab-artifacts") {
+	if err == nil || len(reported) != 1 || !strings.Contains(reported[0].Message, "ContainerCluster/sno") || !strings.Contains(reported[0].Remediation, supportedExample) {
 		t.Fatalf("unsupported refusal = %+v", reported)
 	}
 	if len(h.workspace.area.files) != 0 || h.workspace.mutations != 0 {
@@ -805,4 +819,250 @@ func firstCode(err error) string {
 		return ""
 	}
 	return reported[0].Code
+}
+
+func stagedDefinition(id string, stage reconciliation.Stage, dependencies ...string) reconciliation.BlockDefinition {
+	block := definition(id)
+	block.Stage = stage
+	slices.Sort(dependencies)
+	block.Dependencies = dependencies
+	return block
+}
+
+// nestedDefinitions are the shape that makes stages a graph rather than
+// strata: the KubeVirt substrate of a hub cluster cannot exist before the
+// hosting cluster's virtualization add-on has been installed.
+func nestedDefinitions() []reconciliation.BlockDefinition {
+	return []reconciliation.BlockDefinition{
+		stagedDefinition("artifacts", reconciliation.StageInfraComponents),
+		stagedDefinition("provider-metal", reconciliation.StageSubstrates),
+		stagedDefinition("host-node", reconciliation.StageMachines, "provider-metal"),
+		stagedDefinition("host-cluster", reconciliation.StageClusters, "host-node"),
+		stagedDefinition("host-virtualization", reconciliation.StageAddOns, "host-cluster"),
+		stagedDefinition("provider-kubevirt", reconciliation.StageSubstrates, "host-virtualization"),
+		stagedDefinition("hub-node", reconciliation.StageMachines, "provider-kubevirt"),
+	}
+}
+
+func TestStagedApplyPausesAtTheStageBoundary(t *testing.T) {
+	h := newPlannedHarness(t, nestedDefinitions())
+	result, err := h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"},
+	})
+	if err != nil {
+		t.Fatalf("a stage boundary reported a failure: %v", err)
+	}
+	if result.Receipt.State != string(reconciliation.OperationPaused) || result.Receipt.Next != "continue-apply" {
+		t.Fatalf("receipt = %+v", result.Receipt)
+	}
+	if !slices.Equal(h.capability.applies, []string{"artifacts"}) {
+		t.Fatalf("applied blocks = %v", h.capability.applies)
+	}
+	paused, err := reconciliation.EvidenceFor(reconciliation.Apply, reconciliation.OperationPaused)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := paused.Bytes()
+	if string(h.workspace.evidence) != string(want) {
+		t.Fatalf("evidence = %q, want %q", h.workspace.evidence, want)
+	}
+}
+
+// A stage selection gates which blocks start; it never narrows the frozen plan,
+// so a block whose dependency belongs to an unselected stage simply waits.
+func TestStagedApplyDefersBlocksBehindUnselectedStages(t *testing.T) {
+	h := newPlannedHarness(t, nestedDefinitions())
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"substrates"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(h.capability.applies, []string{"provider-metal"}) {
+		t.Fatalf("applied blocks = %v", h.capability.applies)
+	}
+	presented := h.presenter.presented[0]
+	if len(presented.Steps) != len(nestedDefinitions()) {
+		t.Fatalf("the presented plan was narrowed to %d steps", len(presented.Steps))
+	}
+	marks := map[string]string{}
+	waits := map[string]string{}
+	for _, step := range presented.Steps {
+		marks[step.ID], waits[step.ID] = step.Selection, step.WaitsOn
+	}
+	if marks["provider-metal"] != StepStart || marks["artifacts"] != StepNotSelected {
+		t.Fatalf("selection markers = %v", marks)
+	}
+	if marks["provider-kubevirt"] != StepWaiting || waits["provider-kubevirt"] != "host-virtualization" {
+		t.Fatalf("the nested substrate is not deferred behind its add-on: %v %v", marks, waits)
+	}
+	if presented.Startable != 1 || presented.Deferred != len(nestedDefinitions())-1 {
+		t.Fatalf("startable = %d, deferred = %d", presented.Startable, presented.Deferred)
+	}
+}
+
+func TestContinuationAcceptsAWiderStageSetAndCompletes(t *testing.T) {
+	h := newPlannedHarness(t, nestedDefinitions())
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Receipt.State != string(reconciliation.OperationDone) || result.Receipt.Next != "destroy" {
+		t.Fatalf("receipt = %+v", result.Receipt)
+	}
+	if !slices.Equal(h.capability.applies, []string{
+		"artifacts", "provider-metal", "host-node", "host-cluster", "host-virtualization", "provider-kubevirt", "hub-node",
+	}) {
+		t.Fatalf("applied blocks = %v", h.capability.applies)
+	}
+}
+
+// A pause owns exactly what it completed, so its removal covers those blocks
+// and nothing the operation never started.
+func TestDestroyFromAPausedApplyRemovesOnlyDoneBlocks(t *testing.T) {
+	h := newPlannedHarness(t, nestedDefinitions())
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components", "substrates"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Receipt.State != string(reconciliation.OperationDone) || result.Receipt.Next != "none" {
+		t.Fatalf("receipt = %+v", result.Receipt)
+	}
+	if !slices.Equal(h.capability.destroys, []string{"provider-metal", "artifacts"}) {
+		t.Fatalf("destroyed blocks = %v", h.capability.destroys)
+	}
+}
+
+func TestStageSelectionWithNothingStartableRefuses(t *testing.T) {
+	h := newPlannedHarness(t, nestedDefinitions())
+	_, err := h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"clusters"},
+	})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.stage" {
+		t.Fatalf("fresh refusal = %+v", reported)
+	}
+	if !strings.Contains(reported[0].Remediation, "infra-components") {
+		t.Fatalf("the refusal does not name a stage that would unblock work: %+v", reported[0])
+	}
+	if len(h.workspace.area.files) != 0 || h.workspace.mutations != 0 {
+		t.Fatal("a refused stage selection registered an operation")
+	}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"clusters"},
+	})
+	if code := firstCode(err); code != "lifecycle.stage" {
+		t.Fatalf("continuation refusal = %q", code)
+	}
+}
+
+func TestFailedBlockOutsideTheSelectionRefusesRetry(t *testing.T) {
+	h := newPlannedHarness(t, nestedDefinitions())
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"},
+	}); err == nil {
+		t.Fatal("a failed block reported success")
+	}
+	_, err := h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"substrates"},
+	})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.stage" || !strings.Contains(reported[0].Remediation, "infra-components") {
+		t.Fatalf("retry refusal = %+v", reported)
+	}
+}
+
+// Resolution is read-only, so an unproved effect is observed whatever stages
+// the invocation selects; nothing else may start until it is resolved.
+func TestUnknownBlockIsResolvedRegardlessOfStage(t *testing.T) {
+	h := newPlannedHarness(t, nestedDefinitions())
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"},
+	}); err == nil {
+		t.Fatal("an unknown effect reported success")
+	}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted, Evidence: json.RawMessage(`{"ok":true}`)}}
+	result, err := h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"substrates"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(h.capability.observes, []string{"artifacts"}) {
+		t.Fatalf("observed blocks = %v", h.capability.observes)
+	}
+	if !slices.Equal(h.capability.applies, []string{"artifacts", "provider-metal"}) {
+		t.Fatalf("applied blocks = %v", h.capability.applies)
+	}
+	if result.Receipt.State != string(reconciliation.OperationPaused) {
+		t.Fatalf("receipt = %+v", result.Receipt)
+	}
+}
+
+func TestPlanPreviewMarksStartDeferredAndNotSelected(t *testing.T) {
+	h := newPlannedHarness(t, nestedDefinitions())
+	result, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab", Stages: []string{"substrates"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(result.Stages, []string{"substrates"}) || result.Startable != 1 {
+		t.Fatalf("preview = %+v", result)
+	}
+	if result.Receipt.State != "preview" || h.workspace.mutations != 0 {
+		t.Fatalf("a preview allocated state: %+v", result.Receipt)
+	}
+	plain, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range plain.Steps {
+		if step.Selection != "" {
+			t.Fatalf("a preview without a selection marked %s as %q", step.ID, step.Selection)
+		}
+		if step.Stage == "" {
+			t.Fatalf("step %s carries no stage", step.ID)
+		}
+	}
+}
+
+// Every plan block needs a resolved capability, so an object of a kind no
+// capability claims refuses the whole operation before it registers.
+func TestUnclaimedKindsRefuseBeforeRegistration(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	catalog := api.NewCatalog([]api.Object{
+		api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue(
+			api.FieldValue{Name: "controller", Value: api.MapValue(api.FieldValue{Name: "machineRef", Value: api.StringValue("bastion")})},
+		)),
+		api.NewObject(api.Proxy, "lab-proxy", api.Value{}, api.MapValue(
+			api.FieldValue{Name: "management", Value: api.StringValue("managed")},
+		)),
+		api.NewObject(api.Proxy, "upstream", api.Value{}, api.MapValue(
+			api.FieldValue{Name: "management", Value: api.StringValue("external")},
+		)),
+	})
+	h.service.compiler = testCompiler{state: compilation.NewState(catalog, catalog, nil)}
+	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || !strings.Contains(reported[0].Message, "Proxy/lab-proxy") {
+		t.Fatalf("unclaimed refusal = %+v", reported)
+	}
+	if strings.Contains(reported[0].Message, "Proxy/upstream") {
+		t.Fatal("an external service was reported as unrealizable")
+	}
 }

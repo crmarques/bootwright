@@ -9,38 +9,11 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-// unsupportedKinds would each need a capability this milestone does not
-// implement. Their presence refuses the whole operation before registration.
-var unsupportedKinds = []api.Kind{
-	api.ContainerCluster, api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool,
-	api.StorageFilesystem, api.StorageObjectGateway, api.StorageNFSExport, api.StorageExport,
-	api.ClusterAddon, api.ClusterAddonProfile, api.ClusterAddonBinding,
-	api.Proxy, api.DNSServer, api.NTPServer, api.Registry, api.LoadBalancer,
-}
-
-// Unsupported lists every selected object that would require an effect this
-// executable cannot perform, in canonical order. External services and
-// declaration-only kinds are inputs and never appear here.
+// Unsupported lists every artifact server this capability cannot realize, in
+// canonical order. Kinds no capability claims at all are the engine's own
+// refusal, not this capability's.
 func Unsupported(catalog api.Catalog) []string {
 	var found []string
-	for _, kind := range unsupportedKinds {
-		for _, object := range catalog.OfKind(kind) {
-			if isService(kind) && object.Spec().Get("management").Text() != "managed" {
-				continue
-			}
-			found = append(found, object.Identity())
-		}
-	}
-	for _, machine := range catalog.OfKind(api.Machine) {
-		if provided := machine.Spec().Get("os", "provided"); provided.Type() == api.Boolean && !provided.Bool() {
-			found = append(found, machine.Identity())
-		}
-	}
-	for _, playbook := range catalog.OfKind(api.CustomPlaybook) {
-		if enabled := playbook.Spec().Get("enabled"); enabled.Type() == api.Boolean && enabled.Bool() {
-			found = append(found, playbook.Identity())
-		}
-	}
 	for _, server := range catalog.OfKind(api.ArtifactServer) {
 		if server.Spec().Get("management").Text() == "managed" && server.Spec().Get("retention").Text() == "install-only" {
 			found = append(found, server.Identity())
@@ -48,10 +21,6 @@ func Unsupported(catalog api.Catalog) []string {
 	}
 	slices.Sort(found)
 	return slices.Compact(found)
-}
-
-func isService(kind api.Kind) bool {
-	return slices.Contains([]api.Kind{api.Proxy, api.DNSServer, api.NTPServer, api.Registry, api.LoadBalancer}, kind)
 }
 
 // Requests derives one frozen request per managed artifact server, in

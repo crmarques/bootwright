@@ -122,7 +122,8 @@ operands fail semantic validation after explicit-help precedence, as on other
 runnable commands. An explicit `help` path still requires exact subcommands.
 
 Scalar flags follow command-line order and the last occurrence wins, including
-the scalar comma-list flags `--clusters`, `--machines`, and `--replace`.
+the scalar comma-list flags `--clusters`, `--machines`, `--replace`, and
+`--stage`.
 Collection flags aggregate in command-line order only where this contract says
 they are repeatable. `validate -f` is repeatable. `--authorize` is repeatable
 and each occurrence may also contain commas. Supplying an empty required value
@@ -140,7 +141,8 @@ erase an earlier explicitly empty occurrence. The named empty exceptions remain
 valid occurrences; enum and format validation otherwise applies to the final
 resolved scalar value under the last-occurrence-wins rule.
 
-`--clusters`, `--machines`, and `--replace` are comma-separated name lists.
+`--clusters`, `--machines`, `--replace`, and `--stage` are comma-separated
+lists.
 Whitespace around a member is ignored, empty members are ignored, and duplicate
 members collapse to their first occurrence. Omission selects all eligible
 objects only where the command row says “default all.” Empty resolved lists
@@ -151,7 +153,9 @@ preserve these command-specific compatibility rules:
 - `machine list --clusters` treats an empty or whitespace-only value as
   omission and a comma-only value as an empty result; and
 - `machine trust --machines` treats an empty or comma-only value as omission,
-  while an empty or comma-only `--replace` selects no replacement.
+  while an empty or comma-only `--replace` selects no replacement; and
+- a supplied `--stage` must resolve to at least one member, so a comma-only
+  value is a usage error, and every member must be a declared stage name.
 
 A selector is applied only after the complete Environment-selected graph has
 been loaded, normalized, and validated. It filters presentation, checks,
@@ -343,8 +347,25 @@ artifacts only and are never executed by render.
 ## Lifecycle behavior
 
 `plan`, `apply`, and `destroy` act on the complete selected lifecycle unit.
-They accept no positional operand, partial selector, stage, range, mode,
+They accept no positional operand, partial selector, range, mode,
 reconciliation, adoption, reclaim, force, or resource-specific subcommand.
+
+### Stage selection
+
+`plan` and `apply` accept `--stage`, a comma-separated list over exactly
+`infra-components`, `substrates`, `machines`, `clusters`, and `add-ons`.
+Omission selects every stage. `destroy` and `status` do not accept it.
+
+The selection never narrows the frozen plan or the lifecycle unit. It gates
+only which blocks an invocation starts, under the
+[stage contract](state-reconciliation.md#stages-and-the-pause-boundary): a
+selected block still waits for its dependencies, an unselected block stays
+pending, and the operation reports `paused` when nothing further can start.
+A later `apply` continues that same operation under any selection. An
+invocation whose selection admits no startable block, or that excludes the
+block an operation must retry, fails `lifecycle.stage` before registration and
+before any effect. `plan --stage` never fails for that reason: it previews
+which blocks the selection would start and which it would defer.
 
 ### Staged apply without destroy
 
@@ -402,7 +423,7 @@ result exists:
 ```text
 operation: <operation-id|none>
 verb: <plan|apply|destroy>
-state: <preview|refused|running|failed|unknown|done>
+state: <preview|refused|running|paused|failed|unknown|done>
 next: <apply|continue-apply|destroy|continue-destroy|resolve|none>
 ```
 
@@ -410,8 +431,9 @@ The labels, order, enum values, escaping, and final LF are stable. `preview`
 is a CLI-only marker for a pure plan with no operation; `refused` is a CLI-only
 marker for a resolved request rejected before operation registration. Neither
 is persisted as an operation state. When `operation` is not `none`, `state` is
-exactly the durable `running`, `failed`, `unknown`, or `done` value owned by
-state reconciliation. The receipt and `status --output json` derive from the
+exactly the durable `running`, `paused`, `failed`, `unknown`, or `done` value
+owned by state reconciliation. A `paused` apply is a successful result: it
+exits zero and its next action is `continue-apply`. The receipt and `status --output json` derive from the
 same trustworthy state.
 
 ## Resource inspection and explicit access

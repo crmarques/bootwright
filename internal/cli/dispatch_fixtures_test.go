@@ -325,6 +325,7 @@ func dispatchFlags() *pflag.FlagSet {
 		"value-file": "secret.bin", "password-file": "", "certificate-file": "",
 		"private-key-file": "", "public-key-file": "", "type": "local-keyring",
 		"username": "", "input-dir": "inputs", "output-dir": "artifacts",
+		"stage": "infra-components,substrates",
 	} {
 		flags.String(name, value, "")
 	}

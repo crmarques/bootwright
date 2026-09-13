@@ -11,17 +11,21 @@ registration, receipt, or effects.
 One complete validated Environment selection rooted in one environment
 directory is one lifecycle unit. [API selection](api.md#environment-directory-and-selected-state)
 owns graph membership. Operations cover the entire unit; a public request
-cannot narrow it to kinds, clusters, machines, stages, or ranges.
+cannot narrow it to kinds, clusters, machines, or ranges. A
+[stage selection](#stages-and-the-pause-boundary) is the one exception, and it
+narrows nothing: the plan stays complete and frozen, and the selection only
+gates which of its blocks this invocation may start.
 
 Supported operation modes are:
 
-- a fresh full-context `apply`;
-- exact continuation of an interrupted or failed `apply` or `destroy`; and
-- a full-context `destroy` of everything recorded as owned by the completed
-  apply.
+- a fresh full-context `apply`, optionally stopping at a stage boundary;
+- continuation of a paused, interrupted or failed `apply`, or of an
+  interrupted or failed `destroy`, against its exact frozen plan; and
+- a `destroy` of everything the apply recorded as owned, which for a paused
+  apply is exactly the blocks it completed.
 
-There is no reconciliation, partial apply/destroy, adoption, reclaim, or force
-path. A completed apply must be destroyed before another apply can start.
+There is no reconciliation, partial planning, adoption, reclaim, or force path.
+A completed apply must be destroyed before another apply can start.
 
 An implementation may make `apply` operational before public `destroy` only
 for one complete selected Environment whose lifecycle obligations are fully
@@ -52,6 +56,8 @@ expand the operation. Expansion requires destroy followed by fresh apply.
 Reconciliation owns a closed version-1 mutation record initialized with
 `operation: none` and `ownership: none`. Recognized operation states are `none`,
 `pending`, `failed`, `unknown` and `applied`; ownership is `none` or `retained`.
+A paused operation records `pending` and `retained`, exactly as a running one
+does, because it owns every effect it completed.
 This record establishes only local disposal/update restrictions, not native
 execution, readiness, ownership release or permission to run lifecycle work.
 Future lifecycle publication must participate in the same context lease and
@@ -170,6 +176,7 @@ overwriting durable evidence.
 | --- | --- |
 | no operation, or completed destroy | start a fresh apply |
 | apply running or failed | continue that exact apply |
+| apply paused | continue that exact apply under any stage selection, or start a fresh destroy of the blocks it completed |
 | apply unknown | resolve the exact unknown block; start no effect or retry |
 | apply done | start a fresh destroy |
 | destroy running or failed | continue that exact destroy |
@@ -195,9 +202,49 @@ pending registry before its first platform side effect. Lifecycle commands
 remain unavailable until that secret-continuity boundary exists.
 
 A plan is a dependency DAG of stable blocks. Each block has an ID, description,
-dependencies, impacts, and execution kind. Operations are `running`, `failed`,
-`unknown`, or `done`; blocks are `pending`, `running`, `failed`, `unknown`, or
-`done`.
+stage, dependencies, impacts, and execution kind. Operations are `running`,
+`paused`, `failed`, `unknown`, or `done`; blocks are `pending`, `running`,
+`failed`, `unknown`, or `done`.
+
+### Stages and the pause boundary
+
+Every block carries exactly one stage, frozen with the plan and covered by its
+digest. A stage names the kind of platform work its block performs:
+
+| Stage | Blocks |
+| --- | --- |
+| `infra-components` | Managed shared services: proxying, name resolution, time, artifact serving, registries and load balancing. |
+| `substrates` | Provider realization for a declared `InfraProvider`. |
+| `machines` | Machine realization and managed operating-system installation. |
+| `clusters` | Container and storage cluster installation. |
+| `add-ons` | Add-on instances bound to a cluster. |
+
+The capability that plans a block owns its stage. Stages are not strata: a
+block depends on other blocks, never on a stage, so a `substrates` block may
+legitimately wait on an `add-ons` block when a provider is hosted by a cluster
+that an add-on enables. Ordering always follows the dependency DAG.
+
+A stage selection is the set of stages an invocation may start; an omitted
+selection admits every stage. A block is *ready* when it is `pending` and every
+dependency is `done`, and *startable* when it is ready and its stage is
+selected. Execution runs startable blocks in frozen plan order, re-evaluating
+after each one.
+
+An operation is `paused` when execution stops because no block is startable,
+no block is failed or unknown, and pending blocks remain. A pause is a
+successful, resumable stop, not an interruption: it needs no recovery, it
+allocates no new identity, and the next `apply` continues the same operation
+under whatever selection it is given. Cancellation is never a pause.
+
+Selection never weakens a safety rule. An unproved effect is resolved before
+anything else whatever stages are selected, because resolution is a read-only
+observation. A failed block remains the only retry candidate and halts
+progress; when its stage is not selected the operation refuses `lifecycle.stage`
+before any effect. A selection that admits no startable block also refuses
+`lifecycle.stage` before registration, naming a stage that would unblock work.
+Objects whose kind no capability in the executable can realize refuse before
+registration regardless of the selection, because a frozen plan requires a
+resolved implementation for every block.
 
 A domain capability may define ordered presentation groups within its block for
 one operation performed across one or more Machines. The capability owns each
@@ -299,8 +346,10 @@ invokes capability ports under the
 [Go/Ansible boundary](architecture.md#go-and-ansible-responsibility-boundary).
 
 Destroy is planned from the completed apply snapshot and ownership evidence,
-not newly edited input. It removes dependents before dependencies and retains
-evidence until positive removal or positive absence is durable.
+not newly edited input. A paused apply owns exactly the blocks it completed, so
+its removal covers those blocks and nothing it never started. Destroy removes
+dependents before dependencies and retains evidence until positive removal or
+positive absence is durable. It accepts no stage selection.
 
 ## Bootstrap completion and GitOps readiness
 

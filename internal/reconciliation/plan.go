@@ -41,6 +41,7 @@ type Group struct {
 type BlockDefinition struct {
 	ID             string          `json:"id"`
 	Description    string          `json:"description"`
+	Stage          Stage           `json:"stage"`
 	Dependencies   []string        `json:"dependencies"`
 	Impacts        []string        `json:"impacts"`
 	Groups         []Group         `json:"groups"`
@@ -191,6 +192,9 @@ func validateDefinition(definition BlockDefinition) error {
 	}
 	if !safeDescription(definition.Description) {
 		return planError("lifecycle block requires a safe single-line description")
+	}
+	if !ValidStage(definition.Stage) {
+		return planError("lifecycle block requires a recognized stage")
 	}
 	if definition.Kind == "" || definition.Object == "" || definition.Implementation == "" {
 		return planError("lifecycle block requires its kind, object and implementation identity")
