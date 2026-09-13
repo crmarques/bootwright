@@ -316,7 +316,7 @@ that implements a row updates the row and the stub fitness test together.
 | `validate`, `render effective` (Desired state) | `commands_desiredstate.go` | `desiredstate/compilation` | `desiredstate/inputfs`, `desiredstate/yamlstream`, `desiredstate/encoding` | I |
 | `bastion setup`, `preflight bastion` (Controller) | `commands_controller.go` | `controller/prerequisites` | `controller/hostlinux`, `controller/bundlelocal`, `controller/ansiblelocal`, `controller/nativelocal`, `workspace/contextfs` | I |
 | Local privilege boundary for every root-requiring command (Controller) | `invocation.go` classifies only | — | `controller/privilege`, bound in `run.go` | I |
-| `plan`, `status`, `apply`, `destroy` (State reconciliation) | `commands_reconciliation.go` | `reconciliation/lifecycle` | `reconciliation/operationstore`, `workspace/contextfs`, `desiredstate/compilation`, `secrets/custody`, `controller/hostlinux`, `controller/bundlelocal`, `infrastructureservices/artifactserver` | I |
+| `plan`, `status`, `apply`, `destroy` (State reconciliation) | `commands_reconciliation.go` | `reconciliation/lifecycle` | `reconciliation/operationstore`, `workspace/contextfs`, `desiredstate/compilation`, `secrets/custody`, `controller/hostlinux`, `controller/bundlelocal`, `infrastructureservices/artifactserver`, `infrastructureservices/managedservice` with the `proxy`, `dnsserver` and `ntpserver` definitions | I |
 | `render` (Native artifacts) | `commands_nativeartifacts.go` | `nativeartifacts/rendering` | — | S |
 | `render installer` (Container cluster) | `commands_containercluster.go` | `containercluster/installation` | — | S |
 | `render storage` (Storage) | `commands_storage.go` | `storage/rendering` | — | S |
@@ -414,6 +414,8 @@ reconciliation/lifecycle.Service
    ─AutomationIdentity────────────→ controller/bundlelocal catalog identity
    ─ExecutionGuard────────────────→ controller/bundlelocal.ExecutionGuard
    ─CapabilityResolver, Capability→ ordered set over infrastructureservices/artifactserver.Capability
+                                     and managedservice.Capability bound to the proxy,
+                                     dnsserver and ntpserver definitions
         ─Runner───────────────────→ infrastructureservices/ansibleservice.Runner
              ─process boundary────→ embedded bootwright.core collection
    ─Confirmer, PlanPresenter, ProgressReporter→ internal/cli
@@ -451,7 +453,7 @@ production binding; tests substitute fakes through the same interface.
 | `reconciliation/lifecycle` | `Confirmer`, `PlanPresenter`, `ProgressReporter` | Confirm; PresentLifecyclePlan; ReportProgress | `internal/cli` |
 | `reconciliation/lifecycle` | `Clock`, `Entropy` | Now; Read | composition |
 | `reconciliation/operationstore` | `Area` | Read, Entries, EnsureDirectory, WriteExclusive, Replace, Append, Sync | `contextfs` operation area |
-| `infrastructureservices/artifactserver` | `Runner` | Run | `infrastructureservices/ansibleservice.Runner` |
+| `infrastructureservices/artifactserver`, `infrastructureservices/managedservice` | `Runner` | Run | `infrastructureservices/ansibleservice.Runner` |
 | `workspace/contexts` | `Repository` (embeds `InputRepository`) | ReadInputs, CheckInputDirectory, View, Transact | `workspace/contextfs.Store` |
 | `workspace/contexts` | `Transaction` | Registry, Reserve, Configuration, InitializeSecrets, Publish, MutationState, Delete, Commit | `contextfs` transaction |
 | `workspace/contexts` | `ControllerInputGuard` | CheckControllerInput | `contextfs` transaction |

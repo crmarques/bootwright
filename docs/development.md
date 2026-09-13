@@ -111,31 +111,44 @@ code evolves:
 Executed native installation is not covered by any of these; it is a manual
 `bastion setup` on a prepared host.
 
-## M1e lifecycle and managed artifact serving
+## M1f managed infrastructure components and staged apply
 
-The current [M1e delivery](../specs/milestones.md#m1e--lifecycle-engine-and-managed-artifact-serving)
-adds the lifecycle engine and one capability behind it, so `plan`, `status`,
-`apply` and `destroy` act on an Environment whose only lifecycle objects are
-persistent managed artifact servers. Go owns plans, operation records, leases,
-continuation and authorization; the embedded collection installs and removes
-the service. The verification model is M1d's: every in-tree test is unitary and
-host-independent, creates no container and needs no second host, and
-real-system acceptance is operator-run.
+The current [M1f delivery](../specs/milestones.md#m1f--managed-bastion-network-services)
+completes the `infra-components` stage: managed `Proxy`, `DNSServer` and
+`NTPServer` join the managed `ArtifactServer` behind one capability port, and
+`plan` and `apply` accept `--stage`. Go owns plans, operation records, leases,
+continuation, stage gating and authorization; the embedded collection installs
+and removes each service. The verification model is M1d's: every in-tree test
+is unitary and host-independent, creates no container and needs no second host,
+and real-system acceptance is operator-run.
 
-The managed artifact server runs `registry.access.redhat.com/ubi9/nginx-124`,
-pinned by content digest in
-`internal/infrastructureservices/artifactserver/catalog.go`. The compiled
-default was resolved from the publisher's `latest` tag on 2026-09-11 and
-qualified with podman 5.8.4 on Fedora 43; its runtime constraints are recorded
-in [artifact-server knowledge](../.agents/knowledge/artifact-server-nginx-runtime.md).
-An `ArtifactServer` that pins `spec.image` uses that reference instead, and any
-reference must resolve to an immutable digest.
+Each managed service runs one container image pinned by content digest in its
+capability's `catalog.go`. All four were resolved from their publisher's
+current stable tag and qualified by hand against podman 5.8.4 on Fedora 43 on
+the date below, before any role was written:
+
+| Kind | Image | Qualified |
+| --- | --- | --- |
+| `ArtifactServer` | `registry.access.redhat.com/ubi9/nginx-124` | 2026-09-11 |
+| `Proxy` | `docker.io/ubuntu/squid` (24.04) | 2026-09-13 |
+| `DNSServer` | `docker.io/4km3/dnsmasq` | 2026-09-13 |
+| `NTPServer` | `docker.io/dockurr/chrony` (chrony 4.9) | 2026-09-13 |
+
+Their runtime constraints are recorded in
+[artifact-server knowledge](../.agents/knowledge/artifact-server-nginx-runtime.md)
+and [network-service knowledge](../.agents/knowledge/managed-network-service-runtime.md).
+An authored `spec.image` uses that reference instead, and any reference must
+resolve to an immutable digest.
 
 The embedded collection participates in the dependency-bundle identity, so a
 build that changes `ansible/` changes the bundle a context is bound to. Run
 `bastion setup --context <name>` again after such a build; `preflight bastion`
 reports the incompatible retained bundle and `apply` refuses rather than
 executing automation the receipt does not cover.
+
+Adding the stage to a frozen block changes plan digests, so an operation
+registered by an earlier build cannot be continued or destroyed by this one.
+Destroy or purge any live context before switching builds.
 
 `make ansible-check` covers the new collection content with the same pinned
 syntax, lint, sanity and unit gates as the controller entrypoints. Executed
@@ -144,5 +157,6 @@ and are not selectable from a test runner:
 
 | Acceptance | How it is run |
 | --- | --- |
-| The complete journey in [`examples/lab-artifacts`](../examples/lab-artifacts/README.md): apply, replay, interrupt, continue and destroy against a real container runtime | by hand as root on a prepared bastion |
+| The complete journey in [`examples/managed-infra-components`](../examples/managed-infra-components/README.md): staged apply, replay, interrupt, continue and destroy against a real container runtime | by hand as root on a prepared bastion |
+| The single-service journey in [`examples/lab-artifacts`](../examples/lab-artifacts/README.md) | by hand as root on a prepared bastion |
 | SSH placement against a second OS-ready host | by hand, with that host's authored access and bound host key |

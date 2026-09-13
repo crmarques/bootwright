@@ -1,14 +1,14 @@
 # Milestones
 
-**M1e is the current milestone.** M1a–M1d are complete: the full command
+**M1f is the current milestone.** M1a–M1e are complete: the full command
 catalog with help and completion; admission of all 26 API kinds; durable
 contexts with immutable input; context-backed `validate` and public
 `render effective`; the complete `secret` tree over `local-keyring`; and
-`bastion setup` with `preflight bastion` on RHEL 9 and Fedora for Linux/amd64.
-M1e adds the lifecycle engine and its first capability, so `plan`, `status`,
-`apply` and `destroy` become available for one bounded Environment shape. Every
-other catalogued command retains the
-[unavailable result](cli.md#recognized-but-unavailable-commands).
+`bastion setup` with `preflight bastion` on RHEL 9 and Fedora for Linux/amd64;
+and the lifecycle engine with managed artifact serving, so `plan`, `status`,
+`apply` and `destroy` are available. M1f completes the `infra-components`
+stage and adds stage selection to the engine. Every other catalogued command
+retains the [unavailable result](cli.md#recognized-but-unavailable-commands).
 
 This file owns delivery scope and deferred work. Product specs describe target
 behavior; they do not claim availability. A completed milestone keeps only its
@@ -163,84 +163,91 @@ instead of adding the missing tools to the verified closure; service images,
 the pinned service Ansible closure, local service reservations, readiness and
 their qualified inverse belong to M1e.
 
-## M1e — lifecycle engine and managed artifact serving
+### M1e — lifecycle engine and managed artifact serving
 
 **Owners:** State reconciliation and Infrastructure services, using Workspace,
-Secrets, Machine, Controller and Trust. **Requires:** M1d. **Definition:**
-Specified. **Delivery:** in progress.
+Secrets, Machine, Controller and Trust. **Delivery:** completed; end-to-end
+acceptance against a real bastion is operator-run.
 
-Deliver the durable lifecycle engine and its first domain capability, making
-`plan`, `status`, `apply` and `destroy` available for one bounded Environment
-shape. The engine is generic: plans, operation and block state, leases,
-private logs, exact continuation, unknown-outcome resolution, immutable secret
-binding and the Go-to-Ansible capability boundary belong to State
-reconciliation, and the artifact server is one implementation behind the
-capability port. Later milestones add capabilities, not another engine.
+Delivered the durable lifecycle engine and its first domain capability, making
+`plan`, `status`, `apply` and `destroy` available: plans, operation and block
+state, leases, private logs, exact continuation, unknown-outcome resolution,
+immutable secret binding and the Go-to-Ansible capability boundary, with the
+managed `ArtifactServer` as one implementation behind the capability port.
+Public destroy shipped with it, so the staged-availability exception was never
+entered. Controller placement is the qualified arm; SSH placement is
+implemented and operator-run.
 
-**Supported shape.** One complete selected Environment whose only lifecycle
-capabilities are persistent managed `ArtifactServer` objects placed on OS-ready
-provided Machines. `Environment`, `Machine` and `Secret` are inputs, not plan
-blocks. External services add no block. Every other selected object that would
-require an effect refuses before registration, naming each unsupported object
-and the reduced example. `install-only` retention is excluded.
+Guarded by the reconciliation domain suite, the `reconciliation/lifecycle`
+journey suite, the `operationstore` record and log tests, the `contextfs`
+checkpoint tests, the capability and adapter suites under
+`internal/infrastructureservices`, the CLI lifecycle goldens, and the example
+acceptance in `cmd/bootwright/lab_artifacts_example_test.go`.
 
-**Placement.** Controller placement is the qualified arm: the placement Machine
-is the Environment controller, so M1d's verified host binding, the shared root
-lock and new service-specific reservations coordinate it. SSH placement is the
-second supported arm, using authored `privateKeyRef` with required
-`knownHostsRef` and any required `sudoPasswordRef`, binding the effective user
-and all Secret versions. `passwordRef`, `operatorIdentity` and the global
-borrowed-SSH flags are unsupported and refuse. No SSH configuration is inferred
-for the controller, and no cross-context coordination exists for an SSH host.
+Constraints left for later work: content publication into a served root is C20;
+ISO construction is C12; neither may append to a frozen plan. SSH placement has
+no cross-context conflict coordination, so two contexts targeting one SSH host
+remain the operator's responsibility. Bounded parallel execution remains C7.
+Executed service effects, the service adapter's process and cancellation
+boundary, and SSH placement against a real host are operator-run.
 
-**Public destroy is available for this capability set.** The staged-availability
-exception in [state reconciliation](state-reconciliation.md#lifecycle-unit) and
-the [CLI warnings](cli.md#staged-apply-without-destroy) remain the contract for
-a build that lacks the inverse; M1e does not enter that condition because every
-owned effect has a qualified inverse in the same executable.
+## M1f — managed bastion network services
 
-[Infrastructure services](infrastructure-services.md) owns the implementation,
-image selection, host layout, conflict identities, TLS rules, readiness,
-absence evidence, replay and inverse. TLS validation covers bounded parsing,
-certificate/key agreement, validity, server-auth usage and SAN coverage of
-every serving endpoint without disclosure.
+**Owners:** Infrastructure services and State reconciliation, using Workspace,
+Secrets, Machine and Controller. **Requires:** M1e. **Definition:** Specified.
+**Delivery:** completed; end-to-end acceptance against a real bastion is
+operator-run.
 
-Qualify the [composition boundaries](architecture.md#dependency-direction-and-communication)
-with interchangeable Go capability implementations and Ansible bindings using
-the same request/result/failure/evidence contract. Verify fixed entrypoint,
-role and plugin resolution and refusal of authored executable selection before
-effects. Ansible service-adapter evidence extends M1d's bastion dependency
-contracts and reuses its private runtime, execution guard and result channel.
+Deliver the complete `infra-components` stage: managed `Proxy`, `DNSServer` and
+`NTPServer` join the managed `ArtifactServer` behind the same capability port,
+so a whole bastion service set applies, replays and destroys as one unit. The
+engine gains stage selection, which gates which blocks an invocation starts
+without narrowing the plan.
+
+**Supported shape.** One complete selected Environment whose lifecycle objects
+are managed `Proxy`, `DNSServer`, `NTPServer` and persistent `ArtifactServer`
+objects placed on OS-ready provided Machines. Every other selected object that
+would require an effect refuses before registration, naming each unsupported
+object and the reduced example. Controller placement is the qualified arm; SSH
+placement uses the same request and evidence contract and is operator-run.
+
+**Stage selection.** `plan` and `apply` accept `--stage` over the five stages
+[state reconciliation](state-reconciliation.md#stages-and-the-pause-boundary)
+defines. Every block carries a frozen stage; a selection gates which blocks
+start; an operation that can start nothing further reports `paused` and is
+continued by a later `apply` or removed by a `destroy` of the blocks it
+completed. Only `infra-components` has capabilities in this executable, so the
+other four stages are defined and exercised by tests rather than by effects.
+
+**Implementations.** One container image per kind, digest-pinned in each
+capability's catalog and qualified against a real container runtime on the date
+recorded in [development](../docs/development.md). Derived configuration comes
+from the selected graph, never authored daemon syntax;
+[infrastructure services](infrastructure-services.md#managed-network-services)
+owns the contract.
+
+Exit evidence: the stage domain suite (readiness, startability, deferral
+reasons, done subsets and the nested-cluster graph in which a substrate block
+waits on an add-on block); the lifecycle journey suite covering a pause at the
+boundary, a wider continuation, destroy from a pause, a refused selection, a
+retry excluded by a selection, unknown resolution regardless of selection, and
+the preview markers; the shared capability suite (frozen request round trip,
+placement arms, digest-pinned images, reservation keys, presence and absence
+evidence); adapter protocol and material tests across all four kinds; the
+collection gates over the three new roles, playbooks and plugins; CLI goldens
+for the stage flag, the plan markers and the paused receipt; the example's
+admission, derived requests and reservation keys in
+`cmd/bootwright/managed_infra_components_example_test.go`; and `make check`.
 
 **Verification model.** M1d's model continues: every test carried in this
 repository is unitary and host-independent. Real-system acceptance is
-operator-run and is not a gate of this milestone.
+operator-run.
 
-Exit evidence: the reconciliation domain suite (deterministic plan digests,
-transition table, identity allocation and exhaustion); Workspace fault
-injection at every publication checkpoint, each asserting the checkpoint fired,
-and the proof that acquiring confidential material inside a lifecycle
-transaction refuses rather than blocks; operation-store canonical-record,
-exclusive-attempt and log-truncation tests; capability selection,
-request-digest, TLS subject-alternative-name and evidence tests including
-negative disclosure; adapter protocol, request-materialization and secret-file
-tests; lifecycle journeys covering fresh apply, decline without effects,
-interrupted registration, failed-block retry, all three unknown resolutions,
-changed input, automation or host-binding refusal, cancellation, required-log
-fault, destroy after a completed apply and its binding release; CLI goldens for
-the plan, progress, receipt and status surfaces; the example's admission,
-derived request and reservation keys, and the refusal naming every unsupported
-object in the larger example; and `make check`.
-
-Not covered by any in-tree gate, by the verification model above: executed
-service effects, the process and cancellation boundary of the service adapter,
-and SSH placement against a real host. These are operator-run.
-
-Constraints left for later work: content publication into a served root is
-C20; ISO construction is C12; neither may append to an M1e frozen plan. SSH
-placement has no cross-context conflict coordination, so two contexts targeting
-one SSH host remain the operator's responsibility. Bounded parallel execution
-remains C7. Managed `Proxy`, `DNSServer` and `NTPServer` belong to M1f.
+Not covered by any in-tree gate: executed service effects, the process and
+cancellation boundary of the service adapter, and SSH placement against a real
+host. The named consumer is [`examples/managed-infra-components`](../examples/managed-infra-components);
+[`examples/lab-ocp`](../examples/lab-ocp) remains the larger fixture whose
+guest and cluster still refuse.
 
 ## Later ordered outcomes
 
@@ -249,7 +256,6 @@ implementation. Each must qualify exact releases and close its own contracts.
 
 | Milestone | Owner and outcome | Requires | Definition and exit evidence |
 | --- | --- | --- | --- |
-| M1f — bastion network services | Infrastructure services: extend the M1e lifecycle to managed `Proxy`, `DNSServer` and `NTPServer` on OS-ready Machines, so a complete bastion service set applies and destroys as one unit. | M1e | Named consumer: [`examples/lab-ocp`](../examples/lab-ocp). Select one exact implementation and image per kind under the M1e capability port. Define each kind's conflict identities, readiness, absence evidence and inverse, including the host resolver and time-daemon collisions a wildcard bind causes. Reuse the M1e engine without extending its plan model. Same unitary verification model, plus the operator-run service journey. |
 | M2a — OpenShift/OKD native files | Container cluster and Native artifacts: generate standalone `install-config.yaml` and `agent-config.yaml`. | M1e | Map identity, roles, networks, VIPs, hosts, interfaces, root hints and rendezvous. **N1:** validate NMState/installer schema parity. **N2:** validate/bind pull-secret and public SSH key (M1c). **N3:** define typed manifest, canonical bytes, destinations and overwrite rules (M1b). Prove API sufficiency, sensitive publication/cleanup, non-disclosure and release-specific native goldens. A FIPS slice also qualifies the matching installer and artifact parity. |
 | M2b — Ceph native files | Storage and Native artifacts: render typed storage intent into one release-specific declarative file set. | M1e, N3 | Qualify release schemas and reject unprovable fields; revise the API deliberately if needed. **N5:** define each storage secret consumer's validation, immutable binding and sensitive publication (M1c, N3), or prove outputs secret-free. Native goldens and negative disclosure tests. |
 | M3 — Ceph-pool script | Storage and Native artifacts: generate one deterministic native-CLI pool script. | M1e | **N4:** define the script manifest, bytes, fixed command structure, destination and generation journey (M1b). Prove argument encoding, replay semantics, diagnostics, sensitive classification, publication and goldens. No authored shell fragments, inline secrets or execution. |
@@ -269,12 +275,12 @@ fill its concrete version, journey and evidence gaps when requested.
 | ID | Owner and bounded outcome | Deferred because / requires | Exit evidence |
 | --- | --- | --- | --- |
 | C1 | Substrate: one libvirt, vSphere or KubeVirt provisioning variant. | No variant/consumer selected; requires M1e and a named use case. | Exact release, adapter contract, failure/replay tests and real-system qualification. |
-| C2 | Infrastructure services: one managed `Registry` or `LoadBalancer` lifecycle. | No named consumer; requires M1e. Managed `Proxy`, `DNSServer` and `NTPServer` were promoted to M1f. | Typed port, exact implementation, lifecycle evidence, failure and acceptance tests. |
+| C2 | Infrastructure services: one managed `Registry` or `LoadBalancer` lifecycle. | No named consumer; requires M1f, whose shared managed-service capability both kinds would extend. | Typed port, exact implementation, lifecycle evidence, failure and acceptance tests. |
 | C3 | Storage: one Ceph pool, filesystem, gateway, NFS or export lifecycle. | Separate from operator-run scripts; requires M6 and a named service. | Ownership, replay, destroy and real-system qualification. |
 | C4 | Add-ons: one built-in package and binding lifecycle. | No exact package/target/release selected; requires a supported cluster. | [Package/driver contract](add-ons.md), compatibility, trust/secrets, readiness, ordering/replay/destroy and acceptance. |
 | C5 | Managed OS: one additional image/profile/entitlement variant. | No concrete consumer; requires M5. | Intent gap, deliberate API revision, renderer/executor parity and qualification. |
 | C6 | UX: one additional view of available evidence or explicit access, or a dashboard/completion extension. | No journey selected; requires the underlying capability. | Complete human/machine journey, diagnostics, safety and end-to-end tests. |
-| C7 | State reconciliation: bounded parallel block execution, and the lease-only mutation boundary it needs. | Sequential execution must be qualified first; requires L4. M1e holds the exclusive root lock for the whole operation, so a concurrent read waits; narrowing that to the context lease alone, which would let `status --watch` observe a running operation, belongs here. | Ordering/exclusion, deterministic scheduling, cancellation, persistence, partial-failure and replay tests, plus concurrent-reader evidence for the narrowed lock. |
+| C7 | State reconciliation: bounded parallel block execution, and the lease-only mutation boundary it needs. | Sequential execution must be qualified first; requires L4. A lifecycle operation holds the exclusive root lock for its whole duration, so a concurrent read waits; narrowing that to the context lease alone, which would let `status --watch` observe a running operation, belongs here. | Ordering/exclusion, deterministic scheduling, cancellation, persistence, partial-failure and replay tests, plus concurrent-reader evidence for the narrowed lock. |
 | C8 | Custom automation: one typed, invertible executable playbook journey. **Needs definition.** | Reserved schema cannot prove effects/ownership/non-exfiltration; requires M1e, L2/L4/L5 and a named journey. | Same-change API replacement, immutable source/dependencies, exact targets, bounded secrets, authorization, continuation, failure injection and isolated-runner qualification. |
 | C9 | Bare-metal safety: physical offline disk erase and managed-machine destroy. **Blocked.** | Exact disk identity is unproved during the controller-to-installer interval; needs new safety evidence that closes or explicitly bounds it. | Separate safety contract, immutable target proof at erase, failure injection and real-hardware qualification. |
 | C10 | Add-ons, Workspace and CLI: custom-catalog acquisition, immutable publication, selection and removal, including the storage location and record format of `add-ons add` registrations and the meaning of the [`add-ons/_store` selection exception](api/environment.md#resource-and-cluster-selection). **Needs definition.** | No source/trust/storage/selection contract; requires M1b and C4. The three `add-ons` commands stay unavailable until promoted. | Closed schemas and formats, fixed bounds, authenticity, atomic/crash-safe storage, deterministic selection, retention through destroy and security/acceptance tests. |
