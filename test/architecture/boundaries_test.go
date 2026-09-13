@@ -54,7 +54,8 @@ func packageRoles() map[string]packageRole {
 	}
 	for _, capability := range []string{
 		"addons/catalog", "addons/preflight",
-		"infrastructureservices/artifactserver",
+		"infrastructureservices/artifactserver", "infrastructureservices/managedservice",
+		"infrastructureservices/dnsserver", "infrastructureservices/ntpserver", "infrastructureservices/proxy",
 		"containercluster/access", "containercluster/installation", "containercluster/preflight",
 		"controller/prerequisites", "desiredstate/compilation",
 		"environment/access", "environment/inspection", "environment/preflight",

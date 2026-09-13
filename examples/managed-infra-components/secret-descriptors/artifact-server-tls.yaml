@@ -1,0 +1,16 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: artifact-server-tls
+
+spec:
+  type: tlsCertificate
+
+  source:
+    generated:
+      commonName: bastion.lab.example.test
+      dnsNames:
+        - bastion.lab.example.test
+      ipAddresses:
+        - 192.0.2.1
+      validityDays: 3650

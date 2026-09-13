@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
@@ -20,10 +20,26 @@ const (
 	maxMaterialBytes   = 1 << 20
 )
 
+// operationPlaybook binds one kind and operation to its fixed entrypoint. The
+// mapping is closed: desired state never names a playbook.
 var operationPlaybook = map[string]string{
-	"apply":   "artifact_server_apply.yml",
-	"observe": "artifact_server_observe.yml",
-	"destroy": "artifact_server_destroy.yml",
+	"ArtifactServer/apply":   "artifact_server_apply.yml",
+	"ArtifactServer/observe": "artifact_server_observe.yml",
+	"ArtifactServer/destroy": "artifact_server_destroy.yml",
+	"Proxy/apply":            "proxy_apply.yml",
+	"Proxy/observe":          "proxy_observe.yml",
+	"Proxy/destroy":          "proxy_destroy.yml",
+	"DNSServer/apply":        "dns_server_apply.yml",
+	"DNSServer/observe":      "dns_server_observe.yml",
+	"DNSServer/destroy":      "dns_server_destroy.yml",
+	"NTPServer/apply":        "ntp_server_apply.yml",
+	"NTPServer/observe":      "ntp_server_observe.yml",
+	"NTPServer/destroy":      "ntp_server_destroy.yml",
+}
+
+func playbookFor(request managedservice.RunRequest) (string, bool) {
+	playbook, ok := operationPlaybook[request.Kind+"/"+request.Operation]
+	return playbook, ok
 }
 
 type protocolMessage struct {
@@ -70,48 +86,18 @@ func readProtocol(reader io.Reader, messages chan<- protocolMessage) error {
 	return scanner.Err()
 }
 
-// materialFile names one operation-scoped file a secret part is written to.
-type materialFile struct {
-	name      string
-	part      secrets.Part
-	secret    string
-	mode      uint32
-	variable  string
-	required  bool
-	container string
-}
-
-// materialFiles lists exactly which bound parts this invocation needs on disk.
-// Anything not listed here never leaves bounded memory.
-func materialFiles(request artifactserver.Request) []materialFile {
-	var files []materialFile
-	if request.TLS != nil {
-		files = append(files,
-			materialFile{name: "tls.crt", part: secrets.CertificatePart, secret: request.TLS.Secret, mode: 0600, variable: "certificate", required: true},
-			materialFile{name: "tls.key", part: secrets.PrivateKeyPart, secret: request.TLS.Secret, mode: 0600, variable: "privateKey", required: true},
-		)
-	}
-	if request.Placement.PrivateKeyRef != "" {
-		files = append(files, materialFile{name: "id", part: secrets.PrivateKeyPart, secret: request.Placement.PrivateKeyRef, mode: 0600, variable: "identity", required: true})
-	}
-	if request.Placement.KnownHostsRef != "" {
-		files = append(files, materialFile{name: "known_hosts", part: secrets.ValuePart, secret: request.Placement.KnownHostsRef, mode: 0600, variable: "knownHosts", required: true})
-	}
-	return files
-}
-
 // inventory targets exactly one host. The SSH arm pins host-key checking to
 // the bound entry and forbids every ambient identity and password path.
-func inventory(request artifactserver.Request, interpreter string, paths map[string]string) map[string]any {
+func inventory(placement managedservice.Placement, interpreter string, paths map[string]string) map[string]any {
 	host := map[string]any{"ansible_python_interpreter": interpreter}
-	if request.Placement.Connection == "local" {
+	if placement.Local() {
 		host["ansible_connection"] = "local"
 		host["ansible_host"] = "localhost"
 	} else {
 		host["ansible_connection"] = "ssh"
-		host["ansible_host"] = request.Placement.Address
-		host["ansible_port"] = request.Placement.Port
-		host["ansible_user"] = request.Placement.User
+		host["ansible_host"] = placement.Address
+		host["ansible_port"] = placement.Port
+		host["ansible_user"] = placement.User
 		host["ansible_ssh_private_key_file"] = paths["id"]
 		host["ansible_python_interpreter"] = "/usr/bin/python3"
 		host["ansible_ssh_common_args"] = strings.Join([]string{
@@ -126,29 +112,30 @@ func inventory(request artifactserver.Request, interpreter string, paths map[str
 		}, " ")
 	}
 	return map[string]any{"all": map[string]any{"children": map[string]any{
-		"bootwright_service_host": map[string]any{"hosts": map[string]any{request.Placement.Machine: host}},
+		"bootwright_service_host": map[string]any{"hosts": map[string]any{placement.Machine: host}},
 	}}}
 }
 
-func variables(request artifactserver.Request, digest string, paths map[string]string, sudo string) (map[string]any, error) {
+// variables carries the frozen request and the paths its material was written
+// to. Material values themselves never enter this file.
+func variables(request managedservice.RunRequest, paths map[string]string, sudo string) (map[string]any, error) {
 	decoded := map[string]any{}
-	canonical, err := request.Canonical()
-	if err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal(canonical, &decoded); err != nil {
-		return nil, failure("lifecycle.state", "the frozen artifact-server request could not be prepared")
+	if err := json.Unmarshal(request.Canonical, &decoded); err != nil {
+		return nil, failure("lifecycle.state", "the frozen managed service request could not be prepared")
 	}
 	material := map[string]any{}
-	for _, file := range materialFiles(request) {
-		if path, ok := paths[file.name]; ok {
-			material[file.variable] = path
+	for _, file := range request.Materials {
+		if path, ok := paths[file.Name]; ok {
+			material[file.Variable] = path
 		}
 	}
+	for name, value := range request.MaterialValues {
+		material[name] = value
+	}
 	values := map[string]any{
-		"bootwright_artifact_server_request":  decoded,
-		"bootwright_artifact_server_digest":   digest,
-		"bootwright_artifact_server_material": material,
+		request.Variable + "_request":  decoded,
+		request.Variable + "_digest":   request.Digest,
+		request.Variable + "_material": material,
 	}
 	if sudo != "" {
 		values["ansible_become_password"] = sudo
@@ -158,11 +145,11 @@ func variables(request artifactserver.Request, digest string, paths map[string]s
 
 // becomePassword reads the bound escalation secret into the variables file
 // rather than an argument or environment variable.
-func becomePassword(request artifactserver.Request, material map[string]secrets.Material) (string, error) {
-	if request.Placement.SudoPasswordRef == "" {
+func becomePassword(request managedservice.RunRequest) (string, error) {
+	if request.Sudo == "" {
 		return "", nil
 	}
-	bound, ok := material[request.Placement.SudoPasswordRef]
+	bound, ok := request.Material[request.Sudo]
 	if !ok {
 		return "", failure("secret.store", "the bound escalation password is not available to this attempt")
 	}
@@ -173,21 +160,18 @@ func becomePassword(request artifactserver.Request, material map[string]secrets.
 	return strings.TrimRight(string(value), "\n"), nil
 }
 
-func materialBytes(request artifactserver.Request, material map[string]secrets.Material) (map[string][]byte, error) {
+func materialBytes(request managedservice.RunRequest) (map[string][]byte, error) {
 	out := map[string][]byte{}
-	for _, file := range materialFiles(request) {
-		bound, ok := material[file.secret]
+	for _, file := range request.Materials {
+		bound, ok := request.Material[file.Secret]
 		if !ok {
-			if !file.required {
-				continue
-			}
 			return nil, failure("secret.store", "a bound Secret this operation needs is not available to this attempt")
 		}
-		value, ok := bound.Part(file.part)
+		value, ok := bound.Part(file.Part)
 		if !ok || len(value) == 0 || len(value) > maxMaterialBytes {
 			return nil, failure("secret.part", "a bound Secret does not carry the part this operation needs")
 		}
-		out[file.name] = slices.Clone(value)
+		out[file.Name] = slices.Clone(value)
 	}
 	return out, nil
 }

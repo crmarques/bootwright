@@ -1,0 +1,10 @@
+---
+# Derived from the frozen request only. Nothing here is authored by desired
+# state, and no value selects an executable, a role or a task file.
+infra_ntp_server_chrony_config_dir: '{{ bootwright_ntp_server_request.contentRoot }}/config'
+infra_ntp_server_chrony_unit_path: /etc/containers/systemd/{{ bootwright_ntp_server_request.unit }}.container
+infra_ntp_server_chrony_service: '{{ bootwright_ntp_server_request.unit }}.service'
+infra_ntp_server_chrony_listen: >-
+  {{ '[' ~ bootwright_ntp_server_request.bindAddress ~ ']'
+     if ':' in bootwright_ntp_server_request.bindAddress
+     else bootwright_ntp_server_request.bindAddress }}

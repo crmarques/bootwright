@@ -59,7 +59,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 		}
 		result.Clusters = clusterSummaries(catalog, api.ContainerCluster)
 		result.StorageClusters = clusterSummaries(catalog, api.StorageCluster)
-		result.Shared = serviceSummaries(catalog)
+		result.Shared = serviceSummaries(catalog, s.capabilities.Kinds())
 		result.Secrets = SecretSummary{Declared: len(catalog.OfKind(api.Secret))}
 	}
 	store := s.store(view)
@@ -138,7 +138,10 @@ func clusterSummaries(catalog api.Catalog, kind api.Kind) []ClusterSummary {
 	return out
 }
 
-func serviceSummaries(catalog api.Catalog) []ServiceSummary {
+// serviceSummaries reports what a managed service's lifecycle would do. A kind
+// this executable claims is pending until its block proves otherwise;
+// everything else stays unsupported.
+func serviceSummaries(catalog api.Catalog, claimed []string) []ServiceSummary {
 	out := []ServiceSummary{}
 	for _, kind := range []api.Kind{api.Proxy, api.DNSServer, api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer} {
 		for _, object := range catalog.OfKind(kind) {
@@ -146,7 +149,7 @@ func serviceSummaries(catalog api.Catalog) []ServiceSummary {
 				continue
 			}
 			status := "unsupported"
-			if kind == api.ArtifactServer && object.Spec().Get("retention").Text() != "install-only" {
+			if slices.Contains(claimed, string(kind)) && object.Spec().Get("retention").Text() != "install-only" {
 				status = "pending"
 			}
 			out = append(out, ServiceSummary{

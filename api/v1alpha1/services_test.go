@@ -33,8 +33,12 @@ func TestServiceKindsReplaceGenericCatalog(t *testing.T) {
 	if _, ok := Schema(NetworkConfig).Field("nameResolutionRefs"); ok {
 		t.Fatal("legacy DNS catalog selections remain accepted")
 	}
-	if _, ok := Schema(NTPServer).Field("image"); ok {
-		t.Fatal("NTPServer accepts a container image")
+	// Every managed service runs as a container, so each of the six accepts an
+	// image pin and none of them selects an executable by naming one.
+	for _, kind := range []Kind{Proxy, DNSServer, NTPServer, ArtifactServer, Registry, LoadBalancer} {
+		if _, ok := Schema(kind).Field("image"); !ok {
+			t.Fatalf("%s accepts no container image", kind)
+		}
 	}
 	os, _ := Schema(Machine).Field("os")
 	install, _ := os.Shape.Field("install")

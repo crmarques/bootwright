@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
+
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 )
 
 const requestVersion = "artifact-server-nginx-v1"
@@ -27,24 +29,14 @@ type Request struct {
 	Version     string     `json:"version"`
 }
 
-type Identity struct {
-	Block   string `json:"block"`
-	Context string `json:"context"`
-	Service string `json:"service"`
-}
-
-// Placement fixes where the effect runs. The local arm needs no address or
-// credential; the SSH arm names exactly one target and account.
-type Placement struct {
-	Address         string `json:"address,omitempty"`
-	Connection      string `json:"connection"`
-	KnownHostsRef   string `json:"knownHostsRef,omitempty"`
-	Machine         string `json:"machine"`
-	Port            int    `json:"port,omitempty"`
-	PrivateKeyRef   string `json:"privateKeyRef,omitempty"`
-	SudoPasswordRef string `json:"sudoPasswordRef,omitempty"`
-	User            string `json:"user,omitempty"`
-}
+// Identity, Placement and Egress are the shared managed-service values, so a
+// frozen artifact-server request keeps the exact shape it always had while the
+// derivation is implemented once.
+type (
+	Identity  = managedservice.Identity
+	Placement = managedservice.Placement
+	Egress    = managedservice.Egress
+)
 
 type Listener struct {
 	Name     string `json:"name"`
@@ -64,15 +56,9 @@ type TLS struct {
 	Secret      string `json:"secret"`
 }
 
-type Egress struct {
-	HTTPProxy  string   `json:"httpProxy,omitempty"`
-	HTTPSProxy string   `json:"httpsProxy,omitempty"`
-	NoProxy    []string `json:"noProxy"`
-}
-
 const (
-	connectionLocal = "local"
-	connectionSSH   = "ssh"
+	connectionLocal = managedservice.ConnectionLocal
+	connectionSSH   = managedservice.ConnectionSSH
 )
 
 // Canonical encodes the request exactly as the plan digest and the adapter

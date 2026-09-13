@@ -1,0 +1,13 @@
+---
+- name: Apply one managed time service
+  hosts: bootwright_service_host
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute the time service apply capability
+      ansible.builtin.import_role:
+        name: bootwright.core.infra_ntp_server_chrony
+        tasks_from: apply.yml

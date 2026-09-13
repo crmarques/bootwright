@@ -83,7 +83,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		return issues
 	}
 	machine, found := c.Find(api.Machine, value.Get("machineRef").Text())
-	if found && o.Kind() != api.NTPServer && !slices.Contains(machine.Spec().Get("capabilities").Strings(), "container-runtime") {
+	if found && !slices.Contains(machine.Spec().Get("capabilities").Strings(), "container-runtime") {
 		issues = add(issues, issue("$.spec.machineRef", "service placement requires a Machine with container-runtime capability"))
 	}
 	for index, endpoint := range value.Get("endpoints").Items() {

@@ -1,0 +1,25 @@
+---
+- name: Complete the qualified execution handoff
+  bootwright.core.infra_service_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Observe the managed service without changing it
+  bootwright.core.infra_service_inspect:
+    request: '{{ bootwright_proxy_request }}'
+    readiness: true
+    attempts: 1
+  register: infra_proxy_squid_observation
+
+- name: Publish bounded managed service observation evidence
+  bootwright.core.infra_service_protocol:
+    phase: completed
+    outcome: unchanged
+    digest: '{{ bootwright_proxy_digest }}'
+    observation: '{{ infra_proxy_squid_observation.observation }}'
+    answers: '{{ infra_proxy_squid_observation.answers }}'
+    removed: >-
+      {{ not infra_proxy_squid_observation.observation.unit
+         and not infra_proxy_squid_observation.observation.containerPresent
+         and not infra_proxy_squid_observation.observation.contentRoot }}
+  no_log: true

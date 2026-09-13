@@ -16,7 +16,7 @@ import (
 
 	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
@@ -26,7 +26,7 @@ const (
 	maxVariableBytes  = 4 << 20
 )
 
-// Runner performs one artifact-server operation through the fixed entrypoint
+// Runner performs one managed-service operation through the fixed entrypoint
 // inside the controller's private Ansible runtime.
 type Runner struct {
 	jobParent     string
@@ -41,74 +41,75 @@ func New() Runner {
 	return Runner{jobParent: "/run", scratchParent: "/var/tmp", command: exec.Command}
 }
 
-func (r Runner) Run(ctx context.Context, request artifactserver.RunRequest) (artifactserver.RunResult, error) {
-	playbook, ok := operationPlaybook[request.Operation]
+func (r Runner) Run(ctx context.Context, request managedservice.RunRequest) (managedservice.RunResult, error) {
+	playbook, ok := playbookFor(request)
 	if !ok {
-		return artifactserver.RunResult{}, failure("lifecycle.state", "the artifact-server operation is not recognized")
+		return managedservice.RunResult{}, failure("lifecycle.state", "the managed service operation is not recognized")
 	}
 	if r.command == nil || !filepath.IsAbs(request.Launch.Loader) || request.Bundle.Path == "" {
-		return artifactserver.RunResult{}, failure("lifecycle.state", "the authorized service execution boundary is unavailable")
+		return managedservice.RunResult{}, failure("lifecycle.state", "the authorized service execution boundary is unavailable")
 	}
 	if err := ctx.Err(); err != nil {
-		return artifactserver.RunResult{}, err
+		return managedservice.RunResult{}, err
 	}
 	if err := verifyAutomation(ctx, request); err != nil {
-		return artifactserver.RunResult{}, err
+		return managedservice.RunResult{}, err
 	}
 	job, err := os.MkdirTemp(r.jobParent, "bootwright-service-")
 	if err != nil {
-		return artifactserver.RunResult{}, failure("lifecycle.state", "private service invocation storage is unavailable")
+		return managedservice.RunResult{}, failure("lifecycle.state", "private service invocation storage is unavailable")
 	}
 	// Operation-scoped material never outlives its invocation.
 	defer os.RemoveAll(job)
 	if err := os.Chmod(job, 0700); err != nil {
-		return artifactserver.RunResult{}, failure("lifecycle.state", "private service invocation storage is unsafe")
+		return managedservice.RunResult{}, failure("lifecycle.state", "private service invocation storage is unsafe")
 	}
 	scratch, err := os.MkdirTemp(r.scratchParent, "bootwright-service-scratch-")
 	if err != nil {
-		return artifactserver.RunResult{}, failure("lifecycle.state", "private service staging storage is unavailable")
+		return managedservice.RunResult{}, failure("lifecycle.state", "private service staging storage is unavailable")
 	}
 	defer os.RemoveAll(scratch)
 	paths, err := r.materialize(job, request)
 	if err != nil {
-		return artifactserver.RunResult{}, err
+		return managedservice.RunResult{}, err
 	}
-	sudo, err := becomePassword(request.Request, request.Material)
+	sudo, err := becomePassword(request)
 	if err != nil {
-		return artifactserver.RunResult{}, err
+		return managedservice.RunResult{}, err
 	}
-	values, err := variables(request.Request, request.Digest, paths, sudo)
+	values, err := variables(request, paths, sudo)
 	if err != nil {
-		return artifactserver.RunResult{}, err
+		return managedservice.RunResult{}, err
 	}
 	interpreter := quotedInterpreter(request.Launch)
-	if err := writeJSON(job, "inventory.json", inventory(request.Request, interpreter, paths)); err != nil {
-		return artifactserver.RunResult{}, err
+	if err := writeJSON(job, "inventory.json", inventory(request.Placement, interpreter, paths)); err != nil {
+		return managedservice.RunResult{}, err
 	}
 	if err := writeJSON(job, "request.json", values); err != nil {
-		return artifactserver.RunResult{}, err
+		return managedservice.RunResult{}, err
 	}
 	return r.execute(ctx, job, scratch, playbook, request)
 }
 
-func (r Runner) materialize(job string, request artifactserver.RunRequest) (map[string]string, error) {
-	contents, err := materialBytes(request.Request, request.Material)
+func (r Runner) materialize(job string, request managedservice.RunRequest) (map[string]string, error) {
+	contents, err := materialBytes(request)
 	if err != nil {
 		return nil, err
 	}
 	paths := map[string]string{}
-	for _, file := range materialFiles(request.Request) {
-		value, ok := contents[file.name]
+	for _, file := range request.Materials {
+		value, ok := contents[file.Name]
 		if !ok {
 			continue
 		}
-		target := filepath.Join(job, file.name)
-		if err := os.WriteFile(target, value, os.FileMode(file.mode)); err != nil {
+		target := filepath.Join(job, file.Name)
+		// Every bound part is private to this invocation and to root alone.
+		if err := os.WriteFile(target, value, 0600); err != nil {
 			clear(value)
 			return nil, failure("lifecycle.state", "bound Secret material could not be prepared for the adapter")
 		}
 		clear(value)
-		paths[file.name] = target
+		paths[file.Name] = target
 	}
 	return paths, nil
 }
@@ -133,7 +134,7 @@ func quotedInterpreter(launch prerequisites.PythonLaunch) string {
 	return strings.Join(arguments, " ")
 }
 
-func (r Runner) execute(ctx context.Context, job, scratch, playbook string, request artifactserver.RunRequest) (artifactserver.RunResult, error) {
+func (r Runner) execute(ctx context.Context, job, scratch, playbook string, request managedservice.RunRequest) (managedservice.RunResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, invocationTimeout)
 	defer cancel()
 	grace := r.drain
@@ -156,13 +157,13 @@ func (r Runner) execute(ctx context.Context, job, scratch, playbook string, requ
 		"TMPDIR="+scratch, "PATH=/usr/bin:/usr/sbin")
 	output, childOutput, err := os.Pipe()
 	if err != nil {
-		return artifactserver.RunResult{}, failure("lifecycle.state", "the service result channel could not be opened")
+		return managedservice.RunResult{}, failure("lifecycle.state", "the service result channel could not be opened")
 	}
 	defer output.Close()
 	defer childOutput.Close()
 	childInput, input, err := os.Pipe()
 	if err != nil {
-		return artifactserver.RunResult{}, failure("lifecycle.state", "the service authorization channel could not be opened")
+		return managedservice.RunResult{}, failure("lifecycle.state", "the service authorization channel could not be opened")
 	}
 	defer childInput.Close()
 	defer input.Close()
@@ -170,7 +171,7 @@ func (r Runner) execute(ctx context.Context, job, scratch, playbook string, requ
 	command.Stdout, command.Stderr = io.Discard, io.Discard
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := command.Start(); err != nil {
-		return artifactserver.RunResult{}, failure("lifecycle.state", "the qualified service process could not start")
+		return managedservice.RunResult{}, failure("lifecycle.state", "the qualified service process could not start")
 	}
 	childOutput.Close()
 	childInput.Close()
@@ -179,7 +180,7 @@ func (r Runner) execute(ctx context.Context, job, scratch, playbook string, requ
 
 // consume drives the protocol. No service effect is ever authorized to outlive
 // cancellation, so cancellation always terminates the owned process group.
-func (r Runner) consume(ctx context.Context, command *exec.Cmd, output, input *os.File, grace time.Duration, request artifactserver.RunRequest) (artifactserver.RunResult, error) {
+func (r Runner) consume(ctx context.Context, command *exec.Cmd, output, input *os.File, grace time.Duration, request managedservice.RunRequest) (managedservice.RunResult, error) {
 	waited := make(chan error, 1)
 	go func() { waited <- command.Wait() }()
 	messages := make(chan protocolMessage, 8)
@@ -188,7 +189,7 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, output, input *o
 		readResult <- readProtocol(output, messages)
 		close(messages)
 	}()
-	var result artifactserver.RunResult
+	var result managedservice.RunResult
 	var operationErr error
 	loaded, completed, canceled := false, false, false
 	var drain <-chan time.Time
@@ -250,7 +251,7 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, output, input *o
 				valid = valid && loaded
 				if valid {
 					completed = true
-					result = artifactserver.RunResult{Outcome: message.Outcome, Evidence: slices.Clone(message.Evidence)}
+					result = managedservice.RunResult{Outcome: message.Outcome, Evidence: slices.Clone(message.Evidence)}
 				}
 			default:
 				valid = false
@@ -270,13 +271,13 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, output, input *o
 		}
 	}
 	if canceled {
-		return artifactserver.RunResult{}, ctx.Err()
+		return managedservice.RunResult{}, ctx.Err()
 	}
 	if operationErr != nil || !completed {
 		if operationErr == nil {
 			operationErr = failure("lifecycle.unknown", "the artifact-server operation has no complete result")
 		}
-		return artifactserver.RunResult{}, operationErr
+		return managedservice.RunResult{}, operationErr
 	}
 	return result, nil
 }
@@ -297,7 +298,7 @@ exec(code, {'__name__': '__main__', '__file__': path})
 
 // verifyAutomation proves the approved bundle carries exactly this
 // executable's embedded collection before any of it runs.
-func verifyAutomation(ctx context.Context, request artifactserver.RunRequest) error {
+func verifyAutomation(ctx context.Context, request managedservice.RunRequest) error {
 	if request.Area == nil {
 		return failure("controller.identity", "the approved execution bundle is unavailable")
 	}

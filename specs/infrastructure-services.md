@@ -63,7 +63,7 @@ A reservation key is one of:
 
 | Key | Claims |
 | --- | --- |
-| `socket:<address>:<port>` | One effective listening socket. A wildcard bind address claims every declared endpoint address at that port and additionally conflicts with any other bind address at that port. |
+| `socket:<address>:<port>` | One effective listening socket on every transport, so a service listening on UDP and TCP at one port holds one key. A wildcard bind address claims every declared endpoint address at that port and additionally conflicts with any other bind address at that port. |
 | `unit:<name>` | One host service-manager unit and its container name. |
 | `path:<absolute path>` | One owned directory tree. |
 
@@ -138,6 +138,74 @@ observation, remains unknown.
 **Cancellation.** Cancellation stops authorization of new effects and
 terminates the owned process tree. An attempt whose effect was already
 authorized becomes unknown unless positive evidence already proves its outcome.
+
+## Managed network services
+
+`Proxy`, `DNSServer` and `NTPServer` share one capability: each runs one
+container under the host service manager with host networking, serving one
+declared port on its declared bind address. They differ only in the daemon they
+run, the configuration derived for it, and the answer readiness proves. Their
+plan blocks belong to the
+[`infra-components` stage](state-reconciliation.md#stages-and-the-pause-boundary)
+and declare no dependency, so the whole set applies in one pass.
+
+**Implementation.** One container image per kind, selected as
+`spec.image.local`, else `spec.image.public`, else the executable's compiled
+default. Every reference resolves to an immutable content digest before the
+plan freezes; a floating tag is refused. Image acquisition uses the placement
+Machine's normalized [proxy choice](api/machines.md#machine-proxy) and no
+ambient proxy variable. The unit never uses the image's own entrypoint: the
+frozen request alone decides what runs.
+
+**Owned host state.** Each service owns one content root, one daemon
+configuration inside it and one unit definition. Directories are `0755`. The
+content root is outside the Bootwright state root. Nothing else on the host is
+created, modified or removed, and no managed service writes to the host's own
+resolver, proxy or time configuration.
+
+**Derived configuration.** A managed service is configured from the selected
+graph, never from authored daemon syntax:
+
+| Kind | Derived from the graph | Authored |
+| --- | --- | --- |
+| `Proxy` | The client set below, as the only addresses it serves. Caching and authentication are disabled. | `bindAddress`, `port` |
+| `DNSServer` | One address record per retained Machine, from its effective `fqdn` contact and its declared IP addresses. | `bindAddress`, `port`, `forwarders[]` |
+| `NTPServer` | The client set below, as the only addresses it answers. | `bindAddress`, `port`, `upstreamSources[]` |
+
+The client set is loopback, every selected `NetworkConfig.spec.machineNetwork`
+CIDR, and every retained Machine IP address as a single-host prefix, sorted and
+deduplicated. A managed proxy or time service is therefore never planned open
+to the world.
+
+A `DNSServer` with no authored forwarder answers only its own records rather
+than reaching an ambient upstream. `additionalIngressHosts` is frozen in the
+request and produces no record until a cluster capability supplies the ingress
+address it would answer with. A managed `NTPServer` serves time without
+disciplining its host's clock, so it coexists with the host's own time service.
+
+**Readiness.** Completion requires a positive answer on every address the
+service serves: the declared bind address, or every declared endpoint address
+when the bind address is a wildcard. A proxy answers a bounded HTTP request
+with a well-formed status line; a resolver answers one of its own records over
+both UDP and TCP; a time service returns a server-mode reply, whose stratum may
+show it unsynchronized without being a failure. An address that never answers
+within the bounded readiness window is unknown, not failure.
+
+**Replay.** An apply whose frozen request already matches the live host reports
+`completed` with the same completion evidence and no change. Configuration
+bytes that differ restart the service; identical bytes do not.
+
+**Inverse.** Destroy stops the service, removes the unit definition, removes
+the container, removes the owned content root and then reobserves. Positive
+absence requires the unit absent, the container absent, the content root absent
+and every reserved socket free. An already-absent service reports `completed`
+with that same absence evidence. Destroy removes no image from the host store
+and no unrelated file.
+
+**Unknown resolution and cancellation.** Both follow the artifact server's
+rules above: observation is read-only against the frozen request and exact
+identity, and cancellation terminates the owned process tree, leaving an
+already-authorized effect unknown unless positive evidence proves its outcome.
 
 ## Adapter boundary
 

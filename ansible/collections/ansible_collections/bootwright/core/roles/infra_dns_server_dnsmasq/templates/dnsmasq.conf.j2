@@ -1,0 +1,19 @@
+{#
+  The records are the retained Machines of the selected graph. With no authored
+  forwarder the resolver answers only those records rather than silently
+  reaching an ambient upstream.
+#}
+listen-address={{ bootwright_dns_server_request.bindAddress }}
+port={{ bootwright_dns_server_request.port }}
+bind-interfaces
+no-resolv
+no-hosts
+domain-needed
+bogus-priv
+
+{% for record in bootwright_dns_server_request.records | default([]) %}
+host-record={{ record.name }},{{ record.addresses | join(',') }}
+{% endfor %}
+{% for forwarder in bootwright_dns_server_request.forwarders | default([]) %}
+server={{ forwarder }}
+{% endfor %}

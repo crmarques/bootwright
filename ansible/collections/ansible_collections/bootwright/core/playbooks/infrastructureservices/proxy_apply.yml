@@ -1,0 +1,13 @@
+---
+- name: Apply one managed proxy
+  hosts: bootwright_service_host
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute the proxy apply capability
+      ansible.builtin.import_role:
+        name: bootwright.core.infra_proxy_squid
+        tasks_from: apply.yml

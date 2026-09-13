@@ -83,13 +83,13 @@ controller binding of this context to this host without installing anything.
 
 ## Lifecycle availability
 
-`plan`, `apply` and `destroy` are available, but this Environment is outside
-the shape [M1e](../../specs/milestones.md#m1e--lifecycle-engine-and-managed-artifact-serving)
-supports: it declares managed Proxy, DNS and NTP services, a libvirt guest and
-a container cluster, whose capabilities arrive with M1f, M2a and M4. An apply
-therefore refuses before registering an operation, naming every object it
-cannot realize, and changes nothing. Use [`examples/lab-artifacts`](../lab-artifacts)
-to exercise the lifecycle engine today.
+`plan`, `apply` and `destroy` are available, and every managed service here is
+realizable. The libvirt guest and the container cluster are not: their
+capabilities arrive with M2a and M4. An apply therefore refuses before
+registering an operation, naming `ContainerCluster/sno` and
+`Machine/sno-master-01`, and changes nothing. Use
+[`examples/managed-infra-components`](../managed-infra-components) to exercise
+the whole `infra-components` stage today.
 
 The setup journeys above are unaffected: this example remains the input for
 context creation, Secret custody, `bastion setup` and `preflight bastion`.

@@ -10,6 +10,10 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ansibleservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
@@ -77,9 +81,18 @@ func (r capabilityResolver) Resolve(kind, implementation string) (lifecycle.Capa
 // buildCapabilities lists what this executable can realize, in the API's own
 // kind order, so a plan's block order never depends on wiring order.
 func buildCapabilities(clock systemClock) capabilityResolver {
-	return capabilityResolver{
-		{artifactserver.Kind, artifactserver.Implementation, artifactserver.New(ansibleservice.New(), clock)},
+	runner := ansibleservice.New()
+	resolver := capabilityResolver{}
+	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(), ntpserver.Definition()} {
+		resolver = append(resolver, boundCapability{
+			kind: string(definition.Kind), implementation: definition.Implementation,
+			capability: managedservice.NewCapability(definition, runner),
+		})
 	}
+	return append(resolver, boundCapability{
+		kind: artifactserver.Kind, implementation: artifactserver.Implementation,
+		capability: artifactserver.New(runner, clock),
+	})
 }
 
 func wireLifecycle(deps lifecycleDependencies, compiler compilation.Compiler, binder *custody.Service) cli.LifecycleService {

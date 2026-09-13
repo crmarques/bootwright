@@ -4,3 +4,5 @@ plugins/modules/controller_inventory.py validate-modules:missing-gplv3-license
 plugins/modules/controller_packages.py validate-modules:missing-gplv3-license
 plugins/modules/controller_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/controller_tool.py validate-modules:missing-gplv3-license
+plugins/modules/infra_service_inspect.py validate-modules:missing-gplv3-license
+plugins/modules/infra_service_protocol.py validate-modules:missing-gplv3-license

@@ -2,38 +2,16 @@ package artifactserver
 
 import (
 	"context"
-	"encoding/json"
 	"slices"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
-
-// RunRequest is one authorized adapter invocation. Material is bounded memory
-// owned by the caller; the adapter writes it only to operation-scoped files it
-// removes, and never to arguments, environment, evidence or logs.
-type RunRequest struct {
-	Operation string
-	Digest    string
-	Request   Request
-	Canonical []byte
-	Launch    prerequisites.PythonLaunch
-	Bundle    prerequisites.BundleLocation
-	Area      prerequisites.BundleArea
-	Material  map[string]secrets.Material
-	Log       func(context.Context, operationstore.LogRecord) error
-	Progress  func(context.Context, string, string)
-}
-
-type RunResult struct {
-	Outcome  string
-	Evidence json.RawMessage
-}
 
 // Capability realizes managed artifact servers. It owns what completion,
 // readiness and absence mean for this kind and nothing else.
@@ -147,7 +125,7 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
-	result, err := c.run(ctx, execution, operation, request)
+	result, err := c.run(ctx, execution, operation, request, fingerprint)
 	if err != nil {
 		return unknown, err
 	}
@@ -179,7 +157,7 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 	if err != nil {
 		return unknown, err
 	}
-	result, err := c.run(ctx, execution, "observe", request)
+	result, err := c.run(ctx, execution, "observe", request, fingerprint)
 	if err != nil {
 		return unknown, nil
 	}
@@ -223,23 +201,47 @@ func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution, 
 	return request, certificate.Fingerprint, nil
 }
 
-func (c Capability) run(ctx context.Context, execution lifecycle.Execution, operation string, request Request) (RunResult, error) {
+func (c Capability) run(ctx context.Context, execution lifecycle.Execution, operation string, request Request, fingerprint string) (managedservice.RunResult, error) {
 	canonical, err := request.Canonical()
 	if err != nil {
-		return RunResult{}, err
+		return managedservice.RunResult{}, err
 	}
-	return c.runner.Run(ctx, RunRequest{
-		Operation: operation,
-		Digest:    execution.Block.RequestDigest,
-		Request:   request,
-		Canonical: canonical,
-		Launch:    execution.Launch,
-		Bundle:    execution.Bundle,
-		Area:      execution.Area,
-		Material:  execution.Material,
-		Log:       execution.Log,
-		Progress:  execution.Progress,
+	values := map[string]string{}
+	if fingerprint != "" {
+		values["fingerprint"] = fingerprint
+	}
+	return c.runner.Run(ctx, managedservice.RunRequest{
+		Kind:           Kind,
+		Operation:      operation,
+		Variable:       variablePrefix,
+		Digest:         execution.Block.RequestDigest,
+		Canonical:      canonical,
+		Placement:      request.Placement,
+		Materials:      materials(request),
+		MaterialValues: values,
+		Sudo:           request.Placement.SudoPasswordRef,
+		Launch:         execution.Launch,
+		Bundle:         execution.Bundle,
+		Area:           execution.Area,
+		Material:       execution.Material,
+		Log:            execution.Log,
+		Progress:       execution.Progress,
 	})
+}
+
+const variablePrefix = "bootwright_artifact_server"
+
+// materials lists exactly which bound parts this invocation needs on disk.
+// Anything not listed here never leaves bounded memory.
+func materials(request Request) []managedservice.MaterialFile {
+	var files []managedservice.MaterialFile
+	if request.TLS != nil {
+		files = append(files,
+			managedservice.MaterialFile{Name: "tls.crt", Part: secrets.CertificatePart, Secret: request.TLS.Secret, Variable: "certificate"},
+			managedservice.MaterialFile{Name: "tls.key", Part: secrets.PrivateKeyPart, Secret: request.TLS.Secret, Variable: "privateKey"},
+		)
+	}
+	return append(files, managedservice.Materials(request.Placement)...)
 }
 
 // Unsupported names every selected object this capability cannot realize, so

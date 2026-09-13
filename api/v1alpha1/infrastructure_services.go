@@ -10,10 +10,8 @@ func infrastructureServiceSchema(kind Kind) *Shape {
 	fields := []Field{required("management", enumeration("managed", "external")), field("machineRef", ref(Machine))}
 	managed := []string{"machineRef"}
 	external := []string{}
-	if kind != NTPServer {
-		fields = append(fields, field("image", record(field("local", image()), field("public", image()))))
-		managed = append(managed, "image")
-	}
+	fields = append(fields, field("image", record(field("local", image()), field("public", image()))))
+	managed = append(managed, "image")
 	implementation := map[Kind]string{Proxy: "squid", DNSServer: "dnsmasq", NTPServer: "chrony", Registry: "mirror-registry", LoadBalancer: "haproxy"}[kind]
 	if implementation != "" {
 		fields = append(fields, field("implementation", enumeration(implementation)))

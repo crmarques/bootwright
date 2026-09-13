@@ -108,19 +108,17 @@ func TestLabOCPExampleIsRefusedWithItsUnsupportedObjects(t *testing.T) {
 	sources := exampleDirectory(t, "lab-ocp")
 	state, _ := compileAcceptance(t, sources)
 	unsupported := lifecycle.Unrealizable(state.Effective(), buildCapabilities(systemClock{}).Kinds())
-	for _, want := range []string{
-		"ContainerCluster/sno", "DNSServer/lab-dns", "Machine/sno-master-01",
-		"NTPServer/lab-ntp", "Proxy/lab-proxy",
+	if !slices.Equal(unsupported, []string{"ContainerCluster/sno", "Machine/sno-master-01"}) {
+		t.Fatalf("unsupported = %v", unsupported)
+	}
+	// Every managed service in this example is realizable now, so only the
+	// cluster and the guest whose OS Bootwright would install remain.
+	for _, realizable := range []string{
+		"ArtifactServer/lab-artifacts", "DNSServer/lab-dns", "NTPServer/lab-ntp", "Proxy/lab-proxy",
 	} {
-		if !slices.Contains(unsupported, want) {
-			t.Fatalf("unsupported = %v, missing %q", unsupported, want)
+		if slices.Contains(unsupported, realizable) {
+			t.Fatalf("%s was reported unsupported", realizable)
 		}
-	}
-	if slices.Contains(unsupported, "ArtifactServer/lab-artifacts") {
-		t.Fatal("the managed artifact server was reported unsupported")
-	}
-	if !slices.IsSorted(unsupported) {
-		t.Fatalf("unsupported objects are unordered: %v", unsupported)
 	}
 }
 

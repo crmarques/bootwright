@@ -20,7 +20,7 @@ ownership of the external service.
 | `spec.management` | string | All services | Required `managed` or `external`. |
 | `spec.machineRef` | string | Managed services | Required global `Machine` placement reference; forbidden for external. |
 | `spec.implementation` | string | Managed Proxy, DNSServer, NTPServer, Registry, LoadBalancer | Required implementation listed below; forbidden for external and ArtifactServer. |
-| `spec.image` | object | Managed container services | Optional image pins, forbidden for external and NTPServer. |
+| `spec.image` | object | Managed container services | Optional image pins, forbidden for external. |
 | `spec.image.local` | string | With `image` | Local image reference. |
 | `spec.image.public` | string | With `image` | Public image reference. |
 
@@ -30,8 +30,8 @@ service; fleet defaults can supply it through the corresponding kind entry.
 Image declarations neither select an executable adapter nor establish release
 support.
 
-Managed services require their placement Machine's `container-runtime`
-capability, except NTPServer. An external service forbids managed placement,
+Every managed service runs as a container, so each requires its placement
+Machine's `container-runtime` capability. An external service forbids managed placement,
 implementation, image and listener configuration. Managed-only intrinsic
 defaults do not materialize on external declarations. An explicit management
 choice suppresses incompatible inherited fields under the ordinary
@@ -43,7 +43,7 @@ Effective service fields emit in this order, omitting inapplicable fields:
 | --- | --- |
 | Proxy | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `connection`. |
 | DNSServer | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `address`, `additionalIngressHosts`, `forwarders`. |
-| NTPServer | `management`, `machineRef`, `implementation`, `bindAddress`, `port`, `endpoints`, `address`, `upstreamSources`. |
+| NTPServer | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `address`, `upstreamSources`. |
 | ArtifactServer | `management`, `machineRef`, `image`, `bindAddress`, `retention`, `tls`, `listeners`, `endpoints`. |
 | Registry | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `url`, `credentialsRef`, `trustBundleRef`. |
 | LoadBalancer | `management`, `machineRef`, `image`, `implementation`, `bindAddresses`. |

@@ -7,32 +7,33 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
-func localRequest() artifactserver.Request {
-	return artifactserver.Request{
-		BindAddress: "192.0.2.1",
-		ContentRoot: "/var/lib/bootwright-services/ctx-1/artifact-server/lab",
-		Egress:      artifactserver.Egress{NoProxy: []string{}},
-		Endpoints:   []artifactserver.Endpoint{{Address: "192.0.2.1", Listener: "https", Name: "ip-https"}},
-		Identity:    artifactserver.Identity{Block: "artifact-server-lab", Context: "ctx-1", Service: "lab"},
-		Image:       "registry.example.test/nginx@sha256:" + strings.Repeat("a", 64),
-		Listeners:   []artifactserver.Listener{{Name: "https", Port: 8443, Protocol: "https"}},
-		Placement:   artifactserver.Placement{Connection: "local", Machine: "bastion"},
-		TLS:         &artifactserver.TLS{MinVersion: "TLSv1.2", Secret: "artifact-server-tls"},
-		Unit:        "bootwright-ctx-1-artifacts-lab",
-		Version:     "artifact-server-nginx-v1",
+func localRequest() managedservice.RunRequest {
+	return managedservice.RunRequest{
+		Kind: artifactserver.Kind, Operation: "apply", Variable: "bootwright_artifact_server",
+		Digest:    strings.Repeat("d", 64),
+		Canonical: []byte(`{"unit":"bootwright-ctx-1-artifacts-lab"}`),
+		Placement: managedservice.Placement{Connection: "local", Machine: "bastion"},
+		Materials: []managedservice.MaterialFile{
+			{Name: "tls.crt", Part: secrets.CertificatePart, Secret: "artifact-server-tls", Variable: "certificate"},
+			{Name: "tls.key", Part: secrets.PrivateKeyPart, Secret: "artifact-server-tls", Variable: "privateKey"},
+		},
+		Material: material(),
 	}
 }
 
-func sshRequest() artifactserver.Request {
+func sshRequest() managedservice.RunRequest {
 	request := localRequest()
-	request.Placement = artifactserver.Placement{
+	request.Placement = managedservice.Placement{
 		Address: "192.0.2.9", Connection: "ssh", KnownHostsRef: "host-key",
 		Machine: "services", Port: 2222, PrivateKeyRef: "services-key",
 		SudoPasswordRef: "services-sudo", User: "operator",
 	}
+	request.Materials = append(slices.Clone(request.Materials), managedservice.Materials(request.Placement)...)
+	request.Sudo = "services-sudo"
 	return request
 }
 
@@ -47,51 +48,68 @@ func material() map[string]secrets.Material {
 	}
 }
 
-func TestMaterialFilesCoverExactlyTheBoundParts(t *testing.T) {
-	local := materialFiles(localRequest())
-	if len(local) != 2 {
-		t.Fatalf("local material files = %+v", local)
-	}
-	for _, file := range local {
-		if file.mode != 0600 {
-			t.Fatalf("%s uses mode %o", file.name, file.mode)
+// Every managed service reaches the same fixed entrypoint set, and only
+// through it: a kind and operation the map does not name has no playbook.
+func TestEveryKindAndOperationBindsOneFixedEntrypoint(t *testing.T) {
+	for _, kind := range []string{"ArtifactServer", "Proxy", "DNSServer", "NTPServer"} {
+		for _, operation := range []string{"apply", "observe", "destroy"} {
+			playbook, ok := playbookFor(managedservice.RunRequest{Kind: kind, Operation: operation})
+			if !ok || !strings.HasSuffix(playbook, "_"+operation+".yml") {
+				t.Fatalf("%s/%s resolved to %q", kind, operation, playbook)
+			}
 		}
 	}
-	remote := materialFiles(sshRequest())
+	for _, request := range []managedservice.RunRequest{
+		{Kind: "Registry", Operation: "apply"},
+		{Kind: "ArtifactServer", Operation: "reconcile"},
+		{Kind: "", Operation: ""},
+	} {
+		if _, ok := playbookFor(request); ok {
+			t.Fatalf("%s/%s resolved to a playbook", request.Kind, request.Operation)
+		}
+	}
+}
+
+func TestMaterialFilesCoverExactlyTheBoundParts(t *testing.T) {
 	names := []string{}
-	for _, file := range remote {
-		names = append(names, file.name)
+	for _, file := range sshRequest().Materials {
+		names = append(names, file.Name)
 	}
 	slices.Sort(names)
 	if !slices.Equal(names, []string{"id", "known_hosts", "tls.crt", "tls.key"}) {
 		t.Fatalf("ssh material files = %v", names)
 	}
 	plain := localRequest()
-	plain.TLS = nil
-	if len(materialFiles(plain)) != 0 {
-		t.Fatal("an HTTP-only request still demands serving material")
+	plain.Materials = managedservice.Materials(plain.Placement)
+	if len(plain.Materials) != 0 {
+		t.Fatal("a local placement without serving material still demands a file")
 	}
 }
 
 func TestMaterialBytesRefuseMissingOrUnusableParts(t *testing.T) {
-	values, err := materialBytes(localRequest(), material())
+	values, err := materialBytes(localRequest())
 	if err != nil || string(values["tls.crt"]) != "CERTIFICATE" || string(values["tls.key"]) != "PRIVATE" {
 		t.Fatalf("material = %v (%v)", values, err)
 	}
-	if _, err := materialBytes(localRequest(), nil); err == nil {
+	absent := localRequest()
+	absent.Material = nil
+	if _, err := materialBytes(absent); err == nil {
 		t.Fatal("absent bound material was accepted")
 	}
-	empty := map[string]secrets.Material{"artifact-server-tls": secrets.NewMaterial(map[secrets.Part][]byte{
+	empty := localRequest()
+	empty.Material = map[string]secrets.Material{"artifact-server-tls": secrets.NewMaterial(map[secrets.Part][]byte{
 		secrets.CertificatePart: nil, secrets.PrivateKeyPart: []byte("PRIVATE"),
 	})}
-	if _, err := materialBytes(localRequest(), empty); err == nil {
+	if _, err := materialBytes(empty); err == nil {
 		t.Fatal("an empty part was accepted")
 	}
 }
 
 func TestVariablesCarryPathsNotMaterial(t *testing.T) {
 	paths := map[string]string{"tls.crt": "/job/tls.crt", "tls.key": "/job/tls.key"}
-	values, err := variables(localRequest(), strings.Repeat("d", 64), paths, "escalate")
+	request := localRequest()
+	request.MaterialValues = map[string]string{"fingerprint": strings.Repeat("f", 64)}
+	values, err := variables(request, paths, "escalate")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,21 +134,23 @@ func TestVariablesCarryPathsNotMaterial(t *testing.T) {
 }
 
 func TestBecomePasswordRequiresItsBoundSecret(t *testing.T) {
-	value, err := becomePassword(sshRequest(), material())
+	value, err := becomePassword(sshRequest())
 	if err != nil || value != "escalate" {
 		t.Fatalf("password = %q (%v)", value, err)
 	}
-	if _, err := becomePassword(sshRequest(), map[string]secrets.Material{}); err == nil {
+	missing := sshRequest()
+	missing.Material = map[string]secrets.Material{}
+	if _, err := becomePassword(missing); err == nil {
 		t.Fatal("a missing escalation secret was accepted")
 	}
-	if value, err := becomePassword(localRequest(), material()); err != nil || value != "" {
+	if value, err := becomePassword(localRequest()); err != nil || value != "" {
 		t.Fatalf("a request without escalation returned %q (%v)", value, err)
 	}
 }
 
 func TestInventoryPinsTheSSHIdentityAndHostKey(t *testing.T) {
 	paths := map[string]string{"id": "/job/id", "known_hosts": "/job/known_hosts"}
-	value := inventory(sshRequest(), "/interpreter", paths)
+	value := inventory(sshRequest().Placement, "/interpreter", paths)
 	host := value["all"].(map[string]any)["children"].(map[string]any)["bootwright_service_host"].(map[string]any)["hosts"].(map[string]any)["services"].(map[string]any)
 	if host["ansible_connection"] != "ssh" || host["ansible_host"] != "192.0.2.9" || host["ansible_port"] != 2222 || host["ansible_user"] != "operator" {
 		t.Fatalf("ssh host = %+v", host)
@@ -147,7 +167,7 @@ func TestInventoryPinsTheSSHIdentityAndHostKey(t *testing.T) {
 			t.Fatalf("ssh arguments = %q, missing %q", arguments, required)
 		}
 	}
-	local := inventory(localRequest(), "/interpreter", nil)
+	local := inventory(localRequest().Placement, "/interpreter", nil)
 	host = local["all"].(map[string]any)["children"].(map[string]any)["bootwright_service_host"].(map[string]any)["hosts"].(map[string]any)["bastion"].(map[string]any)
 	if host["ansible_connection"] != "local" || host["ansible_python_interpreter"] != "/interpreter" {
 		t.Fatalf("local host = %+v", host)

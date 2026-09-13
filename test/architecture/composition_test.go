@@ -30,8 +30,13 @@ func applicationValues() packageSymbols {
 		// Immutable request and evidence values an adapter must construct and
 		// read; they bind no replaceable service.
 		"internal/infrastructureservices/artifactserver": {"Request": true, "Evidence": true},
-		"internal/reconciliation":                        {"Plan": true, "Evidence": true},
-		"internal/reconciliation/operationstore":         {"Log": true},
+		"internal/infrastructureservices/managedservice": {
+			"Request": true, "Evidence": true, "Definition": true, "RunRequest": true,
+			"RunResult": true, "MaterialFile": true, "Placement": true, "Identity": true,
+			"Egress": true, "Endpoint": true, "Record": true, "Answer": true,
+		},
+		"internal/reconciliation":                {"Plan": true, "Evidence": true},
+		"internal/reconciliation/operationstore": {"Log": true},
 	}
 }
 

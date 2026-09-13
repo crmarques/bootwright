@@ -22,11 +22,20 @@ Validate the directory as a whole:
 bootwright validate -f examples/multidc-platform
 ```
 
+[`lab-artifacts/`](lab-artifacts/) is the smallest complete Environment a
+lifecycle operation can realize: one bastion hosting one managed artifact
+server. It is the fixture for the lifecycle engine itself.
+
+[`managed-infra-components/`](managed-infra-components/) adds the rest of the
+`infra-components` stage to that shape: one bastion hosting managed proxy, DNS,
+NTP and artifact-server containers. Its README walks the staged apply.
+
 [`lab-ocp/`](lab-ocp/) is a small single-machine lab: the development
-machine is the bastion, hosts the managed proxy, DNS, NTP and artifact-server
-containers, and runs a single-node OpenShift guest on libvirt behind an
-emulated Redfish BMC. It uses documentation addresses and a synthetic domain,
-and its README lists the commands that prepare the bastion from it.
+machine is the bastion, hosts the same managed service set, and runs a
+single-node OpenShift guest on libvirt behind an emulated Redfish BMC. It uses
+documentation addresses and a synthetic domain, and its README lists the
+commands that prepare the bastion from it. Its guest and cluster still need
+capabilities a later milestone adds, so an apply refuses and names them.
 
 ## Local work in progress
 
