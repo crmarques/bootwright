@@ -7,6 +7,7 @@ import (
 	"maps"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -206,9 +207,13 @@ func (c *testCapability) next(outcomes *[]Result) Result {
 	return value
 }
 
-func (c *testCapability) Apply(_ context.Context, execution Execution) (Result, error) {
+func (c *testCapability) Apply(ctx context.Context, execution Execution) (Result, error) {
 	c.applies = append(c.applies, execution.Block.ID)
 	c.material = append(c.material, execution.Material)
+	if execution.Progress != nil {
+		execution.Progress(ctx, "pull-image", "running")
+		execution.Progress(ctx, "pull-image", "ok")
+	}
 	result := c.next(&c.outcomes)
 	if result.Outcome == reconciliation.OutcomeFailed {
 		return result, errors.New("capability failed")
@@ -358,6 +363,7 @@ func definition(id string) reconciliation.BlockDefinition {
 		ID: id, Description: "serve " + id, Kind: "ArtifactServer", Object: id,
 		Implementation: "artifact-server-nginx-v1", ContentDigest: strings.Repeat("c", 64),
 		Request: json.RawMessage(`{"name":"` + id + `"}`),
+		Groups:  []reconciliation.Group{{ID: "pull-image", Description: "acquire the pinned server image", Machines: []string{"bastion"}}},
 	}
 }
 
@@ -458,6 +464,36 @@ func TestFreshApplyRegistersExecutesAndProjectsEvidence(t *testing.T) {
 	}
 	if len(result.Logs) == 0 {
 		t.Fatal("the operation created no private log")
+	}
+}
+
+type testProgress struct{ rows []string }
+
+func (p *testProgress) ReportProgress(_ context.Context, event ProgressEvent) {
+	row := event.Description + ":" + event.Detail + ":" + event.Status
+	if event.Total != 0 {
+		row += ":" + strconv.Itoa(event.Position) + "/" + strconv.Itoa(event.Total)
+	}
+	p.rows = append(p.rows, row)
+}
+
+// Progress names each block by its description and each group by the frozen
+// plan's own description of it, so the operator never reads an identifier.
+func TestProgressNamesBlocksAndGroupsFromTheFrozenPlan(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	progress := &testProgress{}
+	h.service.options.Progress = progress
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"serve artifact-server-lab::running:1/1",
+		"serve artifact-server-lab:acquire the pinned server image:running:1/1",
+		"serve artifact-server-lab:acquire the pinned server image:ok:1/1",
+		"serve artifact-server-lab::done:1/1",
+	}
+	if !slices.Equal(progress.rows, want) {
+		t.Fatalf("progress = %q, want %q", progress.rows, want)
 	}
 }
 

@@ -2,37 +2,73 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"io"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
-// ControllerPlanPresenter writes the complete setup plan before confirmation.
-// Construction performs no output; write failure prevents setup mutation.
-type ControllerPlanPresenter struct{ out io.Writer }
+const controllerSetupHeadline = "Bastion setup"
 
-func NewControllerPlanPresenter(out io.Writer) *ControllerPlanPresenter {
-	return &ControllerPlanPresenter{out: out}
+// ControllerPresenter owns everything bastion setup shows while it works: the
+// resolution steps before the plan, the plan itself and the approved actions
+// after confirmation. One object presents all three so the headline is written
+// once and every row shares one layout. Construction performs no output; a
+// plan write failure prevents setup mutation.
+type ControllerPresenter struct {
+	progress progressPresenter
+	headline bool
 }
 
-func (p *ControllerPlanPresenter) PresentControllerPlan(ctx context.Context, report prerequisites.Report) error {
+func NewControllerPresenter(out io.Writer) *ControllerPresenter {
+	return &ControllerPresenter{progress: progressPresenter{out: out, clock: systemProgressClock()}}
+}
+
+func (p *ControllerPresenter) PresentControllerPlan(ctx context.Context, report prerequisites.Report) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if p == nil || p.out == nil || !validControllerReport(&report) {
+	if p == nil || p.progress.out == nil || !validControllerReport(&report) {
 		return &controllerOutputFailure{}
 	}
 	var text display
-	text.headline("", controllerHeadline("bastion setup", &report))
+	if !p.headline {
+		text.headline("", controllerHeadline("bastion setup", &report))
+	}
 	controllerPlanText(&text, &report)
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := text.writeTo(p.out); err != nil {
+	if p.headline {
+		// The plan follows the resolution rows as its own block.
+		if _, err := io.WriteString(p.progress.out, "\n"); err != nil {
+			return &controllerOutputFailure{}
+		}
+	}
+	if err := text.writeTo(p.progress.out); err != nil {
 		return &controllerOutputFailure{}
 	}
+	p.headline = true
 	return nil
+}
+
+// ReportProgress streams one setup row. Resolution rows precede the plan, so
+// the first one also opens the headline the plan would otherwise write.
+func (p *ControllerPresenter) ReportProgress(ctx context.Context, event prerequisites.ProgressEvent) {
+	if p == nil || p.progress.out == nil || ctx.Err() != nil || event.Action == "" {
+		return
+	}
+	heading, nested := "Progress", event.Detail != ""
+	if event.Phase == prerequisites.ResolutionPhase {
+		heading, nested = "Resolving", false
+		if !p.headline {
+			p.headline = true
+			io.WriteString(p.progress.out, controllerSetupHeadline+"\n")
+		}
+	}
+	p.progress.report(ctx, progressEvent{
+		Heading: heading, Label: controllerActionLabel(event.Action), Detail: event.Detail,
+		Status: event.Status, Position: event.Step, Total: event.Steps, Nested: nested,
+	})
 }
 
 type controllerOutputFailure struct{}
@@ -76,14 +112,29 @@ func controllerHeadline(command string, report *prerequisites.Report) string {
 		return "Bastion readiness"
 	}
 	if report.PlanPresented || !report.DryRun {
-		return "Bastion setup"
+		return controllerSetupHeadline
 	}
 	return "Bastion setup plan"
 }
 
+// controllerActionLabel turns a receipt action identity into the prose the
+// operator reads; resolution steps already arrive as prose.
+func controllerActionLabel(id string) string {
+	switch id {
+	case "execution-bundle":
+		return "Execution bundle"
+	case "container-runtime":
+		return "Container runtime"
+	case "controller-binding":
+		return "Controller binding"
+	}
+	return id
+}
+
 func writeControllerReport(out io.Writer, command string, report *prerequisites.Report) error {
 	var text display
-	if !report.PlanPresented {
+	presented := report.PlanPresented || report.ProgressPresented
+	if !presented {
 		text.headline("", controllerHeadline(command, report))
 		controllerPlanText(&text, report)
 	}
@@ -93,12 +144,18 @@ func writeControllerReport(out io.Writer, command string, report *prerequisites.
 		text.section("Progress")
 		rows := make([][]string, 0, len(report.Progress))
 		for _, action := range report.Progress {
-			rows = append(rows, []string{progressToken(action), action.ID})
+			rows = append(rows, []string{progressToken(action), controllerActionLabel(action.ID)})
 		}
 		text.rows(rows)
 	}
 	text.section("")
 	text.fields(controllerOutcomeFields(command, report)...)
+	if presented {
+		// Streamed rows precede this block, so it separates itself from them.
+		if _, err := io.WriteString(out, "\n"); err != nil {
+			return err
+		}
+	}
 	return text.writeTo(out)
 }
 
@@ -201,52 +258,4 @@ func controllerPlanText(text *display, report *prerequisites.Report) {
 	}
 	text.section("Planned changes")
 	text.steps(report.Actions)
-}
-
-// ControllerProgressPresenter writes one line per setup step while setup runs,
-// so a long acquisition is visibly working rather than silent. It writes to the
-// same stream as the plan and never buffers, because an unflushed line during a
-// ten-minute transfer would defeat its only purpose.
-type ControllerProgressPresenter struct {
-	out     io.Writer
-	started bool
-}
-
-func NewControllerProgressPresenter(out io.Writer) *ControllerProgressPresenter {
-	return &ControllerProgressPresenter{out: out}
-}
-
-func (p *ControllerProgressPresenter) ReportProgress(ctx context.Context, event prerequisites.ProgressEvent) {
-	if p == nil || p.out == nil || ctx.Err() != nil || event.Action == "" {
-		return
-	}
-	if !p.started {
-		p.started = true
-		io.WriteString(p.out, "\nProgress\n")
-	}
-	subject := event.Action
-	if event.Detail != "" {
-		subject = event.Action + ": " + event.Detail
-	}
-	if event.Steps > 0 && event.Step > 0 {
-		subject += fmt.Sprintf(" (%d/%d)", event.Step, event.Steps)
-	}
-	io.WriteString(p.out, "  "+progressStatusToken(event.Status)+" "+escapeDisplayLine(subject)+"\n")
-}
-
-// Progress reuses the output contract's status tokens: work in flight has no
-// terminal outcome, and a finished step reports the outcome it proved.
-func progressStatusToken(status string) string {
-	switch status {
-	case "running":
-		return "[RUNNING]"
-	case "changed":
-		return "[DONE]"
-	case "unchanged":
-		return "[OK]"
-	case "failed":
-		return "[FAIL]"
-	default:
-		return "[UNKNOWN]"
-	}
 }

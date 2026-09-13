@@ -39,16 +39,16 @@ type bundleLocation struct {
 	Sealed   bool   `json:"sealed"`
 }
 
-func (installer Installer) Prepare(ctx context.Context, area prerequisites.BundleArea, platform prerequisites.Platform, definition prerequisites.Definition, egress prerequisites.SetupEgress, publish func(context.Context, prerequisites.NativePreparation) error) (prerequisites.ActionResult, error) {
-	return installer.invoke(ctx, area, platform, definition, egress, publish, nil)
+func (installer Installer) Prepare(ctx context.Context, area prerequisites.BundleArea, platform prerequisites.Platform, definition prerequisites.Definition, egress prerequisites.SetupEgress, publish func(context.Context, prerequisites.NativePreparation) error, progress func(prerequisites.ProgressEvent)) (prerequisites.ActionResult, error) {
+	return installer.invoke(ctx, area, platform, definition, egress, publish, nil, progress)
 }
 
-func (installer Installer) Recover(ctx context.Context, area prerequisites.BundleArea, platform prerequisites.Platform, definition prerequisites.Definition, egress prerequisites.SetupEgress, preparation prerequisites.NativePreparation) (prerequisites.ActionResult, error) {
+func (installer Installer) Recover(ctx context.Context, area prerequisites.BundleArea, platform prerequisites.Platform, definition prerequisites.Definition, egress prerequisites.SetupEgress, preparation prerequisites.NativePreparation, progress func(prerequisites.ProgressEvent)) (prerequisites.ActionResult, error) {
 	preparation.AddedSources = slices.Clone(preparation.AddedSources)
-	return installer.invoke(ctx, area, platform, definition, egress, nil, &preparation)
+	return installer.invoke(ctx, area, platform, definition, egress, nil, &preparation, progress)
 }
 
-func (installer Installer) invoke(ctx context.Context, area prerequisites.BundleArea, platform prerequisites.Platform, definition prerequisites.Definition, egress prerequisites.SetupEgress, publish func(context.Context, prerequisites.NativePreparation) error, preparation *prerequisites.NativePreparation) (prerequisites.ActionResult, error) {
+func (installer Installer) invoke(ctx context.Context, area prerequisites.BundleArea, platform prerequisites.Platform, definition prerequisites.Definition, egress prerequisites.SetupEgress, publish func(context.Context, prerequisites.NativePreparation) error, preparation *prerequisites.NativePreparation, progress func(prerequisites.ProgressEvent)) (prerequisites.ActionResult, error) {
 	result := actionResult("failed", false)
 	if preparation != nil {
 		result = actionResult("unknown", true)
@@ -105,7 +105,7 @@ func (installer Installer) invoke(ctx context.Context, area prerequisites.Bundle
 	}
 	err = installer.ExecutionGuard.WithPython(ctx, area, definition.Execution, func(launch prerequisites.PythonLaunch, release func() error) error {
 		var runErr error
-		result, runErr = run(ctx, launch, request, release, publish)
+		result, runErr = run(ctx, launch, request, release, publish, progress)
 		return runErr
 	})
 	return result, err

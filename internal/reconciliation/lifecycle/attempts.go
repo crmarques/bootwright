@@ -36,7 +36,7 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	}
 	defer func() { _ = log.Close(ctx) }()
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: "running", Position: position, Total: total})
-	result, runErr := s.invoke(ctx, tx, operation, block, material, log, func(inner context.Context, execution Execution) (Result, error) {
+	result, runErr := s.invoke(ctx, tx, operation, block, material, log, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		if operation.Verb == reconciliation.Destroy {
 			return capability.Destroy(inner, execution)
 		}
@@ -63,7 +63,7 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 
 // resolveUnknown observes the exact frozen request read-only under a freshly
 // allocated resolution identity and log, before any observation begins.
-func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material) (reconciliation.BlockState, error) {
+func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, position, total int) (reconciliation.BlockState, error) {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
 		return reconciliation.BlockUnknown, failure("lifecycle.state",
@@ -87,8 +87,9 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 		return reconciliation.BlockUnknown, logFault(err)
 	}
 	defer func() { _ = log.Close(ctx) }()
+	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Detail: "resolving the unknown outcome from live evidence", Status: "running", Position: position, Total: total})
 	var observation Observation
-	_, runErr := s.invoke(ctx, tx, operation, block, material, log, func(inner context.Context, execution Execution) (Result, error) {
+	_, runErr := s.invoke(ctx, tx, operation, block, material, log, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		execution.Resolution = number
 		value, err := capability.Observe(inner, execution)
 		observation = value
@@ -106,6 +107,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	if err := store.CompleteResolution(ctx, operation.ID, block.ID, attemptNumber, number, resolvedEffect, state, observation.Evidence); err != nil {
 		return reconciliation.BlockUnknown, err
 	}
+	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: string(state), Position: position, Total: total})
 	if state != reconciliation.BlockDone {
 		return state, failure("lifecycle.unknown",
 			"the frozen effect could not be resolved from live evidence",
@@ -116,7 +118,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 
 // invoke opens the controller's approved bundle and runs the capability inside
 // the private Python execution boundary, exactly as bastion setup does.
-func (s Service) invoke(ctx context.Context, tx Transaction, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, log *operationstore.Log, call func(context.Context, Execution) (Result, error)) (Result, error) {
+func (s Service) invoke(ctx context.Context, tx Transaction, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, log *operationstore.Log, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
 	view := tx.Controller()
 	receipt := view.State.Receipt
 	if receipt.Definition == nil {
@@ -147,7 +149,7 @@ func (s Service) invoke(ctx context.Context, tx Transaction, operation operation
 				return log.Append(inner, record)
 			},
 			Progress: func(inner context.Context, group, status string) {
-				s.report(inner, ProgressEvent{Block: block.ID, Group: group, Status: status})
+				s.report(inner, ProgressEvent{Block: block.ID, Description: block.Description, Group: group, Detail: groupDescription(block, group), Status: status, Position: position, Total: total})
 			},
 		}
 		value, callErr := call(ctx, execution)
@@ -161,6 +163,17 @@ func (s Service) report(ctx context.Context, event ProgressEvent) {
 	if s.options.Progress != nil {
 		s.options.Progress.ReportProgress(ctx, event)
 	}
+}
+
+// groupDescription reads the frozen block's own description of a group, so
+// the adapter reports only the stable identity and the plan supplies the prose.
+func groupDescription(block reconciliation.Block, id string) string {
+	for _, group := range block.Groups {
+		if group.ID == id {
+			return group.Description
+		}
+	}
+	return id
 }
 
 // project publishes the context mutation evidence the operation state implies.

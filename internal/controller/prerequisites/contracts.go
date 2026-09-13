@@ -32,9 +32,11 @@ type BundleManager interface {
 	Prepare(context.Context, BundleArea, Definition, SetupEgress, func(ProgressEvent)) error
 }
 
+// RuntimeInstaller reports the phase of its native transaction and each target
+// tool through the progress callback; the caller supplies the action identity.
 type RuntimeInstaller interface {
-	Prepare(context.Context, BundleArea, Platform, Definition, SetupEgress, func(context.Context, NativePreparation) error) (ActionResult, error)
-	Recover(context.Context, BundleArea, Platform, Definition, SetupEgress, NativePreparation) (ActionResult, error)
+	Prepare(context.Context, BundleArea, Platform, Definition, SetupEgress, func(context.Context, NativePreparation) error, func(ProgressEvent)) (ActionResult, error)
+	Recover(context.Context, BundleArea, Platform, Definition, SetupEgress, NativePreparation, func(ProgressEvent)) (ActionResult, error)
 }
 
 // WithPython verifies and holds the execution foundation under the native

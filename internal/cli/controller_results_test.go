@@ -73,7 +73,7 @@ func TestControllerNegativeReportPreservesStreamsAndSafeDiagnostics(t *testing.T
 
 func TestControllerPlanFailureStopsOutputWithoutFallback(t *testing.T) {
 	var errOut bytes.Buffer
-	presenter := NewControllerPlanPresenter(rejectingWriter{})
+	presenter := NewControllerPresenter(rejectingWriter{})
 	err := presenter.PresentControllerPlan(context.Background(), *controllerReport("planned", true))
 	record := &dispatchRecord{result: commandResult{controller: controllerReport("incomplete", false)}, err: err}
 	var out bytes.Buffer
@@ -203,7 +203,7 @@ func TestControllerChecksUseContractStatusTokens(t *testing.T) {
 		report := controllerReport("planned", false)
 		report.Checks[0].Status = status
 		var out bytes.Buffer
-		if err := NewControllerPlanPresenter(&out).PresentControllerPlan(context.Background(), *report); err != nil {
+		if err := NewControllerPresenter(&out).PresentControllerPlan(context.Background(), *report); err != nil {
 			t.Fatal(err)
 		}
 		if !strings.Contains(out.String(), "  "+token+"  execution-bundle  ") {
@@ -233,7 +233,7 @@ func TestControllerIncompleteSetupReportsPerActionProgress(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit = %d", code)
 	}
-	for _, want := range []string{"Progress\n", "  [DONE]     execution-bundle\n", "  [UNKNOWN]  container-runtime\n", "  [SKIPPED]  controller-binding\n"} {
+	for _, want := range []string{"\nProgress\n", "  [DONE]     Execution bundle\n", "  [UNKNOWN]  Container runtime\n", "  [SKIPPED]  Controller binding\n"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("result %q lacks %q", out.String(), want)
 		}
@@ -255,5 +255,52 @@ func TestControllerCompletedSetupReportsReadinessOnly(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "Progress\n") || !strings.Contains(out.String(), "Readiness  all required prerequisites verified") {
 		t.Fatalf("result = %q", out.String())
+	}
+}
+
+// Resolution rows open the headline before the plan, and the plan then follows
+// them as its own block without repeating it.
+func TestControllerResolutionRowsPrecedeThePlanUnderOneHeadline(t *testing.T) {
+	var out bytes.Buffer
+	presenter := NewControllerPresenter(&out)
+	ctx := context.Background()
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.ResolutionPhase, Action: "Python and Ansible", Status: "running", Step: 1, Steps: 2})
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.ResolutionPhase, Action: "Python and Ansible", Status: "ok", Detail: "Python 3.14.7, Ansible 2.21.4", Step: 1, Steps: 2})
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.ResolutionPhase, Action: "Native packages", Status: "ok", Detail: "no changes", Step: 2, Steps: 2})
+	if err := presenter.PresentControllerPlan(ctx, *controllerReport("planned", false)); err != nil {
+		t.Fatal(err)
+	}
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "execution-bundle", Status: "running", Step: 1, Steps: 1})
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "execution-bundle", Status: "running", Detail: "acquiring python.tar.gz, source 1 of 1", Step: 1, Steps: 1})
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "execution-bundle", Status: "changed", Step: 1, Steps: 1})
+	rendered := out.String()
+	prefix := "Bastion setup\n\nResolving\n" +
+		"  [RUNNING]  Python and Ansible (1/2)\n" +
+		"  [OK]       Python and Ansible: Python 3.14.7, Ansible 2.21.4 (1/2)\n" +
+		"  [OK]       Native packages: no changes (2/2)\n" +
+		"\n  Scope     baseline\n"
+	if !strings.HasPrefix(rendered, prefix) {
+		t.Fatalf("result = %q, want prefix %q", rendered, prefix)
+	}
+	suffix := "\nProgress\n" +
+		"  [RUNNING]  Execution bundle (1/1)\n" +
+		"  [RUNNING]  Execution bundle: acquiring python.tar.gz, source 1 of 1 (1/1)\n" +
+		"  [DONE]     Execution bundle (1/1)\n"
+	if strings.Count(rendered, "Bastion setup\n") != 1 || !strings.Contains(rendered, "\nChecks\n") || !strings.HasSuffix(rendered, suffix) {
+		t.Fatalf("result = %q", rendered)
+	}
+}
+
+// A resolution failure has already streamed its rows, so the result adds only
+// its outcome instead of a second headline and an unresolved plan.
+func TestControllerResolutionFailureReportsOutcomeOnly(t *testing.T) {
+	report := controllerReport("planned", false)
+	report.ProgressPresented = true
+	record := &dispatchRecord{result: commandResult{controller: report}, err: diagnostics.NewFailure("controller.setup", "publisher metadata is unavailable", "")}
+	var out, errOut bytes.Buffer
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"bastion", "setup"})
+	want := "\n  Outcome  planned\n  Next     bootwright bastion setup\n"
+	if code != 1 || out.String() != want || !strings.Contains(errOut.String(), "controller.setup") {
+		t.Fatalf("code=%d out=%q err=%q", code, out.String(), errOut.String())
 	}
 }

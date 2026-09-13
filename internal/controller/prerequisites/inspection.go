@@ -39,10 +39,19 @@ type ActionProgress struct {
 	Outcome string
 }
 
-// ProgressEvent is one operator-visible step of an authorized setup. Detail is
-// safe display text naming the work in flight; Step and Steps are present only
-// when the action knows its own extent.
+// Progress phases: resolution precedes the plan and discovers exact dependency
+// identities; setup follows confirmation and performs the approved actions.
+const (
+	ResolutionPhase = "resolution"
+	SetupPhase      = "setup"
+)
+
+// ProgressEvent is one operator-visible step of an authorized setup. Action
+// names the step: a receipt action identity during setup, or the dependency
+// family during resolution. Detail is safe display text naming the work in
+// flight; Step and Steps are present only when the phase knows its extent.
 type ProgressEvent struct {
+	Phase  string
 	Action string
 	Status string
 	Detail string

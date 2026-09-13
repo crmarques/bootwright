@@ -76,8 +76,19 @@ func TestQualifiedUnprivilegedBundlePreparationAndReadOnlyReuse(t *testing.T) {
 		defer file.Close()
 		return io.ReadAll(io.LimitReader(file, source.Bytes+1))
 	}
-	if err := manager.Prepare(t.Context(), area, definition, prerequisites.SetupEgress{}, nil); err != nil {
+	var details []string
+	progress := func(event prerequisites.ProgressEvent) { details = append(details, event.Detail) }
+	if err := manager.Prepare(t.Context(), area, definition, prerequisites.SetupEgress{}, progress); err != nil {
 		t.Fatal(err)
+	}
+	// Each slow phase announces itself: every acquisition, then the projection,
+	// its verification and the interpreter probe.
+	if len(details) < 4 || !strings.HasPrefix(details[0], "acquiring ") || !strings.Contains(details[0], ", source 1 of ") {
+		t.Fatalf("preparation progress = %q", details)
+	}
+	tail := details[len(details)-3:]
+	if !strings.HasPrefix(tail[0], "publishing ") || !strings.HasSuffix(tail[0], " bundle files") || tail[1] != "verifying the published bundle" || tail[2] != "qualifying the private interpreter" {
+		t.Fatalf("preparation progress = %q", details)
 	}
 	before, err := area.Entries(t.Context())
 	if err != nil {
@@ -90,8 +101,12 @@ func TestQualifiedUnprivilegedBundlePreparationAndReadOnlyReuse(t *testing.T) {
 			t.Fatalf("qualified inspection failed: %+v %v", inspection, err)
 		}
 	}
-	if err := manager.Prepare(t.Context(), area, definition, prerequisites.SetupEgress{}, nil); err != nil {
+	details = nil
+	if err := manager.Prepare(t.Context(), area, definition, prerequisites.SetupEgress{}, progress); err != nil {
 		t.Fatal(err)
+	}
+	if !slices.Equal(details, []string{"qualifying the private interpreter"}) {
+		t.Fatalf("ready bundle progress = %q", details)
 	}
 	after, err := area.Entries(t.Context())
 	if err != nil {

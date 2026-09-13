@@ -173,6 +173,7 @@ func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, erro
 		}
 		current = fresh
 		current.report.PlanPresented = true
+		current.report.ProgressPresented = approved.report.ProgressPresented
 		return s.prepare(ctx, tx, &current)
 	})
 	if err != nil {

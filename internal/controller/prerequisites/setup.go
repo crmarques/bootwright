@@ -99,6 +99,10 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 			return err
 		}
 		action := &state.Receipt.Actions[index]
+		progress := func(event ProgressEvent) {
+			event.Phase, event.Action, event.Step, event.Steps = SetupPhase, action.ID, index+1, len(state.Receipt.Actions)
+			s.report(ctx, &current.report, event)
+		}
 		ready := action.ID == "execution-bundle" && current.bundle.Ready || action.ID == "container-runtime" && current.dependenciesReady() || action.ID == "controller-binding" && current.bound
 		var request map[string]any
 		if json.Unmarshal(action.Request, &request) != nil {
@@ -133,7 +137,8 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 			if err != nil {
 				return err
 			}
-			result, err := s.runtime.Recover(ctx, area, current.platform, current.definition, current.route(), preparation)
+			progress(ProgressEvent{Status: "running", Detail: "recovering the recorded native transaction"})
+			result, err := s.runtime.Recover(ctx, area, current.platform, current.definition, current.route(), preparation, progress)
 			if err != nil {
 				return err
 			}
@@ -165,17 +170,14 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 					return err
 				}
 			}
-			s.report(ctx, ProgressEvent{Action: action.ID, Status: "running", Step: index + 1, Steps: len(state.Receipt.Actions)})
+			progress(ProgressEvent{Status: "running"})
 			var err error
 			switch action.ID {
 			case "execution-bundle":
 				var area BundleArea
 				area, err = tx.Bundle(ctx, current.definition.CatalogDigest)
 				if err == nil {
-					err = s.bundle.Prepare(ctx, area, current.definition, current.route(), func(event ProgressEvent) {
-						event.Action = action.ID
-						s.report(ctx, event)
-					})
+					err = s.bundle.Prepare(ctx, area, current.definition, current.route(), progress)
 				}
 				if err == nil {
 					current.bundle, err = s.bundle.Inspect(ctx, area, current.definition, true)
@@ -204,7 +206,7 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 							}
 							action.Preparation = encoded
 							return publish(call, tx, state)
-						})
+						}, progress)
 						if err == nil && len(result.Evidence) > 2 {
 							evidence = result.Evidence
 						}
@@ -234,12 +236,12 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 				err = failure("controller.unknown", "setup contains an unsupported retained action", "restore the original compatible executable")
 			}
 			if err != nil {
-				s.report(ctx, ProgressEvent{Action: action.ID, Status: "failed", Step: index + 1, Steps: len(state.Receipt.Actions)})
+				progress(ProgressEvent{Status: "failed"})
 				return err
 			}
 			outcome = "changed"
 		}
-		s.report(ctx, ProgressEvent{Action: action.ID, Status: outcome, Step: index + 1, Steps: len(state.Receipt.Actions)})
+		progress(ProgressEvent{Status: outcome})
 		action.Phase, action.Outcome = "observed", outcome
 		action.Evidence = evidence
 		if action.ID != "controller-binding" {
@@ -258,11 +260,13 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 }
 
 // report never fails an operation: progress is presentation, and a setup that
-// could not describe itself has still done exactly what it recorded.
-func (s Service) report(ctx context.Context, event ProgressEvent) {
+// could not describe itself has still done exactly what it recorded. The
+// report remembers that rows were streamed so the result does not repeat them.
+func (s Service) report(ctx context.Context, report *Report, event ProgressEvent) {
 	if s.options.Progress == nil || ctx.Err() != nil {
 		return
 	}
+	report.ProgressPresented = true
 	s.options.Progress.ReportProgress(ctx, event)
 }
 

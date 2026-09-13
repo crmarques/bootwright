@@ -391,7 +391,7 @@ type testRuntimeInstaller struct {
 	recoveryError     error
 }
 
-func (r *testRuntimeInstaller) Recover(context.Context, BundleArea, Platform, Definition, SetupEgress, NativePreparation) (ActionResult, error) {
+func (r *testRuntimeInstaller) Recover(context.Context, BundleArea, Platform, Definition, SetupEgress, NativePreparation, func(ProgressEvent)) (ActionResult, error) {
 	r.recovers++
 	if r.recoveryError != nil {
 		return ActionResult{}, r.recoveryError
@@ -400,7 +400,7 @@ func (r *testRuntimeInstaller) Recover(context.Context, BundleArea, Platform, De
 	return ActionResult{Outcome: "unchanged", Evidence: object(map[string]any{"nativePostcondition": "verified"})}, nil
 }
 
-func (r *testRuntimeInstaller) Prepare(ctx context.Context, area BundleArea, platform Platform, definition Definition, route SetupEgress, record func(context.Context, NativePreparation) error) (ActionResult, error) {
+func (r *testRuntimeInstaller) Prepare(ctx context.Context, area BundleArea, platform Platform, definition Definition, route SetupEgress, record func(context.Context, NativePreparation) error, _ func(ProgressEvent)) (ActionResult, error) {
 	r.calls++
 	if area == nil || !r.owner.bundle.ready || !slices.ContainsFunc(r.owner.store.state.Receipt.Actions, func(a SetupAction) bool { return a.ID == "container-runtime" && a.Phase == "intent" }) {
 		return ActionResult{}, errors.New("runtime without qualified bundle and durable intent")

@@ -41,27 +41,30 @@ type lifecycleOutputFailure struct{}
 
 func (*lifecycleOutputFailure) Error() string { return "lifecycle plan output failed" }
 
-// LifecycleProgressPresenter reports each block and group while the operation
-// runs, because a silent process is indistinguishable from a stuck one.
-type LifecycleProgressPresenter struct{ out io.Writer }
+// LifecycleProgressPresenter streams each block and presentation group while
+// the operation runs, because a silent process is indistinguishable from a
+// stuck one. A group is a sub-step of its block.
+type LifecycleProgressPresenter struct{ progress progressPresenter }
 
 func NewLifecycleProgressPresenter(out io.Writer) *LifecycleProgressPresenter {
-	return &LifecycleProgressPresenter{out: out}
+	return &LifecycleProgressPresenter{progress: progressPresenter{out: out, clock: systemProgressClock()}}
 }
 
 func (p *LifecycleProgressPresenter) ReportProgress(ctx context.Context, event lifecycle.ProgressEvent) {
-	if p == nil || p.out == nil || ctx.Err() != nil {
+	if p == nil || p.progress.out == nil || ctx.Err() != nil || event.Block == "" {
 		return
 	}
-	label := escapeDisplayLine(event.Block)
-	if event.Group != "" {
-		label += " " + escapeDisplayLine(event.Group)
+	label, detail := event.Description, event.Detail
+	if label == "" {
+		label = event.Block
 	}
-	position := ""
-	if event.Total > 0 && event.Position > 0 {
-		position = fmt.Sprintf(" (%d/%d)", event.Position, event.Total)
+	if detail == "" {
+		detail = event.Group
 	}
-	fmt.Fprintf(p.out, "  %s %s%s\n", progressStatusToken(event.Status), label, position)
+	p.progress.report(ctx, progressEvent{
+		Heading: "Progress", Label: label, Detail: detail, Status: event.Status,
+		Position: event.Position, Total: event.Total, Nested: event.Group != "",
+	})
 }
 
 func lifecycleHeadline(result lifecycle.PlanResult) string {

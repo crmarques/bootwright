@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -98,7 +99,7 @@ func TestRunnerDrainsCompletionAfterChildExit(t *testing.T) {
 		}
 		published = true
 		return nil
-	}, boundary)
+	}, nil, boundary)
 	if err != nil || result.Outcome != "unchanged" || !released || !published {
 		t.Fatalf("completion lost: %s %v", result.Outcome, err)
 	}
@@ -108,11 +109,42 @@ func TestRunnerDrainsCompletionAfterChildExit(t *testing.T) {
 	}
 }
 
+// Every protocol phase names the work Ansible is about to do, so the native
+// transaction and each tool transfer are visible instead of one silent action.
+func TestRunnerReportsProtocolPhasesAsProgress(t *testing.T) {
+	launch, request, boundary := runnerFixture(t, "complete")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var details []string
+	progress := func(event prerequisites.ProgressEvent) { details = append(details, event.Status+": "+event.Detail) }
+	if _, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, progress, boundary); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"running: starting the private Ansible runtime", "running: reading the native package inventory"}; !slices.Equal(details, want) {
+		t.Fatalf("progress = %q, want %q", details, want)
+	}
+	launch, request, boundary = runnerFixture(t, "recover-native")
+	request.Operation = "recover"
+	request.Native = &prerequisites.NativeResolvedPlan{Digest: strings.Repeat("c", 64), BeforeSHA256: strings.Repeat("a", 64), AfterSHA256: strings.Repeat("b", 64), Actions: []prerequisites.NativeAction{{SourceID: "native-one"}}}
+	transitions, err := prerequisites.NativeTransitionsDigest(request.Native.Actions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Preparation = &prerequisites.NativePreparation{InventorySHA256: request.Native.BeforeSHA256, AfterInventorySHA256: request.Native.AfterSHA256, PlanDigest: request.Native.Digest, TransitionsSHA256: transitions, AddedSources: []string{"native-one"}}
+	details = nil
+	if _, err := runProcess(ctx, launch, request, func() error { return nil }, nil, progress, boundary); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"running: starting the private Ansible runtime", "running: verifying the recorded native transaction", "running: installing 1 native package"}; !slices.Equal(details, want) {
+		t.Fatalf("recovery progress = %q, want %q", details, want)
+	}
+}
+
 func TestRunnerRefusesCancellationAtDurablePreparation(t *testing.T) {
 	launch, request, boundary := runnerFixture(t, "complete")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { cancel(); return nil }, boundary)
+	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { cancel(); return nil }, nil, boundary)
 	if !errors.Is(err, context.Canceled) || result.Outcome != "unknown" {
 		t.Fatalf("cancellation lost durable intent: %s %v", result.Outcome, err)
 	}
@@ -125,7 +157,7 @@ func TestRunnerSanitizesInvalidProtocol(t *testing.T) {
 	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error {
 		t.Error("invalid phase published intent")
 		return nil
-	}, boundary)
+	}, nil, boundary)
 	if err == nil || result.Outcome != "failed" || strings.Contains(err.Error(), "private-child-diagnostic") {
 		t.Fatalf("invalid protocol accepted: %s %v", result.Outcome, err)
 	}
@@ -142,7 +174,7 @@ func TestRunnerAcknowledgesFrozenNativeRecoveryWithoutNewPreparation(t *testing.
 	request.Preparation = &prerequisites.NativePreparation{InventorySHA256: request.Native.BeforeSHA256, AfterInventorySHA256: request.Native.AfterSHA256, PlanDigest: request.Native.Digest, TransitionsSHA256: transitions, AddedSources: []string{"native-one"}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	result, err := runProcess(ctx, launch, request, func() error { return nil }, nil, boundary)
+	result, err := runProcess(ctx, launch, request, func() error { return nil }, nil, nil, boundary)
 	if err != nil || result.Outcome != "changed" {
 		t.Fatalf("frozen native recovery failed: %s %v", result.Outcome, err)
 	}
@@ -162,7 +194,7 @@ func TestRunnerReapsUnauthorizedChildOnCancellationDuringRecovery(t *testing.T) 
 			// authorization pipe cannot end it instead of the reap.
 			go func() { time.Sleep(500 * time.Millisecond); cancel() }()
 			started := time.Now()
-			result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, boundary)
+			result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, boundary)
 			if elapsed := time.Since(started); elapsed > 10*time.Second {
 				t.Fatalf("unauthorized child was not reaped: %s took %s", operation, elapsed)
 			}
@@ -186,7 +218,7 @@ func TestRunnerStagesInPrivateDurableScratch(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if _, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, boundary); err != nil {
+	if _, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, boundary); err != nil {
 		t.Fatal(err)
 	}
 	var scratch string
@@ -234,7 +266,7 @@ func TestRunnerBoundsDrainWhenDescendantRetainsResultChannel(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	started := time.Now()
-	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, boundary)
+	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, boundary)
 	elapsed := time.Since(started)
 	if ctx.Err() != nil {
 		t.Fatal("run outlived its own drain bound and hit the test deadline")

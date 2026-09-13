@@ -116,38 +116,88 @@ func describeNativeAction(action NativeAction) string {
 	return action.Kind + " " + identity(*action.Before) + " -> " + identity(action.After)
 }
 
+// resolutionStep brackets one dependency family with progress rows, so the
+// operator sees which publisher or solver is being waited on and what it
+// settled. A failed step reports before its error propagates.
+func (s Service) resolutionStep(ctx context.Context, report *Report, position, total int, label string, resolve func() (string, error)) error {
+	s.report(ctx, report, ProgressEvent{Phase: ResolutionPhase, Action: label, Status: "running", Step: position, Steps: total})
+	detail, err := resolve()
+	if err != nil {
+		s.report(ctx, report, ProgressEvent{Phase: ResolutionPhase, Action: label, Status: "failed", Step: position, Steps: total})
+		return err
+	}
+	s.report(ctx, report, ProgressEvent{Phase: ResolutionPhase, Action: label, Status: "ok", Detail: detail, Step: position, Steps: total})
+	return nil
+}
+
+func nativeChangeSummary(plan NativeResolvedPlan) string {
+	switch len(plan.Actions) {
+	case 0:
+		return "no changes"
+	case 1:
+		return "1 change"
+	}
+	return strconv.Itoa(len(plan.Actions)) + " changes"
+}
+
+func toolVersionSummary(tools []ToolDefinition) string {
+	versions := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		versions = append(versions, tool.Kind+" "+tool.Version)
+	}
+	return strings.Join(versions, ", ")
+}
+
 // resolveDependencies is the only application path that discovers latest.
 // It runs outside shared-state locks; a second inspection binds its exact
 // result to unchanged host/input/receipt evidence before plan presentation.
 func (s Service) resolveDependencies(ctx context.Context, name string, before inspection) (inspection, error) {
-	bootstrap, err := s.options.Bootstrap.Resolve(ctx, before.platform, before.selection.Versions(), before.route())
+	total := 2 + len(before.toolRequests)
+	var bootstrap BootstrapDefinition
+	err := s.resolutionStep(ctx, &before.report, 1, total, "Python and Ansible", func() (string, error) {
+		var err error
+		bootstrap, err = s.options.Bootstrap.Resolve(ctx, before.platform, before.selection.Versions(), before.route())
+		return "Python " + bootstrap.PythonVersion + ", Ansible " + bootstrap.AnsibleVersion, err
+	})
 	if err != nil {
 		return before, err
 	}
-	native, err := s.options.Native.Resolve(ctx, before.platform, before.definition.NativeRequirements, before.selection.Versions(), before.route())
+	var native NativeResolvedPlan
+	err = s.resolutionStep(ctx, &before.report, 2, total, "Native packages", func() (string, error) {
+		var err error
+		native, err = s.options.Native.Resolve(ctx, before.platform, before.definition.NativeRequirements, before.selection.Versions(), before.route())
+		return nativeChangeSummary(native), err
+	})
 	if err != nil {
 		return before, err
 	}
 	tools := []ToolDefinition{}
-	for _, request := range before.toolRequests {
+	for index, request := range before.toolRequests {
 		if s.options.Tools == nil {
 			return before, failure("controller.unsupported", "target tool resolution is unavailable", "use a compatible executable")
 		}
-		var resolved []ToolDefinition
-		complete := false
-		if request.Version != "latest" {
-			resolved, complete, err = s.options.Tools.Select([]controller.ToolRequest{request}, before.view.State.RetainedSources)
-			if err != nil {
-				return before, err
+		err := s.resolutionStep(ctx, &before.report, 3+index, total, "Target tool "+request.Kind, func() (string, error) {
+			var resolved []ToolDefinition
+			complete := false
+			var err error
+			if request.Version != "latest" {
+				resolved, complete, err = s.options.Tools.Select([]controller.ToolRequest{request}, before.view.State.RetainedSources)
+				if err != nil {
+					return "", err
+				}
 			}
-		}
-		if !complete {
-			resolved, err = s.options.Tools.Resolve(ctx, []controller.ToolRequest{request}, before.route())
-			if err != nil {
-				return before, err
+			if !complete {
+				resolved, err = s.options.Tools.Resolve(ctx, []controller.ToolRequest{request}, before.route())
+				if err != nil {
+					return "", err
+				}
 			}
+			tools = append(tools, resolved...)
+			return toolVersionSummary(resolved), nil
+		})
+		if err != nil {
+			return before, err
 		}
-		tools = append(tools, resolved...)
 	}
 	definition, err := NewResolvedDefinition(bootstrap, native, before.toolRequests, tools)
 	if err != nil {
@@ -182,6 +232,7 @@ func (s Service) resolveDependencies(ctx context.Context, name string, before in
 		if err != nil {
 			return err
 		}
+		after.report.ProgressPresented = before.report.ProgressPresented
 		if before.view.Context != after.view.Context || !before.host.Equal(after.host) || before.selection.Versions() != after.selection.Versions() || !slices.Equal(before.toolRequests, after.toolRequests) || before.view.State.Receipt.ID != after.view.State.Receipt.ID || before.view.State.Receipt.Status != after.view.State.Receipt.Status {
 			return failure("controller.conflict", "bastion requirements changed during dependency resolution", setupCommand(name))
 		}

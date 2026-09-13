@@ -34,7 +34,7 @@ func TestInstallerRefusesReadOnlyOrSealedPathCapabilities(t *testing.T) {
 		result, err := installer.Prepare(context.Background(), authorityArea{location: location}, prerequisites.Platform{}, prerequisites.Definition{}, prerequisites.SetupEgress{}, func(context.Context, prerequisites.NativePreparation) error {
 			t.Fatal("unauthorized preparation published")
 			return nil
-		})
+		}, nil)
 		if err == nil || result.Outcome != "failed" {
 			t.Fatal("unauthorized path capability accepted")
 		}

@@ -8,7 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
-func run(ctx context.Context, _ prerequisites.PythonLaunch, _ capabilityRequest, _ func() error, _ func(context.Context, prerequisites.NativePreparation) error) (prerequisites.ActionResult, error) {
+func run(ctx context.Context, _ prerequisites.PythonLaunch, _ capabilityRequest, _ func() error, _ func(context.Context, prerequisites.NativePreparation) error, _ func(prerequisites.ProgressEvent)) (prerequisites.ActionResult, error) {
 	if err := ctx.Err(); err != nil {
 		return actionResult("failed", false), err
 	}

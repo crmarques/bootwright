@@ -67,7 +67,8 @@ func (p *controllerPorts) Prepare(context.Context, prerequisites.BundleArea, pre
 }
 
 func TestComposedControllerSuppliesEveryPort(t *testing.T) {
-	process := processDependencies{Progress: cli.NewControllerProgressPresenter(io.Discard), Presenter: cli.NewControllerPlanPresenter(io.Discard)}
+	presenter := cli.NewControllerPresenter(io.Discard)
+	process := processDependencies{Progress: presenter, Presenter: presenter}
 	deps := reflect.ValueOf(localControllerDependencies(testRepository(t.TempDir()), process))
 	fields := deps.Type()
 	for index := range fields.NumField() {

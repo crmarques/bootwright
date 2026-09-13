@@ -99,11 +99,15 @@ func TestOperationResultLeadsWithItsOutcomeAndNamesItsLog(t *testing.T) {
 func TestProgressReportsEachBlockAndGroupUnbuffered(t *testing.T) {
 	var out bytes.Buffer
 	presenter := NewLifecycleProgressPresenter(&out)
-	presenter.ReportProgress(context.Background(), lifecycle.ProgressEvent{Block: "artifact-server-lab", Status: "running", Position: 1, Total: 2})
-	presenter.ReportProgress(context.Background(), lifecycle.ProgressEvent{Block: "artifact-server-lab", Group: "pull-image", Status: "ok"})
-	rendered := out.String()
-	if !strings.Contains(rendered, "artifact-server-lab (1/2)") || !strings.Contains(rendered, "artifact-server-lab pull-image") {
-		t.Fatalf("progress = %q", rendered)
+	presenter.ReportProgress(context.Background(), lifecycle.ProgressEvent{Block: "artifact-server-lab", Description: "serve artifacts on lab", Status: "running", Position: 1, Total: 2})
+	presenter.ReportProgress(context.Background(), lifecycle.ProgressEvent{Block: "artifact-server-lab", Description: "serve artifacts on lab", Group: "pull-image", Detail: "acquire the pinned server image", Status: "ok", Position: 1, Total: 2})
+	presenter.ReportProgress(context.Background(), lifecycle.ProgressEvent{Block: "artifact-server-lab", Description: "serve artifacts on lab", Status: "done", Position: 1, Total: 2})
+	want := "\nProgress\n" +
+		"  [RUNNING]  serve artifacts on lab (1/2)\n" +
+		"  [OK]       serve artifacts on lab: acquire the pinned server image (1/2)\n" +
+		"  [DONE]     serve artifacts on lab (1/2)\n"
+	if out.String() != want {
+		t.Fatalf("progress = %q, want %q", out.String(), want)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

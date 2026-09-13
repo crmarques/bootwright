@@ -82,11 +82,12 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 		return code
 	}
 	confirmer := cli.NewConfirmation(readStdin, stderr, stdinTerminal)
+	controllerPresenter := cli.NewControllerPresenter(stdout)
 	process := processDependencies{
 		Confirmer:          confirmer,
 		SecretInput:        secretInputFunc(readStdin),
-		Progress:           cli.NewControllerProgressPresenter(stdout),
-		Presenter:          cli.NewControllerPlanPresenter(stdout),
+		Progress:           controllerPresenter,
+		Presenter:          controllerPresenter,
 		LifecycleProgress:  cli.NewLifecycleProgressPresenter(stdout),
 		LifecyclePresenter: cli.NewLifecyclePlanPresenter(stdout),
 		Executable:         lifecycle.Executable{Version: version, Commit: commit},

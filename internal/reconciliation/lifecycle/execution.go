@@ -289,7 +289,7 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 		if state == reconciliation.BlockUnknown {
 			// The resolution's durable transition is authoritative even when it
 			// reports a refusal, so the operation state matches what was recorded.
-			resolved, err := s.resolveUnknown(ctx, tx, store, operation, block, material)
+			resolved, err := s.resolveUnknown(ctx, tx, store, operation, block, material, index+1, len(plan.Blocks))
 			if resolved == "" {
 				resolved = reconciliation.BlockUnknown
 			}

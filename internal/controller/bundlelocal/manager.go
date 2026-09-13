@@ -7,6 +7,7 @@ import (
 	"path"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/crmarques/bootwright/ansible"
@@ -64,6 +65,13 @@ func (m *Manager) Prepare(ctx context.Context, area prerequisites.BundleArea, de
 	if m == nil || m.fetch == nil || m.probe == nil {
 		return bundleFailure("bundle preparation adapters are unavailable")
 	}
+	// Every phase that can take seconds is announced first, because a silent
+	// acquisition, projection or interpreter probe looks identical to a hang.
+	report := func(detail string) {
+		if progress != nil {
+			progress(prerequisites.ProgressEvent{Status: "running", Detail: detail})
+		}
+	}
 	before, entries, err := inspectFiles(ctx, area, record, definition.Tools)
 	if err != nil {
 		return err
@@ -72,6 +80,7 @@ func (m *Manager) Prepare(ctx context.Context, area prerequisites.BundleArea, de
 		return bundleFailure("existing bundle content is not attributable to the approved closure")
 	}
 	if before.Ready {
+		report("qualifying the private interpreter")
 		return m.probe(ctx, area, definition)
 	}
 	if err := area.EnsureDirectory(ctx, "sources"); err != nil {
@@ -90,11 +99,7 @@ func (m *Manager) Prepare(ctx context.Context, area prerequisites.BundleArea, de
 		if _, found := entries[name]; found {
 			data, err = area.Read(ctx, name, int(source.Bytes))
 		} else {
-			// Acquisition is the slow part of setup, so each dependency is
-			// announced before the transfer rather than after it.
-			if progress != nil {
-				progress(prerequisites.ProgressEvent{Status: "running", Detail: "acquiring " + path.Base(source.ID), Step: index + 1, Steps: len(record.Baseline)})
-			}
+			report("acquiring " + path.Base(source.ID) + ", source " + strconv.Itoa(index+1) + " of " + strconv.Itoa(len(record.Baseline)))
 			data, err = m.fetch(ctx, source, egress)
 		}
 		if err != nil {
@@ -117,6 +122,7 @@ func (m *Manager) Prepare(ctx context.Context, area prerequisites.BundleArea, de
 	if !projected.matches(record.Bootstrap) {
 		return bundleFailure("bootstrap projection differs from its frozen file closure")
 	}
+	report("publishing " + strconv.Itoa(len(projected.files)) + " bundle files")
 	for _, name := range projected.directories() {
 		if err := area.EnsureDirectory(ctx, name); err != nil {
 			return err
@@ -146,6 +152,7 @@ func (m *Manager) Prepare(ctx context.Context, area prerequisites.BundleArea, de
 			return err
 		}
 	}
+	report("verifying the published bundle")
 	after, _, err := inspectFiles(ctx, area, record, definition.Tools)
 	if err != nil {
 		return err
@@ -153,6 +160,7 @@ func (m *Manager) Prepare(ctx context.Context, area prerequisites.BundleArea, de
 	if !after.Ready {
 		return bundleFailure("published bundle does not match its complete approved projection")
 	}
+	report("qualifying the private interpreter")
 	return m.probe(ctx, area, definition)
 }
 

@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -38,11 +39,11 @@ const (
 	authorizedResultDrain = 60 * time.Second
 )
 
-func run(ctx context.Context, launch prerequisites.PythonLaunch, request capabilityRequest, release func() error, publish func(context.Context, prerequisites.NativePreparation) error) (prerequisites.ActionResult, error) {
+func run(ctx context.Context, launch prerequisites.PythonLaunch, request capabilityRequest, release func() error, publish func(context.Context, prerequisites.NativePreparation) error, progress func(prerequisites.ProgressEvent)) (prerequisites.ActionResult, error) {
 	// Invocation state is small and must not survive a reboot, so it lives on
 	// the runtime filesystem. Package staging is large and must not, so it goes
 	// to durable temporary storage instead.
-	return runProcess(ctx, launch, request, release, publish, processBoundary{owner: 0, jobParent: "/run", scratchParent: "/var/tmp", command: exec.Command})
+	return runProcess(ctx, launch, request, release, publish, progress, processBoundary{owner: 0, jobParent: "/run", scratchParent: "/var/tmp", command: exec.Command})
 }
 
 type processBoundary struct {
@@ -56,9 +57,16 @@ type processBoundary struct {
 	authorizedDrain time.Duration
 }
 
-func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request capabilityRequest, release func() error, publish func(context.Context, prerequisites.NativePreparation) error, boundary processBoundary) (prerequisites.ActionResult, error) {
+func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request capabilityRequest, release func() error, publish func(context.Context, prerequisites.NativePreparation) error, progress func(prerequisites.ProgressEvent), boundary processBoundary) (prerequisites.ActionResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
+	// Each protocol phase names the work Ansible is about to do, so the native
+	// transaction and every tool transfer are visible while they run.
+	report := func(detail string) {
+		if progress != nil {
+			progress(prerequisites.ProgressEvent{Status: "running", Detail: detail})
+		}
+	}
 	if boundary.completedDrain <= 0 {
 		boundary.completedDrain = completedResultDrain
 	}
@@ -127,6 +135,7 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 	if err := ctx.Err(); err != nil {
 		return result, err
 	}
+	report("starting the private Ansible runtime")
 	if err := command.Start(); err != nil {
 		return result, failure("controller.setup", "the qualified Ansible process could not start")
 	}
@@ -215,6 +224,11 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 					operationErr = release()
 					loaded = operationErr == nil
 				}
+				if loaded && request.Operation == "recover" {
+					report("verifying the recorded native transaction")
+				} else if loaded {
+					report("reading the native package inventory")
+				}
 			case "prepared":
 				valid = valid && loaded && !prepared && message.Preparation != nil && publish != nil && validPreparation(*message.Preparation, request)
 				if valid {
@@ -230,11 +244,14 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 				valid = valid && loaded && prepared && !nativeAuthorized && preparation != nil && nativeChanges(request) > 0
 				if valid {
 					nativeAuthorized = true
+					report("installing " + countNoun(nativeChanges(request), "native package"))
 				}
 			case "continue":
 				valid = valid && loaded && prepared && continuations < len(request.Tools)
 				if valid {
 					continuations++
+					tool := request.Tools[continuations-1]
+					report("installing " + tool.Kind + " " + tool.Version + ", tool " + strconv.Itoa(continuations) + " of " + strconv.Itoa(len(request.Tools)))
 				}
 			case "completed":
 				valid = valid && loaded && prepared && (message.Outcome == "changed" || message.Outcome == "unchanged" && !nativeAuthorized) && continuations == len(request.Tools) && (request.Operation == "recover" || nativeAuthorized == (preparation != nil && nativeChanges(request) > 0)) && validEvidence(message.Evidence, request, preparation, nativeAuthorized)
@@ -274,6 +291,13 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 		return result, operationErr
 	}
 	return result, nil
+}
+
+func countNoun(count int, noun string) string {
+	if count == 1 {
+		return "1 " + noun
+	}
+	return strconv.Itoa(count) + " " + noun + "s"
 }
 
 // requireScratchCapacity refuses before any effect when the staging filesystem

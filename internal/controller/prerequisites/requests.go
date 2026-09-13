@@ -25,5 +25,8 @@ type Report struct {
 	Actions       []string
 	Dependencies  []string
 	PlanPresented bool
-	Progress      []ActionProgress
+	// ProgressPresented records that progress rows were already streamed, so a
+	// failure report adds only its outcome rather than repeating the headline.
+	ProgressPresented bool
+	Progress          []ActionProgress
 }

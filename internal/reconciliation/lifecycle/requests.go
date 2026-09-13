@@ -105,10 +105,13 @@ type OperationResult struct {
 	Receipt Receipt
 }
 
+// ProgressEvent is one row of an operation's progress. Description names the
+// block; Detail names the group or observation in flight within it.
 type ProgressEvent struct {
 	Block       string
 	Group       string
 	Description string
+	Detail      string
 	Status      string
 	Position    int
 	Total       int

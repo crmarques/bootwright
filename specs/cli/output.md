@@ -86,16 +86,49 @@ drawing, and does not vary with terminal width.
 ### Long-running progress
 
 A command whose authorized work can take minutes reports progress as it runs,
-because a silent process is indistinguishable from a stuck one. Each step is one
-`[RUNNING]` status row naming the action, the work in flight, and its position
-in the known total; the step is then reported again with the outcome it proved.
-Rows appear under a `Progress` heading opened by the first step. Progress is
-written unbuffered so it is visible while the work is still in flight.
+because a silent process is indistinguishable from a stuck one. Progress is a
+stream of status rows in the shared layout, written unbuffered to standard
+output. The bytes are identical on a terminal, through a pipe and under the
+privilege supervisor, and JSON mode never emits them.
+
+Every row has this form. The status token is padded to the width of
+`[RUNNING]` so the subject column aligns without knowing which tokens follow;
+the step's position in its known total closes the subject; and a trailing
+`still running` note or elapsed time is separated by the column gap:
+
+```text
+  [RUNNING]  <step>[: <detail>][ (<position>/<total>)]
+  [RUNNING]  <step>[: <detail>][ (<position>/<total>)]  still running, <elapsed>
+  [<STATUS>] <step>[: <detail>][ (<position>/<total>)][  <elapsed>]
+```
+
+Four rules govern the stream:
+
+1. **Coverage.** Any unit of work that can exceed the heartbeat interval opens
+   a `[RUNNING]` row before it starts, including work before confirmation.
+   `bastion setup` reports dependency resolution under a `Resolving` heading
+   before it presents the plan; every command reports confirmed effects under
+   a `Progress` heading. The first row opens its heading.
+2. **Silence bound.** While a step runs and ten seconds pass without a new
+   row, the presenter repeats the current row with `still running` and the
+   time since that row first appeared. The CLI presenter owns the timer;
+   domain and adapter code emit events and never read a clock to present them.
+3. **Two levels.** A step may report sub-steps as its detail: the source being
+   acquired, the native transaction, the target tool, or the presentation
+   group in flight. A sub-step's own outcome row closes only the sub-step and
+   carries its duration. There is no third level.
+4. **Outcome with duration.** Every step closes with the outcome it proved and,
+   when it took at least one second, the elapsed time truncated to whole
+   seconds in Go duration form, such as `1m48s`.
 
 Progress is presentation only. A failure to report never changes an effect, an
 outcome, or a recorded receipt, and progress rows never replace the ordered
 result that follows them. Reporting stops at cancellation rather than claiming a
-step whose outcome is no longer observable.
+step whose outcome is no longer observable. Heartbeat notes and elapsed times
+are the only timing-dependent bytes in human output; contract tests drive the
+presenter through an injected clock. This mode uses no color, cursor control or
+in-place rewriting; a terminal-only redraw of the running row is a
+[candidate](../milestones.md#candidates), not part of this contract.
 
 ### Context identity
 

@@ -154,9 +154,11 @@ promotion, with exit evidence covering exact binding, reopen and release,
 certificate validation, non-disclosure and interrupted acquisition with
 changed or unavailable credentials; additional host families and
 architectures need separate matrices; controller relocation and restore
-remain C14; there is no host uninstall or automatic OS upgrade; service images,
-the pinned service Ansible closure, local service reservations, readiness and
-their qualified inverse belong to M1e.
+remain C14; there is no host uninstall or automatic OS upgrade; resolution
+verifies the Python archive and wheels in disposable staging and the bundle
+step acquires them again, so a fresh setup transfers them twice; service
+images, the pinned service Ansible closure, local service reservations,
+readiness and their qualified inverse belong to M1e.
 
 ## M1e — lifecycle engine and managed artifact serving
 
@@ -268,7 +270,7 @@ fill its concrete version, journey and evidence gaps when requested.
 | C3 | Storage: one Ceph pool, filesystem, gateway, NFS or export lifecycle. | Separate from operator-run scripts; requires M6 and a named service. | Ownership, replay, destroy and real-system qualification. |
 | C4 | Add-ons: one built-in package and binding lifecycle. | No exact package/target/release selected; requires a supported cluster. | [Package/driver contract](add-ons.md), compatibility, trust/secrets, readiness, ordering/replay/destroy and acceptance. |
 | C5 | Managed OS: one additional image/profile/entitlement variant. | No concrete consumer; requires M5. | Intent gap, deliberate API revision, renderer/executor parity and qualification. |
-| C6 | UX: one additional view of available evidence or explicit access, or a dashboard/completion extension. | No journey selected; requires the underlying capability. | Complete human/machine journey, diagnostics, safety and end-to-end tests. |
+| C6 | UX: one additional view of available evidence or explicit access, a terminal-only in-place redraw of the running [progress row](cli/output.md#long-running-progress), or a dashboard/completion extension. | No journey selected; requires the underlying capability. The redraw also needs the privilege supervisor to prove the child's standard output is the operator's terminal. | Complete human/machine journey, diagnostics, safety and end-to-end tests. |
 | C7 | State reconciliation: bounded parallel block execution, and the lease-only mutation boundary it needs. | Sequential execution must be qualified first; requires L4. M1e holds the exclusive root lock for the whole operation, so a concurrent read waits; narrowing that to the context lease alone, which would let `status --watch` observe a running operation, belongs here. | Ordering/exclusion, deterministic scheduling, cancellation, persistence, partial-failure and replay tests, plus concurrent-reader evidence for the narrowed lock. |
 | C8 | Custom automation: one typed, invertible executable playbook journey. **Needs definition.** | Reserved schema cannot prove effects/ownership/non-exfiltration; requires M1e, L2/L4/L5 and a named journey. | Same-change API replacement, immutable source/dependencies, exact targets, bounded secrets, authorization, continuation, failure injection and isolated-runner qualification. |
 | C9 | Bare-metal safety: physical offline disk erase and managed-machine destroy. **Blocked.** | Exact disk identity is unproved during the controller-to-installer interval; needs new safety evidence that closes or explicitly bounds it. | Separate safety contract, immutable target proof at erase, failure injection and real-hardware qualification. |

@@ -334,7 +334,11 @@ defined work.
 Both commands retain their existing text-only CLI surface. Order checks and
 actions by catalog dependency order, then stable prerequisite identity. Show
 the baseline or explicit context scope, required/observed versions, planned
-changes, readiness and next safe command. Host fingerprints, private paths,
+changes, readiness and next safe command. Real setup also streams
+[long-running progress](cli/output.md#long-running-progress): one `Resolving`
+step per dependency family before the plan, and one `Progress` step per
+receipt action after confirmation, with the source, native transaction or
+target tool in flight as its detail. Host fingerprints, private paths,
 credentials, environment dumps and raw native-tool output are not public
 results. No new JSON flag, lifecycle receipt or private operation log is added.
 
