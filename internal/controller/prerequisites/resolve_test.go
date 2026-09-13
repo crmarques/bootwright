@@ -82,10 +82,13 @@ func TestTargetToolsResolveBeforeConfirmationAndInstallEvenWithReadyRuntime(t *t
 		}
 	}
 	writes := f.store.writes
+	// The retained closure is complete and installed, so a repeated setup
+	// consults no publisher, not even for the latest helm intent.
+	catalog.fail = errors.New("tool publisher must not be contacted")
+	f.resolution.bootstrapError = errors.New("bootstrap publisher must not be contacted")
+	f.resolution.nativeError = errors.New("repository must not be refreshed")
 	report, err = f.service.Setup(context.Background(), SetupRequest{ContextName: "example"})
-	// Helm has no exact desired-state version, so a fresh setup resolves latest
-	// again; the releases are unchanged, so it still settles as a verified no-op.
-	if err != nil || report.Outcome != "unchanged" || installer.calls != 1 || catalog.resolves != 4 || f.store.writes != writes {
+	if err != nil || report.Outcome != "unchanged" || installer.calls != 1 || catalog.resolves != 3 || f.store.writes != writes {
 		t.Fatalf("no-op changed frozen tools: %#v %v resolves=%d", report, err, catalog.resolves)
 	}
 }
@@ -151,21 +154,36 @@ func TestUnattributablePartialToolsCannotResume(t *testing.T) {
 	}
 }
 
-func TestDefiniteToolRefusalAllowsExactFreshAttempt(t *testing.T) {
-	f, installer, catalog := toolsFixture(t)
-	installer.result = ActionResult{Outcome: "failed", Evidence: object(map[string]any{"installationEntered": false})}
-	installer.err = failure("controller.unsupported", "native transaction refused before effects", "prepare the required foundation")
-	_, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
-	if err == nil || f.store.state.Receipt.Status != "failed" || f.bundle.sealed {
-		t.Fatal("failure was not retained as an unsealed terminal attempt")
-	}
-	installer.err = nil
-	installer.result = ActionResult{Outcome: "changed", Evidence: object(map[string]any{"nativePostcondition": "verified"})}
-	report, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
-	// A fresh attempt after a terminal failure resolves latest again; the exact
-	// releases stay frozen, so only the one latest client is re-resolved.
-	if err != nil || report.Outcome != "changed" || catalog.resolves != 4 || installer.calls != 2 || !f.bundle.sealed {
-		t.Fatalf("fresh tool attempt did not complete: %#v %v resolves=%d", report, err, catalog.resolves)
+func TestDefiniteRefusalRetriesFromRetainedClosure(t *testing.T) {
+	for _, missing := range []string{"tools", "native"} {
+		t.Run(missing, func(t *testing.T) {
+			f, installer, catalog := toolsFixture(t)
+			installer.result = ActionResult{Outcome: "failed", Evidence: object(map[string]any{"installationEntered": false})}
+			installer.err = failure("controller.unsupported", "native transaction refused before effects", "prepare the required foundation")
+			_, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+			if err == nil || f.store.state.Receipt.Status != "failed" || f.bundle.sealed {
+				t.Fatal("failure was not retained as an unsealed terminal attempt")
+			}
+			installer.err = nil
+			installer.result = ActionResult{Outcome: "changed", Evidence: object(map[string]any{"nativePostcondition": "verified"})}
+			// A fresh attempt installs the retained closure as frozen: no bootstrap
+			// or tool publisher is contacted, even for the latest helm intent. Only
+			// a missing native root solves the native transaction again, because
+			// the frozen one is bound to a before-inventory the host no longer has.
+			catalog.fail = errors.New("tool publisher must not be contacted")
+			f.resolution.bootstrapError = errors.New("bootstrap publisher must not be contacted")
+			nativeCalls := 1
+			if missing == "native" {
+				f.host.runtime = RuntimeInspection{}
+				nativeCalls = 2
+			} else {
+				f.resolution.nativeError = errors.New("repository must not be refreshed")
+			}
+			report, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+			if err != nil || report.Outcome != "changed" || catalog.resolves != 3 || f.resolution.bootstrapCalls != 1 || f.resolution.nativeCalls != nativeCalls || installer.calls != 2 || !f.bundle.sealed {
+				t.Fatalf("retry from the retained closure failed: %#v %v resolves=%d bootstrap=%d native=%d installs=%d", report, err, catalog.resolves, f.resolution.bootstrapCalls, f.resolution.nativeCalls, installer.calls)
+			}
+		})
 	}
 }
 

@@ -89,7 +89,9 @@ baseline source does not include that client; a selected RHEL libvirt requiremen
 refuses before acquisition until an approved entitled source is defined.
 
 Python, Ansible and generic clients without exact desired-state versions resolve
-latest stable during explicit setup, before confirmation. Native packages use
+latest stable during explicit setup, before confirmation, and only when no
+retained resolution serves the selected platform, version intent, native
+requirements and target tools under the running executable. Native packages use
 the latest available build for the selected OS release and approved repository
 set. OpenShift/OKD installer and clients remain tied to the target release.
 A cluster pinned to a release image still selects its clients from the declared
@@ -98,9 +100,19 @@ client release from the image.
 `virtctl` uses upstream latest unless explicitly overridden; no remote target
 discovery or automatic compatibility inference is required. Freeze source URL,
 version, byte count and publisher SHA-256 in the plan and receipt. Mirrors
-change acquisition only. Dry-run and preflight do not discover versions. A
-fresh setup resolves latest again; an incomplete setup reuses its exact frozen
-resolution without metadata refresh.
+change acquisition only. Dry-run and preflight do not discover versions. Setup
+never checks for newer releases: a serving retained resolution is reused as
+frozen, a ready bastion reports unchanged without publisher or repository
+access, and a bastion missing part of that closure installs only what is
+missing. Native packages are solved again only when a selected native root is
+not installed, because the frozen transaction binds the host's exact
+before-inventory; the retained Python, Ansible and target-tool resolution is
+kept. A retained resolution the running executable cannot use, or whose
+`latest` Ansible release falls below the collection minimum, is superseded by a
+fresh resolution; a declared release below that minimum refuses. An incomplete
+setup reuses its exact frozen resolution without metadata refresh. Moving a
+`latest` dependency to a newer release requires declaring that release in
+`dependencyVersions`.
 
 An already installed dependency is usable only after identity, version and
 integrity checks against the catalog. Process exit status alone does not prove
@@ -336,7 +348,7 @@ actions by catalog dependency order, then stable prerequisite identity. Show
 the baseline or explicit context scope, required/observed versions, planned
 changes, readiness and next safe command. Real setup also streams
 [long-running progress](cli/output.md#long-running-progress): one `Resolving`
-step per dependency family before the plan, and one `Progress` step per
+step per dependency family it resolves before the plan, and one `Progress` step per
 receipt action after confirmation, with the source, native transaction or
 target tool in flight as its detail. Host fingerprints, private paths,
 credentials, environment dumps and raw native-tool output are not public

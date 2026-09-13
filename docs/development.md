@@ -77,12 +77,13 @@ context, rendering and Secret journeys. Go selects and freezes dependencies,
 owns confirmation/recovery and orchestrates the embedded Ansible collection.
 Ansible installs the selected host packages and target CLIs. The private
 Python/Ansible bootstrap is materialized by Go so the playbooks can run.
-Setup resolves latest stable dependencies by default; Environment
-`spec.dependencyVersions` overrides individual roots, including Python and
-Ansible. Public resolver downloads and maintained pip/DNF resolution use
-disposable unprivileged staging before the installation plan is confirmed.
-Retries use the frozen result. Development checks retain their separate pinned
-tool versions for reproducible verification.
+Setup resolves latest stable dependencies by default, and only when no retained
+resolution serves the selected intent; Environment `spec.dependencyVersions`
+overrides individual roots, including Python and Ansible. Public resolver
+downloads and maintained pip/DNF resolution use disposable unprivileged staging
+before the installation plan is confirmed. A ready bastion and every retry use
+the frozen result without contacting a publisher. Development checks retain
+their separate pinned tool versions for reproducible verification.
 The [Ansible check tool lock and setup](../scripts/tools/ansible-check.md)
 is separate from the product execution bundle and builds its own pinned
 interpreter on first use, so the gate does not depend on the host's Python. `make check` includes its

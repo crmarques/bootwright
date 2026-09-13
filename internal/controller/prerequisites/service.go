@@ -45,6 +45,7 @@ type inspection struct {
 	bundle        BundleInspection
 	runtime       RuntimeInspection
 	bound         bool
+	reusable      bool
 	report        Report
 	toolRequests  []controller.ToolRequest
 	toolsResolved bool
@@ -109,7 +110,11 @@ func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, erro
 		current.report.Outcome = "planned"
 		return &current.report, nil
 	}
-	if s.options.Bootstrap != nil && !(current.view.State.Receipt.ID != "" && current.view.State.Receipt.Incomplete()) {
+	if err == nil && current.ready() {
+		current.report.Outcome = "unchanged"
+		return &current.report, nil
+	}
+	if s.options.Bootstrap != nil && !(current.view.State.Receipt.ID != "" && current.view.State.Receipt.Incomplete()) && current.resolutionRequired() {
 		current, err = s.resolveDependencies(ctx, request.ContextName, current)
 		if err != nil {
 			return &current.report, err
@@ -325,6 +330,7 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, fro
 			if err != nil {
 				return current, err
 			}
+			current.reusable = current.definition.Bootstrap != nil
 		}
 	}
 	current.report.setCheck(readiness("execution-bundle", current.versions(), current.bundle.Ready))
@@ -399,6 +405,14 @@ func (i inspection) ready() bool {
 
 func (i inspection) dependenciesReady() bool {
 	return (!i.selection.ContainerRuntime() || i.runtime.Ready) && i.toolsResolved && (len(i.toolRequests) == 0 || i.bundle.ToolsReady)
+}
+
+// resolutionRequired reports whether publisher metadata must be consulted. A
+// reusable retained resolution installs from its frozen closure, except that a
+// missing native root needs a new transaction bound to the host's current
+// package inventory.
+func (i inspection) resolutionRequired() bool {
+	return !i.reusable || i.selection.ContainerRuntime() && !i.runtime.Ready
 }
 
 func (i inspection) canPrepare() error {

@@ -128,9 +128,10 @@ version intent, platform, Python/wheel metadata and the native transaction's
 exact before/after inventory and actions. Retained definitions are append-only
 in publication order and identified by resolution digest. The receipt's
 definition must match one retained entry. Versions resolved from latest become
-ordinary immutable retained sources; they are not refreshed during exact
-recovery. A new solve with unchanged selected releases and no native action
-reuses the existing verified bundle and source closure.
+ordinary immutable retained sources; neither exact recovery nor a later setup
+with the same intent refreshes them. A new solve with unchanged selected
+releases and no native action reuses the existing verified bundle and source
+closure.
 
 An action may also carry a canonical `preparation` object, omitted until its
 before-state has been observed. First publication requires an existing durable

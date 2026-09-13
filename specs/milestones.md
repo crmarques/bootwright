@@ -156,9 +156,12 @@ changed or unavailable credentials; additional host families and
 architectures need separate matrices; controller relocation and restore
 remain C14; there is no host uninstall or automatic OS upgrade; resolution
 verifies the Python archive and wheels in disposable staging and the bundle
-step acquires them again, so a fresh setup transfers them twice; service
-images, the pinned service Ansible closure, local service reservations,
-readiness and their qualified inverse belong to M1e.
+step acquires them again, so a fresh setup transfers them twice; a retained
+resolution serves only its exact target tool set, so a context whose tools
+differ from every retained resolution resolves Python and Ansible again
+instead of adding the missing tools to the verified closure; service images,
+the pinned service Ansible closure, local service reservations, readiness and
+their qualified inverse belong to M1e.
 
 ## M1e — lifecycle engine and managed artifact serving
 

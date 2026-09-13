@@ -26,6 +26,7 @@ type fixture struct {
 	confirmationError error
 	presentationError error
 	beforeMutation    func()
+	resolution        *resolvingFixture
 }
 
 func newFixture(t *testing.T, platform ...Platform) *fixture {

@@ -47,7 +47,7 @@ func (n resolvingNative) Resolve(_ context.Context, platform Platform, requireme
 
 func (f *resolvingFixture) Check(context.Context, NativeResolvedPlan) (bool, error) {
 	f.inspections++
-	return true, nil
+	return f.owner.host.runtime.Ready, nil
 }
 
 func dynamicFixture(t *testing.T, platform ...Platform) (*fixture, *resolvingFixture) {
@@ -100,10 +100,11 @@ func wireResolution(t *testing.T, f *fixture) (*fixture, *resolvingFixture) {
 	f.service.options.Bootstrap = r
 	f.service.options.Native = resolvingNative{r}
 	f.service.options.NativeInspector = r
+	f.resolution = r
 	return f, r
 }
 
-func TestLatestSetupResolvesFreshAndRetainsExactNoop(t *testing.T) {
+func TestLatestSetupResolvesOnceAndReusesRetainedNoop(t *testing.T) {
 	f, r := dynamicFixture(t)
 	report, err := f.service.Setup(context.Background(), SetupRequest{})
 	if err != nil || report.Outcome != "changed" || r.bootstrapCalls != 1 || r.nativeCalls != 1 || f.store.state.Receipt.Definition == nil {
@@ -115,9 +116,33 @@ func TestLatestSetupResolvesFreshAndRetainsExactNoop(t *testing.T) {
 	}
 	writes, prepares := f.store.writes, f.bundle.prepares
 	prior := CloneDefinition(*f.store.state.Receipt.Definition)
+	// A ready bastion never checks for newer releases.
+	r.bootstrapError = errors.New("latest endpoint must not be contacted")
+	r.nativeError = errors.New("repository must not be refreshed")
 	report, err = f.service.Setup(context.Background(), SetupRequest{})
-	if err != nil || report.Outcome != "unchanged" || r.bootstrapCalls != 2 || r.nativeCalls != 2 || f.store.writes != writes || f.bundle.prepares != prepares || !SameDefinition(prior, *f.store.state.Receipt.Definition) {
-		t.Fatalf("fresh latest no-op: %#v %v", report, err)
+	if err != nil || report.Outcome != "unchanged" || r.bootstrapCalls != 1 || r.nativeCalls != 1 || f.store.writes != writes || f.bundle.prepares != prepares || !SameDefinition(prior, *f.store.state.Receipt.Definition) {
+		t.Fatalf("retained latest no-op: %#v %v bootstrap=%d native=%d", report, err, r.bootstrapCalls, r.nativeCalls)
+	}
+}
+
+func TestRetainedLatestBelowRaisedMinimumResolvesFresh(t *testing.T) {
+	f, r := dynamicFixture(t)
+	if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	retained := f.store.state.Receipt.Definition
+	retained.AnsibleVersion, retained.Bootstrap.AnsibleVersion = "2.18.0", "2.18.0"
+	report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+	if err != nil || r.bootstrapCalls != 2 || r.nativeCalls != 2 {
+		t.Fatalf("superseded latest resolution was reused: %#v %v bootstrap=%d native=%d", report, err, r.bootstrapCalls, r.nativeCalls)
+	}
+	for _, value := range []struct {
+		intent, version string
+		superseded      bool
+	}{{"latest", "2.18.0", true}, {"latest", MinimumBootstrapAnsibleVersion, false}, {"2.18.0", "2.18.0", false}} {
+		if supersededLatest(Definition{Versions: controller.DependencyVersions{Ansible: value.intent}, AnsibleVersion: value.version}) != value.superseded {
+			t.Fatalf("%s intent at %s: superseded != %v", value.intent, value.version, value.superseded)
+		}
 	}
 }
 
@@ -282,12 +307,15 @@ func TestResolvedDefinitionRejectsConflictingSourceIdentity(t *testing.T) {
 	}
 }
 
-func TestFreshLatestRefusesChangedBytesForSameNativeRelease(t *testing.T) {
+func TestNativeSolveRefusesChangedBytesForSameRetainedRelease(t *testing.T) {
 	f, r := dynamicFixture(t)
 	if _, err := f.service.Setup(t.Context(), SetupRequest{SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
 	writes := f.store.writes
+	// Only a missing native root solves again; the retained bootstrap is kept.
+	f.host.runtime = RuntimeInspection{}
+	r.bootstrapError = errors.New("bootstrap publisher must not be contacted")
 	r.native.Packages[0].Source.SHA256 = strings.Repeat("0", 64)
 	var err error
 	r.native, err = CanonicalNativePlan(r.native)
@@ -341,9 +369,9 @@ func TestSetupJourneyCoversBothSupportedMatrices(t *testing.T) {
 			if solver := f.store.state.Receipt.Definition.Native.Solver; platform.OS == "fedora" && solver != "dnf5" || platform.OS == "rhel" && solver != "dnf4" {
 				t.Fatalf("%v froze the wrong native solver: %s", platform, solver)
 			}
-			// An unchanged rerun re-resolves latest and settles as a no-op.
+			// An unchanged rerun reuses the retained resolution as a no-op.
 			report, err = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
-			if err != nil || report.Outcome != "unchanged" {
+			if err != nil || report.Outcome != "unchanged" || r.bootstrapCalls != 1 || r.nativeCalls != 1 {
 				t.Fatalf("%v rerun: %#v %v", platform, report, err)
 			}
 		})

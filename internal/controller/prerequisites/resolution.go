@@ -28,12 +28,12 @@ func (s Service) selectedResolution(current inspection, requirements NativeRequi
 	} else {
 		for index := len(current.view.State.RetainedDefinitions) - 1; index >= 0; index-- {
 			value := current.view.State.RetainedDefinitions[index]
-			if matches(value) {
+			if matches(value) && !supersededLatest(value) {
 				selected = &value
 				break
 			}
 		}
-		if selected == nil && current.view.State.Receipt.Definition != nil && matches(*current.view.State.Receipt.Definition) {
+		if selected == nil && current.view.State.Receipt.Definition != nil && matches(*current.view.State.Receipt.Definition) && !supersededLatest(*current.view.State.Receipt.Definition) {
 			selected = current.view.State.Receipt.Definition
 		}
 	}
@@ -71,6 +71,13 @@ func (s Service) selectedResolution(current inspection, requirements NativeRequi
 	}
 	versions := current.selection.Versions()
 	return Definition{Platform: current.platform, Versions: versions, NativeRequirements: requirements, ToolRequests: slices.Clone(current.toolRequests), PythonVersion: versions.Python, AnsibleVersion: versions.Ansible, Runtime: RuntimeRequirement{Version: versions.Podman}}, false, nil
+}
+
+// supersededLatest reports a retained latest resolution whose Ansible release
+// no longer meets the collection minimum. A raised minimum is the one update
+// setup discovers on its own; a declared release below it refuses instead.
+func supersededLatest(value Definition) bool {
+	return value.Versions.Ansible == "latest" && ValidateBootstrapAnsibleVersion(value.AnsibleVersion) != nil
 }
 
 func dependencyIntent(selection controller.Selection, tools []controller.ToolRequest) []string {
@@ -151,19 +158,28 @@ func toolVersionSummary(tools []ToolDefinition) string {
 // resolveDependencies is the only application path that discovers latest.
 // It runs outside shared-state locks; a second inspection binds its exact
 // result to unchanged host/input/receipt evidence before plan presentation.
+// A reusable retained resolution keeps its Python, Ansible and target tools
+// frozen, so only the native transaction is solved and reported, against the
+// host's current inventory.
 func (s Service) resolveDependencies(ctx context.Context, name string, before inspection) (inspection, error) {
-	total := 2 + len(before.toolRequests)
+	total, step, requests := 2+len(before.toolRequests), 1, before.toolRequests
 	var bootstrap BootstrapDefinition
-	err := s.resolutionStep(ctx, &before.report, 1, total, "Python and Ansible", func() (string, error) {
-		var err error
-		bootstrap, err = s.options.Bootstrap.Resolve(ctx, before.platform, before.selection.Versions(), before.route())
-		return "Python " + bootstrap.PythonVersion + ", Ansible " + bootstrap.AnsibleVersion, err
-	})
-	if err != nil {
-		return before, err
+	tools := []ToolDefinition{}
+	if before.reusable {
+		total, bootstrap, tools, requests = 1, *before.definition.Bootstrap, slices.Clone(before.definition.Tools), nil
+	} else {
+		err := s.resolutionStep(ctx, &before.report, step, total, "Python and Ansible", func() (string, error) {
+			var err error
+			bootstrap, err = s.options.Bootstrap.Resolve(ctx, before.platform, before.selection.Versions(), before.route())
+			return "Python " + bootstrap.PythonVersion + ", Ansible " + bootstrap.AnsibleVersion, err
+		})
+		if err != nil {
+			return before, err
+		}
+		step++
 	}
 	var native NativeResolvedPlan
-	err = s.resolutionStep(ctx, &before.report, 2, total, "Native packages", func() (string, error) {
+	err := s.resolutionStep(ctx, &before.report, step, total, "Native packages", func() (string, error) {
 		var err error
 		native, err = s.options.Native.Resolve(ctx, before.platform, before.definition.NativeRequirements, before.selection.Versions(), before.route())
 		return nativeChangeSummary(native), err
@@ -171,8 +187,7 @@ func (s Service) resolveDependencies(ctx context.Context, name string, before in
 	if err != nil {
 		return before, err
 	}
-	tools := []ToolDefinition{}
-	for index, request := range before.toolRequests {
+	for index, request := range requests {
 		if s.options.Tools == nil {
 			return before, failure("controller.unsupported", "target tool resolution is unavailable", "use a compatible executable")
 		}

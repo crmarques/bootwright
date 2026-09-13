@@ -85,7 +85,9 @@ spec:
 ```
 
 These fields follow the normal `defaults.Environment` inheritance rules.
-A fresh setup resolves `latest` again and presents any required changes.
+Setup resolves `latest` only when no retained resolution serves the declared
+intent; a serving resolution is reused without checking for newer releases, so
+moving a `latest` dependency forward means declaring the newer release here.
 An incomplete setup retries its recorded exact selection without resolving
 new versions. Preflight checks retained dependencies and never refreshes them.
 
