@@ -2,6 +2,7 @@ package prerequisites
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"reflect"
 	"slices"
@@ -73,13 +74,20 @@ type memoryStorage struct {
 	reads, writes   int
 	exists          bool
 	bundleExists    bool
+	bundleRequests  []string
 	failPublication int
 	mutationError   error
 }
 
 func (m *memoryStorage) view() StorageView {
 	value := StorageView{Exists: m.exists, Initialized: m.state.Host.Valid(), Context: m.scope, State: copyState(m.state)}
-	value.OpenBundle = func(context.Context, string) (BundleArea, error) {
+	// The store admits only a resolved bundle identity, so this double refuses
+	// anything else exactly as the durable adapter does.
+	value.OpenBundle = func(_ context.Context, id string) (BundleArea, error) {
+		m.bundleRequests = append(m.bundleRequests, id)
+		if decoded, err := hex.DecodeString(id); err != nil || len(decoded) != 32 {
+			return nil, errors.New("controller bundle identity is invalid")
+		}
 		if m.bundleExists {
 			return dummyArea{}, nil
 		}

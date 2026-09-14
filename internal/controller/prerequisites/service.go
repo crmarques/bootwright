@@ -339,7 +339,9 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, pha
 			return current, failure("controller.unknown", "another exact setup attempt remains unresolved", "restore its original context, executable and acquisition route, then repeat controller setup")
 		}
 	}
-	if view.OpenBundle != nil {
+	// Only a resolved definition identifies a bundle. An unresolved setup has
+	// nothing retained to verify, and the store admits no other identity.
+	if view.OpenBundle != nil && current.definition.CatalogDigest != "" {
 		start("execution-bundle", "verifying the retained bundle")
 		area, err := view.OpenBundle(ctx, current.definition.CatalogDigest)
 		if err != nil {

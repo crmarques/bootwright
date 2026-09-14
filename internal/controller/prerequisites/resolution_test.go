@@ -2,6 +2,7 @@ package prerequisites
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"slices"
 	"strings"
@@ -153,6 +154,35 @@ func TestRetainedLatestBelowRaisedMinimumResolvesFresh(t *testing.T) {
 	}{{"latest", "2.18.0", true}, {"latest", MinimumBootstrapAnsibleVersion, false}, {"2.18.0", "2.18.0", false}} {
 		if supersededLatest(Definition{Versions: controller.DependencyVersions{Ansible: value.intent}, AnsibleVersion: value.version}) != value.superseded {
 			t.Fatalf("%s intent at %s: superseded != %v", value.intent, value.version, value.superseded)
+		}
+	}
+}
+
+// A first setup on a clean host has resolved nothing, so no identity names a
+// retained bundle. The durable store admits only a resolved identity, so asking
+// it for one before resolving refuses the whole inspection.
+func TestUnresolvedSetupRequestsNoBundleIdentity(t *testing.T) {
+	f, r := dynamicFixture(t)
+	report, err := f.service.Check(context.Background(), CheckRequest{})
+	if code(err) != "preflight.failed" || report.Outcome != "not-ready" || r.bootstrapCalls != 0 {
+		t.Fatalf("unresolved inspection: %#v %v", report, err)
+	}
+	if len(f.store.bundleRequests) != 0 {
+		t.Fatalf("unresolved inspection asked for a bundle: %q", f.store.bundleRequests)
+	}
+	index := slices.IndexFunc(report.Checks, func(check Check) bool { return check.ID == "execution-bundle" })
+	if index == -1 || report.Checks[index].Status != "not-ready" {
+		t.Fatalf("execution bundle check: %#v", report.Checks)
+	}
+	if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.store.bundleRequests) == 0 {
+		t.Fatal("resolved setup verified no bundle")
+	}
+	for _, id := range f.store.bundleRequests {
+		if decoded, decodeErr := hex.DecodeString(id); decodeErr != nil || len(decoded) != 32 {
+			t.Fatalf("resolved setup asked for %q", id)
 		}
 	}
 }
