@@ -38,9 +38,22 @@ collisions are worth checking by hand:
 - the host resolver must not own port `53` on that address. systemd-resolved
   binds `127.0.0.53` and is fine; a libvirt network on the same bridge is not,
   unless it declares `<dns enable='no'/>` and no DHCP range.
-- the host time service must not serve on that address. Fedora's chronyd does
-  not by default, and the managed container never disciplines the host clock,
-  so the two coexist.
+- the host time daemon must not hold port `123`. A stock chronyd binds the
+  wildcard address, which covers every address on the host, so check it rather
+  than assuming the managed container can bind beside it. The `-x` the managed
+  container runs with keeps it from touching the host clock, but it does not
+  free the socket.
+
+Check both before importing, and read the output as the port owner, not the
+interface:
+
+```sh
+ss -lntup | grep -E ':(53|123|3128|8443|8080)\b'
+```
+
+If chronyd holds `0.0.0.0:123`, either give it explicit `bindaddress` lines for
+the addresses it should serve and reload it, or stop it for the duration of the
+test and start it again afterwards.
 
 ## Run it
 

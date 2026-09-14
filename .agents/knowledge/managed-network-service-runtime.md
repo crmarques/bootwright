@@ -54,9 +54,12 @@ in each capability's `catalog.go` under
 - The image entrypoint is `/entrypoint.sh`, which synthesizes a configuration
   from `NTP_DIRECTIVES` and a pool list. It is bypassed entirely:
   `Entrypoint=/usr/sbin/chronyd` with `Exec=-d -x -f /etc/chrony/chrony.conf`.
-- `-x` is what makes the service safe to run beside the host's own time
-  daemon: the log line `Disabled control of system clock` confirms it serves
-  time without disciplining the host.
+- `-x` keeps the container from disciplining the host clock; the log line
+  `Disabled control of system clock` confirms it. It does **not** free the
+  socket: a stock Fedora chronyd binds `0.0.0.0:123`, which covers every
+  address, so the managed container's bind to a specific address contends with
+  it. Give the host daemon explicit `bindaddress` lines, or stop it, before
+  placing a managed time service on that host.
 - `cmdport 0` avoids the command socket. Without it the daemon logs
   `Wrong permissions on /run/chrony` and disables the socket anyway.
 - `local stratum 10 orphan` answers **stratum 0** until peers agree, which no
