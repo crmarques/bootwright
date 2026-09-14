@@ -1146,3 +1146,55 @@ func TestUnclaimedKindsRefuseBeforeRegistration(t *testing.T) {
 		t.Fatal("an external service was reported as unrealizable")
 	}
 }
+
+// The clients a controller block installs are what every other block's adapter
+// runs, so the engine makes each of them wait for it. The edge is a real block
+// dependency, frozen with the plan, not a rule about stage order.
+func TestControllerBlockPrecedesEveryOtherBlock(t *testing.T) {
+	definitions := append([]reconciliation.BlockDefinition{
+		stagedDefinition("controller-prerequisites", reconciliation.StageController),
+	}, nestedDefinitions()...)
+	h := newPlannedHarness(t, definitions)
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.capability.applies) == 0 || h.capability.applies[0] != "controller-prerequisites" {
+		t.Fatalf("applied blocks = %v", h.capability.applies)
+	}
+}
+
+// Selecting only a later stage therefore starts nothing at all, and the refusal
+// names the stage that would unblock the operation.
+func TestSelectingALaterStageWaitsForTheControllerBlock(t *testing.T) {
+	definitions := append([]reconciliation.BlockDefinition{
+		stagedDefinition("controller-prerequisites", reconciliation.StageController),
+	}, nestedDefinitions()...)
+	h := newPlannedHarness(t, definitions)
+	_, err := h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"},
+	})
+	if diagnostics.Of(err)[0].Code != "lifecycle.stage" || !strings.Contains(diagnostics.Of(err)[0].Remediation, "--stage controller") {
+		t.Fatalf("selection error = %v", err)
+	}
+	if len(h.capability.applies) != 0 {
+		t.Fatalf("a refused selection still executed %v", h.capability.applies)
+	}
+}
+
+// A plan without a controller block keeps exactly the dependencies its
+// capabilities declared.
+func TestPlanWithoutAControllerBlockGainsNoDependency(t *testing.T) {
+	h := newPlannedHarness(t, nestedDefinitions())
+	result, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Steps) != len(nestedDefinitions()) {
+		t.Fatalf("steps = %+v", result.Steps)
+	}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"},
+	}); err != nil {
+		t.Fatalf("an unrelated selection was refused: %v", err)
+	}
+}

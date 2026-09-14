@@ -232,8 +232,8 @@ non-interactive, JSON output is selected, or a safe answer cannot be read.
 proven-disposable local context data, while `--yes` independently controls its
 ordinary confirmation. Protected or unknown state refuses deletion.
 
-`--stage` accepts only `infra-components`, `substrates`, `machines`,
-`clusters`, and `add-ons`, and only on `plan` and `apply`. Whitespace around
+`--stage` accepts only `controller`, `infra-components`, `substrates`,
+`machines`, `clusters`, and `add-ons`, and only on `plan` and `apply`. Whitespace around
 comma-separated members is ignored, empty members are ignored, duplicates
 collapse, and the last occurrence wins. A supplied value that resolves to no
 member and an unrecognized member are both usage errors. Omission selects every

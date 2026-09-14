@@ -35,6 +35,32 @@ func (s Service) compile(ctx context.Context, view View) (*compilation.State, er
 	return state, nil
 }
 
+// dependOnController makes every other block wait for the controller block,
+// because the clients that block installs are what their adapters run. This is
+// the one dependency the engine owns; a plan without a controller block is
+// ordered by its capabilities alone.
+func dependOnController(definitions []reconciliation.BlockDefinition) []reconciliation.BlockDefinition {
+	prerequisite := ""
+	for _, definition := range definitions {
+		if definition.Stage == reconciliation.StageController {
+			prerequisite = definition.ID
+			break
+		}
+	}
+	if prerequisite == "" {
+		return definitions
+	}
+	for index, definition := range definitions {
+		if definition.ID == prerequisite || slices.Contains(definition.Dependencies, prerequisite) {
+			continue
+		}
+		dependencies := append(slices.Clone(definition.Dependencies), prerequisite)
+		slices.Sort(dependencies)
+		definitions[index].Dependencies = dependencies
+	}
+	return definitions
+}
+
 // planFrom asks every resolvable capability for its blocks. Planning is pure:
 // it opens no payload, contacts nothing and materializes no Secret.
 func (s Service) planFrom(ctx context.Context, view View, state *compilation.State, verb reconciliation.Verb) (reconciliation.Plan, capabilityBinding, error) {
@@ -67,6 +93,7 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 		}
 	}
 	slices.Sort(binding.secrets)
+	definitions = dependOnController(definitions)
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, definitions)
 	if err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err

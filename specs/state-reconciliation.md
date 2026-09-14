@@ -213,6 +213,7 @@ digest. A stage names the kind of platform work its block performs:
 
 | Stage | Blocks |
 | --- | --- |
+| `controller` | The [context prerequisites](controller.md) this Environment adds to its controller host. |
 | `infra-components` | Managed shared services: proxying, name resolution, time, artifact serving, registries and load balancing. |
 | `substrates` | Provider realization for a declared `InfraProvider`. |
 | `machines` | Machine realization and managed operating-system installation. |
@@ -223,6 +224,13 @@ The capability that plans a block owns its stage. Stages are not strata: a
 block depends on other blocks, never on a stage, so a `substrates` block may
 legitimately wait on an `add-ons` block when a provider is hosted by a cluster
 that an add-on enables. Ordering always follows the dependency DAG.
+
+The `controller` stage is the one exception, and the engine owns it rather than
+any capability. When a plan contains a controller block, every other block in
+that plan depends on it, because the clients it installs are what the other
+blocks' adapters run. The edge is a real block dependency frozen with the plan
+and covered by its digest, not a rule about stages; a plan with no controller
+block has no such edge and is ordered by its capabilities alone.
 
 A stage selection is the set of stages an invocation may start; an omitted
 selection admits every stage. A block is *ready* when it is `pending` and every

@@ -272,20 +272,31 @@ report names either `setup` or that context's own controller stage.
 binding moved to the first `apply`, published under the lock and lease that
 operation already holds, before any reservation or effect.
 
-**Remaining.** The `controller` stage itself: a first stage ahead of
-`infra-components` whose one block installs the target client closure and the
-libvirt client a context selects, on the controller Machine, through that
-Machine's proxy choice. Every other block depends on it. Until it exists, a
-context that selects target clients or libvirt has no command that installs
-them, and `preflight controller --context <name>` reports them as unmet.
+The `controller` stage now exists as the first stage, selectable by `--stage`
+and defined by [state reconciliation](state-reconciliation.md#stages-and-the-pause-boundary),
+with the engine-owned edge that makes every other block wait for a controller
+block. Like M1f's four unimplemented stages, it is exercised by tests rather
+than by effects until its capability lands.
+
+**Remaining.** The capability that fills the stage: one block that resolves and
+installs the target client closure and the libvirt client a context selects, on
+the controller Machine, through that Machine's proxy choice. It needs a durable
+reservation protocol for the shared host area those clients are published into,
+with the same intent-before-effect and sealing rules the setup bundle has, plus
+its own crash and replay evidence. That protocol is why it is not in this
+slice. Until it lands, a context that selects target clients or libvirt has no
+command that installs them, `preflight controller --context <name>` reports
+them as unmet, and `apply --stage controller` refuses with `lifecycle.stage`
+because no block carries that stage.
 
 Exit evidence so far: the `internal/controller/prerequisites` suite (setup
 ignores the tools and libvirt a context selects, retains no tool source,
 publishes no binding, and reports both scopes through preflight), the
 `internal/controller` selection and version tests, the lifecycle journey suite
 (a first apply binds, a repeated apply revalidates, a rebind refuses, an
-unprepared host refuses before any effect), the CLI catalog, dispatch,
-confirmation and output tests, `cmd/bootwright` admission and example
+unprepared host refuses before any effect, a controller block precedes every
+other block, and a plan without one gains no dependency), the CLI catalog,
+dispatch, confirmation and output tests, `cmd/bootwright` admission and example
 acceptance, and `make check`.
 
 **Verification model.** M1d's model continues: every test carried in this

@@ -8,6 +8,7 @@ import "slices"
 type Stage string
 
 const (
+	StageController      Stage = "controller"
 	StageInfraComponents Stage = "infra-components"
 	StageSubstrates      Stage = "substrates"
 	StageMachines        Stage = "machines"
@@ -16,7 +17,7 @@ const (
 )
 
 func Stages() []Stage {
-	return []Stage{StageInfraComponents, StageSubstrates, StageMachines, StageClusters, StageAddOns}
+	return []Stage{StageController, StageInfraComponents, StageSubstrates, StageMachines, StageClusters, StageAddOns}
 }
 
 func ValidStage(value Stage) bool { return slices.Contains(Stages(), value) }

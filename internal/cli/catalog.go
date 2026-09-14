@@ -153,7 +153,7 @@ func contextFileFlag() flagSpec {
 
 func stageFlag() flagSpec {
 	flag := stringFlag("stage", "Select comma-separated stages to start (default: all)")
-	flag.enum, flag.enumList = []string{"infra-components", "substrates", "machines", "clusters", "add-ons"}, true
+	flag.enum, flag.enumList = []string{"controller", "infra-components", "substrates", "machines", "clusters", "add-ons"}, true
 	return flag
 }
 
