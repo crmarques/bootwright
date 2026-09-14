@@ -121,3 +121,21 @@ func (r *Runner) writeNegativeSecretCheck(command *cobra.Command, path string, r
 	}
 	return true, writeSecretCheck(r.config.Out, r.config.ErrOut, path, result.secretCheck, diagnostics, 1, selectedJSON(command))
 }
+
+// writeExecutedLifecycle presents an operation that ran and then failed. The
+// operation summary, its log reference and its receipt are the evidence the
+// operator continues from, so a terminal failure keeps them on standard output
+// and carries the diagnostics on standard error. A refusal registers no
+// operation and therefore has no result to present.
+func (r *Runner) writeExecutedLifecycle(path string, result commandResult, diagnostics []diagnostic) (bool, error) {
+	if path != "apply" && path != "destroy" {
+		return false, nil
+	}
+	if result.lifecycleOperation == nil {
+		return false, nil
+	}
+	if err := writeLifecycleOperation(r.config.Out, result.lifecycleOperation); err != nil {
+		return true, err
+	}
+	return true, writeDiagnostics(r.config.Out, r.config.ErrOut, path, diagnostics, 1, false)
+}

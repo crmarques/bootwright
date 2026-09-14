@@ -227,11 +227,11 @@ func (s lifecycleSpy) Status(ctx context.Context, request lifecycle.StatusReques
 }
 
 func (s lifecycleSpy) Apply(ctx context.Context, request lifecycle.ApplyRequest) (*lifecycle.OperationResult, error) {
-	return nil, s.record.called(ctx, "apply", request)
+	return s.record.result.lifecycleOperation, s.record.called(ctx, "apply", request)
 }
 
 func (s lifecycleSpy) Destroy(ctx context.Context, request lifecycle.DestroyRequest) (*lifecycle.OperationResult, error) {
-	return nil, s.record.called(ctx, "destroy", request)
+	return s.record.result.lifecycleOperation, s.record.called(ctx, "destroy", request)
 }
 
 type artifactsSpy struct{ record *dispatchRecord }

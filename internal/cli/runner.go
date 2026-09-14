@@ -231,6 +231,12 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 			}
 			return 1
 		}
+		if handled, presentErr := r.writeExecutedLifecycle(path, result, diagnostics); handled {
+			if presentErr != nil {
+				return 1
+			}
+			return 1
+		}
 		if err := writeDiagnostics(r.config.Out, r.config.ErrOut, path, diagnostics, 1, selectedJSON(command)); err != nil {
 			return 1
 		}

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -235,5 +236,76 @@ func TestPausedOperationReportsSuccessAndItsContinuation(t *testing.T) {
 	}
 	if !strings.HasSuffix(rendered, "operation: op-abc\nverb: apply\nstate: paused\nnext: continue-apply\n") {
 		t.Fatalf("receipt = %q", rendered)
+	}
+}
+
+func TestFailedOperationKeepsItsResultLogAndReceipt(t *testing.T) {
+	for _, path := range []string{"apply", "destroy"} {
+		t.Run(path, func(t *testing.T) {
+			operation := &lifecycle.OperationResult{
+				Context: lifecycle.ContextIdentity{Name: "lab"}, Verb: path,
+				Blocks: []lifecycle.BlockResult{
+					{ID: "artifact-server-lab", Description: "serve artifacts for lab-artifacts", State: "failed"},
+					{ID: "dns-lab", Description: "resolve names for lab-dns", State: "pending"},
+				},
+				Logs:    []string{"op-abc/logs/blocks/artifact-server-lab/attempt-000001.jsonl"},
+				Receipt: lifecycle.Receipt{Operation: "op-abc", Verb: path, State: "failed", Next: "continue-" + path},
+			}
+			failure := &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "lifecycle.state", Message: "the operation did not complete"}}}
+			record := &dispatchRecord{result: commandResult{lifecycleOperation: operation}, err: failure}
+			var out, errOut bytes.Buffer
+			code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{path, "--yes"})
+			if code != 1 {
+				t.Fatalf("code = %d", code)
+			}
+			rendered := out.String()
+			if !strings.Contains(rendered, "serve artifacts for lab-artifacts") {
+				t.Fatalf("result rows missing: %q", rendered)
+			}
+			if !strings.Contains(rendered, "op-abc/logs/blocks/artifact-server-lab/attempt-000001.jsonl") {
+				t.Fatalf("the failure did not name its private log: %q", rendered)
+			}
+			if !strings.HasSuffix(rendered, "next: continue-"+path+"\n") {
+				t.Fatalf("result does not end with its receipt: %q", rendered)
+			}
+			if errOut.String() != "[FAIL] lifecycle.state: the operation did not complete\n" {
+				t.Fatalf("stderr = %q", errOut.String())
+			}
+		})
+	}
+}
+
+func TestRefusedOperationPresentsOnlyItsDiagnostic(t *testing.T) {
+	failure := &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "lifecycle.stage", Message: "no block carries the selected stage"}}}
+	record := &dispatchRecord{err: failure}
+	var out, errOut bytes.Buffer
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"apply", "--stage", "substrates", "--yes"})
+	if code != 1 || out.String() != "" {
+		t.Fatalf("refusal code=%d stdout=%q", code, out.String())
+	}
+	if errOut.String() != "[FAIL] lifecycle.stage: no block carries the selected stage\n" {
+		t.Fatalf("stderr = %q", errOut.String())
+	}
+}
+
+func TestStatusNamesTheLogOfAnIncompleteOperation(t *testing.T) {
+	result := &lifecycle.StatusResult{
+		Context:   lifecycle.ContextIdentity{Name: "lab", Revision: "rev-1"},
+		NextSteps: []string{"bootwright apply"},
+		Lifecycle: &lifecycle.LifecycleSummary{
+			Operation: "op-abc", Verb: "apply", State: "failed", Next: "continue-apply",
+			Blocks: []lifecycle.BlockResult{{ID: "artifact-server-lab", Description: "serve artifacts", State: "failed"}},
+			Logs:   []string{"op-abc/logs/blocks/artifact-server-lab/attempt-000001.jsonl"},
+		},
+	}
+	var text bytes.Buffer
+	if err := writeLifecycleStatus(&text, result, false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text.String(), "op-abc/logs/blocks/artifact-server-lab/attempt-000001.jsonl") {
+		t.Fatalf("status did not name the operation log: %q", text.String())
+	}
+	if !strings.Contains(text.String(), "bootwright apply") {
+		t.Fatalf("status dropped its next step: %q", text.String())
 	}
 }

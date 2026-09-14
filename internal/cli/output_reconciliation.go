@@ -239,9 +239,16 @@ func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMod
 		}
 		text.rows(rows)
 	}
+	var tail []field
+	if result.Lifecycle != nil && len(result.Lifecycle.Logs) != 0 {
+		tail = append(tail, field{Label: "Details", Value: escapeDisplayLine(result.Lifecycle.Logs[0])})
+	}
 	if len(result.NextSteps) != 0 {
+		tail = append(tail, field{Label: "Next", Value: escapeDisplayLine(result.NextSteps[0])})
+	}
+	if len(tail) != 0 {
 		text.section("")
-		text.fields(field{Label: "Next", Value: escapeDisplayLine(result.NextSteps[0])})
+		text.fields(tail...)
 	}
 	return text.writeTo(out)
 }
