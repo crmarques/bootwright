@@ -95,7 +95,7 @@ creation; a second publication records the actual directory identity. An
 unattributable directory after a crash is preserved and refuses adoption.
 Only explicit setup can finish an attributable initialization.
 
-The private Controller record version is `1`. Its fields are `version`, `host`,
+The private Controller record version is `2`. Its fields are `version`, `host`,
 `receipt`, `bindings`, `retainedSources`, optional `retainedDefinitions`,
 `bundles` and optional `reservations`, encoded as compact JSON
 in schema order followed by LF. Unknown fields, duplicate keys, noncanonical

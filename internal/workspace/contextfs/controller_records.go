@@ -14,6 +14,10 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
+// ControllerRecordVersion is the private shared-host evidence format. Version 2
+// names the owning context by name in its receipt, bindings and reservations.
+const ControllerRecordVersion = 2
+
 const (
 	maxControllerState           = 4 << 20
 	maxControllerActions         = 128
@@ -57,7 +61,7 @@ func controllerRecord(value prerequisites.HostState, bundles []controllerBundleR
 	if retained == nil {
 		retained = []controllerBundleReservation{}
 	}
-	return controllerStateRecord{Version: 1, Host: controllerHostRecord{value.Host.Provider(), value.Host.MachineID(), value.Host.ProductUUID(), value.Host.FilesystemUUID()}, Receipt: value.Receipt, Bindings: value.Bindings, RetainedSources: value.RetainedSources, RetainedDefinitions: value.RetainedDefinitions, Bundles: retained, Reservations: value.Reservations}
+	return controllerStateRecord{Version: ControllerRecordVersion, Host: controllerHostRecord{value.Host.Provider(), value.Host.MachineID(), value.Host.ProductUUID(), value.Host.FilesystemUUID()}, Receipt: value.Receipt, Bindings: value.Bindings, RetainedSources: value.RetainedSources, RetainedDefinitions: value.RetainedDefinitions, Bundles: retained, Reservations: value.Reservations}
 }
 
 func decodeControllerRecord(data []byte) (prerequisites.HostState, []controllerBundleReservation, error) {
@@ -65,7 +69,7 @@ func decodeControllerRecord(data []byte) (prerequisites.HostState, []controllerB
 	if err := decodeRecord(data, maxControllerState, &record); err != nil {
 		return prerequisites.HostState{}, nil, err
 	}
-	if record.Version != 1 {
+	if record.Version != ControllerRecordVersion {
 		return prerequisites.HostState{}, nil, state("controller evidence version is unsupported")
 	}
 	host, err := controller.NewInstalledHostIdentity(record.Host.Provider, record.Host.MachineID, record.Host.ProductUUID, record.Host.FilesystemUUID)

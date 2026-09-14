@@ -120,6 +120,13 @@ func TestControllerResolvedDefinitionEncodingRemainsBoundedAndCanonical(t *testi
 			t.Fatal("malformed frozen definition accepted")
 		}
 	}
+	superseded := bytes.Replace(encoded, []byte(`{"version":2,`), []byte(`{"version":1,`), 1)
+	if bytes.Equal(encoded, superseded) {
+		t.Fatal("fixture did not alter the record version")
+	}
+	if _, _, err := decodeControllerRecord(superseded); err == nil {
+		t.Fatal("superseded controller evidence version accepted")
+	}
 	if _, err := encodeRecord(controllerRecord(value, nil), len(encoded)-1); err == nil {
 		t.Fatal("encoding exceeded exact size bound")
 	}
