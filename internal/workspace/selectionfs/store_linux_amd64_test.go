@@ -228,9 +228,9 @@ func TestSelectionRejectsUnsafeStorage(t *testing.T) {
 			case "malformed":
 				os.WriteFile(path, []byte("{"), 0600)
 			case "unknown-field":
-				os.WriteFile(path, []byte(`{"version":1,"name":"test","id":"ctx-00000000000000000000000000000001","extra":true}`), 0600)
+				os.WriteFile(path, []byte(`{"version":2,"name":"test","extra":true}`), 0600)
 			case "duplicate-field":
-				os.WriteFile(path, []byte(`{"version":1,"name":"other","name":"test","id":"ctx-00000000000000000000000000000001"}`), 0600)
+				os.WriteFile(path, []byte(`{"version":2,"name":"other","name":"test"}`), 0600)
 			}
 			if _, err := store.Read(context.Background()); err == nil {
 				t.Fatal("unsafe selection accepted")

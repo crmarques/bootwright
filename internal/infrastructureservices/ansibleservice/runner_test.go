@@ -15,7 +15,7 @@ func localRequest() managedservice.RunRequest {
 	return managedservice.RunRequest{
 		Kind: artifactserver.Kind, Operation: "apply", Variable: "bootwright_artifact_server",
 		Digest:    strings.Repeat("d", 64),
-		Canonical: []byte(`{"unit":"bootwright-ctx-1-artifacts-lab"}`),
+		Canonical: []byte(`{"unit":"bootwright-lab-artifacts-lab"}`),
 		Placement: managedservice.Placement{Connection: "local", Machine: "bastion"},
 		Materials: []managedservice.MaterialFile{
 			{Name: "tls.crt", Part: secrets.CertificatePart, Secret: "artifact-server-tls", Variable: "certificate"},

@@ -110,7 +110,7 @@ func TestOperationIdentityGrammar(t *testing.T) {
 		"non hex":     "op-" + strings.Repeat("gg", 16),
 		"long":        valid + "a",
 		"empty":       "",
-		"other kinds": "ctx-" + strings.Repeat("ab", 16),
+		"other kinds": "rev-" + strings.Repeat("ab", 16),
 	} {
 		if got := ValidOperationID(value); got != (name == "valid") {
 			t.Fatalf("%s: ValidOperationID(%q) = %t", name, value, got)

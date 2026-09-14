@@ -727,7 +727,7 @@ func TestRegistryStrictnessAndManifestPaths(t *testing.T) {
 	for _, path := range []string{"../escape.yaml", "secrets/payload.yaml", "manifests/native.yaml", ".hidden/object.yaml", "roles/main.yaml"} {
 		changed := sources
 		changed.Files = []desiredstate.SourceFile{desiredstate.NewSourceFile(filepath.Join(sources.Roots[0], path), []byte("a: b\n"))}
-		_, _, err := prepareManifest("ctx-00000000000000000000000000000000", sources.Roots[0], changed)
+		_, _, err := prepareManifest("example", sources.Roots[0], changed)
 		expectState(t, err)
 	}
 	if _, err := os.Stat(store.options.Root); !errors.Is(err, os.ErrNotExist) {
@@ -735,7 +735,7 @@ func TestRegistryStrictnessAndManifestPaths(t *testing.T) {
 	}
 	markerRoot := filepath.Join(t.TempDir(), "add-ons", "_store", "sample")
 	markerSources := desiredstate.Sources{Roots: []string{markerRoot}, Markers: []desiredstate.SourceFile{desiredstate.NewSourceFile(filepath.Join(markerRoot, ".bootwright-addon"), []byte("native\n"))}}
-	if _, _, err := prepareManifest("ctx-00000000000000000000000000000000", markerRoot, markerSources); err != nil {
+	if _, _, err := prepareManifest("example", markerRoot, markerSources); err != nil {
 		t.Fatal(err)
 	}
 }

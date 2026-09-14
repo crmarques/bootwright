@@ -204,7 +204,7 @@ func TestNewJourneysDiscardResultsWhenServiceCancels(t *testing.T) {
 		var out, errOut bytes.Buffer
 		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(ctx, args)
 		cancel()
-		if code != 1 || record.calls != 1 || !strings.Contains(out.String()+errOut.String(), "runtime.canceled") || strings.Contains(out.String()+errOut.String(), "ctx-synthetic") || args[0] == "context" && out.Len() != 0 {
+		if code != 1 || record.calls != 1 || !strings.Contains(out.String()+errOut.String(), "runtime.canceled") || strings.Contains(out.String(), "Input configured") || args[0] == "context" && out.Len() != 0 {
 			t.Fatal("canceled service leaked result", args, code, out.String(), errOut.String())
 		}
 	}
