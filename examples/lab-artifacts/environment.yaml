@@ -8,4 +8,4 @@ spec:
     base: lab.example.test
 
   controller:
-    machineRef: bastion
+    machineRef: controller

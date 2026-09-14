@@ -7,9 +7,9 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
-const controllerSetupHeadline = "Bastion setup"
+const controllerSetupHeadline = "Controller setup"
 
-// ControllerPresenter owns everything bastion setup and readiness show while
+// ControllerPresenter owns everything controller setup and readiness show while
 // they work: the scope, the host checks as they are verified, the resolution
 // steps, the plan and the approved actions after confirmation. One object
 // presents all of them so the headline and each section appear exactly once.
@@ -59,7 +59,7 @@ func (p *ControllerPresenter) PresentControllerPlan(ctx context.Context, report 
 	}
 	var text display
 	if !p.headline {
-		text.headline("", controllerHeadline("bastion setup", &report))
+		text.headline("", controllerHeadline("controller setup", &report))
 	}
 	controllerPlanText(&text, &report, !p.scope, !p.checks)
 	if err := ctx.Err(); err != nil {
@@ -142,7 +142,7 @@ func validControllerReport(report *prerequisites.Report) bool {
 }
 
 func successfulControllerReport(command string, report *prerequisites.Report) bool {
-	if command == "preflight bastion" {
+	if command == "preflight controller" {
 		return report.Outcome == "ready" && !report.DryRun
 	}
 	return report.DryRun && report.Outcome == "planned" || !report.DryRun && (report.Outcome == "unchanged" || report.Outcome == "changed")
@@ -151,18 +151,18 @@ func successfulControllerReport(command string, report *prerequisites.Report) bo
 // controllerHeadline names what the reader is looking at. Readiness inspection
 // never presents a plan, so only setup announces one.
 func controllerHeadline(command string, report *prerequisites.Report) string {
-	if command == "preflight bastion" {
-		return "Bastion readiness"
+	if command == "preflight controller" {
+		return "Controller readiness"
 	}
 	if report.PlanPresented || !report.DryRun {
 		return controllerSetupHeadline
 	}
-	return "Bastion setup plan"
+	return "Controller setup plan"
 }
 
 func phaseHeadline(phase string) string {
 	if phase == prerequisites.ReadinessPhase {
-		return "Bastion readiness"
+		return "Controller readiness"
 	}
 	return controllerSetupHeadline
 }
@@ -236,9 +236,9 @@ func controllerOutcomeFields(command string, report *prerequisites.Report) []fie
 		fields = append(fields, field{Label: "Readiness", Value: "all required prerequisites verified"})
 	}
 	if report.Outcome != "ready" {
-		next := "bootwright bastion setup"
+		next := "bootwright controller setup"
 		if report.Outcome == "changed" || report.Outcome == "unchanged" {
-			next = "bootwright preflight bastion"
+			next = "bootwright preflight controller"
 		}
 		if report.ContextName != "" {
 			next += " --context " + report.ContextName

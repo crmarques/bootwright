@@ -22,13 +22,13 @@ func field(name string, value api.Value) api.FieldValue {
 
 func text(name, value string) api.FieldValue { return field(name, api.StringValue(value)) }
 
-func bastion() api.Object {
-	return api.NewObject(api.Machine, "bastion", api.Value{}, api.MapValue(
+func controller() api.Object {
+	return api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
 		field("capabilities", api.ListValue(api.StringValue("container-runtime"))),
 		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
 		field("proxy", api.MapValue(field("direct", api.MapValue()))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
-			api.MapValue(text("name", "fqdn"), text("address", "bastion.lab.example.test")),
+			api.MapValue(text("name", "fqdn"), text("address", "controller.lab.example.test")),
 			api.MapValue(text("name", "ip"), text("address", "192.0.2.1")),
 		)))),
 		field("access", api.MapValue(field("local", api.BoolValue(true)))),
@@ -37,7 +37,7 @@ func bastion() api.Object {
 
 func service(kind api.Kind, name string, extra ...api.FieldValue) api.Object {
 	fields := append([]api.FieldValue{
-		text("management", "managed"), text("machineRef", "bastion"),
+		text("management", "managed"), text("machineRef", "controller"),
 		text("bindAddress", "192.0.2.1"), field("port", api.IntegerValue("3128")),
 		field("endpoints", api.ListValue(api.MapValue(text("name", "ip"), text("addressRef", "ip")))),
 	}, extra...)
@@ -68,12 +68,12 @@ func firstCode(err error) string {
 
 func TestRequestsDeriveTheFrozenLocalPlacement(t *testing.T) {
 	capability := NewCapability(testDefinition(), nil)
-	requests, err := capability.Requests(catalogOf(bastion(), service(api.Proxy, "lab-proxy")), "bastion", testContext)
+	requests, err := capability.Requests(catalogOf(controller(), service(api.Proxy, "lab-proxy")), "controller", testContext)
 	if err != nil || len(requests) != 1 {
 		t.Fatalf("requests = %+v (%v)", requests, err)
 	}
 	request := requests[0]
-	if request.Placement.Connection != ConnectionLocal || request.Placement.Machine != "bastion" {
+	if request.Placement.Connection != ConnectionLocal || request.Placement.Machine != "controller" {
 		t.Fatalf("placement = %+v", request.Placement)
 	}
 	if request.Unit != "bootwright-"+testContext+"-proxy-lab-proxy" {
@@ -94,7 +94,7 @@ func TestRequestsDeriveTheFrozenLocalPlacement(t *testing.T) {
 // unchanged and refuse anything a reader could interpret differently.
 func TestRequestCanonicalFormIsStableAndOrdered(t *testing.T) {
 	capability := NewCapability(testDefinition(), nil)
-	requests, err := capability.Requests(catalogOf(bastion(), service(api.Proxy, "lab-proxy")), "bastion", testContext)
+	requests, err := capability.Requests(catalogOf(controller(), service(api.Proxy, "lab-proxy")), "controller", testContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,9 +138,9 @@ func TestSSHPlacementRequiresKeyAndHostKeyAndReservesNothing(t *testing.T) {
 	))
 	capability := NewCapability(testDefinition(), nil)
 	plan, err := capability.Plan(context.Background(), lifecycle.PlanInput{
-		Verb: reconciliation.Apply, Controller: "bastion",
+		Verb: reconciliation.Apply, Controller: "controller",
 		Context: lifecycle.ContextIdentity{Name: testContext},
-		State:   compilation.NewState(catalogOf(bastion(), remote, placed), catalogOf(bastion(), remote, placed), nil),
+		State:   compilation.NewState(catalogOf(controller(), remote, placed), catalogOf(controller(), remote, placed), nil),
 	})
 	if err != nil || len(plan.Definitions) != 1 {
 		t.Fatalf("plan = %+v (%v)", plan, err)
@@ -157,7 +157,7 @@ func TestSSHPlacementRequiresKeyAndHostKeyAndReservesNothing(t *testing.T) {
 			field("auth", api.MapValue(field("operatorIdentity", api.MapValue()))),
 		)))),
 	))
-	if _, err := capability.Requests(catalogOf(bastion(), unusable, placed), "bastion", testContext); err == nil {
+	if _, err := capability.Requests(catalogOf(controller(), unusable, placed), "controller", testContext); err == nil {
 		t.Fatal("operator SSH identity was accepted for managed service placement")
 	}
 }
@@ -165,12 +165,12 @@ func TestSSHPlacementRequiresKeyAndHostKeyAndReservesNothing(t *testing.T) {
 func TestImageSelectionRequiresADigestPin(t *testing.T) {
 	capability := NewCapability(testDefinition(), nil)
 	tagged := service(api.Proxy, "lab-proxy", field("image", api.MapValue(text("public", "docker.io/library/squid:6"))))
-	if _, err := capability.Requests(catalogOf(bastion(), tagged), "bastion", testContext); firstCode(err) != "api.value" {
+	if _, err := capability.Requests(catalogOf(controller(), tagged), "controller", testContext); firstCode(err) != "api.value" {
 		t.Fatalf("a floating tag was accepted: %v", err)
 	}
 	pinned := service(api.Proxy, "lab-proxy", field("image", api.MapValue(
 		text("local", "registry.lab.example.test/squid@sha256:"+strings.Repeat("b", 64)))))
-	requests, err := capability.Requests(catalogOf(bastion(), pinned), "bastion", testContext)
+	requests, err := capability.Requests(catalogOf(controller(), pinned), "controller", testContext)
 	if err != nil || !strings.HasSuffix(requests[0].Image, strings.Repeat("b", 64)) {
 		t.Fatalf("image = %+v (%v)", requests, err)
 	}
@@ -178,7 +178,7 @@ func TestImageSelectionRequiresADigestPin(t *testing.T) {
 
 func TestReservationKeysCoverTheUnitPathAndSocket(t *testing.T) {
 	capability := NewCapability(testDefinition(), nil)
-	requests, err := capability.Requests(catalogOf(bastion(), service(api.Proxy, "lab-proxy")), "bastion", testContext)
+	requests, err := capability.Requests(catalogOf(controller(), service(api.Proxy, "lab-proxy")), "controller", testContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,11 +194,11 @@ func TestReservationKeysCoverTheUnitPathAndSocket(t *testing.T) {
 	}
 	// A wildcard bind takes the port on every declared endpoint address too.
 	wildcard := api.NewObject(api.Proxy, "lab-proxy", api.Value{}, api.MapValue(
-		text("management", "managed"), text("machineRef", "bastion"),
+		text("management", "managed"), text("machineRef", "controller"),
 		text("bindAddress", "0.0.0.0"), field("port", api.IntegerValue("3128")),
 		field("endpoints", api.ListValue(api.MapValue(text("name", "ip"), text("addressRef", "ip")))),
 	))
-	requests, err = capability.Requests(catalogOf(bastion(), wildcard), "bastion", testContext)
+	requests, err = capability.Requests(catalogOf(controller(), wildcard), "controller", testContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func TestReservationKeysCoverTheUnitPathAndSocket(t *testing.T) {
 func TestRequestsRefuseAnInvalidContextName(t *testing.T) {
 	capability := NewCapability(testDefinition(), nil)
 	for _, name := range []string{"", "Lab", "-lab", "lab-", "lab/other", strings.Repeat("c", 64)} {
-		if _, err := capability.Requests(catalogOf(bastion(), service(api.Proxy, "lab-proxy")), "bastion", name); err == nil {
+		if _, err := capability.Requests(catalogOf(controller(), service(api.Proxy, "lab-proxy")), "controller", name); err == nil {
 			t.Fatalf("context name %q was accepted", name)
 		}
 	}
@@ -218,7 +218,7 @@ func TestRequestsRefuseAnInvalidContextName(t *testing.T) {
 
 func TestPresenceRequiresEveryDeclaredAnswer(t *testing.T) {
 	capability := NewCapability(testDefinition(), nil)
-	requests, err := capability.Requests(catalogOf(bastion(), service(api.Proxy, "lab-proxy")), "bastion", testContext)
+	requests, err := capability.Requests(catalogOf(controller(), service(api.Proxy, "lab-proxy")), "controller", testContext)
 	if err != nil {
 		t.Fatal(err)
 	}

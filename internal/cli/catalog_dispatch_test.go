@@ -33,7 +33,7 @@ func TestCommandModesComeFromTheCatalog(t *testing.T) {
 		"secret list": true, "secret show": true, "secret delete": true,
 		"secret encryption init": true, "secret encryption status": true,
 		"secret encryption rotate": true, "validate": true, "render effective": true,
-		"bastion setup": true, "preflight bastion": true,
+		"controller setup": true, "preflight controller": true,
 		"plan": true, "status": true, "apply": true, "destroy": true,
 	}
 	for _, spec := range commandCatalog() {
@@ -44,7 +44,7 @@ func TestCommandModesComeFromTheCatalog(t *testing.T) {
 			t.Errorf("%s: privileged = %t, want %t", spec.path, privilegedOperation(spec.path), want[spec.path])
 		}
 	}
-	if implementedOperation("bastion") || privilegedOperation("machine list") {
+	if implementedOperation("controller") || privilegedOperation("machine list") {
 		t.Fatal("an incomplete path or unavailable command claimed a mode")
 	}
 }

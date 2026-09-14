@@ -5,7 +5,7 @@ metadata:
 
 spec:
   libvirt:
-    machineRef: bastion
+    machineRef: controller
     uri: qemu:///system
 
     bmcEmulationDefaults:

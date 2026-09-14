@@ -249,10 +249,10 @@ func TestSecondLifecycleMutatorRefusesWhileOneHoldsTheStore(t *testing.T) {
 }
 
 // reserveFixture publishes a controller receipt so reservations have a record
-// to live in, mirroring a host that completed bastion setup.
+// to live in, mirroring a host that completed controller setup.
 func reserveFixture(t *testing.T, store *Store, record contexts.Record) {
 	t.Helper()
-	scope := prerequisites.SetupContext{Name: record.Name, Revision: record.Revision, Machine: "bastion"}
+	scope := prerequisites.SetupContext{Name: record.Name, Revision: record.Revision, Machine: "controller"}
 	publishControllerState(t, store, scope, completeControllerState(syntheticControllerState(t, scope)))
 }
 
@@ -261,7 +261,7 @@ func reserveFixture(t *testing.T, store *Store, record contexts.Record) {
 func sealedBundleFixture(t *testing.T, store *Store, record contexts.Record) string {
 	t.Helper()
 	ctx := context.Background()
-	scope := prerequisites.SetupContext{Name: record.Name, Revision: record.Revision, Machine: "bastion"}
+	scope := prerequisites.SetupContext{Name: record.Name, Revision: record.Revision, Machine: "controller"}
 	value := syntheticControllerState(t, scope)
 	publishControllerState(t, store, scope, value)
 	err := store.MutateController(ctx, scope, false, func(tx prerequisites.StorageTransaction) error {

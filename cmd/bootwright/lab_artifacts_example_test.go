@@ -51,7 +51,7 @@ func TestLabArtifactsExampleIsAdmissibleAndSupported(t *testing.T) {
 		t.Fatalf("the example declares an unsupported artifact server: %v", unsupported)
 	}
 	requireObject(t, state.Effective(), api.ArtifactServer, "lab-artifacts")
-	requireObject(t, state.Effective(), api.Machine, "bastion")
+	requireObject(t, state.Effective(), api.Machine, "controller")
 }
 
 // The capability must derive a complete frozen request from the example alone,
@@ -61,7 +61,7 @@ func TestLabArtifactsExamplePlansOneLocalBlock(t *testing.T) {
 	state, _ := compileAcceptance(t, sources)
 	capability := artifactserver.New(nil, nil)
 	plan, err := capability.Plan(context.Background(), lifecycle.PlanInput{
-		Verb: reconciliation.Apply, State: state, Controller: "bastion",
+		Verb: reconciliation.Apply, State: state, Controller: "controller",
 		Context: lifecycle.ContextIdentity{Name: "lab-artifacts"},
 	})
 	if err != nil || len(plan.Definitions) != 1 {
@@ -87,7 +87,7 @@ func TestLabArtifactsExamplePlansOneLocalBlock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if request.Placement.Connection != "local" || request.Placement.Machine != "bastion" {
+	if request.Placement.Connection != "local" || request.Placement.Machine != "controller" {
 		t.Fatalf("placement = %+v", request.Placement)
 	}
 	if request.TLS == nil || request.TLS.Secret != "artifact-server-tls" {

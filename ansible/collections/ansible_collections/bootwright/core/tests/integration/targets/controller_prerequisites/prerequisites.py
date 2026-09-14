@@ -66,7 +66,7 @@ with tempfile.TemporaryDirectory(prefix="bootwright-prerequisites-") as area:
             "children": {
                 "bootwright_controller": {
                     "hosts": {
-                        "bastion": {
+                        "controller": {
                             "ansible_connection": "local",
                             "ansible_python_interpreter": interpreter,
                             "ansible_host": "localhost",

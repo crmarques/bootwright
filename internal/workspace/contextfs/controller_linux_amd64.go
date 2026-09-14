@@ -24,7 +24,7 @@ type controllerStored struct {
 }
 
 func controllerFailure(code, message string) error {
-	return diagnostics.NewFailureWithRemediation(code, message, "", "repeat the same bastion setup command with its original input and compatible executable")
+	return diagnostics.NewFailureWithRemediation(code, message, "", "repeat the same controller setup command with its original input and compatible executable")
 }
 
 func openControllerDirectory(root *directory, registry contexts.Registry) (*directory, error) {
@@ -648,7 +648,7 @@ func (t *transaction) checkControllerRecovery(ctx context.Context, name string) 
 		t.controllerEvidence = &expected
 	}
 	if stored.data != nil && stored.value.Receipt.Incomplete() && stored.value.Receipt.Context.Name == name {
-		return state("context input is protected by incomplete bastion setup; repeat its exact setup command")
+		return state("context input is protected by incomplete controller setup; repeat its exact setup command")
 	}
 	return nil
 }

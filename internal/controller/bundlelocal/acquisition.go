@@ -133,7 +133,7 @@ func transportFailure(subject, endpoint string, err error) error {
 		host = parsed.Hostname()
 	}
 	condition := "could not be reached from this host"
-	remediation := "Restore this host's access to " + host + ", or select an external Proxy on the controller Machine, then repeat bastion setup."
+	remediation := "Restore this host's access to " + host + ", or select an external Proxy on the controller Machine, then repeat controller setup."
 	var resolution *net.DNSError
 	var verification *tls.CertificateVerificationError
 	var expired interface{ Timeout() bool }
@@ -143,10 +143,10 @@ func transportFailure(subject, endpoint string, err error) error {
 		if resolution.IsTimeout {
 			condition = "was not resolved before this host's resolver timed out"
 		}
-		remediation = "Make " + host + " resolvable before setup, or select an external Proxy on the controller Machine, then repeat bastion setup."
+		remediation = "Make " + host + " resolvable before setup, or select an external Proxy on the controller Machine, then repeat controller setup."
 	case errors.As(err, &verification), errors.As(err, new(x509.UnknownAuthorityError)):
 		condition = "presented a certificate the qualified system trust store does not accept"
-		remediation = "Install the required certificate authority in the system trust store, then repeat bastion setup."
+		remediation = "Install the required certificate authority in the system trust store, then repeat controller setup."
 	case errors.As(err, &expired) && expired.Timeout():
 		condition = "did not answer within its bounded acquisition timeout"
 	}

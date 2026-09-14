@@ -1,7 +1,7 @@
-# Managed infrastructure components on the bastion
+# Managed infrastructure components on the controller
 
 This example is the smallest complete Environment the
-[M1f lifecycle](../../specs/milestones.md#m1f--managed-bastion-network-services)
+[M1f lifecycle](../../specs/milestones.md#m1f--managed-controller-network-services)
 supports: one OS-ready Machine that is both the Bootwright controller and the
 host of every managed infrastructure service. Applying it exercises the whole
 `infra-components` stage, including plans, leases, operation records, secret
@@ -9,7 +9,7 @@ binding, host reservations, readiness evidence and the inverse.
 
 | Object | Role |
 | --- | --- |
-| [`bastion`](infra/machines/bastion.yaml) | The provided local Machine selected by `Environment.spec.controller`; it declares `container-runtime`. |
+| [`controller`](infra/machines/controller.yaml) | The provided local Machine selected by `Environment.spec.controller`; it declares `container-runtime`. |
 | [`lab-proxy`](infra/components/proxy.yaml) | Managed Squid container; it answers only the addresses the graph declares. |
 | [`lab-dns`](infra/components/dns.yaml) | Managed dnsmasq container answering every retained Machine name. |
 | [`lab-ntp`](infra/components/ntp.yaml) | Managed chrony container serving time without disciplining the host clock. |
@@ -59,7 +59,7 @@ test and start it again afterwards.
 
 Bootwright requests sudo authorization for context, setup and lifecycle
 commands. The service automation is embedded in the executable, so a build that
-changes it also changes the dependency-bundle identity: run `bastion setup`
+changes it also changes the dependency-bundle identity: run `controller setup`
 again after `make build`, otherwise `apply` refuses with the retained bundle it
 cannot use.
 
@@ -69,8 +69,8 @@ make build
 ./bin/bootwright context init --name managed-infra --input-dir "$PWD/examples/managed-infra-components"
 ./bin/bootwright secret generate
 ./bin/bootwright secret check
-./bin/bootwright bastion setup --context managed-infra
-./bin/bootwright preflight bastion --context managed-infra
+./bin/bootwright controller setup --context managed-infra
+./bin/bootwright preflight controller --context managed-infra
 ./bin/bootwright plan
 ./bin/bootwright plan --stage infra-components
 ./bin/bootwright apply --stage infra-components
@@ -93,8 +93,8 @@ independently:
 ```sh
 curl -sk https://192.0.2.1:8443/ -o /dev/null -w '%{http_code}\n'
 curl -x http://192.0.2.1:3128 -sI http://example.com/ | head -1
-dig @192.0.2.1 bastion.lab.example.test +short
-dig @192.0.2.1 +tcp bastion.lab.example.test +short
+dig @192.0.2.1 controller.lab.example.test +short
+dig @192.0.2.1 +tcp controller.lab.example.test +short
 chronyd -Q -t 3 'server 192.0.2.1 iburst port 123'
 systemctl list-units 'bootwright-*'
 ```

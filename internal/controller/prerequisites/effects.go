@@ -43,7 +43,7 @@ type PythonLaunch struct {
 }
 
 // NativeRequirements selects the fixed package closure required by the
-// admitted bastion capabilities and referenced infrastructure providers.
+// admitted controller capabilities and referenced infrastructure providers.
 type NativeRequirements struct {
 	ContainerRuntime bool `json:"containerRuntime"`
 	LibvirtClient    bool `json:"libvirtClient"`

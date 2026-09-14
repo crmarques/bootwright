@@ -1,6 +1,6 @@
 {#
   chronyd runs with -x, so it serves time without disciplining the host clock
-  and coexists with the bastion's own time service. A local stratum keeps the
+  and coexists with the controller's own time service. A local stratum keeps the
   lab answering when no upstream is reachable; orphan mode would answer
   stratum 0 until peers agree, which is not an answer a client can use.
 #}

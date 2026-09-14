@@ -10,8 +10,8 @@ import (
 
 func selectionObjects() []api.Object {
 	return []api.Object{
-		api.NewObject(api.Environment, "example", api.Value{}, api.MapValue().WithPath(api.StringValue("bastion"), "controller", "machineRef")),
-		api.NewObject(api.Machine, "bastion", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").With("capabilities", api.StringList("container-runtime")).WithPath(api.MapValue(), "proxy", "direct")),
+		api.NewObject(api.Environment, "example", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "controller", "machineRef")),
+		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").With("capabilities", api.StringList("container-runtime")).WithPath(api.MapValue(), "proxy", "direct")),
 	}
 }
 
@@ -24,12 +24,12 @@ func TestExplicitControllerRequiresDeclaredContainerRuntime(t *testing.T) {
 		}
 	}
 	selected, err := controller.Select(api.NewCatalog(selectionObjects()))
-	if err != nil || !selected.ContainerRuntime() || selected.MachineName() != "bastion" || !selected.Route().Direct() {
+	if err != nil || !selected.ContainerRuntime() || selected.MachineName() != "controller" || !selected.Route().Direct() {
 		t.Fatal(selected, err)
 	}
 }
 
-func TestLibvirtClientFollowsBastionCapabilityAndReferencedProvider(t *testing.T) {
+func TestLibvirtClientFollowsControllerCapabilityAndReferencedProvider(t *testing.T) {
 	for _, selectedBy := range []string{"capability", "provider", "unused-provider"} {
 		t.Run(selectedBy, func(t *testing.T) {
 			objects := selectionObjects()

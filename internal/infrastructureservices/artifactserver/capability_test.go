@@ -38,13 +38,13 @@ func planInput(t *testing.T, verb reconciliation.Verb, objects ...api.Object) li
 		Verb:       verb,
 		Context:    lifecycle.ContextIdentity{Name: testContext, Revision: "rev-1"},
 		State:      compilation.NewState(catalog, catalog, nil),
-		Controller: "bastion",
+		Controller: "controller",
 	}
 }
 
 func TestPlanFreezesOneBlockPerManagedServer(t *testing.T) {
 	capability := New(&fakeRunner{}, fixedClock{})
-	plan, err := capability.Plan(context.Background(), planInput(t, reconciliation.Apply, bastion(), artifactServer()))
+	plan, err := capability.Plan(context.Background(), planInput(t, reconciliation.Apply, controller(), artifactServer()))
 	if err != nil || len(plan.Definitions) != 1 {
 		t.Fatalf("plan = %+v (%v)", plan, err)
 	}
@@ -75,7 +75,7 @@ func TestPlanFreezesOneBlockPerManagedServer(t *testing.T) {
 
 func TestDestroyPlanUsesRemovalGroups(t *testing.T) {
 	capability := New(&fakeRunner{}, fixedClock{})
-	plan, err := capability.Plan(context.Background(), planInput(t, reconciliation.Destroy, bastion(), artifactServer()))
+	plan, err := capability.Plan(context.Background(), planInput(t, reconciliation.Destroy, controller(), artifactServer()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestSSHPlacementReservesNothing(t *testing.T) {
 		text("knownHostsRef", "services-host-key"),
 	)
 	host := api.NewObject(api.Machine, "services", api.Value{},
-		bastion().Spec().Without("access").With("access", api.MapValue(field("ssh", ssh))))
+		controller().Spec().Without("access").With("access", api.MapValue(field("ssh", ssh))))
 	capability := New(&fakeRunner{}, fixedClock{})
 	plan, err := capability.Plan(context.Background(), planInput(t, reconciliation.Apply, host, artifactServer(text("machineRef", "services"))))
 	if err != nil {
@@ -109,7 +109,7 @@ func TestSSHPlacementReservesNothing(t *testing.T) {
 func execution(t *testing.T, material secrets.Material) lifecycle.Execution {
 	t.Helper()
 	capability := New(&fakeRunner{}, fixedClock{})
-	plan, err := capability.Plan(context.Background(), planInput(t, reconciliation.Apply, bastion(), artifactServer()))
+	plan, err := capability.Plan(context.Background(), planInput(t, reconciliation.Apply, controller(), artifactServer()))
 	if err != nil {
 		t.Fatal(err)
 	}

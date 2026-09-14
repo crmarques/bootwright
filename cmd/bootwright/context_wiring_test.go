@@ -60,7 +60,7 @@ func testServices(t *testing.T, repository *contextfs.Store, root string) cli.Se
 
 // The lifecycle harness binds the real context store with substituted host,
 // execution and capability ports, so a journey exercises the durable boundary
-// without a bastion, a container runtime or a second host.
+// without a controller, a container runtime or a second host.
 type testLifecycleHost struct{}
 
 func (testLifecycleHost) Identity(ctx context.Context) (controller.InstalledHostIdentity, error) {

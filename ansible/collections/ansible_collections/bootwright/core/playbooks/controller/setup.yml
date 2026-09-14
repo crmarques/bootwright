@@ -1,5 +1,5 @@
 ---
-- name: Prepare the authorized bastion dependencies
+- name: Prepare the authorized controller dependencies
   hosts: bootwright_controller
   gather_facts: false
   any_errors_fatal: true

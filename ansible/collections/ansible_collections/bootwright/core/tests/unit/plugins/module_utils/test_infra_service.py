@@ -14,15 +14,15 @@ from ansible_collections.bootwright.core.plugins.module_utils.infra_service impo
 
 
 def test_dns_query_asks_one_a_record_for_the_exact_name():
-    payload = dns_query("bastion.lab.example.test")
+    payload = dns_query("controller.lab.example.test")
     identifier, flags, questions, answers = struct.unpack(">HHHH", payload[:8])
     assert (identifier, flags, questions, answers) == (0x4257, 0x0100, 1, 0)
     assert payload.endswith(struct.pack(">HH", 1, 1))
-    assert b"\x07bastion" in payload
+    assert b"\x0acontroller" in payload
 
 
 def test_dns_answers_counts_only_a_matching_reply():
-    payload = dns_query("bastion.lab.example.test")
+    payload = dns_query("controller.lab.example.test")
     reply = payload[:6] + struct.pack(">H", 2) + payload[8:]
     assert dns_answers(payload, reply) == 2
     with pytest.raises(ValueError):

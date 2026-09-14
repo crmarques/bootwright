@@ -52,4 +52,4 @@ spec:
         - serverRef: default-03
 
   controller:
-    machineRef: bastion
+    machineRef: controller

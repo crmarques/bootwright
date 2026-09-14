@@ -36,7 +36,7 @@ func ClassifyInvocation(args []string) InvocationClass {
 			return InvocationClass{}
 		}
 	}
-	if path == "bastion setup" && boolValue(command.Flags(), "dry-run") && stringValue(command.Flags(), "context") == "" {
+	if path == "controller setup" && boolValue(command.Flags(), "dry-run") && stringValue(command.Flags(), "context") == "" {
 		return InvocationClass{Command: path}
 	}
 	return InvocationClass{RequiresRoot: true, JSON: selectedJSON(command), Command: path}

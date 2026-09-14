@@ -44,7 +44,7 @@ merge contexts or create an abstraction before its first consumer.
 | Desired state | Document discovery and provenance, strict decoding, API-to-domain translation, normalized catalog assembly, deterministic diagnostics, and canonical effective-state encoding. | Domain invariants belonging to the referenced platform contexts or any platform effect. |
 | Environment | Environment selection, shared defaults, complete graph closure, and cross-context reference semantics. | Policy internal to a selected machine, provider, cluster, storage service, or add-on. |
 | Workspace (CLI noun `context`) | Named root-owned contexts, separate Context configuration, per-user selection, and persistence boundaries for local runtime data. | Lifecycle policy, secret meaning, or arbitrary user filesystem content. |
-| Controller (CLI noun `bastion`) | Local controller prerequisite inspection, setup, invoking-account verification, and sudo process supervision. | Managed-machine provisioning, cluster readiness, or lifecycle ordering. |
+| Controller (CLI noun `controller`) | Local controller prerequisite inspection, setup, invoking-account verification, and sudo process supervision. | Managed-machine provisioning, cluster readiness, or lifecycle ordering. |
 | Secrets | Secret custody and materialization, immutable secret binding, and disclosure classification. | A consuming context's authorization or business decision. Entitlement semantics remain with the product context that consumes them. |
 | Trust | SSH host identity, TLS trust, trust decisions, and durable trust evidence. | Secret custody, endpoint business policy, or ambient trust configuration. |
 | Substrate | Provider capabilities, provider identity, network attachments, machine infrastructure realization, and normalized power and identity operations. | Machine OS policy, cluster installation, or lifecycle ordering. |
@@ -314,7 +314,7 @@ that implements a row updates the row and the stub fitness test together.
 | `secret set/generate/check/list/show/delete` (Secrets) | `commands_secrets.go` | `secrets/custody` | `secrets/secretstore`, `secrets/localkeyring`, `secrets/material` | I |
 | `secret encryption init/status/rotate` (Secrets) | `commands_secrets.go` | `secrets/encryption` | `secrets/secretstore`, `secrets/localkeyring` | I |
 | `validate`, `render effective` (Desired state) | `commands_desiredstate.go` | `desiredstate/compilation` | `desiredstate/inputfs`, `desiredstate/yamlstream`, `desiredstate/encoding` | I |
-| `bastion setup`, `preflight bastion` (Controller) | `commands_controller.go` | `controller/prerequisites` | `controller/hostlinux`, `controller/bundlelocal`, `controller/ansiblelocal`, `controller/nativelocal`, `workspace/contextfs` | I |
+| `controller setup`, `preflight controller` (Controller) | `commands_controller.go` | `controller/prerequisites` | `controller/hostlinux`, `controller/bundlelocal`, `controller/ansiblelocal`, `controller/nativelocal`, `workspace/contextfs` | I |
 | Local privilege boundary for every root-requiring command (Controller) | `invocation.go` classifies only | — | `controller/privilege`, bound in `run.go` | I |
 | `plan`, `status`, `apply`, `destroy` (State reconciliation) | `commands_reconciliation.go` | `reconciliation/lifecycle` | `reconciliation/operationstore`, `workspace/contextfs`, `desiredstate/compilation`, `secrets/custody`, `controller/hostlinux`, `controller/bundlelocal`, `infrastructureservices/artifactserver`, `infrastructureservices/managedservice` with the `proxy`, `dnsserver` and `ntpserver` definitions | I |
 | `render` (Native artifacts) | `commands_nativeartifacts.go` | `nativeartifacts/rendering` | — | S |
@@ -639,7 +639,7 @@ Go owns:
 - translation of one authorized capability request into one bounded adapter
   call.
 
-Ansible owns bastion dependency installation and Bootwright-controlled
+Ansible owns controller dependency installation and Bootwright-controlled
 interaction with managed remote components.
 Remote observation, access, configuration, installation, verification, and
 removal cross an Ansible adapter boundary. Ansible does not infer desired
@@ -651,7 +651,7 @@ structured result with required evidence. A local native tool may run
 through a typed Go runner for a purely local transformation. Controller
 prerequisite inspection uses bounded Go read-only ports. Go also materializes
 the private Python/Ansible execution bootstrap. Host-package and native target
-CLI installation cross the fixed Ansible bastion roles/playbooks through
+CLI installation cross the fixed Ansible controller roles/playbooks through
 [Controller ports](controller.md#egress-and-local-effects). A tool
 contacting a managed remote component belongs inside Ansible.
 

@@ -83,7 +83,7 @@ collection, variant, and identity/source rules. The example retains explicit
 cluster values so their resolved choices are visible.
 
 Environment's `controller.machineRef` selects the existing
-[provided local Machine](infra/machines/bastion.yaml). That Machine's `proxy`
+[provided local Machine](infra/machines/controller.yaml). That Machine's `proxy`
 references the [external Proxy](infra/components/proxy-default.yaml) directly.
 Kind defaults select the same Proxy for ContainerCluster installation and
 MachineInstallProfile. Each consumer owns its `noProxy` list; `direct: {}`

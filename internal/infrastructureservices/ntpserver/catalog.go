@@ -13,7 +13,7 @@ const defaultImage = "docker.io/dockurr/chrony@sha256:f584829f268b26b26b351000b6
 
 // Definition binds the shared managed-service behavior to chrony. The daemon
 // serves time without disciplining the host clock, so it coexists with the
-// bastion's own time service instead of competing with it.
+// controller's own time service instead of competing with it.
 func Definition() managedservice.Definition {
 	return managedservice.Definition{
 		Kind:           api.NTPServer,

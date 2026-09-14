@@ -1,6 +1,6 @@
 # Controller runtime isolation
 
-Observed while implementing bastion setup; [Controller](../../specs/controller.md#supported-host-and-dependency-selection)
+Observed while implementing controller setup; [Controller](../../specs/controller.md#supported-host-and-dependency-selection)
 owns the requirement that the private Python/Ansible runtime runs isolated from
 ambient Python, loader and Ansible configuration and that readiness rejects
 additions and substitutions. This page records how that isolation is achieved

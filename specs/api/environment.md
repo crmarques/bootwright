@@ -20,7 +20,7 @@ Environment fields emit in this order:
 | `spec.remoteMachinesAccessKey` | object | conditional | — | Fleet key for the `bootwright` account installed on managed machines. |
 | `spec.defaults` | kind-keyed partial specs | no | `{}` | Omitted object fields inherit the corresponding kind entry under the rules below. |
 | `spec.downloads` | object | no | source-specific | Closed download-mirror policy below. |
-| `spec.dependencyVersions` | object | no | `latest` at setup | Version intent for bastion dependencies; closed shape below. |
+| `spec.dependencyVersions` | object | no | `latest` at setup | Version intent for controller dependencies; closed shape below. |
 | `spec.controller` | object | yes | — | Required controller Machine selection below. |
 | `spec.lifecycle` | object | no | — | Offline-rescue input; the declaration exposes no lifecycle command. |
 
@@ -31,7 +31,7 @@ documented identity.
 ## Dependency versions
 
 `spec.dependencyVersions` controls the versions installed by
-[`bootwright bastion setup`](../controller.md). Fields emit in the following
+[`bootwright controller setup`](../controller.md). Fields emit in the following
 order. Every field is optional and accepts a string; omission means `latest`
 when setup resolves the dependency. Admission preserves authored values and
 does not materialize release numbers or contact publishers.
@@ -63,7 +63,7 @@ client. Supporting Python wheels and native package dependencies are resolved
 as a complete compatible closure; they are not individually configurable.
 An incompatible or unavailable exact request fails with a dependency
 diagnostic rather than silently substituting another root version.
-The bastion adapter requires Ansible Core 2.19 or newer; an older exact override
+The controller adapter requires Ansible Core 2.19 or newer; an older exact override
 refuses before confirmation. Python must satisfy the selected Ansible release's
 published compatibility requirements.
 
@@ -364,13 +364,13 @@ spec:
     base: example.test
 
   controller:
-    machineRef: bastion
+    machineRef: controller
 
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata:
-  name: bastion
+  name: controller
 
 spec:
   capabilities:
@@ -388,9 +388,9 @@ spec:
 
 A controller may host a managed service when that service explicitly selects
 its `machineRef` and the Machine has the service's required capabilities.
-`container-runtime` is required for the bastion even when no managed service
+`container-runtime` is required for the controller even when no managed service
 is selected. A capability declaration does not install or prove a runtime;
-`bastion setup` installs an absent qualified Podman and verifies its dependencies.
+`controller setup` installs an absent qualified Podman and verifies its dependencies.
 No service placement defaults to the controller.
 
 Admission checks these declarations without inspecting the invoking host,

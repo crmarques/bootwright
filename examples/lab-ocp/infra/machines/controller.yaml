@@ -1,7 +1,7 @@
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata:
-  name: bastion
+  name: controller
 
 spec:
   capabilities:
@@ -17,7 +17,7 @@ spec:
   network:
     addresses:
       - name: fqdn
-        address: bastion.lab.example.test
+        address: controller.lab.example.test
 
       - name: ip
         address: 192.0.2.1

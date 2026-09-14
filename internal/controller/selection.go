@@ -90,8 +90,8 @@ func Select(catalog api.Catalog) (Selection, error) {
 	return Selection{environmentName: environment.Name(), machineName: machine.Name(), containerRuntime: containerRuntime, libvirtClient: requiresLibvirtClient(catalog, machine), route: route, versions: versions}, nil
 }
 
-func requiresLibvirtClient(catalog api.Catalog, bastion api.Object) bool {
-	if slices.Contains(bastion.Spec().Get("capabilities").Strings(), "libvirt") {
+func requiresLibvirtClient(catalog api.Catalog, controllerMachine api.Object) bool {
+	if slices.Contains(controllerMachine.Spec().Get("capabilities").Strings(), "libvirt") {
 		return true
 	}
 	for _, machine := range catalog.OfKind(api.Machine) {

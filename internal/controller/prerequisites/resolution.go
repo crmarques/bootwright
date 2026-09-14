@@ -255,7 +255,7 @@ func (s Service) resolveDependencies(ctx context.Context, name string, before in
 		}
 		after.report.ProgressPresented = before.report.ProgressPresented
 		if before.view.Context != after.view.Context || !before.host.Equal(after.host) || before.selection.Versions() != after.selection.Versions() || !slices.Equal(before.toolRequests, after.toolRequests) || before.view.State.Receipt.ID != after.view.State.Receipt.ID || before.view.State.Receipt.Status != after.view.State.Receipt.Status {
-			return failure("controller.conflict", "bastion requirements changed during dependency resolution", setupCommand(name))
+			return failure("controller.conflict", "controller requirements changed during dependency resolution", setupCommand(name))
 		}
 		return nil
 	})

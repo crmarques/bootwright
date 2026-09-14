@@ -1,9 +1,9 @@
-# Controller prerequisites and bastion setup
+# Controller prerequisites and setup
 
 Controller owns inspection and preparation of the local host on which
-Bootwright runs. This contract defines `bastion setup` and `preflight bastion`;
-[milestones](milestones.md#m1d--bastion-setup) own delivery and qualification
-status. The bastion is the [Environment-selected controller Machine](api/environment.md#controller-machine)
+Bootwright runs. This contract defines `controller setup` and `preflight controller`;
+[milestones](milestones.md#m1d--controller-setup) own delivery and qualification
+status. The prepared host is the [Environment-selected controller Machine](api/environment.md#controller-machine)
 when a context is supplied. Setup never provisions that Machine's OS or
 executes a managed service's lifecycle.
 
@@ -61,7 +61,7 @@ releases are resolved by explicit setup. Dependency selection follows
 | Host foundation | Verify the provided OS, architecture, local identity, account/sudo boundary, filesystem containment/durability, free-space limits and trusted package sources. No OS installation, release upgrade, repository enrollment, entitlement registration or reboot. |
 | Baseline execution bundle | Publish the resolved exact Python and `ansible-core` closure in an isolated Bootwright-owned location. Do not use system/user Python imports or ambient Ansible configuration. |
 | Container runtime | Require the controller to declare `container-runtime`; context-free baseline setup also selects Podman. Install or update the approved dependency set and verify an existing exact runtime without taking ownership of its containers or configuration. Do not start a service, pull a managed-service image or create a container. |
-| Native target clients | Select the complete controller-side tool closure from the admitted desired-state graph. OpenShift/OKD clients (`oc`, `kubectl`) and installer match the selected release; Kubernetes consumers select Helm; referenced vSphere providers select `govc`; virtualization selects upstream `virtctl`. Native SSH clients and NMState support the baseline flows. A declared `libvirt` capability or referenced libvirt provider selects `virsh` and its native client dependencies. Install these with the fixed Ansible bastion role. |
+| Native target clients | Select the complete controller-side tool closure from the admitted desired-state graph. OpenShift/OKD clients (`oc`, `kubectl`) and installer match the selected release; Kubernetes consumers select Helm; referenced vSphere providers select `govc`; virtualization selects upstream `virtctl`. Native SSH clients and NMState support the baseline flows. A declared `libvirt` capability or referenced libvirt provider selects `virsh` and its native client dependencies. Install these with the fixed Ansible controller role. |
 | Service execution | Service images, containers and lifecycle configuration remain with their service consumer. Installing a client grants no authority to contact or change a target. |
 
 Setup installs missing dependencies, updates selected dependencies to their
@@ -106,8 +106,8 @@ discovery or automatic compatibility inference is required. Freeze source URL,
 version, byte count and publisher SHA-256 in the plan and receipt. Mirrors
 change acquisition only. Dry-run and preflight do not discover versions. Setup
 never checks for newer releases: a serving retained resolution is reused as
-frozen, a ready bastion reports unchanged without publisher or repository
-access, and a bastion missing part of that closure installs only what is
+frozen, a ready controller reports unchanged without publisher or repository
+access, and a controller missing part of that closure installs only what is
 missing. Native packages are solved again only when a selected native root is
 not installed, because the frozen transaction binds the host's exact
 before-inventory; the retained Python, Ansible and target-tool resolution is
@@ -146,11 +146,11 @@ matrix does block setup before effects. Global SSH flags remain unconsumed.
 
 | Invocation | Required behavior |
 | --- | --- |
-| `bootwright bastion setup --dry-run` | Produce deterministic dependency intent and actions from policy and bounded local file metadata. No dependency subprocess, network, Secret read, privilege escalation or write. Versions requiring live resolution and readiness facts requiring effects are explicitly unverified. |
-| `bootwright bastion setup` | Inspect, present the complete bounded local plan, confirm when it contains changes, prepare the baseline and verify every required postcondition. |
-| `bootwright bastion setup --context <name> --dry-run` | Add controller requirements, binding disposition and declared egress from immutable context input. Existing verified sudo may be used solely to read the private store. After that boundary, no dependency subprocess, network, Secret material access, binding publication or other write. |
-| `bootwright bastion setup --context <name>` | Verify the local target, include any first host binding in the plan, then perform the confirmed prerequisite work under host and context coordination. |
-| `bootwright preflight bastion [--context <name>]` | Read and verify the selected prerequisites with bounded local probes. May use the verified privilege boundary for private metadata and disposable local probe scratch. Never install, download, refresh repository metadata, contact a managed endpoint, create/repair shared state or publish a binding. |
+| `bootwright controller setup --dry-run` | Produce deterministic dependency intent and actions from policy and bounded local file metadata. No dependency subprocess, network, Secret read, privilege escalation or write. Versions requiring live resolution and readiness facts requiring effects are explicitly unverified. |
+| `bootwright controller setup` | Inspect, present the complete bounded local plan, confirm when it contains changes, prepare the baseline and verify every required postcondition. |
+| `bootwright controller setup --context <name> --dry-run` | Add controller requirements, binding disposition and declared egress from immutable context input. Existing verified sudo may be used solely to read the private store. After that boundary, no dependency subprocess, network, Secret material access, binding publication or other write. |
+| `bootwright controller setup --context <name>` | Verify the local target, include any first host binding in the plan, then perform the confirmed prerequisite work under host and context coordination. |
+| `bootwright preflight controller [--context <name>]` | Read and verify the selected prerequisites with bounded local probes. May use the verified privilege boundary for private metadata and disposable local probe scratch. Never install, download, refresh repository metadata, contact a managed endpoint, create/repair shared state or publish a binding. |
 
 Dry-run does not execute a native package resolver. It lists required version
 intent and identifies any transaction feasibility, live identity or readiness
@@ -284,7 +284,7 @@ follows [controller-host protection](state-reconciliation.md#controller-host-pro
 Workspace serializes shared prerequisite mutation across every context in the
 fixed root using its exclusive root lock, acquired before a context lease.
 Preflight holds a shared root lock when the root exists, for coherent stored
-evidence. An absent root reports missing setup with `bastion setup` guidance
+evidence. An absent root reports missing setup with `controller setup` guidance
 and creates nothing. A busy lock refuses; there is no timeout-based takeover. Before installation, reject any
 package/runtime transaction that could alter dependencies in use or retained
 by another setup or frozen lifecycle. The OS package-manager lock is an
@@ -384,5 +384,5 @@ protected dependencies, cancellation, package failures, uncertain publication
 and exact retry. A fake adapter proves this contract and never proves an
 executed native installer. Collection syntax, pinned lint, sanity, unit and
 local integration checks qualify the shipped Ansible entrypoints as content.
-[Milestones](milestones.md#m1d--bastion-setup) own the verification model and
+[Milestones](milestones.md#m1d--controller-setup) own the verification model and
 which acceptance remains operator-run.

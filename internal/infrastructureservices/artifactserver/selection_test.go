@@ -19,13 +19,13 @@ func text(name, value string) api.FieldValue { return field(name, api.StringValu
 
 func number(name string, value string) api.FieldValue { return field(name, api.IntegerValue(value)) }
 
-func bastion() api.Object {
-	return api.NewObject(api.Machine, "bastion", api.Value{}, api.MapValue(
+func controller() api.Object {
+	return api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
 		field("capabilities", api.StringList("container-runtime")),
 		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
 		field("proxy", api.MapValue(field("direct", api.MapValue()))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
-			api.MapValue(text("name", "fqdn"), text("address", "bastion.lab.example.test")),
+			api.MapValue(text("name", "fqdn"), text("address", "controller.lab.example.test")),
 			api.MapValue(text("name", "ip"), text("address", "192.0.2.1")),
 		)))),
 		field("access", api.MapValue(field("local", api.BoolValue(true)))),
@@ -35,7 +35,7 @@ func bastion() api.Object {
 func artifactServer(fields ...api.FieldValue) api.Object {
 	spec := api.MapValue(
 		text("management", "managed"),
-		text("machineRef", "bastion"),
+		text("machineRef", "controller"),
 		text("bindAddress", "192.0.2.1"),
 		text("retention", "persistent"),
 		field("tls", api.MapValue(text("secretRef", "artifact-server-tls"), text("minVersion", "TLSv1.2"))),
@@ -57,12 +57,12 @@ func artifactServer(fields ...api.FieldValue) api.Object {
 func catalogOf(objects ...api.Object) api.Catalog { return api.NewCatalog(objects) }
 
 func TestRequestsDeriveTheFrozenLocalPlacement(t *testing.T) {
-	requests, err := Requests(catalogOf(bastion(), artifactServer()), "bastion", testContext)
+	requests, err := Requests(catalogOf(controller(), artifactServer()), "controller", testContext)
 	if err != nil || len(requests) != 1 {
 		t.Fatalf("requests = %d (%v)", len(requests), err)
 	}
 	request := requests[0]
-	if request.Placement.Connection != connectionLocal || request.Placement.Machine != "bastion" {
+	if request.Placement.Connection != connectionLocal || request.Placement.Machine != "controller" {
 		t.Fatalf("placement = %+v", request.Placement)
 	}
 	if request.Placement.Address != "" || request.Placement.User != "" || request.Placement.Port != 0 {
@@ -89,7 +89,7 @@ func TestRequestsDeriveTheFrozenLocalPlacement(t *testing.T) {
 }
 
 func TestRequestCanonicalFormIsStableAndOrdered(t *testing.T) {
-	requests, err := Requests(catalogOf(bastion(), artifactServer()), "bastion", testContext)
+	requests, err := Requests(catalogOf(controller(), artifactServer()), "controller", testContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestRequestCanonicalFormIsStableAndOrdered(t *testing.T) {
 
 func TestSSHPlacementRequiresKeyAndHostKey(t *testing.T) {
 	host := func(ssh api.Value) api.Object {
-		spec := bastion().Spec().Without("access").With("access", api.MapValue(field("ssh", ssh)))
+		spec := controller().Spec().Without("access").With("access", api.MapValue(field("ssh", ssh)))
 		return api.NewObject(api.Machine, "services", api.Value{}, spec)
 	}
 	complete := api.MapValue(
@@ -129,7 +129,7 @@ func TestSSHPlacementRequiresKeyAndHostKey(t *testing.T) {
 		text("knownHostsRef", "services-host-key"),
 	)
 	server := artifactServer(text("machineRef", "services"))
-	requests, err := Requests(catalogOf(host(complete), server), "bastion", testContext)
+	requests, err := Requests(catalogOf(host(complete), server), "controller", testContext)
 	if err != nil || len(requests) != 1 {
 		t.Fatalf("ssh placement = %v", err)
 	}
@@ -144,13 +144,13 @@ func TestSSHPlacementRequiresKeyAndHostKey(t *testing.T) {
 		"no host key":       complete.Without("knownHostsRef"),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := Requests(catalogOf(host(auth), server), "bastion", testContext); err == nil {
+			if _, err := Requests(catalogOf(host(auth), server), "controller", testContext); err == nil {
 				t.Fatal("an unsupported SSH posture produced a request")
 			}
 		})
 	}
-	bare := api.NewObject(api.Machine, "services", api.Value{}, bastion().Spec().Without("access"))
-	if _, err := Requests(catalogOf(bare, server), "bastion", testContext); err == nil {
+	bare := api.NewObject(api.Machine, "services", api.Value{}, controller().Spec().Without("access"))
+	if _, err := Requests(catalogOf(bare, server), "controller", testContext); err == nil {
 		t.Fatal("a host with neither controller nor SSH access produced a request")
 	}
 }
@@ -162,7 +162,7 @@ func TestImageSelectionRequiresADigestPin(t *testing.T) {
 		"public":     api.MapValue(text("public", digest)),
 	} {
 		t.Run(name, func(t *testing.T) {
-			requests, err := Requests(catalogOf(bastion(), artifactServer(field("image", image))), "bastion", testContext)
+			requests, err := Requests(catalogOf(controller(), artifactServer(field("image", image))), "controller", testContext)
 			if err != nil || requests[0].Image != digest {
 				t.Fatalf("image = %v (%v)", requests, err)
 			}
@@ -175,7 +175,7 @@ func TestImageSelectionRequiresADigestPin(t *testing.T) {
 		"uppercase":    "registry.example.test/nginx@sha256:" + strings.Repeat("A", 64),
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := Requests(catalogOf(bastion(), artifactServer(field("image", api.MapValue(text("public", reference))))), "bastion", testContext)
+			_, err := Requests(catalogOf(controller(), artifactServer(field("image", api.MapValue(text("public", reference))))), "controller", testContext)
 			reported := diagnostics.Of(err)
 			if err == nil || len(reported) != 1 || !strings.Contains(reported[0].Remediation, "@sha256:") {
 				t.Fatalf("an unpinned image was accepted: %+v", reported)
@@ -189,10 +189,10 @@ func TestEgressFollowsThePlacementMachineProxyChoice(t *testing.T) {
 		text("management", "external"),
 		field("connection", api.MapValue(text("httpsProxy", "http://proxy.example.test:3128"))),
 	))
-	host := api.NewObject(api.Machine, "bastion", api.Value{}, bastion().Spec().With("proxy", api.MapValue(
+	host := api.NewObject(api.Machine, "controller", api.Value{}, controller().Spec().With("proxy", api.MapValue(
 		text("proxyRef", "egress"), field("noProxy", api.StringList(".lab.example.test")),
 	)))
-	requests, err := Requests(catalogOf(host, external, artifactServer()), "bastion", testContext)
+	requests, err := Requests(catalogOf(host, external, artifactServer()), "controller", testContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,9 +201,9 @@ func TestEgressFollowsThePlacementMachineProxyChoice(t *testing.T) {
 		t.Fatalf("egress = %+v", egress)
 	}
 	managed := api.NewObject(api.Proxy, "egress", api.Value{}, api.MapValue(
-		text("management", "managed"), text("machineRef", "bastion"), text("implementation", "squid"),
+		text("management", "managed"), text("machineRef", "controller"), text("implementation", "squid"),
 	))
-	if _, err := Requests(catalogOf(host, managed, artifactServer()), "bastion", testContext); err == nil {
+	if _, err := Requests(catalogOf(host, managed, artifactServer()), "controller", testContext); err == nil {
 		t.Fatal("a managed Proxy was accepted as service egress")
 	}
 	authenticated := api.NewObject(api.Proxy, "egress", api.Value{}, api.MapValue(
@@ -213,7 +213,7 @@ func TestEgressFollowsThePlacementMachineProxyChoice(t *testing.T) {
 			field("auth", api.MapValue(text("proxyAuthRef", "proxy-credentials"))),
 		)),
 	))
-	if _, err := Requests(catalogOf(host, authenticated, artifactServer()), "bastion", testContext); err == nil {
+	if _, err := Requests(catalogOf(host, authenticated, artifactServer()), "controller", testContext); err == nil {
 		t.Fatal("an authenticated proxy was accepted for image acquisition")
 	}
 }
@@ -229,17 +229,17 @@ func TestUnsupportedArtifactServersAreListedInCanonicalOrder(t *testing.T) {
 	installOnly := api.NewObject(api.ArtifactServer, "temp", api.Value{}, api.MapValue(
 		text("management", "managed"), text("retention", "install-only"),
 	))
-	found := Unsupported(catalogOf(bastion(), cluster, managedProxy, external, installOnly, artifactServer()))
+	found := Unsupported(catalogOf(controller(), cluster, managedProxy, external, installOnly, artifactServer()))
 	if !slices.Equal(found, []string{"ArtifactServer/temp"}) {
 		t.Fatalf("unsupported = %v", found)
 	}
-	if len(Unsupported(catalogOf(bastion(), artifactServer()))) != 0 {
+	if len(Unsupported(catalogOf(controller(), artifactServer()))) != 0 {
 		t.Fatal("a supported graph reported unsupported objects")
 	}
 }
 
 func TestReservationKeysCoverEverySocketUnitAndPath(t *testing.T) {
-	requests, err := Requests(catalogOf(bastion(), artifactServer()), "bastion", testContext)
+	requests, err := Requests(catalogOf(controller(), artifactServer()), "controller", testContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +257,7 @@ func TestReservationKeysCoverEverySocketUnitAndPath(t *testing.T) {
 		t.Fatalf("keys are unordered: %v", keys)
 	}
 	wildcard := artifactServer(text("bindAddress", "0.0.0.0"))
-	requests, err = Requests(catalogOf(bastion(), wildcard), "bastion", testContext)
+	requests, err = Requests(catalogOf(controller(), wildcard), "controller", testContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +270,7 @@ func TestReservationKeysCoverEverySocketUnitAndPath(t *testing.T) {
 }
 
 func TestProbeTargetsFollowTheEffectiveBind(t *testing.T) {
-	requests, err := Requests(catalogOf(bastion(), artifactServer()), "bastion", testContext)
+	requests, err := Requests(catalogOf(controller(), artifactServer()), "controller", testContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +278,7 @@ func TestProbeTargetsFollowTheEffectiveBind(t *testing.T) {
 	if len(targets) != 2 || targets[0].Name != "http" || targets[0].Address != "192.0.2.1" || targets[1].Protocol != "https" {
 		t.Fatalf("targets = %+v", targets)
 	}
-	requests, err = Requests(catalogOf(bastion(), artifactServer(text("bindAddress", "0.0.0.0"))), "bastion", testContext)
+	requests, err = Requests(catalogOf(controller(), artifactServer(text("bindAddress", "0.0.0.0"))), "controller", testContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +291,7 @@ func TestProbeTargetsFollowTheEffectiveBind(t *testing.T) {
 
 func TestRequestsRefuseAnInvalidContextName(t *testing.T) {
 	for _, name := range []string{"", "Lab", "-lab", "lab-", "lab/other", strings.Repeat("a", 64)} {
-		if _, err := Requests(catalogOf(bastion(), artifactServer()), "bastion", name); err == nil {
+		if _, err := Requests(catalogOf(controller(), artifactServer()), "controller", name); err == nil {
 			t.Fatalf("context name %q produced requests", name)
 		}
 	}

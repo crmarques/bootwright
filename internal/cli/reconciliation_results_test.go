@@ -14,7 +14,7 @@ func previewResult() *lifecycle.PlanResult {
 		Context: lifecycle.ContextIdentity{Name: "lab"},
 		Verb:    "apply",
 		Steps: []lifecycle.PlanStep{{
-			ID: "artifact-server-lab", Description: "serve artifacts for lab on bastion",
+			ID: "artifact-server-lab", Description: "serve artifacts for lab on controller",
 			Stage: "infra-components", Impacts: []string{"open-listener 192.0.2.1:8443"}, State: "pending",
 		}},
 		Receipt: lifecycle.Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "apply"},
@@ -40,7 +40,7 @@ func TestPlanResultEndsWithItsReceipt(t *testing.T) {
 		t.Fatal(err)
 	}
 	rendered := out.String()
-	if !strings.Contains(rendered, "Apply plan") || !strings.Contains(rendered, "1. serve artifacts for lab on bastion") {
+	if !strings.Contains(rendered, "Apply plan") || !strings.Contains(rendered, "1. serve artifacts for lab on controller") {
 		t.Fatalf("plan text = %q", rendered)
 	}
 	if !strings.Contains(rendered, "open-listener 192.0.2.1:8443") {
@@ -136,7 +136,7 @@ func TestStatusRendersTextAndJSON(t *testing.T) {
 	result := &lifecycle.StatusResult{
 		Context:     lifecycle.ContextIdentity{Name: "lab", Revision: "rev-1"},
 		SetupChecks: []lifecycle.SetupCheck{{ID: "controller-binding", Status: "ready"}},
-		Shared:      []lifecycle.ServiceSummary{{Kind: "ArtifactServer", Name: "lab", Machine: "bastion", Status: "done"}},
+		Shared:      []lifecycle.ServiceSummary{{Kind: "ArtifactServer", Name: "lab", Machine: "controller", Status: "done"}},
 		NextSteps:   []string{"bootwright destroy"},
 		Lifecycle: &lifecycle.LifecycleSummary{
 			Operation: "op-abc", Verb: "apply", State: "done", Next: "destroy",
@@ -187,7 +187,7 @@ func TestPlanResultMarksWhatAStageSelectionWouldStart(t *testing.T) {
 	}
 	rendered := out.String()
 	for _, want := range []string{
-		"1. serve artifacts for lab on bastion [infra-components] [not selected]",
+		"1. serve artifacts for lab on controller [infra-components] [not selected]",
 		"2. realize metal [substrates] [start]",
 		"3. realize kubevirt [substrates] [deferred: waits on host-virtualization]",
 		"Stages  substrates",
@@ -205,7 +205,7 @@ func TestPlanResultWithoutASelectionCarriesNoMarker(t *testing.T) {
 		t.Fatal(err)
 	}
 	rendered := out.String()
-	if !strings.Contains(rendered, "1. serve artifacts for lab on bastion [infra-components]") {
+	if !strings.Contains(rendered, "1. serve artifacts for lab on controller [infra-components]") {
 		t.Fatalf("plan text = %q", rendered)
 	}
 	for _, absent := range []string{"[start]", "[not selected]", "Stages", "Starts"} {

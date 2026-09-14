@@ -37,7 +37,7 @@ The controller arm requires this context's verified
 [host binding](contexts.md#controller-relationship-and-host-binding) and the
 setup receipt whose automation identity matches the running executable. A
 missing, contradictory or stale binding refuses before effects and names
-`bastion setup`.
+`controller setup`.
 
 The SSH arm consumes authored `access.ssh.auth.privateKeyRef`, required
 `access.ssh.knownHostsRef` and any `access.ssh.sudoPasswordRef`, binding the

@@ -128,7 +128,7 @@ func TestLatestSetupResolvesOnceAndReusesRetainedNoop(t *testing.T) {
 	}
 	writes, prepares := f.store.writes, f.bundle.prepares
 	prior := CloneDefinition(*f.store.state.Receipt.Definition)
-	// A ready bastion never checks for newer releases.
+	// A ready controller never checks for newer releases.
 	r.bootstrapError = errors.New("latest endpoint must not be contacted")
 	r.nativeError = errors.New("repository must not be refreshed")
 	report, err = f.service.Setup(context.Background(), SetupRequest{})
@@ -350,7 +350,7 @@ func TestSelectedNativeClientIsAdmittedBeforeAcquisition(t *testing.T) {
 		api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("hypervisor"), "substrate", "providerRef")),
 	}
 	f.store.scope = SetupContext{Name: "example", Revision: "rev-" + strings.Repeat("2", 32)}
-	f.catalog.err = failure("controller.unsupported", "selected libvirt controller dependencies have no qualified native source for this bastion release", "")
+	f.catalog.err = failure("controller.unsupported", "selected libvirt controller dependencies have no qualified native source for this controller release", "")
 
 	_, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example"})
 	if err == nil {

@@ -117,24 +117,24 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 }
 
 // invoke opens the controller's approved bundle and runs the capability inside
-// the private Python execution boundary, exactly as bastion setup does.
+// the private Python execution boundary, exactly as controller setup does.
 func (s Service) invoke(ctx context.Context, tx Transaction, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, log *operationstore.Log, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
 	view := tx.Controller()
 	receipt := view.State.Receipt
 	if receipt.Definition == nil {
 		return Result{Outcome: reconciliation.OutcomeFailed}, failure("controller.state",
-			"the retained bastion setup has no execution definition",
-			"run bastion setup --context "+tx.Identity().Name)
+			"the retained controller setup has no execution definition",
+			"run controller setup --context "+tx.Identity().Name)
 	}
 	if view.OpenBundle == nil {
-		return Result{Outcome: reconciliation.OutcomeFailed}, failure("controller.state", "the approved execution bundle is unavailable", "run bastion setup --context "+tx.Identity().Name)
+		return Result{Outcome: reconciliation.OutcomeFailed}, failure("controller.state", "the approved execution bundle is unavailable", "run controller setup --context "+tx.Identity().Name)
 	}
 	area, err := view.OpenBundle(ctx, receipt.CatalogDigest)
 	if err != nil {
 		return Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
 	if area == nil {
-		return Result{Outcome: reconciliation.OutcomeFailed}, failure("controller.state", "the approved execution bundle is missing", "run bastion setup --context "+tx.Identity().Name)
+		return Result{Outcome: reconciliation.OutcomeFailed}, failure("controller.state", "the approved execution bundle is missing", "run controller setup --context "+tx.Identity().Name)
 	}
 	location, err := area.Location(ctx)
 	if err != nil {

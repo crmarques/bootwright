@@ -81,7 +81,7 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*Report, erro
 			return nil
 		}
 		result.Outcome = "not-ready"
-		return failure("preflight.failed", "required bastion prerequisites are not ready", setupCommand(request.ContextName))
+		return failure("preflight.failed", "required controller prerequisites are not ready", setupCommand(request.ContextName))
 	})
 	return result, err
 }
@@ -153,7 +153,7 @@ func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, erro
 		if scope == "" {
 			scope = "baseline"
 		}
-		if err := s.options.Confirmer.Confirm(ctx, "bastion setup", scope); err != nil {
+		if err := s.options.Confirmer.Confirm(ctx, "controller setup", scope); err != nil {
 			return &current.report, err
 		}
 	}
@@ -178,7 +178,7 @@ func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, erro
 			return err
 		}
 		if !approved.samePlan(fresh) {
-			return failure("controller.conflict", "bastion state changed after plan confirmation", setupCommand(request.ContextName))
+			return failure("controller.conflict", "controller state changed after plan confirmation", setupCommand(request.ContextName))
 		}
 		current = fresh
 		current.report.PlanPresented = true
@@ -348,7 +348,7 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, pha
 	settle(readiness("installed-host", "verified local identity", true))
 	if view.State.Receipt.ID != "" && view.State.Receipt.Incomplete() {
 		if !current.compatibleReceipt(view.State.Receipt) || !current.matchesActions(view.State.Receipt.Actions) {
-			return current, failure("controller.unknown", "another exact setup attempt remains unresolved", "restore its original context, executable and acquisition route, then repeat bastion setup")
+			return current, failure("controller.unknown", "another exact setup attempt remains unresolved", "restore its original context, executable and acquisition route, then repeat controller setup")
 		}
 	}
 	if view.OpenBundle != nil && current.toolsResolved {
@@ -389,7 +389,7 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, pha
 		}
 		settle(check)
 		if !current.runtime.Ready {
-			current.report.Actions = append(current.report.Actions, "Run the Ansible bastion role to install and verify missing native prerequisites")
+			current.report.Actions = append(current.report.Actions, "Run the Ansible controller role to install and verify missing native prerequisites")
 		}
 		if current.definition.Native != nil && !current.runtime.Ready {
 			for _, action := range current.definition.Native.Actions {
@@ -536,9 +536,9 @@ func readiness(id, required string, ready bool) Check {
 
 func setupCommand(name string) string {
 	if name == "" {
-		return "run bootwright bastion setup"
+		return "run bootwright controller setup"
 	}
-	return "run bootwright bastion setup --context " + name
+	return "run bootwright controller setup --context " + name
 }
 
 func failure(code, message, remediation string) error {

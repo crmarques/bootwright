@@ -1,4 +1,4 @@
-# Managed artifact server on the bastion
+# Managed artifact server on the controller
 
 This example is the smallest complete Environment the
 [M1e lifecycle](../../specs/milestones.md#m1e--lifecycle-engine-and-managed-artifact-serving)
@@ -9,8 +9,8 @@ readiness evidence, exact continuation and the inverse.
 
 | Object | Role |
 | --- | --- |
-| [`bastion`](infra/machines/bastion.yaml) | The provided local Machine selected by `Environment.spec.controller`; it declares `container-runtime`. |
-| [`lab-artifacts`](infra/components/artifact-server.yaml) | Managed artifact server with one HTTPS and one HTTP listener on the bastion address. |
+| [`controller`](infra/machines/controller.yaml) | The provided local Machine selected by `Environment.spec.controller`; it declares `container-runtime`. |
+| [`lab-artifacts`](infra/components/artifact-server.yaml) | Managed artifact server with one HTTPS and one HTTP listener on the controller address. |
 | [`artifact-server-tls`](secret-descriptors/artifact-server-tls.yaml) | Generated serving certificate; its subject alternative names must cover every address an HTTPS endpoint serves. |
 
 Nothing else is declared, because every other selected object would need a
@@ -34,7 +34,7 @@ already holds.
 Bootwright requests sudo authorization for context, setup and lifecycle
 commands. The artifact-server automation is embedded in the executable, so a
 build that changes it also changes the dependency-bundle identity: run
-`bastion setup` again after `make build`, otherwise `apply` refuses with the
+`controller setup` again after `make build`, otherwise `apply` refuses with the
 retained bundle it cannot use.
 
 ```sh
@@ -43,8 +43,8 @@ make build
 ./bin/bootwright context init --name lab-artifacts --input-dir "$PWD/examples/lab-artifacts"
 ./bin/bootwright secret generate
 ./bin/bootwright secret check
-./bin/bootwright bastion setup --context lab-artifacts
-./bin/bootwright preflight bastion --context lab-artifacts
+./bin/bootwright controller setup --context lab-artifacts
+./bin/bootwright preflight controller --context lab-artifacts
 ./bin/bootwright plan
 ./bin/bootwright apply
 ```

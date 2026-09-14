@@ -4,7 +4,7 @@
 catalog with help and completion; admission of all 26 API kinds; durable
 contexts with immutable input; context-backed `validate` and public
 `render effective`; the complete `secret` tree over `local-keyring`; and
-`bastion setup` with `preflight bastion` on RHEL 9 and Fedora for Linux/amd64;
+`controller setup` with `preflight controller` on RHEL 9 and Fedora for Linux/amd64;
 and the lifecycle engine with managed artifact serving, so `plan`, `status`,
 `apply` and `destroy` are available. M1f completes the `infra-components`
 stage and adds stage selection to the engine. Every other catalogued command
@@ -116,14 +116,14 @@ Not qualified: real-store migration, secure erasure, power loss and actual
 host sudo password authentication. Complete-store restore and bounded lifetime
 ID allocation remain C14 and C15.
 
-### M1d — bastion setup
+### M1d — controller setup
 
 **Owners:** Controller (prerequisites, local adapters and verified host
 evidence) and Workspace (shared setup state and context binding), using
 Machine, Desired state and the invocation boundary. **Delivery:** completed;
-end-to-end acceptance against a real bastion is operator-run.
+end-to-end acceptance against a real controller is operator-run.
 
-Delivered `bastion setup`, `bastion setup --dry-run` and `preflight bastion`
+Delivered `controller setup`, `controller setup --dry-run` and `preflight controller`
 for RHEL 9 and Fedora on Linux/amd64 under [Controller](controller.md) and the
 [host-binding contract](contexts.md#controller-relationship-and-host-binding):
 desired-state dependency selection with version overrides, frozen resolution
@@ -137,7 +137,7 @@ deferred.
 host-independent: it runs without a package manager, network, privilege or a
 second operating system, and creates no virtual machine. Such tests qualify
 contracts, refusals and recovery semantics, never an executed native installer.
-End-to-end acceptance on a real bastion is operator-run and is not a gate of
+End-to-end acceptance on a real controller is operator-run and is not a gate of
 any milestone. The operator-run harnesses and their selectors are listed in
 [development](../docs/development.md).
 
@@ -168,7 +168,7 @@ their qualified inverse belong to M1e.
 
 **Owners:** State reconciliation and Infrastructure services, using Workspace,
 Secrets, Machine, Controller and Trust. **Delivery:** completed; end-to-end
-acceptance against a real bastion is operator-run.
+acceptance against a real controller is operator-run.
 
 Delivered the durable lifecycle engine and its first domain capability, making
 `plan`, `status`, `apply` and `destroy` available: plans, operation and block
@@ -192,16 +192,16 @@ remain the operator's responsibility. Bounded parallel execution remains C7.
 Executed service effects, the service adapter's process and cancellation
 boundary, and SSH placement against a real host are operator-run.
 
-## M1f — managed bastion network services
+## M1f — managed controller network services
 
 **Owners:** Infrastructure services and State reconciliation, using Workspace,
 Secrets, Machine and Controller. **Requires:** M1e. **Definition:** Specified.
-**Delivery:** completed; end-to-end acceptance against a real bastion is
+**Delivery:** completed; end-to-end acceptance against a real controller is
 operator-run.
 
 Deliver the complete `infra-components` stage: managed `Proxy`, `DNSServer` and
 `NTPServer` join the managed `ArtifactServer` behind the same capability port,
-so a whole bastion service set applies, replays and destroys as one unit. The
+so a whole controller service set applies, replays and destroys as one unit. The
 engine gains stage selection, which gates which blocks an invocation starts
 without narrowing the plan.
 

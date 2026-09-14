@@ -71,8 +71,8 @@ sources and exercises the generated Bash script, and the other shells when they
 are selected. An unavailable selected runtime is missing verification evidence,
 not a pass.
 
-The current [M1d delivery](../specs/milestones.md#m1d--bastion-setup) adds
-bastion dependency preparation and preflight to the existing admission,
+The current [M1d delivery](../specs/milestones.md#m1d--controller-setup) adds
+controller dependency preparation and preflight to the existing admission,
 context, rendering and Secret journeys. Go selects and freezes dependencies,
 owns confirmation/recovery and orchestrates the embedded Ansible collection.
 Ansible installs the selected host packages and target CLIs. The private
@@ -81,21 +81,21 @@ Setup resolves latest stable dependencies by default, and only when no retained
 resolution serves the selected intent; Environment `spec.dependencyVersions`
 overrides individual roots, including Python and Ansible. Public resolver
 downloads and maintained pip/DNF resolution use disposable unprivileged staging
-before the installation plan is confirmed. A ready bastion and every retry use
+before the installation plan is confirmed. A ready controller and every retry use
 the frozen result without contacting a publisher. Development checks retain
 their separate pinned tool versions for reproducible verification.
 The [Ansible check tool lock and setup](../scripts/tools/ansible-check.md)
 is separate from the product execution bundle and builds its own pinned
 interpreter on first use, so the gate does not depend on the host's Python. `make check` includes its
-unprivileged collection gate; it never installs bastion packages.
+unprivileged collection gate; it never installs controller packages.
 
-Bastion tests are unitary and host-independent, following the
-[M1d verification model](../specs/milestones.md#m1d--bastion-setup): no package
+Controller tests are unitary and host-independent, following the
+[M1d verification model](../specs/milestones.md#m1d--controller-setup): no package
 manager, network, privilege or second operating system, and no virtual machines.
-End-to-end acceptance against a real bastion is operator-run. Deferred
+End-to-end acceptance against a real controller is operator-run. Deferred
 lifecycle commands keep their unavailable result until their owning milestone.
 
-Operator-run bastion harnesses are carried in the tree but excluded from
+Operator-run controller harnesses are carried in the tree but excluded from
 `make test`, so they never report a silent skip as acceptance. They resolve
 real publisher metadata or touch the running host and are run by hand as the
 code evolves:
@@ -109,11 +109,11 @@ code evolves:
 | Ansible `controller_prerequisites` target, which runs the shipped setup playbook and role over the real runner protocol against the host inventory | `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1` with `make ansible-check` |
 
 Executed native installation is not covered by any of these; it is a manual
-`bastion setup` on a prepared host.
+`controller setup` on a prepared host.
 
 ## M1f managed infrastructure components and staged apply
 
-The current [M1f delivery](../specs/milestones.md#m1f--managed-bastion-network-services)
+The current [M1f delivery](../specs/milestones.md#m1f--managed-controller-network-services)
 completes the `infra-components` stage: managed `Proxy`, `DNSServer` and
 `NTPServer` join the managed `ArtifactServer` behind one capability port, and
 `plan` and `apply` accept `--stage`. Go owns plans, operation records, leases,
@@ -142,7 +142,7 @@ resolve to an immutable digest.
 
 The embedded collection participates in the dependency-bundle identity, so a
 build that changes `ansible/` changes the bundle a context is bound to. Run
-`bastion setup --context <name>` again after such a build; `preflight bastion`
+`controller setup --context <name>` again after such a build; `preflight controller`
 reports the incompatible retained bundle and `apply` refuses rather than
 executing automation the receipt does not cover.
 
@@ -157,6 +157,6 @@ and are not selectable from a test runner:
 
 | Acceptance | How it is run |
 | --- | --- |
-| The complete journey in [`examples/managed-infra-components`](../examples/managed-infra-components/README.md): staged apply, replay, interrupt, continue and destroy against a real container runtime | by hand as root on a prepared bastion |
-| The single-service journey in [`examples/lab-artifacts`](../examples/lab-artifacts/README.md) | by hand as root on a prepared bastion |
+| The complete journey in [`examples/managed-infra-components`](../examples/managed-infra-components/README.md): staged apply, replay, interrupt, continue and destroy against a real container runtime | by hand as root on a prepared controller |
+| The single-service journey in [`examples/lab-artifacts`](../examples/lab-artifacts/README.md) | by hand as root on a prepared controller |
 | SSH placement against a second OS-ready host | by hand, with that host's authored access and bound host key |

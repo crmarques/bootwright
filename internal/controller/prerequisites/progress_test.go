@@ -94,7 +94,7 @@ func (r *recordingProgress) settled(t *testing.T, phase string) []string {
 	return rows
 }
 
-// Inspection is what a ready bastion spends its time on, so the scope opens
+// Inspection is what a ready controller spends its time on, so the scope opens
 // first and every check is shown as it settles, once, although setup inspects
 // again before it resolves and again under the transaction. Readiness streams
 // the same checks under its own phase.

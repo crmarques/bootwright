@@ -9,7 +9,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
-// controllerDependencies names every local capability bastion setup consumes.
+// controllerDependencies names every local capability controller setup consumes.
 // A nil field leaves its capability unavailable rather than substituting one.
 type controllerDependencies struct {
 	Storage         prerequisites.Storage

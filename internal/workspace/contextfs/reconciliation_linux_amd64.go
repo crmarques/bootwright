@@ -278,7 +278,7 @@ func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []p
 		if len(next) == 0 {
 			return nil
 		}
-		return controllerFailure("controller.identity", "locally hosted services require a completed bastion setup on this host")
+		return controllerFailure("controller.identity", "locally hosted services require a completed controller setup on this host")
 	}
 	claimed := map[string]string{}
 	retained := []prerequisites.HostReservation{}

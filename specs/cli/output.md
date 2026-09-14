@@ -64,7 +64,7 @@ command is readable from a familiar one. One shared renderer owns this layout;
 a command supplies content and never its own spacing, padding, or separators.
 
 - An optional **headline** opens the result: either a status line
-  (`[OK] Context initialized`) or a plain title (`Bastion setup plan`). It is
+  (`[OK] Context initialized`) or a plain title (`Controller setup plan`). It is
   the only line at column zero besides section headings and table headers.
 - A **section** is an optional capitalized heading followed by its body. One
   blank line separates a section from the block before it. A section with no
@@ -109,8 +109,8 @@ Four rules govern the stream:
 
 1. **Coverage.** Any unit of work that can exceed the heartbeat interval opens
    a `[RUNNING]` row before it starts, including work before confirmation.
-   `bastion setup` and `preflight bastion` open with their scope and report
-   each host check under a `Checks` heading as it is verified; `bastion setup`
+   `controller setup` and `preflight controller` open with their scope and report
+   each host check under a `Checks` heading as it is verified; `controller setup`
    reports dependency resolution under `Resolving` before it presents the
    plan; every command reports confirmed effects under `Progress`. The first
    row opens its heading, and a section the stream already showed is not

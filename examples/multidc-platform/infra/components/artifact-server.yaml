@@ -5,7 +5,7 @@ metadata:
 
 spec:
   management: managed
-  machineRef: bastion
+  machineRef: controller
   bindAddress: 0.0.0.0
   retention: persistent
 

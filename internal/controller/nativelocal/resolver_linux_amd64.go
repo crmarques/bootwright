@@ -179,7 +179,7 @@ func profiles(platform prerequisites.Platform, requirements prerequisites.Native
 		return []repository{{ID: "fedora", BaseURL: "https://dl.fedoraproject.org/pub/fedora/linux/releases/43/Everything/x86_64/os", Signer: signer}, {ID: "updates", BaseURL: "https://dl.fedoraproject.org/pub/fedora/linux/updates/43/Everything/x86_64", Signer: signer}}, nil
 	case platform.OS == "rhel" && platform.Release == "9.8":
 		if requirements.LibvirtClient {
-			return nil, diagnostics.NewFailureWithRemediation("controller.unsupported", "RHEL libvirt requires an authenticated AppStream source adapter", "", "Use a Fedora bastion for libvirt preparation until RHEL AppStream credential acquisition is configured.")
+			return nil, diagnostics.NewFailureWithRemediation("controller.unsupported", "RHEL libvirt requires an authenticated AppStream source adapter", "", "Use a Fedora controller for libvirt preparation until RHEL AppStream credential acquisition is configured.")
 		}
 		signer := "567e347ad0044ade55ba8a5f199e2f91fd431d51"
 		return []repository{{ID: "ubi-baseos", BaseURL: "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os", Signer: signer}, {ID: "ubi-appstream", BaseURL: "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/appstream/os", Signer: signer}}, nil

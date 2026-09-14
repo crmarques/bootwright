@@ -290,7 +290,7 @@ completion, or context initialization without input. Context-free validation
 can run away from the declared controller; it checks input relationships and
 never verifies the invoking host.
 
-`bastion setup` and `preflight bastion` follow the
+`controller setup` and `preflight controller` follow the
 [Controller journeys](controller.md#selection-and-command-journeys), including
 preparation before context creation or Environment import. These commands
 consume a context only when `--context` is explicit and nonempty; omission ignores current

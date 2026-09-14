@@ -215,7 +215,7 @@ func TestTargetCLIVersionsCoexistWithOtherDependencyOverrides(t *testing.T) {
 }
 
 // A pinned release image is the payload; the declared release still selects the
-// matching clients, so it must not block the rest of bastion setup.
+// matching clients, so it must not block the rest of controller setup.
 func TestTargetToolsFollowDeclaredReleaseBesideAPinnedImage(t *testing.T) {
 	objects := selectionObjects()
 	cluster := api.NewObject(api.ContainerCluster, "cluster", api.Value{}, api.MapValue().

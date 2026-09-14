@@ -18,7 +18,7 @@ func TestComposedBaselineDryRunUsesOnlyPlatformAndCatalog(t *testing.T) {
 	for _, flag := range []string{"", "--context="} {
 		ports := &controllerPorts{}
 		services := assembleServices(serviceDependencies{Controller: controllerDependencies{Storage: ports, Host: ports, Catalog: ports, Bundle: ports}})
-		args := []string{"bastion", "setup", "--dry-run"}
+		args := []string{"controller", "setup", "--dry-run"}
 		if flag != "" {
 			args = append(args, flag)
 		}
@@ -83,7 +83,7 @@ func TestComposedControllerSuppliesEveryPort(t *testing.T) {
 
 func TestUnsuppliedControllerPortsRemainUnavailable(t *testing.T) {
 	services := assembleServices(serviceDependencies{})
-	for _, args := range [][]string{{"bastion", "setup"}, {"bastion", "setup", "--dry-run"}, {"preflight", "bastion"}} {
+	for _, args := range [][]string{{"controller", "setup"}, {"controller", "setup", "--dry-run"}, {"preflight", "controller"}} {
 		var out, errOut bytes.Buffer
 		code := runServices(context.Background(), args, &out, &errOut, services)
 		if code != 1 || out.Len() != 0 || !strings.HasPrefix(errOut.String(), "[FAIL] cli.not-implemented: bootwright ") {

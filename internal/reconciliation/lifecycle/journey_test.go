@@ -372,7 +372,7 @@ func definition(id string) reconciliation.BlockDefinition {
 		Kind: "ArtifactServer", Object: id,
 		Implementation: "artifact-server-nginx-v1", ContentDigest: strings.Repeat("c", 64),
 		Request: json.RawMessage(`{"name":"` + id + `"}`),
-		Groups:  []reconciliation.Group{{ID: "pull-image", Description: "acquire the pinned server image", Machines: []string{"bastion"}}},
+		Groups:  []reconciliation.Group{{ID: "pull-image", Description: "acquire the pinned server image", Machines: []string{"controller"}}},
 	}
 }
 
@@ -397,7 +397,7 @@ func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinitio
 		t.Fatal(err)
 	}
 	catalog := api.NewCatalog([]api.Object{api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue(
-		api.FieldValue{Name: "controller", Value: api.MapValue(api.FieldValue{Name: "machineRef", Value: api.StringValue("bastion")})},
+		api.FieldValue{Name: "controller", Value: api.MapValue(api.FieldValue{Name: "machineRef", Value: api.StringValue("controller")})},
 	))})
 	pristine, err := reconciliation.PristineEvidence().Bytes()
 	if err != nil {
@@ -416,7 +416,7 @@ func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinitio
 					Status: "complete", CatalogDigest: strings.Repeat("b", 64),
 					Definition: &prerequisites.Definition{},
 				},
-				Bindings: []prerequisites.ControllerBinding{{Context: testContextName, Machine: "bastion", HostDigest: digest}},
+				Bindings: []prerequisites.ControllerBinding{{Context: testContextName, Machine: "controller", HostDigest: digest}},
 			},
 			OpenBundle: func(context.Context, string) (prerequisites.BundleArea, error) { return testBundle{}, nil },
 		},
@@ -1045,7 +1045,7 @@ func TestUnclaimedKindsRefuseBeforeRegistration(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
 	catalog := api.NewCatalog([]api.Object{
 		api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue(
-			api.FieldValue{Name: "controller", Value: api.MapValue(api.FieldValue{Name: "machineRef", Value: api.StringValue("bastion")})},
+			api.FieldValue{Name: "controller", Value: api.MapValue(api.FieldValue{Name: "machineRef", Value: api.StringValue("controller")})},
 		)),
 		api.NewObject(api.Proxy, "lab-proxy", api.Value{}, api.MapValue(
 			api.FieldValue{Name: "management", Value: api.StringValue("managed")},

@@ -96,7 +96,7 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 		interpreterArguments[index] = "'" + strings.ReplaceAll(argument, "'", "'\"'\"'") + "'"
 	}
 	interpreter := strings.Join(interpreterArguments, " ")
-	inventory := map[string]any{"all": map[string]any{"children": map[string]any{"bootwright_controller": map[string]any{"hosts": map[string]any{"bastion": map[string]any{"ansible_connection": "local", "ansible_python_interpreter": interpreter, "ansible_host": "localhost"}}}}}}
+	inventory := map[string]any{"all": map[string]any{"children": map[string]any{"bootwright_controller": map[string]any{"hosts": map[string]any{"controller": map[string]any{"ansible_connection": "local", "ansible_python_interpreter": interpreter, "ansible_host": "localhost"}}}}}}
 	variables := map[string]any{"bootwright_controller_request": request}
 	for name, value := range map[string]any{"inventory.json": inventory, "request.json": variables} {
 		encoded, err := json.Marshal(value)

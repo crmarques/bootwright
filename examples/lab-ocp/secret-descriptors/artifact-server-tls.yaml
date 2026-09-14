@@ -8,9 +8,9 @@ spec:
 
   source:
     generated:
-      commonName: bastion.lab.example.test
+      commonName: controller.lab.example.test
       dnsNames:
-        - bastion.lab.example.test
+        - controller.lab.example.test
       ipAddresses:
         - 192.0.2.1
       validityDays: 3650

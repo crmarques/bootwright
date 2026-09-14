@@ -27,7 +27,7 @@ func NewConfirmation(read func(context.Context, []byte) (int, error), out io.Wri
 
 func (c *Confirmation) Confirm(ctx context.Context, action, name string) error {
 	failure := func(reason string) error {
-		if action == "bastion setup" {
+		if action == "controller setup" {
 			return diagnostics.NewFailure("controller.setup", "setup confirmation "+reason, "")
 		}
 		return contexts.StateError("context confirmation " + reason)
@@ -46,8 +46,8 @@ func (c *Confirmation) Confirm(ctx context.Context, action, name string) error {
 		return failure("requires interactive input; use --yes after reviewing the selected transition")
 	}
 	prompt := fmt.Sprintf("Confirm %s for context %s? [y/N] ", escapeDisplayLine(action), escapeDisplayLine(name))
-	if action == "bastion setup" {
-		prompt = fmt.Sprintf("Confirm bastion setup for %s? [y/N] ", escapeDisplayLine(name))
+	if action == "controller setup" {
+		prompt = fmt.Sprintf("Confirm controller setup for %s? [y/N] ", escapeDisplayLine(name))
 	}
 	if n, err := io.WriteString(c.out, prompt); err != nil || n != len(prompt) {
 		return failure("prompt could not be written")

@@ -221,7 +221,7 @@ func (c *testCompiler) Compile(context.Context, desiredstate.Sources) (*compilat
 	c.calls++
 	name := c.machine
 	if name == "" {
-		name = "bastion"
+		name = "controller"
 	}
 	environment := api.NewObject(api.Environment, "example", api.Value{}, api.MapValue().WithPath(api.StringValue(name), "controller", "machineRef"))
 	spec := api.MapValue().WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").WithPath(api.MapValue(), "proxy", "direct")
@@ -357,7 +357,7 @@ func TestExplicitSelectionBindingAndWrongMachineRefusal(t *testing.T) {
 	f := newFixture(t)
 	f.store.scope = SetupContext{Name: "example", Revision: "rev-" + strings.Repeat("2", 32)}
 	result, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
-	if err != nil || result.Machine != "bastion" || len(f.store.state.Bindings) != 1 || f.store.state.Receipt.Context.Machine != "bastion" {
+	if err != nil || result.Machine != "controller" || len(f.store.state.Bindings) != 1 || f.store.state.Receipt.Context.Machine != "controller" {
 		t.Fatalf("binding=%#v err=%v", result, err)
 	}
 	f.compiler.machine = "replacement"

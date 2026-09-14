@@ -8,7 +8,7 @@ import (
 
 func fixtureRequest(t *testing.T) Request {
 	t.Helper()
-	requests, err := Requests(catalogOf(bastion(), artifactServer()), "bastion", testContext)
+	requests, err := Requests(catalogOf(controller(), artifactServer()), "controller", testContext)
 	if err != nil {
 		t.Fatal(err)
 	}

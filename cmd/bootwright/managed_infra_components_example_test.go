@@ -33,7 +33,7 @@ func TestManagedInfraComponentsExampleIsAdmissibleAndSupported(t *testing.T) {
 		kind api.Kind
 		name string
 	}{
-		{api.Machine, "bastion"}, {api.Proxy, "lab-proxy"},
+		{api.Machine, "controller"}, {api.Proxy, "lab-proxy"},
 		{api.DNSServer, "lab-dns"}, {api.NTPServer, "lab-ntp"},
 		{api.ArtifactServer, "lab-artifacts"},
 	} {
@@ -48,7 +48,7 @@ func TestManagedInfraComponentsExamplePlansOneBlockPerService(t *testing.T) {
 	state, _ := compileAcceptance(t, sources)
 	resolver := buildCapabilities(systemClock{})
 	input := lifecycle.PlanInput{
-		Verb: reconciliation.Apply, State: state, Controller: "bastion",
+		Verb: reconciliation.Apply, State: state, Controller: "controller",
 		Context: lifecycle.ContextIdentity{Name: "managed-infra"},
 	}
 	var definitions []reconciliation.BlockDefinition
@@ -111,7 +111,7 @@ func TestManagedInfraComponentsRequestsCarryTheirDerivedIntent(t *testing.T) {
 	for _, kind := range []string{"Proxy", "DNSServer", "NTPServer"} {
 		capability, _ := resolver.Resolve(kind, "")
 		contribution, err := capability.Plan(context.Background(), lifecycle.PlanInput{
-			Verb: reconciliation.Apply, State: state, Controller: "bastion",
+			Verb: reconciliation.Apply, State: state, Controller: "controller",
 			Context: lifecycle.ContextIdentity{Name: "managed-infra"},
 		})
 		if err != nil || len(contribution.Definitions) != 1 {
@@ -129,7 +129,7 @@ func TestManagedInfraComponentsRequestsCarryTheirDerivedIntent(t *testing.T) {
 		t.Fatalf("clients = %v and %v", requests["Proxy"].Clients, requests["NTPServer"].Clients)
 	}
 	records := requests["DNSServer"].Records
-	if len(records) != 1 || records[0].Name != "bastion.lab.example.test" || !slices.Equal(records[0].Addresses, []string{"192.0.2.1"}) {
+	if len(records) != 1 || records[0].Name != "controller.lab.example.test" || !slices.Equal(records[0].Addresses, []string{"192.0.2.1"}) {
 		t.Fatalf("records = %+v", records)
 	}
 	if !slices.Equal(requests["DNSServer"].Forwarders, []string{"192.0.2.53"}) {
@@ -139,7 +139,7 @@ func TestManagedInfraComponentsRequestsCarryTheirDerivedIntent(t *testing.T) {
 		t.Fatalf("sources = %v", requests["NTPServer"].Sources)
 	}
 	for kind, request := range requests {
-		if request.Placement.Connection != "local" || request.Placement.Machine != "bastion" {
+		if request.Placement.Connection != "local" || request.Placement.Machine != "controller" {
 			t.Fatalf("%s placement = %+v", kind, request.Placement)
 		}
 		if !strings.Contains(request.Image, "@sha256:") {

@@ -56,7 +56,7 @@ func copySources(t *testing.T, sources desiredstate.Sources, destination string)
 	}
 }
 
-func TestLabExampleSelectsBastionDependenciesFromDesiredState(t *testing.T) {
+func TestLabExampleSelectsControllerDependenciesFromDesiredState(t *testing.T) {
 	sources := labExampleSources(t)
 	if len(sources.Files) != labExampleFiles {
 		t.Fatalf("lab example discovery: got %d files, want %d", len(sources.Files), labExampleFiles)
@@ -73,7 +73,7 @@ func TestLabExampleSelectsBastionDependenciesFromDesiredState(t *testing.T) {
 	state, _ := compileAcceptance(t, sources)
 	effective := state.Effective()
 	selection, err := controller.Select(effective)
-	if err != nil || selection.MachineName() != "bastion" || !selection.ContainerRuntime() || !selection.LibvirtClient() || !selection.Route().Direct() || selection.Versions() != controller.DefaultDependencyVersions() {
+	if err != nil || selection.MachineName() != "controller" || !selection.ContainerRuntime() || !selection.LibvirtClient() || !selection.Route().Direct() || selection.Versions() != controller.DefaultDependencyVersions() {
 		t.Fatalf("controller selection: %#v err=%v", selection, err)
 	}
 	tools, err := controller.SelectTools(effective)
@@ -102,12 +102,12 @@ func TestLabExampleSelectsBastionDependenciesFromDesiredState(t *testing.T) {
 		name string
 	}{{api.Proxy, "lab-proxy"}, {api.DNSServer, "lab-dns"}, {api.NTPServer, "lab-ntp"}, {api.ArtifactServer, "lab-artifacts"}} {
 		object := requireObject(t, effective, service.kind, service.name)
-		if object.Spec().Get("management").Text() != "managed" || object.Spec().Get("machineRef").Text() != "bastion" || object.Spec().Get("bindAddress").Text() != "192.0.2.1" {
-			t.Fatalf("%s/%s is not a managed bastion service", service.kind, service.name)
+		if object.Spec().Get("management").Text() != "managed" || object.Spec().Get("machineRef").Text() != "controller" || object.Spec().Get("bindAddress").Text() != "192.0.2.1" {
+			t.Fatalf("%s/%s is not a managed controller service", service.kind, service.name)
 		}
 	}
 	provider := requireObject(t, effective, api.InfraProvider, "lab-libvirt")
-	if provider.Spec().Get("libvirt", "bmcEmulationDefaults", "vMediaPort").Text() != "8001" || provider.Spec().Get("libvirt", "machineRef").Text() != "bastion" {
+	if provider.Spec().Get("libvirt", "bmcEmulationDefaults", "vMediaPort").Text() != "8001" || provider.Spec().Get("libvirt", "machineRef").Text() != "controller" {
 		t.Fatal("libvirt provider lost its emulated BMC defaults", provider.Spec())
 	}
 }
@@ -138,7 +138,7 @@ func (p *labControllerPorts) Select(_ prerequisites.Platform, requirements prere
 
 func (p *labControllerPorts) ValidateEgress(egress prerequisites.SetupEgress) error {
 	if egress.HTTPProxy != "" || egress.HTTPSProxy != "" {
-		return errors.New("direct bastion egress selected a proxy")
+		return errors.New("direct controller egress selected a proxy")
 	}
 	return nil
 }
@@ -182,7 +182,7 @@ func labContextServices(t *testing.T) (cli.Services, string, *labControllerPorts
 	return assembleServices(options), input, ports
 }
 
-func TestLabExampleContextAndBastionPreparationJourney(t *testing.T) {
+func TestLabExampleContextAndControllerPreparationJourney(t *testing.T) {
 	services, input, ports := labContextServices(t)
 	out, _ := contextRun(t, services, 0, "context", "init", "--name", "lab-ocp", "--input-dir", input)
 	if !strings.Contains(out, "Files copied     14") || !strings.Contains(out, "Objects decoded  14") {
@@ -213,17 +213,17 @@ func TestLabExampleContextAndBastionPreparationJourney(t *testing.T) {
 			t.Fatalf("secret %s is not listed after custody:\n%s", name, secrets)
 		}
 	}
-	plan, _ := contextRun(t, services, 0, "bastion", "setup", "--context", "lab-ocp", "--dry-run")
-	for _, expected := range []string{"Scope       context lab-ocp", "Controller  bastion", "[UNKNOWN]  Container runtime", "[UNKNOWN]  Target tools", "[UNKNOWN]  Controller binding  required bastion", "Outcome  planned", "Next     bootwright bastion setup --context lab-ocp"} {
+	plan, _ := contextRun(t, services, 0, "controller", "setup", "--context", "lab-ocp", "--dry-run")
+	for _, expected := range []string{"Scope       context lab-ocp", "Controller  controller", "[UNKNOWN]  Container runtime", "[UNKNOWN]  Target tools", "[UNKNOWN]  Controller binding  required controller", "Outcome  planned", "Next     bootwright controller setup --context lab-ocp"} {
 		if !strings.Contains(plan, expected) {
 			t.Fatalf("context dry-run lacks %q:\n%s", expected, plan)
 		}
 	}
-	report, diagnostics := contextRun(t, services, 1, "preflight", "bastion", "--context", "lab-ocp")
-	if !strings.Contains(report, "[FAIL]  Controller binding  required bastion") || !strings.Contains(report, "Outcome  not-ready") || !strings.Contains(diagnostics, "preflight.failed") || !strings.Contains(diagnostics, "bastion setup --context lab-ocp") {
+	report, diagnostics := contextRun(t, services, 1, "preflight", "controller", "--context", "lab-ocp")
+	if !strings.Contains(report, "[FAIL]  Controller binding  required controller") || !strings.Contains(report, "Outcome  not-ready") || !strings.Contains(diagnostics, "preflight.failed") || !strings.Contains(diagnostics, "controller setup --context lab-ocp") {
 		t.Fatalf("preflight before setup must fail with setup guidance:\nstdout=%s\nstderr=%s", report, diagnostics)
 	}
-	_, diagnostics = contextRun(t, services, 1, "bastion", "setup", "--context", "missing", "--dry-run")
+	_, diagnostics = contextRun(t, services, 1, "controller", "setup", "--context", "missing", "--dry-run")
 	if !strings.Contains(diagnostics, "context") {
 		t.Fatal("unknown explicit context was not refused", diagnostics)
 	}

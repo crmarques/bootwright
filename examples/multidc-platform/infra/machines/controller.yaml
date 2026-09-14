@@ -1,7 +1,7 @@
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata:
-  name: bastion
+  name: controller
 
 spec:
   capabilities:

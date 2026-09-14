@@ -16,7 +16,7 @@ func localRequest() managedservice.RunRequest {
 		Kind: artifactserver.Kind, Operation: "apply", Variable: "bootwright_artifact_server",
 		Digest:    strings.Repeat("d", 64),
 		Canonical: []byte(`{"unit":"bootwright-lab-artifacts-lab"}`),
-		Placement: managedservice.Placement{Connection: "local", Machine: "bastion"},
+		Placement: managedservice.Placement{Connection: "local", Machine: "controller"},
 		Materials: []managedservice.MaterialFile{
 			{Name: "tls.crt", Part: secrets.CertificatePart, Secret: "artifact-server-tls", Variable: "certificate"},
 			{Name: "tls.key", Part: secrets.PrivateKeyPart, Secret: "artifact-server-tls", Variable: "privateKey"},
@@ -168,7 +168,7 @@ func TestInventoryPinsTheSSHIdentityAndHostKey(t *testing.T) {
 		}
 	}
 	local := inventory(localRequest().Placement, "/interpreter", nil)
-	host = local["all"].(map[string]any)["children"].(map[string]any)["bootwright_service_host"].(map[string]any)["hosts"].(map[string]any)["bastion"].(map[string]any)
+	host = local["all"].(map[string]any)["children"].(map[string]any)["bootwright_service_host"].(map[string]any)["hosts"].(map[string]any)["controller"].(map[string]any)
 	if host["ansible_connection"] != "local" || host["ansible_python_interpreter"] != "/interpreter" {
 		t.Fatalf("local host = %+v", host)
 	}

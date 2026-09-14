@@ -198,7 +198,7 @@ content digest. Verify integrity and required publisher authenticity from
 separately trusted metadata before use. Repository-owned automation is
 content-digested as part of the selected implementation. Implicit upgrade,
 floating tags during execution, and ambient external tools are forbidden.
-Explicit bastion setup without a serving retained resolution resolves latest or
+Explicit controller setup without a serving retained resolution resolves latest or
 declared dependency versions before confirmation. It may acquire verified
 public resolver payloads and execute a
 maintained resolver within disposable, unprivileged staging. This exception

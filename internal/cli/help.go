@@ -9,7 +9,7 @@ import (
 )
 
 func writeHelp(w io.Writer, command *cobra.Command) error {
-	if path := command.Annotations["bootwright.command"]; path == "bastion setup" || path == "preflight bastion" {
+	if path := command.Annotations["bootwright.command"]; path == "controller setup" || path == "preflight controller" {
 		if flag := command.InheritedFlags().Lookup("context"); flag != nil {
 			previous := flag.Usage
 			flag.Usage = "Select explicit Environment requirements (default: baseline)"

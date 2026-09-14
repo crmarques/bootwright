@@ -45,7 +45,7 @@ func TestOperationBoundaryOwnsContextAndCleanupForEveryImplementedPath(t *testin
 		[]string{"validate", "-f", "input"}, []string{"validate", "--context", "example"}, []string{"render", "effective"},
 		[]string{"secret", "set", "--name", "example", "--value-file", "value"}, []string{"secret", "generate"}, []string{"secret", "check"}, []string{"secret", "list"},
 		[]string{"secret", "show", "--name", "example", "--part", "value"}, []string{"secret", "delete", "--name", "example"},
-		[]string{"secret", "encryption", "init"}, []string{"secret", "encryption", "status"}, []string{"secret", "encryption", "rotate"}, []string{"bastion", "setup"}, []string{"bastion", "setup", "--dry-run"}, []string{"preflight", "bastion"},
+		[]string{"secret", "encryption", "init"}, []string{"secret", "encryption", "status"}, []string{"secret", "encryption", "rotate"}, []string{"controller", "setup"}, []string{"controller", "setup", "--dry-run"}, []string{"preflight", "controller"},
 		[]string{"plan"}, []string{"status"}, []string{"apply", "--yes"}, []string{"destroy", "--yes"})
 	for _, args := range invocations {
 		begins, finishes := 0, 0

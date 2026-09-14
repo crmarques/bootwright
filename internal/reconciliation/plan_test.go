@@ -15,7 +15,7 @@ func definition(id string, dependencies ...string) BlockDefinition {
 		Stage:          StageInfraComponents,
 		Dependencies:   dependencies,
 		Impacts:        []string{"create-container-unit"},
-		Groups:         []Group{{ID: "start-service", Description: "start the service", Machines: []string{"bastion"}}},
+		Groups:         []Group{{ID: "start-service", Description: "start the service", Machines: []string{"controller"}}},
 		Kind:           "ArtifactServer",
 		Object:         id,
 		Implementation: "artifact-server-nginx-v1",
