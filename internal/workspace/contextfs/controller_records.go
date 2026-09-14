@@ -49,8 +49,15 @@ type controllerBundleReservation struct {
 	DirectoryInode  uint64 `json:"directoryInode"`
 }
 
-func controllerRecord(value prerequisites.HostState) controllerStateRecord {
-	return controllerStateRecord{Version: 1, Host: controllerHostRecord{value.Host.Provider(), value.Host.MachineID(), value.Host.ProductUUID(), value.Host.FilesystemUUID()}, Receipt: value.Receipt, Bindings: value.Bindings, RetainedSources: value.RetainedSources, RetainedDefinitions: value.RetainedDefinitions, Bundles: []controllerBundleReservation{}, Reservations: value.Reservations}
+// controllerRecord takes the retained bundle reservations explicitly, so a
+// publication that changes another part of the record cannot silently drop the
+// attribution that proves this store owns its bundle directories.
+func controllerRecord(value prerequisites.HostState, bundles []controllerBundleReservation) controllerStateRecord {
+	retained := slices.Clone(bundles)
+	if retained == nil {
+		retained = []controllerBundleReservation{}
+	}
+	return controllerStateRecord{Version: 1, Host: controllerHostRecord{value.Host.Provider(), value.Host.MachineID(), value.Host.ProductUUID(), value.Host.FilesystemUUID()}, Receipt: value.Receipt, Bindings: value.Bindings, RetainedSources: value.RetainedSources, RetainedDefinitions: value.RetainedDefinitions, Bundles: retained, Reservations: value.Reservations}
 }
 
 func decodeControllerRecord(data []byte) (prerequisites.HostState, []controllerBundleReservation, error) {

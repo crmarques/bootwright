@@ -256,6 +256,71 @@ func reserveFixture(t *testing.T, store *Store, record contexts.Record) {
 	publishControllerState(t, store, scope, completeControllerState(syntheticControllerState(t, scope)))
 }
 
+// sealedBundleFixture completes a setup whose sealed bundle directory exists,
+// which is the state every real controller carries into a lifecycle apply.
+func sealedBundleFixture(t *testing.T, store *Store, record contexts.Record) string {
+	t.Helper()
+	ctx := context.Background()
+	scope := prerequisites.SetupContext{Name: record.Name, ID: record.ID, Revision: record.Revision, Machine: "bastion"}
+	value := syntheticControllerState(t, scope)
+	publishControllerState(t, store, scope, value)
+	err := store.MutateController(ctx, scope, false, func(tx prerequisites.StorageTransaction) error {
+		intended := tx.Snapshot().State
+		intended.Receipt.Actions[0].Phase = "intent"
+		if _, err := tx.Publish(ctx, intended); err != nil {
+			return err
+		}
+		area, err := tx.Bundle(ctx, value.Receipt.CatalogDigest)
+		if err != nil {
+			return err
+		}
+		if err := area.Write(ctx, "manifest.json", []byte("{}\n"), false); err != nil {
+			return err
+		}
+		_, err = tx.Publish(ctx, completeControllerState(tx.Snapshot().State))
+		return err
+	})
+	if err != nil {
+		t.Fatalf("sealed bundle publication failed: %#v", diagnostics.Of(err))
+	}
+	return value.Receipt.CatalogDigest
+}
+
+// A reservation publishes the shared controller record, which must carry the
+// bundle attribution forward; dropping it leaves an unreserved directory that
+// refuses every later read of the store.
+func TestReservationsRetainBundleAttribution(t *testing.T) {
+	ctx := context.Background()
+	store, record := lifecycleFixture(t)
+	digest := sealedBundleFixture(t, store, record)
+	claim := []prerequisites.HostReservation{{
+		ContextID: record.ID, Kind: "proxy", Service: "lab-proxy",
+		Keys: []string{"socket:192.0.2.1:3128", "unit:bootwright-proxy"},
+	}}
+	for _, reserve := range []func(tx lifecycle.Transaction) error{
+		func(tx lifecycle.Transaction) error { return tx.Reserve(ctx, claim) },
+		func(tx lifecycle.Transaction) error { return tx.ReleaseReservations(ctx) },
+	} {
+		if err := store.MutateLifecycle(ctx, "example", reserve); err != nil {
+			t.Fatalf("reservation publication failed: %#v", diagnostics.Of(err))
+		}
+		err := store.ReadController(ctx, "", func(view prerequisites.StorageView) error {
+			area, err := view.OpenBundle(ctx, digest)
+			if err != nil || area == nil {
+				t.Fatalf("the sealed bundle is no longer attributed (%v)", err)
+			}
+			location, err := area.Location(ctx)
+			if err != nil || !location.Sealed {
+				t.Fatalf("bundle location = %+v (%v)", location, err)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("controller read after a reservation failed: %#v", diagnostics.Of(err))
+		}
+	}
+}
+
 func TestReservationsRefuseAnotherContextsKeys(t *testing.T) {
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)

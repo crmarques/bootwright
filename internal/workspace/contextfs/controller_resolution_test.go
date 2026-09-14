@@ -104,7 +104,7 @@ func TestControllerResolvedDefinitionEncodingRemainsBoundedAndCanonical(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	encoded, err := encodeRecord(controllerRecord(value), maxControllerState)
+	encoded, err := encodeRecord(controllerRecord(value, nil), maxControllerState)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestControllerResolvedDefinitionEncodingRemainsBoundedAndCanonical(t *testi
 			t.Fatal("malformed frozen definition accepted")
 		}
 	}
-	if _, err := encodeRecord(controllerRecord(value), len(encoded)-1); err == nil {
+	if _, err := encodeRecord(controllerRecord(value, nil), len(encoded)-1); err == nil {
 		t.Fatal("encoding exceeded exact size bound")
 	}
 }

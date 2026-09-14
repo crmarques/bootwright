@@ -321,7 +321,7 @@ func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []p
 		return err
 	}
 	defer dir.file.Close()
-	data, err := encodeRecord(controllerRecord(value), maxControllerState)
+	data, err := encodeRecord(controllerRecord(value, t.stored.bundles), maxControllerState)
 	if err != nil {
 		return err
 	}

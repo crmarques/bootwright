@@ -554,7 +554,7 @@ func TestControllerRecordCanonicalBoundsAndPlanIntegrity(t *testing.T) {
 	if err := validateControllerState(value); err != nil {
 		t.Fatal(err)
 	}
-	encoded, err := encodeRecord(controllerRecord(value), maxControllerState)
+	encoded, err := encodeRecord(controllerRecord(value, nil), maxControllerState)
 	if err != nil {
 		t.Fatal(err)
 	}

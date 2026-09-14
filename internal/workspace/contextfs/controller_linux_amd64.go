@@ -467,8 +467,7 @@ func (t *controllerTransaction) Publish(ctx context.Context, requested prerequis
 		}
 	}
 	if t.stored.data != nil {
-		candidate := controllerRecord(next)
-		candidate.Bundles = t.stored.bundles
+		candidate := controllerRecord(next, t.stored.bundles)
 		data, err := encodeRecord(candidate, maxControllerState)
 		if err != nil {
 			return prerequisites.NotCommitted, err
@@ -567,11 +566,7 @@ func (t *controllerTransaction) publishValue(ctx context.Context, value prerequi
 		return prerequisites.NotCommitted, err
 	}
 	defer dir.file.Close()
-	record := controllerRecord(value)
-	record.Bundles = slices.Clone(bundles)
-	if record.Bundles == nil {
-		record.Bundles = []controllerBundleReservation{}
-	}
+	record := controllerRecord(value, bundles)
 	if value.Receipt.Status == "complete" {
 		for index := range record.Bundles {
 			if record.Bundles[index].ID == value.Receipt.CatalogDigest && record.Bundles[index].Mode == "attributed" {
@@ -756,8 +751,7 @@ func (t *transaction) dropControllerBinding(ctx context.Context, id string) erro
 		return err
 	}
 	defer dir.file.Close()
-	record := controllerRecord(value)
-	record.Bundles = stored.bundles
+	record := controllerRecord(value, stored.bundles)
 	data, err := encodeRecord(record, maxControllerState)
 	if err != nil {
 		return err
