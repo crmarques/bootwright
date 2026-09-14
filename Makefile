@@ -3,8 +3,17 @@
 GO := ./scripts/go
 VULNDB ?= https://vuln.go.dev
 
+# A release build overrides these; an ordinary build identifies the working tree
+# it came from. Outside a repository they stay empty and `version` reports an
+# unidentified build instead of claiming a revision it cannot prove. Every one
+# is expanded by the build recipe alone, so no other target runs Git.
+VERSION ?= $(shell git describe --tags --dirty 2>/dev/null)
+COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null)
+SOURCE ?= $(if $(COMMIT),$(if $(shell git status --porcelain --untracked-files=no 2>/dev/null),modified,clean))
+STAMP = -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.source=$(SOURCE)
+
 build:
-	$(GO) build -trimpath -buildvcs=false -o bin/bootwright ./cmd/bootwright
+	$(GO) build -trimpath -buildvcs=false -ldflags '$(STAMP)' -o bin/bootwright ./cmd/bootwright
 
 test:
 	$(GO) test ./...

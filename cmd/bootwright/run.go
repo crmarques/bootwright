@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"runtime/debug"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller/privilege"
@@ -167,22 +169,63 @@ func (w *invocationError) emit() error {
 	return err
 }
 
+// buildInformation prefers the linker-injected release values. A build that
+// injects none of them still identifies itself from the toolchain's own stamp,
+// which an ordinary `go build` or `go install` of this module embeds.
+func buildInformation() cli.BuildInfo {
+	stamp, _ := debug.ReadBuildInfo()
+	return stampedBuildInformation(cli.BuildInfo{
+		Version:          version,
+		Commit:           commit,
+		Source:           source,
+		GoVersion:        runtime.Version(),
+		GOOS:             runtime.GOOS,
+		GOARCH:           runtime.GOARCH,
+		DependencyBundle: dependencyBundle,
+	}, stamp)
+}
+
+func stampedBuildInformation(info cli.BuildInfo, stamp *debug.BuildInfo) cli.BuildInfo {
+	if stamp == nil {
+		return info
+	}
+	if strings.TrimSpace(info.Version) == "" && stamp.Main.Version != "(devel)" {
+		info.Version = stamp.Main.Version
+	}
+	for _, setting := range stamp.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			if strings.TrimSpace(info.Commit) == "" {
+				info.Commit = setting.Value
+			}
+		case "vcs.modified":
+			if strings.TrimSpace(info.Source) == "" {
+				info.Source = sourceState(setting.Value)
+			}
+		}
+	}
+	return info
+}
+
+func sourceState(modified string) string {
+	switch modified {
+	case "true":
+		return "modified"
+	case "false":
+		return "clean"
+	}
+	return ""
+}
+
 func runServices(ctx context.Context, args []string, stdout, stderr io.Writer, services cli.Services, hooks ...invocationHooks) int {
 	var hook invocationHooks
 	if len(hooks) > 0 {
 		hook = hooks[0]
 	}
 	return cli.New(cli.Config{
-		Out:    stdout,
-		ErrOut: stderr,
-		BuildInfo: cli.BuildInfo{
-			Version:          version,
-			Commit:           commit,
-			GoVersion:        runtime.Version(),
-			GOOS:             runtime.GOOS,
-			GOARCH:           runtime.GOARCH,
-			DependencyBundle: dependencyBundle,
-		},
+		Out:                 stdout,
+		ErrOut:              stderr,
+		BuildInfo:           buildInformation(),
 		Services:            services,
 		CompletionPaths:     completionPaths,
 		BeginOperation:      hook.begin,

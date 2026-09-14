@@ -36,7 +36,7 @@ dependencies, keeping check tooling out of the application module graph.
 
 | Command | Result |
 | --- | --- |
-| `make build` | Build `bin/bootwright`. |
+| `make build` | Build `bin/bootwright`, stamped with the version, commit and source state of the checkout it was built from. |
 | `make test` | Run all package tests. |
 | `make vet` | Run Go static analysis. |
 | `make fmt-check` | Check Go formatting. |

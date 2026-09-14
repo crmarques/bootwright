@@ -235,7 +235,7 @@ behavior. Do not create empty packages or repeat generic `domain`,
 
 | File | Responsibility |
 | --- | --- |
-| `main.go` | Process entrypoint and exit; linker-injected `version`, `commit`, and `dependencyBundle` variables. |
+| `main.go` | Process entrypoint and exit; linker-injected `version`, `commit`, `source`, and `dependencyBundle` variables. |
 | `run.go` | The local privilege boundary, then the CLI invocation with process streams and build information. |
 | `wiring.go` | `wireServices` returns the statically typed `cli.Services` bundle by calling one `wire<Domain>` function per domain. |
 | `wiring_<domain>.go` | Constructs that domain's adapters and injects them into its service, naming every adapter bound to every port. |

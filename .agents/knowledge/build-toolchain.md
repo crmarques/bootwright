@@ -10,13 +10,30 @@ pinned scanner. Inspect `scripts/go version` when diagnosing toolchain drift.
 The language policy remains in [Go engineering](../skills/code-implementation/references/go.md).
 
 [main.go](../../cmd/bootwright/main.go) exposes `main.version`, `main.commit`,
-and `main.dependencyBundle` as string variables for linker `-ldflags -X`
-injection. Keep these names aligned with release build arguments. Go runtime,
-OS, and architecture values come from the linked runtime.
-`TestCompositionSuppliesRuntimeBuildInformation` in
-[main_test.go](../../cmd/bootwright/main_test.go) checks composition defaults and
-runtime values; [version tests](../../internal/cli/version_test.go) check
-formatting. These tests do not qualify a release build pipeline. The
+`main.source`, and `main.dependencyBundle` as string variables for linker
+`-ldflags -X` injection. Keep these names aligned with release build arguments.
+`make build` stamps the first three from Git: `git describe --tags --dirty`, the
+`HEAD` revision, and `clean` or `modified` from the tracked-file status. Each is
+an overridable variable (`make build VERSION=v0.4.0`), and outside a repository
+all three stay empty. Go runtime, OS, and architecture values come from the
+linked runtime, and `runtime/debug.ReadBuildInfo` completes an uninjected
+version, commit, or source state from the toolchain's own VCS stamp, which is
+what a plain `go build` or `go install` of this module records.
+
+The Makefile still passes `-buildvcs=false` and injects the identity itself,
+because that toolchain stamp is missing exactly where much of the work happens:
+Go records no `vcs.*` setting when the module sits in a linked Git worktree,
+whose `.git` is a file rather than a directory. It stays silent under `auto` and
+produces neither a stamp nor an error under `-buildvcs=true`; the primary
+checkout stamps normally. Verified with Go 1.26.7 against a worktree of this
+repository. Never treat the toolchain stamp as the release identity.
+
+`TestCompositionSuppliesRuntimeBuildInformation` and
+`TestCompositionIdentifiesTheBuild` in
+[main_test.go](../../cmd/bootwright/main_test.go) check composition defaults,
+runtime values, and the precedence of injected values over that stamp;
+[version tests](../../internal/cli/version_test.go) check formatting. These
+tests do not qualify a release build pipeline. The
 [version output contract](../../specs/cli/commands.md#version-output) owns the
 required representation.
 

@@ -7,8 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"testing"
+
+	"github.com/crmarques/bootwright/internal/cli"
 )
 
 func TestCompositionSuppliesRuntimeBuildInformation(t *testing.T) {
@@ -26,6 +29,53 @@ func TestCompositionSuppliesRuntimeBuildInformation(t *testing.T) {
 		if !strings.Contains(stdout.String(), line) {
 			t.Fatalf("version %q does not contain linked runtime %q", stdout.String(), line)
 		}
+	}
+}
+
+// TestCompositionIdentifiesTheBuild proves the linked stamp only completes what
+// the release build left empty, so an injected identity is never overwritten by
+// the toolchain's view of the tree that produced it.
+func TestCompositionIdentifiesTheBuild(t *testing.T) {
+	stamp := &debug.BuildInfo{
+		Main: debug.Module{Version: "v0.2.0"},
+		Settings: []debug.BuildSetting{
+			{Key: "vcs.revision", Value: "1111111111111111111111111111111111111111"},
+			{Key: "vcs.modified", Value: "true"},
+		},
+	}
+	tests := []struct {
+		name     string
+		injected cli.BuildInfo
+		stamp    *debug.BuildInfo
+		want     cli.BuildInfo
+	}{
+		{
+			name:  "unstamped build takes the linked identity",
+			stamp: stamp,
+			want:  cli.BuildInfo{Version: "v0.2.0", Commit: "1111111111111111111111111111111111111111", Source: "modified"},
+		},
+		{
+			name:     "injected identity wins",
+			injected: cli.BuildInfo{Version: "v1.0.0", Commit: "2222222", Source: "clean"},
+			stamp:    stamp,
+			want:     cli.BuildInfo{Version: "v1.0.0", Commit: "2222222", Source: "clean"},
+		},
+		{
+			name:  "unpublished module version and clean tree",
+			stamp: &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}, Settings: []debug.BuildSetting{{Key: "vcs.modified", Value: "false"}}},
+			want:  cli.BuildInfo{Source: "clean"},
+		},
+		{
+			name: "no linked stamp identifies nothing",
+			want: cli.BuildInfo{},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := stampedBuildInformation(test.injected, test.stamp); got != test.want {
+				t.Fatalf("build information = %+v, want %+v", got, test.want)
+			}
+		})
 	}
 }
 

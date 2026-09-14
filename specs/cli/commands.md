@@ -107,7 +107,7 @@ The required controller declaration and context-free setup boundary follow
 | `bootwright cluster oc` | required `--name <cluster>` and non-empty `<command>...` | bounded `oc` handoff descriptor | read context-owned access metadata only |
 | `bootwright cluster kubectl` | required `--name <cluster>` and non-empty `<command>...` | bounded `kubectl` handoff descriptor | read context-owned access metadata only |
 | `bootwright cluster kubeconfig` | required `--name <cluster>` | kubeconfig through the explicit sensitive-output boundary | read and reveal one context-owned credential artifact |
-| `bootwright version` | none | version, commit, Go runtime and target, and embedded dependency-bundle identity | none |
+| `bootwright version` | none | version, commit, source state, Go runtime and target, and embedded dependency-bundle identity | none |
 | `bootwright help [command ...]` | no local flags | human help for the exact resolved command | none |
 | `bootwright completion bash` | `--no-descriptions` false | Bash completion script | none |
 | `bootwright completion zsh` | `--no-descriptions` false | Zsh completion script | none |
@@ -144,27 +144,37 @@ to hide or enable commands. Target-aware discovery belongs to `cluster info`.
 
 ### Version output
 
-`version` writes exactly these five lines in this order to standard output and
-writes nothing to standard error:
+`version` writes the build identity to standard output in the
+[shared human layout](output.md#shared-human-layout) and nothing to standard
+error: the `Bootwright` headline, then exactly these six fields in this order.
 
 ```text
-version: <version>
-commit: <commit>
-go: <go-runtime>
-target: <goos>/<goarch>
-dependency bundle: <dependency-bundle>
+Bootwright
+
+  Version            v0.4.0
+  Commit             9f2c1d0e3b5a7c8d9e0f1a2b3c4d5e6f70819293
+  Source             clean
+  Go                 go1.26.7
+  Target             linux/amd64
+  Dependency bundle  sha256:<64 hexadecimal digits>
 ```
 
-Each line ends in LF and the fifth line supplies the final LF. The composition
-root supplies every value: it obtains the Go runtime, GOOS, and GOARCH from the
-linked Go runtime and combines them with link-supplied version, commit, and
-dependency-bundle values before constructing the CLI. Surrounding whitespace is
-removed from composition-root values, and every displayed value follows the
-[safe display escaping](output.md#json-output). An empty version renders as `devel`. A
-non-empty commit is valid only when it contains 7 through 64 hexadecimal digits;
-it renders in lowercase, and an empty or invalid commit renders as `unknown`.
-An empty Go runtime, GOOS, or GOARCH also renders as `unknown`, including in its
-corresponding target component. An absent dependency bundle renders as `none`.
+The composition root supplies every value. It obtains the Go runtime, GOOS, and
+GOARCH from the linked Go runtime and combines them with the link-supplied
+version, commit, source-state, and dependency-bundle values. For a version,
+commit, or source state the build left empty, it uses the module version,
+revision, and working-tree state recorded in the linked build stamp instead, so
+a build identifies the revision it was produced from and whether that revision's
+working tree was modified. An identity that neither source establishes is
+reported as absent, never assumed. Surrounding whitespace is removed from
+composition-root values, and every displayed value follows the
+[safe display escaping](output.md#json-output). An empty version renders as
+`devel`. A non-empty commit is valid only when it contains 7 through 64
+hexadecimal digits; it renders in lowercase, and an empty or invalid commit
+renders as `unknown`. The source state is exactly `clean` or `modified`; any
+other value, including an absent one, renders as `unknown`. An empty Go runtime,
+GOOS, or GOARCH also renders as `unknown`, including in its corresponding target
+component. An absent dependency bundle renders as `none`.
 A present dependency bundle is its canonical content identity, exactly
 `sha256:` followed by 64 lowercase hexadecimal digits; a value that is empty or
 does not have that form renders as `none`. The command performs no environment
