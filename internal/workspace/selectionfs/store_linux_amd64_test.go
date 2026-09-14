@@ -192,7 +192,7 @@ func TestSelectionRejectsNoncanonicalRecords(t *testing.T) {
 }
 
 func TestSelectionRejectsUnsafeStorage(t *testing.T) {
-	for _, kind := range []string{"directory-symlink", "directory-mode", "file-symlink", "file-hardlink", "file-mode", "fifo", "oversized", "malformed", "unknown-field", "duplicate-field"} {
+	for _, kind := range []string{"directory-symlink", "directory-mode", "file-symlink", "file-hardlink", "file-mode", "fifo"} {
 		t.Run(kind, func(t *testing.T) {
 			store, home := fixture(t)
 			dir := filepath.Join(home, ".bootwright")
@@ -223,14 +223,6 @@ func TestSelectionRejectsUnsafeStorage(t *testing.T) {
 			case "fifo":
 				os.Remove(path)
 				syscall.Mkfifo(path, 0600)
-			case "oversized":
-				os.WriteFile(path, bytes.Repeat([]byte("x"), maximumRecord+1), 0600)
-			case "malformed":
-				os.WriteFile(path, []byte("{"), 0600)
-			case "unknown-field":
-				os.WriteFile(path, []byte(`{"version":2,"name":"test","extra":true}`), 0600)
-			case "duplicate-field":
-				os.WriteFile(path, []byte(`{"version":2,"name":"other","name":"test"}`), 0600)
 			}
 			if _, err := store.Read(context.Background()); err == nil {
 				t.Fatal("unsafe selection accepted")
@@ -240,6 +232,49 @@ func TestSelectionRejectsUnsafeStorage(t *testing.T) {
 			}
 			if got, err := os.ReadFile(outside); err != nil || string(got) != "untouched" {
 				t.Fatalf("outside changed %q %v", got, err)
+			}
+		})
+	}
+}
+
+func TestSelectionReplacesUnreadableRecords(t *testing.T) {
+	for _, test := range []struct {
+		kind   string
+		record []byte
+	}{
+		{"oversized", bytes.Repeat([]byte("x"), maximumRecord+1)},
+		{"malformed", []byte("{")},
+		{"unknown-field", []byte(`{"version":2,"name":"test","extra":true}` + "\n")},
+		{"duplicate-field", []byte(`{"version":2,"name":"other","name":"test"}` + "\n")},
+		{"noncanonical", []byte(`{"name":"test","version":2}` + "\n")},
+		{"retired-identity", []byte(`{"version":1,"name":"test","id":"ctx-45f86f63ecc2341c0000000000000003"}` + "\n")},
+		{"unsupported-version", []byte(`{"version":9,"name":"test"}` + "\n")},
+	} {
+		t.Run(test.kind, func(t *testing.T) {
+			store, home := fixture(t)
+			ctx := context.Background()
+			value := contexts.Selection{Version: contexts.SelectionVersion, Name: "test"}
+			if err := store.Write(ctx, value); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(home, ".bootwright", "context")
+			if err := os.WriteFile(path, test.record, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if got, err := store.Read(ctx); err != nil || got != (contexts.Selection{}) {
+				t.Fatalf("unreadable record reported as a selection: %v %v", got, err)
+			}
+			if err := store.Clear(ctx, value); err != nil {
+				t.Fatalf("conditional clear refused: %v", err)
+			}
+			if got, err := os.ReadFile(path); err != nil || !bytes.Equal(got, test.record) {
+				t.Fatalf("clear removed an unmatched record: %q %v", got, err)
+			}
+			if err := store.Write(ctx, value); err != nil {
+				t.Fatalf("unreadable record not replaced: %v", err)
+			}
+			if got, err := store.Read(ctx); err != nil || got != value {
+				t.Fatalf("replacement: %v %v", got, err)
 			}
 		})
 	}
@@ -293,6 +328,34 @@ func TestSelectionHelperBoundedProtocol(t *testing.T) {
 	for _, input := range []string{strings.Repeat("x", maximumRecord+1), `{"account":{"UID":0},"action":"write"}`, `{"action":"execute"}`} {
 		if _, code := ServeHelper(context.Background(), []string{HelperMode}, strings.NewReader(input), &output); code == 0 {
 			t.Fatal("unsafe helper request accepted")
+		}
+	}
+}
+
+func TestSelectionHelperReportsItsRefusal(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("helper deliberately refuses root; credential-drop test covers this under root")
+	}
+	store, home := fixture(t)
+	store.options.Home = filepath.Join(home, "absent")
+	data, err := json.Marshal(helperRequest{Account: store.options, Action: "read"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	if handled, code := ServeHelper(context.Background(), []string{HelperMode}, bytes.NewReader(data), &output); !handled || code != 0 {
+		t.Fatalf("helper %v %d", handled, code)
+	}
+	var response helperResponse
+	if json.Unmarshal(output.Bytes(), &response) != nil || !response.Failed {
+		t.Fatalf("helper response %s", output.Bytes())
+	}
+	if refusal(response.Message) != "selection account home cannot be opened safely" {
+		t.Fatalf("refusal not reported: %q", response.Message)
+	}
+	for _, message := range []string{"", strings.Repeat("x", 201), "opened\nsafely"} {
+		if refusal(message) != unclassifiedRefusal {
+			t.Fatalf("unbounded refusal accepted: %q", message)
 		}
 	}
 }

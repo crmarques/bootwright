@@ -264,19 +264,26 @@ func (s *Store) readRecord(dir *os.File) (selectionRecord, error) {
 		return result, err
 	}
 	var before, after syscall.Stat_t
-	if syscall.Fstat(fd, &before) != nil || before.Size < 0 || before.Size > maximumRecord {
-		return result, state("selection file exceeds its limit")
+	if syscall.Fstat(fd, &before) != nil || before.Size < 0 {
+		return result, state("selection file cannot be inspected safely")
 	}
 	if !s.private(before, syscall.S_IFREG, 0600) {
 		return result, state("selection owner, type, links or permissions are unsafe")
+	}
+	// Content this store cannot read is the account's own superseded record,
+	// not an unsafe object: hold it for identity, report no selection, and let
+	// the next write replace it.
+	if before.Size > maximumRecord {
+		result.file, result.identity = file, before
+		keep = true
+		return result, nil
 	}
 	data, err := io.ReadAll(io.LimitReader(file, maximumRecord+1))
 	if err != nil || len(data) > maximumRecord || syscall.Fstat(fd, &after) != nil || !sameRecord(before, after) || int64(len(data)) != after.Size {
 		return result, state("selection file changed while reading")
 	}
-	result.value, err = decodeSelection(data)
-	if err != nil {
-		return selectionRecord{}, state("selection record is invalid")
+	if value, err := decodeSelection(data); err == nil {
+		result.value = value
 	}
 	result.file, result.identity = file, after
 	keep = true

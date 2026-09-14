@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -27,6 +28,31 @@ type helperRequest struct {
 type helperResponse struct {
 	Selection contexts.Selection `json:"selection"`
 	Failed    bool               `json:"failed"`
+	Message   string             `json:"message,omitempty"`
+}
+
+const unclassifiedRefusal = "selection could not be accessed under its owning account"
+
+// The helper is this same verified executable under the selection account, so
+// its bounded state message is the accurate diagnosis of a refusal. Anything
+// else reaching this decoder is reported as an unclassified refusal.
+func refusal(message string) string {
+	if message == "" || len(message) > 200 {
+		return unclassifiedRefusal
+	}
+	for _, r := range message {
+		if r < ' ' || r > '~' {
+			return unclassifiedRefusal
+		}
+	}
+	return message
+}
+
+func refusalMessage(err error) string {
+	if reported := diagnostics.Of(err); len(reported) == 1 {
+		return reported[0].Message
+	}
+	return unclassifiedRefusal
 }
 
 func (s *Store) perform(ctx context.Context, action string, selection contexts.Selection) (contexts.Selection, error) {
@@ -74,8 +100,11 @@ func (s *Store) perform(ctx context.Context, action string, selection contexts.S
 		return contexts.Selection{}, state("selection account helper failed")
 	}
 	var response helperResponse
-	if output.overflow || json.Unmarshal(output.data, &response) != nil || response.Failed {
-		return contexts.Selection{}, state("selection account helper refused unsafe storage")
+	if output.overflow || json.Unmarshal(output.data, &response) != nil {
+		return contexts.Selection{}, state("selection account helper returned no usable response")
+	}
+	if response.Failed {
+		return contexts.Selection{}, state(refusal(response.Message))
 	}
 	return response.Selection, nil
 }
@@ -119,7 +148,11 @@ func ServeHelper(ctx context.Context, args []string, input io.Reader, output io.
 		return true, 1
 	}
 	selection, err := New(request.Account).local(ctx, request.Action, request.Selection)
-	if json.NewEncoder(output).Encode(helperResponse{Selection: selection, Failed: err != nil}) != nil {
+	response := helperResponse{Selection: selection, Failed: err != nil}
+	if err != nil {
+		response.Message = refusalMessage(err)
+	}
+	if json.NewEncoder(output).Encode(response) != nil {
 		return true, 1
 	}
 	return true, 0

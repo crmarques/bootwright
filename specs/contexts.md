@@ -2,9 +2,9 @@
 
 Workspace owns named contexts, Context configuration, immutable input revisions,
 per-user selection and local publication. The private Linux/amd64 store reads
-one registry format. Malformed records, unsupported formats, contradictory
-identity and unsafe filesystem objects fail with `context.state`. There is no
-archive retention or staging directory.
+one registry format. Malformed root-store records, unsupported formats,
+contradictory identity and unsafe filesystem objects fail with `context.state`.
+There is no archive retention or staging directory.
 
 ## Identity and selection
 
@@ -37,7 +37,15 @@ bounded canonical JSON record containing `version: 2` and `name` (at most
 is user-owned `0700`; the regular file is user-owned `0600`. Resolve the account
 through the invocation identity and local account database, never `HOME`.
 Perform its filesystem effects with that user's credentials. Use verified
-no-follow handles, exclusive temporary files and atomic replacement.
+no-follow handles, exclusive temporary files and atomic replacement. A refusal
+raised under that account reports that account's own bounded diagnosis.
+
+Unsafe ownership, permissions, object type or link count fail with
+`context.state`. Content the store cannot read as a supported record, including
+a superseded format, an unknown or retired field, a non-canonical encoding and
+an over-bound file, is the account's own superseded marker rather than an unsafe
+object: report no current selection, hold its observed identity, and let the
+next selecting command replace it. Selection never requires manual repair.
 
 There is no global current selection. Explicit `--context` bypasses the user
 file; an implicit selection must still name a ready registry entry. A selection
