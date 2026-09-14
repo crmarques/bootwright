@@ -211,6 +211,7 @@ type testCapability struct {
 	outcomes     []Result
 	observations []Observation
 	planErr      error
+	applyErr     error
 	material     []map[string]secrets.Material
 }
 
@@ -238,6 +239,9 @@ func (c *testCapability) Apply(ctx context.Context, execution Execution) (Result
 	if execution.Progress != nil {
 		execution.Progress(ctx, "pull-image", "running")
 		execution.Progress(ctx, "pull-image", "ok")
+	}
+	if c.applyErr != nil {
+		return Result{Outcome: reconciliation.OutcomeFailed}, c.applyErr
 	}
 	result := c.next(&c.outcomes)
 	if result.Outcome == reconciliation.OutcomeFailed {
@@ -1227,5 +1231,28 @@ func TestFailedExecutionKeepsItsBindingAndFailedRegistrationReleasesIt(t *testin
 	}
 	if !slices.Equal(refused.binder.released, []string{"bind-1"}) {
 		t.Fatalf("a failed registration retained its binding: %v", refused.binder.released)
+	}
+}
+
+// The terminal state alone says only that the operation did not complete. A
+// block that refused for a nameable reason must carry that reason out with it.
+func TestFailedBlockReportsItsOwnCauseBesideTheTerminalState(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.capability.applyErr = diagnostics.NewFailureWithRemediation(
+		"secret.part", "the serving certificate does not cover every address its HTTPS endpoints answer on",
+		"", "add 192.0.2.1 to the certificate's subject alternative names and regenerate it")
+	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err == nil || result == nil || result.Receipt.State != "failed" {
+		t.Fatalf("failed apply = %+v (%v)", result, err)
+	}
+	codes := map[string]string{}
+	for _, reported := range diagnostics.Of(err) {
+		codes[reported.Code] = reported.Remediation
+	}
+	if _, ok := codes["lifecycle.state"]; !ok {
+		t.Fatalf("the terminal state was dropped: %v", diagnostics.Of(err))
+	}
+	if codes["secret.part"] != "add 192.0.2.1 to the certificate's subject alternative names and regenerate it" {
+		t.Fatalf("the block cause did not reach the caller: %v", diagnostics.Of(err))
 	}
 }

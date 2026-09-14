@@ -233,3 +233,21 @@ func TestProtocolIsBoundedInRecordsAndLength(t *testing.T) {
 		t.Fatal("an unbounded protocol stream was accepted")
 	}
 }
+
+// A failed run's output is the evidence the structured events do not carry.
+// The adapter's own no_log marking, not a cutoff here, keeps material out of it.
+func TestRunCaptureBoundsWhatItRetains(t *testing.T) {
+	capture := &runCapture{limit: 8}
+	if n, err := capture.Write([]byte("abcdefghij")); n != 10 || err != nil {
+		t.Fatalf("write = %d (%v)", n, err)
+	}
+	if string(capture.retained()) != "abcdefgh" {
+		t.Fatalf("retained = %q", capture.retained())
+	}
+	if n, err := capture.Write([]byte("more")); n != 4 || err != nil {
+		t.Fatalf("write past the bound = %d (%v)", n, err)
+	}
+	if string(capture.retained()) != "abcdefgh" {
+		t.Fatalf("the bound did not hold: %q", capture.retained())
+	}
+}

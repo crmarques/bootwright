@@ -39,6 +39,7 @@ type lifecycleTransaction struct {
 	base    *transaction
 	stored  controllerStored
 	context *directory
+	areas   []*controllerBundleArea
 }
 
 func lifecycleRecord(registry contexts.Registry, name string) (contexts.Record, error) {
@@ -162,7 +163,6 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 			return err
 		}
 		active := true
-		defer func() { active = false }()
 		tx := &lifecycleTransaction{
 			lifecycleView: lifecycleView{
 				identity:   lifecycle.ContextIdentity{Name: record.Name, Revision: record.Revision},
@@ -172,6 +172,39 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 				operations: &operationArea{store: s, context: dir, active: func() bool { return active }},
 			},
 			base: t, stored: stored, context: dir,
+		}
+		defer func() {
+			active = false
+			for _, area := range tx.areas {
+				area.close()
+			}
+		}()
+		// A block runs inside the controller's approved bundle, so the operation
+		// needs the same read-only opener setup uses. Without it no effect can
+		// execute at all.
+		tx.controller.OpenBundle = func(call context.Context, id string) (prerequisites.BundleArea, error) {
+			guard := func(call context.Context) error {
+				if !active {
+					return state("lifecycle controller capability has closed")
+				}
+				if err := t.available(call); err != nil {
+					return err
+				}
+				actual, err := readControllerStored(call, t.root, t.registry)
+				if err != nil || !bytes.Equal(actual.data, tx.stored.data) || actual.data != nil && !sameFile(actual.identity, tx.stored.identity) {
+					return state("controller evidence changed during the operation")
+				}
+				return nil
+			}
+			if err := guard(call); err != nil {
+				return nil, err
+			}
+			area, err := openControllerBundle(call, s, t.root, t.registry, tx.stored, id, func() bool { return active }, false, guard)
+			if err != nil || area == nil {
+				return nil, err
+			}
+			tx.areas = append(tx.areas, area)
+			return area, nil
 		}
 		// Every publication this transaction performs is independently atomic
 		// and verified, so it needs no registry commit: a lifecycle operation

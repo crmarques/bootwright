@@ -22,7 +22,7 @@ const (
 	inspectContextTree contextTreeAction = iota
 	removeContextTree
 	syncContextTree
-	maxContextEntries = maxSecretEntries + maxRevisions*(desiredstate.MaxFiles+desiredstate.MaxMarkers+3) + 16
+	maxContextEntries = maxSecretEntries + maxOperationEntries + maxRevisions*(desiredstate.MaxFiles+desiredstate.MaxMarkers+3) + 16
 )
 
 // Context traversal accepts only the owned layout. It never follows a link or
@@ -65,6 +65,12 @@ func contextEntryAllowed(path, name string, directory bool) bool {
 		_, err := secretPath(name, 1, 1)
 		return !directory && err == nil
 	}
+	// The operations area owns its own naming and bounds, so deletion admits
+	// exactly what that area was allowed to create. Without this a context that
+	// ever ran one operation can never be deleted.
+	if path == "state/operations" || strings.HasPrefix(path, "state/operations/") {
+		return safeOperationName(name)
+	}
 	return false
 }
 
@@ -103,7 +109,11 @@ func contextDirectoryLimit(path string) int {
 	case "":
 		return 4
 	case "state":
-		return 2
+		// reservation.json, mutation.json and operations: exactly what
+		// verifyContextLayout admits. A released reservation is an empty
+		// record, not a removed file, so a destroyed context always has all
+		// three and a lower bound here would refuse to delete it.
+		return 3
 	case "desired-state":
 		return 1
 	case "desired-state/revisions":
@@ -111,6 +121,9 @@ func contextDirectoryLimit(path string) int {
 	}
 	if path == "secrets" || strings.HasPrefix(path, "secrets/") {
 		return maxSecretEntries
+	}
+	if path == "state/operations" || strings.HasPrefix(path, "state/operations/") {
+		return maxOperationEntries
 	}
 	return desiredstate.MaxFiles + desiredstate.MaxMarkers + 1
 }

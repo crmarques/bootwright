@@ -101,11 +101,13 @@ systemctl list-units 'bootwright-*'
 
 An empty served root answers `404` and the proxy answers `400` to a request
 that is not a proxy request; both are well-formed answers and both are what
-readiness proves. Repeating the apply reports every block unchanged, and the
-inverse removes exactly what the apply created:
+readiness proves. A completed apply is terminal: repeating it refuses with
+`lifecycle.state`, because there is
+[no reconciliation path](../../specs/state-reconciliation.md#lifecycle-unit).
+The inverse removes exactly what the apply created:
 
 ```sh
-./bin/bootwright apply --yes
+./bin/bootwright apply --yes    # refuses: destroy it before applying again
 ./bin/bootwright destroy
 ./bin/bootwright context delete --name managed-infra --purge
 ```

@@ -142,3 +142,18 @@ func TestLogPathsFollowFrozenPlanOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestAdapterOutputIsRetainedBesideItsAttemptLog(t *testing.T) {
+	id := "op-" + strings.Repeat("ab", 16)
+	attempt, err := AttemptLogPath(id, "alpha", 1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := AdapterOutputPath(attempt)
+	if err != nil || target != id+"/logs/blocks/alpha/attempt-000001.output" {
+		t.Fatalf("adapter output path = %q (%v)", target, err)
+	}
+	if _, err := AdapterOutputPath(id + "/logs/blocks/alpha/attempt-000001"); err == nil {
+		t.Fatal("a path that is not an attempt log produced an output path")
+	}
+}

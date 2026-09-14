@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"path"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -36,7 +37,7 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	}
 	defer func() { _ = log.Close(ctx) }()
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: "running", Position: position, Total: total})
-	result, runErr := s.invoke(ctx, tx, operation, block, material, log, position, total, func(inner context.Context, execution Execution) (Result, error) {
+	result, runErr := s.invoke(ctx, tx, store, operation, block, material, log, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		if operation.Verb == reconciliation.Destroy {
 			return capability.Destroy(inner, execution)
 		}
@@ -89,7 +90,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	defer func() { _ = log.Close(ctx) }()
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Detail: "resolving the unknown outcome from live evidence", Status: "running", Position: position, Total: total})
 	var observation Observation
-	_, runErr := s.invoke(ctx, tx, operation, block, material, log, position, total, func(inner context.Context, execution Execution) (Result, error) {
+	_, runErr := s.invoke(ctx, tx, store, operation, block, material, log, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		execution.Resolution = number
 		value, err := capability.Observe(inner, execution)
 		observation = value
@@ -118,7 +119,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 
 // invoke opens the controller's approved bundle and runs the capability inside
 // the private Python execution boundary, exactly as controller setup does.
-func (s Service) invoke(ctx context.Context, tx Transaction, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, log *operationstore.Log, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
+func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, log *operationstore.Log, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
 	view := tx.Controller()
 	receipt := view.State.Receipt
 	if receipt.Definition == nil {
@@ -147,6 +148,16 @@ func (s Service) invoke(ctx context.Context, tx Transaction, operation operation
 			Material: material,
 			Log: func(inner context.Context, record operationstore.LogRecord) error {
 				return log.Append(inner, record)
+			},
+			Diagnostics: func(inner context.Context, data []byte) error {
+				target, err := operationstore.AdapterOutputPath(log.Path())
+				if err != nil {
+					return err
+				}
+				if err := store.WriteAdapterOutput(inner, target, data); err != nil {
+					return err
+				}
+				return log.Append(inner, operationstore.LogRecord{Event: "adapter-output", Block: block.ID, Detail: path.Base(target)})
 			},
 			Progress: func(inner context.Context, group, status string) {
 				s.report(inner, ProgressEvent{Block: block.ID, Description: block.Description, Group: group, Detail: groupDescription(block, group), Status: status, Position: position, Total: total})

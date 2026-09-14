@@ -449,3 +449,71 @@ func TestSecretAcquisitionInsideALifecycleTransactionRefuses(t *testing.T) {
 		t.Fatal("secret mutation failed outside the lifecycle transaction:", err)
 	}
 }
+
+// A block runs inside the controller's approved bundle, so the lifecycle
+// transaction must offer the same opener controller reads do. Without it every
+// effect refuses before it starts.
+func TestLifecycleTransactionOpensTheApprovedBundle(t *testing.T) {
+	ctx := context.Background()
+	store, record := lifecycleFixture(t)
+	digest := sealedBundleFixture(t, store, record)
+	if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		view := tx.Controller()
+		if view.OpenBundle == nil {
+			t.Fatal("the lifecycle transaction offers no execution bundle")
+		}
+		area, err := view.OpenBundle(ctx, digest)
+		if err != nil || area == nil {
+			t.Fatalf("the approved bundle did not open (%v)", err)
+		}
+		location, err := area.Location(ctx)
+		if err != nil || !location.Sealed || location.Path == "" {
+			t.Fatalf("bundle location = %+v (%v)", location, err)
+		}
+		missing, err := view.OpenBundle(ctx, strings.Repeat("c", 64))
+		if err != nil || missing != nil {
+			t.Fatalf("an unreserved bundle identity opened an area: %v (%v)", missing, err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("lifecycle mutation failed: %#v", diagnostics.Of(err))
+	}
+}
+
+// A destroyed context carries all three state entries: releasing a reservation
+// writes an empty record rather than removing the file. Deleting it must not
+// refuse the very layout the store admits.
+func TestDestroyedContextIsDeletable(t *testing.T) {
+	ctx := context.Background()
+	store, record := lifecycleFixture(t)
+	sealedBundleFixture(t, store, record)
+	claim := []prerequisites.HostReservation{{
+		Context: record.Name, Kind: "proxy", Service: "lab-proxy",
+		Keys: []string{"socket:192.0.2.1:3128", "unit:bootwright-proxy"},
+	}}
+	if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		if err := tx.Reserve(ctx, claim); err != nil {
+			return err
+		}
+		if err := tx.PublishEvidence(ctx, []byte(pristineMutation)); err != nil {
+			return err
+		}
+		return tx.Operations().WriteExclusive(ctx, "index.json", []byte("{\"version\":1}\n"))
+	}); err != nil {
+		t.Fatalf("apply publication failed: %#v", diagnostics.Of(err))
+	}
+	if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		return tx.ReleaseReservations(ctx)
+	}); err != nil {
+		t.Fatalf("release failed: %#v", diagnostics.Of(err))
+	}
+	if err := store.Transact(ctx, false, nil, func(tx contexts.Transaction) error {
+		// Production takes the lease through the disposition read first.
+		if _, err := tx.MutationState(ctx, record.Name); err != nil {
+			return err
+		}
+		return tx.Delete(ctx, record)
+	}); err != nil {
+		t.Fatalf("deleting a destroyed context failed: %#v", diagnostics.Of(err))
+	}
+}

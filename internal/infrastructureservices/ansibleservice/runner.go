@@ -121,7 +121,7 @@ func inventory(placement managedservice.Placement, interpreter string, paths map
 func variables(request managedservice.RunRequest, paths map[string]string, sudo string) (map[string]any, error) {
 	decoded := map[string]any{}
 	if err := json.Unmarshal(request.Canonical, &decoded); err != nil {
-		return nil, failure("lifecycle.state", "the frozen managed service request could not be prepared")
+		return nil, failure("lifecycle.state", "the frozen managed service request could not be prepared", "")
 	}
 	material := map[string]any{}
 	for _, file := range request.Materials {
@@ -151,11 +151,11 @@ func becomePassword(request managedservice.RunRequest) (string, error) {
 	}
 	bound, ok := request.Material[request.Sudo]
 	if !ok {
-		return "", failure("secret.store", "the bound escalation password is not available to this attempt")
+		return "", failure("secret.store", "the bound escalation password is not available to this attempt", bindingRemediation)
 	}
 	value, ok := bound.Part(secrets.PasswordPart)
 	if !ok || len(value) == 0 || len(value) > maxMaterialBytes {
-		return "", failure("secret.part", "the bound escalation password has no usable password part")
+		return "", failure("secret.part", "the bound escalation password has no usable password part", bindingRemediation)
 	}
 	return strings.TrimRight(string(value), "\n"), nil
 }
@@ -165,17 +165,25 @@ func materialBytes(request managedservice.RunRequest) (map[string][]byte, error)
 	for _, file := range request.Materials {
 		bound, ok := request.Material[file.Secret]
 		if !ok {
-			return nil, failure("secret.store", "a bound Secret this operation needs is not available to this attempt")
+			return nil, failure("secret.store", "a bound Secret this operation needs is not available to this attempt", bindingRemediation)
 		}
 		value, ok := bound.Part(file.Part)
 		if !ok || len(value) == 0 || len(value) > maxMaterialBytes {
-			return nil, failure("secret.part", "a bound Secret does not carry the part this operation needs")
+			return nil, failure("secret.part", "a bound Secret does not carry the part this operation needs", bindingRemediation)
 		}
 		out[file.Name] = slices.Clone(value)
 	}
 	return out, nil
 }
 
-func failure(code, message string) error {
-	return diagnostics.NewFailureWithRemediation(code, message, "", "Preserve the operation and repeat it so its Secret bindings are reopened.")
+// Each adapter failure names the recovery its own cause needs. One shared
+// remediation was wrong for every failure that had nothing to do with Secrets.
+const (
+	bindingRemediation = "repeat the operation so its Secret bindings are reopened"
+	outputRemediation  = "read the adapter output retained beside this attempt's log"
+	setupRemediation   = "run bootwright setup"
+)
+
+func failure(code, message, remediation string) error {
+	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
 }

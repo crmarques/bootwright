@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -90,12 +89,10 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 	if err := requireScratchCapacity(scratch, request); err != nil {
 		return result, err
 	}
-	interpreterArguments := append([]string{launch.Loader}, launch.Arguments...)
-	interpreterArguments = append(interpreterArguments, "-I", "-B", "-S")
-	for index, argument := range interpreterArguments {
-		interpreterArguments[index] = "'" + strings.ReplaceAll(argument, "'", "'\"'\"'") + "'"
+	interpreter := filepath.Join(job, "interpreter")
+	if err := os.WriteFile(interpreter, []byte(launch.InterpreterScript()), 0700); err != nil {
+		return result, failure("controller.setup", "the pinned module interpreter could not be published")
 	}
-	interpreter := strings.Join(interpreterArguments, " ")
 	inventory := map[string]any{"all": map[string]any{"children": map[string]any{"bootwright_controller": map[string]any{"hosts": map[string]any{"controller": map[string]any{"ansible_connection": "local", "ansible_python_interpreter": interpreter, "ansible_host": "localhost"}}}}}}
 	variables := map[string]any{"bootwright_controller_request": request}
 	for name, value := range map[string]any{"inventory.json": inventory, "request.json": variables} {

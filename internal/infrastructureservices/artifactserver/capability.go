@@ -7,9 +7,11 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
@@ -159,6 +161,10 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 	}
 	result, err := c.run(ctx, execution, "observe", request, fingerprint)
 	if err != nil {
+		// An observation that failed proves nothing either way, so the effect
+		// stays unknown. The reason still belongs in the attempt log: without
+		// it a resolution loop reports only that it could not resolve.
+		recordObservationFailure(ctx, execution, err)
 		return unknown, nil
 	}
 	digest := execution.Block.RequestDigest
@@ -169,6 +175,17 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 		return lifecycle.Observation{Effect: reconciliation.EffectNoEffect, Evidence: result.Evidence}, nil
 	}
 	return lifecycle.Observation{Effect: reconciliation.EffectUnknown, Evidence: result.Evidence}, nil
+}
+
+func recordObservationFailure(ctx context.Context, execution lifecycle.Execution, err error) {
+	if execution.Log == nil {
+		return
+	}
+	for _, reported := range diagnostics.Of(err) {
+		_ = execution.Log(ctx, operationstore.LogRecord{
+			Event: "observation-failed", Block: execution.Block.ID, Detail: reported.Code + ": " + reported.Message,
+		})
+	}
 }
 
 // prepare decodes the frozen request and, when the operation serves content,
@@ -226,6 +243,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		Material:       execution.Material,
 		Log:            execution.Log,
 		Progress:       execution.Progress,
+		Diagnostics:    execution.Diagnostics,
 	})
 }
 

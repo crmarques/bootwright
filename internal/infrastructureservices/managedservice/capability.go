@@ -284,20 +284,21 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		return RunResult{}, err
 	}
 	return c.runner.Run(ctx, RunRequest{
-		Kind:      string(c.definition.Kind),
-		Operation: operation,
-		Variable:  c.definition.Variable,
-		Digest:    execution.Block.RequestDigest,
-		Canonical: canonical,
-		Placement: request.Placement,
-		Materials: Materials(request.Placement),
-		Sudo:      request.Placement.SudoPasswordRef,
-		Launch:    execution.Launch,
-		Bundle:    execution.Bundle,
-		Area:      execution.Area,
-		Material:  execution.Material,
-		Log:       execution.Log,
-		Progress:  execution.Progress,
+		Kind:        string(c.definition.Kind),
+		Operation:   operation,
+		Variable:    c.definition.Variable,
+		Digest:      execution.Block.RequestDigest,
+		Canonical:   canonical,
+		Placement:   request.Placement,
+		Materials:   Materials(request.Placement),
+		Sudo:        request.Placement.SudoPasswordRef,
+		Launch:      execution.Launch,
+		Bundle:      execution.Bundle,
+		Area:        execution.Area,
+		Material:    execution.Material,
+		Log:         execution.Log,
+		Progress:    execution.Progress,
+		Diagnostics: execution.Diagnostics,
 	})
 }
 

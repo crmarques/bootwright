@@ -61,11 +61,13 @@ systemctl status 'bootwright-*-artifacts-lab-artifacts.service'
 ```
 
 An empty served root answers `404`; that is the expected result until content
-publication exists. Repeating the apply reports every block unchanged, and the
-inverse removes exactly what the apply created:
+publication exists. A completed apply is terminal: repeating it refuses with
+`lifecycle.state`, because there is
+[no reconciliation path](../../specs/state-reconciliation.md#lifecycle-unit).
+The inverse removes exactly what the apply created:
 
 ```sh
-./bin/bootwright apply --yes
+./bin/bootwright apply --yes    # refuses: destroy it before applying again
 ./bin/bootwright destroy
 ./bin/bootwright context delete --name lab-artifacts --purge
 ```

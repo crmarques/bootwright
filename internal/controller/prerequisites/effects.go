@@ -2,6 +2,7 @@ package prerequisites
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/controller"
 )
@@ -40,6 +41,19 @@ type PythonLaunch struct {
 	Arguments   []string
 	Directory   string
 	Environment []string
+}
+
+// InterpreterScript is the pinned launch published as one executable. Ansible
+// resolves a module interpreter as a single path and execs it, so the loader
+// invocation that isolates the private runtime cannot be passed as a command
+// line: it has to be a script the host can run.
+func (l PythonLaunch) InterpreterScript() string {
+	arguments := append([]string{l.Loader}, l.Arguments...)
+	arguments = append(arguments, "-I", "-B", "-S")
+	for index, argument := range arguments {
+		arguments[index] = "'" + strings.ReplaceAll(argument, "'", "'\"'\"'") + "'"
+	}
+	return "#!/bin/sh\nexec " + strings.Join(arguments, " ") + " \"$@\"\n"
 }
 
 // NativeRequirements selects the fixed package closure required by the

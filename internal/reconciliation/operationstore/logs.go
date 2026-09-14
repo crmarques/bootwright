@@ -12,8 +12,11 @@ import (
 )
 
 const (
-	MaxLogBytes  = 8 << 20
-	maxLogDetail = 512
+	MaxLogBytes = 8 << 20
+	// MaxAdapterOutputBytes bounds the adapter's own output retained after a
+	// handoff that never completed. It is troubleshooting material only.
+	MaxAdapterOutputBytes = 64 << 10
+	maxLogDetail          = 512
 )
 
 // LogRecord is the only shape a private operation log accepts. Every field is
@@ -56,6 +59,31 @@ func AttemptLogPath(id, block string, attempt, resolution int) (string, error) {
 		file += "-resolution-" + suffix
 	}
 	return path.Join(id, "logs", "blocks", block, file+".jsonl"), nil
+}
+
+// AdapterOutputPath names the retained output beside the attempt log it
+// belongs to, so one attempt's evidence stays together.
+func AdapterOutputPath(logPath string) (string, error) {
+	trimmed, found := strings.CutSuffix(logPath, ".jsonl")
+	if !found || trimmed == "" {
+		return "", recordError("an adapter output path requires its attempt log")
+	}
+	return trimmed + ".output", nil
+}
+
+// WriteAdapterOutput retains what an adapter printed before it completed its
+// qualified handoff. The bytes are raw and unparsed: they are never product
+// output, ownership evidence or a continuation cursor, and nothing reads them
+// back. Output produced after the handoff is never retained, because task
+// output may carry material the adapter marked sensitive.
+func (s *Store) WriteAdapterOutput(ctx context.Context, target string, data []byte) error {
+	if len(data) == 0 {
+		return nil
+	}
+	if len(data) > MaxAdapterOutputBytes {
+		data = data[:MaxAdapterOutputBytes]
+	}
+	return s.area.WriteExclusive(ctx, target, data)
 }
 
 // OpenLog establishes the logging boundary before its effect or observation
@@ -140,14 +168,24 @@ func (s *Store) LogPaths(ctx context.Context, id string, plan reconciliation.Pla
 			return nil, err
 		}
 		names := make([]string, 0, len(entries))
+		outputs := map[string]bool{}
 		for _, entry := range entries {
-			if !entry.Directory && strings.HasSuffix(entry.Name, ".jsonl") {
+			if entry.Directory {
+				continue
+			}
+			if strings.HasSuffix(entry.Name, ".jsonl") {
 				names = append(names, entry.Name)
+			}
+			if strings.HasSuffix(entry.Name, ".output") {
+				outputs[entry.Name] = true
 			}
 		}
 		slices.Sort(names)
 		for _, name := range names {
 			paths = append(paths, path.Join(directory, name))
+			if retained, found := outputs[strings.TrimSuffix(name, ".jsonl")+".output"]; found && retained {
+				paths = append(paths, path.Join(directory, strings.TrimSuffix(name, ".jsonl")+".output"))
+			}
 		}
 	}
 	return paths, nil

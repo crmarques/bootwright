@@ -26,7 +26,9 @@ func applicationValues() packageSymbols {
 	return packageSymbols{
 		"internal/desiredstate/compilation": {"State": true},
 		"internal/workspace/contexts":       {"Configuration": true},
-		"internal/controller/prerequisites": {"SetupReceipt": true},
+		// PythonLaunch is the pinned launch descriptor an adapter reads and
+		// projects; it binds no replaceable service.
+		"internal/controller/prerequisites": {"SetupReceipt": true, "PythonLaunch": true},
 		// Immutable request and evidence values an adapter must construct and
 		// read; they bind no replaceable service.
 		"internal/infrastructureservices/artifactserver": {"Request": true, "Evidence": true},

@@ -40,6 +40,7 @@ type RunRequest struct {
 	Material       map[string]secrets.Material
 	Log            func(context.Context, operationstore.LogRecord) error
 	Progress       func(context.Context, string, string)
+	Diagnostics    func(context.Context, []byte) error
 }
 
 type RunResult struct {

@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -354,6 +355,7 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 		return result, err
 	}
 	boundary := false
+	var cause error
 	for {
 		if err := ctx.Err(); err != nil {
 			break
@@ -376,10 +378,24 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 		}
 		states[block.ID] = outcome
 		if err != nil || outcome != reconciliation.BlockDone {
+			cause = err
 			break
 		}
 	}
-	return s.finish(ctx, tx, store, operation, plan, states, boundary, result)
+	final, terminal := s.finish(ctx, tx, store, operation, plan, states, boundary, result)
+	return final, withCause(cause, terminal)
+}
+
+// withCause keeps the block's own diagnostics beside the terminal state. The
+// terminal failure alone says only that the operation did not complete, which
+// is never the reason an operator needs. A cause that carries no diagnostics,
+// such as a cancellation, is left for the boundary that recognizes it.
+func withCause(cause, terminal error) error {
+	reported := diagnostics.Of(cause)
+	if len(reported) == 0 {
+		return terminal
+	}
+	return &diagnostics.Failure{Diagnostics: append(reported, diagnostics.Of(terminal)...)}
 }
 
 // unproved covers both ways an effect loses its outcome: an attempt that

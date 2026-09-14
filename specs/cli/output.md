@@ -485,6 +485,7 @@ Managed operations use this tree:
     operation.jsonl
     blocks/<block-id>/
       attempt-000001.jsonl
+      attempt-000001.output
       attempt-000002.jsonl
       attempt-000002-resolution-000001.jsonl
 ```
@@ -502,6 +503,19 @@ terminal escapes, environment dumps, command lines containing sensitive values,
 secret values or digests, and content protected by an adapter's `no_log`
 equivalent are forbidden. Truncation and dropped-event counts are explicit.
 
+An `attempt-NNNNNN.output` beside an attempt log retains what that adapter
+process printed on its own standard output and error, raw and unparsed. It
+exists whenever that run ends without a complete result, because the structured
+events alone need not say why: a run can fail before its qualified execution
+handoff, or after it with no failing group. Keeping material out of a retained
+run is the adapter's own obligation, discharged where the material is used:
+every task that reads bound material marks itself `no_log`, so the adapter's
+output never carries it. The file is bounded, truncated to its limit without a
+marker, and written once. It is troubleshooting material only: nothing reads it
+back, it is never product output, ownership evidence or a continuation cursor,
+and its attempt log records that it exists by name. Retaining it never changes
+the outcome the operation records.
+
 The operation log and required attempt log exist before the corresponding
 effect or resolution observation. A create, append, flush, or finalize failure
 stops admission of new work, requests cancellation, and returns `runtime.log`.
@@ -513,8 +527,9 @@ cursor.
 
 Human output names a safe relative log path once as `details: <path>` after the
 relevant terminal summary. JSON `logs` lists created paths once: operation log
-first, then blocks in frozen plan order, effect attempts in numeric order, and
-their resolution attempts in numeric order.
+first, then blocks in frozen plan order, effect attempts in numeric order, each
+attempt's retained adapter output directly after its own log, and their
+resolution attempts in numeric order.
 
 ## Multi-machine presentation
 

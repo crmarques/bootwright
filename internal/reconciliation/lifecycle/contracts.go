@@ -119,6 +119,7 @@ type OperationStore interface {
 	StartResolution(context.Context, string, string, int) (int, error)
 	CompleteResolution(context.Context, string, string, int, int, reconciliation.EffectState, reconciliation.BlockState, json.RawMessage) error
 	OpenLog(context.Context, string) (*operationstore.Log, error)
+	WriteAdapterOutput(context.Context, string, []byte) error
 	LogPaths(context.Context, string, reconciliation.Plan) ([]string, error)
 }
 
@@ -173,6 +174,11 @@ type Execution struct {
 	Material   map[string]secrets.Material
 	Log        func(context.Context, operationstore.LogRecord) error
 	Progress   func(context.Context, string, string)
+	// Diagnostics retains what the adapter printed before it completed its
+	// qualified handoff, for an operator to read when no structured event
+	// explains the failure. An adapter calls it at most once, and never with
+	// output produced after the handoff.
+	Diagnostics func(context.Context, []byte) error
 }
 
 type Result struct {
