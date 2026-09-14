@@ -62,12 +62,14 @@ state, change its root or infer a Machine from the invocation.
 [Controller](controller.md) owns verified local-host evidence and setup
 semantics. Workspace owns its durable shared-host receipt and the binding
 between context name, admitted controller Machine identity and verified
-host. First binding is an explicit confirmed setup publication under the root
-lock and context lease; context import and inspection never publish it.
-Missing, contradictory or different host evidence refuses without replacement.
-A changed Machine name cannot silently transfer an existing binding. Ordinary
-same-host reboot must remain distinguishable from relocation in the qualified
-identity implementation.
+host. First binding is published by the first `apply` that uses the host, under
+the root lock and context lease it already holds, before that operation
+reserves anything or performs any effect. Setup claims no context, and context
+import, preflight and inspection never publish it. Missing, contradictory or
+different host evidence refuses without replacement. A changed Machine name
+cannot silently transfer an existing binding. Ordinary same-host reboot must
+remain distinguishable from relocation in the qualified identity
+implementation.
 
 Shared host state belongs under `/var/lib/bootwright/controller/`. The current
 receipt and all context bindings share one atomic `state.json` publication;
@@ -78,7 +80,7 @@ that must execute are a narrow root-owned `0700` exception to the regular-file
 `0600` rule; metadata and other files remain `0600`. Only catalogued immutable
 controller bundles may use this exception.
 
-Explicit baseline setup may initialize the fixed root and publish a durable
+Explicit setup may initialize the fixed root and publish a durable
 empty registry without creating a context or keyring. That registry commit
 must precede any controller subtree. Confirmed setup adds the independently
 versioned Controller descriptor to the registry, preserving its active context
@@ -103,8 +105,9 @@ records and versions refuse. The host contains the confidential
 [`linux-installed-v1` tuple](controller.md#host-identity-and-shared-prerequisites).
 The receipt fixes its ID, catalog digest, plan digest, context name/revision/
 Machine, explicit egress, source closure, full resolved dependency definition,
-ordered actions and status. A baseline
-receipt has empty context fields. Sources bind a stable ID to its original
+ordered actions and status. Its context fields are always empty, because setup
+selects no context.
+Sources bind a stable ID to its original
 credential-free URL, SHA-256 and exact byte count. Bindings contain the context
 name, Machine name and the private host digest, ordered by context name;
 sources are ordered by source ID. Reusing a source ID with different bytes or

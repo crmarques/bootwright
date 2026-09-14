@@ -57,7 +57,7 @@ func resolvedDefinitionFixture(t *testing.T) prerequisites.Definition {
 	if err != nil {
 		t.Fatal(err)
 	}
-	definition, err := prerequisites.NewResolvedDefinition(bootstrap, native, nil, nil)
+	definition, err := prerequisites.NewResolvedDefinition(bootstrap, native)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestBootstrapIncompatibilityNeverMasksCorruptResolution(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				definition, err = prerequisites.NewResolvedDefinition(bootstrap, *definition.Native, nil, nil)
+				definition, err = prerequisites.NewResolvedDefinition(bootstrap, *definition.Native)
 				if err != nil {
 					t.Fatal(err)
 				}

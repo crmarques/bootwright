@@ -5,7 +5,7 @@ Bootwright controller, the host of every managed infrastructure service and the
 libvirt hypervisor of a single-node OpenShift cluster. It follows the
 [Bootwright API](../../specs/api.md) and is meant to be imported into a context
 on that machine so the implemented setup journeys can be exercised end to end:
-context creation, Secret custody, `controller setup` and `preflight controller`.
+context creation, Secret custody, `setup` and `preflight controller`.
 
 Everything a lifecycle command would later create runs on the controller:
 
@@ -69,17 +69,19 @@ make build
 ./bin/bootwright secret generate
 ./bin/bootwright secret check
 ./bin/bootwright render effective
-./bin/bootwright controller setup --context lab-ocp --dry-run
-./bin/bootwright controller setup --context lab-ocp
+./bin/bootwright setup --dry-run
+./bin/bootwright setup
 ./bin/bootwright preflight controller --context lab-ocp
 ```
 
-Setup resolves the latest Python, Ansible, Podman, OpenSSH, NMState and
-libvirt client builds plus Helm, and the OpenShift clients and installer for
-release `4.21.33`, presents the frozen plan, and installs after confirmation.
-A repeated setup with unchanged intent reports `unchanged`. Preflight verifies
-the retained bundle, the native runtime, the target clients and the
-controller binding of this context to this host without installing anything.
+Setup resolves the latest Python, Ansible, Podman, OpenSSH and NMState builds,
+presents the frozen plan, and installs after confirmation. It selects no
+context, so one setup prepares this host for every context on it and a repeat
+reports `unchanged`. Preflight then verifies that host work, and with
+`--context lab-ocp` also reports what this context still needs: the libvirt
+client, the OpenShift clients and installer for release `4.21.33`, Helm, and
+its binding to this host. Those are installed by the controller stage of its
+own apply, which is not available yet, so preflight reports them as missing.
 
 ## Lifecycle availability
 
@@ -92,4 +94,4 @@ registering an operation, naming `ContainerCluster/sno` and
 the whole `infra-components` stage today.
 
 The setup journeys above are unaffected: this example remains the input for
-context creation, Secret custody, `controller setup` and `preflight controller`.
+context creation, Secret custody, `setup` and `preflight controller`.

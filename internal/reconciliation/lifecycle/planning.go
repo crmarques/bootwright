@@ -17,6 +17,9 @@ import (
 type capabilityBinding struct {
 	reservations []prerequisites.HostReservation
 	secrets      []string
+	// controller is the Machine this Environment selects. A first apply binds
+	// the context to the host it runs on under that name.
+	controller string
 }
 
 // compile reads the frozen input once, so a decision never compiles the same
@@ -45,7 +48,7 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 	}
 	input := PlanInput{Verb: verb, Context: view.Identity(), State: state, Controller: controller}
 	var definitions []reconciliation.BlockDefinition
-	var binding capabilityBinding
+	binding := capabilityBinding{controller: controller}
 	for _, kind := range kinds {
 		capability, ok := s.capabilities.Resolve(kind, "")
 		if !ok {

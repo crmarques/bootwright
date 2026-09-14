@@ -15,7 +15,7 @@ func TestUnavailableService(t *testing.T) {
 		invoke func(context.Context) (*Report, error)
 	}{
 		{"preflight controller", func(ctx context.Context) (*Report, error) { return (Service{}).Check(ctx, CheckRequest{}) }},
-		{"controller setup", func(ctx context.Context) (*Report, error) { return (Service{}).Setup(ctx, SetupRequest{}) }},
+		{"setup", func(ctx context.Context) (*Report, error) { return (Service{}).Setup(ctx, SetupRequest{}) }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

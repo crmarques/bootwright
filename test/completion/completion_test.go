@@ -87,7 +87,7 @@ func TestGeneratedIntegrations(t *testing.T) {
 						words []string
 						want  []string
 					}{
-						{"commands", []string{"c"}, []string{"cluster", "completion", "context", "controller"}},
+						{"commands", []string{"c"}, []string{"cluster", "completion", "context"}},
 						{"nested commands", []string{"cluster", "k"}, []string{"kubeconfig", "kubectl"}},
 						{"flags", []string{"validate", "--o"}, []string{"--output"}},
 						{"enum", []string{"validate", "--output", ""}, []string{"json", "text"}},

@@ -126,6 +126,7 @@ type testWorkspace struct {
 	controller   prerequisites.StorageView
 	inputs       desiredstate.Sources
 	mutations    int
+	binds        int
 	failPublish  error
 }
 
@@ -160,6 +161,29 @@ func (v *testView) PublishEvidence(_ context.Context, data []byte) error {
 		return v.workspace.failPublish
 	}
 	v.workspace.evidence = slices.Clone(data)
+	return nil
+}
+
+// Bind records the relationship the way the store does: a first apply
+// establishes it, a later one revalidates exactly it, and a different Machine
+// or host refuses instead of replacing it.
+func (v *testView) Bind(_ context.Context, machine string, host controller.InstalledHostIdentity) error {
+	digest, err := host.PrivateDigest()
+	if err != nil {
+		return err
+	}
+	v.workspace.binds++
+	for _, binding := range v.workspace.controller.State.Bindings {
+		if binding.Context != v.Identity().Name {
+			continue
+		}
+		if binding.Machine != machine || binding.HostDigest != digest {
+			return failure("controller.identity", "this context is already bound to another controller Machine or host", "")
+		}
+		return nil
+	}
+	v.workspace.controller.State.Bindings = append(v.workspace.controller.State.Bindings,
+		prerequisites.ControllerBinding{Context: v.Identity().Name, Machine: machine, HostDigest: digest})
 	return nil
 }
 
@@ -478,6 +502,64 @@ func TestFreshApplyRegistersExecutesAndProjectsEvidence(t *testing.T) {
 	}
 	if len(result.Logs) == 0 {
 		t.Fatal("the operation created no private log")
+	}
+}
+
+// Setup prepares a host without claiming any context, so the first apply is
+// what records this context against it. A later apply revalidates exactly that
+// relationship instead of publishing another one.
+func TestFirstApplyBindsTheContextToItsControllerHost(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.workspace.controller.State.Bindings = nil
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	bindings := h.workspace.controller.State.Bindings
+	if len(bindings) != 1 || bindings[0].Context != testContextName || bindings[0].Machine != "controller" {
+		t.Fatalf("bindings = %#v", bindings)
+	}
+	if h.workspace.binds != 1 {
+		t.Fatalf("binds = %d", h.workspace.binds)
+	}
+	// Destroying and applying again revalidates the same binding.
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.workspace.controller.State.Bindings) != 1 {
+		t.Fatalf("a repeated apply republished the binding: %#v", h.workspace.controller.State.Bindings)
+	}
+}
+
+// A context already bound to another controller Machine is never silently
+// rebound, and the refusal happens before the operation registers.
+func TestApplyRefusesToRebindAnEstablishedContext(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.workspace.controller.State.Bindings = []prerequisites.ControllerBinding{
+		{Context: testContextName, Machine: "replacement", HostDigest: h.workspace.controller.State.Bindings[0].HostDigest},
+	}
+	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if diagnostics.Of(err)[0].Code != "controller.identity" {
+		t.Fatalf("rebind error = %v", err)
+	}
+	if len(h.capability.applies) != 0 {
+		t.Fatalf("a refused binding still executed %v", h.capability.applies)
+	}
+}
+
+// An unprepared host refuses before any effect and names setup, because no
+// context can claim a host that has none of the shared prerequisites.
+func TestApplyRefusesAnUnpreparedControllerHost(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.workspace.controller.State.Receipt.Status = "pending"
+	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if diagnostics.Of(err)[0].Code != "controller.identity" || !strings.Contains(diagnostics.Of(err)[0].Remediation, "bootwright setup") {
+		t.Fatalf("unprepared host error = %v", err)
+	}
+	if len(h.capability.applies) != 0 || h.workspace.binds != 0 {
+		t.Fatalf("a refused host still executed %v", h.capability.applies)
 	}
 }
 

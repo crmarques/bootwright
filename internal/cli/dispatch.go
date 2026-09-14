@@ -66,7 +66,7 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 		return commandResult{}, s.invokeMedia(ctx, path, &values, args)
 	case "validate", "render effective":
 		return s.invokeDesiredState(ctx, path, &values, args)
-	case "preflight controller", "controller setup":
+	case "preflight controller", "setup":
 		return s.invokeController(ctx, path, &values, args)
 	case "preflight infra", "preflight clusters", "preflight all":
 		return commandResult{}, s.invokeEnvironmentPreflight(ctx, path, &values, args)

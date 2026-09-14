@@ -236,16 +236,26 @@ func controllerOutcomeFields(command string, report *prerequisites.Report) []fie
 		fields = append(fields, field{Label: "Readiness", Value: "all required prerequisites verified"})
 	}
 	if report.Outcome != "ready" {
-		next := "bootwright controller setup"
-		if report.Outcome == "changed" || report.Outcome == "unchanged" {
-			next = "bootwright preflight controller"
-		}
+		fields = append(fields, field{Label: "Next", Value: controllerNextCommand(report)})
+	}
+	return fields
+}
+
+// controllerNextCommand offers the one command that settles what is missing.
+// A completed setup moves the operator on to verification; anything a context
+// selects belongs to its own controller stage, never to setup.
+func controllerNextCommand(report *prerequisites.Report) string {
+	if report.Outcome == "changed" || report.Outcome == "unchanged" {
+		next := "bootwright preflight controller"
 		if report.ContextName != "" {
 			next += " --context " + report.ContextName
 		}
-		fields = append(fields, field{Label: "Next", Value: next})
+		return next
 	}
-	return fields
+	if prerequisites.PendingScope(*report) == prerequisites.ContextScope && report.ContextName != "" {
+		return "bootwright apply --stage controller --context " + report.ContextName
+	}
+	return "bootwright setup"
 }
 
 // Progress uses the same status vocabulary: an observed action reports its

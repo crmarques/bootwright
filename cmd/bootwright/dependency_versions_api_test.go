@@ -7,13 +7,12 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 )
 
+// An Environment declares versions only for the prerequisites its own
+// controller stage installs. The private interpreter, Ansible and the baseline
+// native packages belong to context-independent setup, which reads no
+// Environment, so their former keys are no longer part of the schema.
 func TestEnvironmentDependencyVersionsPreserveExplicitIntent(t *testing.T) {
 	environment := serviceEnvironment + `  dependencyVersions:
-    python: "3.14.6"
-    ansible: "2.21.4"
-    podman: "5.8.4"
-    openssh: "10.0p1-12.fc43"
-    nmstate: latest
     libvirt: latest
     helm: "v4.3.0"
     govc: "0.54.0"
@@ -23,8 +22,7 @@ func TestEnvironmentDependencyVersionsPreserveExplicitIntent(t *testing.T) {
 	object := requireObject(t, state.Effective(), api.Environment, "synthetic")
 	versions := object.Spec().Get("dependencyVersions")
 	for key, expected := range map[string]string{
-		"python": "3.14.6", "ansible": "2.21.4", "podman": "5.8.4", "openssh": "10.0p1-12.fc43",
-		"nmstate": "latest", "libvirt": "latest", "helm": "v4.3.0", "govc": "0.54.0", "virtctl": "v1.9.0",
+		"libvirt": "latest", "helm": "v4.3.0", "govc": "0.54.0", "virtctl": "v1.9.0",
 	} {
 		if versions.Get(key).Text() != expected {
 			t.Fatalf("%s version did not preserve authored intent", key)
@@ -34,8 +32,13 @@ func TestEnvironmentDependencyVersionsPreserveExplicitIntent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := selection.Versions(); got != (controller.DependencyVersions{Python: "3.14.6", Ansible: "2.21.4", Podman: "5.8.4", OpenSSH: "10.0p1-12.fc43", NMState: "latest", Libvirt: "latest", Helm: "4.3.0", Govc: "0.54.0", Virtctl: "1.9.0"}) {
-		t.Fatalf("setup did not receive the complete normalized version intent: %#v", got)
+	// The context-independent versions stay at their compiled default, because
+	// no Environment can move them.
+	if got := selection.Versions(); got != (controller.DependencyVersions{Python: "latest", Ansible: "latest", Podman: "latest", OpenSSH: "latest", NMState: "latest", Libvirt: "latest", Helm: "4.3.0", Govc: "0.54.0", Virtctl: "1.9.0"}) {
+		t.Fatalf("selection did not receive the complete normalized version intent: %#v", got)
+	}
+	if got := selection.Versions().Baseline(); got != controller.DefaultDependencyVersions().Baseline() {
+		t.Fatalf("a context moved the baseline version intent: %#v", got)
 	}
 	tools, err := controller.SelectTools(state.Effective())
 	if err != nil || len(tools) != 0 {
@@ -47,7 +50,7 @@ func TestEnvironmentDependencyVersionsDefaultsAndOmission(t *testing.T) {
 	environment := serviceEnvironment + `  defaults:
     Environment:
       dependencyVersions:
-        python: "3.13.15"
+        govc: "0.53.0"
         helm: "v4.2.0"
         virtctl: latest
   dependencyVersions:
@@ -55,7 +58,7 @@ func TestEnvironmentDependencyVersionsDefaultsAndOmission(t *testing.T) {
 `
 	state, _ := compileAcceptance(t, controllerInputs(environment, serviceHost))
 	versions := requireObject(t, state.Effective(), api.Environment, "synthetic").Spec().Get("dependencyVersions")
-	if versions.Get("python").Text() != "3.13.15" || versions.Get("helm").Text() != "v4.3.0" || versions.Get("virtctl").Text() != "latest" {
+	if versions.Get("govc").Text() != "0.53.0" || versions.Get("helm").Text() != "v4.3.0" || versions.Get("virtctl").Text() != "latest" {
 		t.Fatal("dependency version defaults did not preserve field precedence")
 	}
 	for _, declaration := range []string{"", "  dependencyVersions: {}\n"} {
@@ -72,12 +75,18 @@ func TestEnvironmentDependencyVersionsRejectAmbiguousOverrides(t *testing.T) {
 		{"unknown dependency", "unknown: latest", "api.field", "unknown"},
 		{"coupled installer", "openshift-install: latest", "api.field", "openshift-install"},
 		{"coupled client", "oc: latest", "api.field", "oc"},
+		// Setup owns these, and no Environment may select their versions.
+		{"context-independent interpreter", "python: '3.14.6'", "api.field", "python"},
+		{"context-independent ansible", "ansible: '2.21.4'", "api.field", "ansible"},
+		{"context-independent runtime", "podman: '5.8.4'", "api.field", "podman"},
+		{"context-independent ssh", "openssh: latest", "api.field", "openssh"},
+		{"context-independent nmstate", "nmstate: latest", "api.field", "nmstate"},
 		{"empty version", "helm: ''", "api.value", "helm"},
 		{"range", "helm: '^4.0.0'", "api.value", "helm"},
-		{"partial release", "python: '3.14'", "api.value", "python"},
-		{"prerelease", "ansible: '2.22.0rc1'", "api.value", "ansible"},
+		{"partial release", "govc: '0.54'", "api.value", "govc"},
+		{"prerelease", "virtctl: '1.9.0rc1'", "api.value", "virtctl"},
 		{"whitespace", "virtctl: ' latest'", "api.value", "virtctl"},
-		{"package expression", "podman: '>=5.0'", "api.value", "podman"},
+		{"package expression", "libvirt: '>=5.0'", "api.value", "libvirt"},
 		{"package path", "libvirt: '../release'", "api.value", "libvirt"},
 		{"null", "govc: null", "api.type", "govc"},
 		{"number", "helm: 4", "api.type", "helm"},

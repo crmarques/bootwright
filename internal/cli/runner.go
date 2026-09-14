@@ -204,7 +204,7 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 	if errors.As(err, &controllerOutput) {
 		return 1
 	}
-	if err != nil && (path == "controller setup" || path == "preflight controller") && validControllerReport(result.controller) {
+	if err != nil && (path == "setup" || path == "preflight controller") && validControllerReport(result.controller) {
 		if presentErr := writeControllerReport(r.config.Out, path, result.controller); presentErr != nil {
 			return 1
 		}

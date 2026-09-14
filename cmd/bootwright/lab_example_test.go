@@ -129,9 +129,12 @@ func (p *labControllerPorts) Runtime(context.Context, prerequisites.RuntimeRequi
 	return prerequisites.RuntimeInspection{Present: true, Ready: false}, nil
 }
 
+// Setup admits the context-independent closure only. The lab example libvirt
+// client is selected by its desired state, so it reaches the controller stage
+// rather than this catalog.
 func (p *labControllerPorts) Select(_ prerequisites.Platform, requirements prerequisites.NativeRequirements) (prerequisites.Definition, error) {
-	if !requirements.ContainerRuntime || !requirements.LibvirtClient {
-		return prerequisites.Definition{}, errors.New("lab context must select the container runtime and libvirt client")
+	if !requirements.ContainerRuntime || requirements.LibvirtClient {
+		return prerequisites.Definition{}, errors.New("setup must select the container runtime without the libvirt client")
 	}
 	return prerequisites.Definition{CatalogDigest: strings.Repeat("a", 64), PythonVersion: "3.13.15", AnsibleVersion: "2.21.4", Runtime: prerequisites.RuntimeRequirement{Version: "5.8.4"}}, nil
 }
@@ -161,6 +164,12 @@ func (c labToolCatalog) Select(requests []controller.ToolRequest, _ []prerequisi
 func (c labToolCatalog) Resolve(context.Context, []controller.ToolRequest, prerequisites.SetupEgress) ([]prerequisites.ToolDefinition, error) {
 	c.ports.effects++
 	return nil, errors.New("unexpected publisher metadata resolution")
+}
+
+// Present answers without an effect: the lab example's tools are installed by
+// the controller stage, so preflight only reports that they are absent.
+func (c labToolCatalog) Present(context.Context, prerequisites.BundleArea, []prerequisites.ToolDefinition) (bool, error) {
+	return false, nil
 }
 
 func labContextServices(t *testing.T) (cli.Services, string, *labControllerPorts) {
@@ -213,17 +222,34 @@ func TestLabExampleContextAndControllerPreparationJourney(t *testing.T) {
 			t.Fatalf("secret %s is not listed after custody:\n%s", name, secrets)
 		}
 	}
-	plan, _ := contextRun(t, services, 0, "controller", "setup", "--context", "lab-ocp", "--dry-run")
-	for _, expected := range []string{"Scope       context lab-ocp", "Controller  controller", "[UNKNOWN]  Container runtime", "[UNKNOWN]  Target tools", "[UNKNOWN]  Controller binding  required controller", "Outcome  planned", "Next     bootwright controller setup --context lab-ocp"} {
+	// Setup plans the same context-independent prerequisites whatever context
+	// is selected, so its dry run names the baseline and neither the example's
+	// target tools nor its host binding.
+	plan, _ := contextRun(t, services, 0, "setup", "--dry-run")
+	for _, expected := range []string{"Scope     baseline", "[UNKNOWN]  Container runtime", "Outcome  planned", "Next     bootwright setup"} {
 		if !strings.Contains(plan, expected) {
-			t.Fatalf("context dry-run lacks %q:\n%s", expected, plan)
+			t.Fatalf("baseline dry-run lacks %q:\n%s", expected, plan)
 		}
 	}
+	for _, refused := range []string{"Target tools", "Controller binding", "context lab-ocp"} {
+		if strings.Contains(plan, refused) {
+			t.Fatalf("context-free setup planned %q:\n%s", refused, plan)
+		}
+	}
+	// Preflight keeps the context arm: it reports what the example still needs
+	// on this host, including the binding its first apply publishes.
 	report, diagnostics := contextRun(t, services, 1, "preflight", "controller", "--context", "lab-ocp")
-	if !strings.Contains(report, "[FAIL]  Controller binding  required controller") || !strings.Contains(report, "Outcome  not-ready") || !strings.Contains(diagnostics, "preflight.failed") || !strings.Contains(diagnostics, "controller setup --context lab-ocp") {
+	for _, expected := range []string{"Scope       context lab-ocp", "Controller  controller", "[FAIL]  Controller binding  required controller", "[FAIL]  Target tools", "Outcome  not-ready"} {
+		if !strings.Contains(report, expected) {
+			t.Fatalf("context preflight lacks %q:\n%s", expected, report)
+		}
+	}
+	// The host itself is unprepared, so the one actionable next command is
+	// setup rather than the context's own controller stage.
+	if !strings.Contains(diagnostics, "preflight.failed") || !strings.Contains(diagnostics, "run bootwright setup") {
 		t.Fatalf("preflight before setup must fail with setup guidance:\nstdout=%s\nstderr=%s", report, diagnostics)
 	}
-	_, diagnostics = contextRun(t, services, 1, "controller", "setup", "--context", "missing", "--dry-run")
+	_, diagnostics = contextRun(t, services, 1, "preflight", "controller", "--context", "missing")
 	if !strings.Contains(diagnostics, "context") {
 		t.Fatal("unknown explicit context was not refused", diagnostics)
 	}

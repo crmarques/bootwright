@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"path"
 	"slices"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/controller"
@@ -49,6 +50,13 @@ type inspection struct {
 	report        Report
 	toolRequests  []controller.ToolRequest
 	toolsResolved bool
+	// tools, toolsPresent, libvirtClient and libvirtPresent describe what one
+	// selected context adds to a ready host. They are evidence for preflight;
+	// setup never selects, plans or installs them.
+	tools          []ToolDefinition
+	toolsPresent   bool
+	libvirtClient  bool
+	libvirtPresent bool
 }
 
 func (s Service) available(ctx context.Context) error {
@@ -76,12 +84,12 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*Report, erro
 			return err
 		}
 		result = &current.report
-		if current.ready() {
+		if current.contextReady() {
 			result.Outcome = "ready"
 			return nil
 		}
 		result.Outcome = "not-ready"
-		return failure("preflight.failed", "required controller prerequisites are not ready", setupCommand(request.ContextName))
+		return failure("preflight.failed", "required controller prerequisites are not ready", readinessCommand(*result))
 	})
 	return result, err
 }
@@ -92,15 +100,13 @@ func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, erro
 	}
 	var current inspection
 	var err error
-	if request.DryRun && request.ContextName == "" {
+	// Setup selects no context, so its dry run needs no stored evidence at all
+	// and stays below the privilege boundary.
+	if request.DryRun {
 		current, err = s.inspect(ctx, StorageView{}, true, "")
 	} else {
-		phase := InspectionPhase
-		if request.DryRun {
-			phase = ""
-		}
-		err = s.storage.ReadController(ctx, request.ContextName, func(view StorageView) error {
-			current, err = s.inspect(ctx, view, request.DryRun, phase)
+		err = s.storage.ReadController(ctx, "", func(view StorageView) error {
+			current, err = s.inspect(ctx, view, false, InspectionPhase)
 			return err
 		})
 	}
@@ -119,14 +125,10 @@ func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, erro
 		return &current.report, nil
 	}
 	if s.options.Bootstrap != nil && !(current.view.State.Receipt.ID != "" && current.view.State.Receipt.Incomplete()) && current.resolutionRequired() {
-		current, err = s.resolveDependencies(ctx, request.ContextName, current)
+		current, err = s.resolveDependencies(ctx, current)
 		if err != nil {
 			return &current.report, err
 		}
-	} else if !current.toolsResolved {
-		// A pending receipt is replayed from its frozen resolution; it can never
-		// discover the identities it failed to record.
-		return &current.report, failure("controller.unknown", "pending setup lacks its exact target tool identities", "restore the original setup evidence")
 	}
 	if current.ready() {
 		current.report.Outcome = "unchanged"
@@ -149,11 +151,7 @@ func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, erro
 		if s.options.Confirmer == nil {
 			return &current.report, failure("controller.setup", "setup requires confirmation", "review the plan and repeat with --yes")
 		}
-		scope := request.ContextName
-		if scope == "" {
-			scope = "baseline"
-		}
-		if err := s.options.Confirmer.Confirm(ctx, "controller setup", scope); err != nil {
+		if err := s.options.Confirmer.Confirm(ctx, "setup", "this host"); err != nil {
 			return &current.report, err
 		}
 	}
@@ -178,7 +176,7 @@ func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, erro
 			return err
 		}
 		if !approved.samePlan(fresh) {
-			return failure("controller.conflict", "controller state changed after plan confirmation", setupCommand(request.ContextName))
+			return failure("controller.conflict", "controller state changed after plan confirmation", setupCommand())
 		}
 		current = fresh
 		current.report.PlanPresented = true
@@ -236,10 +234,11 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, pha
 		return current, err
 	}
 	current.platform = platform
-	requirements := NativeRequirements{
-		ContainerRuntime: current.selection.ContainerRuntime(),
-		LibvirtClient:    current.selection.LibvirtClient(),
-	}
+	current.libvirtClient = current.selection.LibvirtClient()
+	// Setup owns the context-independent native closure only. A libvirt client
+	// is selected by one context's desired state, so its controller stage
+	// installs it and this inspection only reports whether it is present.
+	requirements := NativeRequirements{ContainerRuntime: current.selection.ContainerRuntime()}
 	if s.options.Bootstrap != nil {
 		current.definition, current.toolsResolved, err = s.selectedResolution(current, requirements, frozen)
 	} else {
@@ -254,34 +253,23 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, pha
 	current.definition.Execution.Files = slices.Clone(current.definition.Execution.Files)
 	current.definition.Execution.Links = slices.Clone(current.definition.Execution.Links)
 	current.definition.Execution.Preload = slices.Clone(current.definition.Execution.Preload)
-	if len(current.toolRequests) != 0 && s.options.Bootstrap == nil {
-		current.toolsResolved = false
+	// A context's target tools are recovered from retained identities only, so
+	// this inspection reads no publisher metadata and acquires nothing.
+	if len(current.toolRequests) != 0 {
 		if s.options.Tools == nil {
 			return current, failure("controller.unsupported", "target tool selection is not configured", "use a compatible executable")
 		}
-		retained := view.State.RetainedSources
-		if len(frozen) != 0 {
-			retained = frozen[0].Sources
-		}
-		if view.State.Receipt.ID != "" && view.State.Receipt.Incomplete() {
-			retained = view.State.Receipt.Sources
-		}
-		tools, complete, err := s.options.Tools.Select(current.toolRequests, retained)
+		current.tools, current.toolsResolved, err = s.options.Tools.Select(current.toolRequests, view.State.RetainedSources)
 		if err != nil {
 			return current, err
 		}
-		current.definition, err = WithTools(current.definition, tools)
-		if err != nil {
-			return current, err
-		}
-		current.toolsResolved = complete
 	}
 	if err := s.catalog.ValidateEgress(current.route()); err != nil {
 		return current, err
 	}
 	current.report = Report{ContextName: view.Context.Name, Machine: current.selection.MachineName(), Platform: platform, DryRun: dryRun, Outcome: "planned", Checks: []Check{}, Actions: []string{}}
 	if s.options.Bootstrap != nil && !current.toolsResolved {
-		current.report.Dependencies = dependencyIntent(current.selection, current.toolRequests)
+		current.report.Dependencies = dependencyIntent(current.selection)
 	}
 	for _, source := range current.definition.Sources {
 		origin, err := url.Parse(source.URL)
@@ -311,68 +299,63 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, pha
 		}
 	}
 	hostText := platform.OS + " " + platform.Release + "/" + platform.Architecture
-	settle(Check{"host", hostText, hostText, "ready"})
-	current.report.Checks = append(current.report.Checks, Check{"installed-host", "verified local identity", "unverified", "unverified"}, Check{"execution-bundle", current.versions(), "unverified", "unverified"})
+	settle(Check{"host", hostText, hostText, "ready", HostScope})
+	current.report.Checks = append(current.report.Checks, Check{"installed-host", "verified local identity", "unverified", "unverified", HostScope}, Check{"execution-bundle", current.versions(), "unverified", "unverified", HostScope})
 	if current.selection.ContainerRuntime() {
-		current.report.Checks = append(current.report.Checks, Check{"container-runtime", current.definition.Runtime.Version, "unverified", "unverified"})
+		current.report.Checks = append(current.report.Checks, Check{"container-runtime", current.definition.Runtime.Version, "unverified", "unverified", HostScope})
 	}
+	// A selected context adds checks its own controller stage settles. They are
+	// reported, never planned here, because setup installs nothing a context
+	// selects and never publishes a binding.
 	if len(current.toolRequests) != 0 {
-		current.report.Checks = append(current.report.Checks, Check{"target-tools", "desired-state native clients", "unverified", "unverified"})
+		current.report.Checks = append(current.report.Checks, Check{"target-tools", current.toolSummary(), "unverified", "unverified", ContextScope})
+	}
+	if current.libvirtClient {
+		current.report.Checks = append(current.report.Checks, Check{"libvirt-client", "libvirt client", "unverified", "unverified", ContextScope})
 	}
 	if view.Context.Name != "" {
-		current.report.Checks = append(current.report.Checks, Check{"controller-binding", current.selection.MachineName(), "unverified", "unverified"})
+		current.report.Checks = append(current.report.Checks, Check{"controller-binding", current.selection.MachineName(), "unverified", "unverified", ContextScope})
 	}
 	if dryRun {
 		current.report.Actions = append(current.report.Actions, "Resolve requested versions, verify the installed host and prepare the exact execution bundle")
 		if current.selection.ContainerRuntime() {
 			current.report.Actions = append(current.report.Actions, "Resolve and review native package changes, then install and verify them with Ansible")
 		}
-		if len(current.toolRequests) != 0 {
-			current.report.Actions = append(current.report.Actions, "Resolve missing target tool versions and publisher checksums before confirmation, then install with Ansible")
-		}
-		if view.Context.Name != "" {
-			current.report.Actions = append(current.report.Actions, "Verify or establish the selected controller binding")
-		}
 		return current, nil
 	}
 	start("installed-host", "verifying local identity")
 	current.host, err = s.host.Identity(ctx)
 	if err != nil {
-		settle(unverified("installed-host", "verified local identity"))
+		settle(unverified("installed-host", "verified local identity", HostScope))
 		return current, err
 	}
 	if view.State.Host.Valid() && !view.State.Host.Equal(current.host) {
-		settle(unverified("installed-host", "verified local identity"))
+		settle(unverified("installed-host", "verified local identity", HostScope))
 		return current, failure("controller.identity", "stored setup belongs to a different installed host", "restore the original host and state; setup cannot rebind it")
 	}
-	settle(readiness("installed-host", "verified local identity", true))
+	settle(readiness("installed-host", "verified local identity", true, HostScope))
 	if view.State.Receipt.ID != "" && view.State.Receipt.Incomplete() {
 		if !current.compatibleReceipt(view.State.Receipt) || !current.matchesActions(view.State.Receipt.Actions) {
 			return current, failure("controller.unknown", "another exact setup attempt remains unresolved", "restore its original context, executable and acquisition route, then repeat controller setup")
 		}
 	}
-	if view.OpenBundle != nil && current.toolsResolved {
+	if view.OpenBundle != nil {
 		start("execution-bundle", "verifying the retained bundle")
 		area, err := view.OpenBundle(ctx, current.definition.CatalogDigest)
 		if err != nil {
-			settle(unverified("execution-bundle", current.versions()))
+			settle(unverified("execution-bundle", current.versions(), HostScope))
 			return current, err
 		}
 		if area != nil {
 			current.bundle, err = s.bundle.Inspect(ctx, area, current.definition, true)
 			if err != nil {
-				settle(unverified("execution-bundle", current.versions()))
+				settle(unverified("execution-bundle", current.versions(), HostScope))
 				return current, err
 			}
 			current.reusable = current.definition.Bootstrap != nil
 		}
 	}
-	settle(readiness("execution-bundle", current.versions(), current.bundle.Ready))
-	installTools := false
-	if len(current.toolRequests) != 0 {
-		settle(readiness("target-tools", "desired-state native clients", current.toolsResolved && current.bundle.ToolsReady))
-		installTools = !current.toolsResolved || !current.bundle.ToolsReady
-	}
+	settle(readiness("execution-bundle", current.versions(), current.bundle.Ready, HostScope))
 	if !current.bundle.Ready {
 		current.report.Actions = append(current.report.Actions, "Prepare and verify the pinned execution bundle")
 	}
@@ -380,10 +363,10 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, pha
 		start("container-runtime", "inspecting native packages")
 		current.runtime, err = s.inspectRuntime(ctx, current.definition)
 		if err != nil {
-			settle(unverified("container-runtime", current.definition.Runtime.Version))
+			settle(unverified("container-runtime", current.definition.Runtime.Version, HostScope))
 			return current, err
 		}
-		check := readiness("container-runtime", current.definition.Runtime.Version, current.runtime.Ready)
+		check := readiness("container-runtime", current.definition.Runtime.Version, current.runtime.Ready, HostScope)
 		if current.runtime.Version != "" {
 			check.Observed = current.runtime.Version
 		}
@@ -397,30 +380,11 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, pha
 			}
 		}
 	}
-	// Target clients are installed by the same Ansible run the bundle and native
-	// runtime enable, so they follow both in catalog dependency order.
-	if installTools {
-		current.report.Actions = append(current.report.Actions, "Install and verify the desired-state native clients with Ansible")
-	}
-	current.bound = view.Context.Name == ""
-	for _, binding := range view.State.Bindings {
-		if binding.Context != view.Context.Name {
-			continue
-		}
-		digest, _ := current.host.PrivateDigest()
-		if binding.Machine != current.selection.MachineName() || binding.HostDigest != digest {
-			return current, failure("controller.identity", "selected controller does not match its established host binding", "restore the bound controller input; setup cannot rebind it")
-		}
-		current.bound = true
-	}
-	if view.Context.Name != "" {
-		settle(readiness("controller-binding", current.selection.MachineName(), current.bound))
-		if !current.bound {
-			current.report.Actions = append(current.report.Actions, "Bind the selected controller Machine to this installed host")
-		}
+	if err := s.settleContextChecks(ctx, view, &current, settle, start); err != nil {
+		return current, err
 	}
 	if view.State.Receipt.ID != "" && view.State.Receipt.Incomplete() {
-		settle(Check{"setup-recovery", "complete", "incomplete", "not-ready"})
+		settle(Check{"setup-recovery", "complete", "incomplete", "not-ready", HostScope})
 		current.report.Actions = append(current.report.Actions, "Resolve the exact pending setup receipt")
 	} else if view.State.Receipt.ID == "" || view.State.Receipt.Status != "complete" || !current.bundle.Sealed {
 		observed := view.State.Receipt.Status
@@ -429,22 +393,120 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, pha
 		} else if observed == "complete" && !current.bundle.Sealed {
 			observed = "selected bundle is not sealed"
 		}
-		settle(Check{"setup-state", "complete", observed, "not-ready"})
+		settle(Check{"setup-state", "complete", observed, "not-ready", HostScope})
 		current.report.Actions = append(current.report.Actions, "Record verified setup completion")
 	}
 	return current, nil
+}
+
+// settleContextChecks reports what one selected context still needs on this
+// host. Every observation is read-only presence: the tools its desired state
+// selects, its libvirt client closure, and its binding to this host. None of
+// them is a setup action, because the context's controller stage owns them.
+func (s Service) settleContextChecks(ctx context.Context, view StorageView, current *inspection, settle func(Check), start func(string, string)) error {
+	if view.Context.Name == "" {
+		current.bound = true
+		return nil
+	}
+	if len(current.toolRequests) != 0 {
+		start("target-tools", "verifying the retained target tools")
+		ready := false
+		if current.toolsResolved && view.OpenBundle != nil && s.options.Tools != nil {
+			area, err := view.OpenBundle(ctx, ToolsDigest(current.tools))
+			if err != nil {
+				settle(unverified("target-tools", current.toolSummary(), ContextScope))
+				return err
+			}
+			if area != nil {
+				ready, err = s.options.Tools.Present(ctx, area, current.tools)
+				if err != nil {
+					settle(unverified("target-tools", current.toolSummary(), ContextScope))
+					return err
+				}
+			}
+		}
+		settle(readiness("target-tools", current.toolSummary(), ready, ContextScope))
+		current.toolsPresent = ready
+	}
+	if current.libvirtClient {
+		start("libvirt-client", "inspecting the libvirt client packages")
+		present, err := s.libvirtPresent(ctx, view)
+		if err != nil {
+			settle(unverified("libvirt-client", "libvirt client", ContextScope))
+			return err
+		}
+		settle(readiness("libvirt-client", "libvirt client", present, ContextScope))
+		current.libvirtPresent = present
+	}
+	for _, binding := range view.State.Bindings {
+		if binding.Context != view.Context.Name {
+			continue
+		}
+		digest, _ := current.host.PrivateDigest()
+		if binding.Machine != current.selection.MachineName() || binding.HostDigest != digest {
+			return failure("controller.identity", "selected controller does not match its established host binding", "restore the bound controller input; apply cannot rebind it")
+		}
+		current.bound = true
+	}
+	settle(readiness("controller-binding", current.selection.MachineName(), current.bound, ContextScope))
+	return nil
+}
+
+// libvirtPresent proves the context's libvirt roots from a retained resolution
+// that selected them. Without such a resolution nothing installed them, so the
+// answer is a definite absence rather than an unverifiable check.
+func (s Service) libvirtPresent(ctx context.Context, view StorageView) (bool, error) {
+	if s.options.NativeInspector == nil {
+		return false, nil
+	}
+	for index := len(view.State.RetainedDefinitions) - 1; index >= 0; index-- {
+		definition := view.State.RetainedDefinitions[index]
+		if !definition.NativeRequirements.LibvirtClient || definition.Native == nil {
+			continue
+		}
+		presence, err := s.options.NativeInspector.Check(ctx, *definition.Native)
+		if err != nil {
+			return false, err
+		}
+		if presence.Ready {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (i inspection) versions() string {
 	return "Python " + i.definition.PythonVersion + ", Ansible " + i.definition.AnsibleVersion
 }
 
+// toolSummary names the context clients by exact release once their identities
+// are retained, and by requirement until then, so the check always states
+// something the operator can act on.
+func (i inspection) toolSummary() string {
+	if summary := toolVersionSummary(i.tools); summary != "" {
+		return summary
+	}
+	kinds := make([]string, 0, len(i.toolRequests))
+	for _, request := range i.toolRequests {
+		kinds = append(kinds, request.Kind)
+	}
+	return strings.Join(kinds, ", ")
+}
+
+// ready is host readiness: everything context-independent setup owns. It never
+// includes a context's own tools, libvirt client or binding.
 func (i inspection) ready() bool {
-	return i.bundle.Ready && i.bundle.Sealed && i.dependenciesReady() && i.bound && i.view.State.Receipt.ID != "" && i.view.State.Receipt.Status == "complete"
+	return i.bundle.Ready && i.bundle.Sealed && i.dependenciesReady() && i.view.State.Receipt.ID != "" && i.view.State.Receipt.Status == "complete"
+}
+
+// contextReady adds what one selected context needs on a ready host. Preflight
+// requires it; setup neither observes nor prepares it.
+func (i inspection) contextReady() bool {
+	return i.ready() && i.bound && (len(i.toolRequests) == 0 || i.toolsPresent) && (!i.libvirtClient || i.libvirtPresent)
 }
 
 func (i inspection) dependenciesReady() bool {
-	return (!i.selection.ContainerRuntime() || i.runtime.Ready) && i.toolsResolved && (len(i.toolRequests) == 0 || i.bundle.ToolsReady)
+	return !i.selection.ContainerRuntime() || i.runtime.Ready
 }
 
 // resolutionRequired reports whether publisher metadata must be consulted. A
@@ -523,22 +585,31 @@ func checkEvent(phase string, check Check) ProgressEvent {
 
 // unverified settles a check whose verification itself failed, so the row
 // closes before the diagnostic explains why.
-func unverified(id, required string) Check {
-	return Check{id, required, "not verified", "not-ready"}
+func unverified(id, required, scope string) Check {
+	return Check{id, required, "not verified", "not-ready", scope}
 }
 
-func readiness(id, required string, ready bool) Check {
+func readiness(id, required string, ready bool, scope string) Check {
 	if ready {
-		return Check{id, required, required, "ready"}
+		return Check{id, required, required, "ready", scope}
 	}
-	return Check{id, required, "missing or unverified", "not-ready"}
+	return Check{id, required, "missing or unverified", "not-ready", scope}
 }
 
-func setupCommand(name string) string {
-	if name == "" {
-		return "run bootwright controller setup"
+func setupCommand() string { return "run bootwright setup" }
+
+func stageCommand(name string) string {
+	return "run bootwright apply --stage controller --context " + name
+}
+
+// readinessCommand names the one command that settles what preflight found
+// missing: setup for a host prerequisite, and the context's own controller
+// stage for anything its desired state selects.
+func readinessCommand(report Report) string {
+	if PendingScope(report) == ContextScope && report.ContextName != "" {
+		return stageCommand(report.ContextName)
 	}
-	return "run bootwright controller setup --context " + name
+	return setupCommand()
 }
 
 func failure(code, message, remediation string) error {

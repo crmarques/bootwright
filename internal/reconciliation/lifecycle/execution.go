@@ -441,6 +441,14 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		}
 		return operation, plan, nil
 	}
+	// A fresh apply is where a context claims its controller host. Binding
+	// precedes every reservation and effect, so an operation never leaves work
+	// behind on a host the context is not recorded against.
+	if decided.verb == reconciliation.Apply {
+		if err := s.establishBinding(ctx, tx, decided.binding.controller); err != nil {
+			return operationstore.Operation{}, reconciliation.Plan{}, err
+		}
+	}
 	if err := s.reserve(ctx, tx, decided); err != nil {
 		return operationstore.Operation{}, reconciliation.Plan{}, err
 	}
@@ -487,6 +495,21 @@ func (s Service) reserve(ctx context.Context, tx Transaction, decided transition
 	return tx.Reserve(ctx, decided.binding.reservations)
 }
 
+// establishBinding proves the prepared host and records this context against
+// it. Setup prepares a host without claiming any context, so the relationship
+// is published here, once, by the operation that first uses the host.
+func (s Service) establishBinding(ctx context.Context, tx Transaction, machine string) error {
+	host, err := s.host.Identity(ctx)
+	if err != nil {
+		return err
+	}
+	view := tx.Controller()
+	if !view.Exists || !view.Initialized || view.State.Receipt.Status != "complete" {
+		return failure("controller.identity", "this host has no completed controller setup", "run bootwright setup")
+	}
+	return tx.Bind(ctx, machine, host)
+}
+
 // verifyContinuation re-proves everything a continuation depends on before it
 // does work. Drift refuses; it never re-resolves to another implementation.
 func (s Service) verifyContinuation(ctx context.Context, tx Transaction, operation operationstore.Operation) error {
@@ -498,7 +521,7 @@ func (s Service) verifyContinuation(ctx context.Context, tx Transaction, operati
 		return failure("lifecycle.state", "the frozen input no longer matches this operation", "restore the exact input revision this operation froze")
 	}
 	if operation.AutomationDigest != s.automation.CatalogDigest() {
-		return failure("lifecycle.state", "this executable's automation differs from the one this operation froze", "install the compatible executable and run controller setup --context "+identity.Name)
+		return failure("lifecycle.state", "this executable's automation differs from the one this operation froze", "install the compatible executable and run bootwright setup")
 	}
 	host, err := s.host.Identity(ctx)
 	if err != nil {
@@ -511,10 +534,10 @@ func (s Service) verifyContinuation(ctx context.Context, tx Transaction, operati
 // runs on and that its setup completed, before any local effect.
 func verifyHostBinding(view prerequisites.StorageView, identity ContextIdentity, host controller.InstalledHostIdentity) error {
 	if !view.Exists || !view.Initialized {
-		return failure("controller.identity", "this host has no completed controller setup", "run controller setup --context "+identity.Name)
+		return failure("controller.identity", "this host has no completed controller setup", "run bootwright setup")
 	}
 	if view.State.Receipt.Status != "complete" {
-		return failure("controller.state", "the retained controller setup is incomplete", "run controller setup --context "+identity.Name+" to resolve it")
+		return failure("controller.state", "the retained controller setup is incomplete", "run bootwright setup to resolve it")
 	}
 	digest, err := host.PrivateDigest()
 	if err != nil {
@@ -532,7 +555,7 @@ func verifyHostBinding(view prerequisites.StorageView, identity ContextIdentity,
 		}
 		return nil
 	}
-	return failure("controller.identity", "this context is not bound to a controller host", "run controller setup --context "+identity.Name)
+	return failure("controller.identity", "this context is not bound to a controller host", "run bootwright apply to bind it")
 }
 
 // inputDigest binds the operation to the exact frozen bytes it planned from,

@@ -75,6 +75,41 @@ func (c *ToolCatalog) Select(requests []controller.ToolRequest, retained []prere
 	return result, complete, nil
 }
 
+// Present lists the area once and confirms each tool's retained source by size
+// and each published member by existence. It opens no file and runs no tool,
+// so proving a prepared host costs one directory walk.
+func (c *ToolCatalog) Present(ctx context.Context, area prerequisites.BundleArea, tools []prerequisites.ToolDefinition) (bool, error) {
+	if len(tools) == 0 {
+		return true, nil
+	}
+	if area == nil {
+		return false, nil
+	}
+	listed, err := area.Entries(ctx)
+	if err != nil {
+		return false, err
+	}
+	entries := make(map[string]prerequisites.BundleEntry, len(listed))
+	for _, entry := range listed {
+		entries[entry.Path] = entry
+	}
+	present := func(name string, size int64) bool {
+		entry, found := entries[name]
+		return found && !entry.Directory && (size < 0 || entry.Size == size)
+	}
+	for _, tool := range tools {
+		if !present(sourcePath(tool.Source), tool.Source.Bytes) {
+			return false, nil
+		}
+		for _, file := range tool.Files {
+			if !present(file.Path, -1) {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
+}
+
 func (c *ToolCatalog) Resolve(ctx context.Context, requests []controller.ToolRequest, egress prerequisites.SetupEgress) ([]prerequisites.ToolDefinition, error) {
 	requests, err := toolRequests(requests)
 	if err != nil {

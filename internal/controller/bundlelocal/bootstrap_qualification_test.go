@@ -91,7 +91,7 @@ func TestQualifiedResolvedBootstrapPreparation(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	definition, err := prerequisites.NewResolvedDefinition(bootstrap, native, nil, nil)
+	definition, err := prerequisites.NewResolvedDefinition(bootstrap, native)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,17 +2,28 @@ package prerequisites
 
 type CheckRequest struct{ ContextName string }
 
+// SetupRequest carries no context. Setup prepares the prerequisites every
+// context on this host shares; the prerequisites a context adds are installed
+// by the controller stage of its own apply.
 type SetupRequest struct {
-	ContextName      string
 	DryRun           bool
 	SkipConfirmation bool
 }
+
+// Check scopes tell the operator which command settles a missing prerequisite:
+// HostScope is context-independent and owned by setup, ContextScope is selected
+// by one context's desired state and owned by its controller stage.
+const (
+	HostScope    = "host"
+	ContextScope = "context"
+)
 
 type Check struct {
 	ID       string
 	Required string
 	Observed string
 	Status   string
+	Scope    string
 }
 
 // Summary is what the operator reads beside a check: the observation when it
@@ -39,4 +50,21 @@ type Report struct {
 	// failure report adds only its outcome rather than repeating the headline.
 	ProgressPresented bool
 	Progress          []ActionProgress
+}
+
+// PendingScope names the narrowest scope that has an unmet check, so a result
+// can offer the one command that settles it. An unmet host prerequisite always
+// wins, because the prerequisites a context adds need a prepared host first.
+func PendingScope(report Report) string {
+	pending := ""
+	for _, check := range report.Checks {
+		if check.Status == "ready" {
+			continue
+		}
+		if check.Scope == HostScope || check.Scope == "" {
+			return HostScope
+		}
+		pending = check.Scope
+	}
+	return pending
 }

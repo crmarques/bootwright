@@ -37,6 +37,9 @@ type View interface {
 type Transaction interface {
 	View
 	PublishEvidence(context.Context, []byte) error
+	// Bind records this context's controller relationship on the prepared host.
+	// A first apply establishes it; every later one revalidates exactly it.
+	Bind(context.Context, string, controller.InstalledHostIdentity) error
 	Reserve(context.Context, []prerequisites.HostReservation) error
 	ReleaseReservations(context.Context) error
 }

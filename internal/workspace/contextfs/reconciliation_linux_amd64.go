@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -273,6 +274,44 @@ func (t *lifecycleTransaction) ReleaseReservations(ctx context.Context) error {
 	return t.publishReservations(ctx, nil)
 }
 
+// Bind records this context's controller relationship on the prepared host.
+// The first apply establishes it; every later one revalidates the exact same
+// relationship. A different Machine or host never replaces an existing
+// binding, so relocation stays an explicit operator decision.
+func (t *lifecycleTransaction) Bind(ctx context.Context, machine string, host controller.InstalledHostIdentity) error {
+	if err := t.base.available(ctx); err != nil {
+		return err
+	}
+	if machine == "" {
+		return state("a controller binding requires the selected Machine name")
+	}
+	if t.stored.data == nil || t.stored.value.Receipt.Status != "complete" {
+		return controllerFailure("controller.identity", "this host has no completed controller setup; run bootwright setup")
+	}
+	if !t.stored.value.Host.Equal(host) {
+		return controllerFailure("controller.identity", "this host is not the host this controller state belongs to")
+	}
+	digest, err := host.PrivateDigest()
+	if err != nil {
+		return err
+	}
+	bindings := slices.Clone(t.stored.value.Bindings)
+	for _, binding := range bindings {
+		if binding.Context != t.identity.Name {
+			continue
+		}
+		if binding.Machine != machine || binding.HostDigest != digest {
+			return controllerFailure("controller.identity", "this context is already bound to another controller Machine or host; restore it, or create a context here")
+		}
+		return nil
+	}
+	bindings = append(bindings, prerequisites.ControllerBinding{Context: t.identity.Name, Machine: machine, HostDigest: digest})
+	slices.SortFunc(bindings, func(x, y prerequisites.ControllerBinding) int { return strings.Compare(x.Context, y.Context) })
+	value := cloneControllerState(t.stored.value)
+	value.Bindings = bindings
+	return t.publishControllerState(ctx, value, "before-binding")
+}
+
 func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []prerequisites.HostReservation) error {
 	if t.stored.data == nil {
 		if len(next) == 0 {
@@ -313,7 +352,14 @@ func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []p
 	}
 	value := cloneControllerState(t.stored.value)
 	value.Reservations = combined
-	if err := t.base.store.checkpoint(ctx, "before-reservation"); err != nil {
+	return t.publishControllerState(ctx, value, "before-reservation")
+}
+
+// publishControllerState replaces the shared record atomically under the held
+// root lock, then re-reads it so the transaction keeps working from exactly
+// what is durable.
+func (t *lifecycleTransaction) publishControllerState(ctx context.Context, value prerequisites.HostState, checkpoint string) error {
+	if err := t.base.store.checkpoint(ctx, checkpoint); err != nil {
 		return err
 	}
 	dir, err := openControllerDirectory(t.base.root, t.base.registry)

@@ -12,6 +12,21 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
+// ToolsDigest names the shared host area that holds one exact target tool
+// closure. It is content-addressed by the resolved tools alone, so every
+// context selecting the same tools proves the same files and a different
+// closure never disturbs them.
+func ToolsDigest(tools []ToolDefinition) string {
+	ordered := slices.Clone(tools)
+	slices.SortFunc(ordered, func(a, b ToolDefinition) int { return strings.Compare(a.Source.ID, b.Source.ID) })
+	encoded, err := json.Marshal(ordered)
+	if err != nil {
+		return ""
+	}
+	digest := sha256.Sum256(append([]byte("bootwright.controller.tool-area-v1\x00"), encoded...))
+	return hex.EncodeToString(digest[:])
+}
+
 // ToolDefinition freezes publisher metadata for the Ansible dependency role.
 // Only fixed regular archive members may become the named private executables.
 type ToolDefinition struct {

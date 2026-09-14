@@ -1,11 +1,28 @@
 # Controller prerequisites and setup
 
 Controller owns inspection and preparation of the local host on which
-Bootwright runs. This contract defines `controller setup` and `preflight controller`;
+Bootwright runs. This contract defines `setup` and `preflight controller`;
 [milestones](milestones.md#m1d--controller-setup) own delivery and qualification
-status. The prepared host is the [Environment-selected controller Machine](api/environment.md#controller-machine)
-when a context is supplied. Setup never provisions that Machine's OS or
-executes a managed service's lifecycle.
+status. Setup never provisions an operating system or executes a managed
+service's lifecycle.
+
+Prerequisites divide by what selects them. **Host prerequisites** are
+context-independent: every context on this host needs exactly the same ones, so
+`setup` owns them and reads no desired state at all. **Context prerequisites**
+are selected by one Environment's own graph, so the
+[controller stage](state-reconciliation.md#stages-and-the-pause-boundary) of
+that context's apply owns them. Each prerequisite belongs to exactly one side,
+and neither command performs the other's work.
+
+| Scope | Prerequisites | Owner |
+| --- | --- | --- |
+| Host | Provided OS, architecture and verified installed-host identity; the fixed root and its controller record; the private Python and `ansible-core` execution bundle with the embedded automation; the baseline native closure of container runtime, SSH and NMState clients. | `setup` |
+| Context | The target client closure the selected graph needs; the libvirt client closure a declared `libvirt` capability or referenced libvirt provider selects; the binding between this context and this host. | `apply --stage controller` |
+
+A host prepared once therefore serves every context later created on it, and a
+context that selects nothing beyond the baseline needs no controller stage.
+The [Environment-selected controller Machine](api/environment.md#controller-machine)
+names the host a context expects to run on; `setup` never reads it.
 
 ## Supported host and dependency selection
 
@@ -23,9 +40,11 @@ dependency locks must remain consistent with that exit evidence.
 
 The baseline selects CPython from python-build-standalone, `ansible-core`,
 their supporting wheels and urllib3 for bounded Ansible-owned downloads.
-The [Environment version policy](api/environment.md#dependency-versions)
-defaults every configurable dependency to latest stable. An explicit version
-overrides that root. Resolve Python and Ansible independently, then use the
+Every host dependency resolves to latest stable: no Environment declares their
+versions, because setup reads none. The
+[Environment version policy](api/environment.md#dependency-versions) declares
+only the versions a controller stage installs. Resolve Python and Ansible
+independently, then use the
 selected interpreter's maintained pip resolver with exact roots and wheel-only
 downloads. Incompatibility is a refusal, not permission to choose an older root.
 Freeze the complete wheel closure, metadata and resolver identities. Production
@@ -60,8 +79,8 @@ releases are resolved by explicit setup. Dependency selection follows
 | --- | --- |
 | Host foundation | Verify the provided OS, architecture, local identity, account/sudo boundary, filesystem containment/durability, free-space limits and trusted package sources. No OS installation, release upgrade, repository enrollment, entitlement registration or reboot. |
 | Baseline execution bundle | Publish the resolved exact Python and `ansible-core` closure in an isolated Bootwright-owned location. Do not use system/user Python imports or ambient Ansible configuration. |
-| Container runtime | Require the controller to declare `container-runtime`; context-free baseline setup also selects Podman. Install or update the approved dependency set and verify an existing exact runtime without taking ownership of its containers or configuration. Do not start a service, pull a managed-service image or create a container. |
-| Native target clients | Select the complete controller-side tool closure from the admitted desired-state graph. OpenShift/OKD clients (`oc`, `kubectl`) and installer match the selected release; Kubernetes consumers select Helm; referenced vSphere providers select `govc`; virtualization selects upstream `virtctl`. Native SSH clients and NMState support the baseline flows. A declared `libvirt` capability or referenced libvirt provider selects `virsh` and its native client dependencies. Install these with the fixed Ansible controller role. |
+| Container runtime | Setup selects Podman for every prepared host, so a controller that declares `container-runtime` finds it ready. Install or update the approved dependency set and verify an existing exact runtime without taking ownership of its containers or configuration. Do not start a service, pull a managed-service image or create a container. |
+| Native target clients | Selected by the admitted desired-state graph, so the controller stage owns them. OpenShift/OKD clients (`oc`, `kubectl`) and installer match the selected release; Kubernetes consumers select Helm; referenced vSphere providers select `govc`; virtualization selects upstream `virtctl`. A declared `libvirt` capability or referenced libvirt provider selects `virsh` and its native client dependencies. Setup selects none of them; the SSH and NMState clients that support the baseline flows are host prerequisites. Install these with the fixed Ansible controller role. |
 | Service execution | Service images, containers and lifecycle configuration remain with their service consumer. Installing a client grants no authority to contact or change a target. |
 
 Setup installs missing dependencies, updates selected dependencies to their
@@ -130,34 +149,47 @@ garbage-collection command.
 
 ## Selection and command journeys
 
-These commands use a named context **only when `--context` is explicit and
-nonempty**. An explicitly empty value is omission. Nonempty names follow the
-existing context-name grammar. Omission ignores the invoking user's current selection, resolves no desired
-state and selects the baseline dependencies with direct download routing. This
-allows preparation before context creation or Environment import. No current
-directory, user profile or ambient proxy selects inputs.
+`setup` selects no context. It ignores the invoking user's current selection,
+resolves no desired state, consumes no explicit `--context` value, and selects
+the host dependencies with direct download routing. This allows preparation
+before context creation or Environment import, and makes one prepared host
+serve every context created on it. No current directory, user profile or
+ambient proxy selects inputs. Version intent for the host dependencies comes
+from the compiled default alone, because no Environment can move it; the
+[Environment version policy](api/environment.md#dependency-versions) declares
+only the versions a controller stage installs.
 
-An explicit context must be ready and have an admitted input revision. Resolve
-its immutable input, select its controller Machine and derive all local native prerequisites
-needed by the selected target flows. An empty context returns
-`context.input` with the import command. Unavailable cluster or service lifecycle commands remain unavailable;
-setup readiness reports local dependencies only. A controller requirement outside the supported setup
-matrix does block setup before effects. Global SSH flags remain unconsumed.
+`preflight controller` uses a named context **only when `--context` is explicit
+and nonempty**. An explicitly empty value is omission. Nonempty names follow
+the existing context-name grammar. An explicit context must be ready and have
+an admitted input revision; an empty one returns `context.input` with the
+import command. Every check carries the scope that owns it, so a negative
+report names the one command that settles it: `setup` for a host prerequisite,
+and that context's own `apply --stage controller` for anything its graph
+selects. An unmet host prerequisite always wins, because the prerequisites a
+context adds cannot be prepared on an unprepared host. Unavailable cluster or
+service lifecycle commands remain unavailable. A controller requirement outside
+the supported setup matrix does block setup before effects. Global SSH flags
+remain unconsumed.
 
 | Invocation | Required behavior |
 | --- | --- |
-| `bootwright controller setup --dry-run` | Produce deterministic dependency intent and actions from policy and bounded local file metadata. No dependency subprocess, network, Secret read, privilege escalation or write. Versions requiring live resolution and readiness facts requiring effects are explicitly unverified. |
-| `bootwright controller setup` | Inspect, present the complete bounded local plan, confirm when it contains changes, prepare the baseline and verify every required postcondition. |
-| `bootwright controller setup --context <name> --dry-run` | Add controller requirements, binding disposition and declared egress from immutable context input. Existing verified sudo may be used solely to read the private store. After that boundary, no dependency subprocess, network, Secret material access, binding publication or other write. |
-| `bootwright controller setup --context <name>` | Verify the local target, include any first host binding in the plan, then perform the confirmed prerequisite work under host and context coordination. |
-| `bootwright preflight controller [--context <name>]` | Read and verify the selected prerequisites with bounded local probes. May use the verified privilege boundary for private metadata and disposable local probe scratch. Never install, download, refresh repository metadata, contact a managed endpoint, create/repair shared state or publish a binding. |
+| `bootwright setup --dry-run` | Produce deterministic dependency intent and actions from policy and bounded local file metadata. No stored evidence is read, so this stays below the privilege boundary. No dependency subprocess, network, Secret read, privilege escalation or write. Versions requiring live resolution and readiness facts requiring effects are explicitly unverified. |
+| `bootwright setup` | Inspect, present the complete bounded local plan, confirm when it contains changes, prepare the host dependencies and verify every required postcondition. Publish no binding and record no context on the receipt. |
+| `bootwright preflight controller` | Read and verify the host prerequisites with bounded local probes. May use the verified privilege boundary for private metadata and disposable local probe scratch. |
+| `bootwright preflight controller --context <name>` | Additionally report that context's own target tools, libvirt client and host binding as context-scoped checks, by presence only. Contact no publisher and read no repository metadata for them. |
+
+Neither command installs, downloads, refreshes repository metadata, contacts a
+managed endpoint, creates or repairs shared state, or publishes a binding on
+behalf of the other's scope. Preflight publishes nothing at all.
 
 Dry-run does not execute a native package resolver. It lists required version
 intent and identifies any transaction feasibility, live identity or readiness
 evidence still needed by real setup. A valid dry-run exits successfully with
 unverified checks visibly labeled; it never reports completed setup. Preflight
 requires positive current evidence for all selected checks; an unbound context
-is a failure with setup guidance, distinct from host mismatch.
+is a failure that names its controller stage, distinct from host mismatch,
+which names the restored host.
 
 Real setup first resolves dependencies in disposable unprivileged staging.
 This phase may download verified public bootstrap payloads, run wheel-only pip
@@ -214,9 +246,9 @@ installed bootstrap and target file inventories from approved retained sources.
 yes/no confirmation semantics, with the plan before the prompt; decline,
 noninteractive input without `--yes`, or cancellation starts no setup mutation.
 A verified no-op needs no prompt or installed-host/shared-state writes.
-Disposable resolution and local-probe scratch is removed after use. First binding publication is a
-change even when every dependency is already ready. Setup changes neither
-current-context selection nor Environment input.
+Disposable resolution and local-probe scratch is removed after use. Setup
+changes neither current-context selection nor Environment input, and claims no
+context.
 
 ## Egress and local effects
 
@@ -274,17 +306,16 @@ resistance. Controller relocation and full-store restore remain separately
 defined work.
 
 [Workspace](contexts.md#controller-relationship-and-host-binding) persists the
-verified identity and context relationship. A first explicit setup displays
-the selected Machine and proposed local binding and confirms it before
-publication. Subsequent setup and context preflight verify that exact binding;
-they never silently rebind. Context-free setup can prepare the host without
-claiming any context. Lifecycle protection of the OS, power, runtime and state
+verified identity and context relationship. Setup prepares the host without
+claiming any context; the relationship is published by the first apply that
+uses the host, under the same verified identity. Later operations and context
+preflight verify that exact binding; they never silently rebind.
 follows [controller-host protection](state-reconciliation.md#controller-host-protection).
 
 Workspace serializes shared prerequisite mutation across every context in the
 fixed root using its exclusive root lock, acquired before a context lease.
 Preflight holds a shared root lock when the root exists, for coherent stored
-evidence. An absent root reports missing setup with `controller setup` guidance
+evidence. An absent root reports missing setup with `setup` guidance
 and creates nothing. A busy lock refuses; there is no timeout-based takeover. Before installation, reject any
 package/runtime transaction that could alter dependencies in use or retained
 by another setup or frozen lifecycle. The OS package-manager lock is an

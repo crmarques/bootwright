@@ -64,9 +64,12 @@ func (f *fixture) PresentControllerPlan(ctx context.Context, _ Report) error {
 }
 
 type memoryStorage struct {
-	owner           *fixture
-	state           HostState
-	scope           SetupContext
+	owner *fixture
+	state HostState
+	scope SetupContext
+	// held is the scope the open mutation was entered with, so a snapshot taken
+	// inside it sees exactly the context the caller asked to mutate.
+	held            SetupContext
 	reads, writes   int
 	exists          bool
 	bundleExists    bool
@@ -104,9 +107,17 @@ func (m *memoryStorage) MutateController(ctx context.Context, scope SetupContext
 	if m.mutationError != nil {
 		return m.mutationError
 	}
+	previous := m.held
+	m.held = scope
+	defer func() { m.held = previous }()
 	return fn(m)
 }
-func (m *memoryStorage) Snapshot() StorageView { return m.view() }
+
+func (m *memoryStorage) Snapshot() StorageView {
+	value := m.view()
+	value.Context = m.held
+	return value
+}
 func (m *memoryStorage) Publish(ctx context.Context, state HostState) (Publication, error) {
 	m.writes++
 	if m.writes == m.failPublication {
@@ -353,16 +364,49 @@ func TestCancellationRetainsIntentAndStopsActions(t *testing.T) {
 	}
 }
 
-func TestExplicitSelectionBindingAndWrongMachineRefusal(t *testing.T) {
+// Setup claims no context. It publishes no binding, records no controller
+// Machine on its receipt and never compiles desired state, so a host prepared
+// once serves every context that is later created on it.
+func TestSetupClaimsNoContextAndPublishesNoBinding(t *testing.T) {
 	f := newFixture(t)
 	f.store.scope = SetupContext{Name: "example", Revision: "rev-" + strings.Repeat("2", 32)}
-	result, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
-	if err != nil || result.Machine != "controller" || len(f.store.state.Bindings) != 1 || f.store.state.Receipt.Context.Machine != "controller" {
-		t.Fatalf("binding=%#v err=%v", result, err)
+	result, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+	if err != nil || result.Outcome != "changed" {
+		t.Fatalf("setup=%#v err=%v", result, err)
+	}
+	if result.ContextName != "" || result.Machine != "" || len(f.store.state.Bindings) != 0 {
+		t.Fatalf("setup claimed a context: report=%#v bindings=%#v", result, f.store.state.Bindings)
+	}
+	if f.store.state.Receipt.Context != (SetupContext{}) || f.compiler.calls != 0 {
+		t.Fatalf("setup read desired state: receipt=%#v compilations=%d", f.store.state.Receipt.Context, f.compiler.calls)
+	}
+	// A different controller Machine changes nothing setup owns.
+	f.compiler.machine = "replacement"
+	result, err = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+	if err != nil || result.Outcome != "unchanged" {
+		t.Fatalf("a changed controller Machine disturbed setup: %#v %v", result, err)
+	}
+}
+
+// Preflight still proves the binding a context's first apply published, and
+// refuses when that binding names another controller Machine.
+func TestContextPreflightVerifiesTheEstablishedBinding(t *testing.T) {
+	f := newFixture(t)
+	f.store.scope = SetupContext{Name: "example", Revision: "rev-" + strings.Repeat("2", 32)}
+	if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	digest, err := f.host.identity.PrivateDigest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.store.state.Bindings = []ControllerBinding{{Context: "example", Machine: "controller", HostDigest: digest}}
+	report, err := f.service.Check(context.Background(), CheckRequest{ContextName: "example"})
+	if err != nil || report.Outcome != "ready" {
+		t.Fatalf("bound context was not ready: %#v %v", report, err)
 	}
 	f.compiler.machine = "replacement"
-	_, err = f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
-	if code(err) != "controller.identity" {
+	if _, err := f.service.Check(context.Background(), CheckRequest{ContextName: "example"}); code(err) != "controller.identity" {
 		t.Fatalf("rebind error=%v", err)
 	}
 }
@@ -454,16 +498,16 @@ func explicitRuntimeFixture(t *testing.T) (*fixture, *testRuntimeInstaller) {
 	return f, r
 }
 
-func TestAbsentRuntimeInstallationPrecedesBinding(t *testing.T) {
+func TestAbsentRuntimeIsInstalledAndRecorded(t *testing.T) {
 	f, r := explicitRuntimeFixture(t)
-	result, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
-	if err != nil || result.Outcome != "changed" || r.calls != 1 || f.store.state.Receipt.Status != "complete" || len(f.store.state.Bindings) != 1 {
+	result, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+	if err != nil || result.Outcome != "changed" || r.calls != 1 || f.store.state.Receipt.Status != "complete" {
 		t.Fatalf("runtime=%#v err=%v calls=%d", result, err, r.calls)
 	}
 	if string(f.store.state.Receipt.Actions[1].Evidence) != `{"nativePostcondition":"verified"}` {
 		t.Fatal("native evidence was discarded")
 	}
-	_, err = f.service.Setup(context.Background(), SetupRequest{ContextName: "example"})
+	_, err = f.service.Setup(context.Background(), SetupRequest{})
 	if err != nil || r.calls != 1 {
 		t.Fatalf("runtime no-op repeated install: %v", err)
 	}
@@ -472,7 +516,7 @@ func TestAbsentRuntimeInstallationPrecedesBinding(t *testing.T) {
 func TestMissingNativeDependencyWithExistingPodmanIsPrepared(t *testing.T) {
 	f, installer := explicitRuntimeFixture(t)
 	f.host.runtime = RuntimeInspection{Present: true}
-	report, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+	report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 	if err != nil || report.Outcome != "changed" || installer.calls != 1 {
 		t.Fatalf("missing native dependency was not prepared: %#v %v", report, err)
 	}
@@ -481,7 +525,7 @@ func TestMissingNativeDependencyWithExistingPodmanIsPrepared(t *testing.T) {
 func TestConflictingNativeDependencyRefusesBeforeMutation(t *testing.T) {
 	f, installer := explicitRuntimeFixture(t)
 	f.host.runtime = RuntimeInspection{Present: true, Conflict: true}
-	_, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+	_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 	if code(err) != "controller.unsupported" || installer.calls != 0 || f.store.writes != 0 {
 		t.Fatalf("conflicting native dependency was mutated: %v", err)
 	}
@@ -491,14 +535,14 @@ func TestDefiniteNativeRefusalPreservesBundleAndPermitsFreshAttempt(t *testing.T
 	f, r := explicitRuntimeFixture(t)
 	r.err = failure("controller.unsupported", "provided native foundation is incompatible", "prepare the qualified foundation")
 	r.result = ActionResult{Outcome: "failed", Evidence: object(map[string]any{"installationEntered": false})}
-	_, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+	_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 	if code(err) != "controller.unsupported" || f.store.state.Receipt.Status != "failed" || !f.bundle.ready || len(f.store.state.Bindings) != 0 {
 		t.Fatalf("native refusal=%v state=%#v", err, f.store.state)
 	}
 	first := f.store.state.Receipt.ID
 	r.err = nil
 	r.result = ActionResult{Outcome: "changed", Evidence: object(map[string]any{"nativePostcondition": "verified"})}
-	_, err = f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+	_, err = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 	if err != nil || f.bundle.prepares != 1 || r.calls != 2 || f.store.state.Receipt.ID == first || f.store.state.Receipt.Status != "complete" {
 		t.Fatalf("native retry=%v", err)
 	}
@@ -508,16 +552,16 @@ func TestUnknownNativeOutcomeBlocksReinstallUntilPositiveReadiness(t *testing.T)
 	f, r := explicitRuntimeFixture(t)
 	r.err = failure("controller.unknown", "native result was lost", "resolve the native transaction")
 	r.result = ActionResult{Outcome: "unknown", Evidence: object(map[string]any{"installationEntered": true})}
-	_, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+	_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 	if code(err) != "controller.unknown" || !f.store.state.Receipt.Incomplete() {
 		t.Fatalf("native unknown=%v", err)
 	}
-	_, err = f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+	_, err = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 	if code(err) != "controller.unknown" || r.calls != 1 {
 		t.Fatalf("repeated unproved native action=%v", err)
 	}
 	f.host.runtime = RuntimeInspection{Present: true, Ready: true}
-	_, err = f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+	_, err = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 	if err != nil || r.calls != 1 || r.recovers != 1 || f.store.state.Receipt.Status != "complete" {
 		t.Fatalf("positive native resolution=%v", err)
 	}
@@ -529,7 +573,7 @@ func TestNativePreparationMustCommitBeforeInstallerEntry(t *testing.T) {
 	// durable before-inventory publication. An uncertain fifth publication must
 	// prevent authorization delivery to the native transaction.
 	f.store.failPublication = 5
-	_, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+	_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 	if code(err) != "controller.unknown" || r.calls != 1 || r.entered != 0 || len(f.store.state.Bindings) != 0 {
 		t.Fatalf("native entered without durable preparation: err=%v entered=%d", err, r.entered)
 	}
@@ -538,12 +582,12 @@ func TestNativePreparationMustCommitBeforeInstallerEntry(t *testing.T) {
 func TestNativeIntentWithoutPreparationCanRetryBeforeInstallation(t *testing.T) {
 	f, r := explicitRuntimeFixture(t)
 	r.beforePreparation = errors.New("native lock unavailable before authorization")
-	_, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+	_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 	if err == nil || r.entered != 0 || len(f.store.state.Receipt.Actions[1].Preparation) != 0 {
 		t.Fatalf("unexpected preparation: %v", err)
 	}
 	r.beforePreparation = nil
-	_, err = f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+	_, err = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 	if err != nil || r.calls != 2 || r.entered != 1 || r.recovers != 0 || f.store.state.Receipt.Status != "complete" {
 		t.Fatalf("unentered native retry: %v", err)
 	}
@@ -553,10 +597,10 @@ func TestNativeRecoveryRequiresOriginalInventoryProof(t *testing.T) {
 	f, r := explicitRuntimeFixture(t)
 	r.err = errors.New("native completion lost")
 	r.result.Outcome = "unknown"
-	_, _ = f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+	_, _ = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 	f.host.runtime = RuntimeInspection{Present: true, Ready: true}
 	r.recoveryError = failure("controller.unknown", "original inventory cannot be reconstructed", "restore the exact native evidence")
-	_, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+	_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 	if code(err) != "controller.unknown" || r.calls != 1 || r.recovers != 1 || !f.store.state.Receipt.Incomplete() || len(f.store.state.Bindings) != 0 {
 		t.Fatalf("unproved native recovery completed: %v", err)
 	}
@@ -568,14 +612,14 @@ func TestPendingReceiptCannotOmitOrChangeRequiredActions(t *testing.T) {
 			f, r := explicitRuntimeFixture(t)
 			r.err = errors.New("native result lost")
 			r.result = ActionResult{Outcome: "unknown", Evidence: object(map[string]any{"installationEntered": true})}
-			_, _ = f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+			_, _ = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 			if change == "omit" {
 				f.store.state.Receipt.Actions = f.store.state.Receipt.Actions[:1]
 			} else {
 				f.store.state.Receipt.Actions[1].Request = object(map[string]any{"readyBefore": false, "version": "unapproved"})
 			}
 			writes := f.store.writes
-			_, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+			_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 			if code(err) != "controller.unknown" || f.store.writes != writes || len(f.store.state.Bindings) != 0 {
 				t.Fatalf("retained action substitution=%v", err)
 			}

@@ -15,7 +15,10 @@ import (
 // NewResolvedDefinition binds the complete approved resolution separately from
 // bundle content. A native transaction's before-state changes after success;
 // that alone must not create another private execution bundle on the next run.
-func NewResolvedDefinition(bootstrap BootstrapDefinition, native NativeResolvedPlan, requests []controller.ToolRequest, tools []ToolDefinition) (Definition, error) {
+// NewResolvedDefinition freezes one context-independent setup resolution. It
+// carries no target tool: those are selected by a context and resolved by its
+// own controller stage.
+func NewResolvedDefinition(bootstrap BootstrapDefinition, native NativeResolvedPlan) (Definition, error) {
 	if err := ValidateBootstrap(bootstrap); err != nil {
 		return Definition{}, err
 	}
@@ -30,14 +33,8 @@ func NewResolvedDefinition(bootstrap BootstrapDefinition, native NativeResolvedP
 			return Definition{}, failure("controller.unsupported", "native dependencies would replace the qualified execution foundation", "use dependency versions compatible with the provided host foundation")
 		}
 	}
-	value := Definition{Platform: native.Platform, Versions: native.Requests, ToolRequests: slices.Clone(requests), Native: &native, Bootstrap: &bootstrap, NativeRequirements: native.Requirements, PythonVersion: bootstrap.PythonVersion, AnsibleVersion: bootstrap.AnsibleVersion, Execution: bootstrap.Execution, Sources: slices.Clone(bootstrap.Sources)}
-	if value.ToolRequests == nil {
-		value.ToolRequests = []controller.ToolRequest{}
-	}
+	value := Definition{Platform: native.Platform, Versions: native.Requests, ToolRequests: []controller.ToolRequest{}, Native: &native, Bootstrap: &bootstrap, NativeRequirements: native.Requirements, PythonVersion: bootstrap.PythonVersion, AnsibleVersion: bootstrap.AnsibleVersion, Execution: bootstrap.Execution, Sources: slices.Clone(bootstrap.Sources)}
 	value.Runtime.Files, value.Runtime.Links = []InstalledFile{}, []InstalledLink{}
-	if tools == nil {
-		tools = []ToolDefinition{}
-	}
 	for _, item := range native.Packages {
 		value.Sources = append(value.Sources, item.Source)
 	}
@@ -46,11 +43,11 @@ func NewResolvedDefinition(bootstrap BootstrapDefinition, native NativeResolvedP
 			value.Runtime.Version = root.Package.Version + "-" + root.Package.Release
 		}
 	}
-	// WithTools owns the common source and private target-file checks. Its base
-	// identity is temporary; the complete resolved content receives its own hash.
+	// WithTools owns the common source checks. Its base identity is temporary;
+	// the complete resolved content receives its own hash.
 	value.CatalogDigest = strings.Repeat("0", 64)
 	var err error
-	value, err = WithTools(value, tools)
+	value, err = WithTools(value, []ToolDefinition{})
 	if err != nil {
 		return Definition{}, err
 	}
@@ -98,10 +95,10 @@ func definitionHash(domain string, value any) (string, error) {
 // grants it authority. Artifact and installed-file verification still belongs
 // at the acquisition, execution and native transaction boundaries.
 func ValidateResolvedDefinition(value Definition) error {
-	if value.Bootstrap == nil || value.Native == nil || len(value.ToolRequests) > 128 {
+	if value.Bootstrap == nil || value.Native == nil || len(value.ToolRequests) != 0 || len(value.Tools) != 0 {
 		return failure("controller.state", "resolved dependencies lack their complete frozen definition", "restore the exact setup evidence")
 	}
-	expected, err := NewResolvedDefinition(*value.Bootstrap, *value.Native, value.ToolRequests, value.Tools)
+	expected, err := NewResolvedDefinition(*value.Bootstrap, *value.Native)
 	if err != nil {
 		return err
 	}

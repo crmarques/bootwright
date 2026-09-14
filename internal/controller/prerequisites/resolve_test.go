@@ -9,6 +9,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type testTools struct {
@@ -29,6 +30,27 @@ func (c *testTools) Select(requests []controller.ToolRequest, retained []Depende
 		tools = append(tools, ToolDefinition{Kind: request.Kind, Version: "1.2.3", Compatibility: request.Compatibility, Archive: "binary", Source: retained[index], Files: []ToolFile{{Member: request.Kind, Path: "tools/" + request.Kind + "/1.2.3/" + request.Kind}}})
 	}
 	return tools, complete, nil
+}
+
+func (c *testTools) Present(ctx context.Context, area BundleArea, tools []ToolDefinition) (bool, error) {
+	if len(tools) == 0 {
+		return true, nil
+	}
+	if area == nil {
+		return false, nil
+	}
+	entries, err := area.Entries(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, tool := range tools {
+		for _, file := range tool.Files {
+			if !slices.ContainsFunc(entries, func(entry BundleEntry) bool { return entry.Path == file.Path }) {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
 }
 
 func (c *testTools) Resolve(_ context.Context, requests []controller.ToolRequest, _ SetupEgress) ([]ToolDefinition, error) {
@@ -59,43 +81,66 @@ func toolsFixture(t *testing.T) (*fixture, *testRuntimeInstaller, *testTools) {
 	return f, installer, catalog
 }
 
-func TestTargetToolsResolveBeforeConfirmationAndInstallEvenWithReadyRuntime(t *testing.T) {
+// Setup prepares what every context on this host shares. A context that
+// selects target clients adds nothing to it: no publisher is asked for their
+// metadata, no source is retained for them, and the frozen closure stays the
+// context-independent one. Their installation belongs to the controller stage.
+func TestSetupIgnoresTheTargetToolsAContextSelects(t *testing.T) {
 	f, installer, catalog := toolsFixture(t)
-	report, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example"})
-	if err != nil || report.Outcome != "changed" || installer.calls != 1 || catalog.resolves != 3 || !f.bundle.toolsReady {
+	catalog.fail = errors.New("tool publisher must not be contacted")
+	report, err := f.service.Setup(context.Background(), SetupRequest{})
+	if err != nil || report.Outcome != "changed" || installer.calls != 0 || catalog.resolves != 0 {
 		t.Fatalf("report=%#v err=%v installs=%d resolves=%d", report, err, installer.calls, catalog.resolves)
 	}
-	confirm := slices.Index(f.events, "confirm")
-	for index, event := range f.events {
-		if event == "resolve" && index >= confirm {
-			t.Fatal("metadata resolution happened after confirmation")
+	if len(f.store.state.RetainedSources) != 6 {
+		t.Fatalf("setup retained a source it does not own: %#v", f.store.state.RetainedSources)
+	}
+	for _, source := range f.store.state.RetainedSources {
+		if strings.HasPrefix(source.ID, "tool-") {
+			t.Fatal("setup retained a target tool source", source.ID)
 		}
 	}
-	// The frozen closure is the complete dependency set: bootstrap, native and
-	// every selected target client.
-	if f.store.state.Receipt.CatalogDigest == f.catalog.definition.CatalogDigest || len(f.store.state.RetainedSources) != 9 {
-		t.Fatalf("target source closure was not frozen: %#v", f.store.state.RetainedSources)
-	}
-	for _, id := range []string{"tool-helm", "tool-openshift-clients", "tool-openshift-install"} {
-		if !slices.ContainsFunc(f.store.state.RetainedSources, func(source DependencySource) bool { return source.ID == id }) {
-			t.Fatal("target tool source was not retained", id)
+	for _, check := range report.Checks {
+		if check.Scope != HostScope {
+			t.Fatalf("setup reported a %s check: %#v", check.Scope, check)
 		}
 	}
 	writes := f.store.writes
-	// The retained closure is complete and installed, so a repeated setup
-	// consults no publisher, not even for the latest helm intent.
-	catalog.fail = errors.New("tool publisher must not be contacted")
 	f.resolution.bootstrapError = errors.New("bootstrap publisher must not be contacted")
 	f.resolution.nativeError = errors.New("repository must not be refreshed")
-	report, err = f.service.Setup(context.Background(), SetupRequest{ContextName: "example"})
-	if err != nil || report.Outcome != "unchanged" || installer.calls != 1 || catalog.resolves != 3 || f.store.writes != writes {
-		t.Fatalf("no-op changed frozen tools: %#v %v resolves=%d", report, err, catalog.resolves)
+	report, err = f.service.Setup(context.Background(), SetupRequest{})
+	if err != nil || report.Outcome != "unchanged" || installer.calls != 0 || f.store.writes != writes {
+		t.Fatalf("no-op changed the frozen closure: %#v %v", report, err)
+	}
+}
+
+// One retained resolution serves every context, because none of them can move
+// the versions setup owns.
+func TestRetainedResolutionServesAContextThatSelectsTools(t *testing.T) {
+	f, installer, catalog := toolsFixture(t)
+	if _, err := f.service.Setup(context.Background(), SetupRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	f.resolution.bootstrapError = errors.New("bootstrap publisher must not be contacted")
+	f.resolution.nativeError = errors.New("repository must not be refreshed")
+	catalog.fail = errors.New("tool publisher must not be contacted")
+	report, err := f.service.Check(context.Background(), CheckRequest{ContextName: "example"})
+	if code(err) != "preflight.failed" || report.Outcome != "not-ready" || installer.calls != 0 {
+		t.Fatalf("a ready host did not serve the context from its retained resolution: %#v %v", report, err)
+	}
+	// The host itself is ready, so every unmet check belongs to the context and
+	// the offered command is its own controller stage.
+	if PendingScope(*report) != ContextScope {
+		t.Fatalf("pending scope = %q: %#v", PendingScope(*report), report.Checks)
+	}
+	if !strings.Contains(diagnostics.Of(err)[0].Remediation, "apply --stage controller --context example") {
+		t.Fatalf("remediation = %q", diagnostics.Of(err)[0].Remediation)
 	}
 }
 
 func TestToolPlanningAndPreflightNeverResolveMetadata(t *testing.T) {
 	f, installer, catalog := toolsFixture(t)
-	_, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", DryRun: true})
+	_, err := f.service.Setup(context.Background(), SetupRequest{DryRun: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,85 +148,50 @@ func TestToolPlanningAndPreflightNeverResolveMetadata(t *testing.T) {
 	if code(err) != "preflight.failed" || report.Outcome != "not-ready" || catalog.resolves != 0 || installer.calls != 0 || f.store.writes != 0 {
 		t.Fatalf("inspection crossed effect boundary: %#v %v", report, err)
 	}
-}
-
-func TestToolMetadataFailureOrChangedInputCannotStartInstallation(t *testing.T) {
-	for _, mode := range []string{"metadata", "input"} {
-		t.Run(mode, func(t *testing.T) {
-			f, installer, catalog := toolsFixture(t)
-			if mode == "metadata" {
-				catalog.fail = errors.New("metadata unavailable")
-			} else {
-				catalog.beforeResolve = func() { f.store.scope.Revision = "rev-" + strings.Repeat("3", 32) }
-			}
-			_, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
-			if err == nil || installer.calls != 0 || f.store.writes != 0 || slices.Contains(f.events, "present") {
-				t.Fatalf("unapproved metadata/input caused effects: %v", err)
-			}
-		})
+	// Preflight reports the context's own prerequisites without planning them.
+	scopes := map[string]string{}
+	for _, check := range report.Checks {
+		scopes[check.ID] = check.Scope
 	}
-}
-
-func TestUncertainTargetInstallationUsesFrozenMetadataOnRetry(t *testing.T) {
-	f, installer, catalog := toolsFixture(t)
-	installer.err = errors.New("result lost")
-	installer.result = ActionResult{Outcome: "unknown"}
-	_, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
-	if err == nil || catalog.resolves != 3 || !f.store.state.Receipt.Incomplete() {
-		t.Fatal("missing pending receipt")
+	for id, want := range map[string]string{"execution-bundle": HostScope, "container-runtime": HostScope, "target-tools": ContextScope, "controller-binding": ContextScope} {
+		if scopes[id] != want {
+			t.Fatalf("check %s scope = %q, want %q", id, scopes[id], want)
+		}
 	}
-	installer.recoveryError = failure("controller.unknown", "native inventory is not attributable", "restore exact native evidence")
-	_, err = f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
-	if code(err) != "controller.unknown" || catalog.resolves != 3 || installer.calls != 1 {
-		t.Fatalf("uncertain tool work repeated: %v", err)
-	}
-	installer.recoveryError = nil
-	_, err = f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
-	if err != nil || catalog.resolves != 3 || installer.calls != 1 || installer.recovers != 2 || !f.bundle.toolsReady {
-		t.Fatalf("frozen recovery failed: %v", err)
-	}
-}
-
-func TestUnattributablePartialToolsCannotResume(t *testing.T) {
-	f, installer, catalog := toolsFixture(t)
-	installer.err = errors.New("result lost")
-	installer.result = ActionResult{Outcome: "unknown"}
-	_, _ = f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
-	f.bundle.recoverable = false
-	_, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
-	if code(err) != "controller.unknown" || installer.calls != 1 || installer.recovers != 0 || catalog.resolves != 3 {
-		t.Fatalf("unattributable files resumed: %v", err)
+	for _, action := range report.Actions {
+		if strings.Contains(action, "client") || strings.Contains(action, "Bind") {
+			t.Fatal("preflight planned a context prerequisite", action)
+		}
 	}
 }
 
 func TestDefiniteRefusalRetriesFromRetainedClosure(t *testing.T) {
-	for _, missing := range []string{"tools", "native"} {
+	for _, missing := range []string{"none", "native"} {
 		t.Run(missing, func(t *testing.T) {
-			f, installer, catalog := toolsFixture(t)
+			f, installer, _ := toolsFixture(t)
+			f.host.runtime = RuntimeInspection{}
 			installer.result = ActionResult{Outcome: "failed", Evidence: object(map[string]any{"installationEntered": false})}
 			installer.err = failure("controller.unsupported", "native transaction refused before effects", "prepare the required foundation")
-			_, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+			_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 			if err == nil || f.store.state.Receipt.Status != "failed" || f.bundle.sealed {
 				t.Fatal("failure was not retained as an unsealed terminal attempt")
 			}
 			installer.err = nil
 			installer.result = ActionResult{Outcome: "changed", Evidence: object(map[string]any{"nativePostcondition": "verified"})}
 			// A fresh attempt installs the retained closure as frozen: no bootstrap
-			// or tool publisher is contacted, even for the latest helm intent. Only
-			// a missing native root solves the native transaction again, because
-			// the frozen one is bound to a before-inventory the host no longer has.
-			catalog.fail = errors.New("tool publisher must not be contacted")
+			// publisher is contacted. Only a missing native root solves the native
+			// transaction again, because the frozen one is bound to a
+			// before-inventory the host no longer has.
 			f.resolution.bootstrapError = errors.New("bootstrap publisher must not be contacted")
-			nativeCalls := 1
-			if missing == "native" {
-				f.host.runtime = RuntimeInspection{}
-				nativeCalls = 2
-			} else {
+			nativeCalls, installs := 2, 2
+			if missing == "none" {
+				f.host.runtime = RuntimeInspection{Present: true, Ready: true}
 				f.resolution.nativeError = errors.New("repository must not be refreshed")
+				nativeCalls, installs = 1, 1
 			}
-			report, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
-			if err != nil || report.Outcome != "changed" || catalog.resolves != 3 || f.resolution.bootstrapCalls != 1 || f.resolution.nativeCalls != nativeCalls || installer.calls != 2 || !f.bundle.sealed {
-				t.Fatalf("retry from the retained closure failed: %#v %v resolves=%d bootstrap=%d native=%d installs=%d", report, err, catalog.resolves, f.resolution.bootstrapCalls, f.resolution.nativeCalls, installer.calls)
+			report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+			if err != nil || report.Outcome != "changed" || f.resolution.bootstrapCalls != 1 || f.resolution.nativeCalls != nativeCalls || installer.calls != installs || !f.bundle.sealed {
+				t.Fatalf("retry from the retained closure failed: %#v %v bootstrap=%d native=%d installs=%d", report, err, f.resolution.bootstrapCalls, f.resolution.nativeCalls, installer.calls)
 			}
 		})
 	}
@@ -206,14 +216,14 @@ func TestFailedReceiptDoesNotClaimReadyAfterManualPreparation(t *testing.T) {
 
 func TestOldSealedBundleCannotBeRepairedThroughLaterReceipt(t *testing.T) {
 	f, _, _ := toolsFixture(t)
-	_, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+	_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.store.state.Receipt.CatalogDigest = strings.Repeat("f", 64)
-	f.bundle.toolsReady = false
+	f.bundle.ready = false
 	writes := f.store.writes
-	_, err = f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
+	_, err = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 	if code(err) != "controller.unknown" || f.store.writes != writes {
 		t.Fatalf("old sealed bundle repair was authorized: %v", err)
 	}
@@ -221,12 +231,12 @@ func TestOldSealedBundleCannotBeRepairedThroughLaterReceipt(t *testing.T) {
 
 func TestLaterCompletedReceiptCannotQualifyUnsealedBundle(t *testing.T) {
 	f, _, _ := toolsFixture(t)
-	request := SetupRequest{ContextName: "example", SkipConfirmation: true}
+	request := SetupRequest{SkipConfirmation: true}
 	if _, err := f.service.Setup(context.Background(), request); err != nil {
 		t.Fatal(err)
 	}
-	// Another native/tool profile completed after this unsealed attempt. Its
-	// shared receipt cannot supply this bundle's missing completion evidence.
+	// Another native profile completed after this unsealed attempt. Its shared
+	// receipt cannot supply this bundle's missing completion evidence.
 	f.store.state.Receipt.CatalogDigest = strings.Repeat("f", 64)
 	f.bundle.sealed = false
 	report, err := f.service.Check(context.Background(), CheckRequest{ContextName: "example"})

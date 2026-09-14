@@ -25,7 +25,7 @@ func TestResolutionReportsEachDependencyFamilyBeforeThePlan(t *testing.T) {
 	f, _, _ := toolsFixture(t)
 	progress := &recordingProgress{owner: f}
 	f.service.options.Progress = progress
-	report, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example"})
+	report, err := f.service.Setup(context.Background(), SetupRequest{})
 	if err != nil || report.Outcome != "changed" || !report.ProgressPresented {
 		t.Fatalf("report=%#v err=%v", report, err)
 	}
@@ -45,7 +45,9 @@ func TestResolutionReportsEachDependencyFamilyBeforeThePlan(t *testing.T) {
 			t.Fatalf("event without a phase: %#v", event)
 		}
 	}
-	if len(resolution) != 10 {
+	// Setup resolves the two context-independent families and nothing else, so
+	// the target clients this context selects add no resolution step.
+	if len(resolution) != 4 {
 		t.Fatalf("resolution events = %#v", resolution)
 	}
 	for index, event := range resolution {
@@ -53,11 +55,11 @@ func TestResolutionReportsEachDependencyFamilyBeforeThePlan(t *testing.T) {
 		if index%2 == 1 {
 			status = "ok"
 		}
-		if event.Status != status || event.Step != position || event.Steps != 5 || (status == "ok") != (event.Detail != "") {
+		if event.Status != status || event.Step != position || event.Steps != 2 || (status == "ok") != (event.Detail != "") {
 			t.Fatalf("resolution event %d = %#v", index, event)
 		}
-		if position > 2 && !strings.HasPrefix(event.Action, "Target tool ") {
-			t.Fatalf("resolution event %d = %#v", index, event)
+		if strings.HasPrefix(event.Action, "Target tool ") {
+			t.Fatalf("setup resolved a target tool: %#v", event)
 		}
 	}
 	if resolution[0].Action != "Python and Ansible" || resolution[1].Detail != "Python 3.14.7, Ansible 2.21.4" || resolution[2].Action != "Native packages" {
@@ -129,16 +131,16 @@ func TestInspectionStreamsEachCheckOnceAndReadinessUsesItsOwnPhase(t *testing.T)
 
 // A failed resolution names the step that failed and never presents a plan.
 func TestResolutionFailureReportsTheFailedStep(t *testing.T) {
-	f, _, catalog := toolsFixture(t)
+	f, _, _ := toolsFixture(t)
 	progress := &recordingProgress{owner: f}
 	f.service.options.Progress = progress
-	catalog.fail = errors.New("publisher unavailable")
-	report, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example"})
+	f.resolution.nativeError = errors.New("repository unavailable")
+	report, err := f.service.Setup(context.Background(), SetupRequest{})
 	if err == nil || report == nil || !report.ProgressPresented || report.PlanPresented || slices.Contains(f.events, "present") {
 		t.Fatalf("report=%#v err=%v events=%v", report, err, f.events)
 	}
 	last := progress.events[len(progress.events)-1]
-	if last.Phase != ResolutionPhase || !strings.HasPrefix(last.Action, "Target tool ") || last.Status != "failed" {
+	if last.Phase != ResolutionPhase || last.Action != "Native packages" || last.Status != "failed" {
 		t.Fatalf("last event = %#v", last)
 	}
 }

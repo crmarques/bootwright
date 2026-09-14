@@ -165,7 +165,7 @@ func (s controllerSpy) Check(ctx context.Context, request prerequisites.CheckReq
 }
 
 func (s controllerSpy) Setup(ctx context.Context, request prerequisites.SetupRequest) (*prerequisites.Report, error) {
-	return s.record.result.controller, s.record.called(ctx, "controller setup", request)
+	return s.record.result.controller, s.record.called(ctx, "setup", request)
 }
 
 type environmentSpy struct{ record *dispatchRecord }

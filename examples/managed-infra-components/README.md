@@ -59,7 +59,7 @@ test and start it again afterwards.
 
 Bootwright requests sudo authorization for context, setup and lifecycle
 commands. The service automation is embedded in the executable, so a build that
-changes it also changes the dependency-bundle identity: run `controller setup`
+changes it also changes the dependency-bundle identity: run `setup`
 again after `make build`, otherwise `apply` refuses with the retained bundle it
 cannot use.
 
@@ -69,7 +69,7 @@ make build
 ./bin/bootwright context init --name managed-infra --input-dir "$PWD/examples/managed-infra-components"
 ./bin/bootwright secret generate
 ./bin/bootwright secret check
-./bin/bootwright controller setup --context managed-infra
+./bin/bootwright setup
 ./bin/bootwright preflight controller --context managed-infra
 ./bin/bootwright plan
 ./bin/bootwright plan --stage infra-components

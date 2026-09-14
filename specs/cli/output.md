@@ -109,8 +109,8 @@ Four rules govern the stream:
 
 1. **Coverage.** Any unit of work that can exceed the heartbeat interval opens
    a `[RUNNING]` row before it starts, including work before confirmation.
-   `controller setup` and `preflight controller` open with their scope and report
-   each host check under a `Checks` heading as it is verified; `controller setup`
+   `setup` and `preflight controller` open with their scope and report
+   each host check under a `Checks` heading as it is verified; `setup`
    reports dependency resolution under `Resolving` before it presents the
    plan; every command reports confirmed effects under `Progress`. The first
    row opens its heading, and a section the stream already showed is not

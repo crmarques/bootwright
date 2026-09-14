@@ -24,6 +24,13 @@ func DefaultDependencyVersions() DependencyVersions {
 	return DependencyVersions{"latest", "latest", "latest", "latest", "latest", "latest", "latest", "latest", "latest"}
 }
 
+// Baseline is the version intent of the context-independent prerequisites
+// setup owns. A context declares only the versions its own controller stage
+// installs, so those values never select or supersede a retained resolution.
+func (v DependencyVersions) Baseline() DependencyVersions {
+	return DependencyVersions{Python: v.Python, Ansible: v.Ansible, Podman: v.Podman, OpenSSH: v.OpenSSH, NMState: v.NMState}
+}
+
 func selectDependencyVersions(environment api.Object) (DependencyVersions, error) {
 	versions := DefaultDependencyVersions()
 	configured := environment.Spec().Get("dependencyVersions")
@@ -34,22 +41,12 @@ func selectDependencyVersions(environment api.Object) (DependencyVersions, error
 		var target *string
 		grammar := "cli-version"
 		switch field.Name {
-		case "python":
-			target = &versions.Python
-		case "ansible":
-			target = &versions.Ansible
 		case "helm":
 			target = &versions.Helm
 		case "govc":
 			target = &versions.Govc
 		case "virtctl":
 			target = &versions.Virtctl
-		case "podman":
-			target, grammar = &versions.Podman, "package-version"
-		case "openssh":
-			target, grammar = &versions.OpenSSH, "package-version"
-		case "nmstate":
-			target, grammar = &versions.NMState, "package-version"
 		case "libvirt":
 			target, grammar = &versions.Libvirt, "package-version"
 		default:

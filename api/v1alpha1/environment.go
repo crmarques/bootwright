@@ -14,11 +14,12 @@ func environmentSchema() *Shape {
 	)
 }
 
+// dependencyVersions declares only the prerequisites a context selects. The
+// private interpreter, Ansible and the baseline native packages are prepared by
+// context-independent setup, which reads no Environment.
 func dependencyVersions() *Shape {
 	return record(
-		field("python", lexical("cli-version")), field("ansible", lexical("cli-version")),
-		field("podman", lexical("package-version")), field("openssh", lexical("package-version")),
-		field("nmstate", lexical("package-version")), field("libvirt", lexical("package-version")),
+		field("libvirt", lexical("package-version")),
 		field("helm", lexical("cli-version")), field("govc", lexical("cli-version")), field("virtctl", lexical("cli-version")),
 	)
 }

@@ -42,7 +42,7 @@ func syntheticResolution(t *testing.T) p.Definition {
 	if err != nil {
 		t.Fatal(err)
 	}
-	definition, err := p.NewResolvedDefinition(bootstrap, native, nil, nil)
+	definition, err := p.NewResolvedDefinition(bootstrap, native)
 	if err != nil {
 		t.Fatal(err)
 	}

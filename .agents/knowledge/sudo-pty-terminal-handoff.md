@@ -6,7 +6,7 @@ Observed on 2026-09-12 with sudo 1.9.17p2 on Fedora 43, whose sudoers enables
 
 ## Symptom
 
-`controller setup` printed its plan, asked `Confirm controller setup for baseline?
+`setup` printed its plan, asked `Confirm controller setup on this host?
 [y/N]`, echoed the typed `y` and then stayed silent indefinitely. The typed
 `y` and newline were still queued unread on the invoking terminal (`FIONREAD`
 reported two bytes), the elevated child had written nothing further, held no

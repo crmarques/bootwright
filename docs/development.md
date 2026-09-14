@@ -109,7 +109,7 @@ code evolves:
 | Ansible `controller_prerequisites` target, which runs the shipped setup playbook and role over the real runner protocol against the host inventory | `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1` with `make ansible-check` |
 
 Executed native installation is not covered by any of these; it is a manual
-`controller setup` on a prepared host.
+`setup` on a prepared host.
 
 ## M1f managed infrastructure components and staged apply
 
@@ -142,7 +142,7 @@ resolve to an immutable digest.
 
 The embedded collection participates in the dependency-bundle identity, so a
 build that changes `ansible/` changes the bundle a context is bound to. Run
-`controller setup --context <name>` again after such a build; `preflight controller`
+`setup` again after such a build; `preflight controller`
 reports the incompatible retained bundle and `apply` refuses rather than
 executing automation the receipt does not cover.
 

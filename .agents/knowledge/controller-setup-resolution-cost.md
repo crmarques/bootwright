@@ -1,7 +1,7 @@
 # Controller setup resolution and readiness cost
 
 Observed on 2026-09-12 and 2026-09-13 on a ready Fedora 43 controller:
-`bootwright controller setup` took about two minutes, then still almost a minute,
+`bootwright setup` took about two minutes, then still almost a minute,
 to report `unchanged`. [Controller](../../specs/controller.md#supported-host-and-dependency-selection)
 owns the rules that setup reuses a serving retained resolution, never checks
 for newer releases, and checks readiness by presence only; this page records

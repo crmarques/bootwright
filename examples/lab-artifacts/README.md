@@ -34,7 +34,7 @@ already holds.
 Bootwright requests sudo authorization for context, setup and lifecycle
 commands. The artifact-server automation is embedded in the executable, so a
 build that changes it also changes the dependency-bundle identity: run
-`controller setup` again after `make build`, otherwise `apply` refuses with the
+`setup` again after `make build`, otherwise `apply` refuses with the
 retained bundle it cannot use.
 
 ```sh
@@ -43,7 +43,7 @@ make build
 ./bin/bootwright context init --name lab-artifacts --input-dir "$PWD/examples/lab-artifacts"
 ./bin/bootwright secret generate
 ./bin/bootwright secret check
-./bin/bootwright controller setup --context lab-artifacts
+./bin/bootwright setup
 ./bin/bootwright preflight controller --context lab-artifacts
 ./bin/bootwright plan
 ./bin/bootwright apply

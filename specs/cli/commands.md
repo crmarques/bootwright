@@ -13,7 +13,7 @@ its syntax and context-independent safety checks still apply.
 
 | Flag | Type and default | Contract |
 | --- | --- | --- |
-| `--context <name>` | context name; current context | Select the named context for a context-backed command. Controller setup/preflight consume only an explicit nonempty value; omission selects their context-free baseline and ignores current selection. A non-empty value conflicts with context-free `render --input-dir`. |
+| `--context <name>` | context name; current context | Select the named context for a context-backed command. `preflight controller` consumes only an explicit nonempty value and omission selects its host baseline, ignoring current selection; `setup` selects no context and consumes no value. A non-empty value conflicts with context-free `render --input-dir`. |
 | `--ssh-id-file <path>` | path; none | Offer this private key first for an SSH operation. A leading `~` resolves from the invoking account database, not an untrusted `HOME`; the opened file must satisfy the private-file rules in [security](../security.md). |
 | `--ssh-user <name>` | POSIX user name; none | Use one explicitly borrowed account for eligible OS-ready machines. It does not alter desired state or the managed identity Bootwright installs. |
 | `--ssh-ask-sudo-password[=<bool>]` | Boolean; `false` | Prompt once for the borrowed account's sudo password, hold it only in bounded memory for this invocation, and never place it in arguments, environment, state, output, or logs. It conflicts with JSON output and non-interactive execution. |
@@ -74,7 +74,7 @@ The required controller declaration and context-free setup boundary follow
 
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
-| `bootwright validate` | repeatable `-f, --file <file-or-dir>` default selected context input; `--output text\|json` default `text` | decoded object counts, exclusions, advisories, and diagnostics | none |
+| `bootwright preflight controller` | none | [host readiness, and a selected context own prerequisites and binding](../controller.md#selection-and-command-journeys) | bounded local observation; no state publication |
 | `bootwright preflight controller` | none | [baseline or explicit-context controller readiness](../controller.md#selection-and-command-journeys) | bounded local observation; no state publication |
 | `bootwright preflight infra` | `--clusters <list>` default all; `--dry-run` false; `--output text\|json` default `text`; `--trust-on-first-use=<bool>` default `true`; `-v, --verbose` false | infrastructure readiness checks | observe unless `--dry-run`, which is local-only |
 | `bootwright preflight clusters` | same flags as `preflight infra` | all selected cluster readiness checks | observe unless `--dry-run` |
@@ -99,7 +99,7 @@ The required controller declaration and context-free setup boundary follow
 | `bootwright machine rsh` | required `--name <machine>` | bounded handoff for an interactive SSH session to the exact Machine | read target and access metadata only |
 | `bootwright machine exec` | required `--name <machine>` and `<command>...` | bounded handoff for the exact remote command argument vector | read target and access metadata only |
 | `bootwright machine trust` | `--machines <list>` default all; `--replace <list>` default none; `--dry-run` false; `--yes` false; `--output text\|json` default `text` | exact host-key trust plan and result | bounded SSH identity observation; local trust-store write unless dry-run |
-| `bootwright controller setup` | `--dry-run` false; `--yes` false | [controller prerequisite plan or completed setup](../controller.md#selection-and-command-journeys) | bounded dependency acquisition and local installation/binding publication; dry-run only previews |
+| `bootwright setup` | `--dry-run` false; `--yes` false | [context-independent controller prerequisite plan or completed setup](../controller.md#selection-and-command-journeys) | bounded dependency acquisition and local installation; no context selection or binding; dry-run only previews |
 | `bootwright cluster list` | `--output text\|json` default `text` | container and storage cluster names and kinds in canonical order | read local state |
 | `bootwright cluster info` | `--name <cluster>` default all unless `--secrets`; `--secrets` false; `--output text\|json` default `text` | cluster kinds, endpoints, access-command applicability and availability, artifact availability, and optional explicit sensitive values | read local state and optional confidential material |
 | `bootwright cluster rsh` | required `--name <cluster>`; `--node <node>` default first node in canonical name order | bounded handoff for an interactive SSH session to the resolved cluster node | read target and access metadata only |

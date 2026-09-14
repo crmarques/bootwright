@@ -20,7 +20,7 @@ Environment fields emit in this order:
 | `spec.remoteMachinesAccessKey` | object | conditional | — | Fleet key for the `bootwright` account installed on managed machines. |
 | `spec.defaults` | kind-keyed partial specs | no | `{}` | Omitted object fields inherit the corresponding kind entry under the rules below. |
 | `spec.downloads` | object | no | source-specific | Closed download-mirror policy below. |
-| `spec.dependencyVersions` | object | no | `latest` at setup | Version intent for controller dependencies; closed shape below. |
+| `spec.dependencyVersions` | object | no | `latest` at apply | Version intent for the prerequisites this Environment controller stage installs; closed shape below. |
 | `spec.controller` | object | yes | — | Required controller Machine selection below. |
 | `spec.lifecycle` | object | no | — | Offline-rescue input; the declaration exposes no lifecycle command. |
 
@@ -30,25 +30,27 @@ documented identity.
 
 ## Dependency versions
 
-`spec.dependencyVersions` controls the versions installed by
-[`bootwright controller setup`](../controller.md). Fields emit in the following
-order. Every field is optional and accepts a string; omission means `latest`
-when setup resolves the dependency. Admission preserves authored values and
-does not materialize release numbers or contact publishers.
+`spec.dependencyVersions` controls the versions this Environment's own
+[controller stage](../state-reconciliation.md#stages-and-the-pause-boundary)
+installs. Fields emit in the following order. Every field is optional and
+accepts a string; omission means `latest` when the stage resolves the
+dependency. Admission preserves authored values and does not materialize
+release numbers or contact publishers.
 
 | Field | Dependency | Exact override |
 | --- | --- | --- |
-| `python` | Private CPython interpreter | Stable `MAJOR.MINOR.PATCH`, optionally prefixed by `v`. |
-| `ansible` | Private `ansible-core` | Stable `MAJOR.MINOR.PATCH`, optionally prefixed by `v`. |
-| `podman` | Native container runtime | Distribution package version or `[EPOCH:]VERSION-RELEASE`. |
-| `openssh` | Native OpenSSH clients | Distribution package version or `[EPOCH:]VERSION-RELEASE`. |
-| `nmstate` | Native NMState client | Distribution package version or `[EPOCH:]VERSION-RELEASE`. |
 | `libvirt` | Native libvirt client, including `virsh` | Distribution package version or `[EPOCH:]VERSION-RELEASE`. |
 | `helm` | Helm | Stable `MAJOR.MINOR.PATCH`, optionally prefixed by `v`. |
 | `govc` | vSphere client | Stable `MAJOR.MINOR.PATCH`, optionally prefixed by `v`. |
 | `virtctl` | Upstream KubeVirt client | Stable `MAJOR.MINOR.PATCH`, optionally prefixed by `v`. |
 
-`latest` selects the publisher's latest stable release for Python, Ansible and
+The private interpreter, `ansible-core` and the baseline native packages have
+no field here. They are [host prerequisites](../controller.md): one prepared
+host serves every context, so no single Environment may move their versions.
+`python`, `ansible`, `podman`, `openssh` and `nmstate` are therefore rejected
+like any other unknown key.
+
+`latest` selects the publisher's latest stable release for
 the generic target clients. For native packages it selects the newest available
 build from the approved repositories for the executing OS release and
 architecture. A native version without a release selects the highest available
@@ -63,9 +65,9 @@ client. Supporting Python wheels and native package dependencies are resolved
 as a complete compatible closure; they are not individually configurable.
 An incompatible or unavailable exact request fails with a dependency
 diagnostic rather than silently substituting another root version.
-The controller adapter requires Ansible Core 2.19 or newer; an older exact override
-refuses before confirmation. Python must satisfy the selected Ansible release's
-published compatibility requirements.
+The controller adapter requires Ansible Core 2.19 or newer; the host
+prerequisite that supplies it is prepared by setup, which always resolves
+latest stable.
 
 OpenShift/OKD installer and client versions remain tied to the target cluster's
 declared release. `openshift-install`, `oc` and `kubectl` are not override keys.
@@ -78,18 +80,18 @@ For example:
 ```yaml
 spec:
   dependencyVersions:
-    python: "3.14.7"
-    ansible: latest
-    podman: latest
+    libvirt: latest
+    helm: "4.3.0"
     virtctl: "1.9.0"
 ```
 
 These fields follow the normal `defaults.Environment` inheritance rules.
-Setup resolves `latest` only when no retained resolution serves the declared
-intent; a serving resolution is reused without checking for newer releases, so
-moving a `latest` dependency forward means declaring the newer release here.
-An incomplete setup retries its recorded exact selection without resolving
-new versions. Preflight checks retained dependencies and never refreshes them.
+The controller stage resolves `latest` only when no retained resolution serves
+the declared intent; a serving resolution is reused without checking for newer
+releases, so moving a `latest` dependency forward means declaring the newer
+release here. An incomplete attempt retries its recorded exact selection
+without resolving new versions. Preflight checks retained dependencies by
+presence and never refreshes them.
 
 ## Domains
 
@@ -390,7 +392,7 @@ A controller may host a managed service when that service explicitly selects
 its `machineRef` and the Machine has the service's required capabilities.
 `container-runtime` is required for the controller even when no managed service
 is selected. A capability declaration does not install or prove a runtime;
-`controller setup` installs an absent qualified Podman and verifies its dependencies.
+`setup` installs an absent qualified Podman and verifies its dependencies.
 No service placement defaults to the controller.
 
 Admission checks these declarations without inspecting the invoking host,

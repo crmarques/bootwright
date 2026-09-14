@@ -73,6 +73,10 @@ type TargetToolCatalog interface {
 	// Resolve reads bounded publisher metadata through the explicit route. It
 	// does not acquire payloads, create files, run tools, or mutate host state.
 	Resolve(context.Context, []controller.ToolRequest, SetupEgress) ([]ToolDefinition, error)
+	// Present reports whether every resolved tool's retained source and
+	// published files exist in the area. It reads no file content and contacts
+	// no publisher, so a prepared host proves its tools without acquisition.
+	Present(context.Context, BundleArea, []ToolDefinition) (bool, error)
 }
 
 // Storage owns host-wide setup coordination and durable evidence. ExplicitName

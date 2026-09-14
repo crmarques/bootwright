@@ -14,8 +14,11 @@ func (s Service) selectedResolution(current inspection, requirements NativeRequi
 	if s.options.Native == nil || s.options.NativeInspector == nil {
 		return Definition{}, false, failure("controller.unsupported", "native dependency resolution and inspection are not configured", "use a compatible executable")
 	}
+	// A retained resolution serves any context, because setup resolves only the
+	// context-independent closure. Target tools are resolved and retained by the
+	// controller stage and never take part in this selection.
 	matches := func(value Definition) bool {
-		return value.Platform == current.platform && value.Versions == current.selection.Versions() && value.NativeRequirements == requirements && slices.Equal(value.ToolRequests, current.toolRequests)
+		return value.Platform == current.platform && value.Versions.Baseline() == current.selection.Versions().Baseline() && value.NativeRequirements == requirements && len(value.Tools) == 0
 	}
 	var selected *Definition
 	if len(frozen) != 0 && frozen[0].Definition != nil {
@@ -41,21 +44,8 @@ func (s Service) selectedResolution(current inspection, requirements NativeRequi
 		if err := ValidateResolvedDefinition(*selected); err != nil {
 			return Definition{}, false, err
 		}
-		if len(current.toolRequests) != 0 {
-			if s.options.Tools == nil {
-				return Definition{}, false, failure("controller.unsupported", "target tool inspection is unavailable", "use a compatible executable")
-			}
-			tools, complete, err := s.options.Tools.Select(current.toolRequests, selected.Sources)
-			if err != nil {
-				return Definition{}, false, err
-			}
-			// WithTools canonicalizes tool order by source identity.
-			slices.SortFunc(tools, func(a, b ToolDefinition) int { return strings.Compare(a.Source.ID, b.Source.ID) })
-			if !complete || !reflect.DeepEqual(tools, selected.Tools) {
-				return Definition{}, false, failure("controller.state", "frozen target tools differ from the selected desired state", "restore the exact setup evidence")
-			}
-		} else if len(selected.Tools) != 0 {
-			return Definition{}, false, failure("controller.state", "frozen setup contains unselected target tools", "restore the exact setup evidence")
+		if len(selected.Tools) != 0 {
+			return Definition{}, false, failure("controller.state", "frozen setup contains target tools it does not own", "restore the exact setup evidence")
 		}
 		if !matches(*selected) {
 			return Definition{}, false, failure("controller.unknown", "frozen setup dependencies differ from current intent", "restore the original input before retrying")
@@ -70,7 +60,7 @@ func (s Service) selectedResolution(current inspection, requirements NativeRequi
 		return Definition{}, false, err
 	}
 	versions := current.selection.Versions()
-	return Definition{Platform: current.platform, Versions: versions, NativeRequirements: requirements, ToolRequests: slices.Clone(current.toolRequests), PythonVersion: versions.Python, AnsibleVersion: versions.Ansible, Runtime: RuntimeRequirement{Version: versions.Podman}}, false, nil
+	return Definition{Platform: current.platform, Versions: versions, NativeRequirements: requirements, PythonVersion: versions.Python, AnsibleVersion: versions.Ansible, Runtime: RuntimeRequirement{Version: versions.Podman}}, false, nil
 }
 
 // supersededLatest reports a retained latest resolution whose Ansible release
@@ -80,17 +70,11 @@ func supersededLatest(value Definition) bool {
 	return value.Versions.Ansible == "latest" && ValidateBootstrapAnsibleVersion(value.AnsibleVersion) != nil
 }
 
-func dependencyIntent(selection controller.Selection, tools []controller.ToolRequest) []string {
+func dependencyIntent(selection controller.Selection) []string {
 	versions := selection.Versions()
 	result := []string{"python=" + versions.Python, "ansible=" + versions.Ansible, "openssh=" + versions.OpenSSH, "nmstate=" + versions.NMState}
 	if selection.ContainerRuntime() {
 		result = append(result, "podman="+versions.Podman)
-	}
-	if selection.LibvirtClient() {
-		result = append(result, "libvirt="+versions.Libvirt)
-	}
-	for _, tool := range tools {
-		result = append(result, tool.Kind+"="+tool.Version)
 	}
 	return result
 }
@@ -167,12 +151,11 @@ func toolVersionSummary(tools []ToolDefinition) string {
 // A reusable retained resolution keeps its Python, Ansible and target tools
 // frozen, so only the native transaction is solved and reported, against the
 // host's current inventory.
-func (s Service) resolveDependencies(ctx context.Context, name string, before inspection) (inspection, error) {
-	total, step, requests := 2+len(before.toolRequests), 1, before.toolRequests
+func (s Service) resolveDependencies(ctx context.Context, before inspection) (inspection, error) {
+	total, step := 2, 1
 	var bootstrap BootstrapDefinition
-	tools := []ToolDefinition{}
 	if before.reusable {
-		total, bootstrap, tools, requests = 1, *before.definition.Bootstrap, slices.Clone(before.definition.Tools), nil
+		total, bootstrap = 1, *before.definition.Bootstrap
 	} else {
 		err := s.resolutionStep(ctx, &before.report, step, total, "Python and Ansible", func() (string, error) {
 			var err error
@@ -193,34 +176,7 @@ func (s Service) resolveDependencies(ctx context.Context, name string, before in
 	if err != nil {
 		return before, err
 	}
-	for index, request := range requests {
-		if s.options.Tools == nil {
-			return before, failure("controller.unsupported", "target tool resolution is unavailable", "use a compatible executable")
-		}
-		err := s.resolutionStep(ctx, &before.report, 3+index, total, "Target tool "+request.Kind, func() (string, error) {
-			var resolved []ToolDefinition
-			complete := false
-			var err error
-			if request.Version != "latest" {
-				resolved, complete, err = s.options.Tools.Select([]controller.ToolRequest{request}, before.view.State.RetainedSources)
-				if err != nil {
-					return "", err
-				}
-			}
-			if !complete {
-				resolved, err = s.options.Tools.Resolve(ctx, []controller.ToolRequest{request}, before.route())
-				if err != nil {
-					return "", err
-				}
-			}
-			tools = append(tools, resolved...)
-			return toolVersionSummary(resolved), nil
-		})
-		if err != nil {
-			return before, err
-		}
-	}
-	definition, err := NewResolvedDefinition(bootstrap, native, before.toolRequests, tools)
+	definition, err := NewResolvedDefinition(bootstrap, native)
 	if err != nil {
 		return before, err
 	}
@@ -247,15 +203,15 @@ func (s Service) resolveDependencies(ctx context.Context, name string, before in
 		definition = CloneDefinition(before.definition)
 	}
 	var after inspection
-	err = s.storage.ReadController(ctx, name, func(view StorageView) error {
+	err = s.storage.ReadController(ctx, "", func(view StorageView) error {
 		var err error
 		after, err = s.inspect(ctx, view, false, "", inspectionResolution{Definition: &definition})
 		if err != nil {
 			return err
 		}
 		after.report.ProgressPresented = before.report.ProgressPresented
-		if before.view.Context != after.view.Context || !before.host.Equal(after.host) || before.selection.Versions() != after.selection.Versions() || !slices.Equal(before.toolRequests, after.toolRequests) || before.view.State.Receipt.ID != after.view.State.Receipt.ID || before.view.State.Receipt.Status != after.view.State.Receipt.Status {
-			return failure("controller.conflict", "controller requirements changed during dependency resolution", setupCommand(name))
+		if !before.host.Equal(after.host) || before.selection.Versions() != after.selection.Versions() || before.view.State.Receipt.ID != after.view.State.Receipt.ID || before.view.State.Receipt.Status != after.view.State.Receipt.Status {
+			return failure("controller.conflict", "controller requirements changed during dependency resolution", setupCommand())
 		}
 		return nil
 	})

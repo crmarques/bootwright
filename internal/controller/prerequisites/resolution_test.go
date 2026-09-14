@@ -9,7 +9,6 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type resolvingFixture struct {
@@ -285,7 +284,7 @@ func TestNativeFoundationReplacementRefusesBeforeConfirmation(t *testing.T) {
 
 func TestResolvedDefinitionRejectsTamperingAndCopiesInputs(t *testing.T) {
 	_, r := dynamicFixture(t)
-	definition, err := NewResolvedDefinition(r.bootstrap, r.native, nil, nil)
+	definition, err := NewResolvedDefinition(r.bootstrap, r.native)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +313,7 @@ func TestResolvedDefinitionRejectsConflictingSourceIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewResolvedDefinition(r.bootstrap, r.native, nil, nil); err == nil {
+	if _, err := NewResolvedDefinition(r.bootstrap, r.native); err == nil {
 		t.Fatal("native resolution replaced a bootstrap source identity")
 	}
 }
@@ -340,31 +339,42 @@ func TestNativeSolveRefusesChangedBytesForSameRetainedRelease(t *testing.T) {
 	}
 }
 
-// The catalog owns the qualified native matrix, so the complete selection must
-// reach it during inspection. An unqualified client refuses there, before any
-// dependency is acquired.
-func TestSelectedNativeClientIsAdmittedBeforeAcquisition(t *testing.T) {
+// A libvirt client is selected by one context's desired state, so it never
+// enters the context-independent closure setup admits and prepares. Its own
+// controller stage installs it, and preflight reports it as a context check.
+func TestSelectedLibvirtClientIsNotASetupPrerequisite(t *testing.T) {
 	f, r := dynamicFixture(t)
 	f.compiler.extra = []api.Object{
 		api.NewObject(api.InfraProvider, "hypervisor", api.Value{}, api.MapValue().With("libvirt", api.MapValue())),
 		api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("hypervisor"), "substrate", "providerRef")),
 	}
 	f.store.scope = SetupContext{Name: "example", Revision: "rev-" + strings.Repeat("2", 32)}
-	f.catalog.err = failure("controller.unsupported", "selected libvirt controller dependencies have no qualified native source for this controller release", "")
 
-	_, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example"})
-	if err == nil {
-		t.Fatal("unqualified native client was accepted")
+	report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+	if err != nil || report.Outcome != "changed" {
+		t.Fatalf("setup refused a context's libvirt selection: %#v %v", report, err)
 	}
-	if diagnostics := diagnostics.Of(err); len(diagnostics) != 1 || diagnostics[0].Code != "controller.unsupported" {
-		t.Fatalf("refusal code = %#v", diagnostics)
+	for _, admitted := range f.catalog.admitted {
+		if admitted.LibvirtClient || !admitted.ContainerRuntime {
+			t.Fatalf("setup admitted %#v; the closure is not context-independent", f.catalog.admitted)
+		}
 	}
-	if len(f.catalog.admitted) == 0 || !f.catalog.admitted[0].LibvirtClient || !f.catalog.admitted[0].ContainerRuntime {
-		t.Fatalf("catalog admitted %#v; the selected client requirement was dropped", f.catalog.admitted)
+	if r.nativeCalls != 1 {
+		t.Fatalf("setup solved the native transaction %d times", r.nativeCalls)
 	}
-	// Refusal must precede every acquisition and every host mutation.
-	if r.bootstrapCalls != 0 || r.nativeCalls != 0 || f.bundle.prepares != 0 || f.store.writes != 0 {
-		t.Fatalf("unqualified selection acquired dependencies: %#v %#v", r, f)
+	// Preflight reports the same selection as an unmet context prerequisite.
+	check, err := f.service.Check(context.Background(), CheckRequest{ContextName: "example"})
+	if code(err) != "preflight.failed" {
+		t.Fatalf("context preflight = %#v %v", check, err)
+	}
+	found := false
+	for _, entry := range check.Checks {
+		if entry.ID == "libvirt-client" {
+			found = entry.Scope == ContextScope && entry.Status == "not-ready"
+		}
+	}
+	if !found {
+		t.Fatalf("libvirt client was not reported as an unmet context prerequisite: %#v", check.Checks)
 	}
 }
 

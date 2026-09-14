@@ -1,14 +1,15 @@
 # Milestones
 
-**M1f is the current milestone.** M1a–M1e are complete: the full command
+**M1g is the current milestone.** M1a–M1f are complete: the full command
 catalog with help and completion; admission of all 26 API kinds; durable
 contexts with immutable input; context-backed `validate` and public
-`render effective`; the complete `secret` tree over `local-keyring`; and
-`controller setup` with `preflight controller` on RHEL 9 and Fedora for Linux/amd64;
-and the lifecycle engine with managed artifact serving, so `plan`, `status`,
-`apply` and `destroy` are available. M1f completes the `infra-components`
-stage and adds stage selection to the engine. Every other catalogued command
-retains the [unavailable result](cli.md#recognized-but-unavailable-commands).
+`render effective`; the complete `secret` tree over `local-keyring`;
+controller setup with `preflight controller` on RHEL 9 and Fedora for
+Linux/amd64; the lifecycle engine with managed artifact serving, so `plan`,
+`status`, `apply` and `destroy` are available; and the complete
+`infra-components` stage with stage selection. M1g splits controller
+prerequisites by what selects them. Every other catalogued command retains the
+[unavailable result](cli.md#recognized-but-unavailable-commands).
 
 This file owns delivery scope and deferred work. Product specs describe target
 behavior; they do not claim availability. A completed milestone keeps only its
@@ -123,7 +124,7 @@ evidence) and Workspace (shared setup state and context binding), using
 Machine, Desired state and the invocation boundary. **Delivery:** completed;
 end-to-end acceptance against a real controller is operator-run.
 
-Delivered `controller setup`, `controller setup --dry-run` and `preflight controller`
+Delivered `controller setup`, its dry run and `preflight controller`
 for RHEL 9 and Fedora on Linux/amd64 under [Controller](controller.md) and the
 [host-binding contract](contexts.md#controller-relationship-and-host-binding):
 desired-state dependency selection with version overrides, frozen resolution
@@ -192,7 +193,7 @@ remain the operator's responsibility. Bounded parallel execution remains C7.
 Executed service effects, the service adapter's process and cancellation
 boundary, and SSH placement against a real host are operator-run.
 
-## M1f — managed controller network services
+### M1f — managed controller network services
 
 **Owners:** Infrastructure services and State reconciliation, using Workspace,
 Secrets, Machine and Controller. **Requires:** M1e. **Definition:** Specified.
@@ -249,6 +250,48 @@ cancellation boundary of the service adapter, and SSH placement against a real
 host. The named consumer is [`examples/managed-infra-components`](../examples/managed-infra-components);
 [`examples/lab-ocp`](../examples/lab-ocp) remains the larger fixture whose
 guest and cluster still refuse.
+
+## M1g — controller prerequisites by selecting scope
+
+**Owners:** Controller and CLI, using Workspace and State reconciliation.
+**Requires:** M1f. **Definition:** Specified. **Delivery:** in progress.
+
+Split controller prerequisites by what selects them, so one prepared host
+serves every context created on it. [Controller](controller.md) owns the
+contract; the scopes and their owning commands are its opening table.
+
+**Delivered so far.** One CLI noun names the domain, its host and its Machine:
+`controller`. Setup became the root command `setup`, which selects no
+context: it reads no Environment, consumes no `--context`, prepares the host
+foundation, the private Python and `ansible-core` bundle and the baseline
+native closure, and publishes no binding. `preflight controller` keeps its
+context arm and reports each check with the scope that owns it, so a negative
+report names either `setup` or that context's own controller stage.
+`Environment.spec.dependencyVersions` lost `python`, `ansible`, `podman`,
+`openssh` and `nmstate`, which no single context may move. The context-to-host
+binding moved to the first `apply`, published under the lock and lease that
+operation already holds, before any reservation or effect.
+
+**Remaining.** The `controller` stage itself: a first stage ahead of
+`infra-components` whose one block installs the target client closure and the
+libvirt client a context selects, on the controller Machine, through that
+Machine's proxy choice. Every other block depends on it. Until it exists, a
+context that selects target clients or libvirt has no command that installs
+them, and `preflight controller --context <name>` reports them as unmet.
+
+Exit evidence so far: the `internal/controller/prerequisites` suite (setup
+ignores the tools and libvirt a context selects, retains no tool source,
+publishes no binding, and reports both scopes through preflight), the
+`internal/controller` selection and version tests, the lifecycle journey suite
+(a first apply binds, a repeated apply revalidates, a rebind refuses, an
+unprepared host refuses before any effect), the CLI catalog, dispatch,
+confirmation and output tests, `cmd/bootwright` admission and example
+acceptance, and `make check`.
+
+**Verification model.** M1d's model continues: every test carried in this
+repository is unitary and host-independent. Real-system acceptance is
+operator-run, and an operator upgrading an existing host runs `setup` again
+before the first `apply` of each context, because no binding exists until then.
 
 ## Later ordered outcomes
 

@@ -124,17 +124,17 @@ func (s Service) invoke(ctx context.Context, tx Transaction, operation operation
 	if receipt.Definition == nil {
 		return Result{Outcome: reconciliation.OutcomeFailed}, failure("controller.state",
 			"the retained controller setup has no execution definition",
-			"run controller setup --context "+tx.Identity().Name)
+			"run bootwright setup")
 	}
 	if view.OpenBundle == nil {
-		return Result{Outcome: reconciliation.OutcomeFailed}, failure("controller.state", "the approved execution bundle is unavailable", "run controller setup --context "+tx.Identity().Name)
+		return Result{Outcome: reconciliation.OutcomeFailed}, failure("controller.state", "the approved execution bundle is unavailable", "run bootwright setup")
 	}
 	area, err := view.OpenBundle(ctx, receipt.CatalogDigest)
 	if err != nil {
 		return Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
 	if area == nil {
-		return Result{Outcome: reconciliation.OutcomeFailed}, failure("controller.state", "the approved execution bundle is missing", "run controller setup --context "+tx.Identity().Name)
+		return Result{Outcome: reconciliation.OutcomeFailed}, failure("controller.state", "the approved execution bundle is missing", "run bootwright setup")
 	}
 	location, err := area.Location(ctx)
 	if err != nil {

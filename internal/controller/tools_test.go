@@ -191,7 +191,7 @@ func TestTargetCLIVersionOverridesRejectUnstableSelections(t *testing.T) {
 
 func TestTargetCLIVersionsCoexistWithOtherDependencyOverrides(t *testing.T) {
 	versions := api.MapValue().With("helm", api.StringValue("latest"))
-	for _, dependency := range []string{"python", "ansible", "podman", "openssh", "nmstate", "libvirt"} {
+	for _, dependency := range []string{"libvirt", "govc", "virtctl"} {
 		versions = versions.With(dependency, api.StringValue("latest"))
 	}
 	objects := selectionObjects()

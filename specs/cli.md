@@ -290,16 +290,20 @@ completion, or context initialization without input. Context-free validation
 can run away from the declared controller; it checks input relationships and
 never verifies the invoking host.
 
-`controller setup` and `preflight controller` follow the
+`setup` and `preflight controller` follow the
 [Controller journeys](controller.md#selection-and-command-journeys), including
-preparation before context creation or Environment import. These commands
-consume a context only when `--context` is explicit and nonempty; omission ignores current
-selection and uses the baseline prerequisites. Explicit context setup uses
-immutable controller intent and includes any required first binding in the
-confirmed local plan; preflight verifies without publishing a binding.
-Controller selection alone does not cause setup, install a container runtime
-or start services. Commands retain their specified unavailable result until
-the corresponding delivery is implemented.
+preparation before context creation or Environment import. `setup` selects no
+context: it prepares what every context on the host shares, reads no
+Environment, and an explicit `--context` changes nothing it does. The
+prerequisites one context adds are installed by the
+[controller stage](state-reconciliation.md#stages-and-the-pause-boundary) of
+its own apply, which is also where the context claims its controller host.
+`preflight controller` consumes a context only when `--context` is explicit and
+nonempty; omission ignores current selection and reports host readiness alone.
+With a context it also reports that context's own prerequisites and binding,
+and publishes nothing. Controller selection alone does not cause setup, install
+a container runtime or start services. Commands retain their specified
+unavailable result until the corresponding delivery is implemented.
 
 The local-access controller is not an SSH target. The existing SSH handoff and
 trust commands must not silently turn its selection into a local shell,
