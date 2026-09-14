@@ -48,17 +48,17 @@ func publish(t *testing.T, store *Store, name string, sources desiredstate.Sourc
 				result = record
 			}
 		}
-		if result.ID == "" {
+		if result.Name == "" {
 			var err error
 			result, err = tx.Reserve(context.Background(), name, sources.Roots[0], contexts.DefaultConfiguration(name).Canonical())
 			if err != nil {
 				return err
 			}
 		}
-		if _, err := tx.MutationState(context.Background(), result.ID); err != nil {
+		if _, err := tx.MutationState(context.Background(), result.Name); err != nil {
 			return err
 		}
-		revision, err := tx.Publish(context.Background(), result.ID, sources.Roots[0], sources)
+		revision, err := tx.Publish(context.Background(), result.Name, sources.Roots[0], sources)
 		if err != nil {
 			return err
 		}
@@ -66,7 +66,7 @@ func publish(t *testing.T, store *Store, name string, sources desiredstate.Sourc
 		result.Revision = revision
 		result.Mode = contexts.Ready
 		for i := range registry.Contexts {
-			if registry.Contexts[i].ID == result.ID {
+			if registry.Contexts[i].Name == result.Name {
 				registry.Contexts[i] = result
 			}
 		}
@@ -105,11 +105,11 @@ func expectPendingRegistry(t *testing.T, err error) {
 	}
 }
 
-func expectInconsistentEmptyRegistry(t *testing.T, err error) {
+func expectUnsupportedRootState(t *testing.T, err error) {
 	t.Helper()
 	diagnostics := diagnostics.Of(err)
-	if len(diagnostics) != 1 || diagnostics[0].Code != "context.state" || diagnostics[0].Message != "registry.json is empty but the context store is not" || diagnostics[0].Remediation != storeRecoveryRemediation {
-		t.Fatalf("unexpected empty-registry diagnostic: %#v", diagnostics)
+	if len(diagnostics) != 1 || diagnostics[0].Code != "context.state" || diagnostics[0].Message != unsupportedRootStateMessage || diagnostics[0].Remediation != storeRecoveryRemediation {
+		t.Fatalf("unexpected unsupported-root diagnostic: %#v", diagnostics)
 	}
 }
 
@@ -147,7 +147,7 @@ func TestImmutableInputAndReadOnlyLifecycleBoundary(t *testing.T) {
 		if err != nil || len(view.Contexts) != 1 || view.Contexts[0].Name != "example" {
 			t.Fatalf("view: %v", err)
 		}
-		input, err := store.ReadInputs(context.Background(), "example", "")
+		input, err := store.ReadInputs(context.Background(), "example")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -164,7 +164,7 @@ func TestImmutableInputAndReadOnlyLifecycleBoundary(t *testing.T) {
 func TestMissingStoreAndInputPreflight(t *testing.T) {
 	store, sources := fixture(t)
 	view, err := store.View(context.Background())
-	if err != nil || view.Version != 2 || len(view.Contexts) != 0 {
+	if err != nil || view.Version != contexts.RegistryVersion || len(view.Contexts) != 0 {
 		t.Fatalf("absent list: %v", err)
 	}
 	if _, err := os.Stat(store.options.Root); !errors.Is(err, os.ErrNotExist) {
@@ -298,7 +298,7 @@ func TestInterruptedInitialRegistryPublicationRecoversOnlyDuringCreate(t *testin
 	if err := store.Transact(context.Background(), true, nil, func(tx contexts.Transaction) error {
 		callbackCalled = true
 		registry := tx.Registry()
-		if !reflect.DeepEqual(registry, contexts.Registry{Version: 2, Identities: []contexts.Identity{}, Contexts: []contexts.Record{}}) {
+		if !reflect.DeepEqual(registry, emptyRegistry()) {
 			t.Fatalf("recovered registry is not empty and canonical: %#v", registry)
 		}
 		return nil
@@ -585,23 +585,23 @@ func TestInitialRegistryRecoveryRejectsPostRenameRootChange(t *testing.T) {
 	if _, err := store.View(context.Background()); err == nil {
 		t.Fatal("read-only view accepted the changed recovered root")
 	} else {
-		expectInconsistentEmptyRegistry(t, err)
+		expectUnsupportedRootState(t, err)
 	}
-	if _, err := store.ReadInputs(context.Background(), "test", ""); err == nil {
+	if _, err := store.ReadInputs(context.Background(), "test"); err == nil {
 		t.Fatal("input reader accepted the changed recovered root")
 	} else {
-		expectInconsistentEmptyRegistry(t, err)
+		expectUnsupportedRootState(t, err)
 	}
 	if _, err := store.SecretContext(context.Background(), "test"); err == nil {
 		t.Fatal("secret reader accepted the changed recovered root")
 	} else {
-		expectInconsistentEmptyRegistry(t, err)
+		expectUnsupportedRootState(t, err)
 	}
 	err = store.Transact(context.Background(), true, nil, func(contexts.Transaction) error {
 		callbackCalled = true
 		return nil
 	})
-	expectInconsistentEmptyRegistry(t, err)
+	expectUnsupportedRootState(t, err)
 	if callbackCalled {
 		t.Fatal("retry callback ran with unexpected state beside the empty registry")
 	}
@@ -695,7 +695,7 @@ func TestUnsafeStoreObjects(t *testing.T) {
 			case "blob-digest":
 				writePrivate(t, filepath.Join(revisionDir, blobName(0)), []byte("version: modified\n"))
 			}
-			_, err := store.ReadInputs(context.Background(), "example", "")
+			_, err := store.ReadInputs(context.Background(), "example")
 			expectState(t, err)
 			if kind != "blob-link" && kind != "blob-digest" {
 				_, err = store.View(context.Background())
@@ -745,11 +745,11 @@ func TestMutationGuardLayoutAndLeases(t *testing.T) {
 	record := publish(t, store, "example", sources)
 	contextDir := filepath.Join(store.options.Root, "contexts", record.Name)
 	writePrivate(t, filepath.Join(contextDir, "future-operation.json"), []byte("{}\n"))
-	if _, err := store.ReadInputs(context.Background(), "example", ""); err != nil {
+	if _, err := store.ReadInputs(context.Background(), "example"); err != nil {
 		t.Fatal(err)
 	}
 	expectState(t, store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
-		_, err := tx.MutationState(context.Background(), record.ID)
+		_, err := tx.MutationState(context.Background(), record.Name)
 		return err
 	}))
 	if err := os.Remove(filepath.Join(contextDir, "future-operation.json")); err != nil {
@@ -764,10 +764,10 @@ func TestMutationGuardLayoutAndLeases(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectState(t, store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
-		_, err := tx.MutationState(context.Background(), record.ID)
+		_, err := tx.MutationState(context.Background(), record.Name)
 		return err
 	}))
-	if _, err := store.ReadInputs(context.Background(), "example", ""); err != nil {
+	if _, err := store.ReadInputs(context.Background(), "example"); err != nil {
 		t.Fatal("reader acquired a lease", err)
 	}
 	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_UN); err != nil {
@@ -786,11 +786,11 @@ func TestTransactionDoesNotPublishWithoutCommit(t *testing.T) {
 	record := publish(t, store, "example", sources)
 	var orphan string
 	if err := store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
-		if _, err := tx.MutationState(context.Background(), record.ID); err != nil {
+		if _, err := tx.MutationState(context.Background(), record.Name); err != nil {
 			return err
 		}
 		var err error
-		orphan, err = tx.Publish(context.Background(), record.ID, sources.Roots[0], sources)
+		orphan, err = tx.Publish(context.Background(), record.Name, sources.Roots[0], sources)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -816,11 +816,11 @@ func TestReplacementDuringTransactionRefuses(t *testing.T) {
 			record := publish(t, store, "example", sources)
 			err := store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
 				registry := tx.Registry()
-				if _, err := tx.MutationState(context.Background(), record.ID); err != nil {
+				if _, err := tx.MutationState(context.Background(), record.Name); err != nil {
 					return err
 				}
 				if target == "revision-bytes" {
-					revision, err := tx.Publish(context.Background(), record.ID, sources.Roots[0], sources)
+					revision, err := tx.Publish(context.Background(), record.Name, sources.Roots[0], sources)
 					if err != nil {
 						return err
 					}
@@ -868,10 +868,10 @@ func TestPublicationFailurePoints(t *testing.T) {
 				return nil
 			}
 			err := store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
-				if _, err := tx.MutationState(context.Background(), original.ID); err != nil {
+				if _, err := tx.MutationState(context.Background(), original.Name); err != nil {
 					return err
 				}
-				revision, err := tx.Publish(context.Background(), original.ID, sources.Roots[0], sources)
+				revision, err := tx.Publish(context.Background(), original.Name, sources.Roots[0], sources)
 				if err != nil {
 					return err
 				}
@@ -891,7 +891,7 @@ func TestPublicationFailurePoints(t *testing.T) {
 			if point == "after-registry-rename" && view.Contexts[0].Revision == original.Revision {
 				t.Fatal("postcommit interruption claimed rollback")
 			}
-			if _, err := store.ReadInputs(context.Background(), "example", ""); err != nil {
+			if _, err := store.ReadInputs(context.Background(), "example"); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -906,7 +906,7 @@ func TestConcurrentReadersSeeCompleteRevisions(t *testing.T) {
 	for range 4 {
 		group.Go(func() {
 			for range 10 {
-				input, err := store.ReadInputs(context.Background(), "example", "")
+				input, err := store.ReadInputs(context.Background(), "example")
 				if err != nil {
 					failures <- err
 					return
@@ -960,11 +960,11 @@ func TestCrashReleasesLocksAndLeavesCompleteSelection(t *testing.T) {
 			if (view.Contexts[0].Revision == original.Revision) != (point == "before-registry-rename") {
 				t.Fatal("crash visibility violated commit point")
 			}
-			if _, err := store.ReadInputs(context.Background(), "example", ""); err != nil {
+			if _, err := store.ReadInputs(context.Background(), "example"); err != nil {
 				t.Fatal(err)
 			}
 			if err := store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
-				if _, err := tx.MutationState(context.Background(), original.ID); err != nil {
+				if _, err := tx.MutationState(context.Background(), original.Name); err != nil {
 					return err
 				}
 				return tx.Commit(context.Background(), tx.Registry())
@@ -981,7 +981,7 @@ func TestCrashHelper(t *testing.T) {
 		t.Skip("subprocess helper")
 	}
 	store := New(testOptions(root))
-	sources, err := store.ReadInputs(context.Background(), "example", "")
+	sources, err := store.ReadInputs(context.Background(), "example")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1008,10 +1008,9 @@ func (r constantRandom) Read(data []byte) (int, error) {
 func FuzzPersistedRecords(f *testing.F) {
 	valid, _ := encodeRecord(emptyRegistry(), maxRegistry)
 	f.Add(valid, false)
-	v3, _ := encodeRecord(registryV3{Version: 3, IDNamespace: "0123456789abcdef", NextIdentity: 1, Contexts: []contexts.Record{}}, maxRegistry)
-	f.Add(v3, false)
+	f.Add([]byte("{\"version\":3,\"idNamespace\":\"0123456789abcdef\",\"nextIdentity\":1,\"contexts\":[]}\n"), false)
 	input := "/example/input"
-	m := manifest{Version: 2, ID: "ctx-00000000000000000000000000000000", Revision: "rev-00000000000000000000000000000000", InputDirectory: input, EnvironmentDirectory: input, Files: []frozenFile{{Path: "environment.yaml", Category: "yaml", Size: 0, SHA256: digest(nil)}}}
+	m := manifest{Version: ManifestVersion, Context: "example", Revision: "rev-00000000000000000000000000000000", InputDirectory: input, EnvironmentDirectory: input, Files: []frozenFile{{Path: "environment.yaml", Category: "yaml", Size: 0, SHA256: digest(nil)}}}
 	validManifest, _ := encodeRecord(m, maxManifest)
 	f.Add(validManifest, true)
 	f.Add([]byte(`{"version":1,"version":1}`), false)
@@ -1024,7 +1023,7 @@ func FuzzPersistedRecords(f *testing.F) {
 		if isManifest {
 			var value manifest
 			if decodeRecord(data, maxManifest, &value) == nil {
-				_ = validateManifest(value, value.ID, value.Revision, value.EnvironmentDirectory)
+				_ = validateManifest(value, value.Context, value.Revision, value.EnvironmentDirectory)
 			}
 		} else {
 			var value contexts.Registry
@@ -1058,10 +1057,10 @@ func TestEveryPublicationEffectCanBeInterrupted(t *testing.T) {
 			return nil
 		}
 		err := store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
-			if _, err := tx.MutationState(context.Background(), original.ID); err != nil {
+			if _, err := tx.MutationState(context.Background(), original.Name); err != nil {
 				return err
 			}
-			revision, err := tx.Publish(context.Background(), original.ID, sources.Roots[0], sources)
+			revision, err := tx.Publish(context.Background(), original.Name, sources.Roots[0], sources)
 			if err != nil {
 				return err
 			}
@@ -1078,7 +1077,7 @@ func TestEveryPublicationEffectCanBeInterrupted(t *testing.T) {
 		if (view.Contexts[0].Revision == original.Revision) != (interrupted < commitIndex) {
 			t.Fatalf("checkpoint %d violated atomic visibility", interrupted)
 		}
-		if _, err := store.ReadInputs(context.Background(), "example", ""); err != nil {
+		if _, err := store.ReadInputs(context.Background(), "example"); err != nil {
 			t.Fatalf("checkpoint %d: %v", interrupted, err)
 		}
 	}
@@ -1123,10 +1122,10 @@ func TestPendingSourceReplacementRefusesPublication(t *testing.T) {
 				return errors.New("missing pending source")
 			}
 			err = store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
-				if _, err := tx.MutationState(context.Background(), original.ID); err != nil {
+				if _, err := tx.MutationState(context.Background(), original.Name); err != nil {
 					return err
 				}
-				revision, err := tx.Publish(context.Background(), original.ID, sources.Roots[0], sources)
+				revision, err := tx.Publish(context.Background(), original.Name, sources.Roots[0], sources)
 				if err != nil {
 					return err
 				}
@@ -1159,7 +1158,7 @@ func TestViewValidatesManifestAgreement(t *testing.T) {
 			if err := decodeRecord(data, maxManifest, &m); err != nil {
 				t.Fatal(err)
 			}
-			m.ID = "ctx-00000000000000000000000000000000"
+			m.Context = "another"
 			data, err = encodeRecord(m, maxManifest)
 			if err != nil {
 				t.Fatal(err)
@@ -1203,12 +1202,13 @@ func TestAggregateManifestBytesPrecedeDecoding(t *testing.T) {
 }
 
 func TestRecordSizePreflightMatchesCanonicalEncoding(t *testing.T) {
+	descriptor := contexts.ControllerDescriptor{Version: 1, Mode: "ready", DirectoryDevice: ^uint64(0), DirectoryInode: ^uint64(0)}
 	values := []any{
 		emptyRegistry(),
-		registryV3{Version: 3, IDNamespace: "0123456789abcdef", NextIdentity: ^uint64(0), Contexts: []contexts.Record{}},
+		registryRecord{Version: contexts.RegistryVersion, Contexts: []contexts.Record{}, Controller: &descriptor},
 		contexts.Record{DirectoryDevice: ^uint64(0), DirectoryInode: ^uint64(0)},
-		reservation{Version: -9223372036854775807, ID: "<>&\n\t\b\r\f\x00\"\\", Name: "/example/\u2028\u2029/é/雪"},
-		manifest{Version: 2, Files: []frozenFile{{Path: "a.yaml", Category: "yaml", Size: 100, SHA256: digest(nil)}}},
+		reservation{Version: -9223372036854775807, Name: "/example/\u2028\u2029/é/雪"},
+		manifest{Version: ManifestVersion, Context: "<>&\n\t\b\r\f\x00\"\\", Files: []frozenFile{{Path: "a.yaml", Category: "yaml", Size: 100, SHA256: digest(nil)}}},
 	}
 	for _, value := range values {
 		canonical, err := json.Marshal(value)

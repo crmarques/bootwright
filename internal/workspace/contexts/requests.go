@@ -32,7 +32,6 @@ type DeleteRequest struct {
 
 type Summary struct {
 	Name       string
-	ID         string
 	Mode       Mode
 	Current    bool
 	Configured bool
@@ -54,7 +53,6 @@ type CurrentResult struct{ Context Summary }
 
 type DeleteResult struct {
 	Name           string
-	ID             string
 	Outcome        string
 	CurrentCleared bool
 }

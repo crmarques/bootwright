@@ -8,7 +8,6 @@ import (
 
 type Context struct {
 	Name     string `json:"name"`
-	ID       string `json:"id"`
 	Mode     string `json:"mode"`
 	Revision string `json:"-"`
 }
@@ -54,7 +53,7 @@ type Selection struct {
 
 type Selector struct {
 	SelectorVersion int    `json:"version"`
-	ContextID       string `json:"contextId"`
+	Context         string `json:"context"`
 	Backend         string `json:"backend"`
 	Generation      string `json:"generation"`
 }

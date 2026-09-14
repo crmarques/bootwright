@@ -22,9 +22,9 @@ func TestCanonicalEncodedSizeMatchesJSONEncoding(t *testing.T) {
 	invalidUTF8 := string(allBytes)
 	values := []any{
 		envelope{FormatVersion: formatVersion, Algorithm: algorithm, Purpose: invalidUTF8, KeyID: "key", BlobID: "blob", Nonce: "nonce", Ciphertext: "ciphertext\u2028\u2029"},
-		secretstore.Selector{SelectorVersion: formatVersion, ContextID: "ctx", Backend: New().Backend(), Generation: "generation"},
+		secretstore.Selector{SelectorVersion: formatVersion, Context: "ctx", Backend: New().Backend(), Generation: "generation"},
 		indexRecord{FormatVersion: formatVersion, Algorithm: algorithm, Keys: nil, Versions: []storedVersion{}, Current: nil, Bindings: []secretstore.Binding{}},
-		initializationRecord{FormatVersion: formatVersion, ContextID: "ctx", Selection: New().Backend(), Attempts: []initializationAttempt{}, MACKeyID: "", MAC: ""},
+		initializationRecord{FormatVersion: formatVersion, Context: "ctx", Selection: New().Backend(), Attempts: []initializationAttempt{}, MACKeyID: "", MAC: ""},
 	}
 	for index, value := range values {
 		marshaled, err := json.Marshal(value)
@@ -149,7 +149,7 @@ func TestIndexStructuralPreflightEnforcesTypedArrayLimits(t *testing.T) {
 }
 
 func TestMaximumLogicalIndexRoundTrips(t *testing.T) {
-	selector := secretstore.Selector{SelectorVersion: formatVersion, ContextID: fixedID("ctx-", 1), Backend: New().Backend(), Generation: fixedID("gen-", 1)}
+	selector := secretstore.Selector{SelectorVersion: formatVersion, Context: "example", Backend: New().Backend(), Generation: fixedID("gen-", 1)}
 	keyID := fixedID("key-", 1)
 	index := indexRecord{
 		FormatVersion: formatVersion,
@@ -201,7 +201,7 @@ func TestMaximumLogicalIndexRoundTrips(t *testing.T) {
 
 func TestPublishRejectsOversizedProjectedEnvelopeBeforeEffects(t *testing.T) {
 	selection := New().Backend()
-	contextID := fixedID("ctx-", 1)
+	contextName := "example"
 	keyID := fixedID("key-", 1)
 	oldGeneration := fixedID("gen-", 99)
 	versionID := fixedID("ver-", 1)
@@ -220,7 +220,7 @@ func TestPublishRejectsOversizedProjectedEnvelopeBeforeEffects(t *testing.T) {
 	next := indexRecord{
 		FormatVersion: formatVersion,
 		Algorithm:     algorithm,
-		Selector:      secretstore.Selector{SelectorVersion: formatVersion, ContextID: contextID, Backend: selection, Generation: oldGeneration},
+		Selector:      secretstore.Selector{SelectorVersion: formatVersion, Context: contextName, Backend: selection, Generation: oldGeneration},
 		ActiveKey:     keyID,
 		Keys:          []storedKey{{ID: keyID}},
 		Versions: []storedVersion{{
@@ -260,7 +260,7 @@ func TestPublishRejectsOversizedProjectedEnvelopeBeforeEffects(t *testing.T) {
 	random := &sequenceReader{}
 	session := &session{
 		implementation: NewWithOptions(Options{Random: random}),
-		context:        secretstore.Context{Name: "example", ID: contextID, Mode: "ready", Revision: fixedID("rev-", 1)},
+		context:        secretstore.Context{Name: contextName, Mode: "ready", Revision: fixedID("rev-", 1)},
 		area:           area,
 		selector:       next.Selector,
 		selectorData:   []byte("prior selector"),
@@ -279,18 +279,18 @@ func TestPublishRejectsOversizedProjectedEnvelopeBeforeEffects(t *testing.T) {
 }
 
 func TestSealReservationCeilingIncludesAbandonedReservations(t *testing.T) {
-	contextID := fixedID("ctx-", 1)
+	contextName := "example"
 	keyID := fixedID("key-", 1)
 	selection := New().Backend()
 	key := bytes.Repeat([]byte{0x42}, 32)
-	initial, err := encodeLedger(contextID, selection, key, keyID, maxSeals-2)
+	initial, err := encodeLedger(contextName, selection, key, keyID, maxSeals-2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	area := &limitArea{files: map[string][]byte{ledgerPath(keyID): initial}}
 	newSession := func() *session {
 		return &session{
-			context:  secretstore.Context{ID: contextID},
+			context:  secretstore.Context{Name: contextName},
 			area:     area,
 			selector: secretstore.Selector{Backend: selection},
 			index:    indexRecord{Keys: []storedKey{{ID: keyID, Seals: maxSeals - 2}}},
@@ -323,7 +323,7 @@ func TestSealReservationCeilingIncludesAbandonedReservations(t *testing.T) {
 	if area.mutations != mutations || !bytes.Equal(before, area.files[ledgerPath(keyID)]) {
 		t.Fatal("failed ceiling reservation changed durable state")
 	}
-	ledger, err := decodeLedger(before, contextID, selection, key, keyID, maxSeals-2)
+	ledger, err := decodeLedger(before, contextName, selection, key, keyID, maxSeals-2)
 	if err != nil || ledger.Seals != maxSeals {
 		t.Fatalf("reserved ledger: seals=%d error=%v", ledger.Seals, err)
 	}

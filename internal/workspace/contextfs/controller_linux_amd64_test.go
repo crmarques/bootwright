@@ -137,8 +137,8 @@ func TestControllerAbsentReadsAndBaselineBootstrap(t *testing.T) {
 	value := syntheticControllerState(t, prerequisites.SetupContext{})
 	publishControllerState(t, store, prerequisites.SetupContext{}, value)
 	registry, err := store.View(context.Background())
-	if err != nil || registry.Version != 4 || len(registry.Contexts) != 0 || registry.Controller.Mode != "ready" {
-		t.Fatalf("baseline did not publish standalone v4 root: %v", err)
+	if err != nil || registry.Version != contexts.RegistryVersion || len(registry.Contexts) != 0 || registry.Controller.Mode != "ready" {
+		t.Fatalf("baseline did not publish a standalone controller root: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(store.options.Root, "contexts")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("baseline created context or secret state")
@@ -171,65 +171,60 @@ func TestControllerAbsentReadsAndBaselineBootstrap(t *testing.T) {
 	}
 }
 
-func TestControllerLegacyInspectionDoesNotUpgradeAndContextWritesPreserveV4(t *testing.T) {
-	for _, legacy := range []bool{false, true} {
-		t.Run(map[bool]string{false: "v3", true: "v2"}[legacy], func(t *testing.T) {
-			store, sources := fixture(t)
-			record := publish(t, store, "example", sources)
-			if legacy {
-				legacyContextRegistry(t, store, record)
-			}
-			before, _ := os.ReadFile(filepath.Join(store.options.Root, "registry.json"))
-			if err := store.ReadController(context.Background(), record.Name, func(view prerequisites.StorageView) error {
-				if view.Context.ID != record.ID || view.Context.Revision != record.Revision || view.Initialized {
-					t.Fatal("legacy scope changed")
-				}
-				return nil
-			}); err != nil {
-				t.Fatal(err)
-			}
-			after, _ := os.ReadFile(filepath.Join(store.options.Root, "registry.json"))
-			if !bytes.Equal(before, after) {
-				t.Fatal("controller read upgraded legacy store")
-			}
-			value := completeControllerState(syntheticControllerState(t, prerequisites.SetupContext{}))
-			publishControllerState(t, store, prerequisites.SetupContext{}, value)
-			if err := replaceInput(store, record, sources); err != nil {
-				t.Fatal(err)
-			}
-			registry, err := store.View(context.Background())
-			if err != nil || registry.Version != 4 || registry.Contexts[0].ID != record.ID || registry.Controller.Mode != "ready" {
-				t.Fatal("ordinary context update discarded the enclosing controller format")
-			}
-		})
+// A controller read never declares the shared subtree, and an ordinary context
+// write preserves the descriptor that confirmed setup published.
+func TestControllerReadDeclaresNothingAndContextWritesPreserveTheDescriptor(t *testing.T) {
+	store, sources := fixture(t)
+	record := publish(t, store, "example", sources)
+	before, _ := os.ReadFile(filepath.Join(store.options.Root, "registry.json"))
+	if err := store.ReadController(context.Background(), record.Name, func(view prerequisites.StorageView) error {
+		if view.Context.Revision != record.Revision || view.Initialized {
+			t.Fatal("controller scope changed")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.ReadFile(filepath.Join(store.options.Root, "registry.json"))
+	if !bytes.Equal(before, after) {
+		t.Fatal("controller read declared the shared subtree")
+	}
+	value := completeControllerState(syntheticControllerState(t, prerequisites.SetupContext{}))
+	publishControllerState(t, store, prerequisites.SetupContext{}, value)
+	if err := replaceInput(store, record, sources); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := store.View(context.Background())
+	if err != nil || registry.Contexts[0].Name != record.Name || registry.Controller.Mode != "ready" {
+		t.Fatal("ordinary context update discarded the enclosing controller descriptor")
 	}
 }
 
 func TestPendingControllerReceiptProtectsExactInputAndBlocksOtherSetup(t *testing.T) {
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
-	scope := prerequisites.SetupContext{Name: record.Name, ID: record.ID, Revision: record.Revision, Machine: "controller"}
+	scope := prerequisites.SetupContext{Name: record.Name, Revision: record.Revision, Machine: "controller"}
 	value := syntheticControllerState(t, scope)
 	publishControllerState(t, store, scope, value)
 	before, _ := os.ReadFile(filepath.Join(store.options.Root, "registry.json"))
 	for _, operation := range []func(contexts.Transaction) error{
 		func(tx contexts.Transaction) error {
-			_, err := tx.MutationState(context.Background(), record.ID)
+			_, err := tx.MutationState(context.Background(), record.Name)
 			return err
 		},
 		func(tx contexts.Transaction) error {
-			_, err := tx.Publish(context.Background(), record.ID, record.EnvironmentDirectory, sources)
+			_, err := tx.Publish(context.Background(), record.Name, record.EnvironmentDirectory, sources)
 			return err
 		},
 		func(tx contexts.Transaction) error { return tx.Delete(context.Background(), record) },
 		func(tx contexts.Transaction) error {
 			base := tx.(*transaction)
-			dir, err := base.leaseContext(context.Background(), record.ID)
+			dir, err := base.leaseContext(context.Background(), record.Name)
 			if err != nil {
 				return err
 			}
-			base.evidence[record.ID] = []byte(pristineMutation)
-			return base.verifyRevisionCollection(context.Background(), dir, record.ID)
+			base.evidence[record.Name] = []byte(pristineMutation)
+			return base.verifyRevisionCollection(context.Background(), dir, record.Name)
 		},
 	} {
 		if err := store.Transact(context.Background(), false, nil, operation); err == nil {
@@ -266,23 +261,23 @@ func TestPendingControllerReceiptProtectsExactInputAndBlocksOtherSetup(t *testin
 func TestControllerBindingSurvivesUpdateAndDisposableDeletionRetainsHost(t *testing.T) {
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
-	scope := prerequisites.SetupContext{Name: record.Name, ID: record.ID, Revision: record.Revision, Machine: "controller"}
+	scope := prerequisites.SetupContext{Name: record.Name, Revision: record.Revision, Machine: "controller"}
 	value := completeControllerState(syntheticControllerState(t, scope))
 	hostDigest, _ := value.Host.PrivateDigest()
-	value.Bindings = []prerequisites.ControllerBinding{{ContextID: record.ID, Machine: scope.Machine, HostDigest: hostDigest}}
+	value.Bindings = []prerequisites.ControllerBinding{{Context: record.Name, Machine: scope.Machine, HostDigest: hostDigest}}
 	publishControllerState(t, store, scope, value)
 	err := store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
 		guard := tx.(contexts.ControllerInputGuard)
-		if err := guard.CheckControllerInput(context.Background(), record.ID, "replacement"); err == nil {
+		if err := guard.CheckControllerInput(context.Background(), record.Name, "replacement"); err == nil {
 			t.Fatal("input update transferred a controller binding")
 		}
-		if err := guard.CheckControllerInput(context.Background(), record.ID, scope.Machine); err != nil {
+		if err := guard.CheckControllerInput(context.Background(), record.Name, scope.Machine); err != nil {
 			return err
 		}
-		if _, err := tx.MutationState(context.Background(), record.ID); err != nil {
+		if _, err := tx.MutationState(context.Background(), record.Name); err != nil {
 			return err
 		}
-		revision, err := tx.Publish(context.Background(), record.ID, record.EnvironmentDirectory, sources)
+		revision, err := tx.Publish(context.Background(), record.Name, record.EnvironmentDirectory, sources)
 		if err != nil {
 			return err
 		}
@@ -299,7 +294,7 @@ func TestControllerBindingSurvivesUpdateAndDisposableDeletionRetainsHost(t *test
 	}
 	record = registry.Contexts[0]
 	err = store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
-		if _, err := tx.MutationState(context.Background(), record.ID); err != nil {
+		if _, err := tx.MutationState(context.Background(), record.Name); err != nil {
 			return err
 		}
 		return tx.Delete(context.Background(), record)

@@ -76,7 +76,7 @@ func (s *serviceSession) Rotate(context.Context) (string, error) {
 func serviceFixture() (*Service, *serviceAccess) {
 	ref := secretstore.ComponentRef{ID: "independent", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1}
 	access := &serviceAccess{
-		selected:  secretstore.Context{Name: "fixture", ID: "ctx-fixture", Mode: "ready", Revision: "rev-fixture"},
+		selected:  secretstore.Context{Name: "fixture", Mode: "ready", Revision: "rev-fixture"},
 		selection: secretstore.Selection{Type: "independent", Store: ref, KeyCustody: ref},
 		session:   &serviceSession{},
 	}

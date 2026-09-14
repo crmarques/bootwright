@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -17,15 +16,22 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
+// ReservationVersion and ManifestVersion identify each record independently of
+// the registry. Both dropped the allocated context identity that the context
+// name now carries.
+const (
+	ReservationVersion = 3
+	ManifestVersion    = 3
+)
+
 type reservation struct {
 	Version int    `json:"version"`
-	ID      string `json:"id"`
 	Name    string `json:"name"`
 }
 
 type manifest struct {
 	Version              int          `json:"version"`
-	ID                   string       `json:"id"`
+	Context              string       `json:"context"`
 	Revision             string       `json:"revision"`
 	InputDirectory       string       `json:"inputDirectory"`
 	EnvironmentDirectory string       `json:"environmentDirectory"`
@@ -45,7 +51,7 @@ func decodeRecord(data []byte, maximum int, target any) error {
 	if len(data) > maximum || !utf8.Valid(data) {
 		return state("persisted record exceeds its bounds or encoding")
 	}
-	items := maxIdentities
+	items := maxContexts
 	if _, ok := target.(*manifest); ok {
 		items = desiredstate.MaxFiles + desiredstate.MaxMarkers
 	}
@@ -138,9 +144,9 @@ func boundedJSONLimits(data []byte, maxItems, maxDepth, maxFields int) error {
 func encodeRecord(value any, maximum int) ([]byte, error) {
 	switch registry := value.(type) {
 	case contexts.Registry:
-		value = registryRecord(registry)
+		value = registryDocument(registry)
 	case *contexts.Registry:
-		value = registryRecord(*registry)
+		value = registryDocument(*registry)
 	}
 	depth := 8
 	switch value.(type) {
@@ -382,35 +388,17 @@ func contextName(name string) bool {
 }
 
 func validateRegistry(r contexts.Registry) error {
-	if r.Version != 2 && r.Version != 3 && r.Version != 4 || r.Version == 2 && r.Identities == nil || r.Contexts == nil || len(r.Identities) > maxIdentities || len(r.Contexts) > maxIdentities {
+	if r.Version != contexts.RegistryVersion || r.Contexts == nil || len(r.Contexts) > maxContexts {
 		return state("context registry has unsupported version or bounds")
 	}
-	if r.Version == 2 && (r.IDNamespace != "" || r.NextIdentity != 0) || r.Version >= 3 && (!validNamespace(r.IDNamespace) || r.NextIdentity == 0 || len(r.Identities) != 0) {
-		return state("context registry allocation state is invalid")
-	}
-	if r.Version < 4 && r.Controller != (contexts.ControllerDescriptor{}) || r.Version == 4 && (r.Controller.Version != 1 || r.Controller.Mode != "initializing" && r.Controller.Mode != "ready" || r.Controller.DirectoryInode == 0 && (r.Controller.DirectoryDevice != 0 || r.Controller.Mode == "ready")) {
+	descriptor := r.Controller
+	if descriptor != (contexts.ControllerDescriptor{}) && (descriptor.Version != 1 || descriptor.Mode != "initializing" && descriptor.Mode != "ready" || descriptor.DirectoryInode == 0 && (descriptor.DirectoryDevice != 0 || descriptor.Mode == "ready")) {
 		return state("controller store descriptor is invalid")
 	}
-	ids := make(map[string]bool, len(r.Identities))
 	previous := ""
-	for _, item := range r.Identities {
-		if !identifier(item.ID, "ctx-") || item.ID <= previous {
-			return state("context identity ledger is invalid or unordered")
-		}
-		ids[item.ID] = true
-		previous = item.ID
-	}
-	active := make(map[string]bool, len(r.Contexts))
-	previous = ""
 	for _, record := range r.Contexts {
-		if !contextName(record.Name) || record.Name <= previous || !identifier(record.ID, "ctx-") || r.Version == 2 && !ids[record.ID] || active[record.ID] {
-			return state("context name or identity mapping is invalid")
-		}
-		if r.Version >= 3 && identityNamespace(record.ID) == r.IDNamespace {
-			sequence, err := strconv.ParseUint(record.ID[len("ctx-")+16:], 16, 64)
-			if err != nil || sequence == 0 || sequence >= r.NextIdentity {
-				return state("context identity exceeds its allocation counter")
-			}
+		if !contextName(record.Name) || record.Name <= previous {
+			return state("context name is invalid or unordered")
 		}
 		if !contextName(record.SecretStoreType) {
 			return state("context secret store type is invalid")
@@ -425,13 +413,12 @@ func validateRegistry(r contexts.Registry) error {
 			return state("context directory identity is missing")
 		}
 		previous = record.Name
-		active[record.ID] = true
 	}
 	return nil
 }
 
-func validateReservation(r reservation, id, name string) error {
-	if r.Version != 2 || r.ID != id || !identifier(r.ID, "ctx-") || !contextName(r.Name) || name != "" && r.Name != name {
+func validateReservation(r reservation, name string) error {
+	if r.Version != ReservationVersion || !contextName(r.Name) || name != "" && r.Name != name {
 		return state("context reservation contradicts its identity")
 	}
 	return nil
@@ -456,8 +443,8 @@ func validFrozenPath(path, category string) bool {
 	return category == "marker" && parts[len(parts)-1] == ".bootwright-addon"
 }
 
-func validateManifest(m manifest, id, revision, environment string) error {
-	if m.Version != 2 || m.ID != id || m.Revision != revision || !identifier(id, "ctx-") || !identifier(revision, "rev-") || !canonicalPath(m.InputDirectory) || !canonicalPath(m.EnvironmentDirectory) || !beneath(m.InputDirectory, m.EnvironmentDirectory) || m.EnvironmentDirectory != environment || m.Files == nil {
+func validateManifest(m manifest, name, revision, environment string) error {
+	if m.Version != ManifestVersion || m.Context != name || m.Revision != revision || !contextName(name) || !identifier(revision, "rev-") || !canonicalPath(m.InputDirectory) || !canonicalPath(m.EnvironmentDirectory) || !beneath(m.InputDirectory, m.EnvironmentDirectory) || m.EnvironmentDirectory != environment || m.Files == nil {
 		return state("input manifest identity is invalid")
 	}
 	if len(m.Files) > desiredstate.MaxFiles+desiredstate.MaxMarkers {

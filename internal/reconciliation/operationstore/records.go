@@ -39,7 +39,7 @@ type Operation struct {
 	Version          int                           `json:"version"`
 	ID               string                        `json:"id"`
 	Verb             reconciliation.Verb           `json:"verb"`
-	ContextID        string                        `json:"contextId"`
+	Context          string                        `json:"context"`
 	Revision         string                        `json:"revision"`
 	InputDigest      string                        `json:"inputDigest"`
 	PlanDigest       string                        `json:"planDigest"`
@@ -137,7 +137,7 @@ func validateOperation(operation Operation) error {
 	if operation.Verb == reconciliation.Destroy && operation.Source == "" {
 		return recordError("a destroy operation requires the applied operation it removes")
 	}
-	for _, value := range []string{operation.ContextID, operation.Revision, operation.InputDigest, operation.PlanDigest, operation.AutomationDigest} {
+	for _, value := range []string{operation.Context, operation.Revision, operation.InputDigest, operation.PlanDigest, operation.AutomationDigest} {
 		if value == "" || len(value) > maxIdentifier {
 			return recordError("lifecycle operation identity fields are incomplete")
 		}

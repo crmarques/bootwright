@@ -40,7 +40,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	if input.State == nil {
 		return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
 	}
-	requests, err := Requests(input.State.Effective(), input.Controller, input.Context.ID)
+	requests, err := Requests(input.State.Effective(), input.Controller, input.Context.Name)
 	if err != nil {
 		return lifecycle.CapabilityPlan{}, err
 	}
@@ -73,7 +73,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			continue
 		}
 		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
-			ContextID: input.Context.ID, Kind: "artifact-server", Service: request.Identity.Service, Keys: request.reservationKeys(),
+			Context: input.Context.Name, Kind: "artifact-server", Service: request.Identity.Service, Keys: request.reservationKeys(),
 		})
 	}
 	slices.Sort(plan.Secrets)

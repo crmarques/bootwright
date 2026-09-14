@@ -135,7 +135,7 @@ func TestInitializationFlushesReusedFilesBeforeReady(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if err := tx.InitializeSecrets(ctx, record.ID, func(area secretstore.Area) error {
+			if err := tx.InitializeSecrets(ctx, record.Name, func(area secretstore.Area) error {
 				session, err := localkeyring.New().Initialize(ctx, secretToken(record), area, nil)
 				if err != nil {
 					return err

@@ -30,7 +30,7 @@ func (a upgradeCapacityArea) Entries(ctx context.Context, path string) ([]secret
 func upgradeCapacityFixture(t *testing.T, withPart bool) (indexRecord, []byte, []byte, int64) {
 	t.Helper()
 	id := func(prefix string, value byte) string { return prefix + strings.Repeat(string(value), 32) }
-	selector := secretstore.Selector{SelectorVersion: formatVersion, ContextID: id("ctx-", '1'), Backend: "local-keyring-v2", Generation: id("gen-", '2')}
+	selector := secretstore.Selector{SelectorVersion: formatVersion, Context: "example", Backend: "local-keyring-v3", Generation: id("gen-", '2')}
 	next := indexRecord{FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, ActiveKey: id("key-", '3'), Keys: []storedKey{{ID: id("key-", '3'), Seals: 1}}, Versions: []storedVersion{}, Current: []secretstore.Current{}, Bindings: []secretstore.Binding{}, Legacy: true}
 	key := bytes.Repeat([]byte{0x41}, 32)
 	defer clear(key)
@@ -41,7 +41,7 @@ func upgradeCapacityFixture(t *testing.T, withPart bool) (indexRecord, []byte, [
 		next.Current = []secretstore.Current{{Name: version.Declaration.Name, Version: version.ID}}
 		next.Keys[0].Seals++
 		part := version.Parts[0]
-		sealed, err := seal(key, make([]byte, part.Size), partAAD(selector.ContextID, selector.Backend, version, part), "part", part.KeyID, part.BlobID, bytes.NewReader(make([]byte, gcmNonceSize)), partMaximum)
+		sealed, err := seal(key, make([]byte, part.Size), partAAD(selector.Context, selector.Backend, version, part), "part", part.KeyID, part.BlobID, bytes.NewReader(make([]byte, gcmNonceSize)), partMaximum)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -58,12 +58,12 @@ func upgradeCapacityFixture(t *testing.T, withPart bool) (indexRecord, []byte, [
 	}
 	outputBytes += int64(len(metadata))
 	clear(metadata)
-	usage, err := encodeLedger(selector.ContextID, selector.Backend, key, next.ActiveKey, next.Keys[0].Seals)
+	usage, err := encodeLedger(selector.Context, selector.Backend, key, next.ActiveKey, next.Keys[0].Seals)
 	if err != nil {
 		t.Fatal(err)
 	}
 	outputBytes += int64(len(usage))
-	journal := upgradeRecord{Version: formatVersion, ContextID: selector.ContextID, Backend: selector.Backend, SourceSelector: strings.Repeat("0", 64), Attempts: []upgradeAttempt{{KeyID: next.ActiveKey, Generation: selector.Generation}}, MAC: strings.Repeat("A", 43)}
+	journal := upgradeRecord{Version: formatVersion, Context: selector.Context, Backend: selector.Backend, SourceSelector: strings.Repeat("0", 64), Attempts: []upgradeAttempt{{KeyID: next.ActiveKey, Generation: selector.Generation}}, MAC: strings.Repeat("A", 43)}
 	intent, err := encodeCanonical(journal, selectorMaximum)
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +103,7 @@ func TestUpgradeCapacityMatchesActualEncodedOutput(t *testing.T) {
 
 func TestUpgradeCapacityIncludesJournalReplacementPeak(t *testing.T) {
 	next, plaintext, intent, outputBytes := upgradeCapacityFixture(t, false)
-	oldJournal := upgradeRecord{Version: formatVersion, ContextID: next.Selector.ContextID, Backend: next.Selector.Backend, SourceSelector: strings.Repeat("0", 64), MAC: strings.Repeat("A", 43)}
+	oldJournal := upgradeRecord{Version: formatVersion, Context: next.Selector.Context, Backend: next.Selector.Backend, SourceSelector: strings.Repeat("0", 64), MAC: strings.Repeat("A", 43)}
 	for index := range 16 {
 		oldJournal.Attempts = append(oldJournal.Attempts, upgradeAttempt{KeyID: fmt.Sprintf("key-%032x", index), Generation: fmt.Sprintf("gen-%032x", index)})
 	}

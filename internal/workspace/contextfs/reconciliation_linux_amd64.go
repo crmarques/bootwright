@@ -119,7 +119,7 @@ func (s *Store) ReadLifecycle(ctx context.Context, name string, callback func(li
 	active := true
 	defer func() { active = false }()
 	view := &lifecycleView{
-		identity:   lifecycle.ContextIdentity{Name: record.Name, ID: record.ID, Revision: record.Revision},
+		identity:   lifecycle.ContextIdentity{Name: record.Name, Revision: record.Revision},
 		inputs:     inputs,
 		controller: controllerView,
 		evidence:   evidence,
@@ -148,7 +148,7 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 		if err != nil {
 			return err
 		}
-		dir, err := t.leaseContext(ctx, record.ID)
+		dir, err := t.leaseContext(ctx, record.Name)
 		if err != nil {
 			return err
 		}
@@ -156,7 +156,7 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 		if err != nil {
 			return err
 		}
-		evidence, err := t.MutationState(ctx, record.ID)
+		evidence, err := t.MutationState(ctx, record.Name)
 		if err != nil {
 			return err
 		}
@@ -164,7 +164,7 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 		defer func() { active = false }()
 		tx := &lifecycleTransaction{
 			lifecycleView: lifecycleView{
-				identity:   lifecycle.ContextIdentity{Name: record.Name, ID: record.ID, Revision: record.Revision},
+				identity:   lifecycle.ContextIdentity{Name: record.Name, Revision: record.Revision},
 				inputs:     inputs,
 				controller: controllerView,
 				evidence:   evidence,
@@ -237,7 +237,7 @@ func (t *lifecycleTransaction) PublishEvidence(ctx context.Context, data []byte)
 		return err
 	}
 	t.evidence = slices.Clone(data)
-	t.base.evidence[t.identity.ID] = slices.Clone(data)
+	t.base.evidence[t.identity.Name] = slices.Clone(data)
 	return nil
 }
 
@@ -249,7 +249,7 @@ func (t *lifecycleTransaction) Reserve(ctx context.Context, reservations []prere
 	}
 	next := make([]prerequisites.HostReservation, 0, len(reservations))
 	for _, reservation := range reservations {
-		if reservation.ContextID != t.identity.ID {
+		if reservation.Context != t.identity.Name {
 			return state("a lifecycle reservation must belong to its own context")
 		}
 		keys := slices.Clone(reservation.Keys)
@@ -283,12 +283,12 @@ func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []p
 	claimed := map[string]string{}
 	retained := []prerequisites.HostReservation{}
 	for _, reservation := range t.stored.value.Reservations {
-		if reservation.ContextID == t.identity.ID {
+		if reservation.Context == t.identity.Name {
 			continue
 		}
 		retained = append(retained, reservation)
 		for _, key := range reservation.Keys {
-			claimed[key] = reservation.ContextID
+			claimed[key] = reservation.Context
 		}
 	}
 	for _, reservation := range next {
@@ -300,7 +300,7 @@ func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []p
 	}
 	combined := append(retained, next...)
 	slices.SortFunc(combined, func(x, y prerequisites.HostReservation) int {
-		if order := strings.Compare(x.ContextID, y.ContextID); order != 0 {
+		if order := strings.Compare(x.Context, y.Context); order != 0 {
 			return order
 		}
 		if order := strings.Compare(x.Kind, y.Kind); order != 0 {

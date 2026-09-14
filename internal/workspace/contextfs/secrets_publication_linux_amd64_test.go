@@ -23,7 +23,7 @@ func secretPublicationFixture(t *testing.T) (*Store, secretstore.Context) {
 	t.Helper()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
-	token := secretstore.Context{Name: record.Name, ID: record.ID, Revision: record.Revision, Mode: string(record.Mode)}
+	token := secretstore.Context{Name: record.Name, Revision: record.Revision, Mode: string(record.Mode)}
 	access := secretstore.NewAccess(store, secretstore.NewCatalog(localkeyring.New()), nil)
 	if err := access.Initialize(context.Background(), token, "local-keyring", func(secretstore.StoreSession, secretstore.Selection, bool) error { return nil }); err != nil {
 		t.Fatal(err)

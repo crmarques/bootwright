@@ -15,7 +15,7 @@ import (
 )
 
 func validSecretContext(value secretstore.Context) bool {
-	return value.Name != "" && value.ID != "" && value.Mode == "ready"
+	return value.Name != "" && value.Mode == "ready"
 }
 
 func validSecretPart(part secrets.Part) bool {
@@ -343,7 +343,7 @@ func sortedSecretListRows(rows []custody.ListRow) []custody.ListRow {
 }
 
 func displaySecretContext(value secretstore.Context) secretstore.Context {
-	return secretstore.Context{Name: escapeDisplayLine(value.Name), ID: escapeDisplayLine(value.ID), Mode: escapeDisplayLine(value.Mode)}
+	return secretstore.Context{Name: escapeDisplayLine(value.Name), Mode: escapeDisplayLine(value.Mode)}
 }
 
 func displaySecretParts(parts []secrets.Part) string {

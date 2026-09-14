@@ -382,7 +382,7 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 		part.BlobID, part.KeyID, part.Generation = blobID, publication.id, generation
 	}
 	next.Legacy = false
-	next.Selector = secretstore.Selector{SelectorVersion: formatVersion, ContextID: s.context.ID, Backend: s.selector.Backend, Generation: generation}
+	next.Selector = secretstore.Selector{SelectorVersion: formatVersion, Context: s.context.Name, Backend: s.selector.Backend, Generation: generation}
 	indexSize, err := canonicalEncodedSize(*next, indexMaximum)
 	if err != nil {
 		return err
@@ -411,7 +411,7 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 		if !validID(id, "ver-") && !validID(id, "bind-") {
 			return secretstore.Failure("store.corrupt", "secret publication identity is invalid")
 		}
-		data, err := encodeCanonical(identityRecord{FormatVersion: formatVersion, ContextID: s.context.ID, ID: id}, selectorMaximum)
+		data, err := encodeCanonical(identityRecord{FormatVersion: formatVersion, Context: s.context.Name, ID: id}, selectorMaximum)
 		if err != nil {
 			return err
 		}
@@ -437,7 +437,7 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 	for _, pending := range plain {
 		version, _ := findVersion(*next, pending.version)
 		part, _ := storedPartOf(version, pending.part)
-		sealed, err := seal(publication.value, pending.data, partAAD(s.context.ID, next.Selector.Backend, version, part), "part", publication.id, part.BlobID, s.implementation.random, partMaximum)
+		sealed, err := seal(publication.value, pending.data, partAAD(s.context.Name, next.Selector.Backend, version, part), "part", publication.id, part.BlobID, s.implementation.random, partMaximum)
 		if err != nil {
 			return err
 		}
@@ -471,7 +471,7 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 
 func (s *session) prepareSeals(ctx context.Context, publication publicationKey, count uint64) (sealReservation, error) {
 	if publication.fresh {
-		data, err := encodeLedger(s.context.ID, s.selector.Backend, publication.value, publication.id, count)
+		data, err := encodeLedger(s.context.Name, s.selector.Backend, publication.value, publication.id, count)
 		return sealReservation{keyID: publication.id, seals: count, data: data, fresh: true}, err
 	}
 	path := ledgerPath(publication.id)
@@ -480,12 +480,12 @@ func (s *session) prepareSeals(ctx context.Context, publication publicationKey, 
 		return sealReservation{}, areaFailure(ctx, "store.corrupt", "secret seal ledger is missing or unsafe", err)
 	}
 	floor, known := keySeals(s.index, publication.id)
-	ledger, ledgerErr := decodeLedger(data, s.context.ID, s.selector.Backend, publication.value, publication.id, floor)
+	ledger, ledgerErr := decodeLedger(data, s.context.Name, s.selector.Backend, publication.value, publication.id, floor)
 	if !known || ledgerErr != nil || count > maxSeals-ledger.Seals {
 		return sealReservation{}, secretstore.Failure("store.limit", "secret encryption key seal limit is exhausted or contradictory")
 	}
 	ledger.Seals += count
-	next, err := encodeLedger(s.context.ID, s.selector.Backend, publication.value, publication.id, ledger.Seals)
+	next, err := encodeLedger(s.context.Name, s.selector.Backend, publication.value, publication.id, ledger.Seals)
 	if err != nil {
 		return sealReservation{}, err
 	}

@@ -17,7 +17,7 @@ import (
 )
 
 func secretResultContext() secretstore.Context {
-	return secretstore.Context{Name: "example", ID: "ctx-00000000000000000000000000000001", Mode: "ready"}
+	return secretstore.Context{Name: "example", Mode: "ready"}
 }
 
 func secretResultComponent(id string) secretstore.ComponentRef {
@@ -38,7 +38,7 @@ func TestSecretCheckAndListResultsAreCanonical(t *testing.T) {
 	}}
 	record := &dispatchRecord{result: commandResult{secretCheck: check}}
 	code, out, errOut := runSecretResult([]string{"secret", "check", "--output", "json"}, record)
-	want := "{\"schemaVersion\":\"v1alpha1\",\"command\":\"secret check\",\"ok\":true,\"exitCode\":0,\"result\":{\"context\":{\"name\":\"example\",\"id\":\"ctx-00000000000000000000000000000001\",\"mode\":\"ready\"},\"secrets\":[{\"name\":\"alpha\",\"type\":\"token\",\"source\":\"contextStore\",\"parts\":[\"value\"],\"status\":\"available\",\"version\":\"ver-2\",\"sequence\":0},{\"name\":\"zeta\",\"type\":\"sshKeyPair\",\"source\":\"file\",\"parts\":[\"private-key\",\"public-key\"],\"status\":\"available\",\"version\":null,\"sequence\":0}]},\"diagnostics\":[],\"logs\":[]}\n"
+	want := "{\"schemaVersion\":\"v1alpha1\",\"command\":\"secret check\",\"ok\":true,\"exitCode\":0,\"result\":{\"context\":{\"name\":\"example\",\"mode\":\"ready\"},\"secrets\":[{\"name\":\"alpha\",\"type\":\"token\",\"source\":\"contextStore\",\"parts\":[\"value\"],\"status\":\"available\",\"version\":\"ver-2\",\"sequence\":0},{\"name\":\"zeta\",\"type\":\"sshKeyPair\",\"source\":\"file\",\"parts\":[\"private-key\",\"public-key\"],\"status\":\"available\",\"version\":null,\"sequence\":0}]},\"diagnostics\":[],\"logs\":[]}\n"
 	if code != 0 || out != want || errOut != "" || record.calls != 1 {
 		t.Fatalf("check code=%d stdout=%q stderr=%q calls=%d", code, out, errOut, record.calls)
 	}
@@ -50,7 +50,7 @@ func TestSecretCheckAndListResultsAreCanonical(t *testing.T) {
 	}}
 	record = &dispatchRecord{result: commandResult{secretList: list}}
 	code, out, errOut = runSecretResult([]string{"secret", "list", "--output", "json"}, record)
-	want = "{\"schemaVersion\":\"v1alpha1\",\"command\":\"secret list\",\"ok\":true,\"exitCode\":0,\"result\":{\"context\":{\"name\":\"example\",\"id\":\"ctx-00000000000000000000000000000001\",\"mode\":\"ready\"},\"secrets\":[{\"name\":\"alpha\",\"type\":\"opaque\",\"source\":\"contextStore\",\"parts\":[\"value\"],\"state\":\"orphaned\",\"currentVersion\":null,\"currentSequence\":0,\"boundVersions\":1},{\"name\":\"zeta\",\"type\":\"caBundle\",\"source\":\"generated\",\"parts\":[\"certificate\",\"private-key\"],\"state\":\"stale\",\"currentVersion\":\"ver-1\",\"currentSequence\":0,\"boundVersions\":2}]},\"diagnostics\":[],\"logs\":[]}\n"
+	want = "{\"schemaVersion\":\"v1alpha1\",\"command\":\"secret list\",\"ok\":true,\"exitCode\":0,\"result\":{\"context\":{\"name\":\"example\",\"mode\":\"ready\"},\"secrets\":[{\"name\":\"alpha\",\"type\":\"opaque\",\"source\":\"contextStore\",\"parts\":[\"value\"],\"state\":\"orphaned\",\"currentVersion\":null,\"currentSequence\":0,\"boundVersions\":1},{\"name\":\"zeta\",\"type\":\"caBundle\",\"source\":\"generated\",\"parts\":[\"certificate\",\"private-key\"],\"state\":\"stale\",\"currentVersion\":\"ver-1\",\"currentSequence\":0,\"boundVersions\":2}]},\"diagnostics\":[],\"logs\":[]}\n"
 	if code != 0 || out != want || errOut != "" || record.calls != 1 {
 		t.Fatalf("list code=%d stdout=%q stderr=%q calls=%d", code, out, errOut, record.calls)
 	}

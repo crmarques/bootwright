@@ -12,7 +12,7 @@ import (
 
 // CurrentSelection resolves the invoking user's context when none is explicit.
 // It returns the selected name and identity so a stale marker is caught.
-type CurrentSelection func(context.Context) (string, string, error)
+type CurrentSelection func(context.Context) (string, error)
 
 type Executable struct{ Version, Commit string }
 
@@ -58,21 +58,21 @@ func (s Service) available(ctx context.Context) error {
 
 // resolve fixes the context this invocation acts on. An omitted name uses the
 // invoking user's selection and refuses a stale marker.
-func (s Service) resolve(ctx context.Context, name string) (string, string, error) {
+func (s Service) resolve(ctx context.Context, name string) (string, error) {
 	if name != "" {
-		return name, "", nil
+		return name, nil
 	}
 	if s.options.Selection == nil {
-		return "", "", failure("context.state", "current context selection is not configured", "")
+		return "", failure("context.state", "current context selection is not configured", "")
 	}
-	selected, id, err := s.options.Selection(ctx)
+	selected, err := s.options.Selection(ctx)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	if selected == "" {
-		return "", "", failure("context.state", "no current context is selected", "select one with context use --name <name>")
+		return "", failure("context.state", "no current context is selected", "select one with context use --name <name>")
 	}
-	return selected, id, nil
+	return selected, nil
 }
 
 func (s Service) store(view View) OperationStore {
@@ -87,15 +87,12 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 	if err != nil {
 		return nil, err
 	}
-	name, id, err := s.resolve(ctx, request.ContextName)
+	name, err := s.resolve(ctx, request.ContextName)
 	if err != nil {
 		return nil, err
 	}
 	var result *PlanResult
 	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
-		if err := verifySelection(view, id); err != nil {
-			return err
-		}
 		previewed, err := s.preview(ctx, view, selection)
 		if err != nil {
 			return err
@@ -211,13 +208,6 @@ func planPreview(plan reconciliation.Plan, states map[string]reconciliation.Bloc
 		}
 	}
 	return result
-}
-
-func verifySelection(view View, id string) error {
-	if id != "" && view.Identity().ID != id {
-		return failure("context.state", "the current context selection is stale", "select it again with context use --name "+view.Identity().Name)
-	}
-	return nil
 }
 
 func failure(code, message, remediation string) error {

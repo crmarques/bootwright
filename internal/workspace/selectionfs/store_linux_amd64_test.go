@@ -40,8 +40,8 @@ func TestSelectionRoundTripPrivateAndConditionalClear(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(home, ".bootwright")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("read created selection directory")
 	}
-	first := contexts.Selection{Version: 1, Name: "test", ID: "ctx-00000000000000000000000000000001"}
-	second := contexts.Selection{Version: 1, Name: "other", ID: "ctx-00000000000000000000000000000002"}
+	first := contexts.Selection{Version: contexts.SelectionVersion, Name: "test"}
+	second := contexts.Selection{Version: contexts.SelectionVersion, Name: "other"}
 	if err := store.Write(ctx, first); err != nil {
 		t.Fatal(err)
 	}
@@ -100,8 +100,8 @@ func TestSelectionRejectsRecordSubstitutionAfterObservation(t *testing.T) {
 		for _, replacement := range []string{"new-pointer", "same-pointer", "in-place", "symlink", "fifo", "appeared"} {
 			t.Run(action+"/"+replacement, func(t *testing.T) {
 				store, home := fixture(t)
-				first := contexts.Selection{Version: 1, Name: "test", ID: "ctx-00000000000000000000000000000001"}
-				newer := contexts.Selection{Version: 1, Name: "other", ID: "ctx-00000000000000000000000000000002"}
+				first := contexts.Selection{Version: contexts.SelectionVersion, Name: "test"}
+				newer := contexts.Selection{Version: contexts.SelectionVersion, Name: "other"}
 				if err := store.Write(context.Background(), first); err != nil {
 					t.Fatal(err)
 				}
@@ -172,14 +172,15 @@ func TestSelectionRejectsRecordSubstitutionAfterObservation(t *testing.T) {
 }
 
 func TestSelectionRejectsNoncanonicalRecords(t *testing.T) {
-	canonical := `{"version":1,"name":"test","id":"ctx-00000000000000000000000000000001"}` + "\n"
+	canonical := `{"version":2,"name":"test"}` + "\n"
 	for _, data := range []string{
 		strings.TrimSuffix(canonical, "\n"),
 		"\n" + canonical,
 		canonical + " ",
-		strings.Replace(canonical, ":1", ": 1", 1),
+		strings.Replace(canonical, ":2", ": 2", 1),
 		strings.Replace(canonical, "test", `\u0074est`, 1),
-		`{"name":"test","version":1,"id":"ctx-00000000000000000000000000000001"}` + "\n",
+		`{"name":"test","version":2}` + "\n",
+		`{"version":2,"name":"test","id":"test"}` + "\n",
 	} {
 		if _, err := decodeSelection([]byte(data)); err == nil {
 			t.Fatalf("noncanonical selection accepted: %q", data)
@@ -196,7 +197,7 @@ func TestSelectionRejectsUnsafeStorage(t *testing.T) {
 			store, home := fixture(t)
 			dir := filepath.Join(home, ".bootwright")
 			path := filepath.Join(dir, "context")
-			value := contexts.Selection{Version: 1, Name: "test", ID: "ctx-00000000000000000000000000000001"}
+			value := contexts.Selection{Version: contexts.SelectionVersion, Name: "test"}
 			if err := store.Write(context.Background(), value); err != nil {
 				t.Fatal(err)
 			}
@@ -248,7 +249,7 @@ func TestSelectionCancellationAndLockRefusal(t *testing.T) {
 	store, home := fixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	value := contexts.Selection{Version: 1, Name: "test", ID: "ctx-00000000000000000000000000000001"}
+	value := contexts.Selection{Version: contexts.SelectionVersion, Name: "test"}
 	if err := store.Write(ctx, value); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
@@ -276,7 +277,7 @@ func TestSelectionHelperBoundedProtocol(t *testing.T) {
 		t.Skip("helper deliberately refuses root; credential-drop test covers this under root")
 	}
 	store, home := fixture(t)
-	value := contexts.Selection{Version: 1, Name: "test", ID: "ctx-00000000000000000000000000000001"}
+	value := contexts.Selection{Version: contexts.SelectionVersion, Name: "test"}
 	data, err := json.Marshal(helperRequest{Account: store.options, Action: "write", Selection: value})
 	if err != nil {
 		t.Fatal(err)
@@ -330,7 +331,7 @@ func TestRootSelectionHelperDropsIdentityBeforeOpeningHome(t *testing.T) {
 	if err := os.WriteFile(executable, data, 0755); err != nil {
 		t.Fatal(err)
 	}
-	value := contexts.Selection{Version: 1, Name: "test", ID: "ctx-00000000000000000000000000000001"}
+	value := contexts.Selection{Version: contexts.SelectionVersion, Name: "test"}
 	request, err := json.Marshal(helperRequest{Account: Options{UID: uid, GID: gid, Home: home}, Action: "write", Selection: value})
 	if err != nil {
 		t.Fatal(err)
@@ -380,8 +381,8 @@ func TestRootSelectionAdapterFixture(t *testing.T) {
 	}
 	store := New(Options{UID: 60001, GID: 60002, Home: home, Groups: []uint32{60002}, Executable: executable})
 	ctx := context.Background()
-	first := contexts.Selection{Version: 1, Name: "test", ID: "ctx-00000000000000000000000000000001"}
-	second := contexts.Selection{Version: 1, Name: "other", ID: "ctx-00000000000000000000000000000002"}
+	first := contexts.Selection{Version: contexts.SelectionVersion, Name: "test"}
+	second := contexts.Selection{Version: contexts.SelectionVersion, Name: "other"}
 	if got, err := store.Read(ctx); err != nil || got != first {
 		t.Fatalf("read %v %v", got, err)
 	}

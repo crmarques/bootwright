@@ -20,10 +20,11 @@ import (
 var _ contexts.Repository = (*Store)(nil)
 
 const (
-	missingRegistryMessage     = "context store is missing registry.json"
-	storeRecoveryRemediation   = "restore the whole store from a matching backup or move it aside if disposable, then retry"
-	pendingRegistryMessage     = "context initialization is incomplete"
-	pendingRegistryRemediation = "retry context init with the original options"
+	missingRegistryMessage      = "context store is missing registry.json"
+	unsupportedRootStateMessage = "the context store root contains unsupported state"
+	storeRecoveryRemediation    = "restore the whole store from a matching backup or move it aside if disposable, then retry"
+	pendingRegistryMessage      = "context initialization is incomplete"
+	pendingRegistryRemediation  = "retry context init with the original options"
 )
 
 type missingRegistryError struct {
@@ -107,7 +108,7 @@ func readRegistry(ctx context.Context, root *directory) (contexts.Registry, bool
 	if err := validateRegistry(registry); err != nil {
 		return contexts.Registry{}, false, err
 	}
-	if err := verifyEmptyRegistryRoot(ctx, root, registry); err != nil {
+	if err := verifyRootEntries(ctx, root, registry); err != nil {
 		return contexts.Registry{}, false, err
 	}
 	return registry, true, nil
@@ -120,9 +121,9 @@ func missingRegistry() error {
 	)}
 }
 
-func inconsistentEmptyRegistry() error {
+func unsupportedRootState() error {
 	return contexts.StateErrorWithRemediation(
-		"registry.json is empty but the context store is not",
+		unsupportedRootStateMessage,
 		storeRecoveryRemediation,
 	)
 }
@@ -215,39 +216,59 @@ func inspectInitialRegistry(ctx context.Context, root *directory) (string, sysca
 	return name, identity, true, nil
 }
 
-func verifyEmptyRegistryRoot(ctx context.Context, root *directory, registry contexts.Registry) error {
-	if registry.Version == 4 {
-		return verifyControllerRootEntries(ctx, root, registry)
-	}
-	if registry.Version == 3 || len(registry.Identities) != 0 || len(registry.Contexts) != 0 {
-		return nil
-	}
-	names, err := rootEntryNames(root, maxIdentities+1)
+// verifyRootEntries admits only the store's own published objects: the
+// registry, the context container, a declared controller subtree and bounded
+// private files left by an interrupted registry replacement. Anything else is
+// unattributable state that only a complete restore can resolve.
+func verifyRootEntries(ctx context.Context, root *directory, registry contexts.Registry) error {
+	names, err := rootEntryNames(root, maxContexts+1)
 	if err != nil {
-		return inconsistentEmptyRegistry()
+		return unsupportedRootState()
 	}
-	registryFound := false
 	for _, name := range names {
-		if name == "registry.json" {
-			if registryFound {
-				return inconsistentEmptyRegistry()
+		switch name {
+		case "registry.json":
+		case "contexts":
+			dir, err := openDirectory(root, name)
+			if err != nil {
+				return err
 			}
-			registryFound = true
-			continue
-		}
-		if !pendingInitialRegistryName(name) {
-			return inconsistentEmptyRegistry()
-		}
-		if err := verifyIgnoredRegistryStage(ctx, root, name); err != nil {
-			if canceled := ctx.Err(); canceled != nil {
-				return canceled
+			dir.file.Close()
+		case "controller":
+			if err := verifyControllerRootEntry(root, registry); err != nil {
+				return err
 			}
-			return inconsistentEmptyRegistry()
+		default:
+			if !pendingInitialRegistryName(name) {
+				return unsupportedRootState()
+			}
+			if err := verifyIgnoredRegistryStage(ctx, root, name); err != nil {
+				if canceled := ctx.Err(); canceled != nil {
+					return canceled
+				}
+				return unsupportedRootState()
+			}
 		}
 	}
-	current, err := rootEntryNames(root, maxIdentities+1)
-	if !registryFound || err != nil || !slices.Equal(names, current) {
-		return inconsistentEmptyRegistry()
+	current, err := rootEntryNames(root, maxContexts+1)
+	if err != nil || !slices.Equal(names, current) {
+		return unsupportedRootState()
+	}
+	return root.verify()
+}
+
+func verifyControllerRootEntry(root *directory, registry contexts.Registry) error {
+	if registry.Controller == (contexts.ControllerDescriptor{}) {
+		return state("context store contains an undeclared controller subtree")
+	}
+	dir, err := openDirectory(root, "controller")
+	if err != nil {
+		return err
+	}
+	replaced := registry.Controller.DirectoryInode != 0 && (registry.Controller.DirectoryInode != dir.identity.Ino || registry.Controller.DirectoryDevice != uint64(dir.identity.Dev))
+	dir.file.Close()
+	if replaced {
+		return state("controller directory was replaced")
 	}
 	return nil
 }
@@ -380,7 +401,7 @@ func verifyMappings(ctx context.Context, root *directory, registry contexts.Regi
 		if err != nil {
 			return err
 		}
-		err = verifyReservation(ctx, dir, record.ID, record.Name)
+		err = verifyReservation(ctx, dir, record.Name)
 		var config []byte
 		if err == nil {
 			config, err = readBounded(ctx, dir, "context.yaml", maxRecord, true)
@@ -462,7 +483,7 @@ func openContext(root *directory, record contexts.Record) (*directory, *director
 	return container, dir, nil
 }
 
-func verifyReservation(ctx context.Context, dir *directory, id, name string) error {
+func verifyReservation(ctx context.Context, dir *directory, name string) error {
 	runtime, err := openDirectory(dir, "state")
 	if err != nil {
 		return state("context reservation directory is missing or unsafe")
@@ -476,7 +497,7 @@ func verifyReservation(ctx context.Context, dir *directory, id, name string) err
 	if err := decodeRecord(data, maxRecord, &record); err != nil {
 		return err
 	}
-	return validateReservation(record, id, name)
+	return validateReservation(record, name)
 }
 
 func readMutation(ctx context.Context, dir *directory) ([]byte, error) {
@@ -488,7 +509,7 @@ func readMutation(ctx context.Context, dir *directory) ([]byte, error) {
 	return readBounded(ctx, runtime, "mutation.json", maxRecord, true)
 }
 
-func (s *Store) ReadInputs(ctx context.Context, name, expectedID string) (desiredstate.Sources, error) {
+func (s *Store) ReadInputs(ctx context.Context, name string) (desiredstate.Sources, error) {
 	root, err := s.openRoot(ctx, false, nil)
 	if err != nil {
 		return desiredstate.Sources{}, safeError(err)
@@ -511,9 +532,6 @@ func (s *Store) ReadInputs(ctx context.Context, name, expectedID string) (desire
 	}
 	for _, record := range registry.Contexts {
 		if record.Name == name {
-			if expectedID != "" && record.ID != expectedID {
-				return desiredstate.Sources{}, state("current context identity changed; select a context again")
-			}
 			if record.Mode != contexts.Ready {
 				return desiredstate.Sources{}, state("context is incomplete; repeat its init or delete command")
 			}
@@ -615,20 +633,20 @@ func (t *transaction) available(ctx context.Context) error {
 
 func (t *transaction) Registry() contexts.Registry { return cloneRegistry(t.registry) }
 
-func (t *transaction) record(id string) (contexts.Record, error) {
+func (t *transaction) record(name string) (contexts.Record, error) {
 	for _, record := range t.registry.Contexts {
-		if record.ID == id {
+		if record.Name == name {
 			return record, nil
 		}
 	}
-	return contexts.Record{}, state("context identity has no registry reservation")
+	return contexts.Record{}, state("context name has no registry reservation")
 }
 
-func (t *transaction) contextDirectory(ctx context.Context, id string) (*directory, error) {
-	if !identifier(id, "ctx-") {
-		return nil, state("context identity is invalid")
+func (t *transaction) contextDirectory(ctx context.Context, name string) (*directory, error) {
+	if !contextName(name) {
+		return nil, state("context name is invalid")
 	}
-	record, err := t.record(id)
+	record, err := t.record(name)
 	if err != nil {
 		return nil, err
 	}
@@ -650,15 +668,6 @@ func (t *transaction) contextDirectory(ctx context.Context, id string) (*directo
 }
 
 func (t *transaction) save(ctx context.Context, registry contexts.Registry) error {
-	slices.SortFunc(registry.Identities, func(a, b contexts.Identity) int {
-		if a.ID < b.ID {
-			return -1
-		}
-		if a.ID > b.ID {
-			return 1
-		}
-		return 0
-	})
 	slices.SortFunc(registry.Contexts, func(a, b contexts.Record) int {
 		if a.Name < b.Name {
 			return -1
@@ -669,10 +678,6 @@ func (t *transaction) save(ctx context.Context, registry contexts.Registry) erro
 		return 0
 	})
 	if err := validateRegistry(registry); err != nil {
-		return err
-	}
-	registry, err := t.store.upgradeRegistry(registry)
-	if err != nil {
 		return err
 	}
 	if err := t.store.writeRegistry(ctx, t.root, registry, t.expected); err != nil {
@@ -707,17 +712,17 @@ func (t *transaction) syncIntent(ctx context.Context) error {
 	return nil
 }
 
-func (t *transaction) MutationState(ctx context.Context, id string) ([]byte, error) {
+func (t *transaction) MutationState(ctx context.Context, name string) ([]byte, error) {
 	if err := t.available(ctx); err != nil {
 		return nil, err
 	}
-	if err := t.checkControllerRecovery(ctx, id); err != nil {
+	if err := t.checkControllerRecovery(ctx, name); err != nil {
 		return nil, err
 	}
-	if prior, ok := t.evidence[id]; ok {
+	if prior, ok := t.evidence[name]; ok {
 		return slices.Clone(prior), nil
 	}
-	dir, err := t.leaseContext(ctx, id)
+	dir, err := t.leaseContext(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -725,18 +730,18 @@ func (t *transaction) MutationState(ctx context.Context, id string) ([]byte, err
 	if err != nil {
 		return nil, err
 	}
-	t.evidence[id] = slices.Clone(data)
+	t.evidence[name] = slices.Clone(data)
 	return data, nil
 }
 
-func (t *transaction) leaseContext(ctx context.Context, id string) (*directory, error) {
+func (t *transaction) leaseContext(ctx context.Context, name string) (*directory, error) {
 	if err := t.available(ctx); err != nil {
 		return nil, err
 	}
-	if dir := t.leases[id]; dir != nil {
+	if dir := t.leases[name]; dir != nil {
 		return dir, dir.verify()
 	}
-	dir, err := t.contextDirectory(ctx, id)
+	dir, err := t.contextDirectory(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -744,11 +749,11 @@ func (t *transaction) leaseContext(ctx context.Context, id string) (*directory, 
 		dir.file.Close()
 		return nil, err
 	}
-	t.leases[id] = dir
+	t.leases[name] = dir
 	if err := verifyContextLayout(ctx, dir); err != nil {
 		return nil, err
 	}
-	if err := verifyReservation(ctx, dir, id, ""); err != nil {
+	if err := verifyReservation(ctx, dir, name); err != nil {
 		return nil, err
 	}
 	return dir, nil
@@ -934,11 +939,11 @@ func (t *transaction) Commit(ctx context.Context, registry contexts.Registry) er
 	if err := validateRegistry(registry); err != nil {
 		return err
 	}
-	if registry.Version != t.registry.Version || registry.Controller != t.registry.Controller || registry.IDNamespace != t.registry.IDNamespace || registry.NextIdentity != t.registry.NextIdentity || !slices.Equal(registry.Identities, t.registry.Identities) || len(registry.Contexts) != len(t.registry.Contexts) {
+	if registry.Version != t.registry.Version || registry.Controller != t.registry.Controller || len(registry.Contexts) != len(t.registry.Contexts) {
 		return state("context commit cannot change reserved identities")
 	}
 	for _, prior := range t.registry.Contexts {
-		index := slices.IndexFunc(registry.Contexts, func(next contexts.Record) bool { return next.ID == prior.ID })
+		index := slices.IndexFunc(registry.Contexts, func(next contexts.Record) bool { return next.Name == prior.Name })
 		if index < 0 {
 			return state("context commit cannot remove identities")
 		}
@@ -946,16 +951,16 @@ func (t *transaction) Commit(ctx context.Context, registry contexts.Registry) er
 		if next == prior {
 			continue
 		}
-		if err := t.checkControllerRecovery(ctx, prior.ID); err != nil {
+		if err := t.checkControllerRecovery(ctx, prior.Name); err != nil {
 			return err
 		}
 		if next.Revision != prior.Revision {
-			if err := t.checkControllerPublication(ctx, prior.ID); err != nil {
+			if err := t.checkControllerPublication(ctx, prior.Name); err != nil {
 				return err
 			}
 		}
-		if next.Name != prior.Name || next.DirectoryDevice != prior.DirectoryDevice || next.DirectoryInode != prior.DirectoryInode || next.SecretStoreType != prior.SecretStoreType {
-			return state("context identity or secret implementation cannot change")
+		if next.DirectoryDevice != prior.DirectoryDevice || next.DirectoryInode != prior.DirectoryInode || next.SecretStoreType != prior.SecretStoreType {
+			return state("context directory identity or secret implementation cannot change")
 		}
 		if prior.Revision != "" && next.Revision == "" {
 			return state("context replacement cannot discard its selected input")
@@ -969,7 +974,7 @@ func (t *transaction) Commit(ctx context.Context, registry contexts.Registry) er
 					return err
 				}
 			}
-			dir, held := t.leases[next.ID]
+			dir, held := t.leases[next.Name]
 			if !held {
 				return state("context publication requires its mutation lease")
 			}
@@ -977,7 +982,7 @@ func (t *transaction) Commit(ctx context.Context, registry contexts.Registry) er
 				return err
 			}
 			current, err := readMutation(ctx, dir)
-			if err != nil || !bytes.Equal(current, t.evidence[next.ID]) {
+			if err != nil || !bytes.Equal(current, t.evidence[next.Name]) {
 				return state("context mutation evidence changed before publication")
 			}
 			if next.Revision != "" {
@@ -996,12 +1001,12 @@ func (t *transaction) Commit(ctx context.Context, registry contexts.Registry) er
 			}
 		}
 	}
-	for id, dir := range t.leases {
+	for name, dir := range t.leases {
 		if err := verifyContextLayout(ctx, dir); err != nil {
 			return err
 		}
 		current, err := readMutation(ctx, dir)
-		if err != nil || !bytes.Equal(current, t.evidence[id]) {
+		if err != nil || !bytes.Equal(current, t.evidence[name]) {
 			return state("context mutation evidence changed before publication")
 		}
 	}
@@ -1013,7 +1018,7 @@ func (t *transaction) Commit(ctx context.Context, registry contexts.Registry) er
 	}
 	t.committed = true
 	for _, record := range registry.Contexts {
-		if err := t.collectRevisions(ctx, record.ID); err != nil {
+		if err := t.collectRevisions(ctx, record.Name); err != nil {
 			return state("context was published, but input revision cleanup is incomplete; inspect the context before retrying")
 		}
 	}

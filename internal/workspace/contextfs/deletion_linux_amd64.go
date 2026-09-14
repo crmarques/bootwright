@@ -260,10 +260,10 @@ func (t *transaction) Delete(ctx context.Context, requested contexts.Record) err
 	if err := t.available(ctx); err != nil {
 		return err
 	}
-	if err := t.checkControllerRecovery(ctx, requested.ID); err != nil {
+	if err := t.checkControllerRecovery(ctx, requested.Name); err != nil {
 		return err
 	}
-	record, err := t.record(requested.ID)
+	record, err := t.record(requested.Name)
 	if err != nil {
 		return err
 	}
@@ -275,7 +275,7 @@ func (t *transaction) Delete(ctx context.Context, requested contexts.Record) err
 			return err
 		}
 	}
-	dir, err := t.contextDirectory(ctx, record.ID)
+	dir, err := t.contextDirectory(ctx, record.Name)
 	if errors.Is(err, syscall.ENOENT) && (record.Mode == contexts.Deleting || record.Mode == contexts.Initializing && record.DirectoryInode == 0) {
 		if t.container == nil {
 			if record.Mode != contexts.Initializing || record.DirectoryInode != 0 {
@@ -297,11 +297,11 @@ func (t *transaction) Delete(ctx context.Context, requested contexts.Record) err
 				return state("initializing directory identity is not attributable")
 			}
 			if record.Mode == contexts.Ready {
-				if _, held := t.leases[record.ID]; !held {
+				if _, held := t.leases[record.Name]; !held {
 					return state("context deletion requires its mutation lease")
 				}
 				current, err := readMutation(ctx, dir)
-				if err != nil || !bytes.Equal(current, t.evidence[record.ID]) {
+				if err != nil || !bytes.Equal(current, t.evidence[record.Name]) {
 					return state("context deletion evidence changed after the disposal check")
 				}
 			}
@@ -312,7 +312,7 @@ func (t *transaction) Delete(ctx context.Context, requested contexts.Record) err
 			record.Mode = contexts.Deleting
 			registry := cloneRegistry(t.registry)
 			for i := range registry.Contexts {
-				if registry.Contexts[i].ID == record.ID {
+				if registry.Contexts[i].Name == record.Name {
 					registry.Contexts[i] = record
 				}
 			}
@@ -320,17 +320,17 @@ func (t *transaction) Delete(ctx context.Context, requested contexts.Record) err
 				return err
 			}
 		}
-		if err := t.dropControllerBinding(ctx, record.ID); err != nil {
+		if err := t.dropControllerBinding(ctx, record.Name); err != nil {
 			return err
 		}
 		remaining := maxContextEntries
-		if err := t.store.walkContextTreeWithRemovalGuard(ctx, dir, "", removeContextTree, &remaining, func(ctx context.Context) error { return t.checkControllerRecovery(ctx, record.ID) }); err != nil {
+		if err := t.store.walkContextTreeWithRemovalGuard(ctx, dir, "", removeContextTree, &remaining, func(ctx context.Context) error { return t.checkControllerRecovery(ctx, record.Name) }); err != nil {
 			return err
 		}
 		if err := t.store.checkpoint(ctx, "before-context-rmdir"); err != nil {
 			return err
 		}
-		if err := t.checkControllerRecovery(ctx, record.ID); err != nil {
+		if err := t.checkControllerRecovery(ctx, record.Name); err != nil {
 			return err
 		}
 		if err := unlinkVerified(t.container, record.Name, dir.identity, true); err != nil {
@@ -341,10 +341,10 @@ func (t *transaction) Delete(ctx context.Context, requested contexts.Record) err
 		}
 	}
 	registry := cloneRegistry(t.registry)
-	if err := t.dropControllerBinding(ctx, record.ID); err != nil {
+	if err := t.dropControllerBinding(ctx, record.Name); err != nil {
 		return err
 	}
-	registry.Contexts = slices.DeleteFunc(registry.Contexts, func(item contexts.Record) bool { return item.ID == record.ID })
+	registry.Contexts = slices.DeleteFunc(registry.Contexts, func(item contexts.Record) bool { return item.Name == record.Name })
 	if err := t.save(ctx, registry); err != nil {
 		return err
 	}

@@ -65,7 +65,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	if input.State == nil {
 		return lifecycle.CapabilityPlan{}, Refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
 	}
-	requests, err := c.Requests(input.State.Effective(), input.Controller, input.Context.ID)
+	requests, err := c.Requests(input.State.Effective(), input.Controller, input.Context.Name)
 	if err != nil {
 		return lifecycle.CapabilityPlan{}, err
 	}
@@ -97,7 +97,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			continue
 		}
 		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
-			ContextID: input.Context.ID, Kind: c.definition.Slug,
+			Context: input.Context.Name, Kind: c.definition.Slug,
 			Service: request.Identity.Service, Keys: request.ReservationKeys(),
 		})
 	}
@@ -107,13 +107,13 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 
 // Requests derives one frozen request per managed service of this kind, in
 // canonical object order. It reads no host, endpoint or Secret material.
-func (c Capability) Requests(catalog api.Catalog, controllerMachine, contextID string) ([]Request, error) {
-	if !ValidContextID(contextID) {
+func (c Capability) Requests(catalog api.Catalog, controllerMachine, contextName string) ([]Request, error) {
+	if !ValidContextName(contextName) {
 		return nil, Refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
 	}
 	var requests []Request
 	for _, object := range ManagedObjects(catalog, c.definition.Kind) {
-		request, err := c.requestFor(catalog, object, controllerMachine, contextID)
+		request, err := c.requestFor(catalog, object, controllerMachine, contextName)
 		if err != nil {
 			return nil, err
 		}
@@ -122,7 +122,7 @@ func (c Capability) Requests(catalog api.Catalog, controllerMachine, contextID s
 	return requests, nil
 }
 
-func (c Capability) requestFor(catalog api.Catalog, object api.Object, controllerMachine, contextID string) (Request, error) {
+func (c Capability) requestFor(catalog api.Catalog, object api.Object, controllerMachine, contextName string) (Request, error) {
 	name := object.Name()
 	if !SafeSegment(name) {
 		return Request{}, Refusal("lifecycle.state", "the managed service name is not a safe host identifier", "rename "+object.Identity())
@@ -158,15 +158,15 @@ func (c Capability) requestFor(catalog api.Catalog, object api.Object, controlle
 	}
 	request := Request{
 		BindAddress: bind,
-		ContentRoot: ContentRoot(contextID, c.definition.Slug, name),
+		ContentRoot: ContentRoot(contextName, c.definition.Slug, name),
 		Egress:      egress,
 		Endpoints:   endpoints,
-		Identity:    Identity{Block: c.definition.BlockID(name), Context: contextID, Service: name},
+		Identity:    Identity{Block: c.definition.BlockID(name), Context: contextName, Service: name},
 		Image:       image,
 		Kind:        string(c.definition.Kind),
 		Placement:   placement,
 		Port:        port,
-		Unit:        UnitName(contextID, c.definition.Slug, name),
+		Unit:        UnitName(contextName, c.definition.Slug, name),
 		Version:     c.definition.Version,
 	}
 	if c.definition.Extend != nil {

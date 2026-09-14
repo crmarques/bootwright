@@ -14,11 +14,11 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
-func prepareManifest(id, environment string, sources desiredstate.Sources) (manifest, map[string]desiredstate.SourceFile, error) {
+func prepareManifest(name, environment string, sources desiredstate.Sources) (manifest, map[string]desiredstate.SourceFile, error) {
 	if len(sources.Roots) != 1 || !canonicalPath(sources.Roots[0]) || len(sources.Files) > desiredstate.MaxFiles || len(sources.Markers) > desiredstate.MaxMarkers {
 		return manifest{}, nil, state("frozen input requires one bounded original directory")
 	}
-	m := manifest{Version: 2, ID: id, InputDirectory: sources.Roots[0], EnvironmentDirectory: environment, Files: []frozenFile{}}
+	m := manifest{Version: ManifestVersion, Context: name, InputDirectory: sources.Roots[0], EnvironmentDirectory: environment, Files: []frozenFile{}}
 	files := make(map[string]desiredstate.SourceFile, len(sources.Files)+len(sources.Markers))
 	minimumMetadataBytes := 0
 	for index, collection := range [][]desiredstate.SourceFile{sources.Files, sources.Markers} {
@@ -59,7 +59,7 @@ func prepareManifest(id, environment string, sources desiredstate.Sources) (mani
 	for i := range m.Files {
 		m.Files[i].SHA256 = "0000000000000000000000000000000000000000000000000000000000000000"
 	}
-	if err := validateManifest(m, id, m.Revision, environment); err != nil {
+	if err := validateManifest(m, name, m.Revision, environment); err != nil {
 		return manifest{}, nil, err
 	}
 	if !fitsJSON(reflect.ValueOf(m), maxManifest-1) {
@@ -72,24 +72,24 @@ func prepareManifest(id, environment string, sources desiredstate.Sources) (mani
 	return m, files, nil
 }
 
-func (t *transaction) Publish(ctx context.Context, id, environment string, sources desiredstate.Sources) (string, error) {
+func (t *transaction) Publish(ctx context.Context, name, environment string, sources desiredstate.Sources) (string, error) {
 	if err := t.available(ctx); err != nil {
 		return "", err
 	}
-	if err := t.checkControllerRecovery(ctx, id); err != nil {
+	if err := t.checkControllerRecovery(ctx, name); err != nil {
 		return "", err
 	}
-	if err := t.checkControllerPublication(ctx, id); err != nil {
+	if err := t.checkControllerPublication(ctx, name); err != nil {
 		return "", err
 	}
-	dir, held := t.leases[id]
+	dir, held := t.leases[name]
 	if !held {
 		return "", state("input publication requires the context mutation lease")
 	}
-	if err := verifyReservation(ctx, dir, id, ""); err != nil {
+	if err := verifyReservation(ctx, dir, name); err != nil {
 		return "", err
 	}
-	m, files, err := prepareManifest(id, environment, sources)
+	m, files, err := prepareManifest(name, environment, sources)
 	if err != nil {
 		return "", err
 	}
@@ -117,7 +117,7 @@ func (t *transaction) Publish(ctx context.Context, id, environment string, sourc
 		if err := t.syncIntent(ctx); err != nil {
 			return "", err
 		}
-		if err := t.collectRevisions(ctx, id); err != nil {
+		if err := t.collectRevisions(ctx, name); err != nil {
 			return "", err
 		}
 		names, err = revisionEntries(revisions, "rev-", "")
@@ -201,7 +201,7 @@ func openManifestBounded(ctx context.Context, root *directory, record contexts.R
 		close()
 		return manifest{}, nil, func() {}, err
 	}
-	if err := validateManifest(m, record.ID, record.Revision, record.EnvironmentDirectory); err != nil {
+	if err := validateManifest(m, record.Name, record.Revision, record.EnvironmentDirectory); err != nil {
 		close()
 		return manifest{}, nil, func() {}, err
 	}

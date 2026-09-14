@@ -11,7 +11,7 @@ import (
 )
 
 func validContextSummary(summary contexts.Summary) bool {
-	return summary.Name != "" && summary.ID != "" && (summary.Mode == contexts.Ready || summary.Mode == contexts.Initializing || summary.Mode == contexts.Deleting)
+	return summary.Name != "" && (summary.Mode == contexts.Ready || summary.Mode == contexts.Initializing || summary.Mode == contexts.Deleting)
 }
 
 func writeContextSummary(out io.Writer, summary contexts.Summary) error {
@@ -20,13 +20,10 @@ func writeContextSummary(out io.Writer, summary contexts.Summary) error {
 	return text.writeTo(out)
 }
 
-// The context commands own context identity, so they are the one place that
-// still presents it in full.
 func contextSummaryFields(text *display, summary contexts.Summary) {
 	text.section("")
 	text.fields(
 		field{Label: "Name", Value: summary.Name},
-		field{Label: "ID", Value: summary.ID},
 		field{Label: "Mode", Value: string(summary.Mode)},
 		field{Label: "Current", Value: strconv.FormatBool(summary.Current)},
 		field{Label: "Input configured", Value: strconv.FormatBool(summary.Configured)},
@@ -78,9 +75,9 @@ func writeContextList(out io.Writer, result *contexts.ListResult) error {
 	slices.SortStableFunc(summaries, func(a, b contexts.Summary) int { return strings.Compare(a.Name, b.Name) })
 	rows := make([][]string, 0, len(summaries))
 	for _, summary := range summaries {
-		rows = append(rows, []string{summary.Name, summary.ID, string(summary.Mode), strconv.FormatBool(summary.Current), strconv.FormatBool(summary.Configured)})
+		rows = append(rows, []string{summary.Name, string(summary.Mode), strconv.FormatBool(summary.Current), strconv.FormatBool(summary.Configured)})
 	}
-	text.table([]string{"NAME", "ID", "MODE", "CURRENT", "INPUT"}, rows)
+	text.table([]string{"NAME", "MODE", "CURRENT", "INPUT"}, rows)
 	return text.writeTo(out)
 }
 
@@ -98,7 +95,6 @@ func writeContextDelete(out io.Writer, result *contexts.DeleteResult) error {
 	text.section("")
 	text.fields(
 		field{Label: "Name", Value: result.Name},
-		field{Label: "ID", Value: result.ID},
 		field{Label: "Current cleared", Value: strconv.FormatBool(result.CurrentCleared)},
 	)
 	return text.writeTo(out)

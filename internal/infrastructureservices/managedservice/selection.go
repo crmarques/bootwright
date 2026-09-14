@@ -17,16 +17,18 @@ const ContentRootPrefix = "/var/lib/bootwright-services"
 // UnitPrefix namespaces every host unit these capabilities own.
 const UnitPrefix = "bootwright"
 
-func ContentRoot(contextID, slug, service string) string {
-	return ContentRootPrefix + "/" + contextID + "/" + slug + "/" + service
+func ContentRoot(contextName, slug, service string) string {
+	return ContentRootPrefix + "/" + contextName + "/" + slug + "/" + service
 }
 
-func UnitName(contextID, slug, service string) string {
-	return UnitPrefix + "-" + contextID + "-" + slug + "-" + service
+func UnitName(contextName, slug, service string) string {
+	return UnitPrefix + "-" + contextName + "-" + slug + "-" + service
 }
 
-func ValidContextID(contextID string) bool {
-	return strings.HasPrefix(contextID, "ctx-") && len(contextID) == 36
+// ValidContextName repeats the workspace name grammar at this boundary, because
+// the context name reaches a unit name and an owned path.
+func ValidContextName(contextName string) bool {
+	return api.ValidLexical("name", contextName)
 }
 
 // PlacementFor selects the arm one service runs through. The controller is

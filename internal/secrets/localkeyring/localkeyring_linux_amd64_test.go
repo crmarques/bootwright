@@ -64,10 +64,10 @@ func newUninitializedIntegrationStore(t *testing.T) *integrationStore {
 		if err != nil {
 			return err
 		}
-		if _, err := tx.MutationState(context.Background(), record.ID); err != nil {
+		if _, err := tx.MutationState(context.Background(), record.Name); err != nil {
 			return err
 		}
-		revision, err := tx.Publish(context.Background(), record.ID, input, sources)
+		revision, err := tx.Publish(context.Background(), record.Name, input, sources)
 		if err != nil {
 			return err
 		}

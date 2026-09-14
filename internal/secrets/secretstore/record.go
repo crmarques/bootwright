@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	RecordVersion = 2
+	RecordVersion = 3
 	RecordMaximum = 8 << 20
 	RecordPath    = "store.json"
 )
@@ -19,7 +19,7 @@ type Record struct {
 }
 
 func EncodeRecord(selector Selector, payload []byte) ([]byte, error) {
-	if len(payload) == 0 || len(payload) > RecordMaximum || bytes.Equal(bytes.TrimSpace(payload), []byte("null")) || !validSelector(selector, selector.ContextID) {
+	if len(payload) == 0 || len(payload) > RecordMaximum || bytes.Equal(bytes.TrimSpace(payload), []byte("null")) || !validSelector(selector, selector.Context) {
 		return nil, Failure("store.corrupt", "secret metadata is invalid or incompatible")
 	}
 	data, err := EncodeCanonical(Record{Selector: selector, Payload: payload})
@@ -29,14 +29,14 @@ func EncodeRecord(selector Selector, payload []byte) ([]byte, error) {
 	return data, nil
 }
 
-func DecodeRecord(data []byte, contextID string) (Record, error) {
+func DecodeRecord(data []byte, contextName string) (Record, error) {
 	var record Record
-	if len(data) == 0 || len(data) > RecordMaximum || DecodeCanonical(data, &record) != nil || !validSelector(record.Selector, contextID) || len(record.Payload) == 0 || bytes.Equal(record.Payload, []byte("null")) {
+	if len(data) == 0 || len(data) > RecordMaximum || DecodeCanonical(data, &record) != nil || !validSelector(record.Selector, contextName) || len(record.Payload) == 0 || bytes.Equal(record.Payload, []byte("null")) {
 		return Record{}, Failure("store.corrupt", "secret metadata is invalid or incompatible")
 	}
 	return record, nil
 }
 
-func validSelector(selector Selector, contextID string) bool {
-	return selector.SelectorVersion == RecordVersion && selector.ContextID == contextID && api.ValidLexical("name", contextID) && api.ValidLexical("name", selector.Backend) && api.ValidLexical("name", selector.Generation)
+func validSelector(selector Selector, contextName string) bool {
+	return selector.SelectorVersion == RecordVersion && selector.Context == contextName && api.ValidLexical("name", contextName) && api.ValidLexical("name", selector.Backend) && api.ValidLexical("name", selector.Generation)
 }

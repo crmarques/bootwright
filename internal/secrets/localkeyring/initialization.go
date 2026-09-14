@@ -17,7 +17,7 @@ func (i *Implementation) initialize(ctx context.Context, selected secretstore.Co
 		return nil, areaFailure(ctx, "store.corrupt", "secret selector cannot be read safely", err)
 	}
 	if selectorExists {
-		record, err := secretstore.DecodeRecord(selectorData, selected.ID)
+		record, err := secretstore.DecodeRecord(selectorData, selected.Name)
 		if err != nil || !validSelector(record.Selector, selected, i.Backend()) {
 			return nil, secretstore.Failure("store.corrupt", "secret metadata is invalid or incompatible")
 		}
@@ -216,7 +216,7 @@ func (i *Implementation) resumeInitialization(ctx context.Context, selected secr
 	ledger := sealLedger{}
 	freshLedger := false
 	if ledgerEntry == nil {
-		ledgerData, err := encodeLedger(selected.ID, i.Backend(), key, attempt.KeyID, 1)
+		ledgerData, err := encodeLedger(selected.Name, i.Backend(), key, attempt.KeyID, 1)
 		if err != nil {
 			return nil, false, marker, err
 		}
@@ -230,24 +230,24 @@ func (i *Implementation) resumeInitialization(ctx context.Context, selected secr
 		if err != nil || !exists {
 			return nil, true, marker, nil
 		}
-		ledger, err = decodeLedger(data, selected.ID, i.Backend(), key, attempt.KeyID, 0)
+		ledger, err = decodeLedger(data, selected.Name, i.Backend(), key, attempt.KeyID, 0)
 		if err != nil {
 			return nil, true, marker, nil
 		}
 	}
-	selector := secretstore.Selector{SelectorVersion: formatVersion, ContextID: selected.ID, Backend: i.Backend(), Generation: attempt.Generation}
+	selector := secretstore.Selector{SelectorVersion: formatVersion, Context: selected.Name, Backend: i.Backend(), Generation: attempt.Generation}
 	index := indexRecord{FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, ActiveKey: attempt.KeyID, Keys: []storedKey{{ID: attempt.KeyID, Seals: ledger.Seals}}, Versions: []storedVersion{}, Current: []secretstore.Current{}, Bindings: []secretstore.Binding{}}
 	if !freshLedger {
 		ledgerData, exists, err := area.ReadMutable(ctx, ledgerPath(attempt.KeyID), ledgerMaximum)
 		if err != nil || !exists {
 			return nil, false, marker, areaFailure(ctx, "store.corrupt", "secret initialization ledger cannot be reserved", err)
 		}
-		ledger, err = decodeLedger(ledgerData, selected.ID, i.Backend(), key, attempt.KeyID, 0)
+		ledger, err = decodeLedger(ledgerData, selected.Name, i.Backend(), key, attempt.KeyID, 0)
 		if err != nil || ledger.Seals >= maxSeals {
 			return nil, false, marker, secretstore.Failure("store.limit", "secret initialization seal limit is exhausted")
 		}
 		ledger.Seals++
-		nextLedger, err := encodeLedger(selected.ID, i.Backend(), key, attempt.KeyID, ledger.Seals)
+		nextLedger, err := encodeLedger(selected.Name, i.Backend(), key, attempt.KeyID, ledger.Seals)
 		if err != nil {
 			return nil, false, marker, err
 		}
@@ -309,11 +309,11 @@ func (i *Implementation) newInitialization(ctx context.Context, selected secrets
 		return initializationRecord{}, err
 	}
 	attempts = append(attempts, initializationAttempt{KeyID: keyID, Generation: generation})
-	return initializationRecord{FormatVersion: formatVersion, ContextID: selected.ID, Selection: i.Backend(), Attempts: attempts}, nil
+	return initializationRecord{FormatVersion: formatVersion, Context: selected.Name, Selection: i.Backend(), Attempts: attempts}, nil
 }
 
 func validInitialization(record initializationRecord, selected secretstore.Context, selection string) bool {
-	if record.FormatVersion != formatVersion || record.ContextID != selected.ID || record.Selection != selection || len(record.Attempts) == 0 || len(record.Attempts) > 16 || (record.MAC == "") != (record.MACKeyID == "") {
+	if record.FormatVersion != formatVersion || record.Context != selected.Name || record.Selection != selection || len(record.Attempts) == 0 || len(record.Attempts) > 16 || (record.MAC == "") != (record.MACKeyID == "") {
 		return false
 	}
 	ids := map[string]bool{}
@@ -473,7 +473,7 @@ func validRootInitializationPending(ctx context.Context, area secretstore.Area, 
 		clear(key)
 		return valid
 	}
-	record, err := secretstore.DecodeRecord(data, selected.ID)
+	record, err := secretstore.DecodeRecord(data, selected.Name)
 	if err != nil || !validSelector(record.Selector, selected, marker.Selection) {
 		return false
 	}
@@ -524,7 +524,7 @@ func validInitializationLedgerPending(ctx context.Context, area secretstore.Area
 		clear(key)
 		return false
 	}
-	_, err = decodeLedger(data, selected.ID, marker.Selection, key, candidate.KeyID, 0)
+	_, err = decodeLedger(data, selected.Name, marker.Selection, key, candidate.KeyID, 0)
 	clear(key)
 	return err == nil
 }

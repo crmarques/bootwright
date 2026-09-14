@@ -17,15 +17,17 @@ const (
 	Deleting     Mode = "deleting"
 )
 
-// Registry is an atomic context snapshot. Identities is retained only while
-// reading the legacy registry; current allocation uses a namespace and counter.
+// RegistryVersion is the durable context-registry format. Earlier formats named
+// each context by an allocated identity that no longer exists, so a store
+// written by them is refused rather than converted.
+const RegistryVersion = 5
+
+// Registry is an atomic context snapshot. A context's name is its identity, so
+// the registry holds no separate identifier and needs no allocation state.
 type Registry struct {
-	Version      int                  `json:"version"`
-	Identities   []Identity           `json:"identities"`
-	Contexts     []Record             `json:"contexts"`
-	IDNamespace  string               `json:"-"`
-	NextIdentity uint64               `json:"-"`
-	Controller   ControllerDescriptor `json:"-"`
+	Version    int                  `json:"version"`
+	Contexts   []Record             `json:"contexts"`
+	Controller ControllerDescriptor `json:"-"`
 }
 
 // ControllerDescriptor attributes the independently versioned shared subtree.
@@ -38,18 +40,13 @@ type ControllerDescriptor struct {
 }
 
 // ControllerInputGuard preserves an existing controller Machine binding when
-// replacing admitted input. The registry v4 capability is transaction-scoped.
+// replacing admitted input. The capability is transaction-scoped.
 type ControllerInputGuard interface {
 	CheckControllerInput(context.Context, string, string) error
 }
 
-type Identity struct {
-	ID string `json:"id"`
-}
-
 type Record struct {
 	Name                 string `json:"name"`
-	ID                   string `json:"id"`
 	EnvironmentDirectory string `json:"environmentDirectory"`
 	Revision             string `json:"revision"`
 	Mode                 Mode   `json:"mode"`
@@ -67,7 +64,7 @@ type Compiler interface {
 }
 
 type InputRepository interface {
-	ReadInputs(context.Context, string, string) (desiredstate.Sources, error)
+	ReadInputs(context.Context, string) (desiredstate.Sources, error)
 }
 
 type Repository interface {
@@ -106,10 +103,13 @@ type Confirmer interface {
 	Confirm(context.Context, string, string) error
 }
 
+// SelectionVersion is the per-user current-context record format. The record
+// holds only the selected name, which is the context's identity.
+const SelectionVersion = 2
+
 type Selection struct {
 	Version int    `json:"version"`
 	Name    string `json:"name"`
-	ID      string `json:"id"`
 }
 
 type SelectionStore interface {
@@ -129,7 +129,7 @@ type Options struct {
 	ValidateConfiguration func(context.Context, Configuration) error
 }
 
-// Inputs acquires an immutable revision for an explicit or identity-bound current context.
+// Inputs acquires an immutable revision for an explicit or current context.
 type Inputs struct {
 	Repository InputRepository
 	Selection  SelectionStore
@@ -142,7 +142,6 @@ func (i Inputs) ReadInputs(ctx context.Context, name string) (desiredstate.Sourc
 	if i.Repository == nil {
 		return desiredstate.Sources{}, StateError("context input repository is not configured")
 	}
-	id := ""
 	if name == "" {
 		if i.Selection == nil {
 			return desiredstate.Sources{}, StateError("current context selection is not configured")
@@ -151,12 +150,12 @@ func (i Inputs) ReadInputs(ctx context.Context, name string) (desiredstate.Sourc
 		if err != nil {
 			return desiredstate.Sources{}, err
 		}
-		if selected.Name == "" || selected.ID == "" {
+		if selected.Name == "" {
 			return desiredstate.Sources{}, StateError("no current context is selected; use context use --name <name>")
 		}
-		name, id = selected.Name, selected.ID
+		name = selected.Name
 	}
-	return i.Repository.ReadInputs(ctx, name, id)
+	return i.Repository.ReadInputs(ctx, name)
 }
 
 func StateError(message string) error { return diagnostics.NewFailure("context.state", message, "") }

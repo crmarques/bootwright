@@ -14,7 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-const testContext = "ctx-0123456789abcdef0123456789abcdef"
+const testContext = "lab"
 
 func field(name string, value api.Value) api.FieldValue {
 	return api.FieldValue{Name: name, Value: value}
@@ -139,7 +139,7 @@ func TestSSHPlacementRequiresKeyAndHostKeyAndReservesNothing(t *testing.T) {
 	capability := NewCapability(testDefinition(), nil)
 	plan, err := capability.Plan(context.Background(), lifecycle.PlanInput{
 		Verb: reconciliation.Apply, Controller: "bastion",
-		Context: lifecycle.ContextIdentity{ID: testContext},
+		Context: lifecycle.ContextIdentity{Name: testContext},
 		State:   compilation.NewState(catalogOf(bastion(), remote, placed), catalogOf(bastion(), remote, placed), nil),
 	})
 	if err != nil || len(plan.Definitions) != 1 {
@@ -207,11 +207,11 @@ func TestReservationKeysCoverTheUnitPathAndSocket(t *testing.T) {
 	}
 }
 
-func TestRequestsRefuseAnInvalidContextIdentity(t *testing.T) {
+func TestRequestsRefuseAnInvalidContextName(t *testing.T) {
 	capability := NewCapability(testDefinition(), nil)
-	for _, identity := range []string{"", "lab", "ctx-short", strings.Repeat("c", 36)} {
-		if _, err := capability.Requests(catalogOf(bastion(), service(api.Proxy, "lab-proxy")), "bastion", identity); err == nil {
-			t.Fatalf("context identity %q was accepted", identity)
+	for _, name := range []string{"", "Lab", "-lab", "lab-", "lab/other", strings.Repeat("c", 64)} {
+		if _, err := capability.Requests(catalogOf(bastion(), service(api.Proxy, "lab-proxy")), "bastion", name); err == nil {
+			t.Fatalf("context name %q was accepted", name)
 		}
 	}
 }

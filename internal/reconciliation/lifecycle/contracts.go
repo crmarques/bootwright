@@ -18,7 +18,6 @@ import (
 
 type ContextIdentity struct {
 	Name     string
-	ID       string
 	Revision string
 }
 

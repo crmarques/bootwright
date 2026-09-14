@@ -134,7 +134,7 @@ func TestLifecycleOutputEscapesUntrustedText(t *testing.T) {
 
 func TestStatusRendersTextAndJSON(t *testing.T) {
 	result := &lifecycle.StatusResult{
-		Context:     lifecycle.ContextIdentity{Name: "lab", ID: "ctx-1", Revision: "rev-1"},
+		Context:     lifecycle.ContextIdentity{Name: "lab", Revision: "rev-1"},
 		SetupChecks: []lifecycle.SetupCheck{{ID: "controller-binding", Status: "ready"}},
 		Shared:      []lifecycle.ServiceSummary{{Kind: "ArtifactServer", Name: "lab", Machine: "bastion", Status: "done"}},
 		NextSteps:   []string{"bootwright destroy"},

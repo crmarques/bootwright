@@ -75,7 +75,7 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 			return true, writeContextCurrent(out, result.current, boolValue(command.Flags(), "short"))
 		}
 	case "context delete":
-		if result.deletion != nil && result.deletion.Name != "" && result.deletion.ID != "" && result.deletion.Outcome == "deleted" {
+		if result.deletion != nil && result.deletion.Name != "" && result.deletion.Outcome == "deleted" {
 			return true, writeContextDelete(out, result.deletion)
 		}
 	case "secret set", "secret generate", "secret delete":

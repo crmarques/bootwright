@@ -17,7 +17,7 @@ import (
 
 const (
 	storeType = "local-keyring"
-	storeID   = "local-v2"
+	storeID   = "local-v3"
 	custodyID = "local-keyfile-v1"
 )
 
@@ -38,7 +38,7 @@ func NewWithOptions(options Options) *Implementation {
 	return &Implementation{random: options.Random}
 }
 
-func (*Implementation) Backend() string { return "local-keyring-v2" }
+func (*Implementation) Backend() string { return "local-keyring-v3" }
 
 func (i *Implementation) Selection() secretstore.Selection {
 	return secretstore.Selection{
@@ -84,7 +84,7 @@ func (i *Implementation) open(ctx context.Context, selected secretstore.Context,
 	if err != nil || !exists {
 		return nil, areaFailure(ctx, "store.corrupt", "secret metadata cannot be read safely", err)
 	}
-	record, err := secretstore.DecodeRecord(selectorData, selected.ID)
+	record, err := secretstore.DecodeRecord(selectorData, selected.Name)
 	if err != nil || record.Selector != selector {
 		return nil, secretstore.Failure("store.corrupt", "secret metadata changed or is invalid")
 	}
@@ -203,7 +203,7 @@ func (s *session) readVersion(ctx context.Context, version storedVersion) (secre
 		if err != nil || !exists {
 			return secrets.Material{}, areaFailure(ctx, "store.corrupt", "encrypted secret part is missing or unsafe", err)
 		}
-		plaintext, err := openEnvelope(data, key, partAAD(s.context.ID, s.selector.Backend, version, part), "part", part.KeyID, part.BlobID, partMaximum)
+		plaintext, err := openEnvelope(data, key, partAAD(s.context.Name, s.selector.Backend, version, part), "part", part.KeyID, part.BlobID, partMaximum)
 		clear(data)
 		if err != nil {
 			return secrets.Material{}, err
@@ -262,7 +262,7 @@ func (s *session) refreshMetadata(ctx context.Context) error {
 		if err != nil || !exists {
 			return areaFailure(ctx, "store.corrupt", "secret seal ledger is missing or unsafe", err)
 		}
-		ledger, ledgerErr := decodeLedger(data, s.context.ID, s.selector.Backend, keyMaterial, key.ID, key.Seals)
+		ledger, ledgerErr := decodeLedger(data, s.context.Name, s.selector.Backend, keyMaterial, key.ID, key.Seals)
 		if ledgerErr != nil {
 			return secretstore.Failure("store.corrupt", "secret seal ledger is invalid or contradictory")
 		}
@@ -312,11 +312,11 @@ func (i *Implementation) uniqueID(prefix string, exists func(string) bool) (stri
 }
 
 func validContext(context secretstore.Context) bool {
-	return validName(context.Name) && validID(context.ID, "ctx-") && (context.Revision == "" || validID(context.Revision, "rev-")) && (context.Mode == "ready" || context.Mode == "initializing")
+	return validName(context.Name) && (context.Revision == "" || validID(context.Revision, "rev-")) && (context.Mode == "ready" || context.Mode == "initializing")
 }
 
 func validSelector(selector secretstore.Selector, context secretstore.Context, selection string) bool {
-	return selector.SelectorVersion == formatVersion && selector.ContextID == context.ID && selector.Backend == selection && validID(selector.Generation, "gen-")
+	return selector.SelectorVersion == formatVersion && selector.Context == context.Name && selector.Backend == selection && validID(selector.Generation, "gen-")
 }
 
 func areaFailure(ctx context.Context, code, message string, err error) error {

@@ -15,13 +15,13 @@ import (
 )
 
 func syntheticContextResults() commandResult {
-	summary := contexts.Summary{Name: "example", ID: "ctx-synthetic", Mode: contexts.Ready, Current: true}
+	summary := contexts.Summary{Name: "example", Mode: contexts.Ready, Current: true}
 	return commandResult{
 		admission: &contexts.AdmissionResult{Context: summary, Counts: compilation.Counts{FilesSeen: 3, ObjectsDecoded: 4}, FilesCopied: 5, InputChanged: true},
 		use:       &contexts.UseResult{Context: summary},
-		list:      &contexts.ListResult{Contexts: []contexts.Summary{{Name: "z", ID: "ctx-z", Mode: contexts.Initializing}, summary}},
+		list:      &contexts.ListResult{Contexts: []contexts.Summary{{Name: "z", Mode: contexts.Initializing}, summary}},
 		current:   &contexts.CurrentResult{Context: summary},
-		deletion:  &contexts.DeleteResult{Name: summary.Name, ID: summary.ID, Outcome: "deleted", CurrentCleared: true},
+		deletion:  &contexts.DeleteResult{Name: summary.Name, Outcome: "deleted", CurrentCleared: true},
 	}
 }
 
@@ -53,10 +53,8 @@ func TestContextSuccessJourneysHaveCompleteTextResults(t *testing.T) {
 				}
 				return
 			}
-			for _, field := range []string{"example", "ctx-synthetic"} {
-				if !strings.Contains(out.String(), field) {
-					t.Fatalf("missing context identity %q: %q", field, out.String())
-				}
+			if !strings.Contains(out.String(), "example") {
+				t.Fatalf("missing context name: %q", out.String())
 			}
 			switch args[1] {
 			case "init", "update":
@@ -89,7 +87,7 @@ func TestContextEmptyListAndPermanentDeletion(t *testing.T) {
 		want   string
 	}{
 		{[]string{"context", "list"}, commandResult{list: &contexts.ListResult{}}, "[OK] No contexts\n"},
-		{[]string{"context", "delete", "--name", "example", "--purge", "--yes"}, commandResult{deletion: &contexts.DeleteResult{Name: "example", ID: "ctx-synthetic", Outcome: "deleted"}}, "Context deleted"},
+		{[]string{"context", "delete", "--name", "example", "--purge", "--yes"}, commandResult{deletion: &contexts.DeleteResult{Name: "example", Outcome: "deleted"}}, "Context deleted"},
 	} {
 		var out, errOut bytes.Buffer
 		record := &dispatchRecord{result: tc.result}
@@ -118,13 +116,12 @@ func TestContextAdmissionWarningsArePrintedOnceAndEscaped(t *testing.T) {
 	}
 	result := syntheticContextResults()
 	result.current.Context.Name = raw
-	result.current.Context.ID = raw
 	var out bytes.Buffer
 	escaped := escapeDisplayLine(raw)
 	if err := writeContextCurrent(&out, result.current, false); err != nil {
 		t.Fatal("context identity display", out.String(), err)
 	}
-	if strings.Count(out.String(), escaped) != 2 || strings.Contains(out.String(), raw) {
+	if strings.Count(out.String(), escaped) != 1 || strings.Contains(out.String(), raw) {
 		t.Fatal("context identity display", out.String())
 	}
 }
@@ -215,7 +212,7 @@ func TestNewJourneysDiscardResultsWhenServiceCancels(t *testing.T) {
 
 func TestContextInitWithoutInputUsesDefaults(t *testing.T) {
 	record := &dispatchRecord{result: syntheticContextResults()}
-	record.result.admission = &contexts.AdmissionResult{Context: contexts.Summary{Name: "test", ID: "ctx-test", Mode: contexts.Ready, Current: true}}
+	record.result.admission = &contexts.AdmissionResult{Context: contexts.Summary{Name: "test", Mode: contexts.Ready, Current: true}}
 	var out, errOut bytes.Buffer
 	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"context", "init", "--name", "test"})
 	request, ok := record.request.(contexts.InitRequest)

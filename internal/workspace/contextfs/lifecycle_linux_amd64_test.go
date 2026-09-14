@@ -23,7 +23,7 @@ func deleteContext(t *testing.T, store *Store, record contexts.Record) error {
 	t.Helper()
 	return store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
 		if record.Mode == contexts.Ready {
-			if _, err := tx.MutationState(context.Background(), record.ID); err != nil {
+			if _, err := tx.MutationState(context.Background(), record.Name); err != nil {
 				return err
 			}
 		}
@@ -61,7 +61,7 @@ func TestExplicitRootUsesRootOwnershipByDefault(t *testing.T) {
 			if err := os.Chown(reservation, int(owner.UID), int(owner.GID)); err != nil {
 				t.Fatal(err)
 			}
-			_, err = store.ReadInputs(context.Background(), record.Name, record.ID)
+			_, err = store.ReadInputs(context.Background(), record.Name)
 			expectState(t, err)
 		})
 	}
@@ -91,15 +91,17 @@ func TestDirectNamedLayoutAndPermanentDeletion(t *testing.T) {
 		t.Fatal("deleted context tree remains")
 	}
 	registry, err := store.View(context.Background())
-	if err != nil || registry.Version != 3 || len(registry.Contexts) != 0 || len(registry.Identities) != 0 || registry.NextIdentity != 2 {
-		t.Fatalf("deletion allocation state: %#v %v", registry, err)
+	if err != nil || registry.Version != contexts.RegistryVersion || len(registry.Contexts) != 0 {
+		t.Fatalf("deletion registry state: %#v %v", registry, err)
 	}
+	// The name is the identity, so it becomes free. What must not come back is
+	// the deleted context's content.
 	next := publish(t, store, "example", sources)
-	if next.ID == record.ID {
-		t.Fatal("name reuse reused identity")
+	if next.Name != record.Name || next.Revision == record.Revision {
+		t.Fatalf("recreated name inherited its predecessor's revision: %#v", next)
 	}
-	if _, err := store.ReadInputs(context.Background(), "example", record.ID); err == nil {
-		t.Fatal("stale selected identity was retargeted")
+	if _, err := os.Stat(filepath.Join(base, "desired-state", "revisions", record.Revision)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("deleted revision survived name reuse")
 	}
 	for _, name := range []string{"archives", "staging"} {
 		if _, err := os.Stat(filepath.Join(store.options.Root, name)); !errors.Is(err, os.ErrNotExist) {
@@ -127,29 +129,34 @@ func TestInterruptedDeletionResumesOnlyRecordedIdentity(t *testing.T) {
 			if err != nil || len(registry.Contexts) != 1 || registry.Contexts[0].Mode != contexts.Deleting {
 				t.Fatalf("pending deletion: %#v %v", registry, err)
 			}
-			if _, err := store.ReadInputs(context.Background(), "example", record.ID); err == nil {
+			if _, err := store.ReadInputs(context.Background(), "example"); err == nil {
 				t.Fatal("deleting context remained usable")
 			}
 			if err := deleteContext(t, store, registry.Contexts[0]); err != nil {
 				t.Fatal(err)
 			}
 			next := publish(t, store, "example", sources)
-			if next.ID == record.ID {
-				t.Fatal("deleted identity was reused")
+			if next.Name != record.Name || next.Revision == record.Revision {
+				t.Fatalf("resumed deletion left its predecessor's input behind: %#v", next)
 			}
 		})
 	}
 }
 
-func TestRetiredIdentityIsNotReusedWithRepeatedRandomBytes(t *testing.T) {
+// A deleted name is reservable again, and its replacement is an independent
+// context with a freshly created directory rather than an adopted one.
+func TestDeletedNameIsReservableAgainWithAFreshDirectory(t *testing.T) {
 	store, sources := fixture(t)
-	store.random = constantRandom(0)
 	record := publish(t, store, "example", sources)
+	before, err := os.Stat(filepath.Join(store.options.Root, "contexts", "example"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := deleteContext(t, store, record); err != nil {
 		t.Fatal(err)
 	}
 	config := contexts.Configuration{Name: "example", SecretStore: contexts.SecretStoreConfiguration{Type: "local-keyring"}}.Canonical()
-	err := store.Transact(context.Background(), true, nil, func(tx contexts.Transaction) error {
+	err = store.Transact(context.Background(), true, nil, func(tx contexts.Transaction) error {
 		_, err := tx.Reserve(context.Background(), "example", "", config)
 		return err
 	})
@@ -157,12 +164,22 @@ func TestRetiredIdentityIsNotReusedWithRepeatedRandomBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 	registry, err := store.View(context.Background())
-	if err != nil || len(registry.Contexts) != 1 || len(registry.Identities) != 0 || registry.NextIdentity != 3 || registry.Contexts[0].ID == record.ID {
-		t.Fatalf("retired identity was reused: %#v %v", registry, err)
+	if err != nil || len(registry.Contexts) != 1 || registry.Contexts[0].Name != "example" || registry.Contexts[0].Revision != "" {
+		t.Fatalf("reserved name after deletion: %#v %v", registry, err)
 	}
-	if _, err := os.Stat(filepath.Join(store.options.Root, "contexts", "example")); err != nil {
-		t.Fatal("fresh identity did not create its context directory")
+	after, err := os.Stat(filepath.Join(store.options.Root, "contexts", "example"))
+	if err != nil {
+		t.Fatal("reused name did not create its context directory")
 	}
+	if sameStat(before, after) {
+		t.Fatal("reused name adopted the deleted context's directory")
+	}
+}
+
+func sameStat(a, b os.FileInfo) bool {
+	left, leftOK := a.Sys().(*syscall.Stat_t)
+	right, rightOK := b.Sys().(*syscall.Stat_t)
+	return leftOK && rightOK && left.Dev == right.Dev && left.Ino == right.Ino
 }
 
 func TestDeletionRefusesUnknownObjectsBeforeRemovingAnything(t *testing.T) {
@@ -215,14 +232,14 @@ func TestPendingInitializationDoesNotPoisonUnrelatedContexts(t *testing.T) {
 	if err != nil || len(registry.Contexts) != 2 {
 		t.Fatalf("pending list: %v", err)
 	}
-	if _, err := store.ReadInputs(context.Background(), "ready", ready.ID); err != nil {
+	if _, err := store.ReadInputs(context.Background(), "ready"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.ReadInputs(context.Background(), "pending", pending.ID); err == nil {
+	if _, err := store.ReadInputs(context.Background(), "pending"); err == nil {
 		t.Fatal("initializing context was usable")
 	}
 	updated := publish(t, store, "ready", sources)
-	if updated.ID != ready.ID {
+	if updated.Name != ready.Name {
 		t.Fatal("pending context disturbed another identity")
 	}
 	err = store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
@@ -230,7 +247,7 @@ func TestPendingInitializationDoesNotPoisonUnrelatedContexts(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if resumed.ID != pending.ID {
+		if resumed.Name != pending.Name {
 			t.Fatal("retry changed identity")
 		}
 		return nil
@@ -268,12 +285,12 @@ func TestInitializationInterruptionReservesExactIdentity(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				if _, err := tx.MutationState(context.Background(), record.ID); err != nil {
+				if _, err := tx.MutationState(context.Background(), record.Name); err != nil {
 					return err
 				}
 				registry := tx.Registry()
 				for i := range registry.Contexts {
-					if registry.Contexts[i].ID == record.ID {
+					if registry.Contexts[i].Name == record.Name {
 						registry.Contexts[i].Mode = contexts.Ready
 					}
 				}
@@ -289,13 +306,13 @@ func TestInitializationInterruptionReservesExactIdentity(t *testing.T) {
 			if index < 0 || registry.Contexts[index].Mode != contexts.Initializing {
 				t.Fatal("interruption lost pending identity")
 			}
-			if _, err := store.ReadInputs(context.Background(), "ready", ready.ID); err != nil {
+			if _, err := store.ReadInputs(context.Background(), ready.Name); err != nil {
 				t.Fatal(err)
 			}
 			pending := registry.Contexts[index]
 			err = store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
 				record, err := tx.Reserve(context.Background(), "pending", "", config)
-				if err == nil && record.ID != pending.ID {
+				if err == nil && record.Name != pending.Name {
 					t.Fatal("retry changed identity")
 				}
 				return err
@@ -317,7 +334,7 @@ func TestEagerSecretInitializationNeedsNoDesiredInput(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		err = tx.InitializeSecrets(context.Background(), record.ID, func(area secretstore.Area) error {
+		err = tx.InitializeSecrets(context.Background(), record.Name, func(area secretstore.Area) error {
 			session, err := localkeyring.New().Initialize(context.Background(), secretToken(record), area, nil)
 			if err != nil {
 				return err
@@ -351,7 +368,7 @@ func TestEagerSecretInitializationNeedsNoDesiredInput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = store.ReadInputs(context.Background(), "empty", ready.ID)
+	_, err = store.ReadInputs(context.Background(), "empty")
 	diagnostics := diagnostics.Of(err)
 	if len(diagnostics) != 1 || diagnostics[0].Code != "context.input" || diagnostics[0].Message != "context has no desired state; run context update --name empty --input-dir <dir>" {
 		t.Fatalf("missing-input guidance: %#v", diagnostics)

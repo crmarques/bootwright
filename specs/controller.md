@@ -301,7 +301,7 @@ establishes service ownership or authorizes another context's resources.
 Setup has a private durable receipt, separate from lifecycle operation state
 and logs. Before the first installation or bundle-publication effect, record
 the verified host, selected implementation and complete immutable local action
-plan. For a context-bound attempt, retain its context ID, controller identity
+plan. For a context-bound attempt, retain its context name, controller identity
 and input revision. Keep required input/binding evidence protected from update
 and purge until the attempt has a definitive terminal outcome.
 

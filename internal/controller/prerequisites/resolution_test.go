@@ -349,7 +349,7 @@ func TestSelectedNativeClientIsAdmittedBeforeAcquisition(t *testing.T) {
 		api.NewObject(api.InfraProvider, "hypervisor", api.Value{}, api.MapValue().With("libvirt", api.MapValue())),
 		api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("hypervisor"), "substrate", "providerRef")),
 	}
-	f.store.scope = SetupContext{Name: "example", ID: "ctx-" + strings.Repeat("1", 32), Revision: "rev-" + strings.Repeat("2", 32)}
+	f.store.scope = SetupContext{Name: "example", Revision: "rev-" + strings.Repeat("2", 32)}
 	f.catalog.err = failure("controller.unsupported", "selected libvirt controller dependencies have no qualified native source for this bastion release", "")
 
 	_, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example"})

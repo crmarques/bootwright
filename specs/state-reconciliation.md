@@ -112,15 +112,15 @@ resolution-attempt numbers. The identity contract is:
 Attempt- or resolution-number exhaustion refuses before observation or effects
 and never wraps or reuses an earlier path.
 
-Context, operation, and block IDs are canonical lowercase ASCII segments
-matching `[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?`. They contain no separator,
-dot segment, whitespace, encoding escape, or user-facing description. An ID is
-validated before lookup or path construction and never comes from an Ansible
-role, play, task, host alias, or vendor response.
+Context names and operation and block IDs are canonical lowercase ASCII
+segments matching `[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?`. They contain no
+separator, dot segment, whitespace, encoding escape, or user-facing
+description. Each is validated before lookup or path construction and never
+comes from an Ansible role, play, task, host alias, or vendor response.
 
-Workspace allocates the context ID independently at creation, before input
-or operations exist, under the
-[context identity grammar](contexts.md#storage-locking-and-publication).
+A context is identified by its name alone, under the
+[context identity contract](contexts.md#identity-and-selection); Workspace
+reserves it at creation, before input or operations exist.
 State reconciliation allocates operation IDs as `op-` followed by 32 lowercase
 hexadecimal characters from 128 OS cryptographically secure random bits.
 

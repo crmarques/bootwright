@@ -250,10 +250,10 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 			}
 		}
 	}
-	if current.view.Context.Name != "" && !slices.ContainsFunc(state.Bindings, func(binding ControllerBinding) bool { return binding.ContextID == current.view.Context.ID }) {
+	if current.view.Context.Name != "" && !slices.ContainsFunc(state.Bindings, func(binding ControllerBinding) bool { return binding.Context == current.view.Context.Name }) {
 		digest, _ := current.host.PrivateDigest()
-		state.Bindings = append(state.Bindings, ControllerBinding{ContextID: current.view.Context.ID, Machine: current.selection.MachineName(), HostDigest: digest})
-		slices.SortFunc(state.Bindings, func(a, b ControllerBinding) int { return strings.Compare(a.ContextID, b.ContextID) })
+		state.Bindings = append(state.Bindings, ControllerBinding{Context: current.view.Context.Name, Machine: current.selection.MachineName(), HostDigest: digest})
+		slices.SortFunc(state.Bindings, func(a, b ControllerBinding) int { return strings.Compare(a.Context, b.Context) })
 	}
 	state.Receipt.Status = "complete"
 	return publish(ctx, tx, state)

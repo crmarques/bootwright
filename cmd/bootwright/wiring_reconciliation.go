@@ -115,16 +115,16 @@ func wireLifecycle(deps lifecycleDependencies, compiler compilation.Compiler, bi
 }
 
 // currentSelection resolves an omitted context name through the invoking
-// user's own marker, returning its identity so a stale marker is refused.
+// user's own marker.
 func currentSelection(store contexts.SelectionStore) lifecycle.CurrentSelection {
 	if store == nil {
 		return nil
 	}
-	return func(ctx context.Context) (string, string, error) {
+	return func(ctx context.Context) (string, error) {
 		selected, err := store.Read(ctx)
 		if err != nil {
-			return "", "", err
+			return "", err
 		}
-		return selected.Name, selected.ID, nil
+		return selected.Name, nil
 	}
 }

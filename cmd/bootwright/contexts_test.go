@@ -112,7 +112,7 @@ func TestCompleteContextJourney(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(registry.Contexts) != 2 || registry.Contexts[0].ID == registry.Contexts[1].ID || registry.Contexts[0].EnvironmentDirectory != registry.Contexts[1].EnvironmentDirectory {
+	if len(registry.Contexts) != 2 || registry.Contexts[0].Name == registry.Contexts[1].Name || registry.Contexts[0].EnvironmentDirectory != registry.Contexts[1].EnvironmentDirectory {
 		t.Fatal("second context from one input directory", registry)
 	}
 	contextRun(t, services, 1, "context", "update", "--name", "alpha", "--input-dir", input)
@@ -124,7 +124,7 @@ func TestCompleteContextJourney(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if registry.Contexts[0].ID != first.ID || registry.Contexts[0].Revision == first.Revision {
+	if registry.Contexts[0].Name != first.Name || registry.Contexts[0].Revision == first.Revision {
 		t.Fatal("update changed identity or did not replace revision", registry)
 	}
 	other := filepath.Join(t.TempDir(), "input")
@@ -140,7 +140,7 @@ func TestCompleteContextJourney(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if registry.Contexts[0].ID != first.ID || registry.Contexts[0].EnvironmentDirectory != filepath.Clean(other) {
+	if registry.Contexts[0].Name != first.Name || registry.Contexts[0].EnvironmentDirectory != filepath.Clean(other) {
 		t.Fatal("update from another directory changed identity or kept the old provenance", registry)
 	}
 	contextRun(t, services, 0, "context", "init", "--name", "beta", "--input-dir", other)
@@ -158,8 +158,8 @@ func TestCompleteContextJourney(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, record := range registry.Contexts {
-		if record.Name == "alpha" && record.ID == first.ID {
-			t.Fatal("reinitialization reused the deleted identity")
+		if record.Name == "alpha" && (record.Revision == first.Revision || record.Revision == "") {
+			t.Fatal("reinitialization inherited or lost the deleted context's input", record)
 		}
 	}
 }
@@ -205,8 +205,8 @@ func TestContextInitWithoutInputCreatesSelectableEncryptedContext(t *testing.T) 
 		t.Fatal("default context is not ready and unconfigured", record)
 	}
 	selection, err := testContextWiring(t, root).Selection.Read(context.Background())
-	if err != nil || selection.Name != "test" || selection.ID != record.ID {
-		t.Fatal("init did not select its new identity", selection, err)
+	if err != nil || selection.Name != record.Name || selection.Version != contexts.SelectionVersion {
+		t.Fatal("init did not select its new context", selection, err)
 	}
 	contextRoot := filepath.Join(root, "contexts", "test")
 	for _, relative := range []string{"context.yaml", "state/reservation.json", "state/mutation.json", "desired-state/revisions", "secrets"} {
@@ -252,39 +252,47 @@ func TestContextInitWithoutInputCreatesSelectableEncryptedContext(t *testing.T) 
 	contextRun(t, services, 0, "context", "update", "--name", "test", "--input-dir", input, "--yes")
 	contextRun(t, services, 0, "validate")
 	updated, err := repository.View(context.Background())
-	if err != nil || updated.Contexts[0].ID != record.ID || updated.Contexts[0].Revision == "" {
+	if err != nil || updated.Contexts[0].Name != record.Name || updated.Contexts[0].Revision == "" {
 		t.Fatal("first import did not preserve the context identity", updated, err)
 	}
 }
 
-func TestStaleUserSelectionCannotResolveReplacementIdentity(t *testing.T) {
+// A context's name is its identity, so a retained user marker follows name
+// reuse instead of being refused. What still refuses is a marker naming a
+// context that does not exist, and deletion clears the deleting user's own.
+func TestUserSelectionRefusesAnAbsentContextAndFollowsNameReuse(t *testing.T) {
 	services, _, input, root := contextFixture(t)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	pointer := testContextWiring(t, root).Selection
-	stale, err := pointer.Read(context.Background())
-	if err != nil {
-		t.Fatal(err)
+	retained, err := pointer.Read(context.Background())
+	if err != nil || retained.Name != "alpha" {
+		t.Fatal("init did not select its context", retained, err)
 	}
 	contextRun(t, services, 0, "context", "delete", "--name", "alpha", "--purge", "--yes")
-	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
-	if err := pointer.Write(context.Background(), stale); err != nil {
+	if cleared, err := pointer.Read(context.Background()); err != nil || cleared.Name != "" {
+		t.Fatal("delete did not clear its own marker", cleared, err)
+	}
+	if err := pointer.Write(context.Background(), retained); err != nil {
 		t.Fatal(err)
 	}
 	before := stateFingerprint(t, root)
 	for _, args := range [][]string{{"context", "current"}, {"validate"}, {"secret", "encryption", "status"}} {
 		_, stderr := contextRun(t, services, 1, args...)
-		if !strings.Contains(stderr, "context.state") || (!strings.Contains(stderr, "stale") && !strings.Contains(stderr, "identity changed")) {
-			t.Fatal("stale pointer was not identified", args, stderr)
+		if !strings.Contains(stderr, "context.state") {
+			t.Fatal("marker naming an absent context was accepted", args, stderr)
 		}
 	}
 	contextRun(t, services, 0, "context", "list")
-	contextRun(t, services, 0, "validate", "--context", "alpha")
-	contextRun(t, services, 0, "secret", "encryption", "status", "--context", "alpha")
 	if !sameFingerprints(before, stateFingerprint(t, root)) {
 		t.Fatal("selection inspection changed context state")
 	}
-	contextRun(t, services, 0, "context", "use", "--name", "alpha")
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	if err := pointer.Write(context.Background(), retained); err != nil {
+		t.Fatal(err)
+	}
+	contextRun(t, services, 0, "context", "current")
 	contextRun(t, services, 0, "validate")
+	contextRun(t, services, 0, "secret", "encryption", "status")
 }
 
 func TestContextReplayAndReadOnlyEffects(t *testing.T) {

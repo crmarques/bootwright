@@ -33,7 +33,7 @@ func (t *transaction) Reserve(ctx context.Context, name, environment string, con
 			break
 		}
 	}
-	fresh := record.ID == ""
+	fresh := record.Name == ""
 	if !fresh && (record.Mode != contexts.Initializing || record.SecretStoreType != configuration.SecretStore.Type) {
 		return contexts.Record{}, state("context name is already reserved")
 	}
@@ -43,18 +43,11 @@ func (t *transaction) Reserve(ctx context.Context, name, environment string, con
 		}
 	}
 	if fresh {
-		if len(t.registry.Contexts) >= maxIdentities {
+		if len(t.registry.Contexts) >= maxContexts {
 			return contexts.Record{}, state("active context limit exceeded")
 		}
-		registry, err := t.store.upgradeRegistry(cloneRegistry(t.registry))
-		if err != nil {
-			return contexts.Record{}, err
-		}
-		id, err := allocateContextIdentity(&registry)
-		if err != nil {
-			return contexts.Record{}, err
-		}
-		record = contexts.Record{Name: name, ID: id, EnvironmentDirectory: environment, Mode: contexts.Initializing, SecretStoreType: configuration.SecretStore.Type}
+		registry := cloneRegistry(t.registry)
+		record = contexts.Record{Name: name, EnvironmentDirectory: environment, Mode: contexts.Initializing, SecretStoreType: configuration.SecretStore.Type}
 		registry.Contexts = append(registry.Contexts, record)
 		if err := t.save(ctx, registry); err != nil {
 			return contexts.Record{}, err
@@ -82,7 +75,7 @@ func (t *transaction) Reserve(ctx context.Context, name, environment string, con
 		}
 		runtime, makeErr := t.store.newDirectory(ctx, dir, "state")
 		if makeErr == nil {
-			data, _ := encodeRecord(reservation{Version: 2, ID: record.ID, Name: name}, maxRecord)
+			data, _ := encodeRecord(reservation{Version: ReservationVersion, Name: name}, maxRecord)
 			makeErr = t.store.writeExclusive(ctx, runtime, "reservation.json", data)
 			runtime.file.Close()
 		}
@@ -99,7 +92,7 @@ func (t *transaction) Reserve(ctx context.Context, name, environment string, con
 			dir.file.Close()
 			return contexts.Record{}, state("initializing context directory was replaced")
 		}
-		if err = verifyReservation(ctx, dir, record.ID, name); err != nil {
+		if err = verifyReservation(ctx, dir, name); err != nil {
 			dir.file.Close()
 			return contexts.Record{}, err
 		}
@@ -116,7 +109,7 @@ func (t *transaction) Reserve(ctx context.Context, name, environment string, con
 		record.DirectoryInode = dir.identity.Ino
 		registry := cloneRegistry(t.registry)
 		for i := range registry.Contexts {
-			if registry.Contexts[i].ID == record.ID {
+			if registry.Contexts[i].Name == record.Name {
 				registry.Contexts[i] = record
 			}
 		}
@@ -166,23 +159,23 @@ func (t *transaction) Reserve(ctx context.Context, name, environment string, con
 	return record, nil
 }
 
-func (t *transaction) Configuration(ctx context.Context, id string) ([]byte, error) {
+func (t *transaction) Configuration(ctx context.Context, name string) ([]byte, error) {
 	if err := t.available(ctx); err != nil {
 		return nil, err
 	}
-	dir, err := t.contextDirectory(ctx, id)
+	dir, err := t.contextDirectory(ctx, name)
 	if err != nil {
 		return nil, err
 	}
 	defer dir.file.Close()
-	if err := verifyReservation(ctx, dir, id, ""); err != nil {
+	if err := verifyReservation(ctx, dir, name); err != nil {
 		return nil, err
 	}
 	data, err := readBounded(ctx, dir, "context.yaml", maxRecord, true)
 	if err != nil {
 		return nil, err
 	}
-	record, err := t.record(id)
+	record, err := t.record(name)
 	if err != nil {
 		return nil, err
 	}

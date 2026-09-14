@@ -51,13 +51,11 @@ func validName(name string) error {
 }
 
 func summary(r Record, selected Selection) Summary {
-	return Summary{Name: r.Name, ID: r.ID, Mode: r.Mode, Current: r.Name == selected.Name && r.ID == selected.ID, Configured: r.Revision != ""}
+	return Summary{Name: r.Name, Mode: r.Mode, Current: r.Name == selected.Name, Configured: r.Revision != ""}
 }
 
 func commitRegistry(ctx context.Context, tx Transaction, reg Registry) error {
-	reg.Identities = slices.Clone(reg.Identities)
 	reg.Contexts = slices.Clone(reg.Contexts)
-	slices.SortFunc(reg.Identities, func(a, b Identity) int { return strings.Compare(a.ID, b.ID) })
 	slices.SortFunc(reg.Contexts, func(a, b Record) int { return strings.Compare(a.Name, b.Name) })
 	return tx.Commit(ctx, reg)
 }
@@ -66,11 +64,11 @@ func findRecord(reg Registry, name string) int {
 	return slices.IndexFunc(reg.Contexts, func(r Record) bool { return r.Name == name })
 }
 
-func (s Service) disposition(ctx context.Context, tx Transaction, id string) (Disposition, error) {
+func (s Service) disposition(ctx context.Context, tx Transaction, name string) (Disposition, error) {
 	if s.guard == nil {
 		return Disposition{}, StateError("context mutation guard is not configured")
 	}
-	data, err := tx.MutationState(ctx, id)
+	data, err := tx.MutationState(ctx, name)
 	if err != nil {
 		return Disposition{}, err
 	}
@@ -169,7 +167,7 @@ func (s Service) configuration(ctx context.Context, name, path string) (Configur
 }
 
 func selectionFor(record Record) Selection {
-	return Selection{Version: 1, Name: record.Name, ID: record.ID}
+	return Selection{Version: SelectionVersion, Name: record.Name}
 }
 
 func (s Service) selection(ctx context.Context) (Selection, error) {
@@ -227,13 +225,13 @@ func (s Service) Init(ctx context.Context, request InitRequest) (*AdmissionResul
 		if err != nil {
 			return err
 		}
-		if err := tx.InitializeSecrets(ctx, record.ID, func(area secretstore.Area) error {
+		if err := tx.InitializeSecrets(ctx, record.Name, func(area secretstore.Area) error {
 			return s.options.InitializeSecrets(ctx, record, area)
 		}); err != nil {
 			return err
 		}
 		if request.InputDirectory != "" {
-			record.Revision, err = tx.Publish(ctx, record.ID, environment, sources)
+			record.Revision, err = tx.Publish(ctx, record.Name, environment, sources)
 			if err != nil {
 				return err
 			}
@@ -310,7 +308,7 @@ func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionR
 			return err
 		}
 		if request.ConfigurationFile != "" {
-			data, err := tx.Configuration(ctx, record.ID)
+			data, err := tx.Configuration(ctx, record.Name)
 			if err != nil {
 				return err
 			}
@@ -326,16 +324,16 @@ func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionR
 			result = admissionResult(record, selected, sources, nil)
 			return nil
 		}
-		if reg.Version == 4 {
+		if reg.Controller != (ControllerDescriptor{}) {
 			guard, ok := tx.(ControllerInputGuard)
 			if !ok {
 				return StateError("controller binding guard is unavailable")
 			}
-			if err := guard.CheckControllerInput(ctx, record.ID, controllerMachine); err != nil {
+			if err := guard.CheckControllerInput(ctx, record.Name, controllerMachine); err != nil {
 				return err
 			}
 		}
-		disposition, err := s.disposition(ctx, tx, record.ID)
+		disposition, err := s.disposition(ctx, tx, record.Name)
 		if err != nil {
 			return err
 		}
@@ -345,7 +343,7 @@ func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionR
 		if err := s.confirm(ctx, request.SkipConfirmation, "update", request.Name); err != nil {
 			return err
 		}
-		record.Revision, err = tx.Publish(ctx, record.ID, environment, sources)
+		record.Revision, err = tx.Publish(ctx, record.Name, environment, sources)
 		if err != nil {
 			return err
 		}
@@ -429,7 +427,7 @@ func (s Service) Current(ctx context.Context, _ CurrentRequest) (*CurrentResult,
 	if err != nil {
 		return nil, err
 	}
-	if selected.Name == "" || selected.ID == "" {
+	if selected.Name == "" {
 		return nil, StateError("no current context is selected; use context use --name <name>")
 	}
 	reg, err := s.repository.View(ctx)
@@ -439,9 +437,6 @@ func (s Service) Current(ctx context.Context, _ CurrentRequest) (*CurrentResult,
 	record, err := readyRecord(reg, selected.Name)
 	if err != nil {
 		return nil, err
-	}
-	if record.ID != selected.ID {
-		return nil, StateError("current context selection is stale; use context use --name <name>")
 	}
 	return &CurrentResult{Context: summary(record, selected)}, ctx.Err()
 }
@@ -469,7 +464,7 @@ func (s Service) Delete(ctx context.Context, request DeleteRequest) (*DeleteResu
 		}
 		record := reg.Contexts[index]
 		if record.Mode == Ready {
-			disposition, err := s.disposition(ctx, tx, record.ID)
+			disposition, err := s.disposition(ctx, tx, record.Name)
 			if err != nil {
 				return err
 			}
@@ -483,8 +478,8 @@ func (s Service) Delete(ctx context.Context, request DeleteRequest) (*DeleteResu
 		if err := tx.Delete(ctx, record); err != nil {
 			return err
 		}
-		result = &DeleteResult{Name: record.Name, ID: record.ID, Outcome: "deleted"}
-		if selected.Name == record.Name && selected.ID == record.ID {
+		result = &DeleteResult{Name: record.Name, Outcome: "deleted"}
+		if selected.Name == record.Name {
 			if err := s.options.Selection.Clear(ctx, selected); err != nil {
 				return StateError("context was deleted, but its current selection could not be cleared")
 			}

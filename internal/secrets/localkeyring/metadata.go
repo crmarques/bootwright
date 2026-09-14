@@ -41,7 +41,7 @@ func sealMetadata(key, plaintext []byte, selector secretstore.Selector, keyID st
 	if _, err := metadataEncodedSize(len(plaintext), selector, keyID); err != nil {
 		return nil, err
 	}
-	sealed, err := seal(key, plaintext, indexAAD(selector.ContextID, selector, keyID), "index", keyID, selector.Generation, random, indexMaximum)
+	sealed, err := seal(key, plaintext, indexAAD(selector.Context, selector, keyID), "index", keyID, selector.Generation, random, indexMaximum)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func openMetadata(record secretstore.Record, key []byte) ([]byte, error) {
 		return nil, err
 	}
 	defer clear(data)
-	return openEnvelope(data, key, indexAAD(record.ContextID, record.Selector, wrapped.KeyID), "index", wrapped.KeyID, record.Generation, indexMaximum)
+	return openEnvelope(data, key, indexAAD(record.Context, record.Selector, wrapped.KeyID), "index", wrapped.KeyID, record.Generation, indexMaximum)
 }
 
 func cleanupFailure(ctx context.Context, err error) error {

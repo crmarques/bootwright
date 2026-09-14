@@ -57,15 +57,12 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 			"borrowed SSH credentials are unsupported for lifecycle operations",
 			"remove --ssh-user, --ssh-id-file and --ssh-ask-sudo-password and author the Machine's own access")
 	}
-	name, id, err := s.resolve(ctx, contextName)
+	name, err := s.resolve(ctx, contextName)
 	if err != nil {
 		return nil, err
 	}
 	var decided transition
 	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
-		if err := verifySelection(view, id); err != nil {
-			return err
-		}
 		decided, err = s.decide(ctx, view, verb, selection)
 		return err
 	})
@@ -466,7 +463,7 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 	}
 	operation := operationstore.Operation{
 		Version: 1, ID: identity, Verb: decided.verb,
-		ContextID: tx.Identity().ID, Revision: tx.Identity().Revision,
+		Context: tx.Identity().Name, Revision: tx.Identity().Revision,
 		InputDigest: inputDigest(tx), PlanDigest: digest, AutomationDigest: s.automation.CatalogDigest(),
 		Executable: operationstore.Executable{Version: s.options.Executable.Version, Commit: s.options.Executable.Commit},
 		Source:     decided.source, Bindings: bindings, State: reconciliation.OperationRunning,
@@ -494,7 +491,7 @@ func (s Service) reserve(ctx context.Context, tx Transaction, decided transition
 // does work. Drift refuses; it never re-resolves to another implementation.
 func (s Service) verifyContinuation(ctx context.Context, tx Transaction, operation operationstore.Operation) error {
 	identity := tx.Identity()
-	if operation.ContextID != identity.ID || operation.Revision != identity.Revision {
+	if operation.Context != identity.Name || operation.Revision != identity.Revision {
 		return failure("lifecycle.state", "the context input changed after this operation registered", "restore the exact input revision this operation froze")
 	}
 	if operation.InputDigest != inputDigest(tx) {
@@ -527,7 +524,7 @@ func verifyHostBinding(view prerequisites.StorageView, identity ContextIdentity,
 		return failure("controller.identity", "this host is not the host the context is bound to", "restore the original host, or create a context on this one")
 	}
 	for _, binding := range view.State.Bindings {
-		if binding.ContextID != identity.ID {
+		if binding.Context != identity.Name {
 			continue
 		}
 		if binding.HostDigest != digest {

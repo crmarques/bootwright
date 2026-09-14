@@ -25,7 +25,7 @@ const (
 
 type legacySelector struct {
 	SelectorVersion int                   `json:"selectorVersion"`
-	ContextID       string                `json:"contextId"`
+	Context         string                `json:"context"`
 	Selection       secretstore.Selection `json:"implementation"`
 	Generation      string                `json:"generation"`
 }
@@ -51,7 +51,7 @@ type legacyIndexAAD struct {
 	Domain        string                `json:"domain"`
 	FormatVersion int                   `json:"formatVersion"`
 	Algorithm     string                `json:"algorithm"`
-	ContextID     string                `json:"contextId"`
+	Context       string                `json:"context"`
 	Selection     secretstore.Selection `json:"implementation"`
 	Generation    string                `json:"generation"`
 	KeyID         string                `json:"keyId"`
@@ -62,7 +62,7 @@ type legacyPartAAD struct {
 	Domain                 string                `json:"domain"`
 	FormatVersion          int                   `json:"formatVersion"`
 	Algorithm              string                `json:"algorithm"`
-	ContextID              string                `json:"contextId"`
+	Context                string                `json:"context"`
 	Selection              secretstore.Selection `json:"implementation"`
 	Generation             string                `json:"generation"`
 	KeyID                  string                `json:"keyId"`
@@ -79,7 +79,7 @@ type legacyLedgerAuthentication struct {
 	Domain        string                `json:"domain"`
 	FormatVersion int                   `json:"formatVersion"`
 	Algorithm     string                `json:"algorithm"`
-	ContextID     string                `json:"contextId"`
+	Context       string                `json:"context"`
 	Selection     secretstore.Selection `json:"implementation"`
 	KeyID         string                `json:"keyId"`
 	Seals         uint64                `json:"seals"`
@@ -87,7 +87,7 @@ type legacyLedgerAuthentication struct {
 
 type legacyInitialization struct {
 	FormatVersion int                           `json:"formatVersion"`
-	ContextID     string                        `json:"contextId"`
+	Context       string                        `json:"context"`
 	Selection     secretstore.Selection         `json:"implementation"`
 	Attempts      []legacyInitializationAttempt `json:"attempts"`
 	MACKeyID      string                        `json:"macKeyId"`
@@ -103,7 +103,7 @@ type legacyInitializationAttempt struct {
 type legacyInitializationAuthentication struct {
 	Domain        string                        `json:"domain"`
 	FormatVersion int                           `json:"formatVersion"`
-	ContextID     string                        `json:"contextId"`
+	Context       string                        `json:"context"`
 	Selection     secretstore.Selection         `json:"implementation"`
 	Attempts      []legacyInitializationAttempt `json:"attempts"`
 	MACKeyID      string                        `json:"macKeyId"`
@@ -116,7 +116,7 @@ type upgradeAttempt struct {
 
 type upgradeRecord struct {
 	Version        int              `json:"version"`
-	ContextID      string           `json:"contextId"`
+	Context        string           `json:"context"`
 	Backend        string           `json:"backend"`
 	SourceSelector string           `json:"sourceSelector"`
 	Attempts       []upgradeAttempt `json:"attempts"`
@@ -156,9 +156,9 @@ func (i *Implementation) upgrade(ctx context.Context, selected secretstore.Conte
 		return nil, areaFailure(ctx, "store.corrupt", "secret upgrade intent is unsafe", err)
 	}
 	digest := sha256.Sum256(old.data)
-	journal := upgradeRecord{Version: formatVersion, ContextID: selected.ID, Backend: i.Backend(), SourceSelector: hex.EncodeToString(digest[:]), Attempts: []upgradeAttempt{}}
+	journal := upgradeRecord{Version: formatVersion, Context: selected.Name, Backend: i.Backend(), SourceSelector: hex.EncodeToString(digest[:]), Attempts: []upgradeAttempt{}}
 	if exists {
-		if decodeCanonical(journalData, selectorMaximum, 256, &journal) != nil || !validUpgrade(journal, selected.ID, i.Backend(), digest, old.keys[old.index.ActiveKey]) {
+		if decodeCanonical(journalData, selectorMaximum, 256, &journal) != nil || !validUpgrade(journal, selected.Name, i.Backend(), digest, old.keys[old.index.ActiveKey]) {
 			return nil, secretstore.Failure("store.corrupt", "secret upgrade intent is invalid or does not match its source")
 		}
 	}
@@ -222,7 +222,7 @@ func (i *Implementation) upgrade(ctx context.Context, selected secretstore.Conte
 		return nil, err
 	}
 	attempt := upgradeAttempt{KeyID: keyID, Generation: generation}
-	next := old.summary(secretstore.Selector{SelectorVersion: formatVersion, ContextID: selected.ID, Backend: i.Backend(), Generation: generation})
+	next := old.summary(secretstore.Selector{SelectorVersion: formatVersion, Context: selected.Name, Backend: i.Backend(), Generation: generation})
 	next.Legacy = true
 	next.ActiveKey = keyID
 	next.Keys = []storedKey{{ID: keyID, Seals: uint64(len(old.plain)) + 1}}
@@ -291,7 +291,7 @@ func (i *Implementation) upgrade(ctx context.Context, selected secretstore.Conte
 	if err := area.WriteExclusive(ctx, keyPath(keyID), key); err != nil {
 		return nil, areaFailure(ctx, "store.conflict", "secret upgrade key could not be stored", err)
 	}
-	usage, err := encodeLedger(selected.ID, i.Backend(), key, keyID, next.Keys[0].Seals)
+	usage, err := encodeLedger(selected.Name, i.Backend(), key, keyID, next.Keys[0].Seals)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +304,7 @@ func (i *Implementation) upgrade(ctx context.Context, selected secretstore.Conte
 		}
 		version, _ := findVersion(next, pending.version)
 		part, _ := storedPartOf(version, pending.part)
-		sealed, err := seal(key, pending.data, partAAD(selected.ID, i.Backend(), version, part), "part", keyID, part.BlobID, i.random, partMaximum)
+		sealed, err := seal(key, pending.data, partAAD(selected.Name, i.Backend(), version, part), "part", keyID, part.BlobID, i.random, partMaximum)
 		if err != nil {
 			return nil, err
 		}
@@ -373,7 +373,7 @@ func readLegacyState(ctx context.Context, selected secretstore.Context, area sec
 	var exists bool
 	var err error
 	s.data, exists, err = area.ReadMutable(ctx, legacySelectorPath, selectorMaximum)
-	if err != nil || !exists || decodeCanonical(s.data, selectorMaximum, 64, &s.selector) != nil || s.selector.SelectorVersion != 1 || s.selector.ContextID != selected.ID || s.selector.Selection != legacySelection() || !validID(s.selector.Generation, "gen-") {
+	if err != nil || !exists || decodeCanonical(s.data, selectorMaximum, 64, &s.selector) != nil || s.selector.SelectorVersion != 1 || s.selector.Context != selected.Name || s.selector.Selection != legacySelection() || !validID(s.selector.Generation, "gen-") {
 		return nil, areaFailure(ctx, "store.corrupt", "legacy secret selection is invalid or incompatible", err)
 	}
 	sealed, exists, err := area.ReadMutable(ctx, "indexes/"+s.selector.Generation+".bin", indexMaximum)
@@ -389,7 +389,7 @@ func readLegacyState(ctx context.Context, selected secretstore.Context, area sec
 	if err != nil {
 		return nil, err
 	}
-	additional, _ := json.Marshal(legacyIndexAAD{Domain: "bootwright.secret.index.v1", FormatVersion: 1, Algorithm: algorithm, ContextID: selected.ID, Selection: s.selector.Selection, Generation: s.selector.Generation, KeyID: wrapped.KeyID, BlobID: s.selector.Generation})
+	additional, _ := json.Marshal(legacyIndexAAD{Domain: "bootwright.secret.index.v1", FormatVersion: 1, Algorithm: algorithm, Context: selected.Name, Selection: s.selector.Selection, Generation: s.selector.Generation, KeyID: wrapped.KeyID, BlobID: s.selector.Generation})
 	plaintext, err := openLegacyEnvelope(sealed, key, additional, "index", wrapped.KeyID, s.selector.Generation, indexMaximum)
 	if err != nil {
 		return nil, err
@@ -403,7 +403,7 @@ func readLegacyState(ctx context.Context, selected secretstore.Context, area sec
 			return nil, secretstore.Failure("store.corrupt", "legacy secret declaration identity is invalid")
 		}
 	}
-	selector := secretstore.Selector{SelectorVersion: formatVersion, ContextID: selected.ID, Backend: "local-keyring-v2", Generation: s.selector.Generation}
+	selector := secretstore.Selector{SelectorVersion: formatVersion, Context: selected.Name, Backend: "local-keyring-v3", Generation: s.selector.Generation}
 	if err := validateIndex(s.summary(selector), selector); err != nil {
 		return nil, secretstore.Failure("store.corrupt", "legacy secret index references are invalid")
 	}
@@ -423,7 +423,7 @@ func readLegacyState(ctx context.Context, selected secretstore.Context, area sec
 		if decodeCanonical(data, ledgerMaximum, 24, &ledger) != nil || ledger.FormatVersion != 1 || ledger.KeyID != reference.ID || ledger.Seals < reference.Seals || ledger.Seals > maxSeals {
 			return nil, secretstore.Failure("store.corrupt", "legacy secret seal ledger is invalid or contradictory")
 		}
-		authentication, _ := json.Marshal(legacyLedgerAuthentication{Domain: "bootwright.secret.ledger.v1", FormatVersion: 1, Algorithm: "HMAC-SHA256", ContextID: selected.ID, Selection: s.selector.Selection, KeyID: reference.ID, Seals: ledger.Seals})
+		authentication, _ := json.Marshal(legacyLedgerAuthentication{Domain: "bootwright.secret.ledger.v1", FormatVersion: 1, Algorithm: "HMAC-SHA256", Context: selected.Name, Selection: s.selector.Selection, KeyID: reference.ID, Seals: ledger.Seals})
 		if !verifyLegacyMAC(key, "bootwright.secret.ledger.mac-key.v1", authentication, ledger.MAC) {
 			return nil, secretstore.Failure("store.corrupt", "legacy secret seal ledger authentication failed")
 		}
@@ -441,7 +441,7 @@ func readLegacyState(ctx context.Context, selected secretstore.Context, area sec
 			if err != nil || !exists {
 				return nil, areaFailure(ctx, "store.corrupt", "legacy secret part is missing or unsafe", err)
 			}
-			aad, _ := json.Marshal(legacyPartAAD{Domain: "bootwright.secret.part.v1", FormatVersion: 1, Algorithm: algorithm, ContextID: selected.ID, Selection: s.selector.Selection, Generation: part.Generation, KeyID: part.KeyID, BlobID: part.BlobID, DeclarationFingerprint: version.Declaration.Fingerprint, Name: version.Declaration.Name, Type: version.Declaration.Type, Source: version.Declaration.Source, Version: version.ID, Part: part.Part})
+			aad, _ := json.Marshal(legacyPartAAD{Domain: "bootwright.secret.part.v1", FormatVersion: 1, Algorithm: algorithm, Context: selected.Name, Selection: s.selector.Selection, Generation: part.Generation, KeyID: part.KeyID, BlobID: part.BlobID, DeclarationFingerprint: version.Declaration.Fingerprint, Name: version.Declaration.Name, Type: version.Declaration.Type, Source: version.Declaration.Source, Version: version.ID, Part: part.Part})
 			material, err := openLegacyEnvelope(data, key, aad, "part", part.KeyID, part.BlobID, partMaximum)
 			clear(data)
 			if err != nil {
@@ -480,7 +480,7 @@ func (s *legacyState) verifyInitialization(ctx context.Context, area secretstore
 		return areaFailure(ctx, "store.corrupt", "legacy secret initialization record is missing or unsafe", err)
 	}
 	var marker legacyInitialization
-	if decodeCanonical(data, selectorMaximum, 512, &marker) != nil || marker.FormatVersion != 1 || marker.ContextID != s.selector.ContextID || marker.Selection != s.selector.Selection || marker.MAC == "" || !validID(marker.MACKeyID, "key-") || len(marker.Attempts) == 0 || len(marker.Attempts) > 16 {
+	if decodeCanonical(data, selectorMaximum, 512, &marker) != nil || marker.FormatVersion != 1 || marker.Context != s.selector.Context || marker.Selection != s.selector.Selection || marker.MAC == "" || !validID(marker.MACKeyID, "key-") || len(marker.Attempts) == 0 || len(marker.Attempts) > 16 {
 		return secretstore.Failure("store.corrupt", "legacy secret initialization record is invalid")
 	}
 	seen := map[string]bool{}
@@ -499,7 +499,7 @@ func (s *legacyState) verifyInitialization(ctx context.Context, area secretstore
 	if err != nil {
 		return err
 	}
-	authentication, _ := json.Marshal(legacyInitializationAuthentication{Domain: "bootwright.secret.initialization.v1", FormatVersion: 1, ContextID: marker.ContextID, Selection: marker.Selection, Attempts: marker.Attempts, MACKeyID: marker.MACKeyID})
+	authentication, _ := json.Marshal(legacyInitializationAuthentication{Domain: "bootwright.secret.initialization.v1", FormatVersion: 1, Context: marker.Context, Selection: marker.Selection, Attempts: marker.Attempts, MACKeyID: marker.MACKeyID})
 	if !verifyLegacyMAC(key, "bootwright.secret.initialization.mac-key.v1", authentication, marker.MAC) {
 		return secretstore.Failure("store.corrupt", "legacy secret initialization authentication failed")
 	}
@@ -563,8 +563,8 @@ func upgradeMAC(record upgradeRecord, key []byte) string {
 	return legacyMAC(key, "bootwright.secret.upgrade.mac-key.v2", data)
 }
 
-func validUpgrade(record upgradeRecord, contextID, backend string, source [sha256.Size]byte, key []byte) bool {
-	if record.Version != formatVersion || record.ContextID != contextID || record.Backend != backend || record.SourceSelector != hex.EncodeToString(source[:]) || len(record.Attempts) == 0 || len(record.Attempts) > maxUpgradeAttempts {
+func validUpgrade(record upgradeRecord, contextName, backend string, source [sha256.Size]byte, key []byte) bool {
+	if record.Version != formatVersion || record.Context != contextName || record.Backend != backend || record.SourceSelector != hex.EncodeToString(source[:]) || len(record.Attempts) == 0 || len(record.Attempts) > maxUpgradeAttempts {
 		return false
 	}
 	seen := map[string]bool{}
@@ -639,10 +639,10 @@ func attributedUpgradeTemporary(ctx context.Context, area secretstore.Area, name
 	defer clear(data)
 	var intent upgradeRecord
 	digest := sha256.Sum256(old.data)
-	if decodeCanonical(data, selectorMaximum, 256, &intent) == nil && validUpgrade(intent, old.selector.ContextID, journal.Backend, digest, old.keys[old.index.ActiveKey]) {
+	if decodeCanonical(data, selectorMaximum, 256, &intent) == nil && validUpgrade(intent, old.selector.Context, journal.Backend, digest, old.keys[old.index.ActiveKey]) {
 		return true, nil
 	}
-	record, err := secretstore.DecodeRecord(data, old.selector.ContextID)
+	record, err := secretstore.DecodeRecord(data, old.selector.Context)
 	if err != nil || record.Backend != journal.Backend {
 		return false, nil
 	}
@@ -735,7 +735,7 @@ func verifyLegacyLayout(ctx context.Context, area secretstore.Area, old *legacyS
 				}
 				data, exists, err := area.ReadMutable(ctx, directory+"/"+entry.Name, selectorMaximum)
 				var identity identityRecord
-				if err != nil || !exists || decodeCanonical(data, selectorMaximum, 16, &identity) != nil || identity.FormatVersion != 1 || identity.ContextID != old.selector.ContextID || identity.ID != id {
+				if err != nil || !exists || decodeCanonical(data, selectorMaximum, 16, &identity) != nil || identity.FormatVersion != 1 || identity.Context != old.selector.Context || identity.ID != id {
 					return areaFailure(ctx, "store.corrupt", "legacy secret identity reservation is invalid", err)
 				}
 				identities[id] = true

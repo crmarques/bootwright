@@ -16,7 +16,7 @@ const (
 	maxAllManifests  = 32 << 20
 	maxRecord        = 64 << 10
 	maxPath          = 4096
-	maxIdentities    = 4096
+	maxContexts      = 4096
 	maxRevisions     = 4096
 	maxSecretEntries = 32768
 	maxSecretBytes   = 256 << 20
@@ -62,11 +62,10 @@ func (s *Store) checkpoint(ctx context.Context, name string) error {
 func state(message string) error { return contexts.StateError(message) }
 
 func emptyRegistry() contexts.Registry {
-	return contexts.Registry{Version: 2, Identities: []contexts.Identity{}, Contexts: []contexts.Record{}}
+	return contexts.Registry{Version: contexts.RegistryVersion, Contexts: []contexts.Record{}}
 }
 
 func cloneRegistry(r contexts.Registry) contexts.Registry {
-	r.Identities = append([]contexts.Identity{}, r.Identities...)
 	r.Contexts = append([]contexts.Record{}, r.Contexts...)
 	return r
 }

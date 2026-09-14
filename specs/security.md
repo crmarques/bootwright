@@ -139,8 +139,8 @@ and invocation-scoped credential refresh follow the
 [CLI boundary](cli.md#local-privilege-and-user-identity). No password enters
 Bootwright memory, argv, environment, durable state or output.
 
-Per-user selection is non-authoritative input: validate its bounded name and
-immutable ID against the root registry. Perform user-file effects with that
+Per-user selection is non-authoritative input: validate its bounded name
+against the root registry. Perform user-file effects with that
 user's credentials, using no-follow handles, private modes and atomic
 publication. Never use an untrusted home or a root write followed by chown.
 Permanent context deletion requires positive disposal proof and an exact

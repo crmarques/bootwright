@@ -10,7 +10,7 @@ import (
 )
 
 func FuzzLocalStoreRecords(f *testing.F) {
-	selector := secretstore.Selector{SelectorVersion: formatVersion, ContextID: "ctx-fixture", Backend: New().Backend(), Generation: "gen-fixture"}
+	selector := secretstore.Selector{SelectorVersion: formatVersion, Context: "fixture", Backend: New().Backend(), Generation: "gen-fixture"}
 	canonical, err := encodeCanonical(selector, selectorMaximum)
 	if err != nil {
 		f.Fatal(err)

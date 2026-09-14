@@ -17,8 +17,8 @@ import (
 
 func TestEveryAdditionalDataFieldIsAuthenticated(t *testing.T) {
 	selection := New().Backend()
-	index := indexAdditionalData{Domain: "index", FormatVersion: 1, Algorithm: algorithm, ContextID: "context-example", Selection: selection, Generation: "generation", KeyID: "key", BlobID: "index"}
-	part := partAdditionalData{Domain: "part", FormatVersion: 1, Algorithm: algorithm, ContextID: "context-example", Selection: selection, Generation: "generation", KeyID: "key", BlobID: "blob", DeclarationFingerprint: "nonsecret-fingerprint", Name: "credential", Type: "opaque", Source: "contextStore", Version: "version", Part: "value"}
+	index := indexAdditionalData{Domain: "index", FormatVersion: 1, Algorithm: algorithm, Context: "context-example", Selection: selection, Generation: "generation", KeyID: "key", BlobID: "index"}
+	part := partAdditionalData{Domain: "part", FormatVersion: 1, Algorithm: algorithm, Context: "context-example", Selection: selection, Generation: "generation", KeyID: "key", BlobID: "blob", DeclarationFingerprint: "nonsecret-fingerprint", Name: "credential", Type: "opaque", Source: "contextStore", Version: "version", Part: "value"}
 	for _, record := range []any{index, part} {
 		t.Run(reflect.TypeOf(record).Name(), func(t *testing.T) {
 			aad, err := json.Marshal(record)

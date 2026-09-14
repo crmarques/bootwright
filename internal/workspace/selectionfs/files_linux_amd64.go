@@ -22,10 +22,9 @@ import (
 const maximumRecord = 4096
 
 var selectionName = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
-var selectionID = regexp.MustCompile(`^ctx-[a-f0-9]{32}$`)
 
 func validSelection(s contexts.Selection) bool {
-	return s.Version == 1 && selectionName.MatchString(s.Name) && selectionID.MatchString(s.ID)
+	return s.Version == contexts.SelectionVersion && selectionName.MatchString(s.Name)
 }
 
 func (s *Store) local(ctx context.Context, action string, value contexts.Selection) (contexts.Selection, error) {
@@ -304,8 +303,6 @@ func decodeSelection(data []byte) (contexts.Selection, error) {
 			err = decoder.Decode(&result.Version)
 		case "name":
 			err = decoder.Decode(&result.Name)
-		case "id":
-			err = decoder.Decode(&result.ID)
 		default:
 			return result, state("selection record is invalid")
 		}

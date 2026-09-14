@@ -202,7 +202,7 @@ func (s *Store) MutateSecrets(ctx context.Context, expected secretstore.Context,
 }
 
 func secretContext(record contexts.Record) secretstore.Context {
-	return secretstore.Context{Name: record.Name, ID: record.ID, Mode: string(record.Mode), Revision: record.Revision}
+	return secretstore.Context{Name: record.Name, Mode: string(record.Mode), Revision: record.Revision}
 }
 
 func namedSecretRecord(registry contexts.Registry, name string) (contexts.Record, error) {
@@ -236,7 +236,7 @@ func openSecretContext(ctx context.Context, root *directory, record contexts.Rec
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := verifyReservation(ctx, dir, record.ID, record.Name); err != nil {
+	if err := verifyReservation(ctx, dir, record.Name); err != nil {
 		dir.file.Close()
 		container.file.Close()
 		return nil, nil, err
@@ -971,7 +971,7 @@ func (a *secretArea) verifyExpectedContext(ctx context.Context) error {
 	if _, err := exactSecretRecord(registry, a.token); err != nil {
 		return err
 	}
-	return verifyReservation(ctx, a.context, a.token.ID, "")
+	return verifyReservation(ctx, a.context, a.token.Name)
 }
 
 func (a *secretArea) Sync(ctx context.Context, path string) error {

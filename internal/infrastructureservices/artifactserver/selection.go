@@ -25,8 +25,8 @@ func Unsupported(catalog api.Catalog) []string {
 
 // Requests derives one frozen request per managed artifact server, in
 // canonical object order. It reads no host, endpoint or Secret material.
-func Requests(catalog api.Catalog, controllerMachine, contextID string) ([]Request, error) {
-	if !strings.HasPrefix(contextID, "ctx-") || len(contextID) != 36 {
+func Requests(catalog api.Catalog, controllerMachine, contextName string) ([]Request, error) {
+	if !api.ValidLexical("name", contextName) {
 		return nil, refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
 	}
 	servers := catalog.OfKind(api.ArtifactServer)
@@ -36,7 +36,7 @@ func Requests(catalog api.Catalog, controllerMachine, contextID string) ([]Reque
 		if server.Spec().Get("management").Text() != "managed" {
 			continue
 		}
-		request, err := requestFor(catalog, server, controllerMachine, contextID)
+		request, err := requestFor(catalog, server, controllerMachine, contextName)
 		if err != nil {
 			return nil, err
 		}
@@ -45,7 +45,7 @@ func Requests(catalog api.Catalog, controllerMachine, contextID string) ([]Reque
 	return requests, nil
 }
 
-func requestFor(catalog api.Catalog, server api.Object, controllerMachine, contextID string) (Request, error) {
+func requestFor(catalog api.Catalog, server api.Object, controllerMachine, contextName string) (Request, error) {
 	name := server.Name()
 	if !safeSegment(name) {
 		return Request{}, refusal("lifecycle.state", "the artifact server name is not a safe host identifier", "rename "+server.Identity())
@@ -77,14 +77,14 @@ func requestFor(catalog api.Catalog, server api.Object, controllerMachine, conte
 	}
 	request := Request{
 		BindAddress: spec.Get("bindAddress").Text(),
-		ContentRoot: contentRootPrefix + "/" + contextID + "/artifact-server/" + name,
+		ContentRoot: contentRootPrefix + "/" + contextName + "/artifact-server/" + name,
 		Egress:      egress,
 		Endpoints:   endpoints,
-		Identity:    Identity{Block: BlockID(name), Context: contextID, Service: name},
+		Identity:    Identity{Block: BlockID(name), Context: contextName, Service: name},
 		Image:       image,
 		Listeners:   listeners,
 		Placement:   placement,
-		Unit:        unitPrefix + "-" + contextID + "-artifacts-" + name,
+		Unit:        unitPrefix + "-" + contextName + "-artifacts-" + name,
 		Version:     requestVersion,
 	}
 	if request.BindAddress == "" {

@@ -40,7 +40,7 @@ func (a *Access) View(ctx context.Context, selected Context, unlock bool, callba
 		return Failure("store.implementation", "secret workspace is not configured")
 	}
 	return a.workspace.ReadSecrets(ctx, selected, func(area Area) error {
-		selector, exists, err := ReadSelector(ctx, area, selected.ID)
+		selector, exists, err := ReadSelector(ctx, area, selected.Name)
 		if err != nil {
 			return err
 		}
@@ -56,7 +56,7 @@ func (a *Access) Mutate(ctx context.Context, selected Context, callback func(Sto
 		return Failure("store.implementation", "secret workspace is not configured")
 	}
 	return a.workspace.MutateSecrets(ctx, selected, func(area Area) error {
-		selector, exists, err := ReadSelector(ctx, area, selected.ID)
+		selector, exists, err := ReadSelector(ctx, area, selected.Name)
 		if err != nil {
 			return err
 		}
@@ -115,7 +115,7 @@ func (a *Access) initializeArea(ctx context.Context, selected Context, implement
 	if a == nil || a.resolver == nil || implementation == nil || area == nil || callback == nil {
 		return Failure("store.implementation", "secret initialization is not configured")
 	}
-	selector, exists, err := readSelectorRecord(ctx, area, selected.ID)
+	selector, exists, err := readSelectorRecord(ctx, area, selected.Name)
 	if err != nil {
 		return err
 	}
@@ -189,8 +189,8 @@ func (a *Access) acquire(ctx context.Context, selected Context, implementation S
 	return material, nil
 }
 
-func ReadSelector(ctx context.Context, area Area, contextID string) (Selector, bool, error) {
-	selector, exists, err := readSelectorRecord(ctx, area, contextID)
+func ReadSelector(ctx context.Context, area Area, contextName string) (Selector, bool, error) {
+	selector, exists, err := readSelectorRecord(ctx, area, contextName)
 	if err != nil || exists {
 		return selector, exists, err
 	}
@@ -204,12 +204,12 @@ func ReadSelector(ctx context.Context, area Area, contextID string) (Selector, b
 	return Selector{}, false, nil
 }
 
-func readSelectorRecord(ctx context.Context, area Area, contextID string) (Selector, bool, error) {
+func readSelectorRecord(ctx context.Context, area Area, contextName string) (Selector, bool, error) {
 	data, exists, err := area.ReadMutable(ctx, RecordPath, RecordMaximum)
 	if err != nil || !exists {
 		return Selector{}, false, err
 	}
-	record, err := DecodeRecord(data, contextID)
+	record, err := DecodeRecord(data, contextName)
 	if err != nil {
 		return Selector{}, false, err
 	}

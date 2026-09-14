@@ -11,9 +11,9 @@ follows [milestones](milestones.md).
 The standalone [Context configuration](contexts.md#context-configuration)
 selects `spec.secretStore.type`, defaulting to `local-keyring`. An immutable
 catalog injected at composition resolves exactly one implementation. Local
-keyring persists the immutable backend-format identity `local-keyring-v2`.
+keyring persists the immutable backend-format identity `local-keyring-v3`.
 The catalog maps that identity to the exact implementation and its public
-component status (`local-v2`, custody `local-keyfile-v1`). Interface/configuration
+component status (`local-v3`, custody `local-keyfile-v1`). Interface/configuration
 metadata belongs to the catalog and is not repeated in persisted records. Context creation initializes
 that implementation through a transaction-scoped Workspace area before ready
 publication, without requiring Environment input or generating Secret values.
@@ -137,7 +137,7 @@ automatically import/generate/delete. Final context deletion permanently removes
 the verified keyring only after positive disposal proof. Human-name reuse
 allocates a fresh identity and never exposes prior material. Protected contexts cannot be deleted or abandoned.
 
-## Local keyring v2
+## Local keyring v3
 
 The `secrets/` subtree is initialized during context creation, independently
 of the enclosing registry format. Empty or absent means uninitialized.
@@ -162,8 +162,9 @@ files, traversal, mount crossings and substitutions.
 | `identities/*.json` | Historical version/binding ID reservations. Retain them after logical deletion to prevent ID reuse. |
 | `init.json`, `upgrade.json` | Temporary authenticated recovery evidence; remove after successful publication and cleanup. |
 
-The shared canonical `store.json` envelope contains `version` (2), `contextId`,
-`backend`, `generation`, then backend-owned `payload`. Local payload is closed
+The shared canonical `store.json` envelope contains `version` (3), `context`,
+`backend`, `generation`, then backend-owned `payload`. The context member is
+the owning [context's name, which is its identity](contexts.md#identity-and-selection). Local payload is closed
 JSON containing `keyId`, `nonce` and `ciphertext`. Its authenticated header
 selects the exact backend and binds metadata to the expected context. Resolve
 only catalog implementations; backend selection cannot authorize acquisition
@@ -204,9 +205,8 @@ metadata generation. The metadata header is authenticated without storing a
 second full selector inside its ciphertext.
 
 Identity reservations use crash-atomic no-replace publication and retain
-`formatVersion`, `contextId`, and `id`. They preserve issued version/binding IDs
-after logical removal. Their allocation policy remains separate from the
-registry's namespace/counter scheme. Initialization uses an attributable,
+`formatVersion`, `context`, and `id`. They preserve issued version/binding IDs
+after logical removal. Initialization uses an attributable,
 authenticated intent recording its context, backend, attempted key/generation
 identities and MAC; never adopt arbitrary partial state by filename.
 
@@ -246,7 +246,7 @@ parts, key usage and initialization evidence before conversion. Preserve
 current/bound logical IDs, mappings, bindings and historical identity
 reservations. Write an attributable upgrade intent before new artifacts;
 reencrypt retained material with a fresh key and durably reserve its seals.
-The single new `store.json` commit selects v2. Before that commit, leave all
+The single new `store.json` commit selects v3. Before that commit, leave all
 version-1 files unchanged and permit only exact attributable retry. After it,
 remove verified obsolete version-1 artifacts using the normal cleanup boundary.
 An interrupted cleanup must not depend on a retired version-1 key. Never import

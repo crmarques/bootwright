@@ -142,7 +142,7 @@ func TestSecretReadSessionPreventsConcurrentMutation(t *testing.T) {
 	token := secretToken(record)
 	implementation := initializeImmutableTestStore(t, store, token)
 	err := store.ReadSecrets(context.Background(), token, func(area secretstore.Area) error {
-		selector, exists, err := secretstore.ReadSelector(context.Background(), area, token.ID)
+		selector, exists, err := secretstore.ReadSelector(context.Background(), area, token.Name)
 		if err != nil || !exists {
 			return errors.New("initialized selector is unavailable")
 		}
@@ -196,7 +196,7 @@ func TestSecretImmutableWriteSurvivesSubprocessDeathMidWrite(t *testing.T) {
 		t.Fatalf("subprocess staging evidence: %#v %v", entries, err)
 	}
 	err = store.ReadSecrets(context.Background(), token, func(area secretstore.Area) error {
-		selector, exists, err := secretstore.ReadSelector(context.Background(), area, token.ID)
+		selector, exists, err := secretstore.ReadSelector(context.Background(), area, token.Name)
 		if err != nil || !exists {
 			return errors.New("initialized selector is unavailable after subprocess death")
 		}

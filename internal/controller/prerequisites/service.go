@@ -404,7 +404,7 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, pha
 	}
 	current.bound = view.Context.Name == ""
 	for _, binding := range view.State.Bindings {
-		if binding.ContextID != view.Context.ID {
+		if binding.Context != view.Context.Name {
 			continue
 		}
 		digest, _ := current.host.PrivateDigest()

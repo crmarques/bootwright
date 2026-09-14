@@ -27,9 +27,9 @@ import (
 )
 
 const (
-	testContextID = "ctx-0123456789abcdef0123456789abcdef"
-	testRevision  = "rev-0123456789abcdef0123456789abcdef"
-	testAutomaton = "aaaa0123456789abcdef0123456789abcdef0123456789abcdef0123456789ab"
+	testContextName = "lab"
+	testRevision    = "rev-0123456789abcdef0123456789abcdef"
+	testAutomaton   = "aaaa0123456789abcdef0123456789abcdef0123456789abcdef0123456789ab"
 )
 
 // memoryArea models the Workspace-held operation area contract.
@@ -148,7 +148,7 @@ func (w *testWorkspace) MutateLifecycle(ctx context.Context, name string, callba
 type testView struct{ workspace *testWorkspace }
 
 func (v *testView) Identity() ContextIdentity {
-	return ContextIdentity{Name: "lab", ID: testContextID, Revision: testRevision}
+	return ContextIdentity{Name: testContextName, Revision: testRevision}
 }
 func (v *testView) Inputs() desiredstate.Sources          { return v.workspace.inputs }
 func (v *testView) Controller() prerequisites.StorageView { return v.workspace.controller }
@@ -416,7 +416,7 @@ func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinitio
 					Status: "complete", CatalogDigest: strings.Repeat("b", 64),
 					Definition: &prerequisites.Definition{},
 				},
-				Bindings: []prerequisites.ControllerBinding{{ContextID: testContextID, Machine: "bastion", HostDigest: digest}},
+				Bindings: []prerequisites.ControllerBinding{{Context: testContextName, Machine: "bastion", HostDigest: digest}},
 			},
 			OpenBundle: func(context.Context, string) (prerequisites.BundleArea, error) { return testBundle{}, nil },
 		},
@@ -440,7 +440,7 @@ func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinitio
 				h.entropy[0]++
 				return len(buffer), nil
 			},
-			Selection:  func(context.Context) (string, string, error) { return "lab", testContextID, nil },
+			Selection:  func(context.Context) (string, error) { return testContextName, nil },
 			Executable: Executable{Version: "devel", Commit: "abcdef1"},
 			Operations: func(area operationstore.Area) OperationStore { return operationstore.New(area, clock.Now) },
 		})
@@ -754,13 +754,11 @@ func TestStatusReportsDurableStateWithoutProbing(t *testing.T) {
 	}
 }
 
-func TestStaleCurrentSelectionRefuses(t *testing.T) {
+func TestEmptyCurrentSelectionRefuses(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
-	h.service.options.Selection = func(context.Context) (string, string, error) {
-		return "lab", "ctx-ffffffffffffffffffffffffffffffff", nil
-	}
+	h.service.options.Selection = func(context.Context) (string, error) { return "", nil }
 	if _, err := h.service.Plan(context.Background(), PlanRequest{}); firstCode(err) != "context.state" {
-		t.Fatalf("stale selection = %v", err)
+		t.Fatalf("empty selection = %v", err)
 	}
 }
 

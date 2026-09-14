@@ -158,7 +158,7 @@ func validateControllerObject(data []byte) error {
 	if len(data) == 0 || len(data) > maxRecord || data[0] != '{' {
 		return state("controller action payload exceeds its bounds or is not an object")
 	}
-	if err := boundedJSON(data, maxIdentities); err != nil {
+	if err := boundedJSON(data, maxContexts); err != nil {
 		return err
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -203,7 +203,7 @@ func validateControllerState(value prerequisites.HostState) error {
 		if r.Context != (prerequisites.SetupContext{}) {
 			return state("baseline setup contains context identity")
 		}
-	} else if !contextName(r.Context.Name) || !identifier(r.Context.ID, "ctx-") || !identifier(r.Context.Revision, "rev-") || !contextName(r.Context.Machine) {
+	} else if !contextName(r.Context.Name) || !identifier(r.Context.Revision, "rev-") || !contextName(r.Context.Machine) {
 		return state("controller receipt context identity is invalid")
 	}
 	if r.Egress.HTTPProxy != "" && !controllerURL(r.Egress.HTTPProxy, false) || r.Egress.HTTPSProxy != "" && !controllerURL(r.Egress.HTTPSProxy, false) || r.Egress.NoProxy == nil || len(r.Egress.NoProxy) > 128 {
@@ -314,15 +314,15 @@ func validateControllerState(value prerequisites.HostState) error {
 		return state("controller receipt plan digest is inconsistent")
 	}
 	hostDigest, _ := value.Host.PrivateDigest()
-	if value.Bindings == nil || len(value.Bindings) > maxIdentities {
+	if value.Bindings == nil || len(value.Bindings) > maxContexts {
 		return state("controller binding count is invalid")
 	}
 	previous := ""
 	for _, binding := range value.Bindings {
-		if !identifier(binding.ContextID, "ctx-") || binding.ContextID <= previous || !contextName(binding.Machine) || binding.HostDigest != hostDigest {
+		if !contextName(binding.Context) || binding.Context <= previous || !contextName(binding.Machine) || binding.HostDigest != hostDigest {
 			return state("controller binding identity is invalid")
 		}
-		previous = binding.ContextID
+		previous = binding.Context
 	}
 	for _, source := range r.Sources {
 		index := slices.IndexFunc(value.RetainedSources, func(item prerequisites.DependencySource) bool { return item.ID == source.ID })
@@ -336,14 +336,14 @@ func validateControllerState(value prerequisites.HostState) error {
 func validateControllerReferences(value prerequisites.HostState, registry contexts.Registry) error {
 	for _, binding := range value.Bindings {
 		if !slices.ContainsFunc(registry.Contexts, func(record contexts.Record) bool {
-			return record.ID == binding.ContextID && record.Mode != contexts.Initializing
+			return record.Name == binding.Context && record.Mode != contexts.Initializing
 		}) {
 			return state("controller binding references an absent context")
 		}
 	}
 	if receipt := value.Receipt; receipt.Incomplete() && receipt.Context.Name != "" {
 		if !slices.ContainsFunc(registry.Contexts, func(record contexts.Record) bool {
-			return record.Name == receipt.Context.Name && record.ID == receipt.Context.ID && record.Revision == receipt.Context.Revision && record.Mode == contexts.Ready
+			return record.Name == receipt.Context.Name && record.Revision == receipt.Context.Revision && record.Mode == contexts.Ready
 		}) {
 			return state("pending controller setup input is missing or changed")
 		}
@@ -396,10 +396,10 @@ func validateControllerReservations(values []prerequisites.HostReservation) erro
 	previous := [3]string{}
 	claimed := map[string]string{}
 	for _, reservation := range values {
-		if !identifier(reservation.ContextID, "ctx-") || !contextName(reservation.Kind) || !contextName(reservation.Service) {
+		if !contextName(reservation.Context) || !contextName(reservation.Kind) || !contextName(reservation.Service) {
 			return state("controller host reservation identity is invalid")
 		}
-		current := [3]string{reservation.ContextID, reservation.Kind, reservation.Service}
+		current := [3]string{reservation.Context, reservation.Kind, reservation.Service}
 		if current[0] < previous[0] || current[0] == previous[0] && (current[1] < previous[1] || current[1] == previous[1] && current[2] <= previous[2]) {
 			return state("controller host reservations are unordered or duplicated")
 		}
@@ -414,10 +414,10 @@ func validateControllerReservations(values []prerequisites.HostReservation) erro
 			if !controllerToken(key) {
 				return state("controller host reservation key is invalid")
 			}
-			if owner, taken := claimed[key]; taken && owner != reservation.ContextID {
+			if owner, taken := claimed[key]; taken && owner != reservation.Context {
 				return state("controller host reservation key is claimed by two contexts")
 			}
-			claimed[key] = reservation.ContextID
+			claimed[key] = reservation.Context
 		}
 		if len(slices.Compact(slices.Clone(reservation.Keys))) != len(reservation.Keys) {
 			return state("controller host reservation keys must be unique")

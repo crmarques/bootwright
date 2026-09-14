@@ -98,10 +98,11 @@ Delivered the complete `secret` tree through the immutable implementation
 catalog with one production implementation, `local-keyring`, plus a test-only
 session-unlock implementation that qualifies the extension seam. Two
 authorized replacements followed: direct root context storage (the fixed root
-store with per-user selection and registry v3 namespace/counter identities,
-without migration from earlier formats) and storage simplification
-(local-keyring v2 with one authenticated metadata file, explicit v1 upgrade and
-guarded cleanup). Platform, entitlement and lifecycle effects remain deferred.
+store with per-user selection, without migration from earlier formats) and
+storage simplification (one authenticated metadata file, explicit v1 upgrade
+and guarded cleanup). The M1b identity replacement then took the keyring to
+`local-keyring-v3`, whose selector and authenticated data name the owning
+context by name. Platform, entitlement and lifecycle effects remain deferred.
 
 Guarded by [`cmd/bootwright/secrets_conformance_test.go`](../cmd/bootwright/secrets_conformance_test.go)
 (the shared port suite over both implementations),
@@ -287,7 +288,7 @@ fill its concrete version, journey and evidence gaps when requested.
 | C11 | Add-ons: one declarative custom-package lifecycle. | No package/target/driver selected; requires C4, C10 and a supported cluster. | Exact identities, qualified driver, host-contract suite, code-content refusal and apply/readiness/replay/destroy acceptance. |
 | C12 | Container cluster and Native artifacts: one local bootable installer ISO from M2a inputs and declared server endpoints. **Needs definition.** | No builder journey; requires M1e and M2a. No remote publication. | Exact builder/dependencies, bounded inputs, sensitive classification, typed manifest/digest, atomic publication, metadata goldens, negative effect tests and boot evidence. |
 | C13 | Release engineering: one source/binary distribution with licensing and notices. **Needs definition.** | Buildability does not define redistribution; requires M1a and one release channel. | Project license, direct/transitive license review, exact release toolchain/platform/shell matrix, non-skipping completion tests, reproducible archives, notices, dependency inventory, checksums, provenance, SBOM and clean-room packaging verification. |
-| C14 | Workspace and Secrets: explicit complete-store restore with logical identity preservation. **Needs definition.** | Copy restoration changes physical identities and may roll back allocation/seal reservations; storage simplification provides upgrades and safe refusal, not a backup/restore command. Requires M1b/M1c and a selected restore journey. | Coherent snapshot validation, authorized inode rebinding, fresh allocation epoch/key before writes after rollback, interruption/retry and wrong-store refusal tests; preserve lifecycle recovery evidence. |
+| C14 | Workspace and Secrets: explicit complete-store restore with logical identity preservation. **Needs definition.** | Copy restoration changes physical identities and may roll back seal reservations; storage simplification provides upgrades and safe refusal, not a backup/restore command. Requires M1b/M1c and a selected restore journey. | Coherent snapshot validation, authorized inode rebinding, fresh key before writes after rollback, interruption/retry and wrong-store refusal tests; preserve lifecycle recovery evidence. |
 | C15 | Secrets: replace per-ID reservations with bounded lifetime allocation. **Needs definition.** | Current opaque random version/binding IDs retain historical reservation files; a new allocation scheme must preserve issued-ID non-reuse across crashes and restore. Requires M1c and C14 restore semantics. | Bounded allocator state, reservation-before-use, counter/namespace exhaustion, migration of existing bindings and failed attempts, non-reuse and crash tests. |
 | C16 | Controller setup and host binding: **delivered by M1d**; local service ownership and conflict refusal **delivered by M1e**. | Relocation requires C14 and a separately defined journey. | M1d owns setup/binding evidence; M1e owns local service qualification and host reservations. |
 | C17 | Managed OS and Workspace: the media store for `media add`, `media list` and `media delete`: layout under the context root, record format, bounds, digest verification and retention while an operation freezes an image. **Needs definition.** | No storage contract exists behind the catalogued commands; requires M1b and M5's first media consumer. The three `media` commands stay unavailable until promoted. | Closed layout and record formats, fixed bounds, atomic publication, frozen-by-operation refusal, bounded download and negative effect tests. |

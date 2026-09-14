@@ -27,51 +27,12 @@ func controllerFailure(code, message string) error {
 	return diagnostics.NewFailureWithRemediation(code, message, "", "repeat the same bastion setup command with its original input and compatible executable")
 }
 
-func verifyControllerRootEntries(ctx context.Context, root *directory, registry contexts.Registry) error {
-	names, err := rootEntryNames(root, maxControllerStages+3)
-	if err != nil {
-		return err
-	}
-	for _, name := range names {
-		switch name {
-		case "registry.json":
-		case "contexts":
-			dir, err := openDirectory(root, name)
-			if err != nil {
-				return err
-			}
-			dir.file.Close()
-		case "controller":
-			if registry.Version != 4 {
-				return state("legacy context store contains unsupported controller state")
-			}
-			dir, err := openDirectory(root, name)
-			if err != nil {
-				return err
-			}
-			if registry.Controller.DirectoryInode != 0 && (registry.Controller.DirectoryInode != dir.identity.Ino || registry.Controller.DirectoryDevice != uint64(dir.identity.Dev)) {
-				dir.file.Close()
-				return state("controller directory was replaced")
-			}
-			dir.file.Close()
-		default:
-			if !pendingInitialRegistryName(name) {
-				return state("context root contains unsupported state")
-			}
-			if err := verifyIgnoredRegistryStage(ctx, root, name); err != nil {
-				return err
-			}
-		}
-	}
-	return root.verify()
-}
-
 func openControllerDirectory(root *directory, registry contexts.Registry) (*directory, error) {
 	// An unattributed descriptor is an interrupted initialization. Any
 	// directory beside it holds no readable controller state, so reads report
 	// missing setup instead of refusing; only explicit setup resolves the
 	// orphan, and it still declines to adopt it.
-	if registry.Version != 4 || registry.Controller.DirectoryInode == 0 {
+	if registry.Controller.DirectoryInode == 0 {
 		return nil, syscall.ENOENT
 	}
 	dir, err := openDirectory(root, "controller")
@@ -86,10 +47,10 @@ func openControllerDirectory(root *directory, registry contexts.Registry) (*dire
 }
 
 func readControllerStored(ctx context.Context, root *directory, registry contexts.Registry) (controllerStored, error) {
-	if registry.Version != 4 {
+	if registry.Controller == (contexts.ControllerDescriptor{}) {
 		return controllerStored{}, nil
 	}
-	if err := verifyControllerRootEntries(ctx, root, registry); err != nil {
+	if err := verifyRootEntries(ctx, root, registry); err != nil {
 		return controllerStored{}, err
 	}
 	dir, err := openControllerDirectory(root, registry)
@@ -151,7 +112,7 @@ func controllerSnapshot(ctx context.Context, root *directory, registry contexts.
 	if err != nil {
 		return prerequisites.StorageView{}, controllerStored{}, err
 	}
-	view := prerequisites.StorageView{Exists: true, Initialized: registry.Version == 4 && registry.Controller.Mode == "ready", State: cloneControllerState(stored.value)}
+	view := prerequisites.StorageView{Exists: true, Initialized: registry.Controller.Mode == "ready", State: cloneControllerState(stored.value)}
 	if name == "" {
 		return view, stored, nil
 	}
@@ -172,7 +133,7 @@ func controllerSnapshot(ctx context.Context, root *directory, registry contexts.
 		if err != nil {
 			return prerequisites.StorageView{}, controllerStored{}, err
 		}
-		view.Context = prerequisites.SetupContext{Name: record.Name, ID: record.ID, Revision: record.Revision}
+		view.Context = prerequisites.SetupContext{Name: record.Name, Revision: record.Revision}
 		view.Sources = sources
 		return view, stored, nil
 	}
@@ -216,7 +177,7 @@ func (s *Store) ReadController(ctx context.Context, name string, callback func(p
 	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
 	registry, exists, err := readRegistry(ctx, root)
 	if err == nil && exists {
-		err = verifyControllerRootEntries(ctx, root, registry)
+		err = verifyRootEntries(ctx, root, registry)
 	}
 	if err == nil {
 		err = verifyMappings(ctx, root, registry)
@@ -265,7 +226,7 @@ func (s *Store) MutateController(ctx context.Context, expected prerequisites.Set
 	if callback == nil {
 		return state("controller mutation callback is missing")
 	}
-	if expected.Name == "" && expected != (prerequisites.SetupContext{}) || expected.Name != "" && (!contextName(expected.Name) || !identifier(expected.ID, "ctx-") || !identifier(expected.Revision, "rev-") || !contextName(expected.Machine)) {
+	if expected.Name == "" && expected != (prerequisites.SetupContext{}) || expected.Name != "" && (!contextName(expected.Name) || !identifier(expected.Revision, "rev-") || !contextName(expected.Machine)) {
 		return state("controller mutation requires exact scope and input evidence")
 	}
 	return s.Transact(ctx, create && expected.Name == "", nil, func(base contexts.Transaction) error {
@@ -274,15 +235,15 @@ func (s *Store) MutateController(ctx context.Context, expected prerequisites.Set
 		if err != nil {
 			return err
 		}
-		if view.Context.Name != expected.Name || view.Context.ID != expected.ID || view.Context.Revision != expected.Revision {
+		if view.Context.Name != expected.Name || view.Context.Revision != expected.Revision {
 			return controllerFailure("controller.conflict", "controller input changed after setup inspection")
 		}
 		view.Context.Machine = expected.Machine
-		if expected.ID != "" {
-			if _, err := t.leaseContext(ctx, expected.ID); err != nil {
+		if expected.Name != "" {
+			if _, err := t.leaseContext(ctx, expected.Name); err != nil {
 				return err
 			}
-			if err := t.CheckControllerInput(ctx, expected.ID, expected.Machine); err != nil {
+			if err := t.CheckControllerInput(ctx, expected.Name, expected.Machine); err != nil {
 				// Exact setup retry owns its pending receipt; ordinary input guards
 				// refuse it. Binding comparison is independently enforced below.
 				if stored.data == nil || !stored.value.Receipt.Incomplete() || stored.value.Receipt.Context != expected {
@@ -294,7 +255,7 @@ func (s *Store) MutateController(ctx context.Context, expected prerequisites.Set
 			return controllerFailure("controller.conflict", "another setup receipt requires exact recovery before host mutation")
 		}
 		for _, binding := range stored.value.Bindings {
-			if binding.ContextID == expected.ID && binding.Machine != expected.Machine {
+			if binding.Context == expected.Name && binding.Machine != expected.Machine {
 				return controllerFailure("controller.identity", "controller Machine differs from its established host binding")
 			}
 		}
@@ -355,15 +316,15 @@ func (t *controllerTransaction) available(ctx context.Context) error {
 	if err != nil || t.base.expected == nil || !sameFile(actual.identity, t.base.expected.identity) || !bytes.Equal(actual.data, t.base.expected.data) {
 		return state("context registry changed during controller setup")
 	}
-	if t.view.Context.ID != "" {
-		dir := t.base.leases[t.view.Context.ID]
+	if t.view.Context.Name != "" {
+		dir := t.base.leases[t.view.Context.Name]
 		if dir == nil {
 			return state("controller context lease is missing")
 		}
 		if err := dir.verify(); err != nil {
 			return err
 		}
-		if err := verifyReservation(ctx, dir, t.view.Context.ID, t.view.Context.Name); err != nil {
+		if err := verifyReservation(ctx, dir, t.view.Context.Name); err != nil {
 			return err
 		}
 	}
@@ -398,7 +359,7 @@ func validateControllerTransition(before, next prerequisites.HostState, scope pr
 		}
 	}
 	for _, binding := range next.Bindings {
-		if !slices.Contains(before.Bindings, binding) && (binding.ContextID != scope.ID || binding.Machine != scope.Machine) {
+		if !slices.Contains(before.Bindings, binding) && (binding.Context != scope.Name || binding.Machine != scope.Machine) {
 			return state("setup cannot publish another context's host binding")
 		}
 	}
@@ -444,7 +405,7 @@ func (t *controllerTransaction) Publish(ctx context.Context, requested prerequis
 	if err := t.available(ctx); err != nil {
 		return prerequisites.NotCommitted, err
 	}
-	if len(requested.Bindings) > maxIdentities || len(requested.RetainedSources) > maxControllerRetainedSources || len(requested.Receipt.Sources) > maxControllerSources || len(requested.Receipt.Actions) > maxControllerActions {
+	if len(requested.Bindings) > maxContexts || len(requested.RetainedSources) > maxControllerRetainedSources || len(requested.Receipt.Sources) > maxControllerSources || len(requested.Receipt.Actions) > maxControllerActions {
 		return prerequisites.NotCommitted, state("controller publication exceeds its collection bounds")
 	}
 	next, err := retainControllerSources(t.stored.value, cloneControllerState(requested))
@@ -462,7 +423,7 @@ func (t *controllerTransaction) Publish(ctx context.Context, requested prerequis
 	}
 	// First publication also admits only this context's new binding.
 	for _, binding := range next.Bindings {
-		if !slices.Contains(t.stored.value.Bindings, binding) && (binding.ContextID != t.view.Context.ID || binding.Machine != t.view.Context.Machine) {
+		if !slices.Contains(t.stored.value.Bindings, binding) && (binding.Context != t.view.Context.Name || binding.Machine != t.view.Context.Machine) {
 			return prerequisites.NotCommitted, state("setup binding lacks its exact context lease")
 		}
 	}
@@ -520,16 +481,11 @@ func (t *controllerTransaction) Publish(ctx context.Context, requested prerequis
 
 func (t *controllerTransaction) ensureController(ctx context.Context) error {
 	registry := t.base.registry
-	if registry.Version < 4 {
-		if err := verifyControllerRootEntries(ctx, t.base.root, registry); err != nil {
+	if registry.Controller == (contexts.ControllerDescriptor{}) {
+		if err := verifyRootEntries(ctx, t.base.root, registry); err != nil {
 			return err
 		}
-		var err error
-		registry, err = t.base.store.upgradeRegistry(cloneRegistry(registry))
-		if err != nil {
-			return err
-		}
-		registry.Version = 4
+		registry = cloneRegistry(registry)
 		registry.Controller = contexts.ControllerDescriptor{Version: 1, Mode: "initializing"}
 		if err := t.base.save(ctx, registry); err != nil {
 			return err
@@ -678,7 +634,7 @@ func (s *Store) replaceControllerRecord(ctx context.Context, dir *directory, exp
 	return prerequisites.Committed, nil
 }
 
-func (t *transaction) checkControllerRecovery(ctx context.Context, id string) error {
+func (t *transaction) checkControllerRecovery(ctx context.Context, name string) error {
 	stored, err := readControllerStored(ctx, t.root, t.registry)
 	if err != nil {
 		return err
@@ -691,17 +647,17 @@ func (t *transaction) checkControllerRecovery(ctx context.Context, id string) er
 		expected := stored
 		t.controllerEvidence = &expected
 	}
-	if stored.data != nil && stored.value.Receipt.Incomplete() && stored.value.Receipt.Context.ID == id {
+	if stored.data != nil && stored.value.Receipt.Incomplete() && stored.value.Receipt.Context.Name == name {
 		return state("context input is protected by incomplete bastion setup; repeat its exact setup command")
 	}
 	return nil
 }
 
-func (t *transaction) CheckControllerInput(ctx context.Context, id, machine string) error {
+func (t *transaction) CheckControllerInput(ctx context.Context, name, machine string) error {
 	if err := t.available(ctx); err != nil {
 		return err
 	}
-	if err := t.checkControllerRecovery(ctx, id); err != nil {
+	if err := t.checkControllerRecovery(ctx, name); err != nil {
 		return err
 	}
 	stored, err := readControllerStored(ctx, t.root, t.registry)
@@ -709,32 +665,32 @@ func (t *transaction) CheckControllerInput(ctx context.Context, id, machine stri
 		return err
 	}
 	for _, binding := range stored.value.Bindings {
-		if binding.ContextID == id && binding.Machine != machine {
+		if binding.Context == name && binding.Machine != machine {
 			return state("replacement input changes the established controller Machine; create a separate context")
 		}
 	}
 	if t.controllerInputs == nil {
 		t.controllerInputs = make(map[string]string)
 	}
-	t.controllerInputs[id] = machine
+	t.controllerInputs[name] = machine
 	return nil
 }
 
-func (t *transaction) checkControllerPublication(ctx context.Context, id string) error {
+func (t *transaction) checkControllerPublication(ctx context.Context, name string) error {
 	stored, err := readControllerStored(ctx, t.root, t.registry)
 	if err != nil {
 		return err
 	}
 	for _, binding := range stored.value.Bindings {
-		if binding.ContextID == id && t.controllerInputs[id] != binding.Machine {
+		if binding.Context == name && t.controllerInputs[name] != binding.Machine {
 			return state("input publication requires preservation of its controller Machine binding")
 		}
 	}
 	return nil
 }
 
-func (t *transaction) dropControllerBinding(ctx context.Context, id string) error {
-	if err := t.checkControllerRecovery(ctx, id); err != nil {
+func (t *transaction) dropControllerBinding(ctx context.Context, name string) error {
+	if err := t.checkControllerRecovery(ctx, name); err != nil {
 		return err
 	}
 	stored, err := readControllerStored(ctx, t.root, t.registry)
@@ -742,7 +698,7 @@ func (t *transaction) dropControllerBinding(ctx context.Context, id string) erro
 		return err
 	}
 	value := cloneControllerState(stored.value)
-	value.Bindings = slices.DeleteFunc(value.Bindings, func(binding prerequisites.ControllerBinding) bool { return binding.ContextID == id })
+	value.Bindings = slices.DeleteFunc(value.Bindings, func(binding prerequisites.ControllerBinding) bool { return binding.Context == name })
 	if len(value.Bindings) == len(stored.value.Bindings) {
 		return nil
 	}

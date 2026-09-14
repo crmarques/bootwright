@@ -138,7 +138,7 @@ func (c *serviceConfirmer) Confirm(context.Context, string, string) error { c.ca
 func serviceFixture(t *testing.T, secretYAML string) (*Service, *serviceAccess, *serviceMaterial, *serviceConfirmer) {
 	t.Helper()
 	content := "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: fixture\nspec:\n  controller: {machineRef: controller}\n  domains:\n    base: example.test\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: controller}\nspec:\n  os: {provided: true}\n  access: {local: true}\n" + secretYAML
-	access := &serviceAccess{snapshot: secretstore.ContextSnapshot{Context: secretstore.Context{Name: "fixture", ID: "ctx-fixture", Revision: "rev-fixture", Mode: "ready"}, Inputs: desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(content))}}}, session: &serviceSession{materials: map[string]secrets.Material{}}}
+	access := &serviceAccess{snapshot: secretstore.ContextSnapshot{Context: secretstore.Context{Name: "fixture", Revision: "rev-fixture", Mode: "ready"}, Inputs: desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(content))}}}, session: &serviceSession{materials: map[string]secrets.Material{}}}
 	material := &serviceMaterial{}
 	confirmer := &serviceConfirmer{}
 	compiler := compilation.NewCompiler(yamlstream.Parser{}, nil, compilation.Rules{Normalize: secrets.Normalize, Validate: secrets.Validate})

@@ -355,7 +355,7 @@ func TestCancellationRetainsIntentAndStopsActions(t *testing.T) {
 
 func TestExplicitSelectionBindingAndWrongMachineRefusal(t *testing.T) {
 	f := newFixture(t)
-	f.store.scope = SetupContext{Name: "example", ID: "ctx-" + strings.Repeat("1", 32), Revision: "rev-" + strings.Repeat("2", 32)}
+	f.store.scope = SetupContext{Name: "example", Revision: "rev-" + strings.Repeat("2", 32)}
 	result, err := f.service.Setup(context.Background(), SetupRequest{ContextName: "example", SkipConfirmation: true})
 	if err != nil || result.Machine != "bastion" || len(f.store.state.Bindings) != 1 || f.store.state.Receipt.Context.Machine != "bastion" {
 		t.Fatalf("binding=%#v err=%v", result, err)
@@ -446,7 +446,7 @@ func (r *testRuntimeInstaller) Prepare(ctx context.Context, area BundleArea, pla
 func explicitRuntimeFixture(t *testing.T) (*fixture, *testRuntimeInstaller) {
 	t.Helper()
 	f := newFixture(t)
-	f.store.scope = SetupContext{Name: "example", ID: "ctx-" + strings.Repeat("1", 32), Revision: "rev-" + strings.Repeat("2", 32)}
+	f.store.scope = SetupContext{Name: "example", Revision: "rev-" + strings.Repeat("2", 32)}
 	f.compiler.runtime = true
 	f.host.runtime = RuntimeInspection{}
 	r := &testRuntimeInstaller{owner: f, result: ActionResult{Outcome: "changed", Evidence: object(map[string]any{"nativePostcondition": "verified"})}}

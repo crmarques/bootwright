@@ -15,15 +15,12 @@ func (s Service) Status(ctx context.Context, request StatusRequest) (*StatusResu
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
-	name, id, err := s.resolve(ctx, request.ContextName)
+	name, err := s.resolve(ctx, request.ContextName)
 	if err != nil {
 		return nil, err
 	}
 	var result *StatusResult
 	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
-		if err := verifySelection(view, id); err != nil {
-			return err
-		}
 		value, err := s.status(ctx, view)
 		result = value
 		return err
@@ -118,7 +115,7 @@ func setupChecks(view View) []SetupCheck {
 			bundle = "incomplete"
 		}
 		for _, item := range controller.State.Bindings {
-			if item.ContextID == view.Identity().ID {
+			if item.Context == view.Identity().Name {
 				binding = "ready"
 			}
 		}

@@ -66,12 +66,11 @@ type repository struct {
 }
 
 func newRepository(t *testing.T) *repository {
-	return &repository{t: t, registry: contexts.Registry{Version: 1, Contexts: []contexts.Record{}, Identities: []contexts.Identity{}}, configurations: map[string][]byte{}, evidence: map[string][]byte{}, published: map[string]desiredstate.Sources{}, failureErr: contexts.StateError("synthetic repository failure")}
+	return &repository{t: t, registry: contexts.Registry{Version: contexts.RegistryVersion, Contexts: []contexts.Record{}}, configurations: map[string][]byte{}, evidence: map[string][]byte{}, published: map[string]desiredstate.Sources{}, failureErr: contexts.StateError("synthetic repository failure")}
 }
 
 func cloneRegistry(reg contexts.Registry) contexts.Registry {
 	reg.Contexts = slices.Clone(reg.Contexts)
-	reg.Identities = slices.Clone(reg.Identities)
 	return reg
 }
 
@@ -101,7 +100,7 @@ func (r *repository) CheckInputDirectory(ctx context.Context, path string) error
 	return r.step(ctx, "preflight")
 }
 
-func (r *repository) ReadInputs(context.Context, string, string) (desiredstate.Sources, error) {
+func (r *repository) ReadInputs(context.Context, string) (desiredstate.Sources, error) {
 	r.t.Fatal("context management used the inspection input port")
 	return desiredstate.Sources{}, nil
 }
@@ -154,35 +153,33 @@ func (tx transaction) Reserve(ctx context.Context, name, directory string, data 
 	}
 	for _, record := range tx.r.registry.Contexts {
 		if record.Name == name {
-			if record.Mode != contexts.Initializing || !reflect.DeepEqual(tx.r.configurations[record.ID], data) {
+			if record.Mode != contexts.Initializing || !reflect.DeepEqual(tx.r.configurations[record.Name], data) {
 				return contexts.Record{}, contexts.StateError("pending init differs")
 			}
 			record.EnvironmentDirectory = directory
 			return record, nil
 		}
 	}
-	id := fmt.Sprintf("ctx-%032x", len(tx.r.registry.Identities)+1)
 	config, err := contexts.ParseConfiguration(name, data)
 	if err != nil {
 		return contexts.Record{}, err
 	}
-	record := contexts.Record{Name: name, ID: id, Mode: contexts.Initializing, EnvironmentDirectory: directory, SecretStoreType: config.SecretStore.Type}
-	tx.r.evidence[id] = []byte(pristineEvidence)
-	tx.r.configurations[id] = slices.Clone(data)
-	tx.r.registry.Identities = append(tx.r.registry.Identities, contexts.Identity{ID: id})
+	record := contexts.Record{Name: name, Mode: contexts.Initializing, EnvironmentDirectory: directory, SecretStoreType: config.SecretStore.Type}
+	tx.r.evidence[name] = []byte(pristineEvidence)
+	tx.r.configurations[name] = slices.Clone(data)
 	tx.r.registry.Contexts = append(tx.r.registry.Contexts, record)
 	return record, nil
 }
 
-func (tx transaction) Configuration(ctx context.Context, id string) ([]byte, error) {
+func (tx transaction) Configuration(ctx context.Context, name string) ([]byte, error) {
 	tx.requireLock()
 	if err := tx.r.step(ctx, "configuration"); err != nil {
 		return nil, err
 	}
-	return slices.Clone(tx.r.configurations[id]), nil
+	return slices.Clone(tx.r.configurations[name]), nil
 }
 
-func (tx transaction) InitializeSecrets(ctx context.Context, id string, callback func(secretstore.Area) error) error {
+func (tx transaction) InitializeSecrets(ctx context.Context, name string, callback func(secretstore.Area) error) error {
 	tx.requireLock()
 	tx.r.leased = true
 	if err := tx.r.step(ctx, "initialize"); err != nil {
@@ -191,16 +188,16 @@ func (tx transaction) InitializeSecrets(ctx context.Context, id string, callback
 	return callback(nil)
 }
 
-func (tx transaction) MutationState(ctx context.Context, id string) ([]byte, error) {
+func (tx transaction) MutationState(ctx context.Context, name string) ([]byte, error) {
 	tx.requireLock()
 	if err := tx.r.step(ctx, "lease"); err != nil {
 		return nil, err
 	}
 	tx.r.leased = true
-	return slices.Clone(tx.r.evidence[id]), nil
+	return slices.Clone(tx.r.evidence[name]), nil
 }
 
-func (tx transaction) Publish(ctx context.Context, id, directory string, input desiredstate.Sources) (string, error) {
+func (tx transaction) Publish(ctx context.Context, name, directory string, input desiredstate.Sources) (string, error) {
 	tx.requireLock()
 	if !tx.r.leased {
 		tx.r.t.Fatal("publication escaped the context lease")
@@ -208,7 +205,7 @@ func (tx transaction) Publish(ctx context.Context, id, directory string, input d
 	if err := tx.r.step(ctx, "publish"); err != nil {
 		return "", err
 	}
-	if directory == "" || id == "" {
+	if directory == "" || name == "" {
 		tx.r.t.Fatal("publication omitted identity")
 	}
 	tx.r.revisions++
@@ -222,8 +219,8 @@ func (tx transaction) Delete(ctx context.Context, record contexts.Record) error 
 	if err := tx.r.step(ctx, "delete"); err != nil {
 		return err
 	}
-	tx.r.registry.Contexts = slices.DeleteFunc(tx.r.registry.Contexts, func(r contexts.Record) bool { return r.ID == record.ID })
-	delete(tx.r.configurations, record.ID)
+	tx.r.registry.Contexts = slices.DeleteFunc(tx.r.registry.Contexts, func(r contexts.Record) bool { return r.Name == record.Name })
+	delete(tx.r.configurations, record.Name)
 	return nil
 }
 
@@ -310,11 +307,10 @@ func service(t *testing.T, r *repository, input desiredstate.Sources) contexts.S
 
 func existingRepository(t *testing.T) *repository {
 	r := newRepository(t)
-	id := "ctx-00000000000000000000000000000001"
-	r.registry = contexts.Registry{Version: 1, Identities: []contexts.Identity{{ID: id}}, Contexts: []contexts.Record{{Name: "example", ID: id, EnvironmentDirectory: "/synthetic/input", Revision: "rev-00000000000000000000000000000001", Mode: contexts.Ready}}}
-	r.evidence[id] = []byte(pristineEvidence)
-	r.selection = contexts.Selection{Version: 1, Name: "example", ID: id}
-	r.configurations[id] = contexts.DefaultConfiguration("example").Canonical()
+	r.registry = contexts.Registry{Version: contexts.RegistryVersion, Contexts: []contexts.Record{{Name: "example", EnvironmentDirectory: "/synthetic/input", Revision: "rev-00000000000000000000000000000001", Mode: contexts.Ready}}}
+	r.evidence["example"] = []byte(pristineEvidence)
+	r.selection = contexts.Selection{Version: contexts.SelectionVersion, Name: "example"}
+	r.configurations["example"] = contexts.DefaultConfiguration("example").Canonical()
 	r.revisions = 1
 	return r
 }
@@ -357,7 +353,7 @@ func TestInitCompilesBeforeTransactionAndPublishesOriginalAcquisition(t *testing
 	if got.Counts != (compilation.Counts{FilesSeen: 4, ObjectsDecoded: 3}) || got.FilesCopied != 5 || len(got.Diagnostics) != 1 || got.Diagnostics[0].Source.Path != "/synthetic/input/excluded.yaml" {
 		t.Fatalf("admission result lost counts or warnings: %#v", got)
 	}
-	if !got.Context.Current || got.Context.Mode != contexts.Ready || got.Context.ID == "" || !r.create || !reflect.DeepEqual(r.roots, []string{"/synthetic/input"}) {
+	if !got.Context.Current || got.Context.Mode != contexts.Ready || got.Context.Name != "example" || !r.create || !reflect.DeepEqual(r.roots, []string{"/synthetic/input"}) {
 		t.Fatal("publication omitted identity, selection or forbidden roots")
 	}
 	if !reflect.DeepEqual(r.calls, []string{"preflight", "read", "compile", "transaction", "registry", "reserve", "initialize", "publish", "registry", "commit", "select"}) {
@@ -416,12 +412,11 @@ func TestInvalidAdmissionAndNamesNeverStartTransaction(t *testing.T) {
 
 func TestUpdatePreservesIdentityAndSelectionAndConfirmsUnderLease(t *testing.T) {
 	r := existingRepository(t)
-	r.selection = contexts.Selection{Version: 1, Name: "other", ID: "ctx-00000000000000000000000000000002"}
-	r.registry.Contexts = append(r.registry.Contexts, contexts.Record{Name: "other", ID: "ctx-00000000000000000000000000000002", EnvironmentDirectory: "/synthetic/other", Revision: "rev-00000000000000000000000000000002", Mode: contexts.Ready})
-	r.registry.Identities = append(r.registry.Identities, contexts.Identity{ID: "ctx-00000000000000000000000000000002"})
+	r.selection = contexts.Selection{Version: contexts.SelectionVersion, Name: "other"}
+	r.registry.Contexts = append(r.registry.Contexts, contexts.Record{Name: "other", EnvironmentDirectory: "/synthetic/other", Revision: "rev-00000000000000000000000000000002", Mode: contexts.Ready})
 	before := cloneRegistry(r.registry)
 	got, err := service(t, r, sourceFixture("/synthetic/input")).Update(context.Background(), contexts.UpdateRequest{Name: "example", InputDirectory: "/synthetic/input"})
-	if err != nil || got.Context.ID != before.Contexts[0].ID || got.Context.Current || r.selection.Name != "other" || r.registry.Contexts[0].Revision == before.Contexts[0].Revision || !reflect.DeepEqual(r.registry.Contexts[1], before.Contexts[1]) || !reflect.DeepEqual(r.registry.Identities, before.Identities) || r.create {
+	if err != nil || got.Context.Name != before.Contexts[0].Name || got.Context.Current || r.selection.Name != "other" || r.registry.Contexts[0].Revision == before.Contexts[0].Revision || !reflect.DeepEqual(r.registry.Contexts[1], before.Contexts[1]) || r.create {
 		t.Fatalf("update changed unrelated state: %#v %v", got, err)
 	}
 	if !reflect.DeepEqual(r.calls, []string{"preflight", "read", "compile", "transaction", "registry", "lease", "guard", "confirm", "publish", "commit"}) {
@@ -439,9 +434,8 @@ func TestProtectedStatesRefuseRecreationAndUnsafeUpdateOrDelete(t *testing.T) {
 				t.Run(operation+"/"+ownership+"/"+command, func(t *testing.T) {
 					r := existingRepository(t)
 					before := cloneRegistry(r.registry)
-					id := r.registry.Contexts[0].ID
 					data := []byte(`{"version":1,"operation":"` + operation + `","ownership":"` + ownership + `"}`)
-					r.evidence[id] = data
+					r.evidence["example"] = data
 					s := service(t, r, sourceFixture("/synthetic/input"))
 					var succeeded bool
 					var err error
@@ -458,7 +452,7 @@ func TestProtectedStatesRefuseRecreationAndUnsafeUpdateOrDelete(t *testing.T) {
 					}
 					allowed := command == "update" && (operation == "none" || operation == "applied")
 					if allowed {
-						if !succeeded || err != nil || r.registry.Contexts[0].ID != id || !reflect.DeepEqual(r.evidence[id], data) {
+						if !succeeded || err != nil || r.registry.Contexts[0].Name != "example" || !reflect.DeepEqual(r.evidence["example"], data) {
 							t.Fatal("allowed update changed identity or mutation evidence", err)
 						}
 					} else if succeeded || err == nil || !reflect.DeepEqual(r.registry, before) || slices.Contains(r.calls, "confirm") || slices.Contains(r.calls, "publish") || slices.Contains(r.calls, "delete") || slices.Contains(r.calls, "commit") {
@@ -475,7 +469,7 @@ func TestMissingCorruptAndLiveLeaseEvidenceCannotBeOverridden(t *testing.T) {
 		for _, command := range []string{"init", "update", "delete"} {
 			t.Run(failure+"/"+command, func(t *testing.T) {
 				r := existingRepository(t)
-				id := r.registry.Contexts[0].ID
+				id := r.registry.Contexts[0].Name
 				switch failure {
 				case "missing":
 					delete(r.evidence, id)
@@ -685,7 +679,7 @@ func TestUpdateMayChangeAcquisitionRootWithoutChangingEnvironmentIdentity(t *tes
 	input.Roots = []string{"/synthetic"}
 	original := r.registry.Contexts[0]
 	got, err := service(t, r, input).Update(context.Background(), contexts.UpdateRequest{Name: "example", InputDirectory: "/synthetic", SkipConfirmation: true})
-	if err != nil || got.Context.ID != original.ID || r.registry.Contexts[0].EnvironmentDirectory != original.EnvironmentDirectory || !reflect.DeepEqual(r.roots, []string{"/synthetic"}) {
+	if err != nil || got.Context.Name != original.Name || r.registry.Contexts[0].EnvironmentDirectory != original.EnvironmentDirectory || !reflect.DeepEqual(r.roots, []string{"/synthetic"}) {
 		t.Fatalf("equivalent Environment location changed identity: %#v %v", got, err)
 	}
 	if !reflect.DeepEqual(r.published[r.registry.Contexts[0].Revision].Roots, input.Roots) || slices.Contains(r.calls, "confirm") {
@@ -745,13 +739,12 @@ func TestDefaultInitThenFirstInputImport(t *testing.T) {
 	if slices.Contains(r.calls, "preflight") || slices.Contains(r.calls, "read") || slices.Contains(r.calls, "compile") || !slices.Contains(r.calls, "initialize") {
 		t.Fatal("default init acquired input or omitted encryption", r.calls)
 	}
-	id := got.Context.ID
-	if !reflect.DeepEqual(r.configurations[id], contexts.DefaultConfiguration("example").Canonical()) || r.selection.ID != id {
+	if !reflect.DeepEqual(r.configurations[got.Context.Name], contexts.DefaultConfiguration("example").Canonical()) || r.selection.Name != got.Context.Name {
 		t.Fatal("default configuration or pointer was not published")
 	}
 	r.calls = nil
 	got, err = s.Update(context.Background(), contexts.UpdateRequest{Name: "example", InputDirectory: "/synthetic/input"})
-	if err != nil || !got.Context.Configured || got.Context.ID != id || !got.InputChanged || !slices.Contains(r.calls, "confirm") || slices.Contains(r.calls, "initialize") {
+	if err != nil || !got.Context.Configured || got.Context.Name != "example" || !got.InputChanged || !slices.Contains(r.calls, "confirm") || slices.Contains(r.calls, "initialize") {
 		t.Fatal("first import failed to preserve configured identity", got, err, r.calls)
 	}
 }
@@ -792,7 +785,6 @@ func TestIncompleteInitializationCanResumeWithSameIdentity(t *testing.T) {
 	if len(r.registry.Contexts) != 1 || r.registry.Contexts[0].Mode != contexts.Initializing || r.selection.Name != "" {
 		t.Fatal("incomplete initialization was lost or selected", r.registry, r.selection)
 	}
-	id := r.registry.Contexts[0].ID
 	r.failure, r.calls = "", nil
 	listed, err := s.List(context.Background(), contexts.ListRequest{})
 	if err != nil || len(listed.Contexts) != 1 || listed.Contexts[0].Mode != contexts.Initializing {
@@ -803,8 +795,8 @@ func TestIncompleteInitializationCanResumeWithSameIdentity(t *testing.T) {
 	}
 	r.calls = nil
 	result, err := s.Init(context.Background(), contexts.InitRequest{Name: "example"})
-	if err != nil || result.Context.ID != id || result.Context.Mode != contexts.Ready || len(r.registry.Identities) != 1 {
-		t.Fatal("initialization retry did not retain identity", result, err)
+	if err != nil || result.Context.Name != "example" || result.Context.Mode != contexts.Ready || len(r.registry.Contexts) != 1 {
+		t.Fatal("initialization retry did not resume its reserved name", result, err)
 	}
 	if repeated, err := s.Init(context.Background(), contexts.InitRequest{Name: "example"}); repeated != nil || err == nil {
 		t.Fatal("ready context was recreated")
@@ -813,7 +805,7 @@ func TestIncompleteInitializationCanResumeWithSameIdentity(t *testing.T) {
 
 func TestSelectionFailureAfterInitializationPreservesReadyContext(t *testing.T) {
 	r := newRepository(t)
-	r.selection = contexts.Selection{Version: 1, Name: "prior", ID: "ctx-prior"}
+	r.selection = contexts.Selection{Version: contexts.SelectionVersion, Name: "prior"}
 	r.failure = "select"
 	got, err := service(t, r, desiredstate.Sources{}).Init(context.Background(), contexts.InitRequest{Name: "example"})
 	if got != nil || err == nil || len(r.registry.Contexts) != 1 || r.registry.Contexts[0].Mode != contexts.Ready || r.selection.Name != "prior" {
@@ -824,27 +816,27 @@ func TestSelectionFailureAfterInitializationPreservesReadyContext(t *testing.T) 
 	}
 }
 
-func TestPerUserSelectionAndDeletedNameCannotRebindIdentity(t *testing.T) {
+// A deleted name becomes free. Recreating it yields a new empty context rather
+// than resurrecting the deleted one's input, configuration or selection.
+func TestDeletedNameIsReusableAndCarriesNothingForward(t *testing.T) {
 	r := existingRepository(t)
 	s := service(t, r, desiredstate.Sources{})
-	old := r.selection
 	before := cloneRegistry(r.registry)
 	if got, err := s.Use(context.Background(), contexts.UseRequest{Name: "example"}); err != nil || !got.Context.Current || !reflect.DeepEqual(r.registry, before) || slices.Contains(r.calls, "commit") {
 		t.Fatal("use changed shared registry", got, err, r.calls)
 	}
 	r.calls = nil
 	deleted, err := s.Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, SkipConfirmation: true})
-	if err != nil || !deleted.CurrentCleared || len(r.registry.Contexts) != 0 || len(r.registry.Identities) != 1 || len(r.configurations) != 0 {
-		t.Fatal("delete did not remove context while retaining ID reservation", deleted, err)
+	if err != nil || !deleted.CurrentCleared || len(r.registry.Contexts) != 0 || len(r.configurations) != 0 || r.selection.Name != "" {
+		t.Fatal("delete did not remove the context and its selection", deleted, err)
 	}
 	r.calls = nil
 	created, err := s.Init(context.Background(), contexts.InitRequest{Name: "example"})
-	if err != nil || created.Context.ID == old.ID {
-		t.Fatal("deleted name reused its old identity", created, err)
+	if err != nil || created.Context.Name != "example" || created.Context.Configured {
+		t.Fatal("recreated name did not start empty", created, err)
 	}
-	r.selection = old
-	if got, err := s.Current(context.Background(), contexts.CurrentRequest{}); got != nil || err == nil {
-		t.Fatal("stale pointer selected new context identity")
+	if record := recordNamed(t, r, "example"); record.Revision != "" || record.EnvironmentDirectory != "" {
+		t.Fatal("recreated name inherited the deleted context's input", record)
 	}
 }
 
@@ -863,7 +855,7 @@ func TestSharedSourceDirectoryNeverBindsContexts(t *testing.T) {
 	r := existingRepository(t)
 	original := recordNamed(t, r, "example")
 	got, err := service(t, r, sourceFixture("/synthetic/input")).Init(context.Background(), contexts.InitRequest{Name: "another", InputDirectory: "/synthetic/input"})
-	if err != nil || got == nil || got.Context.ID == original.ID || len(r.registry.Contexts) != 2 || !reflect.DeepEqual(recordNamed(t, r, "example"), original) {
+	if err != nil || got == nil || got.Context.Name == original.Name || len(r.registry.Contexts) != 2 || !reflect.DeepEqual(recordNamed(t, r, "example"), original) {
 		t.Fatalf("second context from one directory: %#v %v %#v", got, err, r.registry)
 	}
 	if another := recordNamed(t, r, "another"); another.EnvironmentDirectory != original.EnvironmentDirectory || another.Revision == "" || another.Revision == original.Revision {
@@ -871,7 +863,7 @@ func TestSharedSourceDirectoryNeverBindsContexts(t *testing.T) {
 	}
 	r.calls = nil
 	moved, err := service(t, r, sourceFixture("/synthetic/moved")).Update(context.Background(), contexts.UpdateRequest{Name: "example", InputDirectory: "/synthetic/moved", SkipConfirmation: true})
-	if err != nil || moved == nil || moved.Context.ID != original.ID || !slices.Contains(r.calls, "publish") {
+	if err != nil || moved == nil || moved.Context.Name != original.Name || !slices.Contains(r.calls, "publish") {
 		t.Fatalf("update from another directory: %#v %v %v", moved, err, r.calls)
 	}
 	record := recordNamed(t, r, "example")
@@ -886,10 +878,9 @@ func TestIncompleteInitializationResumesWithReplacementInput(t *testing.T) {
 	if result, err := service(t, r, sourceFixture("/synthetic/input")).Init(context.Background(), contexts.InitRequest{Name: "example", InputDirectory: "/synthetic/input"}); result != nil || err == nil {
 		t.Fatal("failed initializer claimed success")
 	}
-	id := recordNamed(t, r, "example").ID
 	r.failure, r.calls = "", nil
 	result, err := service(t, r, sourceFixture("/synthetic/moved")).Init(context.Background(), contexts.InitRequest{Name: "example", InputDirectory: "/synthetic/moved"})
-	if err != nil || result.Context.ID != id || result.Context.Mode != contexts.Ready || !result.Context.Configured {
+	if err != nil || result.Context.Name != "example" || result.Context.Mode != contexts.Ready || !result.Context.Configured {
 		t.Fatalf("retry with replacement input: %#v %v", result, err)
 	}
 	if record := recordNamed(t, r, "example"); record.EnvironmentDirectory != "/synthetic/moved" || record.Revision == "" || !reflect.DeepEqual(r.published[record.Revision].Roots, []string{"/synthetic/moved"}) {
@@ -920,19 +911,19 @@ func TestIdentityConflictsPreserveExistingContexts(t *testing.T) {
 	}
 }
 
-type inputRepositoryFunc func(context.Context, string, string) (desiredstate.Sources, error)
+type inputRepositoryFunc func(context.Context, string) (desiredstate.Sources, error)
 
-func (f inputRepositoryFunc) ReadInputs(ctx context.Context, name, id string) (desiredstate.Sources, error) {
-	return f(ctx, name, id)
+func (f inputRepositoryFunc) ReadInputs(ctx context.Context, name string) (desiredstate.Sources, error) {
+	return f(ctx, name)
 }
 
-func TestCurrentInputAcquisitionCarriesSelectedIdentity(t *testing.T) {
+func TestCurrentInputAcquisitionCarriesSelectedName(t *testing.T) {
 	r := existingRepository(t)
 	calls := 0
-	inputs := contexts.Inputs{Selection: selectionStore{r}, Repository: inputRepositoryFunc(func(ctx context.Context, name, id string) (desiredstate.Sources, error) {
+	inputs := contexts.Inputs{Selection: selectionStore{r}, Repository: inputRepositoryFunc(func(ctx context.Context, name string) (desiredstate.Sources, error) {
 		calls++
-		if name != "example" || calls == 1 && id != r.selection.ID || calls == 2 && id != "" {
-			t.Fatal("selection identity was discarded or explicit target changed", name, id)
+		if name != "example" {
+			t.Fatal("selected name was discarded or an explicit target changed", name)
 		}
 		return sourceFixture("/synthetic/input"), nil
 	})}

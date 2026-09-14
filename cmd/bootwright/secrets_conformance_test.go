@@ -77,7 +77,7 @@ func (i *memoryImplementation) Initialize(ctx context.Context, selected secretst
 		return nil, err
 	}
 	if exists {
-		record, err := secretstore.DecodeRecord(data, selected.ID)
+		record, err := secretstore.DecodeRecord(data, selected.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +100,7 @@ func (i *memoryImplementation) Initialize(ctx context.Context, selected secretst
 func (i *memoryImplementation) Open(ctx context.Context, selected secretstore.Context, area secretstore.Area, selector secretstore.Selector, capability secretstore.SessionMaterial) (secretstore.StoreSession, error) {
 	i.mu.Lock()
 	state, exists := i.states[selector.Generation]
-	if !exists || selector.Backend != i.Backend() || selector.ContextID != selected.ID {
+	if !exists || selector.Backend != i.Backend() || selector.Context != selected.Name {
 		i.mu.Unlock()
 		return nil, secretstore.Failure("store.corrupt", "test snapshot is unavailable")
 	}
@@ -144,7 +144,7 @@ func (s *memorySession) publish(ctx context.Context) error {
 		return err
 	}
 	generation := s.implementation.id("generation")
-	selector, err := secretstore.EncodeRecord(secretstore.Selector{SelectorVersion: secretstore.RecordVersion, ContextID: s.context.ID, Backend: s.implementation.Backend(), Generation: generation}, []byte(`{}`))
+	selector, err := secretstore.EncodeRecord(secretstore.Selector{SelectorVersion: secretstore.RecordVersion, Context: s.context.Name, Backend: s.implementation.Backend(), Generation: generation}, []byte(`{}`))
 	if err != nil {
 		return err
 	}

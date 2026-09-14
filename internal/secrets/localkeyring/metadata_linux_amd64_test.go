@@ -18,7 +18,7 @@ import (
 )
 
 func TestMetadataHeaderAndCiphertextAreAuthenticated(t *testing.T) {
-	selector := secretstore.Selector{SelectorVersion: formatVersion, ContextID: fixedID("ctx-", 1), Backend: New().Backend(), Generation: fixedID("gen-", 1)}
+	selector := secretstore.Selector{SelectorVersion: formatVersion, Context: "example", Backend: New().Backend(), Generation: fixedID("gen-", 1)}
 	keyID := fixedID("key-", 1)
 	key := bytes.Repeat([]byte{7}, 32)
 	plain := []byte("synthetic-authenticated-metadata")
@@ -26,12 +26,12 @@ func TestMetadataHeaderAndCiphertextAreAuthenticated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	record, err := secretstore.DecodeRecord(data, selector.ContextID)
+	record, err := secretstore.DecodeRecord(data, selector.Context)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for name, change := range map[string]func(*secretstore.Record){
-		"context":    func(r *secretstore.Record) { r.ContextID = fixedID("ctx-", 2) },
+		"context":    func(r *secretstore.Record) { r.Context = "other" },
 		"backend":    func(r *secretstore.Record) { r.Backend = "other-backend-v2" },
 		"generation": func(r *secretstore.Record) { r.Generation = fixedID("gen-", 2) },
 		"key": func(r *secretstore.Record) {

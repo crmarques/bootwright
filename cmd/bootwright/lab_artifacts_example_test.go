@@ -59,11 +59,10 @@ func TestLabArtifactsExampleIsAdmissibleAndSupported(t *testing.T) {
 func TestLabArtifactsExamplePlansOneLocalBlock(t *testing.T) {
 	sources := exampleDirectory(t, "lab-artifacts")
 	state, _ := compileAcceptance(t, sources)
-	identity := "ctx-" + strings.Repeat("ab", 16)
 	capability := artifactserver.New(nil, nil)
 	plan, err := capability.Plan(context.Background(), lifecycle.PlanInput{
 		Verb: reconciliation.Apply, State: state, Controller: "bastion",
-		Context: lifecycle.ContextIdentity{Name: "lab-artifacts", ID: identity},
+		Context: lifecycle.ContextIdentity{Name: "lab-artifacts"},
 	})
 	if err != nil || len(plan.Definitions) != 1 {
 		t.Fatalf("plan = %+v (%v)", plan, err)
@@ -75,7 +74,7 @@ func TestLabArtifactsExamplePlansOneLocalBlock(t *testing.T) {
 	if !slices.Equal(plan.Secrets, []string{"artifact-server-tls"}) {
 		t.Fatalf("secrets = %v", plan.Secrets)
 	}
-	if len(plan.Reservations) != 1 || plan.Reservations[0].ContextID != identity {
+	if len(plan.Reservations) != 1 || plan.Reservations[0].Context != "lab-artifacts" {
 		t.Fatalf("reservations = %+v", plan.Reservations)
 	}
 	keys := plan.Reservations[0].Keys

@@ -46,11 +46,10 @@ func TestManagedInfraComponentsExampleIsAdmissibleAndSupported(t *testing.T) {
 func TestManagedInfraComponentsExamplePlansOneBlockPerService(t *testing.T) {
 	sources := exampleDirectory(t, "managed-infra-components")
 	state, _ := compileAcceptance(t, sources)
-	identity := "ctx-" + strings.Repeat("ab", 16)
 	resolver := buildCapabilities(systemClock{})
 	input := lifecycle.PlanInput{
 		Verb: reconciliation.Apply, State: state, Controller: "bastion",
-		Context: lifecycle.ContextIdentity{Name: "managed-infra", ID: identity},
+		Context: lifecycle.ContextIdentity{Name: "managed-infra"},
 	}
 	var definitions []reconciliation.BlockDefinition
 	reservations := map[string][]string{}
@@ -65,8 +64,8 @@ func TestManagedInfraComponentsExamplePlansOneBlockPerService(t *testing.T) {
 		}
 		definitions = append(definitions, contribution.Definitions...)
 		for _, reservation := range contribution.Reservations {
-			if reservation.ContextID != identity {
-				t.Fatalf("%s reserved for %q", kind, reservation.ContextID)
+			if reservation.Context != "managed-infra" {
+				t.Fatalf("%s reserved for %q", kind, reservation.Context)
 			}
 			reservations[reservation.Service] = reservation.Keys
 		}
@@ -107,14 +106,13 @@ func TestManagedInfraComponentsExamplePlansOneBlockPerService(t *testing.T) {
 func TestManagedInfraComponentsRequestsCarryTheirDerivedIntent(t *testing.T) {
 	sources := exampleDirectory(t, "managed-infra-components")
 	state, _ := compileAcceptance(t, sources)
-	identity := "ctx-" + strings.Repeat("ab", 16)
 	resolver := buildCapabilities(systemClock{})
 	requests := map[string]managedservice.Request{}
 	for _, kind := range []string{"Proxy", "DNSServer", "NTPServer"} {
 		capability, _ := resolver.Resolve(kind, "")
 		contribution, err := capability.Plan(context.Background(), lifecycle.PlanInput{
 			Verb: reconciliation.Apply, State: state, Controller: "bastion",
-			Context: lifecycle.ContextIdentity{Name: "managed-infra", ID: identity},
+			Context: lifecycle.ContextIdentity{Name: "managed-infra"},
 		})
 		if err != nil || len(contribution.Definitions) != 1 {
 			t.Fatalf("%s contributed %d blocks (%v)", kind, len(contribution.Definitions), err)

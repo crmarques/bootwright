@@ -9,7 +9,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-const testContext = "ctx-0123456789abcdef0123456789abcdef"
+const testContext = "lab"
 
 func field(name string, value api.Value) api.FieldValue {
 	return api.FieldValue{Name: name, Value: value}
@@ -289,10 +289,10 @@ func TestProbeTargetsFollowTheEffectiveBind(t *testing.T) {
 	}
 }
 
-func TestRequestsRefuseAnInvalidContextIdentity(t *testing.T) {
-	for _, id := range []string{"", "ctx-short", strings.Repeat("a", 36), "op-0123456789abcdef0123456789abcdef"} {
-		if _, err := Requests(catalogOf(bastion(), artifactServer()), "bastion", id); err == nil {
-			t.Fatalf("context identity %q produced requests", id)
+func TestRequestsRefuseAnInvalidContextName(t *testing.T) {
+	for _, name := range []string{"", "Lab", "-lab", "lab-", "lab/other", strings.Repeat("a", 64)} {
+		if _, err := Requests(catalogOf(bastion(), artifactServer()), "bastion", name); err == nil {
+			t.Fatalf("context name %q produced requests", name)
 		}
 	}
 }

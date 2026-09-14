@@ -21,16 +21,16 @@ import (
 func replaceInput(store *Store, record contexts.Record, sources desiredstate.Sources) error {
 	ctx := context.Background()
 	return store.Transact(ctx, false, sources.Roots, func(tx contexts.Transaction) error {
-		if _, err := tx.MutationState(ctx, record.ID); err != nil {
+		if _, err := tx.MutationState(ctx, record.Name); err != nil {
 			return err
 		}
-		revision, err := tx.Publish(ctx, record.ID, sources.Roots[0], sources)
+		revision, err := tx.Publish(ctx, record.Name, sources.Roots[0], sources)
 		if err != nil {
 			return err
 		}
 		registry := tx.Registry()
 		for index := range registry.Contexts {
-			if registry.Contexts[index].ID == record.ID {
+			if registry.Contexts[index].Name == record.Name {
 				registry.Contexts[index].Revision = revision
 			}
 		}
@@ -49,7 +49,7 @@ func requireSelectedInput(t *testing.T, store *Store, record contexts.Record, co
 		t.Fatalf("context publication: %#v %v", registry, err)
 	}
 	selected := registry.Contexts[0]
-	input, err := store.ReadInputs(context.Background(), selected.Name, selected.ID)
+	input, err := store.ReadInputs(context.Background(), selected.Name)
 	if err != nil || len(input.Files) != 1 || !bytes.Equal(input.Files[0].Bytes(), content) {
 		t.Fatalf("selected input is not readable: %#v %v", input, err)
 	}

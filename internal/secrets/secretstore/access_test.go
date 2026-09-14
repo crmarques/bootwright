@@ -109,7 +109,7 @@ func (i *testImplementation) Initialize(ctx context.Context, c Context, a Area, 
 	if err != nil {
 		return nil, err
 	}
-	b, _ := EncodeRecord(Selector{SelectorVersion: RecordVersion, ContextID: c.ID, Backend: i.Backend(), Generation: "generation-one"}, []byte(`{}`))
+	b, _ := EncodeRecord(Selector{SelectorVersion: RecordVersion, Context: c.Name, Backend: i.Backend(), Generation: "generation-one"}, []byte(`{}`))
 	a.(*testArea).files[RecordPath] = b
 	return s, nil
 }
@@ -131,7 +131,7 @@ func testBackend(kind string, needs bool) *testImplementation {
 	return &testImplementation{selection: Selection{Type: kind, Store: ref, KeyCustody: ref}, needs: needs}
 }
 func testAccess(backends ...SecretStoreImplementation) (*Access, *testWorkspace, *testSource) {
-	w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", ID: "ctx-fixture", Mode: "ready", Revision: "rev-fixture"}}
+	w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", Mode: "ready", Revision: "rev-fixture"}}
 	s := &testSource{}
 	return NewAccess(w, NewCatalog(backends...), s), w, s
 }
@@ -183,7 +183,7 @@ func TestImplementationAndSelectorRefusalBeforeBackend(t *testing.T) {
 			w.area.files[RecordPath] = []byte(`{"selectorVersion":1}`)
 		},
 		func(_ *Access, w *testWorkspace, _ *testImplementation) {
-			w.area.files[RecordPath] = []byte(strings.ReplaceAll(string(w.area.files[RecordPath]), "ctx-fixture", "ctx-other"))
+			w.area.files[RecordPath] = []byte(strings.ReplaceAll(string(w.area.files[RecordPath]), "fixture", "other"))
 		},
 		func(_ *Access, _ *testWorkspace, b *testImplementation) { b.selection.Store.StateVersion++ },
 	} {
@@ -282,7 +282,7 @@ func TestAccessUsesInjectedImplementationResolver(t *testing.T) {
 	ctx := context.Background()
 	backend := testBackend("independent", true)
 	resolver := &testResolver{implementation: backend, types: []string{"independent"}}
-	w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", ID: "ctx-fixture", Mode: "ready"}}
+	w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", Mode: "ready"}}
 	source := &testSource{}
 	access := NewAccess(w, resolver, source)
 	if got := access.Types(); !slices.Equal(got, []string{"independent"}) {
@@ -333,10 +333,10 @@ func TestResolverFailureStopsBeforeBackendAndMaterial(t *testing.T) {
 			backend := testBackend("independent", true)
 			want := Failure("store.implementation", "injected resolver refused selection")
 			resolver := &testResolver{implementation: backend, failure: want}
-			w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", ID: "ctx-fixture", Mode: "ready"}}
+			w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", Mode: "ready"}}
 			source := &testSource{}
 			access := NewAccess(w, resolver, source)
-			selector, err := EncodeRecord(Selector{SelectorVersion: RecordVersion, ContextID: w.selected.ID, Backend: backend.Backend(), Generation: "fixture-generation"}, []byte(`{}`))
+			selector, err := EncodeRecord(Selector{SelectorVersion: RecordVersion, Context: w.selected.Name, Backend: backend.Backend(), Generation: "fixture-generation"}, []byte(`{}`))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -368,7 +368,7 @@ func TestMissingResolverPreservesUninitializedInspectionAndRefusesSelection(t *t
 	for name, resolver := range map[string]ImplementationResolver{"nil": nil, "typed-nil-catalog": missing} {
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
-			w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", ID: "ctx-fixture", Mode: "ready"}}
+			w := &testWorkspace{area: &testArea{files: map[string][]byte{}}, selected: Context{Name: "fixture", Mode: "ready"}}
 			access := NewAccess(w, resolver, nil)
 			if len(access.Types()) != 0 {
 				t.Fatal("missing resolver offered completion candidates")
@@ -389,7 +389,7 @@ func TestMissingResolverPreservesUninitializedInspectionAndRefusesSelection(t *t
 			if len(found) != 1 || found[0].Code != "secret.store.implementation" || w.writes != 0 {
 				t.Fatal("missing resolver did not safely refuse initialization", err)
 			}
-			selector, err := EncodeRecord(Selector{SelectorVersion: RecordVersion, ContextID: w.selected.ID, Backend: testBackend("independent", false).Backend(), Generation: "fixture-generation"}, []byte(`{}`))
+			selector, err := EncodeRecord(Selector{SelectorVersion: RecordVersion, Context: w.selected.Name, Backend: testBackend("independent", false).Backend(), Generation: "fixture-generation"}, []byte(`{}`))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -407,14 +407,14 @@ func TestMissingResolverPreservesUninitializedInspectionAndRefusesSelection(t *t
 }
 
 func FuzzCanonicalStoreRecord(f *testing.F) {
-	valid, _ := EncodeRecord(Selector{SelectorVersion: RecordVersion, ContextID: "ctx-test", Backend: testBackend("selected", false).Backend(), Generation: "gen-test"}, []byte(`{}`))
+	valid, _ := EncodeRecord(Selector{SelectorVersion: RecordVersion, Context: "probe", Backend: testBackend("selected", false).Backend(), Generation: "gen-test"}, []byte(`{}`))
 	f.Add(valid)
 	f.Add([]byte(`{"version":2,"version":3}`))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 65536 {
 			return
 		}
-		if record, err := DecodeRecord(data, "ctx-test"); err == nil {
+		if record, err := DecodeRecord(data, "probe"); err == nil {
 			encoded, err := EncodeRecord(record.Selector, record.Payload)
 			if err != nil || string(encoded) != string(data) {
 				t.Fatal("noncanonical record accepted")

@@ -43,7 +43,7 @@ func newLegacyFixture(t *testing.T) legacyFixture {
 	initialKey, activeKey := bytes.Repeat([]byte{0x41}, 32), bytes.Repeat([]byte{0x42}, 32)
 	defer clear(initialKey)
 	defer clear(activeKey)
-	selector := legacySelector{SelectorVersion: 1, ContextID: h.context.ID, Selection: legacySelection(), Generation: id("gen-", '3')}
+	selector := legacySelector{SelectorVersion: 1, Context: h.context.Name, Selection: legacySelection(), Generation: id("gen-", '3')}
 	index := legacyIndex{FormatVersion: 1, Algorithm: algorithm, Selector: selector, ActiveKey: activeKeyID, Keys: []secretstore.Key{{ID: initialKeyID, State: "retired", Seals: 3}, {ID: activeKeyID, State: "active", Seals: 4}}, Versions: []legacyVersion{}, Current: []secretstore.Current{}, Bindings: []secretstore.Binding{}}
 	fixture := legacyFixture{store: h, root: root, selector: selector, values: map[string]string{}, files: map[string][]byte{}, historical: id("ver-", '9')}
 	write := func(path string, value any, maximum int) {
@@ -69,14 +69,14 @@ func newLegacyFixture(t *testing.T) legacyFixture {
 		index.Versions = append(index.Versions, version)
 		fixture.values[item.version] = item.material
 		part := version.Parts[0]
-		aad, _ := json.Marshal(legacyPartAAD{Domain: "bootwright.secret.part.v1", FormatVersion: 1, Algorithm: algorithm, ContextID: h.context.ID, Selection: selector.Selection, Generation: part.Generation, KeyID: activeKeyID, BlobID: part.BlobID, DeclarationFingerprint: declaration.Fingerprint, Name: declaration.Name, Type: declaration.Type, Source: declaration.Source, Version: item.version, Part: secrets.ValuePart})
+		aad, _ := json.Marshal(legacyPartAAD{Domain: "bootwright.secret.part.v1", FormatVersion: 1, Algorithm: algorithm, Context: h.context.Name, Selection: selector.Selection, Generation: part.Generation, KeyID: activeKeyID, BlobID: part.BlobID, DeclarationFingerprint: declaration.Fingerprint, Name: declaration.Name, Type: declaration.Type, Source: declaration.Source, Version: item.version, Part: secrets.ValuePart})
 		write("parts/"+item.blob+".bin", legacyFixtureEnvelope(t, activeKey, []byte(item.material), aad, "part", activeKeyID, item.blob, byte(len(index.Versions))), partMaximum)
-		write("identities/"+item.version+".json", identityRecord{FormatVersion: 1, ContextID: h.context.ID, ID: item.version}, selectorMaximum)
+		write("identities/"+item.version+".json", identityRecord{FormatVersion: 1, Context: h.context.Name, ID: item.version}, selectorMaximum)
 	}
 	index.Current = []secretstore.Current{{Name: "credential", Version: index.Versions[0].ID}}
 	index.Bindings = []secretstore.Binding{{ID: id("bind-", '7'), Versions: []string{index.Versions[1].ID, index.Versions[2].ID}}}
-	write("identities/"+index.Bindings[0].ID+".json", identityRecord{FormatVersion: 1, ContextID: h.context.ID, ID: index.Bindings[0].ID}, selectorMaximum)
-	write("identities/"+fixture.historical+".json", identityRecord{FormatVersion: 1, ContextID: h.context.ID, ID: fixture.historical}, selectorMaximum)
+	write("identities/"+index.Bindings[0].ID+".json", identityRecord{FormatVersion: 1, Context: h.context.Name, ID: index.Bindings[0].ID}, selectorMaximum)
+	write("identities/"+fixture.historical+".json", identityRecord{FormatVersion: 1, Context: h.context.Name, ID: fixture.historical}, selectorMaximum)
 	for n, key := range [][]byte{initialKey, activeKey} {
 		reference := index.Keys[n]
 		path := "keys/" + reference.ID + ".bin"
@@ -84,11 +84,11 @@ func newLegacyFixture(t *testing.T) legacyFixture {
 		if err := os.WriteFile(filepath.Join(root, path), key, 0600); err != nil {
 			t.Fatal(err)
 		}
-		authentication, _ := json.Marshal(legacyLedgerAuthentication{Domain: "bootwright.secret.ledger.v1", FormatVersion: 1, Algorithm: "HMAC-SHA256", ContextID: h.context.ID, Selection: selector.Selection, KeyID: reference.ID, Seals: reference.Seals})
+		authentication, _ := json.Marshal(legacyLedgerAuthentication{Domain: "bootwright.secret.ledger.v1", FormatVersion: 1, Algorithm: "HMAC-SHA256", Context: h.context.Name, Selection: selector.Selection, KeyID: reference.ID, Seals: reference.Seals})
 		write("ledgers/"+reference.ID+".json", sealLedger{FormatVersion: 1, KeyID: reference.ID, Seals: reference.Seals, MAC: legacyMAC(key, "bootwright.secret.ledger.mac-key.v1", authentication)}, ledgerMaximum)
 	}
-	marker := legacyInitialization{FormatVersion: 1, ContextID: h.context.ID, Selection: selector.Selection, Attempts: []legacyInitializationAttempt{{AttemptID: id("init-", 'a'), KeyID: initialKeyID, Generation: id("gen-", '1')}}, MACKeyID: initialKeyID}
-	authentication, _ := json.Marshal(legacyInitializationAuthentication{Domain: "bootwright.secret.initialization.v1", FormatVersion: 1, ContextID: h.context.ID, Selection: selector.Selection, Attempts: marker.Attempts, MACKeyID: initialKeyID})
+	marker := legacyInitialization{FormatVersion: 1, Context: h.context.Name, Selection: selector.Selection, Attempts: []legacyInitializationAttempt{{AttemptID: id("init-", 'a'), KeyID: initialKeyID, Generation: id("gen-", '1')}}, MACKeyID: initialKeyID}
+	authentication, _ := json.Marshal(legacyInitializationAuthentication{Domain: "bootwright.secret.initialization.v1", FormatVersion: 1, Context: h.context.Name, Selection: selector.Selection, Attempts: marker.Attempts, MACKeyID: initialKeyID})
 	marker.MAC = legacyMAC(initialKey, "bootwright.secret.initialization.mac-key.v1", authentication)
 	write(initializationPath, marker, selectorMaximum)
 	plaintext, err := encodeCanonical(index, indexMaximum)
@@ -96,7 +96,7 @@ func newLegacyFixture(t *testing.T) legacyFixture {
 		t.Fatal(err)
 	}
 	defer clear(plaintext)
-	aad, _ := json.Marshal(legacyIndexAAD{Domain: "bootwright.secret.index.v1", FormatVersion: 1, Algorithm: algorithm, ContextID: h.context.ID, Selection: selector.Selection, Generation: selector.Generation, KeyID: activeKeyID, BlobID: selector.Generation})
+	aad, _ := json.Marshal(legacyIndexAAD{Domain: "bootwright.secret.index.v1", FormatVersion: 1, Algorithm: algorithm, Context: h.context.Name, Selection: selector.Selection, Generation: selector.Generation, KeyID: activeKeyID, BlobID: selector.Generation})
 	write("indexes/"+selector.Generation+".bin", legacyFixtureEnvelope(t, activeKey, plaintext, aad, "index", activeKeyID, selector.Generation, 4), indexMaximum)
 	write(legacySelectorPath, selector, selectorMaximum)
 	fixture.index = index
@@ -198,7 +198,7 @@ func TestLegacyUpgradePreservesCurrentBindingsAndIdentityHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = f.store.workspace.ReadSecrets(context.Background(), f.store.context, func(area secretstore.Area) error {
-		_, _, err := secretstore.ReadSelector(context.Background(), area, f.store.context.ID)
+		_, _, err := secretstore.ReadSelector(context.Background(), area, f.store.context.Name)
 		return err
 	})
 	if err == nil {

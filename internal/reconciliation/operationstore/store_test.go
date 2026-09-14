@@ -43,7 +43,7 @@ func testOperation(t *testing.T, plan reconciliation.Plan) Operation {
 	}
 	return Operation{
 		Version: 1, ID: "op-" + strings.Repeat("ab", 16), Verb: plan.Verb,
-		ContextID: "ctx-" + strings.Repeat("cd", 16), Revision: "rev-" + strings.Repeat("ef", 16),
+		Context: "example", Revision: "rev-" + strings.Repeat("ef", 16),
 		InputDigest: strings.Repeat("1", 64), PlanDigest: digest, AutomationDigest: strings.Repeat("2", 64),
 		Executable: Executable{Version: "devel", Commit: "abcdef1"},
 		Bindings:   []string{}, State: reconciliation.OperationRunning,
@@ -132,7 +132,7 @@ func TestRegisterRefusesInconsistentOperations(t *testing.T) {
 		"bad state":         func(o Operation) Operation { o.State = "queued"; return o },
 		"nil bindings":      func(o Operation) Operation { o.Bindings = nil; return o },
 		"unsorted bindings": func(o Operation) Operation { o.Bindings = []string{"b", "a"}; return o },
-		"missing context":   func(o Operation) Operation { o.ContextID = ""; return o },
+		"missing context":   func(o Operation) Operation { o.Context = ""; return o },
 		"local timestamp":   func(o Operation) Operation { o.Created = "2026-09-11T12:00:00+02:00"; return o },
 	} {
 		t.Run(name, func(t *testing.T) {

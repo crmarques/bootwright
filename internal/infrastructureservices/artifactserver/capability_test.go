@@ -36,7 +36,7 @@ func planInput(t *testing.T, verb reconciliation.Verb, objects ...api.Object) li
 	catalog := catalogOf(objects...)
 	return lifecycle.PlanInput{
 		Verb:       verb,
-		Context:    lifecycle.ContextIdentity{Name: "lab", ID: testContext, Revision: "rev-1"},
+		Context:    lifecycle.ContextIdentity{Name: testContext, Revision: "rev-1"},
 		State:      compilation.NewState(catalog, catalog, nil),
 		Controller: "bastion",
 	}
@@ -58,7 +58,7 @@ func TestPlanFreezesOneBlockPerManagedServer(t *testing.T) {
 	if !slices.Equal(plan.Secrets, []string{"artifact-server-tls"}) {
 		t.Fatalf("secrets = %v", plan.Secrets)
 	}
-	if len(plan.Reservations) != 1 || plan.Reservations[0].ContextID != testContext || plan.Reservations[0].Kind != "artifact-server" {
+	if len(plan.Reservations) != 1 || plan.Reservations[0].Context != testContext || plan.Reservations[0].Kind != "artifact-server" {
 		t.Fatalf("reservations = %+v", plan.Reservations)
 	}
 	groups := []string{}

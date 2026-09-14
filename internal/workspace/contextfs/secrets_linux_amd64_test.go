@@ -15,7 +15,7 @@ import (
 )
 
 func secretToken(record contexts.Record) secretstore.Context {
-	return secretstore.Context{Name: record.Name, ID: record.ID, Mode: string(record.Mode), Revision: record.Revision}
+	return secretstore.Context{Name: record.Name, Mode: string(record.Mode), Revision: record.Revision}
 }
 
 func TestSecretAreaIsAbsentReadOnlyAndAtomicallyPublished(t *testing.T) {

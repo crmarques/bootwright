@@ -34,10 +34,10 @@ func TestRetiredServiceAndTrustSnapshotCanBeReplacedWithoutLosingSecrets(t *test
 	// Publish exact historical source bytes through the storage boundary to
 	// model a snapshot admitted by the earlier compiler.
 	err = repository.Transact(context.Background(), false, sources.Roots, func(tx contexts.Transaction) error {
-		if _, err := tx.MutationState(context.Background(), original.ID); err != nil {
+		if _, err := tx.MutationState(context.Background(), original.Name); err != nil {
 			return err
 		}
-		revision, err := tx.Publish(context.Background(), original.ID, input, sources)
+		revision, err := tx.Publish(context.Background(), original.Name, input, sources)
 		if err != nil {
 			return err
 		}
@@ -71,7 +71,7 @@ func TestRetiredServiceAndTrustSnapshotCanBeReplacedWithoutLosingSecrets(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if registry.Contexts[0].ID != original.ID || registry.Contexts[0].Revision == original.Revision || registry.Contexts[0].EnvironmentDirectory != filepath.Clean(input) {
+	if registry.Contexts[0].Name != original.Name || registry.Contexts[0].Revision == original.Revision || registry.Contexts[0].EnvironmentDirectory != filepath.Clean(input) {
 		t.Fatal("schema replacement did not preserve context identity and source directory")
 	}
 	restored, stderr := contextRun(t, services, 0, "secret", "show", "--name", "retained-token", "--part", "value")

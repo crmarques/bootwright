@@ -50,7 +50,7 @@ func wireSecrets(deps serviceDependencies, compiler compilation.Compiler) secret
 				return err
 			},
 			Initialize: func(ctx context.Context, record contexts.Record, area secretstore.Area) error {
-				selected := secretstore.Context{Name: record.Name, ID: record.ID, Mode: string(record.Mode), Revision: record.Revision}
+				selected := secretstore.Context{Name: record.Name, Mode: string(record.Mode), Revision: record.Revision}
 				return access.InitializeArea(ctx, selected, record.SecretStoreType, area)
 			},
 		},

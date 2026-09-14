@@ -12,9 +12,10 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
+// SetupContext names the context a setup attempt is bound to. A context's name
+// is its identity, so the receipt retains no separate identifier.
 type SetupContext struct {
 	Name     string `json:"name"`
-	ID       string `json:"id"`
 	Revision string `json:"revision"`
 	Machine  string `json:"machine"`
 }
@@ -55,9 +56,9 @@ const (
 )
 
 // HostState and all returned evidence are private. Storage copies reachable
-// mutable slices at each request/result boundary. Bindings are sorted by ID and
-// share the receipt's atomic publication; context deletion removes only its
-// disposable binding, preserving host evidence and dependencies.
+// mutable slices at each request/result boundary. Bindings are sorted by context
+// name and share the receipt's atomic publication; context deletion removes only
+// its disposable binding, preserving host evidence and dependencies.
 type HostState struct {
 	Host                controller.InstalledHostIdentity
 	Receipt             SetupReceipt
@@ -68,7 +69,7 @@ type HostState struct {
 }
 
 type ControllerBinding struct {
-	ContextID  string `json:"contextID"`
+	Context    string `json:"context"`
 	Machine    string `json:"machine"`
 	HostDigest string `json:"hostDigest"`
 }
@@ -77,10 +78,10 @@ type ControllerBinding struct {
 // hosted service claims. Workspace stores and compares the keys; only the
 // owning capability knows what a key means. Setup reserves nothing.
 type HostReservation struct {
-	ContextID string   `json:"contextID"`
-	Kind      string   `json:"kind"`
-	Service   string   `json:"service"`
-	Keys      []string `json:"keys"`
+	Context string   `json:"context"`
+	Kind    string   `json:"kind"`
+	Service string   `json:"service"`
+	Keys    []string `json:"keys"`
 }
 
 type SetupEgress struct {

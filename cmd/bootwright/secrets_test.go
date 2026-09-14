@@ -319,12 +319,12 @@ func TestSecretNameReuseCannotExposeAnotherContextIdentity(t *testing.T) {
 	addSecretInput(t, newInput, "secret.yaml", declaration)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", newInput)
 	after, err := repository.View(context.Background())
-	if err != nil || len(after.Contexts) != 1 || before.Contexts[0].ID == after.Contexts[0].ID {
-		t.Fatal("context name reuse did not establish a new durable identity", err)
+	if err != nil || len(after.Contexts) != 1 || before.Contexts[0].Revision == after.Contexts[0].Revision {
+		t.Fatal("context name reuse did not establish new durable state", err)
 	}
 	status := secretResult(t, services, 0, "secret", "encryption", "status")
 	if string(status["initialized"]) != "true" {
-		t.Fatal("new identity did not receive its own initialized secret store")
+		t.Fatal("recreated context did not receive its own initialized secret store")
 	}
 	out, _ := contextRun(t, services, 1, "secret", "show", "--name", "token", "--part", "value")
 	if out != "" {

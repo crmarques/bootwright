@@ -33,7 +33,7 @@ func TestLifecycleViewExposesTheContextSnapshot(t *testing.T) {
 	err := store.ReadLifecycle(ctx, "example", func(view lifecycle.View) error {
 		seen = true
 		identity := view.Identity()
-		if identity.Name != record.Name || identity.ID != record.ID || identity.Revision != record.Revision {
+		if identity.Name != record.Name || identity.Revision != record.Revision {
 			t.Fatalf("identity = %+v, want %+v", identity, record)
 		}
 		if len(view.Inputs().Files) != 1 {
@@ -82,13 +82,13 @@ func TestLifecycleReadRefusesAContextWithoutInput(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if _, err := tx.MutationState(ctx, record.ID); err != nil {
+		if _, err := tx.MutationState(ctx, record.Name); err != nil {
 			return err
 		}
 		registry := tx.Registry()
 		record.Mode = contexts.Ready
 		for i := range registry.Contexts {
-			if registry.Contexts[i].ID == record.ID {
+			if registry.Contexts[i].Name == record.Name {
 				registry.Contexts[i] = record
 			}
 		}
@@ -252,7 +252,7 @@ func TestSecondLifecycleMutatorRefusesWhileOneHoldsTheStore(t *testing.T) {
 // to live in, mirroring a host that completed bastion setup.
 func reserveFixture(t *testing.T, store *Store, record contexts.Record) {
 	t.Helper()
-	scope := prerequisites.SetupContext{Name: record.Name, ID: record.ID, Revision: record.Revision, Machine: "bastion"}
+	scope := prerequisites.SetupContext{Name: record.Name, Revision: record.Revision, Machine: "bastion"}
 	publishControllerState(t, store, scope, completeControllerState(syntheticControllerState(t, scope)))
 }
 
@@ -261,7 +261,7 @@ func reserveFixture(t *testing.T, store *Store, record contexts.Record) {
 func sealedBundleFixture(t *testing.T, store *Store, record contexts.Record) string {
 	t.Helper()
 	ctx := context.Background()
-	scope := prerequisites.SetupContext{Name: record.Name, ID: record.ID, Revision: record.Revision, Machine: "bastion"}
+	scope := prerequisites.SetupContext{Name: record.Name, Revision: record.Revision, Machine: "bastion"}
 	value := syntheticControllerState(t, scope)
 	publishControllerState(t, store, scope, value)
 	err := store.MutateController(ctx, scope, false, func(tx prerequisites.StorageTransaction) error {
@@ -294,7 +294,7 @@ func TestReservationsRetainBundleAttribution(t *testing.T) {
 	store, record := lifecycleFixture(t)
 	digest := sealedBundleFixture(t, store, record)
 	claim := []prerequisites.HostReservation{{
-		ContextID: record.ID, Kind: "proxy", Service: "lab-proxy",
+		Context: record.Name, Kind: "proxy", Service: "lab-proxy",
 		Keys: []string{"socket:192.0.2.1:3128", "unit:bootwright-proxy"},
 	}}
 	for _, reserve := range []func(tx lifecycle.Transaction) error{
@@ -326,7 +326,7 @@ func TestReservationsRefuseAnotherContextsKeys(t *testing.T) {
 	store, record := lifecycleFixture(t)
 	reserveFixture(t, store, record)
 	claim := []prerequisites.HostReservation{{
-		ContextID: record.ID, Kind: "artifact-server", Service: "lab-artifacts",
+		Context: record.Name, Kind: "artifact-server", Service: "lab-artifacts",
 		Keys: []string{"socket:192.0.2.1:8443", "unit:bootwright-artifacts"},
 	}}
 	if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
@@ -340,7 +340,7 @@ func TestReservationsRefuseAnotherContextsKeys(t *testing.T) {
 		t.Fatal("a context could not replace its own reservation:", err)
 	}
 	foreign := slices.Clone(claim)
-	foreign[0].ContextID = "ctx-" + strings.Repeat("ff", 16)
+	foreign[0].Context = "foreign"
 	if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
 		return tx.Reserve(ctx, foreign)
 	}); err == nil {
@@ -367,7 +367,7 @@ func TestReservationRequiresACompletedSetup(t *testing.T) {
 	store, record := lifecycleFixture(t)
 	err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
 		return tx.Reserve(ctx, []prerequisites.HostReservation{{
-			ContextID: record.ID, Kind: "artifact-server", Service: "lab-artifacts", Keys: []string{"unit:x"},
+			Context: record.Name, Kind: "artifact-server", Service: "lab-artifacts", Keys: []string{"unit:x"},
 		}})
 	})
 	if err == nil {
@@ -415,7 +415,7 @@ func TestLifecyclePublicationCheckpointsFireAndFailClosed(t *testing.T) {
 					return err
 				}
 				return tx.Reserve(ctx, []prerequisites.HostReservation{{
-					ContextID: record.ID, Kind: "artifact-server", Service: "lab-artifacts", Keys: []string{"unit:x"},
+					Context: record.Name, Kind: "artifact-server", Service: "lab-artifacts", Keys: []string{"unit:x"},
 				}})
 			})
 			if !fired {
@@ -434,7 +434,7 @@ func TestLifecyclePublicationCheckpointsFireAndFailClosed(t *testing.T) {
 func TestSecretAcquisitionInsideALifecycleTransactionRefuses(t *testing.T) {
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
-	selected := secretstore.Context{Name: record.Name, ID: record.ID, Mode: string(record.Mode), Revision: record.Revision}
+	selected := secretstore.Context{Name: record.Name, Mode: string(record.Mode), Revision: record.Revision}
 	entered := false
 	err := store.MutateLifecycle(ctx, "example", func(lifecycle.Transaction) error {
 		return store.MutateSecrets(ctx, selected, func(secretstore.Area) error {

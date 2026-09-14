@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	formatVersion    = 2
+	formatVersion    = 3
 	algorithm        = "AES-256-GCM"
 	selectorPath     = secretstore.RecordPath
 	selectorMaximum  = 64 << 10
@@ -93,7 +93,7 @@ type ledgerAuthentication struct {
 	Domain        string `json:"domain"`
 	FormatVersion int    `json:"formatVersion"`
 	Algorithm     string `json:"algorithm"`
-	ContextID     string `json:"contextId"`
+	Context       string `json:"context"`
 	Selection     string `json:"backend"`
 	KeyID         string `json:"keyId"`
 	Seals         uint64 `json:"seals"`
@@ -101,7 +101,7 @@ type ledgerAuthentication struct {
 
 type initializationRecord struct {
 	FormatVersion int                     `json:"formatVersion"`
-	ContextID     string                  `json:"contextId"`
+	Context       string                  `json:"context"`
 	Selection     string                  `json:"backend"`
 	Attempts      []initializationAttempt `json:"attempts"`
 	MACKeyID      string                  `json:"macKeyId"`
@@ -116,7 +116,7 @@ type initializationAttempt struct {
 type initializationAuthentication struct {
 	Domain        string                  `json:"domain"`
 	FormatVersion int                     `json:"formatVersion"`
-	ContextID     string                  `json:"contextId"`
+	Context       string                  `json:"context"`
 	Selection     string                  `json:"backend"`
 	Attempts      []initializationAttempt `json:"attempts"`
 	MACKeyID      string                  `json:"macKeyId"`
@@ -124,7 +124,7 @@ type initializationAuthentication struct {
 
 type identityRecord struct {
 	FormatVersion int    `json:"formatVersion"`
-	ContextID     string `json:"contextId"`
+	Context       string `json:"context"`
 	ID            string `json:"id"`
 }
 
@@ -132,7 +132,7 @@ type indexAdditionalData struct {
 	Domain        string `json:"domain"`
 	FormatVersion int    `json:"formatVersion"`
 	Algorithm     string `json:"algorithm"`
-	ContextID     string `json:"contextId"`
+	Context       string `json:"context"`
 	Selection     string `json:"backend"`
 	Generation    string `json:"generation"`
 	KeyID         string `json:"keyId"`
@@ -143,7 +143,7 @@ type partAdditionalData struct {
 	Domain                 string       `json:"domain"`
 	FormatVersion          int          `json:"formatVersion"`
 	Algorithm              string       `json:"algorithm"`
-	ContextID              string       `json:"contextId"`
+	Context                string       `json:"context"`
 	Selection              string       `json:"backend"`
 	Generation             string       `json:"generation"`
 	KeyID                  string       `json:"keyId"`
@@ -673,28 +673,28 @@ func decodeBase64(value string, maximum int) ([]byte, error) {
 	return decoded[:n], nil
 }
 
-func indexAAD(contextID string, selector secretstore.Selector, keyID string) []byte {
-	data, _ := json.Marshal(indexAdditionalData{Domain: "bootwright.secret.index.v2", FormatVersion: formatVersion, Algorithm: algorithm, ContextID: contextID, Selection: selector.Backend, Generation: selector.Generation, KeyID: keyID, BlobID: selector.Generation})
+func indexAAD(contextName string, selector secretstore.Selector, keyID string) []byte {
+	data, _ := json.Marshal(indexAdditionalData{Domain: "bootwright.secret.index.v3", FormatVersion: formatVersion, Algorithm: algorithm, Context: contextName, Selection: selector.Backend, Generation: selector.Generation, KeyID: keyID, BlobID: selector.Generation})
 	return data
 }
 
-func partAAD(contextID string, selection string, version storedVersion, part storedPart) []byte {
-	data, _ := json.Marshal(partAdditionalData{Domain: "bootwright.secret.part.v2", FormatVersion: formatVersion, Algorithm: algorithm, ContextID: contextID, Selection: selection, Generation: part.Generation, KeyID: part.KeyID, BlobID: part.BlobID, DeclarationFingerprint: version.Declaration.Fingerprint, Name: version.Declaration.Name, Type: version.Declaration.Type, Source: version.Declaration.Source, Version: version.ID, Part: part.Part})
+func partAAD(contextName string, selection string, version storedVersion, part storedPart) []byte {
+	data, _ := json.Marshal(partAdditionalData{Domain: "bootwright.secret.part.v3", FormatVersion: formatVersion, Algorithm: algorithm, Context: contextName, Selection: selection, Generation: part.Generation, KeyID: part.KeyID, BlobID: part.BlobID, DeclarationFingerprint: version.Declaration.Fingerprint, Name: version.Declaration.Name, Type: version.Declaration.Type, Source: version.Declaration.Source, Version: version.ID, Part: part.Part})
 	return data
 }
 
-func encodeLedger(contextID string, selection string, key []byte, keyID string, seals uint64) ([]byte, error) {
+func encodeLedger(contextName string, selection string, key []byte, keyID string, seals uint64) ([]byte, error) {
 	record := sealLedger{FormatVersion: formatVersion, KeyID: keyID, Seals: seals}
-	record.MAC = ledgerMAC(contextID, selection, key, keyID, seals)
+	record.MAC = ledgerMAC(contextName, selection, key, keyID, seals)
 	return encodeCanonical(record, ledgerMaximum)
 }
 
-func decodeLedger(data []byte, contextID string, selection string, key []byte, keyID string, floor uint64) (sealLedger, error) {
+func decodeLedger(data []byte, contextName string, selection string, key []byte, keyID string, floor uint64) (sealLedger, error) {
 	var record sealLedger
 	if decodeCanonical(data, ledgerMaximum, 24, &record) != nil || record.FormatVersion != formatVersion || record.KeyID != keyID || record.Seals < floor || record.Seals > maxSeals || record.MAC == "" {
 		return sealLedger{}, errors.New("invalid seal ledger")
 	}
-	expected := ledgerMAC(contextID, selection, key, keyID, record.Seals)
+	expected := ledgerMAC(contextName, selection, key, keyID, record.Seals)
 	actual, err := decodeBase64(record.MAC, sha256.Size)
 	want, wantErr := decodeBase64(expected, sha256.Size)
 	valid := err == nil && wantErr == nil && hmac.Equal(actual, want)
@@ -706,11 +706,11 @@ func decodeLedger(data []byte, contextID string, selection string, key []byte, k
 	return record, nil
 }
 
-func ledgerMAC(contextID string, selection string, key []byte, keyID string, seals uint64) string {
+func ledgerMAC(contextName string, selection string, key []byte, keyID string, seals uint64) string {
 	derive := hmac.New(sha256.New, key)
 	derive.Write([]byte("bootwright.secret.ledger.mac-key.v2"))
 	macKey := derive.Sum(nil)
-	data, _ := json.Marshal(ledgerAuthentication{Domain: "bootwright.secret.ledger.v2", FormatVersion: formatVersion, Algorithm: "HMAC-SHA256", ContextID: contextID, Selection: selection, KeyID: keyID, Seals: seals})
+	data, _ := json.Marshal(ledgerAuthentication{Domain: "bootwright.secret.ledger.v3", FormatVersion: formatVersion, Algorithm: "HMAC-SHA256", Context: contextName, Selection: selection, KeyID: keyID, Seals: seals})
 	mac := hmac.New(sha256.New, macKey)
 	mac.Write(data)
 	result := rawBase64.EncodeToString(mac.Sum(nil))
@@ -741,7 +741,7 @@ func initializationMAC(record initializationRecord, key []byte) string {
 	derive := hmac.New(sha256.New, key)
 	derive.Write([]byte("bootwright.secret.initialization.mac-key.v2"))
 	macKey := derive.Sum(nil)
-	data, _ := json.Marshal(initializationAuthentication{Domain: "bootwright.secret.initialization.v2", FormatVersion: record.FormatVersion, ContextID: record.ContextID, Selection: record.Selection, Attempts: record.Attempts, MACKeyID: record.MACKeyID})
+	data, _ := json.Marshal(initializationAuthentication{Domain: "bootwright.secret.initialization.v3", FormatVersion: record.FormatVersion, Context: record.Context, Selection: record.Selection, Attempts: record.Attempts, MACKeyID: record.MACKeyID})
 	mac := hmac.New(sha256.New, macKey)
 	mac.Write(data)
 	result := rawBase64.EncodeToString(mac.Sum(nil))
