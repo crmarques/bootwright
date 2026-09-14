@@ -281,7 +281,11 @@ func (s Service) execute(ctx context.Context, name string, decided transition) (
 		return err
 	})
 	if err != nil {
-		if decided.fresh && binding != "" {
+		// Only a failed registration releases what it just bound. Once the
+		// operation is registered it owns that binding for its whole lifetime,
+		// because every later attempt reopens it; releasing here would leave a
+		// durable operation that can never be continued.
+		if decided.fresh && binding != "" && result == nil {
 			_, _ = s.binder.Release(ctx, custody.BindingRequest{ContextName: name, BindingID: binding})
 		}
 		return result, err

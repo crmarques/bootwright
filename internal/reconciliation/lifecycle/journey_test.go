@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"path"
 	"slices"
@@ -295,6 +296,7 @@ func (c testCompiler) Compile(context.Context, desiredstate.Sources) (*compilati
 type testBinder struct {
 	bound    []string
 	released []string
+	issued   int
 	material map[string]secrets.Material
 	bindErr  error
 }
@@ -304,10 +306,16 @@ func (b *testBinder) Bind(_ context.Context, request custody.BindRequest) (secre
 		return secretstore.Binding{}, b.bindErr
 	}
 	b.bound = append(b.bound, request.Names...)
-	return secretstore.Binding{ID: "bind-1"}, nil
+	b.issued++
+	return secretstore.Binding{ID: fmt.Sprintf("bind-%d", b.issued)}, nil
 }
 
-func (b *testBinder) Reopen(context.Context, custody.BindingRequest) ([]secretstore.BoundMaterial, error) {
+// Reopen models the store: a released binding is gone, so an operation that
+// still needs its material can no longer acquire it.
+func (b *testBinder) Reopen(_ context.Context, request custody.BindingRequest) ([]secretstore.BoundMaterial, error) {
+	if slices.Contains(b.released, request.BindingID) {
+		return nil, errors.New("secret binding does not exist")
+	}
 	out := []secretstore.BoundMaterial{}
 	for name, value := range b.material {
 		out = append(out, secretstore.BoundMaterial{
@@ -1196,5 +1204,28 @@ func TestPlanWithoutAControllerBlockGainsNoDependency(t *testing.T) {
 		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"},
 	}); err != nil {
 		t.Fatalf("an unrelated selection was refused: %v", err)
+	}
+}
+
+// A registered operation owns its binding until a completed destroy releases
+// it. Releasing it when an effect fails would strand the operation: every
+// continuation reopens that exact binding.
+func TestFailedExecutionKeepsItsBindingAndFailedRegistrationReleasesIt(t *testing.T) {
+	failed := newHarness(t, "artifact-server-lab")
+	failed.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
+	if _, err := failed.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("a failed block reported success")
+	}
+	if len(failed.binder.released) != 0 {
+		t.Fatalf("a registered operation released its binding: %v", failed.binder.released)
+	}
+
+	refused := newHarness(t, "artifact-server-lab")
+	refused.workspace.area.fail["replace index.json"] = errors.New("interrupted")
+	if _, err := refused.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("an interrupted registration reported success")
+	}
+	if !slices.Equal(refused.binder.released, []string{"bind-1"}) {
+		t.Fatalf("a failed registration retained its binding: %v", refused.binder.released)
 	}
 }
