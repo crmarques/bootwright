@@ -394,6 +394,14 @@ before its role is written, with its identity and date recorded in
 [development](../docs/development.md); `mkksiso` is qualified against the
 RHEL 9.7 boot image the same way.
 
+**Task 0 progress.** The image is resolved and its container runtime is
+recorded in [emulated-BMC knowledge](../.agents/knowledge/sushy-tools-emulated-bmc.md),
+including the stock command this contract must not use. Its Redfish surface —
+the `Systems` collection, virtual media, boot override, power and basic
+authentication — and `mkksiso` against RHEL 9.7 boot media are still
+unqualified, and the third delivery is blocked on them: the media is
+subscription content this repository does not carry.
+
 **Implementation order.** Three coherent changes: the `media` commands with
 their store; the engine's requirements, consumed authorization,
 kind-and-implementation resolver and Reconciliation-owned Ansible runner,
