@@ -16,6 +16,10 @@ GROUP_STATUSES = ("running", "ok", "failed", "skipped")
 OUTCOMES = ("changed", "unchanged")
 MAX_NETWORKS = 64
 HEX = set("0123456789abcdef")
+# The observation carries each network's UUID so a definition can be offered
+# back to libvirt under the identity it already holds. Evidence stays narrower:
+# Go validates exactly the facts below, and rejects any field it does not know.
+OBSERVED_NETWORK = {"bridge", "managed", "name", "owned", "state", "uuid"}
 
 
 def digest(value):
@@ -25,7 +29,7 @@ def digest(value):
 
 
 def network_evidence(entry):
-    if set(entry) != {"bridge", "managed", "name", "owned", "state"}:
+    if set(entry) != OBSERVED_NETWORK:
         raise ValueError("network evidence")
     return {
         "bridge": bool(entry["bridge"]),

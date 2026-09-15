@@ -16,7 +16,7 @@ DIGEST = "a" * 64
 def host_observation(**overrides):
     observation = {
         "hypervisor": True,
-        "networks": [{"bridge": True, "managed": True, "name": "n", "owned": True, "state": "active"}],
+        "networks": [{"bridge": True, "managed": True, "name": "n", "owned": True, "state": "active", "uuid": "u"}],
         "pool": "active",
         "service": "active",
         "uri": True,
@@ -32,9 +32,9 @@ def test_a_provider_host_postcondition_needs_every_proof():
         {"service": "failed"},
         {"uri": False},
         {"pool": ""},
-        {"networks": [{"bridge": True, "managed": True, "name": "n", "owned": False, "state": "active"}]},
-        {"networks": [{"bridge": True, "managed": True, "name": "n", "owned": True, "state": "inactive"}]},
-        {"networks": [{"bridge": False, "managed": False, "name": "n", "owned": False, "state": ""}]},
+        {"networks": [{"bridge": True, "managed": True, "name": "n", "owned": False, "state": "active", "uuid": "u"}]},
+        {"networks": [{"bridge": True, "managed": True, "name": "n", "owned": True, "state": "inactive", "uuid": "u"}]},
+        {"networks": [{"bridge": False, "managed": False, "name": "n", "owned": False, "state": "", "uuid": ""}]},
     ):
         assert not substrate_host_protocol.presence(host_observation(**overrides), DIGEST)["postcondition"]
 
@@ -47,10 +47,23 @@ def test_a_provider_host_removal_proves_only_what_it_owns():
     # An external bridge is never this block's to remove, so it does not keep
     # a removal from completing.
     external = substrate_host_protocol.absence(
-        host_observation(pool="", networks=[{"bridge": True, "managed": False, "name": "n", "owned": False, "state": ""}]),
+        host_observation(pool="", networks=[{"bridge": True, "managed": False, "name": "n", "owned": False, "state": "", "uuid": ""}]),
         DIGEST,
     )
     assert external["postcondition"]
+
+
+def test_a_networks_identity_is_observed_but_never_reported_as_evidence():
+    """Go rejects an evidence field it does not know, so the UUID stays here."""
+    evidence = substrate_host_protocol.presence(host_observation(), DIGEST)
+    assert set(evidence["networks"][0]) == {"bridge", "managed", "name", "owned", "state"}
+    # An observation that does not carry the identity is refused rather than
+    # silently shaped into evidence, because a definition without it collides.
+    with pytest.raises(ValueError):
+        substrate_host_protocol.presence(
+            host_observation(networks=[{"bridge": True, "managed": True, "name": "n", "owned": True, "state": "active"}]),
+            DIGEST,
+        )
 
 
 def machine_observation(**overrides):

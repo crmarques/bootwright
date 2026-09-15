@@ -18,3 +18,9 @@ substrate_libvirt_host_owned_networks: >-
      | selectattr('managed')
      | selectattr('owned')
      | list }}
+# The identity libvirt already assigned each managed network, by name. A
+# definition offers it back so a repeated apply redefines rather than collides.
+substrate_libvirt_host_network_uuids: >-
+  {{ substrate_libvirt_host_before.observation.networks
+     | selectattr('managed')
+     | items2dict(key_name='name', value_name='uuid') }}

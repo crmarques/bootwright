@@ -15,6 +15,7 @@ from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt 
 
 OWNED_NETWORK = """<network>
   <name>bootwright-lab-guests</name>
+  <uuid>4c0a4300-aa43-458c-86d7-ac2256d1fc00</uuid>
   <bridge name="virbr-lab"/>
   <metadata>
     <bw:owner xmlns:bw="https://bootwright.io/substrate/v1"><bw:context>lab</bw:context></bw:owner>
@@ -74,6 +75,7 @@ def test_a_network_without_this_contexts_metadata_is_foreign():
     })
     assert network_state(owned, "qemu:///system", "bootwright-lab-guests") == {
         "state": "active", "owned": True, "bridge": "virbr-lab",
+        "uuid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00",
     }
     foreign = runner_for({
         "net-dumpxml bootwright-lab-guests": (0, FOREIGN_NETWORK, ""),
@@ -85,7 +87,34 @@ def test_a_network_without_this_contexts_metadata_is_foreign():
 def test_an_absent_or_malformed_network_reports_no_state():
     assert network_state(runner_for({}), "qemu:///system", "gone")["state"] == ""
     malformed = runner_for({"net-dumpxml gone": (0, "not xml", "")})
-    assert network_state(malformed, "qemu:///system", "gone") == {"state": "", "owned": False, "bridge": ""}
+    assert network_state(malformed, "qemu:///system", "gone") == {
+        "state": "", "owned": False, "bridge": "", "uuid": "",
+    }
+
+
+def test_an_observed_network_carries_the_identity_libvirt_assigned_it():
+    """libvirt refuses to redefine a name under a new UUID, so apply reads it."""
+    runner = runner_for({
+        "version": (0, "", ""),
+        "net-dumpxml bootwright-lab-guests": (0, OWNED_NETWORK, ""),
+        "net-info bootwright-lab-guests": (0, "Active:         yes\n", ""),
+        "--query qemu-kvm": (0, "", ""),
+    })
+    request = {
+        "networks": [{"name": "bootwright-lab-guests", "bridge": "virbr-lab", "managed": True}],
+        "packages": ["qemu-kvm"],
+        "poolName": "bootwright-lab-p-vmedia",
+        "service": "libvirtd.service",
+        "uri": "qemu:///system",
+    }
+    observation = observe_host(runner, request)
+    assert observation["networks"][0]["uuid"] == "4c0a4300-aa43-458c-86d7-ac2256d1fc00"
+    # A network without one reports no identity rather than inventing it.
+    without = runner_for({
+        "net-dumpxml bootwright-lab-guests": (0, FOREIGN_NETWORK, ""),
+        "net-info bootwright-lab-guests": (0, "Active:         yes\n", ""),
+    })
+    assert network_state(without, "qemu:///system", "bootwright-lab-guests")["uuid"] == ""
 
 
 def test_a_domain_reports_its_identity_and_ownership():
@@ -111,3 +140,4 @@ def test_a_host_whose_connection_is_silent_reports_nothing_it_cannot_read():
     assert observation["pool"] == ""
     assert observation["networks"][0]["state"] == ""
     assert observation["networks"][0]["owned"] is False
+    assert observation["networks"][0]["uuid"] == ""

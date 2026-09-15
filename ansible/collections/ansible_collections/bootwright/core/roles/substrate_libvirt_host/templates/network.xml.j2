@@ -3,9 +3,17 @@
     may bind the bridge address; the bridge joins the host firewall's trusted
     zone, because the guests exist to reach the controller's services and the
     zone libvirt would choose rejects them; and the ownership metadata is what
-    makes this network this context's to change and remove. -#}
+    makes this network this context's to change and remove.
+
+    A network the host already carries is redefined under the identity it
+    already has: libvirt refuses a name that exists under another UUID, so
+    omitting this makes every apply after the first one fail. -#}
+{% set network_uuid = substrate_libvirt_host_network_uuids[item.name] | default('') -%}
 <network>
   <name>{{ item.name }}</name>
+{% if network_uuid %}
+  <uuid>{{ network_uuid }}</uuid>
+{% endif %}
   <bridge name="{{ item.bridge }}" stp="on" delay="0" zone="trusted"/>
 {% if item.forward | default('') and item.forward != 'none' %}
   <forward mode="{{ item.forward }}"/>

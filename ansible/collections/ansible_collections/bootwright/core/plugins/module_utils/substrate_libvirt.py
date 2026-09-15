@@ -59,23 +59,31 @@ def uri_answers(runner, uri):
 
 
 def network_state(runner, uri, name):
-    """Report one network's state, ownership and bridge, without changing it."""
+    """Report one network's state, ownership, bridge and identity, unchanged.
+
+    The UUID is read because libvirt refuses to define a name that already
+    exists under a different one, so a repeated apply can only redefine a
+    network by offering back the identity the host already carries.
+    """
     code, output = virsh(runner, uri, "net-dumpxml", name)
     if code != 0:
-        return {"state": "", "owned": False, "bridge": ""}
-    owned, bridge = False, ""
+        return {"state": "", "owned": False, "bridge": "", "uuid": ""}
+    owned, bridge, uuid = False, "", ""
     try:
         root = ElementTree.fromstring(output)
     except ElementTree.ParseError:
-        return {"state": "", "owned": False, "bridge": ""}
+        return {"state": "", "owned": False, "bridge": "", "uuid": ""}
     for metadata in root.findall("./metadata/"):
         owned = owned or metadata.tag.startswith("{" + OWNERSHIP + "}")
     element = root.find("./bridge")
     if element is not None:
         bridge = element.get("name") or ""
+    element = root.find("./uuid")
+    if element is not None:
+        uuid = (element.text or "").strip()
     code, active = virsh(runner, uri, "net-info", name)
     state = "active" if code == 0 and "Active:         yes" in active else "inactive"
-    return {"state": state, "owned": owned, "bridge": bridge}
+    return {"state": state, "owned": owned, "bridge": bridge, "uuid": uuid}
 
 
 def bridge_present(name):
@@ -133,9 +141,9 @@ def observe_host(runner, request):
         entry = {"name": network["name"], "managed": bool(network["managed"]), "bridge": bridge_present(network["bridge"])}
         if entry["managed"] and answers:
             state = network_state(runner, request["uri"], network["name"])
-            entry["state"], entry["owned"] = state["state"], state["owned"]
+            entry["state"], entry["owned"], entry["uuid"] = state["state"], state["owned"], state["uuid"]
         else:
-            entry["state"], entry["owned"] = "", False
+            entry["state"], entry["owned"], entry["uuid"] = "", False, ""
         networks.append(entry)
     return {
         "hypervisor": packages_present(runner, request.get("packages") or []),
