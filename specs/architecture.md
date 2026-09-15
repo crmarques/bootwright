@@ -47,9 +47,9 @@ merge contexts or create an abstraction before its first consumer.
 | Controller (CLI noun `controller`) | Local controller prerequisite inspection, setup, invoking-account verification, and sudo process supervision. | Managed-machine provisioning, cluster readiness, or lifecycle ordering. |
 | Secrets | Secret custody and materialization, immutable secret binding, and disclosure classification. | A consuming context's authorization or business decision. Entitlement semantics remain with the product context that consumes them. |
 | Trust | SSH host identity, TLS trust, trust decisions, and durable trust evidence. | Secret custody, endpoint business policy, or ambient trust configuration. |
-| Substrate | Provider capabilities, provider identity, network attachments, machine infrastructure realization, and normalized power and identity operations. | Machine OS policy, cluster installation, or lifecycle ordering. |
+| Substrate | Provider capabilities, provider identity, network attachments, provider-host and machine infrastructure realization with emulated management controllers, and normalized power and identity operations. | Machine OS policy, cluster installation, or lifecycle ordering. |
 | Machine | Machine identity, addresses, access posture, declared capabilities, and the relationship to a substrate and operating-system intent. | Provider mechanics, OS installer mechanics, or cluster membership policy. |
-| Managed OS | Machine images, install profiles, managed-OS entitlement use, installation intent, and OS completion evidence. | Substrate realization, storage-product entitlement policy, or higher-level cluster and storage orchestration. |
+| Managed OS | Installer media custody, machine images, install profiles, managed-OS entitlement use, installation intent, and OS completion evidence. | Substrate realization, storage-product entitlement policy, or higher-level cluster and storage orchestration. |
 | Infrastructure services | Shared placement, identity, endpoint, and ownership rules for artifact servers, load balancers, proxies, name resolution, time synchronization, and registries. Each service capability owns its specific policy and adapter. | Consumer cluster policy or one generic service workflow. |
 | Container cluster | OpenShift and OKD release, topology, installer intent, node binding, cluster access, and installation evidence. | Machine, substrate, shared-service, storage, or add-on ownership. |
 | Storage | Ceph cluster topology, placement, pools, filesystems, gateways, NFS services, exports, and storage completion evidence. | Machine OS installation or downstream cluster-add-on policy. |
@@ -340,9 +340,12 @@ The kind admission rules that the compiler composes live at the context roots
 `infrastructureservices`. Environment's three preflight methods belong to
 `environment/preflight`, its two inspection methods to `environment/inspection`,
 and its two access methods to `environment/access`; platform rules remain with
-their owning contexts. Substrate realization and normalized identity and power
-operations, managed-OS installation, and infrastructure-service provisioning and
-readiness gain separate capability packages when implemented.
+their owning contexts. Substrate realization with its identity and power
+operations belongs to `substrate/libvirt`, managed-OS installation to
+`managedos/installation`, the media store to `managedos/media` over the
+`managedos/mediastore` adapter, and the one Ansible runner every lifecycle
+capability crosses to `reconciliation/ansiblerunner`; each is created with its
+first authorized behavior.
 
 ### Domain communication graph
 
@@ -612,7 +615,10 @@ completion, readiness and absence evidence, returning it through typed results;
 it cannot schedule another domain's work, allocate an operation identity or
 write lifecycle state. A cluster capability therefore cannot drive storage or
 OS installation, and an adapter returns bounded results only to its own
-application service.
+application service. A capability names what its blocks depend on as API
+objects and the authorization they consume; Reconciliation resolves the former
+into block dependencies and checks the latter at registration, so no capability
+learns another's block identities.
 
 Workspace owns the durable boundary: the lifecycle transaction, the operation
 area and the reservation record are Workspace primitives, and Reconciliation

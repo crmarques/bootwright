@@ -124,12 +124,13 @@ origin refuses, including after replacing a terminal receipt.
 Reservations record the exclusive host resources that locally hosted services
 claim, under the
 [Infrastructure services conflict contract](infrastructure-services.md#host-reservations).
-Each entry contains the context name, capability kind, service name and a
-sorted unique key list; entries are ordered by context name then kind then
-service.
+Each entry contains the context name, capability kind, service name, a sorted
+unique key list and whether the claim is shared; entries are ordered by context
+name then kind then service.
 Workspace stores and compares them without interpreting a key's meaning.
-Publishing a key another context holds refuses; a context replaces only its own
-entries, and its completed removal drops them. The record is absent when empty,
+Publishing an exclusive key another context holds refuses; a shared key is held
+by any number of contexts and a reader asks only whether any context holds it;
+a context replaces only its own entries, and its completed removal drops them. The record is absent when empty,
 so a store that never hosted a service is unchanged.
 
 Action requests and evidence are canonical compact JSON objects with sorted
@@ -324,6 +325,9 @@ Controller subtree exists only after confirmed setup:
     bundles/<catalog-digest>/
       sources/
       python/
+  media/
+    <filename.iso>
+    <filename.iso>.json
   contexts/<name>/
     context.yaml
     desired-state/revisions/<revision-id>/
@@ -344,6 +348,7 @@ Controller subtree exists only after confirmed setup:
 | Path | Purpose and retention |
 | --- | --- |
 | `registry.json` | One atomic map of context names to their selected inputs and status, plus the Controller descriptor once setup publishes it. |
+| `media/` | Host-wide installer media under the [Managed OS media contract](managed-os.md#media-store): each image's exact bytes beside its canonical record, created by the first `media add`, shared read-only by every context and frozen through shared reservations rather than copied. Images and records are published exclusively and atomically; deletion is guarded by the reservation record. |
 | `contexts/<name>/context.yaml` | Canonical immutable Context configuration; keeps the authored configuration contract separate from runtime metadata. |
 | `desired-state/revisions/<revision-id>/` | Immutable input snapshot, so publication and protected recovery can retain a complete selected revision. Collect unselected revisions only with disposal proof. |
 | `manifest.json` | Original input provenance, blob mapping, sizes and hashes needed to verify and replay the snapshot. |
@@ -376,6 +381,7 @@ Manifest integrity failures never fall back to external input.
 | Input manifest | `version` (3), `context`, `revision`, `inputDirectory`, `environmentDirectory`, `files` |
 | Manifest file | `path`, `category` (`yaml` or `marker`), `size`, `sha256` |
 | User selection | `version` (2), `name` |
+| Media record | `version` (1), `name`, `size`, `sha256`, `source`, `added` |
 
 Collections are present arrays, including empty ones. Contexts sort by name
 and manifest entries by relative path. Empty input is encoded
@@ -444,7 +450,8 @@ filesystems are ext4, XFS, Btrfs, tmpfs and overlayfs; Linux must provide
 
 Bounds apply before allocation/traversal: registry 8 MiB and 4096 active or
 reserved names; manifest 4 MiB and 32 MiB aggregate referenced manifests; paths 4096
-bytes; mutation records 64 KiB; 4096 revisions per context. Input and Secrets
+bytes; mutation records 64 KiB; 4096 revisions per context; media images 32 GiB
+each and 64 entries, with records of at most 4 KiB. Input and Secrets
 limits additionally bound their trees. Missing registry in a nonempty root is
 corruption, except that explicit init may finish publication when the root's
 only entry is one private `pending-<32 lowercase hexadecimal digits>.json` file
@@ -458,6 +465,7 @@ from a matching backup or moved aside only after it is verified disposable.
 
 The root admits only the store's own published objects: `registry.json`, the
 `contexts` container, the `controller` subtree once the registry declares it,
+the `media` container once a `media add` has created it,
 and verified private, bounded `pending-<32 lowercase hexadecimal digits>.json`
 files left by an interrupted registry replacement; those files are ignored,
 never adopted. Any other entry refuses with the same complete-store guidance,

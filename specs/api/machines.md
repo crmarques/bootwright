@@ -59,16 +59,20 @@ resolved reference and its `usernamePassword` type.
 | `spec.libvirt.bmcEmulationDefaults.protocol` | string | no | `redfish` | `redfish`. |
 | `spec.libvirt.bmcEmulationDefaults.emulator` | string | no | `sushy-tools` | `sushy-tools`. |
 | `spec.libvirt.bmcEmulationDefaults.bindAddress` | string | no | `0.0.0.0` | Listener address. |
-| `spec.libvirt.bmcEmulationDefaults.port` | integer | no | `8000` | `1..65535`. |
-| `spec.libvirt.bmcEmulationDefaults.vMediaPort` | integer | no | `port + 1` | `1..65535` and different from `port`. |
+| `spec.libvirt.bmcEmulationDefaults.port` | integer | no | `8000` | `1..65535`; the first port of the contiguous range the provider's emulated BMCs listen on. |
 | `spec.libvirt.bmcEmulationDefaults.auth.credentialsRef` | string | yes | — | `usernamePassword` `Secret`; required while emulation is enabled. |
 | `spec.libvirt.bmcEmulationDefaults.disableCertificateVerification` | boolean | no | `false` | Explicit TLS verification opt-out. |
 | `spec.libvirt.machineProfiles` | array | no | `[]` | Provider-local set keyed by `name`; common profile shape below. |
 
-`bmcEmulationDefaults` is required and its defaults materialize. Across
-providers on the same host, effective BMC and virtual-media ports do not
-collide; declarations identifying a shared provider service use the same URI,
-bind address, ports and credential reference.
+`bmcEmulationDefaults` is required and its defaults materialize. Every Machine
+on the provider is realized with its own emulated BMC, listening at `port` plus
+that Machine's position in the canonical name order of the provider's Machines,
+so a provider with `n` Machines claims the range `port` through `port + n - 1`.
+The range ends at or below `65535`, and the ranges of providers on the same
+host do not overlap. The retired `vMediaPort` is rejected: the emulator fetches
+media from the artifact server and opens no second listener.
+[Substrates](../substrates.md#machine-realization) owns the controller each
+Machine receives.
 
 ### vSphere arm
 
@@ -133,7 +137,7 @@ exactly one arm matching the provider's selected substrate:
 | Arm | Exact fields | Rule |
 | --- | --- | --- |
 | `baremetal` | optional integer `vlan` | `0..4094`; zero means no VLAN selection. |
-| `libvirt` | required string `bridge` | Names the libvirt bridge. |
+| `libvirt` | required string `bridge`; optional string `management`; conditional string `address`; conditional string `forward` | `management` is `managed` or `external` and defaults to `external`. `external` names an existing bridge and forbids `address` and `forward`. `managed` requires `address`, the host's IP with its prefix on a bridge Bootwright defines, and permits `forward`, `nat` or `none`, defaulting to `nat`; [substrates](../substrates.md#provider-host-realization) owns the network it defines. |
 | `vsphere` | required string `portgroup`; optional string `distributedSwitch` | `distributedSwitch` is required when the provider spans multiple failure domains. |
 | `kubevirt` | required object `networkRef` | `networkRef.name` is required. `kind` defaults `ClusterUserDefinedNetwork`; known native kinds also include `UserDefinedNetwork` and `NetworkAttachmentDefinition`. `apiGroup` defaults to `k8s.ovn.org` for the first two and `k8s.cni.cncf.io` for the latter; another kind requires explicit `apiGroup`. Scope rules below. |
 
@@ -255,7 +259,8 @@ defaults `attachmentRef` to that reference's name. The default is valid only
 when the provider exposes exactly one attachment and that name resolves;
 otherwise an explicit selection is required. An authored attachment always
 wins. Inline configuration has no reference name from which to derive an
-attachment. `interfaceAttachments` is the KubeVirt alternative for
+attachment. A Machine attached to a managed libvirt network selects an install
+address inside that attachment's prefix. `interfaceAttachments` is the KubeVirt alternative for
 per-interface networks: interface names are unique, every effective physical
 interface is covered exactly once, and each `attachmentRef` resolves to a
 KubeVirt arm in the selected provider.
@@ -410,7 +415,8 @@ and `rootLogin: keep`.
 | `spec.bootMedia` | string | yes | `local-media:<filename.iso>`, an absolute `file://` URI, or an `http://`/`https://` URL. |
 | `spec.checksum` | string | no | SHA-256 content pin: 64 hexadecimal digits with an optional `sha256:` prefix. Surrounding whitespace and hex case are accepted; checksum consumers canonicalize the digest to lowercase. |
 
-The local-media key is a basename ending in `.iso` with no path traversal.
+The local-media key is a basename ending in `.iso` with no path traversal,
+naming an entry of the host-wide [media store](../managed-os.md#media-store).
 Remote lifecycle media requires a checksum; local and file media is pinned by
 the immutable-operation workflow. Authenticated downloads and private-CA
 download fields are not part of this contract. Validation is lexical only.

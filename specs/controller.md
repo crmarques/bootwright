@@ -17,7 +17,7 @@ and neither command performs the other's work.
 | Scope | Prerequisites | Owner |
 | --- | --- | --- |
 | Host | Provided OS, architecture and verified installed-host identity; the fixed root and its controller record; the private Python and `ansible-core` execution bundle with the embedded automation; the baseline native closure of container runtime, SSH and NMState clients. | `setup` |
-| Context | The target client closure the selected graph needs; the libvirt client closure a declared `libvirt` capability or referenced libvirt provider selects; the binding between this context and this host. | [`apply --stage controller`](#the-controller-stage) |
+| Context | The target client closure the selected graph needs; the libvirt client closure a declared `libvirt` capability selects; the hypervisor closure a libvirt provider hosted on this Machine selects; the installer-media tooling an Anaconda installation published through an artifact server on this Machine selects; the binding between this context and this host. | [`apply --stage controller`](#the-controller-stage) |
 
 A host prepared once therefore serves every context later created on it, and a
 context that selects nothing beyond the baseline needs no controller stage.
@@ -80,7 +80,7 @@ releases are resolved by explicit setup. Dependency selection follows
 | Host foundation | Verify the provided OS, architecture, local identity, account/sudo boundary, filesystem containment/durability, free-space limits and trusted package sources. No OS installation, release upgrade, repository enrollment, entitlement registration or reboot. |
 | Baseline execution bundle | Publish the resolved exact Python and `ansible-core` closure in an isolated Bootwright-owned location. Do not use system/user Python imports or ambient Ansible configuration. |
 | Container runtime | Setup selects Podman for every prepared host, so a controller that declares `container-runtime` finds it ready. Install or update the approved dependency set and verify an existing exact runtime without taking ownership of its containers or configuration. Do not start a service, pull a managed-service image or create a container. |
-| Native target clients | Selected by the admitted desired-state graph, so [the controller stage](#the-controller-stage) owns them. OpenShift/OKD clients (`oc`, `kubectl`) and installer match the selected release; Kubernetes consumers select Helm; referenced vSphere providers select `govc`; virtualization selects upstream `virtctl`. A declared `libvirt` capability or referenced libvirt provider selects `virsh` and its native client dependencies. Setup selects none of them; the SSH and NMState clients that support the baseline flows are host prerequisites. Install these with the fixed Ansible controller role. |
+| Native target clients | Selected by the admitted desired-state graph, so [the controller stage](#the-controller-stage) owns them. OpenShift/OKD clients (`oc`, `kubectl`) and installer match the selected release; Kubernetes consumers select Helm; referenced vSphere providers select `govc`; virtualization selects upstream `virtctl`. A declared `libvirt` capability selects `virsh` and its native client dependencies; a libvirt provider hosted on the controller Machine selects the [hypervisor closure](substrates.md#provider-host-realization) instead, and an Anaconda installation published through an artifact server on the controller Machine selects the [installer-media tooling](managed-os.md#installation). Setup selects none of them; the SSH and NMState clients that support the baseline flows are host prerequisites. Install these with the fixed Ansible controller role. |
 | Service execution | Service images, containers and lifecycle configuration remain with their service consumer. Installing a client grants no authority to contact or change a target. |
 
 Setup installs missing dependencies, updates selected dependencies to their
@@ -262,8 +262,11 @@ context.
 selects. It is one block in that context's lifecycle plan, planned by its
 capability from effective state alone and frozen before any effect: the target
 client requirements the graph names, the libvirt requirement a declared
-`libvirt` capability or referenced libvirt provider adds, and the controller
-Machine's normalized proxy choice. Exact releases are not frozen with the
+`libvirt` capability adds, the [hypervisor closure](substrates.md#provider-host-realization)
+a libvirt provider hosted on the controller Machine adds, the
+[installer-media tooling](managed-os.md#installation) an Anaconda installation
+published through an artifact server on the controller Machine adds, and the
+controller Machine's normalized proxy choice. Exact releases are not frozen with the
 block, because a `latest` intent is resolved by the attempt that installs it
 and retained from then on. A context that selects nothing beyond the host
 baseline contributes no block at all.
@@ -295,9 +298,9 @@ interrupted stage is completed by repeating it. `preflight controller --context
 <name>` reports the same closure by presence, and names this command when it is
 not yet installed.
 
-A selected libvirt requirement on RHEL refuses before acquisition until an
-approved entitled source is defined; the qualified Fedora profile carries the
-client closure. Setup remains the owner of the host foundation, and this stage
+A selected libvirt requirement on RHEL, client or hypervisor, refuses before
+acquisition until an approved entitled source is defined; the qualified Fedora
+profile carries both closures and the installer-media tooling. Setup remains the owner of the host foundation, and this stage
 never installs it, publishes a binding, or claims another context's resources.
 
 ## Egress and local effects

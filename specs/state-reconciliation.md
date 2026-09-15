@@ -212,6 +212,21 @@ stage, dependencies, impacts, and execution kind. Operations are `running`,
 `paused`, `failed`, `unknown`, or `done`; blocks are `pending`, `running`,
 `failed`, `unknown`, or `done`.
 
+A capability names what its blocks depend on in domain terms, not by block
+identity: a definition may carry *requirements*, each the kind and name of an
+API object whose realization must be done first. Reconciliation resolves every
+requirement to the blocks that realize that object before it freezes the plan,
+and refuses before registration when no block realizes it, so a capability
+never learns another capability's block-identity grammar and a frozen plan
+carries only resolved dependencies.
+
+A definition may also name the authorization tokens its effects *consume*,
+frozen with the plan and covered by its digest. The tokens an `apply` or
+`destroy` receives must equal the union its plan consumes: a missing token
+refuses `lifecycle.authorization` before registration, naming the blocks that
+consume it, and a surplus token is inapplicable under the
+[authorization rules](#confirmation-and-authorization).
+
 ### Stages and the pause boundary
 
 Every block carries exactly one stage, frozen with the plan and covered by its
@@ -221,8 +236,8 @@ digest. A stage names the kind of platform work its block performs:
 | --- | --- |
 | `controller` | The [context prerequisites](controller.md) this Environment adds to its controller host: the target clients its graph selects and the libvirt client it declares. |
 | `infra-components` | Managed shared services: proxying, name resolution, time, artifact serving, registries and load balancing. |
-| `substrates` | Provider realization for a declared `InfraProvider`. |
-| `machines` | Machine realization and managed operating-system installation. |
+| `substrates` | [Provider host realization](substrates.md#provider-host-realization) for a declared `InfraProvider`: its virtualization runtime, managed networks and virtual-media pool. |
+| `machines` | [Machine realization](substrates.md#machine-realization) with its management controller, and [managed operating-system installation](managed-os.md#installation). |
 | `clusters` | Container and storage cluster installation. |
 | `add-ons` | Add-on instances bound to a cluster. |
 
@@ -471,9 +486,11 @@ loss but does not select a target or relax validation, identity, ownership,
 power, probe, or digest checks.
 
 `data-loss` is the only authorization token. `all`, unknown, duplicate, empty,
-and inapplicable values are errors. A token the frozen plan does not require is
-inapplicable and refuses with `lifecycle.authorization` before registration, so
-a habitual authorization cannot pre-authorize a future destructive plan. An
+and inapplicable values are errors. A plan requires exactly the tokens its
+blocks [consume](#plan-and-execution). A token the frozen plan does not require
+is inapplicable and refuses with `lifecycle.authorization` before registration,
+so a habitual authorization cannot pre-authorize a future destructive plan; a
+required token that is not supplied refuses before registration as well. An
 enabled `CustomPlaybook` refuses before planning and has no authorization
 bypass.
 

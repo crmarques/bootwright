@@ -1,6 +1,6 @@
 # Milestones
 
-**No milestone is current.** M1a–M1g are complete: the full command
+**M1h is the current milestone.** M1a–M1g are complete: the full command
 catalog with help and completion; admission of all 26 API kinds; durable
 contexts with immutable input; context-backed `validate` and public
 `render effective`; the complete `secret` tree over `local-keyring`;
@@ -8,10 +8,9 @@ controller setup with `preflight controller` on RHEL 9 and Fedora for
 Linux/amd64; the lifecycle engine with managed artifact serving, so `plan`,
 `status`, `apply` and `destroy` are available; the complete `infra-components`
 stage with stage selection; and the `controller` stage, which installs the
-clients one context's own graph selects. M1h, defined below, is the next
-outcome and needs definition before implementation. Every other catalogued
-command retains the
-[unavailable result](cli.md#recognized-but-unavailable-commands).
+clients one context's own graph selects. M1h delivers a managed RHEL
+installation on emulated bare metal. Every other catalogued command retains
+the [unavailable result](cli.md#recognized-but-unavailable-commands).
 
 This file owns delivery scope and deferred work. Product specs describe target
 behavior; they do not claim availability. A completed milestone keeps only its
@@ -324,15 +323,13 @@ context, because no binding exists until then.
 ## M1h — managed RHEL on emulated bare metal
 
 **Owners:** Substrate and Managed OS, with Infrastructure services (consumer
-publication), Workspace (host-wide media store) and State reconciliation
+publication), Workspace (host-wide media store), Controller (the hypervisor
+and installer-tooling closures its stage installs) and State reconciliation
 (cross-capability requirements, consumed authorization and the one shared
-adapter runner); using Secrets, Machine and Controller. **Requires:** M1g,
-whose controller-stage capability must be extended to install the hypervisor
-closure, not only the libvirt client, when the controller Machine hosts a
-libvirt provider. **Definition:** Needs definition; D1–D6 below are the open
-decisions with their intended resolution. **Delivery:** not started.
+adapter runner); using Secrets and Machine. **Requires:** M1g.
+**Definition:** Specified. **Delivery:** not started.
 
-Deliver one Bootwright-installed RHEL 9.6 Machine on a libvirt guest that boots
+Deliver one Bootwright-installed RHEL 9.7 Machine on a libvirt guest that boots
 its installer through an emulated Redfish BMC, so the bare-metal installation
 path is rehearsed end to end without hardware. The `substrates` and `machines`
 stages gain their first capabilities; `media add`, `media list` and
@@ -347,9 +344,10 @@ context-journey tests they carried move to the new example and to
 
 **Supported shape.** One Environment whose lifecycle objects are the M1f managed
 service set, one libvirt `InfraProvider` whose host Machine is the controller or
-an SSH-reachable OS-ready Machine, and Bootwright-installed Machines on that
-provider whose Anaconda profile selects `hostedTree` or no package source. A
-profile selecting `initialPassword`, `diskEncryption`, `fromSubscription` or
+an SSH-reachable OS-ready Machine and whose emulated BMCs bind a unicast
+address, and Bootwright-installed Machines on that provider whose Anaconda
+profile selects `hostedTree` or no package source. A profile selecting
+`initialPassword`, `diskEncryption`, `fromSubscription`, `mirror` or
 `templateClone`, and every bare-metal, vSphere or KubeVirt provider, refuses
 before registration. The served ISO is therefore secret-free; a later
 private-content path must extend the frozen request without changing its shape.
@@ -377,18 +375,36 @@ private-content path must extend the frozen request without changing its shape.
   capability resolver by kind and implementation, and owns the one Ansible
   runner every capability crosses.
 
-**Open definitions.** D1: the libvirt attachment gains the network Bootwright
-manages (host address and prefix, forward mode, no DHCP or DNS), so a managed
-service bound on that address can require the provider host block. D2:
-per-Machine BMC port allocation from `bmcEmulationDefaults.port`, and the fate
-of `vMediaPort`, which the sushy-tools implementation does not use. D3: the
-host-wide media store under `/var/lib/bootwright/media/`, its record and
-bounds, and freezing through `media:<name>` host reservations held by the
-consuming context. D4: the publication contract for consumer content beneath an
-artifact server's served root. D5: the guest-agent identity proof as the
-Substrate identity operation. D6: the sushy-tools image and its qualification.
+**Definitions.** D1, the network a managed libvirt attachment declares, is the
+[attachment schema](api/machines.md#machine-profiles-and-network-attachments)
+and its realization in [substrates](substrates.md#provider-host-realization).
+D2, one emulated BMC per Machine allocated from `bmcEmulationDefaults.port`, is
+the [libvirt arm](api/machines.md#libvirt-arm) allocation rule and
+[machine realization](substrates.md#machine-realization); `vMediaPort` is
+retired. D3, the host-wide media store and its shared `media:` reservations, is
+the [media store](managed-os.md#media-store) over the
+[Workspace layout](contexts.md#storage-locking-and-publication) and the
+[reservation classes](infrastructure-services.md#host-reservations). D4,
+consumer content beneath a served root, is
+[consumer publication](infrastructure-services.md#consumer-publication). D5,
+the guest-agent identity proof, is the Substrate
+[identity operation](substrates.md#identity-and-power-operations). D6, the
+sushy-tools image, is pinned in the substrate catalog and qualified by hand
+before its role is written, with its identity and date recorded in
+[development](../docs/development.md); `mkksiso` is qualified against the
+RHEL 9.7 boot image the same way.
 
-Exit evidence: capability planning goldens over `examples/lab-rhel`; request
+**Implementation order.** Three coherent changes: the `media` commands with
+their store; the engine's requirements, consumed authorization,
+kind-and-implementation resolver and Reconciliation-owned Ansible runner,
+together with the `lab-rhel` example that replaces the three it retires; then
+the substrate and managed-OS capabilities with their roles, plugins and the
+completed example. The hypervisor closure and installer-media tooling join the
+controller stage's selection in the same delivery, and the API admission of
+managed attachments and BMC port ranges precedes all of it.
+
+Exit evidence: the `internal/substrate` admission tests for managed attachments
+and BMC port ranges; capability planning goldens over `examples/lab-rhel`; request
 round-trip, evidence-validation and refusal tests for both capabilities; the
 engine suite for requirements, consumed authorization and binding resolution;
 media store bounds, fault injection and cross-context freeze refusal; adapter
@@ -399,7 +415,7 @@ and the authorization refusal; the example acceptance in
 
 **Verification model.** M1d's model continues; real-system acceptance on a
 prepared libvirt host is operator-run, preceded by a by-hand qualification of
-the sushy-tools image and of `mkksiso` against RHEL 9.6 boot media, recorded in
+the sushy-tools image and of `mkksiso` against RHEL 9.7 boot media, recorded in
 [development](../docs/development.md).
 
 ## Later ordered outcomes

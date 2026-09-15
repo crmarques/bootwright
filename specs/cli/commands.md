@@ -69,6 +69,9 @@ process or network access. “Mutate” permits only the named, planned effects.
 
 The required controller declaration and context-free setup boundary follow
 [controller command applicability](../cli.md#controller-declaration-and-command-applicability).
+The three `media` commands select no context: they manage the host-wide
+[media store](../managed-os.md#media-store) with the store's privilege, and an
+explicit `--context` changes nothing they do.
 
 ### Inspect and lifecycle commands
 

@@ -17,6 +17,8 @@ A specified capability is not necessarily implemented or authorized.
 | Secret implementations, custody, immutable bindings and reveal | [Secrets](secrets.md) |
 | Apply, destroy, continuation, ownership and GitOps readiness | [State reconciliation](state-reconciliation.md) |
 | Managed shared-service placement, host claims, readiness and inverse | [Infrastructure services](infrastructure-services.md) |
+| Provider host realization, machine realization, emulated BMCs and identity operations | [Substrates](substrates.md) |
+| Installer media custody and managed operating-system installation | [Managed OS](managed-os.md) |
 | Trust, secrets, filesystem, process, network and supply-chain boundaries | [Security](security.md) |
 | Declarative add-on packages and driver contract | [Add-ons](add-ons.md) |
 

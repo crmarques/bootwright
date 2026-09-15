@@ -279,7 +279,9 @@ Media, secret, add-on, and context writes use verified roots, safe
 single path segments, exclusive creation, restrictive permissions, bounded
 input, and atomic publication. A confirmation cannot authorize overwriting an
 unrelated path. Network media import follows the endpoint and supply-chain
-rules in [security](security.md).
+rules in [security](security.md). Like `setup`, the `media` commands select no
+context: they manage the host-wide [media store](managed-os.md#media-store),
+and an explicit `--context` changes nothing they do.
 
 ### Controller declaration and command applicability
 

@@ -18,7 +18,11 @@ allocates an operation identity or writes lifecycle state.
 A managed service becomes a block only when its placement Machine has effective
 `os.provided: true` and the service's declared requirements hold. Reference
 resolution alone is not a readiness edge: an endpoint's Machine address supplies
-a value, while deployment requires the host itself.
+a value, while deployment requires the host itself. One realization edge does
+exist: a service whose bind address is the host address of a
+[managed libvirt attachment](substrates.md#provider-host-realization) on its
+placement Machine names that provider as a requirement, because the socket
+cannot bind before the bridge exists.
 
 Selection is pure and reads no host, endpoint or Secret material. An
 unsupported required capability refuses before operation registration, with one
@@ -66,11 +70,16 @@ A reservation key is one of:
 | `socket:<address>:<port>` | One effective listening socket on every transport, so a service listening on UDP and TCP at one port holds one key. A wildcard bind address claims every declared endpoint address at that port and additionally conflicts with any other bind address at that port. |
 | `unit:<name>` | One host service-manager unit and its container name. |
 | `path:<absolute path>` | One owned directory tree. |
+| `bridge:<name>` | One host bridge, whichever network defines it. |
+| `libvirt-network:<name>` | One libvirt network definition. |
+| `libvirt-domain:<name>` | One libvirt domain definition. |
+| `media:<filename.iso>` | A shared claim on one image of the [media store](managed-os.md#media-store); it conflicts with nothing and blocks only that image's deletion or replacement while any context holds it. |
 
-Reservations are published under the root lock before the operation's first
-effect and released only by a completed destroy. A key held by another context
-refuses `controller.conflict`, naming the holding context and the key class
-without private paths. A context's own keys are replaced by its own apply. An
+Every key is exclusive except the class marked shared. Reservations are
+published under the root lock before the operation's first effect and released
+only by a completed destroy. An exclusive key held by another context refuses
+`controller.conflict`, naming the holding context and the key class without
+private paths. A context's own keys are replaced by its own apply. An
 interrupted apply leaves its reservation in place; the same context's next
 apply replaces it, and another context's apply keeps refusing until that
 operation is continued or destroyed.
@@ -82,8 +91,10 @@ reserves nothing.
 ## Managed artifact serving
 
 The `ArtifactServer` capability serves static content over the declared
-listeners. It owns its content root and serves it empty; publishing content
-into that root is separate future work and cannot append to a frozen plan.
+listeners. It owns its content root and publishes nothing into it itself; a
+consuming capability publishes beneath it under the
+[consumer publication contract](#consumer-publication), in a block of the same
+plan, never by appending to a frozen one.
 
 **Implementation.** One container image runs an HTTP server under the host
 service manager with host networking, so declared bind addresses and ports are
@@ -138,6 +149,22 @@ observation, remains unknown.
 **Cancellation.** Cancellation stops authorization of new effects and
 terminates the owned process tree. An attempt whose effect was already
 authorized becomes unknown unless positive evidence already proves its outcome.
+
+### Consumer publication
+
+A capability that produces content for others to fetch publishes it beneath a
+managed artifact server's served root instead of serving it itself. The server
+keeps ownership of the root and of everything it created; a consumer block owns
+exactly the subtree `<consumer>/<object>/` it publishes, names the server as a
+requirement so the server's block completes first, and removes that subtree in
+its own inverse, which the plan orders before the server's. Publication within
+the subtree is atomic, labels published files so the serving process can read
+them, and is recorded in the consumer's evidence alone: the server's evidence
+never enumerates consumer content, its replay ignores it, and its inverse
+removes the root only after every consumer subtree is gone. Published content
+is non-sensitive; a consumer that must serve secret bytes needs a separate
+private publication contract. The first consumer is the installer image and
+package tree of [managed OS](managed-os.md#installation).
 
 ## Managed network services
 
