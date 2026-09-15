@@ -17,7 +17,7 @@ investigating or designing, then open only the relevant page.
 | Emulated BMC, `sushy-tools`, `redfish-emulator.sh`, Flask development server and Werkzeug debugger PIN, `--interface ::` default, `SUSHY_TOOLS_CONFIG`, libvirt socket URI | [sushy-tools-emulated-bmc.md](sushy-tools-emulated-bmc.md) |
 | Progress row redrawn in place, repeated `[RUNNING]` lines cut at the terminal width, `\x1b[2K` on a wrapped row, `TIOCGWINSZ`, elided subject | [terminal-progress-redraw.md](terminal-progress-redraw.md) |
 | Sudo `use_pty`, confirmation hangs after `y`, elevated child in a background process group, `SIGTTIN`/`SIGTTOU` handoff, terminal streams through the supervisor | [sudo-pty-terminal-handoff.md](sudo-pty-terminal-handoff.md) |
-| Controller setup slow on a ready host, `unchanged` after minutes, resolution before readiness, Python archive and wheel acquisition during resolve, DNF repository staging, retained resolution reuse, sealed bundle presence check, `rpm --verify` per plan package, native root presence by name | [controller-setup-resolution-cost.md](controller-setup-resolution-cost.md) |
+| Controller setup slow on a ready host, `unchanged` after minutes, resolution before readiness, Python archive and wheel acquisition during resolve, DNF repository staging, retained resolution reuse, sealed bundle presence check, `rpm --verify` per plan package, native root presence by name, full reinstall after an automation edit, automation digest in the bundle identity | [controller-setup-resolution-cost.md](controller-setup-resolution-cost.md) |
 
 Add one focused page for each durable lesson and index it with searchable topic
 terms, affected symbols, or error text. Each new or revised entry identifies the

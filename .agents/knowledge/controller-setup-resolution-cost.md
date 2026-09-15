@@ -40,6 +40,18 @@ why each removed step was expensive, which is the reason those rules matter.
   `internal/controller/nativelocal/resolver_linux_amd64.go` (`Check`,
   `decodePresence`), `ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/native_resolution.py`
   (`present`).
+- None of this reuse survives a change to the embedded automation. `Digest()`
+  hashes every embedded file into `BootstrapDefinition.AutomationDigest`, which
+  enters the bootstrap digest and through it `CatalogDigest`, the name of the
+  bundle area itself. Editing one collection file therefore names an empty area:
+  the retained resolution is refused as incompatible, and the unchanged
+  interpreter, wheels and native closure are acquired again at full price. Only
+  the native roots stay, because their readiness is host presence. Expect this
+  after any build that touched `ansible/`, and expect the superseded area to
+  remain. Code: `ansible/assets.go` (`Digest`),
+  `internal/controller/prerequisites/definition.go` (`resolvedContentDigest`),
+  `internal/controller/bundlelocal/manager.go` (`validateDefinition`). Retirement
+  and an identity split are deferred to milestone candidate C24.
 - Evidence: `internal/controller/prerequisites` tests asserting that a ready
   controller, a retry after a terminal failure and a missing native root contact
   no bootstrap or tool publisher
