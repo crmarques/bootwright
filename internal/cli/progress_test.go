@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // manualClock fires heartbeats only when a test advances it, so the rows a
@@ -61,6 +62,16 @@ func newTestProgress() (*progressPresenter, *manualClock, *bytes.Buffer) {
 	clock := newManualClock()
 	var out bytes.Buffer
 	return &progressPresenter{out: &out, clock: clock.clock()}, clock, &out
+}
+
+// fixedColumns stands in for a terminal of a known width, so a test asserts
+// the rows it draws rather than the size of the window it happens to run in.
+func fixedColumns(width int) progressColumns { return func() int { return width } }
+
+func newTestTerminalProgress(width int) (*progressPresenter, *manualClock, *bytes.Buffer) {
+	clock := newManualClock()
+	var out bytes.Buffer
+	return &progressPresenter{out: &out, clock: clock.clock(), columns: fixedColumns(width)}, clock, &out
 }
 
 func TestProgressRowsAlignAndCloseWithElapsedTime(t *testing.T) {
@@ -172,9 +183,7 @@ func TestProgressStopsAtCancellation(t *testing.T) {
 // A terminal shows each step as one line: the running row is redrawn in place
 // every second and its outcome overwrites it.
 func TestTerminalProgressRewritesTheRunningRowInPlace(t *testing.T) {
-	clock := newManualClock()
-	var out bytes.Buffer
-	presenter := &progressPresenter{out: &out, clock: clock.clock(), terminal: true}
+	presenter, clock, out := newTestTerminalProgress(120)
 	ctx := context.Background()
 	presenter.report(ctx, progressEvent{Heading: "Resolving", Label: "Native packages", Status: "running", Position: 2, Total: 2})
 	clock.advance(2 * time.Second)
@@ -198,9 +207,7 @@ func TestTerminalProgressRewritesTheRunningRowInPlace(t *testing.T) {
 // A new step or heading never overwrites another step's row, and a nested
 // outcome leaves its block's line to the next refresh.
 func TestTerminalProgressClosesALineBeforeAnotherStepOrHeading(t *testing.T) {
-	clock := newManualClock()
-	var out bytes.Buffer
-	presenter := &progressPresenter{out: &out, clock: clock.clock(), terminal: true}
+	presenter, clock, out := newTestTerminalProgress(120)
 	ctx := context.Background()
 	presenter.report(ctx, progressEvent{Heading: "Checks", Label: "Installed host", Detail: "verifying local identity", Status: "running"})
 	presenter.report(ctx, progressEvent{Heading: "Checks", Label: "Execution bundle", Detail: "verifying the retained bundle", Status: "running"})
@@ -216,6 +223,44 @@ func TestTerminalProgressClosesALineBeforeAnotherStepOrHeading(t *testing.T) {
 		"  [RUNNING]  Serve artifacts (1/1)  still running, 1s"
 	if out.String() != want {
 		t.Fatalf("progress = %q, want %q", out.String(), want)
+	}
+}
+
+// A row wider than the terminal wraps, and the erase sequence then clears only
+// its last physical line, so an unbounded row leaves one more copy of its
+// overflow on screen at every refresh instead of settling as one line.
+func TestTerminalProgressFitsEveryRowInTheTerminalWidth(t *testing.T) {
+	const columns = 60
+	presenter, clock, out := newTestTerminalProgress(columns)
+	ctx := context.Background()
+	step := progressEvent{
+		Heading: "Progress", Label: "controller prerequisites for lab-rhel on controller",
+		Detail: "resolve the exact client releases this context selects", Status: "running", Position: 1, Total: 8,
+	}
+	presenter.report(ctx, step)
+	clock.advance(time.Second)
+	step.Status = "done"
+	presenter.report(ctx, step)
+	for _, drawn := range strings.Split(out.String(), eraseLine) {
+		for _, line := range strings.Split(drawn, "\n") {
+			if width := utf8.RuneCountInString(line); width >= columns {
+				t.Fatalf("row %q occupies %d of %d columns", line, width, columns)
+			}
+		}
+	}
+	if !strings.Contains(out.String(), progressElision+"  still running, 1s") {
+		t.Fatalf("the elided row dropped its elapsed note: %q", out.String())
+	}
+}
+
+// Only a redraw is bounded by a width: a pipe, a file and the privilege
+// supervisor's relay receive every row whole.
+func TestAppendedProgressRowsAreNeverElided(t *testing.T) {
+	presenter, _, out := newTestProgress()
+	label := strings.Repeat("wide-", 60)
+	presenter.report(context.Background(), progressEvent{Heading: "Progress", Label: label, Status: "running"})
+	if !strings.Contains(out.String(), label) {
+		t.Fatalf("progress = %q, want the whole row", out.String())
 	}
 }
 

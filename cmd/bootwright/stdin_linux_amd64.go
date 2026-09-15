@@ -29,6 +29,30 @@ func terminalDescriptor(fd uintptr) (bool, error) {
 	return true, nil
 }
 
+// A terminal that reports no size is treated as the classic 80 columns, which
+// keeps a redrawn row within the narrowest width an operator is likely to use.
+const defaultTerminalColumns = 80
+
+// terminalColumns reports how wide the terminal behind writer is, measured
+// again on every call so a resize takes effect. A writer that is not a
+// terminal has no width and receives appended output instead.
+func terminalColumns(writer io.Writer) func() int {
+	file, ok := terminalFile(writer)
+	if !ok {
+		return nil
+	}
+	return func() int { return terminalWidth(file.Fd()) }
+}
+
+func terminalWidth(fd uintptr) int {
+	var window struct{ Rows, Columns, XPixels, YPixels uint16 }
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, fd, syscall.TIOCGWINSZ, uintptr(unsafe.Pointer(&window)))
+	if errno != 0 || window.Columns == 0 {
+		return defaultTerminalColumns
+	}
+	return int(window.Columns)
+}
+
 // terminalFile reports a stream an elevated child can inherit as the same
 // terminal descriptor; every other writer is copied through the supervisor.
 func terminalFile(writer io.Writer) (*os.File, bool) {

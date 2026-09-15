@@ -84,11 +84,11 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 		return code
 	}
 	confirmer := cli.NewConfirmation(readStdin, stderr, stdinTerminal)
-	// A terminal gets its running progress row rewritten in place; a pipe or
-	// file receives every row appended.
-	_, terminal := terminalFile(stdout)
-	controllerPresenter := cli.NewControllerPresenter(stdout, terminal)
-	lifecycleProgress := cli.NewLifecycleProgressPresenter(stdout, terminal)
+	// A terminal gets its running progress row rewritten in place within the
+	// width it can erase; a pipe or file receives every row appended.
+	columns := terminalColumns(stdout)
+	controllerPresenter := cli.NewControllerPresenter(stdout, columns)
+	lifecycleProgress := cli.NewLifecycleProgressPresenter(stdout, columns)
 	process := processDependencies{
 		Confirmer:          confirmer,
 		SecretInput:        secretInputFunc(readStdin),

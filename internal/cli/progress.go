@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // progressHeartbeat bounds how long an appended running row may stay silent
@@ -21,6 +22,15 @@ const (
 // replacement overwrites the running row completely.
 const eraseLine = "\r\x1b[2K"
 
+// progressElision marks a redrawn row the terminal is too narrow to show
+// whole. progressWrapGuard keeps the last column empty, because a terminal
+// that wraps as soon as a line is filled would start a second physical line
+// the erase cannot reach.
+const (
+	progressElision   = "..."
+	progressWrapGuard = 1
+)
+
 // progressTokenWidth aligns streamed rows without knowing which tokens follow:
 // every token a running step can stream is at most as wide as [RUNNING].
 const progressTokenWidth = len("[RUNNING]")
@@ -31,6 +41,11 @@ type progressClock struct {
 	now   func() time.Time
 	after func(time.Duration, func()) func() bool
 }
+
+// progressColumns reports the width of the terminal the rows are redrawn on.
+// The presenter reads it for every row so a resize takes effect on the next
+// refresh; a nil reader means output is not a terminal and rows are appended.
+type progressColumns func() int
 
 func systemProgressClock() progressClock {
 	return progressClock{
@@ -58,9 +73,9 @@ type progressEvent struct {
 // heartbeat fires on the clock's goroutine while the operation keeps
 // reporting on its own.
 type progressPresenter struct {
-	out      io.Writer
-	clock    progressClock
-	terminal bool
+	out     io.Writer
+	clock   progressClock
+	columns progressColumns
 
 	mu      sync.Mutex
 	heading string
@@ -142,7 +157,7 @@ func (p *progressPresenter) arm(step *progressStep) {
 	step.generation++
 	generation := step.generation
 	interval := progressHeartbeat
-	if p.terminal {
+	if p.columns != nil {
 		interval = progressRefresh
 	}
 	step.stop = p.clock.after(interval, func() { p.beat(step, generation) })
@@ -190,6 +205,7 @@ func (p *progressPresenter) closeLine() {
 // settles.
 func (p *progressPresenter) write(status, label, detail string, position, total int, suffix string) {
 	token := progressStatusToken(status)
+	lead := displayIndent + token + strings.Repeat(" ", max(progressTokenWidth-len(token), 0)+displayGap)
 	subject := escapeDisplayLine(label)
 	if detail != "" {
 		subject += ": " + escapeDisplayLine(detail)
@@ -197,14 +213,15 @@ func (p *progressPresenter) write(status, label, detail string, position, total 
 	if total > 0 && position > 0 {
 		subject += fmt.Sprintf(" (%d/%d)", position, total)
 	}
+	tail := ""
 	if suffix != "" {
-		subject += strings.Repeat(" ", displayGap) + suffix
+		tail = strings.Repeat(" ", displayGap) + suffix
 	}
-	row := displayIndent + token + strings.Repeat(" ", max(progressTokenWidth-len(token), 0)+displayGap) + subject
-	if !p.terminal {
-		io.WriteString(p.out, row+"\n")
+	if p.columns == nil {
+		io.WriteString(p.out, lead+subject+tail+"\n")
 		return
 	}
+	row := fitTerminalRow(lead, subject, tail, p.columns())
 	prefix := ""
 	if p.open {
 		prefix = eraseLine
@@ -216,6 +233,31 @@ func (p *progressPresenter) write(status, label, detail string, position, total 
 	}
 	io.WriteString(p.out, prefix+row+"\n")
 	p.open = false
+}
+
+// fitTerminalRow bounds a redrawn row to the terminal it is rewritten on. A
+// wider row wraps, and the erase sequence then clears only its last physical
+// line, so every refresh would leave one more copy of the overflow behind. The
+// subject is elided from the right and the trailing note kept, because the
+// elapsed time is what an operator watches while a step runs.
+func fitTerminalRow(lead, subject, tail string, columns int) string {
+	row := lead + subject + tail
+	columns -= progressWrapGuard
+	if columns <= 0 || utf8.RuneCountInString(row) <= columns {
+		return row
+	}
+	room := columns - utf8.RuneCountInString(lead) - utf8.RuneCountInString(tail) - len(progressElision)
+	if room <= 0 {
+		return cutColumns(row, columns)
+	}
+	return lead + cutColumns(subject, room) + progressElision + tail
+}
+
+func cutColumns(text string, columns int) string {
+	if utf8.RuneCountInString(text) <= columns {
+		return text
+	}
+	return string([]rune(text)[:columns])
 }
 
 // formatElapsed truncates to whole seconds and omits anything shorter than one

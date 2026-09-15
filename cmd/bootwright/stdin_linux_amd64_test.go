@@ -35,6 +35,36 @@ func TestTerminalFileSelectsOnlyTerminalStreams(t *testing.T) {
 	}
 }
 
+// The progress row is redrawn within the width the terminal reports, so the
+// reader follows a resize and a terminal that reports no size falls back to the
+// classic width rather than to an unbounded row.
+func TestTerminalColumnsFollowTheWindowSize(t *testing.T) {
+	_, slave := openTestTerminal(t)
+	width := terminalColumns(slave)
+	if width == nil {
+		t.Fatal("terminal reported no width reader")
+	}
+	if columns := width(); columns != defaultTerminalColumns {
+		t.Fatalf("unsized terminal columns = %d, want %d", columns, defaultTerminalColumns)
+	}
+	window := struct{ Rows, Columns, XPixels, YPixels uint16 }{Rows: 24, Columns: 132}
+	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, slave.Fd(), syscall.TIOCSWINSZ, uintptr(unsafe.Pointer(&window))); errno != 0 {
+		t.Fatalf("set window size: %v", errno)
+	}
+	if columns := width(); columns != int(window.Columns) {
+		t.Fatalf("resized terminal columns = %d, want %d", columns, window.Columns)
+	}
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer read.Close()
+	defer write.Close()
+	if terminalColumns(write) != nil {
+		t.Fatal("pipe reported a terminal width")
+	}
+}
+
 // The monitor helper plays sudo's monitor: session leader in the foreground of
 // the pseudo-terminal, with the command helper parked in a background process
 // group exactly as sudo starts a command whose output is not the user's tty.

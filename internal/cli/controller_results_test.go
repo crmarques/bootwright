@@ -76,7 +76,7 @@ func TestControllerNegativeReportPreservesStreamsAndSafeDiagnostics(t *testing.T
 
 func TestControllerPlanFailureStopsOutputWithoutFallback(t *testing.T) {
 	var errOut bytes.Buffer
-	presenter := NewControllerPresenter(rejectingWriter{}, false)
+	presenter := NewControllerPresenter(rejectingWriter{}, nil)
 	err := presenter.PresentControllerPlan(context.Background(), *controllerReport("planned", true))
 	record := &dispatchRecord{result: commandResult{controller: controllerReport("incomplete", false)}, err: err}
 	var out bytes.Buffer
@@ -208,7 +208,7 @@ func TestControllerChecksUseContractStatusTokens(t *testing.T) {
 		report := controllerReport("planned", false)
 		report.Checks[0].Status = status
 		var out bytes.Buffer
-		if err := NewControllerPresenter(&out, false).PresentControllerPlan(context.Background(), *report); err != nil {
+		if err := NewControllerPresenter(&out, nil).PresentControllerPlan(context.Background(), *report); err != nil {
 			t.Fatal(err)
 		}
 		if !strings.Contains(out.String(), "  "+token+"  Execution bundle  ") {
@@ -267,7 +267,7 @@ func TestControllerCompletedSetupReportsReadinessOnly(t *testing.T) {
 // them as its own block without repeating it.
 func TestControllerResolutionRowsPrecedeThePlanUnderOneHeadline(t *testing.T) {
 	var out bytes.Buffer
-	presenter := NewControllerPresenter(&out, false)
+	presenter := NewControllerPresenter(&out, nil)
 	ctx := context.Background()
 	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.ResolutionPhase, Action: "Python and Ansible", Status: "running", Step: 1, Steps: 2})
 	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.ResolutionPhase, Action: "Python and Ansible", Status: "ok", Detail: "Python 3.14.7, Ansible 2.21.4", Step: 1, Steps: 2})
@@ -301,7 +301,7 @@ func TestControllerResolutionRowsPrecedeThePlanUnderOneHeadline(t *testing.T) {
 // checks.
 func TestControllerScopeChecksResolutionAndPlanStreamInOrder(t *testing.T) {
 	var out bytes.Buffer
-	presenter := NewControllerPresenter(&out, false)
+	presenter := NewControllerPresenter(&out, nil)
 	ctx := context.Background()
 	report := controllerReport("planned", false)
 	if err := presenter.PresentControllerScope(ctx, prerequisites.InspectionPhase, *report); err != nil {
@@ -331,7 +331,7 @@ func TestControllerScopeChecksResolutionAndPlanStreamInOrder(t *testing.T) {
 // Readiness streams the same checks under its own headline.
 func TestControllerReadinessStreamsUnderItsOwnHeadline(t *testing.T) {
 	var out bytes.Buffer
-	presenter := NewControllerPresenter(&out, false)
+	presenter := NewControllerPresenter(&out, nil)
 	ctx := context.Background()
 	if err := presenter.PresentControllerScope(ctx, prerequisites.ReadinessPhase, *controllerReport("ready", false)); err != nil {
 		t.Fatal(err)

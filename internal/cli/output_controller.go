@@ -22,10 +22,10 @@ type ControllerPresenter struct {
 	checks   bool
 }
 
-// NewControllerPresenter streams to out. On a terminal the running row is
-// rewritten in place; anywhere else rows are appended.
-func NewControllerPresenter(out io.Writer, terminal bool) *ControllerPresenter {
-	return &ControllerPresenter{progress: progressPresenter{out: out, clock: systemProgressClock(), terminal: terminal}}
+// NewControllerPresenter streams to out. Given a terminal width reader the
+// running row is rewritten in place within it; anywhere else rows are appended.
+func NewControllerPresenter(out io.Writer, columns func() int) *ControllerPresenter {
+	return &ControllerPresenter{progress: progressPresenter{out: out, clock: systemProgressClock(), columns: columns}}
 }
 
 // PresentControllerScope opens the result before inspection starts streaming

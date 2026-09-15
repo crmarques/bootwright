@@ -46,10 +46,11 @@ func (*lifecycleOutputFailure) Error() string { return "lifecycle plan output fa
 // stuck one. A group is a sub-step of its block.
 type LifecycleProgressPresenter struct{ progress progressPresenter }
 
-// NewLifecycleProgressPresenter streams to out. On a terminal the running row
-// is rewritten in place; anywhere else rows are appended.
-func NewLifecycleProgressPresenter(out io.Writer, terminal bool) *LifecycleProgressPresenter {
-	return &LifecycleProgressPresenter{progress: progressPresenter{out: out, clock: systemProgressClock(), terminal: terminal}}
+// NewLifecycleProgressPresenter streams to out. Given a terminal width reader
+// the running row is rewritten in place within it; anywhere else rows are
+// appended.
+func NewLifecycleProgressPresenter(out io.Writer, columns func() int) *LifecycleProgressPresenter {
+	return &LifecycleProgressPresenter{progress: progressPresenter{out: out, clock: systemProgressClock(), columns: columns}}
 }
 
 // Finish terminates a row a terminal is still rewriting. The runner calls it

@@ -82,7 +82,8 @@ Trailing padding is never written, so no line ends in whitespace. Column width
 is measured in Unicode code points after display escaping. Values cross the
 display boundary inside the renderer, so alignment can never be widened by an
 unescaped control sequence. Layout adds no color, cursor control, or box
-drawing, and does not vary with terminal width.
+drawing, and does not vary with terminal width; only the redrawn
+[progress row](#long-running-progress) is bounded by it.
 
 ### Long-running progress
 
@@ -139,9 +140,16 @@ place instead of appending: a carriage return and an erase-line sequence
 precede each replacement, the elapsed time refreshes every second, and the
 outcome overwrites the row, so each step settles as exactly one line. Only a
 step's own rows replace its line; another step, a heading, the result or a
-diagnostic first terminates it. The appended form above is what a pipe, a file
-and the privilege supervisor's non-interactive relay receive. No other color
-or cursor control is used.
+diagnostic first terminates it.
+
+A redrawn row occupies one physical line: it is bounded by the width the
+terminal reports when it is drawn, measured again for every row so a resize
+takes effect, and the classic eighty columns stand in for a terminal that
+reports no size. A row that does not fit keeps its status token and its
+trailing note, because the elapsed time is what an operator watches, and marks
+the text elided from the end of its subject with `...`. The appended form above
+is never elided; it is what a pipe, a file and the privilege supervisor's
+non-interactive relay receive. No other color or cursor control is used.
 
 ### Context identity
 
