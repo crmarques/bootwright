@@ -128,6 +128,9 @@ type testWorkspace struct {
 	inputs       desiredstate.Sources
 	mutations    int
 	binds        int
+	areas        map[string]bool
+	retained     []prerequisites.DependencySource
+	resolutions  int
 	failPublish  error
 }
 
@@ -198,6 +201,38 @@ func (v *testView) ReleaseReservations(context.Context) error {
 	return nil
 }
 
+// ClientArea models the shared host area the controller stage publishes into:
+// the reservation is recorded before the area exists, and a sealed closure
+// reopens read-only.
+func (v *testView) ClientArea(_ context.Context, id string) (prerequisites.BundleArea, error) {
+	if v.workspace.areas == nil {
+		v.workspace.areas = map[string]bool{}
+	}
+	if _, exists := v.workspace.areas[id]; !exists {
+		v.workspace.areas[id] = false
+	}
+	return nil, nil
+}
+
+func (v *testView) SealClientArea(_ context.Context, id string) error {
+	sealed, exists := v.workspace.areas[id]
+	if !exists {
+		return errors.New("area is not attributed")
+	}
+	if !sealed {
+		v.workspace.areas[id] = true
+	}
+	return nil
+}
+
+func (v *testView) RetainDependencies(_ context.Context, definition *prerequisites.Definition, sources []prerequisites.DependencySource) error {
+	v.workspace.retained = append(v.workspace.retained, sources...)
+	if definition != nil {
+		v.workspace.resolutions++
+	}
+	return nil
+}
+
 // testCapability records what the engine asked it to do and replays scripted
 // outcomes, so every orchestration rule is observable without an adapter.
 type testCapability struct {
@@ -213,6 +248,7 @@ type testCapability struct {
 	planErr      error
 	applyErr     error
 	material     []map[string]secrets.Material
+	executions   []Execution
 }
 
 func (c *testCapability) Plan(_ context.Context, input PlanInput) (CapabilityPlan, error) {
@@ -236,6 +272,7 @@ func (c *testCapability) next(outcomes *[]Result) Result {
 func (c *testCapability) Apply(ctx context.Context, execution Execution) (Result, error) {
 	c.applies = append(c.applies, execution.Block.ID)
 	c.material = append(c.material, execution.Material)
+	c.executions = append(c.executions, execution)
 	if execution.Progress != nil {
 		execution.Progress(ctx, "pull-image", "running")
 		execution.Progress(ctx, "pull-image", "ok")
@@ -257,6 +294,7 @@ func (c *testCapability) Destroy(_ context.Context, execution Execution) (Result
 
 func (c *testCapability) Observe(_ context.Context, execution Execution) (Observation, error) {
 	c.observes = append(c.observes, execution.Block.ID)
+	c.executions = append(c.executions, execution)
 	if len(c.observations) == 0 {
 		return Observation{Effect: reconciliation.EffectUnknown}, nil
 	}
@@ -1254,5 +1292,75 @@ func TestFailedBlockReportsItsOwnCauseBesideTheTerminalState(t *testing.T) {
 	}
 	if codes["secret.part"] != "add 192.0.2.1 to the certificate's subject alternative names and regenerate it" {
 		t.Fatalf("the block cause did not reach the caller: %v", diagnostics.Of(err))
+	}
+}
+
+// A controller block is the one block that extends the host's shared
+// prerequisites, so the engine hands it the publication boundary that work
+// needs: the retained setup evidence, the shared client area and its sealing,
+// the durable identity record, the before-state publication and the native
+// package lock it has to hand back before its own transaction.
+func TestControllerBlockReceivesItsPublicationBoundary(t *testing.T) {
+	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
+		stagedDefinition("controller-prerequisites", reconciliation.StageController),
+	})
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.capability.executions) != 1 {
+		t.Fatalf("executions = %d", len(h.capability.executions))
+	}
+	execution := h.capability.executions[0]
+	if execution.Attempt != 1 || execution.Resolution != 0 {
+		t.Fatalf("attempt identity = %d/%d", execution.Attempt, execution.Resolution)
+	}
+	if !execution.Setup.Exists || execution.Setup.State.Receipt.Status != "complete" {
+		t.Fatalf("setup evidence = %+v", execution.Setup.State.Receipt)
+	}
+	for name, supplied := range map[string]bool{
+		"ClientArea":         execution.ClientArea != nil,
+		"SealClientArea":     execution.SealClientArea != nil,
+		"RetainDependencies": execution.RetainDependencies != nil,
+		"Prepare":            execution.Prepare != nil,
+		"ReleaseFoundation":  execution.ReleaseFoundation != nil,
+	} {
+		if !supplied {
+			t.Fatalf("the controller block received no %s capability", name)
+		}
+	}
+	if err := execution.RetainDependencies(context.Background(), nil, nil); err != nil {
+		t.Fatalf("retention refused: %v", err)
+	}
+	if _, err := execution.ClientArea(context.Background(), strings.Repeat("d", 64)); err != nil {
+		t.Fatalf("client area refused: %v", err)
+	}
+	if err := execution.SealClientArea(context.Background(), strings.Repeat("d", 64)); err != nil {
+		t.Fatalf("sealing refused: %v", err)
+	}
+}
+
+// An observation is read-only. It may never authorize a host effect, so the
+// before-state publication that precedes one is refused during a resolution.
+func TestObservationCannotAuthorizeAHostEffect(t *testing.T) {
+	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
+		stagedDefinition("controller-prerequisites", reconciliation.StageController),
+	})
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted, Evidence: json.RawMessage(`{"ok":true}`)}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("an unknown attempt reported success")
+	}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.capability.observes) != 1 {
+		t.Fatalf("observations = %v", h.capability.observes)
+	}
+	observation := h.capability.executions[len(h.capability.executions)-1]
+	if observation.Resolution == 0 {
+		t.Fatalf("the observation carries no resolution identity: %+v", observation)
+	}
+	if err := observation.Prepare(context.Background(), prerequisites.NativePreparation{}); err == nil {
+		t.Fatal("an observation published a before-state")
 	}
 }

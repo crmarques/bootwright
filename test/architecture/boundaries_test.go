@@ -57,7 +57,7 @@ func packageRoles() map[string]packageRole {
 		"infrastructureservices/artifactserver", "infrastructureservices/managedservice",
 		"infrastructureservices/dnsserver", "infrastructureservices/ntpserver", "infrastructureservices/proxy",
 		"containercluster/access", "containercluster/installation", "containercluster/preflight",
-		"controller/prerequisites", "desiredstate/compilation",
+		"controller/clients", "controller/prerequisites", "desiredstate/compilation",
 		"environment/access", "environment/inspection", "environment/preflight",
 		"machine/access", "machine/inventory", "managedos/media",
 		"nativeartifacts/rendering", "reconciliation/lifecycle",

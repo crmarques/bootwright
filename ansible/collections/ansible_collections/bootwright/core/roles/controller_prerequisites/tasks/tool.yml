@@ -6,7 +6,7 @@
 
 - name: Prepare one exact target tool
   bootwright.core.controller_tool:
-    bundle: '{{ bootwright_controller_request.bundle }}'
+    bundle: '{{ bootwright_controller_request.publicationBundle }}'
     tool: '{{ item }}'
     egress: '{{ bootwright_controller_request.egress }}'
     inspect_only: false

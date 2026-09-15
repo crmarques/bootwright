@@ -117,6 +117,7 @@ class ActionModule(ActionBase):
                 "identity",
                 "platform",
                 "bundle",
+                "publicationBundle",
                 "packages",
                 "native",
                 "tools",
@@ -127,7 +128,7 @@ class ActionModule(ActionBase):
             }:
                 raise ValueError("request")
             if (
-                request["version"] != "controller-prerequisites-v2"
+                request["version"] != "controller-prerequisites-v3"
                 or request["operation"] not in ("setup", "recover")
                 or re.fullmatch(r"[a-f0-9]{64}", request["identity"]) is None
             ):

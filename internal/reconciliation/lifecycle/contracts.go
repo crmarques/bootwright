@@ -42,6 +42,16 @@ type Transaction interface {
 	Bind(context.Context, string, controller.InstalledHostIdentity) error
 	Reserve(context.Context, []prerequisites.HostReservation) error
 	ReleaseReservations(context.Context) error
+	// ClientArea opens the shared host area one exact client closure a context
+	// selects is published into, creating and attributing it under a durable
+	// reservation. A sealed area reopens read-only.
+	ClientArea(context.Context, string) (prerequisites.BundleArea, error)
+	// SealClientArea makes that closure immutable after its complete tree is
+	// verified and durable.
+	SealClientArea(context.Context, string) error
+	// RetainDependencies records the acquisition identities and native
+	// resolution a controller stage froze, before it installs them.
+	RetainDependencies(context.Context, *prerequisites.Definition, []prerequisites.DependencySource) error
 }
 
 type Workspace interface {
@@ -114,6 +124,7 @@ type OperationStore interface {
 	UpdateOperation(context.Context, operationstore.Operation) error
 	BlockStates(context.Context, string, reconciliation.Plan) (map[string]reconciliation.BlockState, error)
 	StartAttempt(context.Context, string, string) (int, error)
+	RecordPreparation(context.Context, string, string, int, json.RawMessage) error
 	CompleteAttempt(context.Context, string, string, int, reconciliation.Outcome, reconciliation.EffectState, reconciliation.BlockState, json.RawMessage) error
 	LastAttempt(context.Context, string, string) (int, error)
 	StartResolution(context.Context, string, string, int) (int, error)
@@ -172,8 +183,27 @@ type Execution struct {
 	Bundle     prerequisites.BundleLocation
 	Area       prerequisites.BundleArea
 	Material   map[string]secrets.Material
-	Log        func(context.Context, operationstore.LogRecord) error
-	Progress   func(context.Context, string, string)
+	// Setup is the retained controller evidence this host was prepared with. A
+	// block that extends those prerequisites reads the resolution and sources
+	// setup froze rather than resolving the host foundation again.
+	Setup prerequisites.StorageView
+	// ClientArea, SealClientArea and RetainDependencies are the controller
+	// stage's publication boundary: the shared area its closure is published
+	// into, its sealing, and the durable identities it records before any
+	// acquisition. Every other block leaves them untouched.
+	ClientArea         func(context.Context, string) (prerequisites.BundleArea, error)
+	SealClientArea     func(context.Context, string) error
+	RetainDependencies func(context.Context, *prerequisites.Definition, []prerequisites.DependencySource) error
+	// Prepare publishes the before-state this attempt observed, before it is
+	// permitted to change the host. A block with no host-wide effect never
+	// calls it.
+	Prepare func(context.Context, prerequisites.NativePreparation) error
+	// ReleaseFoundation hands the native package read lock this execution holds
+	// back, so a block whose own transaction needs the write lock can take it.
+	// It is valid once, and only before that transaction starts.
+	ReleaseFoundation func() error
+	Log               func(context.Context, operationstore.LogRecord) error
+	Progress          func(context.Context, string, string)
 	// Diagnostics retains what the adapter printed before it completed its
 	// qualified handoff, for an operator to read when no structured event
 	// explains the failure. An adapter calls it at most once, and never with

@@ -430,8 +430,8 @@ repeating unbounded authored text in every diagnostic. The shared codes are:
 | `controller.identity` | Required controller binding or verified host evidence is missing or contradictory. |
 | `controller.state` | Retained setup evidence is incomplete, contradictory or no longer valid. |
 | `controller.conflict` | Another setup or context protects a shared prerequisite or holds its coordination boundary. |
-| `controller.setup` | A local setup action definitely failed. |
-| `controller.unknown` | A setup action has an unresolved effect outcome. |
+| `controller.setup` | A local controller prerequisite action definitely failed. |
+| `controller.unknown` | A local controller prerequisite action has an unresolved effect outcome. |
 | `render.publish` | A requested artifact could not be safely rendered or published. |
 | `lifecycle.state` | Durable lifecycle state does not permit the requested transition or continuation. |
 | `lifecycle.stage` | The stage selection admits no startable block, or excludes the block the operation must retry. |

@@ -42,7 +42,7 @@ attributes:
 EXAMPLES = r"""
 - name: Verify one frozen tool through the controller role
   bootwright.core.controller_tool:
-    bundle: '{{ bootwright_controller_request.bundle }}'
+    bundle: '{{ bootwright_controller_request.publicationBundle }}'
     tool: '{{ item }}'
     egress: '{{ bootwright_controller_request.egress }}'
     inspect_only: true

@@ -156,7 +156,13 @@ log-fault flag. `plan.json` is the immutable frozen plan: every block with its
 description, dependencies, impacts, presentation groups, resolved
 implementation identity, content digest and canonical secret-free request.
 Block records carry the block state and its next attempt number; attempt and
-resolution records carry their request, phase, outcome and bounded evidence.
+resolution records carry their request, phase, outcome and bounded evidence. A
+running attempt may additionally publish one bounded `preparation` object: the
+before-state its capability observed, recorded durably while the attempt is
+still running and before it is permitted to change the host. It is written once
+and never replaced, so a later recovery can tell an attempt that was authorized
+to install from one that never reached that point. A resolution observation
+publishes none, because an observation authorizes no effect.
 [The output contract](cli/output.md#private-operation-logs) owns the `logs/`
 tree.
 
@@ -213,7 +219,7 @@ digest. A stage names the kind of platform work its block performs:
 
 | Stage | Blocks |
 | --- | --- |
-| `controller` | The [context prerequisites](controller.md) this Environment adds to its controller host. |
+| `controller` | The [context prerequisites](controller.md) this Environment adds to its controller host: the target clients its graph selects and the libvirt client it declares. |
 | `infra-components` | Managed shared services: proxying, name resolution, time, artifact serving, registries and load balancing. |
 | `substrates` | Provider realization for a declared `InfraProvider`. |
 | `machines` | Machine realization and managed operating-system installation. |
@@ -230,7 +236,19 @@ any capability. When a plan contains a controller block, every other block in
 that plan depends on it, because the clients it installs are what the other
 blocks' adapters run. The edge is a real block dependency frozen with the plan
 and covered by its digest, not a rule about stages; a plan with no controller
-block has no such edge and is ordered by its capabilities alone.
+block has no such edge and is ordered by its capabilities alone. A context that
+selects no client beyond the host baseline contributes no controller block at
+all.
+
+A controller block is the only block whose effects are shared host state rather
+than this context's own. Its closure therefore outlives the context that
+selected it: the block's removal retains what it installed, and the shared area
+it published into is proved, not deleted, by a destroy. Because it extends what
+[controller setup](controller.md) prepared, the engine hands that block the
+retained setup evidence, the shared publication area and its sealing, the
+durable dependency record that precedes acquisition, the before-state
+publication that precedes a host transaction, and the native package read lock
+its own transaction has to take over. No other block receives them.
 
 A stage selection is the set of stages an invocation may start; an omitted
 selection admits every stage. A block is *ready* when it is `pending` and every

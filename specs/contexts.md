@@ -178,12 +178,43 @@ preparation or evidence object is at most 64 KiB. A full resolved definition is
 at most 512 KiB, with at most 16 retained definitions subject to the aggregate
 state bound. Controller records allow nesting depth 16 and 32 fields per object;
 other durable record bounds remain unchanged. There are at most 16 retained bundle
-namespaces, named by the 64-character catalog digest. Their reservations record
-`reserved`, `attributed` or `sealed` and physical directory identity. A bundle
-is bounded to 8 GiB total, 1 GiB per file, 32768 entries and depth 32. Symlinks, hard links, nested
-mounts, unsafe modes, unexpected entries and replacement refuse. Only a durable
-setup intent grants its scoped write capability. Completion verifies and syncs
-the complete tree before sealing; sealed contents cannot be rewritten.
+namespaces, named by the 64-character content digest of what they hold. Their
+reservations record `reserved`, `attributed` or `sealed` and physical directory
+identity. A bundle is bounded to 8 GiB total, 1 GiB per file, 32768 entries and
+depth 32. Symlinks, hard links, nested
+mounts, unsafe modes, unexpected entries and replacement refuse. Completion
+verifies and syncs the complete tree before sealing; sealed contents cannot be
+rewritten.
+
+Two kinds of namespace share that list and those rules, and differ only in what
+grants their write capability. The setup bundle is named by the approved
+catalog digest and writable only under a durable setup intent. A **client
+area** is named by the digest of one exact target client closure and writable
+only inside a lifecycle mutation, which holds the root lock and the context
+lease for its whole callback; the reservation itself is that operation's
+durable intent, published before the directory exists. Neither identity may be
+opened as the other.
+
+A client area is content-addressed, so every context selecting the same clients
+proves the same files and a different closure never disturbs them. Attribution
+follows the setup bundle exactly: the `reserved` entry precedes directory
+creation, a second publication records the actual directory identity, and an
+unattributed directory beside a reservation this store published is its own
+interrupted attempt, adoptable only while empty. Sealing verifies and syncs the
+complete tree, then makes the closure immutable; a sealed area reopens
+read-only for every later operation and context. An unsealed attributed area is
+completed by an exact replay of the same closure, whose publication verifies
+existing bytes rather than overwriting them. Removal never applies: the
+closure is shared host state that outlives the context that published it, and
+no command deletes or garbage-collects one.
+
+A lifecycle operation may also extend the retained dependency evidence it
+acquires under. Before acquisition it publishes the exact source identities it
+will fetch, and the resolved native definition a selected client closure needs,
+into the same atomic record. Sources remain immutable: reusing an ID with
+different bytes or origin refuses, and retained resolutions stay append-only
+and identified by resolution digest, exactly as an explicit setup publishes
+them.
 
 Publication writes and syncs an exclusive private staging file, revalidates
 the held directory and previous record identity, then renames and syncs its

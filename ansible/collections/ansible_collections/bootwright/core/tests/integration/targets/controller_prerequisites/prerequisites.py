@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix="bootwright-prerequisites-") as area:
     bundle.mkdir(mode=0o700)
     identity = os.stat(bundle)
     request = {
-        "version": "controller-prerequisites-v2",
+        "version": "controller-prerequisites-v3",
         "operation": "setup",
         "identity": "a" * 64,
         "platform": {
@@ -50,6 +50,13 @@ with tempfile.TemporaryDirectory(prefix="bootwright-prerequisites-") as area:
             "architecture": "amd64",
         },
         "bundle": {
+            "path": str(bundle),
+            "device": identity.st_dev,
+            "inode": identity.st_ino,
+            "writable": True,
+            "sealed": False,
+        },
+        "publicationBundle": {
             "path": str(bundle),
             "device": identity.st_dev,
             "inode": identity.st_ino,

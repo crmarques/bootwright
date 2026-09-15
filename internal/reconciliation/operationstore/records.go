@@ -62,18 +62,22 @@ type BlockRecord struct {
 
 // Attempt records one effect attempt, or one resolution observation when
 // Resolution is positive. Phase is running before the effect and observed once
-// a durable outcome exists.
+// a durable outcome exists. Preparation is the before-state a capability
+// observed and published while the attempt was still running, before it was
+// permitted to change the host; its presence is what tells a later recovery
+// that this attempt may have installed something.
 type Attempt struct {
-	Version    int                        `json:"version"`
-	Block      string                     `json:"block"`
-	Number     int                        `json:"number"`
-	Resolution int                        `json:"resolution"`
-	Phase      string                     `json:"phase"`
-	Outcome    reconciliation.Outcome     `json:"outcome"`
-	Effect     reconciliation.EffectState `json:"effect"`
-	Evidence   json.RawMessage            `json:"evidence"`
-	Started    string                     `json:"started"`
-	Updated    string                     `json:"updated"`
+	Version     int                        `json:"version"`
+	Block       string                     `json:"block"`
+	Number      int                        `json:"number"`
+	Resolution  int                        `json:"resolution"`
+	Phase       string                     `json:"phase"`
+	Outcome     reconciliation.Outcome     `json:"outcome"`
+	Effect      reconciliation.EffectState `json:"effect"`
+	Evidence    json.RawMessage            `json:"evidence"`
+	Preparation json.RawMessage            `json:"preparation,omitempty"`
+	Started     string                     `json:"started"`
+	Updated     string                     `json:"updated"`
 }
 
 func encode(value any, maximum int) ([]byte, error) {
@@ -187,8 +191,13 @@ func validateAttempt(record Attempt) error {
 	if record.Phase != "running" && record.Phase != "observed" {
 		return recordError("lifecycle attempt phase is invalid")
 	}
+	if len(record.Preparation) > MaxAttemptBytes {
+		return recordError("lifecycle attempt preparation exceeds its bound")
+	}
 	if record.Phase == "running" {
-		if record.Outcome != "" || record.Effect != "" || len(record.Evidence) != 0 {
+		// A record that was written without evidence reads back as JSON null,
+		// so absence has two encodings and both mean the same thing.
+		if record.Outcome != "" || record.Effect != "" || !(len(record.Evidence) == 0 || bytes.Equal(record.Evidence, []byte("null"))) {
 			return recordError("a running lifecycle attempt carries no outcome or evidence")
 		}
 	} else {

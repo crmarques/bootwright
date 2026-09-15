@@ -1,6 +1,7 @@
 package operationstore
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"path"
@@ -310,6 +311,53 @@ func (s *Store) StartAttempt(ctx context.Context, id, block string) (int, error)
 		return 0, err
 	}
 	return number, nil
+}
+
+// RecordPreparation publishes the before-state one running attempt observed,
+// before that attempt is allowed to change the host. It never replaces a
+// published preparation: the first record is the one a recovery reasons from.
+func (s *Store) RecordPreparation(ctx context.Context, id, block string, number int, preparation json.RawMessage) error {
+	name, err := reconciliation.FormatNumber(number)
+	if err != nil {
+		return err
+	}
+	target := path.Join(id, "blocks", block, "attempt-"+name+".json")
+	data, found, err := s.area.Read(ctx, target, MaxAttemptBytes)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return recordError("the lifecycle attempt record is missing its durable start")
+	}
+	var record Attempt
+	if err := decode(data, MaxAttemptBytes, &record); err != nil {
+		return err
+	}
+	if record.Phase != "running" || record.Block != block || record.Number != number || record.Resolution != 0 {
+		return recordError("only a running lifecycle attempt may publish its before-state")
+	}
+	if len(record.Preparation) != 0 {
+		if !bytes.Equal(record.Preparation, preparation) {
+			return recordError("the lifecycle attempt published a different before-state")
+		}
+		return nil
+	}
+	updated, err := s.now()
+	if err != nil {
+		return err
+	}
+	record.Preparation, record.Updated = preparation, updated
+	if err := validateAttempt(record); err != nil {
+		return err
+	}
+	encoded, err := encode(record, MaxAttemptBytes)
+	if err != nil {
+		return err
+	}
+	if err := s.area.Replace(ctx, target, encoded, data); err != nil {
+		return err
+	}
+	return s.area.Sync(ctx, target)
 }
 
 func (s *Store) CompleteAttempt(ctx context.Context, id, block string, number int, outcome reconciliation.Outcome, effect reconciliation.EffectState, state reconciliation.BlockState, evidence json.RawMessage) error {

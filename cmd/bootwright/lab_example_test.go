@@ -15,11 +15,14 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/clients"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/desiredstate/inputfs"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 const labExampleFiles = 14
@@ -255,5 +258,47 @@ func TestLabExampleContextAndControllerPreparationJourney(t *testing.T) {
 	}
 	if ports.effects != 0 {
 		t.Fatalf("dry-run and preflight performed %d setup effects", ports.effects)
+	}
+}
+
+// The controller stage is planned from the example alone: one block, in the
+// controller stage, freezing exactly the clients the graph selects and the
+// libvirt requirement its provider declares. That request is what an
+// operator's apply would freeze, so it must be complete before any effect.
+func TestLabExamplePlansOneControllerPrerequisitesBlock(t *testing.T) {
+	state, _ := compileAcceptance(t, labExampleSources(t))
+	resolver := buildCapabilities(systemClock{}, localControllerDependencies(nil, processDependencies{}))
+	capability, ok := resolver.Resolve(clients.Kind, clients.Implementation)
+	if !ok {
+		t.Fatal("this build offers no controller prerequisites capability")
+	}
+	contribution, err := capability.Plan(context.Background(), lifecycle.PlanInput{
+		Verb: reconciliation.Apply, State: state, Controller: "controller",
+		Context: lifecycle.ContextIdentity{Name: "lab-ocp"},
+	})
+	if err != nil || len(contribution.Definitions) != 1 {
+		t.Fatalf("contributed %d blocks (%v)", len(contribution.Definitions), err)
+	}
+	block := contribution.Definitions[0]
+	if block.ID != clients.BlockID || block.Stage != reconciliation.StageController || block.Object != "lab-ocp" {
+		t.Fatalf("block = %+v", block)
+	}
+	if len(contribution.Reservations) != 0 || len(contribution.Secrets) != 0 {
+		t.Fatal("the controller stage claimed a host resource or Secret")
+	}
+	request, err := clients.DecodeRequest(block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	direct := request.Egress.HTTPProxy == "" && request.Egress.HTTPSProxy == "" && len(request.Egress.NoProxy) == 0
+	if !request.LibvirtClient || request.Machine != "controller" || !direct {
+		t.Fatalf("request = %+v", request)
+	}
+	kinds := make([]string, 0, len(request.Tools))
+	for _, tool := range request.Tools {
+		kinds = append(kinds, tool.Kind)
+	}
+	if !slices.Equal(kinds, []string{"helm", "openshift-clients", "openshift-install"}) {
+		t.Fatalf("frozen clients = %v", kinds)
 	}
 }

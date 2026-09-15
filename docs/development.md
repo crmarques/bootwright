@@ -113,7 +113,7 @@ Executed native installation is not covered by any of these; it is a manual
 
 ## M1f managed infrastructure components and staged apply
 
-The current [M1f delivery](../specs/milestones.md#m1f--managed-controller-network-services)
+The [M1f delivery](../specs/milestones.md#m1f--managed-controller-network-services)
 completes the `infra-components` stage: managed `Proxy`, `DNSServer` and
 `NTPServer` join the managed `ArtifactServer` behind one capability port, and
 `plan` and `apply` accept `--stage`. Go owns plans, operation records, leases,
@@ -160,3 +160,33 @@ and are not selectable from a test runner:
 | The complete journey in [`examples/managed-infra-components`](../examples/managed-infra-components/README.md): staged apply, replay, interrupt, continue and destroy against a real container runtime | by hand as root on a prepared controller |
 | The single-service journey in [`examples/lab-artifacts`](../examples/lab-artifacts/README.md) | by hand as root on a prepared controller |
 | SSH placement against a second OS-ready host | by hand, with that host's authored access and bound host key |
+
+## M1g controller prerequisites by selecting scope
+
+The [M1g delivery](../specs/milestones.md#m1g--controller-prerequisites-by-selecting-scope)
+splits controller prerequisites by what selects them. `bootwright setup`
+prepares the host foundation every context shares and reads no desired state at
+all; the `controller` stage of a context's own `apply` installs the target
+clients its graph selects and the libvirt client it declares.
+
+Those clients are shared host state, so they are published into a
+content-addressed client area beside the setup bundle rather than into it, and
+a `destroy` retains them. Two contexts selecting the same releases prove the same
+sealed files; changing a release creates a new area and leaves the old one in
+place, because an operation frozen against it may still need it.
+
+The stage runs the same `bootwright.core.controller_prerequisites` role setup
+runs, through the request version `controller-prerequisites-v3`. That version
+adds `publicationBundle`: the one area a request may write. Setup passes the
+bundle it executes from; the controller stage passes its client area, because
+its own execution bundle is sealed. An older executable cannot read a request
+at this version, so a build that changes `ansible/` still requires `setup`
+again before the first `apply` of each context.
+
+The verification model stays M1d's. Executed client installation is not covered
+by any in-tree gate:
+
+| Acceptance | How it is run |
+| --- | --- |
+| `apply --stage controller` for a context selecting OpenShift clients and Helm, then a repeated apply that reports `unchanged` without publisher access | by hand as root on a prepared controller |
+| The same for a context declaring the `libvirt` capability, on Fedora; RHEL refuses before acquisition until an entitled source is defined | by hand as root on a prepared Fedora controller |

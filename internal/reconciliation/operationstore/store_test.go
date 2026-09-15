@@ -1,6 +1,7 @@
 package operationstore
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -354,4 +355,49 @@ func FormatIndex(value int) string {
 		value /= 10
 	}
 	return string(out)
+}
+
+// A block that changes the host publishes the before-state it observed while
+// its attempt is still running. The record is the durable intent that later
+// recovery reasons from, so it is written once and never replaced.
+func TestPreparationIsPublishedOnceBeforeTheEffect(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	plan := testPlan(t, "alpha")
+	operation := testOperation(t, plan)
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Register(ctx, operation, plan); err != nil {
+		t.Fatal(err)
+	}
+	preparation := json.RawMessage(`{"inventorySHA256":"` + strings.Repeat("a", 64) + `"}`)
+	if err := store.RecordPreparation(ctx, operation.ID, "alpha", 1, preparation); err == nil {
+		t.Fatal("a before-state was published without a durable attempt")
+	}
+	if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordPreparation(ctx, operation.ID, "alpha", 1, preparation); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordPreparation(ctx, operation.ID, "alpha", 1, preparation); err != nil {
+		t.Fatal("republishing the exact before-state was refused:", err)
+	}
+	if err := store.RecordPreparation(ctx, operation.ID, "alpha", 1, json.RawMessage(`{"inventorySHA256":"`+strings.Repeat("b", 64)+`"}`)); err == nil {
+		t.Fatal("a published before-state was replaced")
+	}
+	var record Attempt
+	if err := decode(area.files[operation.ID+"/blocks/alpha/attempt-000001.json"], MaxAttemptBytes, &record); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(record.Preparation, preparation) || record.Phase != "running" {
+		t.Fatalf("attempt record = %+v", record)
+	}
+	if err := store.CompleteAttempt(ctx, operation.ID, "alpha", 1, reconciliation.OutcomeChanged, reconciliation.EffectCompleted, reconciliation.BlockDone, json.RawMessage(`{"postcondition":true}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordPreparation(ctx, operation.ID, "alpha", 1, preparation); err == nil {
+		t.Fatal("an observed attempt published a before-state")
+	}
 }

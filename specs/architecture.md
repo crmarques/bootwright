@@ -316,7 +316,7 @@ that implements a row updates the row and the stub fitness test together.
 | `validate`, `render effective` (Desired state) | `commands_desiredstate.go` | `desiredstate/compilation` | `desiredstate/inputfs`, `desiredstate/yamlstream`, `desiredstate/encoding` | I |
 | `setup`, `preflight controller` (Controller) | `commands_controller.go` | `controller/prerequisites` | `controller/hostlinux`, `controller/bundlelocal`, `controller/ansiblelocal`, `controller/nativelocal`, `workspace/contextfs` | I |
 | Local privilege boundary for every root-requiring command (Controller) | `invocation.go` classifies only | — | `controller/privilege`, bound in `run.go` | I |
-| `plan`, `status`, `apply`, `destroy` (State reconciliation) | `commands_reconciliation.go` | `reconciliation/lifecycle` | `reconciliation/operationstore`, `workspace/contextfs`, `desiredstate/compilation`, `secrets/custody`, `controller/hostlinux`, `controller/bundlelocal`, `infrastructureservices/artifactserver`, `infrastructureservices/managedservice` with the `proxy`, `dnsserver` and `ntpserver` definitions | I |
+| `plan`, `status`, `apply`, `destroy` (State reconciliation) | `commands_reconciliation.go` | `reconciliation/lifecycle` | `reconciliation/operationstore`, `workspace/contextfs`, `desiredstate/compilation`, `secrets/custody`, `controller/hostlinux`, `controller/bundlelocal`, `controller/nativelocal`, `controller/ansiblelocal`, `controller/clients`, `infrastructureservices/artifactserver`, `infrastructureservices/managedservice` with the `proxy`, `dnsserver` and `ntpserver` definitions | I |
 | `render` (Native artifacts) | `commands_nativeartifacts.go` | `nativeartifacts/rendering` | — | S |
 | `render installer` (Container cluster) | `commands_containercluster.go` | `containercluster/installation` | — | S |
 | `render storage` (Storage) | `commands_storage.go` | `storage/rendering` | — | S |
@@ -413,11 +413,20 @@ reconciliation/lifecycle.Service
    ─HostIdentity──────────────────→ controller/hostlinux.Inspector
    ─AutomationIdentity────────────→ controller/bundlelocal catalog identity
    ─ExecutionGuard────────────────→ controller/bundlelocal.ExecutionGuard
-   ─CapabilityResolver, Capability→ ordered set over infrastructureservices/artifactserver.Capability
+   ─CapabilityResolver, Capability→ ordered set over controller/clients.Capability,
+                                     infrastructureservices/artifactserver.Capability
                                      and managedservice.Capability bound to the proxy,
                                      dnsserver and ntpserver definitions
         ─Runner───────────────────→ infrastructureservices/ansibleservice.Runner
              ─process boundary────→ embedded bootwright.core collection
+
+controller/clients.Capability
+   ─ToolCatalog───────────────────→ controller/bundlelocal.ToolCatalog
+   ─NativeResolver, NativeInspector→ controller/nativelocal.Resolver
+   ─Installer─────────────────────→ controller/ansiblelocal.Installer
+        ─process boundary─────────→ embedded bootwright.core collection, inside the
+                                     execution foundation the lifecycle block holds
+   pure: controller.Select and controller.SelectTools at the context root
    ─Confirmer, PlanPresenter, ProgressReporter→ internal/cli
    ─Clock, Entropy────────────────→ composition
    pure: reconciliation plan, state machine and identity allocation at the context root
@@ -444,12 +453,12 @@ production binding; tests substitute fakes through the same interface.
 | `reconciliation/lifecycle` | `Compiler` | Compile | `desiredstate/compilation.Compiler` |
 | `reconciliation/lifecycle` | `SecretBinder` | Bind, Reopen, Release | `secrets/custody.Service` |
 | `reconciliation/lifecycle` | `Workspace` | ReadLifecycle, MutateLifecycle | `workspace/contextfs.Store` |
-| `reconciliation/lifecycle` | `LifecycleTransaction` | Context, Inputs, Controller, Operations, Evidence, PublishEvidence, Reserve, Release | `contextfs` lifecycle transaction |
-| `reconciliation/lifecycle` | `OperationStore` | Index, Register, ReadOperation, ReadPlan, BlockState, PublishBlock, PublishAttempt, OpenLog, Complete | `reconciliation/operationstore.Store` |
+| `reconciliation/lifecycle` | `LifecycleTransaction` | Context, Inputs, Controller, Operations, Evidence, PublishEvidence, Bind, Reserve, Release, ClientArea, SealClientArea, RetainDependencies | `contextfs` lifecycle transaction |
+| `reconciliation/lifecycle` | `OperationStore` | Index, Register, ReadOperation, ReadPlan, BlockState, PublishBlock, PublishAttempt, RecordPreparation, OpenLog, Complete | `reconciliation/operationstore.Store` |
 | `reconciliation/lifecycle` | `HostIdentity` | Identity | `controller/hostlinux.Inspector` |
 | `reconciliation/lifecycle` | `AutomationIdentity` | CatalogDigest | composition value over `controller/bundlelocal` and the embedded collection |
 | `reconciliation/lifecycle` | `ExecutionGuard` | WithPython | `controller/bundlelocal.ExecutionGuard` |
-| `reconciliation/lifecycle` | `CapabilityResolver`, `Capability` | Kinds, Resolve; Plan, Apply, Observe, Destroy | immutable ordered composition set over `infrastructureservices/artifactserver.Capability` |
+| `reconciliation/lifecycle` | `CapabilityResolver`, `Capability` | Kinds, Resolve; Plan, Apply, Observe, Destroy | immutable ordered composition set over `controller/clients.Capability` and `infrastructureservices/artifactserver.Capability` |
 | `reconciliation/lifecycle` | `Confirmer`, `PlanPresenter`, `ProgressReporter` | Confirm; PresentLifecyclePlan; ReportProgress | `internal/cli` |
 | `reconciliation/lifecycle` | `Clock`, `Entropy` | Now; Read | composition |
 | `reconciliation/operationstore` | `Area` | Read, Entries, EnsureDirectory, WriteExclusive, Replace, Append, Sync | `contextfs` operation area |
@@ -482,6 +491,9 @@ production binding; tests substitute fakes through the same interface.
 | `secrets/material` | `InputReader` | Read | process standard input |
 | `secrets/material` | `Operator` | FileIdentity | the invoking account |
 | `secrets/material` | `Cryptography` | GenerateECDSA, GenerateRSA, CreateCertificate | the package default over the standard library |
+| `controller/clients` | `ToolCatalog` | Select, Resolve, Present | `controller/bundlelocal.ToolCatalog` |
+| `controller/clients` | `NativeResolver`, `NativeInspector` | Resolve; Check | `controller/nativelocal.Resolver` |
+| `controller/clients` | `Installer` | Clients | `controller/ansiblelocal.Installer` |
 | `controller/prerequisites` | `Storage` | ReadController, MutateController | `workspace/contextfs.Store` |
 | `controller/prerequisites` | `StorageTransaction` | Snapshot, Publish, Bundle | `contextfs` controller transaction |
 | `controller/prerequisites` | `BundleArea` | Read, Write, EnsureDirectory, Entries, Verify, Location | `contextfs` bundle area |

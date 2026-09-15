@@ -7,6 +7,7 @@ import (
 
 	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/cli"
+	"github.com/crmarques/bootwright/internal/controller/clients"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ansibleservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
@@ -80,9 +81,12 @@ func (r capabilityResolver) Resolve(kind, implementation string) (lifecycle.Capa
 
 // buildCapabilities lists what this executable can realize, in the API's own
 // kind order, so a plan's block order never depends on wiring order.
-func buildCapabilities(clock systemClock) capabilityResolver {
+func buildCapabilities(clock systemClock, controller controllerDependencies) capabilityResolver {
 	runner := ansibleservice.New()
-	resolver := capabilityResolver{}
+	resolver := capabilityResolver{{
+		kind: clients.Kind, implementation: clients.Implementation,
+		capability: clients.New(controller.Tools, controller.Native, controller.NativeInspector, controller.ClientInstaller),
+	}}
 	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(), ntpserver.Definition()} {
 		resolver = append(resolver, boundCapability{
 			kind: string(definition.Kind), implementation: definition.Implementation,
@@ -95,12 +99,12 @@ func buildCapabilities(clock systemClock) capabilityResolver {
 	})
 }
 
-func wireLifecycle(deps lifecycleDependencies, compiler compilation.Compiler, binder *custody.Service) cli.LifecycleService {
+func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies, compiler compilation.Compiler, binder *custody.Service) cli.LifecycleService {
 	if deps.Workspace == nil || deps.Inputs == nil || deps.Host == nil || deps.Guard == nil {
 		return lifecycle.Service{}
 	}
 	clock := systemClock{}
-	var capabilities lifecycle.CapabilityResolver = buildCapabilities(clock)
+	var capabilities lifecycle.CapabilityResolver = buildCapabilities(clock, controller)
 	if deps.Capabilities != nil {
 		capabilities = deps.Capabilities
 	}

@@ -38,7 +38,7 @@ class ActionModule(ActionBase):
                 or not 0 < len(plan["actions"]) <= 512
             ):
                 raise ValueError("native authority")
-            bundle = Bundle(request["bundle"])
+            bundle = Bundle(request["publicationBundle"])
             bundle.writable()
             with tempfile.TemporaryDirectory(prefix="bootwright-dnf-apply-") as scratch:
                 payloads, total = {}, 0

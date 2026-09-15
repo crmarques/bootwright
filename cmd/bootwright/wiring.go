@@ -75,7 +75,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	services.Secrets, services.Encryption = secrets.custody, secrets.encryption
 	services.DesiredState = wireDesiredState(deps, compiler)
 	services.Controller = wireController(deps.Controller, compiler, deps.Confirmer)
-	services.Lifecycle = wireLifecycle(deps.Lifecycle, compiler, secrets.binder)
+	services.Lifecycle = wireLifecycle(deps.Lifecycle, deps.Controller, compiler, secrets.binder)
 	return services
 }
 

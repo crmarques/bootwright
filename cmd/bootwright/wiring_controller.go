@@ -4,6 +4,7 @@ import (
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller/ansiblelocal"
 	"github.com/crmarques/bootwright/internal/controller/bundlelocal"
+	"github.com/crmarques/bootwright/internal/controller/clients"
 	"github.com/crmarques/bootwright/internal/controller/hostlinux"
 	"github.com/crmarques/bootwright/internal/controller/nativelocal"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -17,6 +18,7 @@ type controllerDependencies struct {
 	Catalog         prerequisites.DependencyCatalog
 	Bundle          prerequisites.BundleManager
 	Runtime         prerequisites.RuntimeInstaller
+	ClientInstaller clients.Installer
 	Tools           prerequisites.TargetToolCatalog
 	Bootstrap       prerequisites.BootstrapResolver
 	Native          prerequisites.NativeResolver
@@ -28,12 +30,14 @@ type controllerDependencies struct {
 func localControllerDependencies(storage prerequisites.Storage, process processDependencies) controllerDependencies {
 	native := nativelocal.New(bundlelocal.FetchMetadata)
 	guard := bundlelocal.ExecutionGuard{}
+	installer := ansiblelocal.New(guard)
 	return controllerDependencies{
 		Storage:         storage,
 		Host:            hostlinux.New(),
 		Catalog:         bundlelocal.Catalog{},
 		Bundle:          bundlelocal.New(guard),
-		Runtime:         ansiblelocal.New(guard),
+		Runtime:         installer,
+		ClientInstaller: installer,
 		Tools:           bundlelocal.NewToolCatalog(),
 		Bootstrap:       bundlelocal.NewBootstrapResolver(),
 		Native:          native,

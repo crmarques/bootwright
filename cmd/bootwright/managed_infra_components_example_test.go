@@ -26,7 +26,7 @@ func TestManagedInfraComponentsExampleIsAdmissibleAndSupported(t *testing.T) {
 		t.Fatalf("validate: out=%q err=%q", out, errOut)
 	}
 	state, _ := compileAcceptance(t, sources)
-	if unsupported := lifecycle.Unrealizable(state.Effective(), buildCapabilities(systemClock{}).Kinds()); len(unsupported) != 0 {
+	if unsupported := lifecycle.Unrealizable(state.Effective(), buildCapabilities(systemClock{}, localControllerDependencies(nil, processDependencies{})).Kinds()); len(unsupported) != 0 {
 		t.Fatalf("the example declares objects no capability claims: %v", unsupported)
 	}
 	for _, object := range []struct {
@@ -46,7 +46,7 @@ func TestManagedInfraComponentsExampleIsAdmissibleAndSupported(t *testing.T) {
 func TestManagedInfraComponentsExamplePlansOneBlockPerService(t *testing.T) {
 	sources := exampleDirectory(t, "managed-infra-components")
 	state, _ := compileAcceptance(t, sources)
-	resolver := buildCapabilities(systemClock{})
+	resolver := buildCapabilities(systemClock{}, localControllerDependencies(nil, processDependencies{}))
 	input := lifecycle.PlanInput{
 		Verb: reconciliation.Apply, State: state, Controller: "controller",
 		Context: lifecycle.ContextIdentity{Name: "managed-infra"},
@@ -106,7 +106,7 @@ func TestManagedInfraComponentsExamplePlansOneBlockPerService(t *testing.T) {
 func TestManagedInfraComponentsRequestsCarryTheirDerivedIntent(t *testing.T) {
 	sources := exampleDirectory(t, "managed-infra-components")
 	state, _ := compileAcceptance(t, sources)
-	resolver := buildCapabilities(systemClock{})
+	resolver := buildCapabilities(systemClock{}, localControllerDependencies(nil, processDependencies{}))
 	requests := map[string]managedservice.Request{}
 	for _, kind := range []string{"Proxy", "DNSServer", "NTPServer"} {
 		capability, _ := resolver.Resolve(kind, "")

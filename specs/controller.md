@@ -17,7 +17,7 @@ and neither command performs the other's work.
 | Scope | Prerequisites | Owner |
 | --- | --- | --- |
 | Host | Provided OS, architecture and verified installed-host identity; the fixed root and its controller record; the private Python and `ansible-core` execution bundle with the embedded automation; the baseline native closure of container runtime, SSH and NMState clients. | `setup` |
-| Context | The target client closure the selected graph needs; the libvirt client closure a declared `libvirt` capability or referenced libvirt provider selects; the binding between this context and this host. | `apply --stage controller` |
+| Context | The target client closure the selected graph needs; the libvirt client closure a declared `libvirt` capability or referenced libvirt provider selects; the binding between this context and this host. | [`apply --stage controller`](#the-controller-stage) |
 
 A host prepared once therefore serves every context later created on it, and a
 context that selects nothing beyond the baseline needs no controller stage.
@@ -80,7 +80,7 @@ releases are resolved by explicit setup. Dependency selection follows
 | Host foundation | Verify the provided OS, architecture, local identity, account/sudo boundary, filesystem containment/durability, free-space limits and trusted package sources. No OS installation, release upgrade, repository enrollment, entitlement registration or reboot. |
 | Baseline execution bundle | Publish the resolved exact Python and `ansible-core` closure in an isolated Bootwright-owned location. Do not use system/user Python imports or ambient Ansible configuration. |
 | Container runtime | Setup selects Podman for every prepared host, so a controller that declares `container-runtime` finds it ready. Install or update the approved dependency set and verify an existing exact runtime without taking ownership of its containers or configuration. Do not start a service, pull a managed-service image or create a container. |
-| Native target clients | Selected by the admitted desired-state graph, so the controller stage owns them. OpenShift/OKD clients (`oc`, `kubectl`) and installer match the selected release; Kubernetes consumers select Helm; referenced vSphere providers select `govc`; virtualization selects upstream `virtctl`. A declared `libvirt` capability or referenced libvirt provider selects `virsh` and its native client dependencies. Setup selects none of them; the SSH and NMState clients that support the baseline flows are host prerequisites. Install these with the fixed Ansible controller role. |
+| Native target clients | Selected by the admitted desired-state graph, so [the controller stage](#the-controller-stage) owns them. OpenShift/OKD clients (`oc`, `kubectl`) and installer match the selected release; Kubernetes consumers select Helm; referenced vSphere providers select `govc`; virtualization selects upstream `virtctl`. A declared `libvirt` capability or referenced libvirt provider selects `virsh` and its native client dependencies. Setup selects none of them; the SSH and NMState clients that support the baseline flows are host prerequisites. Install these with the fixed Ansible controller role. |
 | Service execution | Service images, containers and lifecycle configuration remain with their service consumer. Installing a client grants no authority to contact or change a target. |
 
 Setup installs missing dependencies, updates selected dependencies to their
@@ -219,9 +219,15 @@ or other operator mutation outside that coordination is unsupported
 interference; native transaction checks still apply, and a differing final
 inventory is an unknown outcome requiring recovery, never success.
 
-The `controller-prerequisites-v2` Ansible adapter receives one frozen request
-with platform, exact package/tool sources, a scoped bundle identity, declared
-egress and optional retained preparation. The fixed controller setup playbook
+The `controller-prerequisites-v3` Ansible adapter receives one frozen request
+with platform, exact package/tool sources, two scoped bundle identities,
+declared egress and optional retained preparation. The first names the approved
+execution bundle the fixed automation is read from; the second is the only area
+the request may publish into, and its writability is the adapter's authority to
+change anything at all. Setup passes the same area for both, because it
+publishes into the bundle it executes; a controller stage passes a separate
+[client area](contexts.md#controller-relationship-and-host-binding), because
+its execution bundle is sealed. The fixed controller setup playbook
 composes `bootwright.core.controller_prerequisites`. It validates the request,
 observes the before-inventory, and waits for Go to durably record preparation
 before installation. Package effects use the native package manager under its
@@ -249,6 +255,50 @@ A verified no-op needs no prompt or installed-host/shared-state writes.
 Disposable resolution and local-probe scratch is removed after use. Setup
 changes neither current-context selection nor Environment input, and claims no
 context.
+
+## The controller stage
+
+`apply --stage controller` installs the prerequisites one context's own graph
+selects. It is one block in that context's lifecycle plan, planned by its
+capability from effective state alone and frozen before any effect: the target
+client requirements the graph names, the libvirt requirement a declared
+`libvirt` capability or referenced libvirt provider adds, and the controller
+Machine's normalized proxy choice. Exact releases are not frozen with the
+block, because a `latest` intent is resolved by the attempt that installs it
+and retained from then on. A context that selects nothing beyond the host
+baseline contributes no block at all.
+
+The block extends the resolution setup froze; it never resolves the host
+foundation again. It first recovers the closure from retained identities alone,
+which reads no publisher metadata: a host that already carries every selected
+client reports `unchanged` without acquisition, repository access or
+publication. Only what is missing is resolved, and native packages are solved
+again whenever a selected root is absent, because a frozen native transaction
+binds the host's exact before-inventory.
+
+Before acquiring a single byte it publishes the exact source identities it will
+fetch, and the native resolution a libvirt requirement needs, into the shared
+controller record. Target clients are published into a
+[client area](contexts.md#controller-relationship-and-host-binding) named by
+the digest of that exact closure, under the reservation, attribution and
+sealing rules the setup bundle has; the native transaction publishes its
+before-state into the running attempt before it is authorized. The block
+completes only after every selected client is proved present by presence alone
+and the area is sealed.
+
+The closure is shared host state. Two contexts selecting the same clients prove
+the same sealed files, a different closure gets its own area, and removing a
+context retains both: destroying a context uninstalls no native package and
+deletes no client area. Recovery is idempotent rather than compensating —
+publication verifies existing bytes instead of overwriting them, so an
+interrupted stage is completed by repeating it. `preflight controller --context
+<name>` reports the same closure by presence, and names this command when it is
+not yet installed.
+
+A selected libvirt requirement on RHEL refuses before acquisition until an
+approved entitled source is defined; the qualified Fedora profile carries the
+client closure. Setup remains the owner of the host foundation, and this stage
+never installs it, publishes a binding, or claims another context's resources.
 
 ## Egress and local effects
 

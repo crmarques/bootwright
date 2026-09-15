@@ -40,6 +40,11 @@ type lifecycleTransaction struct {
 	stored  controllerStored
 	context *directory
 	areas   []*controllerBundleArea
+	// active and guard are the capability boundary every area this operation
+	// opens shares: it expires with the callback, and each access reproves that
+	// the shared controller record has not changed underneath it.
+	active func() bool
+	guard  func(context.Context) error
 }
 
 func lifecycleRecord(registry contexts.Registry, name string) (contexts.Record, error) {
@@ -179,27 +184,28 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 				area.close()
 			}
 		}()
+		tx.active = func() bool { return active }
+		tx.guard = func(call context.Context) error {
+			if !active {
+				return state("lifecycle controller capability has closed")
+			}
+			if err := t.available(call); err != nil {
+				return err
+			}
+			actual, err := readControllerStored(call, t.root, t.registry)
+			if err != nil || !bytes.Equal(actual.data, tx.stored.data) || actual.data != nil && !sameFile(actual.identity, tx.stored.identity) {
+				return state("controller evidence changed during the operation")
+			}
+			return nil
+		}
 		// A block runs inside the controller's approved bundle, so the operation
 		// needs the same read-only opener setup uses. Without it no effect can
 		// execute at all.
 		tx.controller.OpenBundle = func(call context.Context, id string) (prerequisites.BundleArea, error) {
-			guard := func(call context.Context) error {
-				if !active {
-					return state("lifecycle controller capability has closed")
-				}
-				if err := t.available(call); err != nil {
-					return err
-				}
-				actual, err := readControllerStored(call, t.root, t.registry)
-				if err != nil || !bytes.Equal(actual.data, tx.stored.data) || actual.data != nil && !sameFile(actual.identity, tx.stored.identity) {
-					return state("controller evidence changed during the operation")
-				}
-				return nil
-			}
-			if err := guard(call); err != nil {
+			if err := tx.guard(call); err != nil {
 				return nil, err
 			}
-			area, err := openControllerBundle(call, s, t.root, t.registry, tx.stored, id, func() bool { return active }, false, guard)
+			area, err := openControllerBundle(call, s, t.root, t.registry, tx.stored, id, tx.active, false, tx.guard)
 			if err != nil || area == nil {
 				return nil, err
 			}
@@ -342,7 +348,7 @@ func (t *lifecycleTransaction) Bind(ctx context.Context, machine string, host co
 	slices.SortFunc(bindings, func(x, y prerequisites.ControllerBinding) int { return strings.Compare(x.Context, y.Context) })
 	value := cloneControllerState(t.stored.value)
 	value.Bindings = bindings
-	return t.publishControllerState(ctx, value, "before-binding")
+	return t.publishControllerState(ctx, value, t.stored.bundles, "before-binding")
 }
 
 func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []prerequisites.HostReservation) error {
@@ -385,13 +391,13 @@ func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []p
 	}
 	value := cloneControllerState(t.stored.value)
 	value.Reservations = combined
-	return t.publishControllerState(ctx, value, "before-reservation")
+	return t.publishControllerState(ctx, value, t.stored.bundles, "before-reservation")
 }
 
 // publishControllerState replaces the shared record atomically under the held
 // root lock, then re-reads it so the transaction keeps working from exactly
 // what is durable.
-func (t *lifecycleTransaction) publishControllerState(ctx context.Context, value prerequisites.HostState, checkpoint string) error {
+func (t *lifecycleTransaction) publishControllerState(ctx context.Context, value prerequisites.HostState, bundles []controllerBundleReservation, checkpoint string) error {
 	if err := t.base.store.checkpoint(ctx, checkpoint); err != nil {
 		return err
 	}
@@ -400,7 +406,7 @@ func (t *lifecycleTransaction) publishControllerState(ctx context.Context, value
 		return err
 	}
 	defer dir.file.Close()
-	data, err := encodeRecord(controllerRecord(value, t.stored.bundles), maxControllerState)
+	data, err := encodeRecord(controllerRecord(value, bundles), maxControllerState)
 	if err != nil {
 		return err
 	}

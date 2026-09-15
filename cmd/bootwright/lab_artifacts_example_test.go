@@ -43,7 +43,7 @@ func TestLabArtifactsExampleIsAdmissibleAndSupported(t *testing.T) {
 		t.Fatalf("validate: out=%q err=%q", out, errOut)
 	}
 	state, _ := compileAcceptance(t, sources)
-	claimed := buildCapabilities(systemClock{}).Kinds()
+	claimed := buildCapabilities(systemClock{}, localControllerDependencies(nil, processDependencies{})).Kinds()
 	if unsupported := lifecycle.Unrealizable(state.Effective(), claimed); len(unsupported) != 0 {
 		t.Fatalf("the example declares objects no capability claims: %v", unsupported)
 	}
@@ -106,7 +106,7 @@ func TestLabArtifactsExamplePlansOneLocalBlock(t *testing.T) {
 func TestLabOCPExampleIsRefusedWithItsUnsupportedObjects(t *testing.T) {
 	sources := exampleDirectory(t, "lab-ocp")
 	state, _ := compileAcceptance(t, sources)
-	unsupported := lifecycle.Unrealizable(state.Effective(), buildCapabilities(systemClock{}).Kinds())
+	unsupported := lifecycle.Unrealizable(state.Effective(), buildCapabilities(systemClock{}, localControllerDependencies(nil, processDependencies{})).Kinds())
 	if !slices.Equal(unsupported, []string{"ContainerCluster/sno", "Machine/sno-master-01"}) {
 		t.Fatalf("unsupported = %v", unsupported)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"path"
 
@@ -37,7 +38,7 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	}
 	defer func() { _ = log.Close(ctx) }()
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: "running", Position: position, Total: total})
-	result, runErr := s.invoke(ctx, tx, store, operation, block, material, log, position, total, func(inner context.Context, execution Execution) (Result, error) {
+	result, runErr := s.invoke(ctx, tx, store, operation, block, material, log, number, 0, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		if operation.Verb == reconciliation.Destroy {
 			return capability.Destroy(inner, execution)
 		}
@@ -90,8 +91,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	defer func() { _ = log.Close(ctx) }()
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Detail: "resolving the unknown outcome from live evidence", Status: "running", Position: position, Total: total})
 	var observation Observation
-	_, runErr := s.invoke(ctx, tx, store, operation, block, material, log, position, total, func(inner context.Context, execution Execution) (Result, error) {
-		execution.Resolution = number
+	_, runErr := s.invoke(ctx, tx, store, operation, block, material, log, attemptNumber, number, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		value, err := capability.Observe(inner, execution)
 		observation = value
 		return Result{Outcome: reconciliation.OutcomeUnknown}, err
@@ -119,7 +119,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 
 // invoke opens the controller's approved bundle and runs the capability inside
 // the private Python execution boundary, exactly as controller setup does.
-func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, log *operationstore.Log, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
+func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, log *operationstore.Log, attempt, resolution, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
 	view := tx.Controller()
 	receipt := view.State.Receipt
 	if receipt.Definition == nil {
@@ -142,10 +142,24 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 		return Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
 	result := Result{Outcome: reconciliation.OutcomeUnknown}
-	err = s.guard.WithPython(ctx, area, receipt.Definition.Execution, func(launch prerequisites.PythonLaunch, _ func() error) error {
+	err = s.guard.WithPython(ctx, area, receipt.Definition.Execution, func(launch prerequisites.PythonLaunch, release func() error) error {
 		execution := Execution{
-			Operation: operation.ID, Attempt: 0, Block: block, Launch: launch, Bundle: location, Area: area,
-			Material: material,
+			Operation: operation.ID, Attempt: attempt, Resolution: resolution, Block: block, Launch: launch, Bundle: location, Area: area,
+			Material: material, Setup: view,
+			ClientArea:         tx.ClientArea,
+			SealClientArea:     tx.SealClientArea,
+			RetainDependencies: tx.RetainDependencies,
+			ReleaseFoundation:  release,
+			Prepare: func(inner context.Context, preparation prerequisites.NativePreparation) error {
+				if resolution != 0 {
+					return failure("lifecycle.state", "an observation may not authorize a host effect", "")
+				}
+				encoded, err := json.Marshal(preparation)
+				if err != nil {
+					return failure("lifecycle.state", "the attempt before-state cannot be canonically represented", "")
+				}
+				return store.RecordPreparation(inner, operation.ID, block.ID, attempt, encoded)
+			},
 			Log: func(inner context.Context, record operationstore.LogRecord) error {
 				return log.Append(inner, record)
 			},
