@@ -9,12 +9,12 @@ import (
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller/clients"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/ansibleservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
+	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
@@ -58,23 +58,22 @@ type boundCapability struct {
 	capability     lifecycle.Capability
 }
 
-func (r capabilityResolver) Kinds() []string {
-	kinds := make([]string, 0, len(r))
+func (r capabilityResolver) Bindings() []lifecycle.CapabilityBinding {
+	bindings := make([]lifecycle.CapabilityBinding, 0, len(r))
 	for _, bound := range r {
-		kinds = append(kinds, bound.kind)
+		bindings = append(bindings, lifecycle.CapabilityBinding{Kind: bound.kind, Implementation: bound.implementation})
 	}
-	return kinds
+	return bindings
 }
 
+// Resolve answers the capability bound to exactly this kind and
+// implementation, so a block frozen against one implementation never continues
+// against another this build happens to offer for the same kind.
 func (r capabilityResolver) Resolve(kind, implementation string) (lifecycle.Capability, bool) {
 	for _, bound := range r {
-		if bound.kind != kind || bound.capability == nil {
-			continue
+		if bound.kind == kind && bound.implementation == implementation && bound.capability != nil {
+			return bound.capability, true
 		}
-		if implementation != "" && implementation != bound.implementation {
-			return nil, false
-		}
-		return bound.capability, true
 	}
 	return nil, false
 }
@@ -82,7 +81,7 @@ func (r capabilityResolver) Resolve(kind, implementation string) (lifecycle.Capa
 // buildCapabilities lists what this executable can realize, in the API's own
 // kind order, so a plan's block order never depends on wiring order.
 func buildCapabilities(clock systemClock, controller controllerDependencies) capabilityResolver {
-	runner := ansibleservice.New()
+	runner := ansiblerunner.New()
 	resolver := capabilityResolver{{
 		kind: clients.Kind, implementation: clients.Implementation,
 		capability: clients.New(controller.Tools, controller.Native, controller.NativeInspector, controller.ClientInstaller),

@@ -33,11 +33,16 @@ func applicationValues() packageSymbols {
 		// read; they bind no replaceable service.
 		"internal/infrastructureservices/artifactserver": {"Request": true, "Evidence": true},
 		"internal/infrastructureservices/managedservice": {
-			"Request": true, "Evidence": true, "Definition": true, "RunRequest": true,
-			"RunResult": true, "MaterialFile": true, "Placement": true, "Identity": true,
+			"Request": true, "Evidence": true, "Definition": true, "Identity": true,
 			"Egress": true, "Endpoint": true, "Record": true, "Answer": true,
 		},
-		"internal/reconciliation":                {"Plan": true, "Evidence": true},
+		"internal/reconciliation": {"Plan": true, "Evidence": true},
+		// The invocation every capability crosses: immutable request and
+		// placement values an adapter constructs and reads, binding no
+		// replaceable service.
+		"internal/reconciliation/lifecycle": {
+			"RunRequest": true, "RunResult": true, "MaterialFile": true, "Placement": true,
+		},
 		"internal/reconciliation/operationstore": {"Log": true},
 	}
 }

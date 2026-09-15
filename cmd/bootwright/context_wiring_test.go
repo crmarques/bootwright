@@ -82,7 +82,9 @@ func (testLifecyclePresenter) PresentLifecyclePlan(context.Context, lifecycle.Pl
 
 type testLifecycleCapabilities struct{}
 
-func (testLifecycleCapabilities) Kinds() []string { return []string{"ArtifactServer"} }
+func (testLifecycleCapabilities) Bindings() []lifecycle.CapabilityBinding {
+	return []lifecycle.CapabilityBinding{{Kind: "ArtifactServer", Implementation: "artifact-server-nginx-v1"}}
+}
 
 func (testLifecycleCapabilities) Resolve(string, string) (lifecycle.Capability, bool) {
 	return nil, false

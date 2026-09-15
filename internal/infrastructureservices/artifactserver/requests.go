@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 const requestVersion = "artifact-server-nginx-v1"
@@ -29,12 +30,12 @@ type Request struct {
 	Version     string     `json:"version"`
 }
 
-// Identity, Placement and Egress are the shared managed-service values, so a
-// frozen artifact-server request keeps the exact shape it always had while the
-// derivation is implemented once.
+// Identity and Egress are the shared managed-service values and Placement is
+// the engine's own, so a frozen artifact-server request keeps the exact shape
+// it always had while the derivation is implemented once.
 type (
 	Identity  = managedservice.Identity
-	Placement = managedservice.Placement
+	Placement = lifecycle.Placement
 	Egress    = managedservice.Egress
 )
 
@@ -57,8 +58,8 @@ type TLS struct {
 }
 
 const (
-	connectionLocal = managedservice.ConnectionLocal
-	connectionSSH   = managedservice.ConnectionSSH
+	connectionLocal = lifecycle.ConnectionLocal
+	connectionSSH   = lifecycle.ConnectionSSH
 )
 
 // Canonical encodes the request exactly as the plan digest and the adapter

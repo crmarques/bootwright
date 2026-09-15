@@ -1,0 +1,65 @@
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-9-7
+
+spec:
+  os:
+    family: rhel
+    version: "9.7"
+    architecture: x86_64
+
+  installer:
+    anaconda:
+      imageRef: rhel-9-7-boot
+
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+
+      packageSource:
+        hostedTree:
+          fromMedia: local-media:rhel-9.7-x86_64-dvd.iso
+          artifactServerEndpoint:
+            serverRef: lab-artifacts
+            endpointRef: ip-http
+
+  ntp:
+    - serverRef: lab-ntp
+      endpointRef: ip
+
+  customizations:
+    hostname:
+      source: machineName
+
+    localization:
+      language: en_US.UTF-8
+      formats: en_US.UTF-8
+      keyboard: us
+      timezone: Etc/UTC
+
+    ssh:
+      passwordAuthentication: false
+
+    storage:
+      rootDevice:
+        source: machineRootDeviceHints
+
+    packages:
+      environment: minimal
+      installWeakDeps: false
+      excludeDocs: true
+      install:
+        - chrony
+        - qemu-guest-agent
+
+    services:
+      enabled:
+        - chronyd
+        - qemu-guest-agent
+        - sshd
+
+    security:
+      selinux:
+        mode: enforcing

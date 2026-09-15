@@ -11,6 +11,7 @@ import (
 // refuses the whole operation rather than silently leaving its objects out.
 func effectKinds() []api.Kind {
 	return []api.Kind{
+		api.InfraProvider,
 		api.Proxy, api.DNSServer, api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer,
 		api.ContainerCluster, api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool,
 		api.StorageFilesystem, api.StorageObjectGateway, api.StorageNFSExport, api.StorageExport,

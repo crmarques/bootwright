@@ -73,7 +73,7 @@ func TestRequestsDeriveTheFrozenLocalPlacement(t *testing.T) {
 		t.Fatalf("requests = %+v (%v)", requests, err)
 	}
 	request := requests[0]
-	if request.Placement.Connection != ConnectionLocal || request.Placement.Machine != "controller" {
+	if request.Placement.Connection != lifecycle.ConnectionLocal || request.Placement.Machine != "controller" {
 		t.Fatalf("placement = %+v", request.Placement)
 	}
 	if request.Unit != "bootwright-"+testContext+"-proxy-lab-proxy" {

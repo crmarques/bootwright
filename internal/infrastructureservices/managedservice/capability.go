@@ -132,7 +132,7 @@ func (c Capability) requestFor(catalog api.Catalog, object api.Object, controlle
 	if !found {
 		return Request{}, Refusal("api.reference", "the managed service's placement Machine is not in the selected graph", "declare "+spec.Get("machineRef").Text()+" or change the reference")
 	}
-	placement, err := PlacementFor(machine, controllerMachine)
+	placement, err := lifecycle.PlacementFor(machine, controllerMachine)
 	if err != nil {
 		return Request{}, err
 	}
@@ -278,27 +278,27 @@ func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution) 
 	return DecodeRequest(execution.Block.Request, c.definition.Version)
 }
 
-func (c Capability) run(ctx context.Context, execution lifecycle.Execution, operation string, request Request) (RunResult, error) {
+func (c Capability) run(ctx context.Context, execution lifecycle.Execution, operation string, request Request) (lifecycle.RunResult, error) {
 	canonical, err := request.Canonical()
 	if err != nil {
-		return RunResult{}, err
+		return lifecycle.RunResult{}, err
 	}
-	return c.runner.Run(ctx, RunRequest{
-		Kind:        string(c.definition.Kind),
-		Operation:   operation,
-		Variable:    c.definition.Variable,
-		Digest:      execution.Block.RequestDigest,
-		Canonical:   canonical,
-		Placement:   request.Placement,
-		Materials:   Materials(request.Placement),
-		Sudo:        request.Placement.SudoPasswordRef,
-		Launch:      execution.Launch,
-		Bundle:      execution.Bundle,
-		Area:        execution.Area,
-		Material:    execution.Material,
-		Log:         execution.Log,
-		Progress:    execution.Progress,
-		Diagnostics: execution.Diagnostics,
+	return c.runner.Run(ctx, lifecycle.RunRequest{
+		Implementation: c.definition.Implementation,
+		Operation:      operation,
+		Variable:       c.definition.Variable,
+		Digest:         execution.Block.RequestDigest,
+		Canonical:      canonical,
+		Placement:      request.Placement,
+		Materials:      lifecycle.Materials(request.Placement),
+		Sudo:           request.Placement.SudoPasswordRef,
+		Launch:         execution.Launch,
+		Bundle:         execution.Bundle,
+		Area:           execution.Area,
+		Material:       execution.Material,
+		Log:            execution.Log,
+		Progress:       execution.Progress,
+		Diagnostics:    execution.Diagnostics,
 	})
 }
 

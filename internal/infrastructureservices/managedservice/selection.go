@@ -8,6 +8,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 // ContentRootPrefix is outside the Bootwright state root, so an owned service
@@ -29,69 +30,6 @@ func UnitName(contextName, slug, service string) string {
 // the context name reaches a unit name and an owned path.
 func ValidContextName(contextName string) bool {
 	return api.ValidLexical("name", contextName)
-}
-
-// PlacementFor selects the arm one service runs through. The controller is
-// local; every other host must author the SSH access the operation binds.
-func PlacementFor(machine api.Object, controllerMachine string) (Placement, error) {
-	if machine.Name() == controllerMachine {
-		return Placement{Connection: ConnectionLocal, Machine: machine.Name()}, nil
-	}
-	ssh := machine.Spec().Get("access", "ssh")
-	if !ssh.Present() {
-		return Placement{}, Refusal("lifecycle.state", "a managed service host must be the controller or declare SSH access", "place the service on the controller Machine, or author access.ssh on "+machine.Identity())
-	}
-	if ssh.Has("auth", "operatorIdentity") {
-		return Placement{}, Refusal("lifecycle.state", "operator SSH identity is unsupported for managed service placement", "author access.ssh.auth.privateKeyRef on "+machine.Identity())
-	}
-	if ssh.Has("auth", "passwordRef") {
-		return Placement{}, Refusal("lifecycle.state", "password SSH authentication is unsupported for managed service placement", "author access.ssh.auth.privateKeyRef on "+machine.Identity())
-	}
-	if !ssh.Has("auth", "privateKeyRef") {
-		return Placement{}, Refusal("lifecycle.state", "managed service placement requires an SSH private key reference", "author access.ssh.auth.privateKeyRef on "+machine.Identity())
-	}
-	if !ssh.Has("knownHostsRef") {
-		return Placement{}, Refusal("lifecycle.state", "managed service placement requires a bound SSH host key", "author access.ssh.knownHostsRef on "+machine.Identity())
-	}
-	address, err := MachineAddress(machine, ssh.Get("addressRef").Text())
-	if err != nil {
-		return Placement{}, err
-	}
-	port := 22
-	if value, ok := ssh.Get("port").Int64(); ok && value > 0 {
-		port = int(value)
-	}
-	user := ssh.Get("user").Text()
-	if user == "" {
-		user = "root"
-	}
-	return Placement{
-		Address: address, Connection: ConnectionSSH, KnownHostsRef: ssh.Get("knownHostsRef").Text(),
-		Machine: machine.Name(), Port: port, PrivateKeyRef: ssh.Get("auth", "privateKeyRef").Text(),
-		SudoPasswordRef: ssh.Get("sudoPasswordRef").Text(), User: user,
-	}, nil
-}
-
-// MachineAddress resolves a Machine-local address reference to the value a
-// consumer receives: the host IP without its prefix, or the DNS name.
-func MachineAddress(machine api.Object, reference string) (string, error) {
-	if reference == "" {
-		return "", Refusal("api.required", "the address reference is empty", "name an address on "+machine.Identity())
-	}
-	for _, address := range machine.Spec().Get("network", "addresses").Items() {
-		if address.Get("name").Text() != reference {
-			continue
-		}
-		value := address.Get("address").Text()
-		if host, _, found := strings.Cut(value, "/"); found {
-			value = host
-		}
-		if value == "" {
-			return "", Refusal("api.value", "the referenced Machine address is empty", "correct the address on "+machine.Identity())
-		}
-		return value, nil
-	}
-	return "", Refusal("api.reference", "the address reference does not resolve on its Machine", "name an address declared on "+machine.Identity())
 }
 
 // ImageFor selects the service image. Planning is pure, so it cannot resolve a
@@ -126,7 +64,7 @@ func EndpointsFor(spec api.Value, machine api.Object) ([]Endpoint, error) {
 	items := spec.Get("endpoints").Items()
 	endpoints := make([]Endpoint, 0, len(items))
 	for _, item := range items {
-		address, err := MachineAddress(machine, item.Get("addressRef").Text())
+		address, err := lifecycle.MachineAddress(machine, item.Get("addressRef").Text())
 		if err != nil {
 			return nil, err
 		}

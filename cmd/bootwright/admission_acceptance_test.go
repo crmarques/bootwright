@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	effectiveencoding "github.com/crmarques/bootwright/internal/desiredstate/encoding"
@@ -106,6 +107,23 @@ func TestActualCLIValidatesCompleteExample(t *testing.T) {
 	}
 	if requireObject(t, state.Authored(), api.Machine, "storage-a-01").Spec().Has("access") {
 		t.Fatal("authored Machine acquired effective access")
+	}
+}
+
+// Target tools are selected by the graph alone: the clusters and providers this
+// example declares are what pull the OpenShift and KubeVirt clients in, at the
+// versions it declares, and nothing else contributes one.
+func TestActualExampleSelectsTargetToolsFromItsClusters(t *testing.T) {
+	state, _ := compileAcceptance(t, exampleSources(t))
+	tools, err := controller.SelectTools(state.Effective())
+	want := []controller.ToolRequest{
+		{Kind: "helm", Version: "latest"},
+		{Kind: "openshift-clients", Version: "4.99.0", Compatibility: "openshift"},
+		{Kind: "openshift-install", Version: "4.99.0", Compatibility: "openshift"},
+		{Kind: "virtctl", Version: "latest", Compatibility: "kubevirt"},
+	}
+	if err != nil || !slices.Equal(tools, want) {
+		t.Fatalf("target tools: %#v err=%v", tools, err)
 	}
 }
 

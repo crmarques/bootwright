@@ -1,6 +1,6 @@
 ---
 - name: Apply one managed proxy
-  hosts: bootwright_service_host
+  hosts: bootwright_target
   gather_facts: false
   any_errors_fatal: true
   serial: 1

@@ -305,19 +305,19 @@ func (c *testCapability) Observe(_ context.Context, execution Execution) (Observ
 
 type testResolver struct {
 	capability Capability
-	kinds      []string
+	bindings   []CapabilityBinding
 	missing    bool
 }
 
-func (r testResolver) Kinds() []string {
-	if len(r.kinds) != 0 {
-		return r.kinds
+func (r testResolver) Bindings() []CapabilityBinding {
+	if len(r.bindings) != 0 {
+		return r.bindings
 	}
-	return []string{"ArtifactServer"}
+	return []CapabilityBinding{{Kind: "ArtifactServer", Implementation: "artifact-server-nginx-v1"}}
 }
 
 func (r testResolver) Resolve(kind, implementation string) (Capability, bool) {
-	if r.missing || !slices.Contains(r.Kinds(), kind) {
+	if r.missing || !slices.Contains(r.Bindings(), CapabilityBinding{Kind: kind, Implementation: implementation}) {
 		return nil, false
 	}
 	return r.capability, true

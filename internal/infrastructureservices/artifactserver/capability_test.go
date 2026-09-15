@@ -10,19 +10,18 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 type fakeRunner struct {
-	requests []managedservice.RunRequest
-	result   managedservice.RunResult
+	requests []lifecycle.RunRequest
+	result   lifecycle.RunResult
 	err      error
 }
 
-func (r *fakeRunner) Run(_ context.Context, request managedservice.RunRequest) (managedservice.RunResult, error) {
+func (r *fakeRunner) Run(_ context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
 	r.requests = append(r.requests, request)
 	return r.result, r.err
 }
@@ -130,7 +129,7 @@ func TestApplyValidatesTheAdapterOutcomeAndEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runner := &fakeRunner{result: managedservice.RunResult{Outcome: "changed", Evidence: presenceEvidence(request, call.Block.RequestDigest, fingerprint)}}
+	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: presenceEvidence(request, call.Block.RequestDigest, fingerprint)}}
 	result, err := New(runner, fixedClock{}).Apply(context.Background(), call)
 	if err != nil || result.Outcome != reconciliation.OutcomeChanged {
 		t.Fatalf("apply = %+v (%v)", result, err)
@@ -145,7 +144,7 @@ func TestApplyValidatesTheAdapterOutcomeAndEvidence(t *testing.T) {
 	}
 	for name, outcome := range map[string]string{"no-effect": "no-effect", "failed": "failed", "invented": "done"} {
 		t.Run(name, func(t *testing.T) {
-			runner := &fakeRunner{result: managedservice.RunResult{Outcome: outcome}}
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: outcome}}
 			result, err := New(runner, fixedClock{}).Apply(context.Background(), call)
 			if err == nil || result.Outcome != reconciliation.OutcomeUnknown {
 				t.Fatalf("outcome %q was accepted: %+v (%v)", outcome, result, err)
@@ -193,14 +192,14 @@ func TestObserveMapsLiveEvidenceToItsEffectState(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, tc := range map[string]struct {
-		result managedservice.RunResult
+		result lifecycle.RunResult
 		err    error
 		want   reconciliation.EffectState
 	}{
-		"complete":       {managedservice.RunResult{Outcome: "unchanged", Evidence: presenceEvidence(request, call.Block.RequestDigest, fingerprint)}, nil, reconciliation.EffectCompleted},
-		"absent":         {managedservice.RunResult{Outcome: "unchanged", Evidence: absenceEvidence(call.Block.RequestDigest)}, nil, reconciliation.EffectNoEffect},
-		"partial":        {managedservice.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(`{"absent":false,"container":"","contentRoot":true,"listeners":[],"postcondition":false,"request":"` + call.Block.RequestDigest + `","unit":"active"}`)}, nil, reconciliation.EffectUnknown},
-		"adapter failed": {managedservice.RunResult{}, errors.New("unreachable"), reconciliation.EffectUnknown},
+		"complete":       {lifecycle.RunResult{Outcome: "unchanged", Evidence: presenceEvidence(request, call.Block.RequestDigest, fingerprint)}, nil, reconciliation.EffectCompleted},
+		"absent":         {lifecycle.RunResult{Outcome: "unchanged", Evidence: absenceEvidence(call.Block.RequestDigest)}, nil, reconciliation.EffectNoEffect},
+		"partial":        {lifecycle.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(`{"absent":false,"container":"","contentRoot":true,"listeners":[],"postcondition":false,"request":"` + call.Block.RequestDigest + `","unit":"active"}`)}, nil, reconciliation.EffectUnknown},
+		"adapter failed": {lifecycle.RunResult{}, errors.New("unreachable"), reconciliation.EffectUnknown},
 	} {
 		t.Run(name, func(t *testing.T) {
 			runner := &fakeRunner{result: tc.result, err: tc.err}
@@ -219,7 +218,7 @@ func TestDestroyRequiresPositiveAbsence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runner := &fakeRunner{result: managedservice.RunResult{Outcome: "changed", Evidence: absenceEvidence(call.Block.RequestDigest)}}
+	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: absenceEvidence(call.Block.RequestDigest)}}
 	result, err := New(runner, fixedClock{}).Destroy(context.Background(), call)
 	if err != nil || result.Outcome != reconciliation.OutcomeChanged {
 		t.Fatalf("destroy = %+v (%v)", result, err)
@@ -227,7 +226,7 @@ func TestDestroyRequiresPositiveAbsence(t *testing.T) {
 	if runner.requests[0].Operation != "destroy" {
 		t.Fatalf("adapter operation = %q", runner.requests[0].Operation)
 	}
-	present := &fakeRunner{result: managedservice.RunResult{Outcome: "changed", Evidence: presenceEvidence(request, call.Block.RequestDigest, fingerprint)}}
+	present := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: presenceEvidence(request, call.Block.RequestDigest, fingerprint)}}
 	result, err = New(present, fixedClock{}).Destroy(context.Background(), call)
 	if err == nil || result.Outcome != reconciliation.OutcomeUnknown {
 		t.Fatalf("destroy accepted presence evidence: %+v (%v)", result, err)

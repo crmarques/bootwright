@@ -218,7 +218,7 @@ where a behavior lives:
 | --- | --- |
 | `internal/<context>` | Pure domain values, invariants and the kind admission rules (`Normalize`, `Validate`, `ValidateAuthored`, `ValidatePartial`) that the compiler composes, plus shared values such as `machine.SSHOptions` and `secrets.Material`. No ports and no I/O. |
 | `internal/<context>/<capability>` | One application service package per command family. `service.go` declares `Service`, its constructor and one exported method per command; `requests.go` declares the request and result types the CLI consumes; `contracts.go` declares every interface the package consumes, and no other file declares an exported interface; remaining files hold private use-case logic. |
-| `internal/<context>/<implementation>` | A driven adapter named by what it binds: `contextfs`, `selectionfs`, `inputfs`, `yamlstream`, `encoding`, `localkeyring`, `material`, `hostlinux`, `bundlelocal`, `ansiblelocal`, `nativelocal`, `privilege`, `ansibleservice`, `medialocal`. It implements another package's contract and never calls another adapter. |
+| `internal/<context>/<implementation>` | A driven adapter named by what it binds: `contextfs`, `selectionfs`, `inputfs`, `yamlstream`, `encoding`, `localkeyring`, `material`, `hostlinux`, `bundlelocal`, `ansiblelocal`, `nativelocal`, `privilege`, `ansiblerunner`, `medialocal`. It implements another package's contract and never calls another adapter. |
 | `internal/diagnostics` | The diagnostic and typed-failure vocabulary every layer emits; it imports nothing first-party. |
 | `internal/availability` | The single unavailable-capability sentinel. |
 
@@ -343,8 +343,9 @@ and its two access methods to `environment/access`; platform rules remain with
 their owning contexts. Substrate realization with its identity and power
 operations belongs to `substrate/libvirt`, managed-OS installation to
 `managedos/installation`, the media store to `managedos/media` over the
-`managedos/mediastore` adapter, and the one Ansible runner every lifecycle
-capability crosses to `reconciliation/ansiblerunner`; each is created with its
+`managedos/medialocal` adapter, and the one Ansible runner every lifecycle
+capability crosses to `reconciliation/ansiblerunner`, whose request, placement
+and material values `reconciliation/lifecycle` owns; each is created with its
 first authorized behavior.
 
 ### Domain communication graph
@@ -428,7 +429,7 @@ reconciliation/lifecycle.Service
                                      infrastructureservices/artifactserver.Capability
                                      and managedservice.Capability bound to the proxy,
                                      dnsserver and ntpserver definitions
-        ─Runner───────────────────→ infrastructureservices/ansibleservice.Runner
+        ─Runner───────────────────→ reconciliation/ansiblerunner.Runner
              ─process boundary────→ embedded bootwright.core collection
 
 controller/clients.Capability
@@ -470,11 +471,11 @@ production binding; tests substitute fakes through the same interface.
 | `reconciliation/lifecycle` | `HostIdentity` | Identity | `controller/hostlinux.Inspector` |
 | `reconciliation/lifecycle` | `AutomationIdentity` | CatalogDigest | composition value over `controller/bundlelocal` and the embedded collection |
 | `reconciliation/lifecycle` | `ExecutionGuard` | WithPython | `controller/bundlelocal.ExecutionGuard` |
-| `reconciliation/lifecycle` | `CapabilityResolver`, `Capability` | Kinds, Resolve; Plan, Apply, Observe, Destroy | immutable ordered composition set over `controller/clients.Capability` and `infrastructureservices/artifactserver.Capability` |
+| `reconciliation/lifecycle` | `CapabilityResolver`, `Capability` | Bindings, Resolve; Plan, Apply, Observe, Destroy | immutable ordered composition set over `controller/clients.Capability`, `infrastructureservices/artifactserver.Capability` and `infrastructureservices/managedservice.Capability` |
 | `reconciliation/lifecycle` | `Confirmer`, `PlanPresenter`, `ProgressReporter` | Confirm; PresentLifecyclePlan; ReportProgress | `internal/cli` |
 | `reconciliation/lifecycle` | `Clock`, `Entropy` | Now; Read | composition |
 | `reconciliation/operationstore` | `Area` | Read, Entries, EnsureDirectory, WriteExclusive, Replace, Append, Sync | `contextfs` operation area |
-| `infrastructureservices/artifactserver`, `infrastructureservices/managedservice` | `Runner` | Run | `infrastructureservices/ansibleservice.Runner` |
+| `infrastructureservices/artifactserver`, `infrastructureservices/managedservice` | `Runner` | Run | `reconciliation/ansiblerunner.Runner` |
 | `workspace/contexts` | `Repository` (embeds `InputRepository`) | ReadInputs, CheckInputDirectory, View, Transact | `workspace/contextfs.Store` |
 | `workspace/contexts` | `Transaction` | Registry, Reserve, Configuration, InitializeSecrets, Publish, MutationState, Delete, Commit | `contextfs` transaction |
 | `workspace/contexts` | `ControllerInputGuard` | CheckControllerInput | `contextfs` transaction |

@@ -56,7 +56,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 		}
 		result.Clusters = clusterSummaries(catalog, api.ContainerCluster)
 		result.StorageClusters = clusterSummaries(catalog, api.StorageCluster)
-		result.Shared = serviceSummaries(catalog, s.capabilities.Kinds())
+		result.Shared = serviceSummaries(catalog, s.capabilityKinds())
 		result.Secrets = SecretSummary{Declared: len(catalog.OfKind(api.Secret))}
 	}
 	store := s.store(view)

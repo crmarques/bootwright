@@ -240,7 +240,7 @@ evidence); adapter protocol and material tests across all four kinds; the
 collection gates over the three new roles, playbooks and plugins; CLI goldens
 for the stage flag, the plan markers and the paused receipt; the example's
 admission, derived requests and reservation keys in
-`cmd/bootwright/managed_infra_components_example_test.go`; and `make check`.
+`cmd/bootwright/lab_rhel_example_test.go`; and `make check`.
 
 **Verification model.** M1d's model continues: every test carried in this
 repository is unitary and host-independent. Real-system acceptance is
@@ -248,9 +248,9 @@ operator-run.
 
 Not covered by any in-tree gate: executed service effects, the process and
 cancellation boundary of the service adapter, and SSH placement against a real
-host. The named consumer is [`examples/managed-infra-components`](../examples/managed-infra-components);
-[`examples/lab-ocp`](../examples/lab-ocp) remains the larger fixture whose
-guest and cluster still refuse.
+host. The named consumer was `examples/managed-infra-components`, which M1h replaced
+with [`examples/lab-rhel`](../examples/lab-rhel); the larger `examples/lab-ocp`
+fixture it carried was retired with it.
 
 ### M1g — controller prerequisites by selecting scope
 
@@ -312,7 +312,7 @@ other block and receives the publication boundary, an observation cannot
 authorize a host effect, and a plan without a controller block gains no
 dependency); the CLI catalog, dispatch, confirmation and output tests;
 `cmd/bootwright` admission and example acceptance, including the one controller
-block `examples/lab-ocp` plans; and `make check`.
+block [`examples/lab-rhel`](../examples/lab-rhel) plans; and `make check`.
 
 Not covered by any in-tree gate: an executed native client transaction, an
 executed target-client publication, and the RHEL libvirt refusal against a real
@@ -327,7 +327,7 @@ publication), Workspace (host-wide media store), Controller (the hypervisor
 and installer-tooling closures its stage installs) and State reconciliation
 (cross-capability requirements, consumed authorization and the one shared
 adapter runner); using Secrets and Machine. **Requires:** M1g.
-**Definition:** Specified. **Delivery:** not started.
+**Definition:** Specified. **Delivery:** in progress.
 
 Deliver one Bootwright-installed RHEL 9.7 Machine on a libvirt guest that boots
 its installer through an emulated Redfish BMC, so the bare-metal installation

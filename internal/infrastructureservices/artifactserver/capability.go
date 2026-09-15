@@ -8,7 +8,6 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
@@ -218,17 +217,17 @@ func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution, 
 	return request, certificate.Fingerprint, nil
 }
 
-func (c Capability) run(ctx context.Context, execution lifecycle.Execution, operation string, request Request, fingerprint string) (managedservice.RunResult, error) {
+func (c Capability) run(ctx context.Context, execution lifecycle.Execution, operation string, request Request, fingerprint string) (lifecycle.RunResult, error) {
 	canonical, err := request.Canonical()
 	if err != nil {
-		return managedservice.RunResult{}, err
+		return lifecycle.RunResult{}, err
 	}
 	values := map[string]string{}
 	if fingerprint != "" {
 		values["fingerprint"] = fingerprint
 	}
-	return c.runner.Run(ctx, managedservice.RunRequest{
-		Kind:           Kind,
+	return c.runner.Run(ctx, lifecycle.RunRequest{
+		Implementation: Implementation,
 		Operation:      operation,
 		Variable:       variablePrefix,
 		Digest:         execution.Block.RequestDigest,
@@ -251,15 +250,15 @@ const variablePrefix = "bootwright_artifact_server"
 
 // materials lists exactly which bound parts this invocation needs on disk.
 // Anything not listed here never leaves bounded memory.
-func materials(request Request) []managedservice.MaterialFile {
-	var files []managedservice.MaterialFile
+func materials(request Request) []lifecycle.MaterialFile {
+	var files []lifecycle.MaterialFile
 	if request.TLS != nil {
 		files = append(files,
-			managedservice.MaterialFile{Name: "tls.crt", Part: secrets.CertificatePart, Secret: request.TLS.Secret, Variable: "certificate"},
-			managedservice.MaterialFile{Name: "tls.key", Part: secrets.PrivateKeyPart, Secret: request.TLS.Secret, Variable: "privateKey"},
+			lifecycle.MaterialFile{Name: "tls.crt", Part: secrets.CertificatePart, Secret: request.TLS.Secret, Variable: "certificate"},
+			lifecycle.MaterialFile{Name: "tls.key", Part: secrets.PrivateKeyPart, Secret: request.TLS.Secret, Variable: "privateKey"},
 		)
 	}
-	return append(files, managedservice.Materials(request.Placement)...)
+	return append(files, lifecycle.Materials(request.Placement)...)
 }
 
 // Unsupported names every selected object this capability cannot realize, so

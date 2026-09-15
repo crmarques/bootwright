@@ -2,6 +2,12 @@ package reconciliation
 
 import "github.com/crmarques/bootwright/internal/diagnostics"
 
+// AuthorizationDataLoss is the only token a plan may consume. A block that
+// consumes it destroys data the operator must acknowledge before registration.
+const AuthorizationDataLoss = "data-loss"
+
+func ValidAuthorization(token string) bool { return token == AuthorizationDataLoss }
+
 type OperationState string
 
 const (

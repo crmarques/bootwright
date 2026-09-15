@@ -157,8 +157,7 @@ and are not selectable from a test runner:
 
 | Acceptance | How it is run |
 | --- | --- |
-| The complete journey in [`examples/managed-infra-components`](../examples/managed-infra-components/README.md): staged apply, replay, interrupt, continue and destroy against a real container runtime | by hand as root on a prepared controller |
-| The single-service journey in [`examples/lab-artifacts`](../examples/lab-artifacts/README.md) | by hand as root on a prepared controller |
+| The complete journey in [`examples/lab-rhel`](../examples/lab-rhel/README.md): staged apply, replay, interrupt, continue and destroy against a real container runtime | by hand as root on a prepared controller |
 | SSH placement against a second OS-ready host | by hand, with that host's authored access and bound host key |
 
 ## M1g controller prerequisites by selecting scope

@@ -100,11 +100,19 @@ type Capability interface {
 	Destroy(context.Context, Execution) (Result, error)
 }
 
+// CapabilityBinding is one implementation this executable offers for one API
+// kind. Several capabilities may realize the same kind through different
+// implementations, so a binding, not a kind alone, identifies one of them.
+type CapabilityBinding struct {
+	Kind           string
+	Implementation string
+}
+
 // CapabilityResolver is the immutable set of capabilities this executable
-// offers, in canonical API-kind order. Kinds names what it can realize so the
-// engine neither hard-codes a kind nor discovers one at runtime.
+// offers, in canonical API-kind order. Bindings names what it can realize so
+// the engine neither hard-codes a kind nor discovers one at runtime.
 type CapabilityResolver interface {
-	Kinds() []string
+	Bindings() []CapabilityBinding
 	Resolve(kind, implementation string) (Capability, bool)
 }
 

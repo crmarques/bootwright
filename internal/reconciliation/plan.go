@@ -36,14 +36,27 @@ type Group struct {
 	Machines    []string `json:"machines"`
 }
 
-// BlockDefinition is what a capability contributes. Reconciliation orders the
-// definitions and freezes them as blocks; a capability never chooses plan order.
+// ObjectRef names one API object whose realization a block waits for. A
+// capability states its requirements in these terms, so it never learns
+// another capability's block-identity grammar.
+type ObjectRef struct {
+	Kind   string
+	Object string
+}
+
+// BlockDefinition is what a capability contributes. Reconciliation resolves its
+// requirements into dependencies, orders the definitions and freezes them as
+// blocks; a capability never chooses plan order.
 type BlockDefinition struct {
-	ID             string          `json:"id"`
-	Description    string          `json:"description"`
-	Stage          Stage           `json:"stage"`
+	ID          string `json:"id"`
+	Description string `json:"description"`
+	Stage       Stage  `json:"stage"`
+	// Requires resolves into Dependencies before the plan freezes, so a frozen
+	// block carries only the block identities it waits for.
+	Requires       []ObjectRef     `json:"-"`
 	Dependencies   []string        `json:"dependencies"`
 	Impacts        []string        `json:"impacts"`
+	Consumes       []string        `json:"consumes"`
 	Groups         []Group         `json:"groups"`
 	Kind           string          `json:"kind"`
 	Object         string          `json:"object"`
@@ -72,7 +85,11 @@ func NewPlan(verb Verb, definitions []BlockDefinition) (Plan, error) {
 	if len(definitions) > MaxBlocks {
 		return Plan{}, planError("lifecycle plan exceeds its block limit")
 	}
-	ordered, err := order(definitions)
+	resolved, err := resolveRequirements(definitions)
+	if err != nil {
+		return Plan{}, err
+	}
+	ordered, err := order(resolved)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -136,6 +153,37 @@ func RequestDigest(definition BlockDefinition) (string, error) {
 	}
 	digest := sha256.Sum256(data)
 	return hex.EncodeToString(digest[:]), nil
+}
+
+// resolveRequirements turns each capability's API-object requirements into
+// block dependencies. A block never depends on itself, and a requirement no
+// block in this plan realizes refuses before the plan exists.
+func resolveRequirements(definitions []BlockDefinition) ([]BlockDefinition, error) {
+	realized := map[ObjectRef][]string{}
+	for _, definition := range definitions {
+		reference := ObjectRef{Kind: definition.Kind, Object: definition.Object}
+		realized[reference] = append(realized[reference], definition.ID)
+	}
+	resolved := make([]BlockDefinition, 0, len(definitions))
+	for _, definition := range definitions {
+		dependencies := slices.Clone(definition.Dependencies)
+		for _, requirement := range definition.Requires {
+			blocks, found := realized[requirement]
+			if !found {
+				return nil, planError("lifecycle block requires " + requirement.Kind + "/" + requirement.Object + ", which no block in this plan realizes")
+			}
+			for _, id := range blocks {
+				if id != definition.ID && !slices.Contains(dependencies, id) {
+					dependencies = append(dependencies, id)
+				}
+			}
+		}
+		slices.Sort(dependencies)
+		definition.Dependencies = slices.Compact(dependencies)
+		definition.Requires = nil
+		resolved = append(resolved, definition)
+	}
+	return resolved, nil
 }
 
 func order(definitions []BlockDefinition) ([]BlockDefinition, error) {
@@ -210,6 +258,14 @@ func validateDefinition(definition BlockDefinition) error {
 	}
 	if !uniqueSorted(definition.Dependencies) {
 		return planError("lifecycle block dependencies must be unique and ordered")
+	}
+	if !uniqueSorted(definition.Consumes) {
+		return planError("lifecycle block authorizations must be unique and ordered")
+	}
+	for _, token := range definition.Consumes {
+		if !ValidAuthorization(token) {
+			return planError("lifecycle block consumes an unrecognized authorization")
+		}
 	}
 	for _, impact := range definition.Impacts {
 		if !safeDescription(impact) {
@@ -300,8 +356,10 @@ func uniqueSorted(values []string) bool {
 }
 
 func clone(definition BlockDefinition) BlockDefinition {
+	definition.Requires = nil
 	definition.Dependencies = slices.Clone(definition.Dependencies)
 	definition.Impacts = slices.Clone(definition.Impacts)
+	definition.Consumes = slices.Clone(definition.Consumes)
 	definition.Groups = slices.Clone(definition.Groups)
 	for index := range definition.Groups {
 		definition.Groups[index].Machines = slices.Clone(definition.Groups[index].Machines)

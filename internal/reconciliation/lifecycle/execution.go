@@ -48,11 +48,6 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
-	if len(authorizations) != 0 {
-		return nil, failure("lifecycle.authorization",
-			"this plan requires no authorization token",
-			"repeat the command without --authorize")
-	}
 	if borrowed {
 		return nil, failure("lifecycle.state",
 			"borrowed SSH credentials are unsupported for lifecycle operations",
@@ -70,6 +65,9 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	if err != nil {
 		return nil, err
 	}
+	if err := authorize(decided.plan, authorizations); err != nil {
+		return nil, err
+	}
 	if err := s.present(ctx, name, decided); err != nil {
 		return nil, err
 	}
@@ -82,6 +80,40 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 		}
 	}
 	return s.execute(ctx, name, decided)
+}
+
+// authorize compares the tokens this invocation supplied with the tokens the
+// frozen plan's blocks consume. A missing token refuses before registration, so
+// an irreversible consequence is always acknowledged first; a token the plan
+// does not consume refuses too, so a habitual authorization cannot
+// pre-authorize a future destructive plan.
+func authorize(plan reconciliation.Plan, authorizations []string) error {
+	consumers := map[string][]string{}
+	required := []string{}
+	for _, block := range plan.Blocks {
+		for _, token := range block.Consumes {
+			if !slices.Contains(required, token) {
+				required = append(required, token)
+			}
+			consumers[token] = append(consumers[token], block.ID)
+		}
+	}
+	supplied := slices.Compact(slices.Sorted(slices.Values(authorizations)))
+	for _, token := range supplied {
+		if !slices.Contains(required, token) {
+			return failure("lifecycle.authorization",
+				"this plan requires no "+token+" authorization",
+				"repeat the command without --authorize "+token)
+		}
+	}
+	for _, token := range required {
+		if !slices.Contains(supplied, token) {
+			return failure("lifecycle.authorization",
+				"this plan has "+token+" consequences that are not authorized: "+strings.Join(consumers[token], ", "),
+				"review the plan's impacts and repeat the command with --authorize "+token)
+		}
+	}
+	return nil
 }
 
 // decide reads durable state and returns the one legal transition. Changed

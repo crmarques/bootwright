@@ -1,0 +1,33 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt
+
+spec:
+  libvirt:
+    machineRef: controller
+    uri: qemu:///system
+
+    bmcEmulationDefaults:
+      enabled: true
+      protocol: redfish
+      emulator: sushy-tools
+      bindAddress: 192.0.2.1
+      port: 8000
+      auth:
+        credentialsRef: lab-bmc-credentials
+
+    machineProfiles:
+      - name: rhel
+        cpu: 4
+        memoryMiB: 8192
+        diskGiB: 60
+        tpm: {}
+
+  networkAttachments:
+    - name: lab-guests
+      libvirt:
+        bridge: virbr-lab
+        management: managed
+        address: 198.51.100.1/24
+        forward: nat

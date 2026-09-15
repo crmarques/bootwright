@@ -68,15 +68,15 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 	if err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
-	kinds := s.capabilities.Kinds()
-	if len(kinds) == 0 {
+	bindings := s.capabilities.Bindings()
+	if len(bindings) == 0 {
 		return reconciliation.Plan{}, capabilityBinding{}, failure("lifecycle.state", "no lifecycle capability is available for the selected state", "")
 	}
 	input := PlanInput{Verb: verb, Context: view.Identity(), State: state, Controller: controller}
 	var definitions []reconciliation.BlockDefinition
 	binding := capabilityBinding{controller: controller}
-	for _, kind := range kinds {
-		capability, ok := s.capabilities.Resolve(kind, "")
+	for _, bound := range bindings {
+		capability, ok := s.capabilities.Resolve(bound.Kind, bound.Implementation)
 		if !ok {
 			return reconciliation.Plan{}, capabilityBinding{}, failure("lifecycle.state", "a declared lifecycle capability does not resolve", "")
 		}
@@ -117,10 +117,9 @@ func (s Service) freshPlan(ctx context.Context, view View, verb reconciliation.V
 // reports what it cannot do within its own kinds; the engine reports every
 // effect-bearing kind no capability claims at all.
 func (s Service) refuseUnsupported(state *compilation.State) error {
-	kinds := s.capabilities.Kinds()
 	var unsupported []string
-	for _, kind := range kinds {
-		capability, ok := s.capabilities.Resolve(kind, "")
+	for _, bound := range s.capabilities.Bindings() {
+		capability, ok := s.capabilities.Resolve(bound.Kind, bound.Implementation)
 		if !ok {
 			continue
 		}
@@ -128,7 +127,7 @@ func (s Service) refuseUnsupported(state *compilation.State) error {
 			unsupported = append(unsupported, reporter.Unsupported(state)...)
 		}
 	}
-	unsupported = append(unsupported, Unrealizable(state.Effective(), kinds)...)
+	unsupported = append(unsupported, Unrealizable(state.Effective(), s.capabilityKinds())...)
 	slices.Sort(unsupported)
 	unsupported = slices.Compact(unsupported)
 	if len(unsupported) == 0 {
@@ -139,7 +138,19 @@ func (s Service) refuseUnsupported(state *compilation.State) error {
 		"remove those objects from the selected Environment, or use an example within the supported shape such as "+supportedExample)
 }
 
-const supportedExample = "examples/managed-infra-components"
+const supportedExample = "examples/lab-rhel"
+
+// capabilityKinds is the distinct API-kind set this build binds at least one
+// implementation for, in binding order.
+func (s Service) capabilityKinds() []string {
+	var kinds []string
+	for _, bound := range s.capabilities.Bindings() {
+		if !slices.Contains(kinds, bound.Kind) {
+			kinds = append(kinds, bound.Kind)
+		}
+	}
+	return kinds
+}
 
 func controllerMachine(state *compilation.State) (string, error) {
 	environments := state.Effective().OfKind(api.Environment)
