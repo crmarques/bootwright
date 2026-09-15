@@ -418,6 +418,11 @@ func validateControllerReservations(values []prerequisites.HostReservation) erro
 			if !controllerToken(key) {
 				return state("controller host reservation key is invalid")
 			}
+			// A shared claim records that a resource is still in use rather
+			// than who owns it, so several contexts may hold the same key.
+			if reservation.Shared {
+				continue
+			}
 			if owner, taken := claimed[key]; taken && owner != reservation.Context {
 				return state("controller host reservation key is claimed by two contexts")
 			}

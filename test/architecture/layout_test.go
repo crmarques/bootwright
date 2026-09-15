@@ -22,7 +22,6 @@ func stubCapabilities() map[string]bool {
 		"internal/environment/preflight":         true,
 		"internal/machine/access":                true,
 		"internal/machine/inventory":             true,
-		"internal/managedos/media":               true,
 		"internal/nativeartifacts/rendering":     true,
 		"internal/storage/preflight":             true,
 		"internal/storage/rendering":             true,

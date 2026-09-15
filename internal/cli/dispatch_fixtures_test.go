@@ -136,16 +136,16 @@ func (s encryptionSpy) Rotate(ctx context.Context, request encryption.Encryption
 
 type mediaSpy struct{ record *dispatchRecord }
 
-func (s mediaSpy) Add(ctx context.Context, request media.AddMediaRequest) error {
-	return s.record.called(ctx, "media add", request)
+func (s mediaSpy) Add(ctx context.Context, request media.AddMediaRequest) (*media.MutationResult, error) {
+	return nil, s.record.called(ctx, "media add", request)
 }
 
-func (s mediaSpy) List(ctx context.Context, request media.ListMediaRequest) error {
-	return s.record.called(ctx, "media list", request)
+func (s mediaSpy) List(ctx context.Context, request media.ListMediaRequest) (*media.ListResult, error) {
+	return nil, s.record.called(ctx, "media list", request)
 }
 
-func (s mediaSpy) Delete(ctx context.Context, request media.DeleteMediaRequest) error {
-	return s.record.called(ctx, "media delete", request)
+func (s mediaSpy) Delete(ctx context.Context, request media.DeleteMediaRequest) (*media.MutationResult, error) {
+	return nil, s.record.called(ctx, "media delete", request)
 }
 
 type desiredStateSpy struct{ record *dispatchRecord }

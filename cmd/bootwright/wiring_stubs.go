@@ -12,7 +12,6 @@ import (
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
-	"github.com/crmarques/bootwright/internal/managedos/media"
 	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
 	storagepreflight "github.com/crmarques/bootwright/internal/storage/preflight"
 	storagerendering "github.com/crmarques/bootwright/internal/storage/rendering"
@@ -26,7 +25,6 @@ func wireStubs() cli.Services {
 	return cli.Services{
 		AddOnCatalog:          addoncatalog.Service{},
 		AddOnPreflight:        addonpreflight.Service{},
-		Media:                 media.Service{},
 		EnvironmentPreflight:  environmentpreflight.Service{},
 		EnvironmentInspection: inspection.Service{},
 		EnvironmentAccess:     environmentaccess.Service{},

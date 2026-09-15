@@ -90,6 +90,14 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		if validSecretList(result.secretList) {
 			return true, writeSecretList(out, path, result.secretList, selectedJSON(command))
 		}
+	case "media add", "media delete":
+		if validMediaMutation(result.mediaMutation) {
+			return true, writeMediaMutation(out, result.mediaMutation)
+		}
+	case "media list":
+		if result.mediaList != nil {
+			return true, writeMediaList(out, path, result.mediaList, selectedJSON(command))
+		}
 	case "secret show":
 		part := secrets.Part(stringValue(command.Flags(), "part"))
 		if result.secretReveal != nil && result.secretReveal.Part == part && validSecretPart(part) {

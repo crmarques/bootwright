@@ -26,9 +26,13 @@ func NewConfirmation(read func(context.Context, []byte) (int, error), out io.Wri
 }
 
 func (c *Confirmation) Confirm(ctx context.Context, action, name string) error {
+	media, mediaVerb := strings.CutPrefix(action, "media ")
 	failure := func(reason string) error {
-		if action == "setup" {
+		switch {
+		case action == "setup":
 			return diagnostics.NewFailure("controller.setup", "setup confirmation "+reason, "")
+		case mediaVerb:
+			return diagnostics.NewFailure("media.store", "media confirmation "+reason, "")
 		}
 		return contexts.StateError("context confirmation " + reason)
 	}
@@ -46,8 +50,11 @@ func (c *Confirmation) Confirm(ctx context.Context, action, name string) error {
 		return failure("requires interactive input; use --yes after reviewing the selected transition")
 	}
 	prompt := fmt.Sprintf("Confirm %s for context %s? [y/N] ", escapeDisplayLine(action), escapeDisplayLine(name))
-	if action == "setup" {
+	switch {
+	case action == "setup":
 		prompt = fmt.Sprintf("Confirm controller setup on %s? [y/N] ", escapeDisplayLine(name))
+	case mediaVerb:
+		prompt = fmt.Sprintf("Confirm %s of stored media %s? [y/N] ", escapeDisplayLine(media), escapeDisplayLine(name))
 	}
 	if n, err := io.WriteString(c.out, prompt); err != nil || n != len(prompt) {
 		return failure("prompt could not be written")

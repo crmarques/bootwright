@@ -6,6 +6,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/encryption"
@@ -30,6 +31,9 @@ type commandResult struct {
 	lifecyclePlan      *lifecycle.PlanResult
 	lifecycleStatus    *lifecycle.StatusResult
 	lifecycleOperation *lifecycle.OperationResult
+
+	mediaMutation *media.MutationResult
+	mediaList     *media.ListResult
 
 	secretMutation     *custody.MutationResult
 	secretCheck        *custody.CheckResult
@@ -63,7 +67,7 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 	case "secret encryption init", "secret encryption status", "secret encryption rotate":
 		return s.invokeEncryption(ctx, path, &values, args)
 	case "media add", "media list", "media delete":
-		return commandResult{}, s.invokeMedia(ctx, path, &values, args)
+		return s.invokeMedia(ctx, path, &values, args)
 	case "validate", "render effective":
 		return s.invokeDesiredState(ctx, path, &values, args)
 	case "preflight controller", "setup":

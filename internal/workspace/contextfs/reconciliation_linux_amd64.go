@@ -365,11 +365,17 @@ func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []p
 			continue
 		}
 		retained = append(retained, reservation)
+		if reservation.Shared {
+			continue
+		}
 		for _, key := range reservation.Keys {
 			claimed[key] = reservation.Context
 		}
 	}
 	for _, reservation := range next {
+		if reservation.Shared {
+			continue
+		}
 		for _, key := range reservation.Keys {
 			if owner, taken := claimed[key]; taken {
 				return controllerFailure("controller.conflict", "another context already reserves a host resource this service needs; destroy or continue context "+owner+" first")

@@ -218,7 +218,7 @@ where a behavior lives:
 | --- | --- |
 | `internal/<context>` | Pure domain values, invariants and the kind admission rules (`Normalize`, `Validate`, `ValidateAuthored`, `ValidatePartial`) that the compiler composes, plus shared values such as `machine.SSHOptions` and `secrets.Material`. No ports and no I/O. |
 | `internal/<context>/<capability>` | One application service package per command family. `service.go` declares `Service`, its constructor and one exported method per command; `requests.go` declares the request and result types the CLI consumes; `contracts.go` declares every interface the package consumes, and no other file declares an exported interface; remaining files hold private use-case logic. |
-| `internal/<context>/<implementation>` | A driven adapter named by what it binds: `contextfs`, `selectionfs`, `inputfs`, `yamlstream`, `encoding`, `localkeyring`, `material`, `hostlinux`, `bundlelocal`, `ansiblelocal`, `nativelocal`, `privilege`, `ansibleservice`. It implements another package's contract and never calls another adapter. |
+| `internal/<context>/<implementation>` | A driven adapter named by what it binds: `contextfs`, `selectionfs`, `inputfs`, `yamlstream`, `encoding`, `localkeyring`, `material`, `hostlinux`, `bundlelocal`, `ansiblelocal`, `nativelocal`, `privilege`, `ansibleservice`, `medialocal`. It implements another package's contract and never calls another adapter. |
 | `internal/diagnostics` | The diagnostic and typed-failure vocabulary every layer emits; it imports nothing first-party. |
 | `internal/availability` | The single unavailable-capability sentinel. |
 
@@ -330,7 +330,7 @@ that implements a row updates the row and the stub fitness test together.
 | `machine list` (Machine) | `commands_machine.go` | `machine/inventory` | — | S |
 | `machine rsh/exec` (Machine) | `commands_machine.go` | `machine/access` | — | S |
 | `machine trust` (Trust) | `commands_trust.go` | `trust/enrollment` | — | S |
-| `media add/list/delete` (Managed OS) | `commands_managedos.go` | `managedos/media` | — | S |
+| `media add/list/delete` (Managed OS) | `commands_managedos.go` | `managedos/media` | `managedos/medialocal`, `workspace/contextfs` | I |
 | `add-ons list/add/delete` (Add-ons) | `commands_addons.go` | `addons/catalog` | — | S |
 | `version`, `help`, `completion *` (CLI) | `commands_cli.go`, `runner.go` | — | — | I |
 
@@ -360,8 +360,9 @@ internal/cli ─SecretService───────→ secrets/custody.Service
 internal/cli ─EncryptionService───→ secrets/encryption.Service
 internal/cli ─DesiredStateService─→ desiredstate/compilation.Service
 internal/cli ─ControllerService───→ controller/prerequisites.Service
+internal/cli ─MediaService────────→ managedos/media.Service
 internal/cli ─LifecycleService────→ reconciliation/lifecycle.Service
-internal/cli ─fifteen stub ports──→ <capability>.Service{} returning availability.ErrNotImplemented
+internal/cli ─fourteen stub ports─→ <capability>.Service{} returning availability.ErrNotImplemented
 
 workspace/contexts.Service
    ─Repository, Transaction, ControllerInputGuard→ workspace/contextfs.Store
@@ -381,6 +382,13 @@ desiredstate/compilation.Compiler
    ─SyntaxParser──→ desiredstate/yamlstream.Parser
    ─fn SelectGraph→ compilation.GraphSelector{fn environment.Select, fn addons.StorageAttachments}
    ─Rules (fn Normalize, Validate*)→ the ten context roots
+
+managedos/media.Service
+   ─Store────────→ workspace/contextfs.Store host-wide media area
+   ─Acquirer─────→ managedos/medialocal.Acquirer
+   ─Confirmer────→ internal/cli.Confirmation
+   ─Clock────────→ composition
+   pure: managedos media names, digests and records at the context root
 
 secrets/custody.Service
    ─StoreAccess──→ secrets/secretstore.Access
@@ -450,8 +458,9 @@ production binding; tests substitute fakes through the same interface.
 | `internal/cli` | `EncryptionService` | Types, Init, Status, Rotate | `secrets/encryption.Service` |
 | `internal/cli` | `DesiredStateService` | Validate, RenderEffective | `desiredstate/compilation.Service` |
 | `internal/cli` | `ControllerService` | Check, Setup | `controller/prerequisites.Service` |
+| `internal/cli` | `MediaService` | Add, List, Delete | `managedos/media.Service` |
 | `internal/cli` | `LifecycleService` | Plan, Status, Apply, Destroy | `reconciliation/lifecycle.Service` |
-| `internal/cli` | fifteen stub ports, one per `S` row of the map | one method per command | `<capability>.Service{}` |
+| `internal/cli` | fourteen stub ports, one per `S` row of the map | one method per command | `<capability>.Service{}` |
 | `reconciliation/lifecycle` | `Inputs` | ReadInputs | `workspace/contexts.Inputs` |
 | `reconciliation/lifecycle` | `Compiler` | Compile | `desiredstate/compilation.Compiler` |
 | `reconciliation/lifecycle` | `SecretBinder` | Bind, Reopen, Release | `secrets/custody.Service` |
@@ -491,6 +500,10 @@ production binding; tests substitute fakes through the same interface.
 | `secrets/secretstore` | `SecretStoreImplementation` | Backend, Selection, Requirements, Initialize, Open | `secrets/localkeyring.Implementation` |
 | `secrets/secretstore` | `StoreSession` | Inspect, Read, PutBatch, Delete, Bind, Reopen, Release, Rotate, Close | `localkeyring` session |
 | `secrets/secretstore` | `SessionMaterialSource`, `SessionMaterial` | Acquire; Close | none in production |
+| `managedos/media` | `Store` | ReadMedia, MutateMedia | `workspace/contextfs.Store` |
+| `managedos/media` | `View`, `Transaction` | Entries, Names, Digest, Frozen; Stage, Publish, Delete | `contextfs` host-wide media area |
+| `managedos/media` | `Acquirer`, `Payload` | Open; Read, Close | `managedos/medialocal.Acquirer` |
+| `managedos/media` | `Confirmer`, `Clock` | Confirm; Now | `internal/cli.Confirmation`; composition |
 | `secrets/material` | `InputReader` | Read | process standard input |
 | `secrets/material` | `Operator` | FileIdentity | the invoking account |
 | `secrets/material` | `Cryptography` | GenerateECDSA, GenerateRSA, CreateCertificate | the package default over the standard library |

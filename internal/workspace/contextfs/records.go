@@ -331,6 +331,8 @@ func fitsJSON(value reflect.Value, limit int, depths ...int) bool {
 						empty = item.Len() == 0
 					case reflect.Pointer:
 						empty = item.IsNil()
+					case reflect.Bool:
+						empty = !item.Bool()
 					default:
 						return false
 					}

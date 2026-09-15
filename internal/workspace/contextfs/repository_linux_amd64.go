@@ -238,6 +238,12 @@ func verifyRootEntries(ctx context.Context, root *directory, registry contexts.R
 			if err := verifyControllerRootEntry(root, registry); err != nil {
 				return err
 			}
+		case mediaContainer:
+			dir, err := openDirectory(root, name)
+			if err != nil {
+				return err
+			}
+			dir.file.Close()
 		default:
 			if !pendingInitialRegistryName(name) {
 				return unsupportedRootState()

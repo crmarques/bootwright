@@ -43,6 +43,7 @@ type serviceDependencies struct {
 	SessionMaterial secretstore.SessionMaterialSource
 	Controller      controllerDependencies
 	Lifecycle       lifecycleDependencies
+	Media           mediaDependencies
 }
 
 func wireServices(process processDependencies) cli.Services {
@@ -56,6 +57,7 @@ func wireServices(process processDependencies) cli.Services {
 		Confirmer:   process.Confirmer,
 		SecretInput: process.SecretInput,
 		Controller:  localControllerDependencies(repository, process),
+		Media:       localMediaDependencies(repository, process.Confirmer),
 		Lifecycle: lifecycleDependencies{
 			Workspace: repository, Inputs: contexts.Inputs{Repository: repository, Selection: account},
 			Host: hostlinux.New(), Guard: bundlelocal.ExecutionGuard{}, Selection: account,
@@ -75,6 +77,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	services.Secrets, services.Encryption = secrets.custody, secrets.encryption
 	services.DesiredState = wireDesiredState(deps, compiler)
 	services.Controller = wireController(deps.Controller, compiler, deps.Confirmer)
+	services.Media = wireMedia(deps.Media)
 	services.Lifecycle = wireLifecycle(deps.Lifecycle, deps.Controller, compiler, secrets.binder)
 	return services
 }

@@ -121,12 +121,12 @@ name, Machine name and the private host digest, ordered by context name;
 sources are ordered by source ID. Reusing a source ID with different bytes or
 origin refuses, including after replacing a terminal receipt.
 
-Reservations record the exclusive host resources that locally hosted services
-claim, under the
+Reservations record the host resources that locally hosted services claim,
+under the
 [Infrastructure services conflict contract](infrastructure-services.md#host-reservations).
-Each entry contains the context name, capability kind, service name, a sorted
-unique key list and whether the claim is shared; entries are ordered by context
-name then kind then service.
+Each entry contains the context name, capability kind, service name and a sorted
+unique key list, plus a shared marker present only on a shared claim; entries
+are ordered by context name then kind then service.
 Workspace stores and compares them without interpreting a key's meaning.
 Publishing an exclusive key another context holds refuses; a shared key is held
 by any number of contexts and a reader asks only whether any context holds it;

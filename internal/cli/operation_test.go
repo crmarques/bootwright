@@ -20,7 +20,7 @@ func TestOperationBoundaryIsLazyForInformationalMalformedAndUnavailablePaths(t *
 		"__bootwright_complete context", "__bootwright_complete_no_desc render",
 		"context init --name example -f one -f two", "context delete --name example --purge=false",
 		"validate --output json --unknown", "render effective -f input", "render --output json",
-		"add-ons list", "media list", "preflight all", "preflight container-cluster",
+		"add-ons list", "preflight all", "preflight container-cluster",
 		"preflight storage-cluster", "preflight add-ons", "machine list", "machine trust", "cluster list",
 		"cluster kubeconfig --name example", "machine exec --name example uptime", "cluster oc --name example get pods",
 		"render --output-dir artifacts --sensitive", "render installer", "render storage",
@@ -45,7 +45,9 @@ func TestOperationBoundaryOwnsContextAndCleanupForEveryImplementedPath(t *testin
 		[]string{"validate", "-f", "input"}, []string{"validate", "--context", "example"}, []string{"render", "effective"},
 		[]string{"secret", "set", "--name", "example", "--value-file", "value"}, []string{"secret", "generate"}, []string{"secret", "check"}, []string{"secret", "list"},
 		[]string{"secret", "show", "--name", "example", "--part", "value"}, []string{"secret", "delete", "--name", "example"},
-		[]string{"secret", "encryption", "init"}, []string{"secret", "encryption", "status"}, []string{"secret", "encryption", "rotate"}, []string{"setup"}, []string{"setup", "--dry-run"}, []string{"preflight", "controller"},
+		[]string{"secret", "encryption", "init"}, []string{"secret", "encryption", "status"}, []string{"secret", "encryption", "rotate"},
+		[]string{"media", "add", "--name", "example.iso", "--from-file", "image.iso"}, []string{"media", "list"}, []string{"media", "delete", "--name", "example.iso"},
+		[]string{"setup"}, []string{"setup", "--dry-run"}, []string{"preflight", "controller"},
 		[]string{"plan"}, []string{"status"}, []string{"apply", "--yes"}, []string{"destroy", "--yes"})
 	for _, args := range invocations {
 		begins, finishes := 0, 0

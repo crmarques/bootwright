@@ -43,6 +43,7 @@ func packageRoles() map[string]packageRole {
 		"internal/controller/ansiblelocal":               adapterRole,
 		"internal/controller/nativelocal":                adapterRole,
 		"internal/infrastructureservices/ansibleservice": adapterRole,
+		"internal/managedos/medialocal":                  adapterRole,
 		"internal/secrets/secretstore":                   applicationRole,
 		"internal/secrets/localkeyring":                  adapterRole,
 		"internal/secrets/material":                      adapterRole,
@@ -190,12 +191,15 @@ func TestAdmissionEffectBoundary(t *testing.T) {
 		controllerNative := source.owner == "internal/controller/nativelocal"
 		controllerEffects := controllerBundle || controllerPackages || controllerNative
 		serviceEffects := source.owner == "internal/infrastructureservices/ansibleservice"
+		// Media acquisition is the one adapter that opens an operator-named file
+		// or one authorized endpoint; it runs no process and holds no state.
+		mediaSource := source.owner == "internal/managedos/medialocal"
 		configuration := source.owner == "internal/workspace/contexts"
 		localProcess := selection || invocation || controllerEffects || serviceEffects
 		codec := source.owner == "internal/desiredstate/yamlstream" || source.owner == "internal/desiredstate/encoding"
 		for _, imported := range source.imports {
 			name := imported.path
-			forbidden := (strings.HasPrefix(name, "os/") && !(localProcess && name == "os/exec" || invocation && name == "os/signal")) || strings.HasPrefix(name, "net/") && name != "net/url" && name != "net/netip" && !controllerEffects || !storage && !selection && !secretMaterial && !secretStore && name == "crypto/rand" || strings.HasPrefix(name, "math/rand") || !storage && !secretMaterial && name == "unsafe" || strings.HasPrefix(name, "golang.org/x/sys") && !controllerHost && !controllerEffects || !input && !storage && !secretMaterial && !localProcess && !controllerHost && (name == "os" || name == "syscall")
+			forbidden := (strings.HasPrefix(name, "os/") && !(localProcess && name == "os/exec" || invocation && name == "os/signal")) || strings.HasPrefix(name, "net/") && name != "net/url" && name != "net/netip" && !controllerEffects && !mediaSource || !storage && !selection && !secretMaterial && !secretStore && name == "crypto/rand" || strings.HasPrefix(name, "math/rand") || !storage && !secretMaterial && name == "unsafe" || strings.HasPrefix(name, "golang.org/x/sys") && !controllerHost && !controllerEffects || !input && !storage && !secretMaterial && !localProcess && !controllerHost && !mediaSource && (name == "os" || name == "syscall")
 			if forbidden {
 				t.Errorf("%s imports unauthorized effect capability %s", source.path, name)
 			}
@@ -212,7 +216,7 @@ func TestAdmissionEffectBoundary(t *testing.T) {
 					return true
 				}
 				member := selector.Sel.Name
-				if name == "net" && member != "ParseMAC" && !controllerEffects && !(secretMaterial && (member == "IP" || member == "ParseIP")) {
+				if name == "net" && member != "ParseMAC" && !controllerEffects && !mediaSource && !(secretMaterial && (member == "IP" || member == "ParseIP")) {
 					t.Errorf("%s accesses networking through net.%s", source.path, member)
 				}
 				if name == "fmt" && !isCLI && (strings.HasPrefix(member, "Print") || strings.HasPrefix(member, "Fprint") || strings.HasPrefix(member, "Scan") || strings.HasPrefix(member, "Fscan")) {
