@@ -8,7 +8,8 @@ controller setup with `preflight controller` on RHEL 9 and Fedora for
 Linux/amd64; the lifecycle engine with managed artifact serving, so `plan`,
 `status`, `apply` and `destroy` are available; and the complete
 `infra-components` stage with stage selection. M1g splits controller
-prerequisites by what selects them. Every other catalogued command retains the
+prerequisites by what selects them; M1h, defined below, follows it and starts
+when it completes. Every other catalogued command retains the
 [unavailable result](cli.md#recognized-but-unavailable-commands).
 
 This file owns delivery scope and deferred work. Product specs describe target
@@ -304,6 +305,87 @@ repository is unitary and host-independent. Real-system acceptance is
 operator-run, and an operator upgrading an existing host runs `setup` again
 before the first `apply` of each context, because no binding exists until then.
 
+## M1h — managed RHEL on emulated bare metal
+
+**Owners:** Substrate and Managed OS, with Infrastructure services (consumer
+publication), Workspace (host-wide media store) and State reconciliation
+(cross-capability requirements, consumed authorization and the one shared
+adapter runner); using Secrets, Machine and Controller. **Requires:** M1g
+complete, and its controller-stage capability must install the hypervisor
+closure, not only the libvirt client, when the controller Machine hosts a
+libvirt provider. **Definition:** Needs definition; D1–D6 below are the open
+decisions with their intended resolution. **Delivery:** not started.
+
+Deliver one Bootwright-installed RHEL 9.6 Machine on a libvirt guest that boots
+its installer through an emulated Redfish BMC, so the bare-metal installation
+path is rehearsed end to end without hardware. The `substrates` and `machines`
+stages gain their first capabilities; `media add`, `media list` and
+`media delete` become available over one host-wide media store; and a managed
+`ArtifactServer` serves the per-machine installer ISO and the DVD package tree
+derived from that store, for installation and for package updates afterwards.
+The named consumer is `examples/lab-rhel`, which replaces
+`examples/managed-infra-components`; `examples/lab-artifacts` and
+`examples/lab-ocp` are removed with it, and the controller-selection and
+context-journey tests they carried move to the new example and to
+`examples/multidc-platform`.
+
+**Supported shape.** One Environment whose lifecycle objects are the M1f managed
+service set, one libvirt `InfraProvider` whose host Machine is the controller or
+an SSH-reachable OS-ready Machine, and Bootwright-installed Machines on that
+provider whose Anaconda profile selects `hostedTree` or no package source. A
+profile selecting `initialPassword`, `diskEncryption`, `fromSubscription` or
+`templateClone`, and every bare-metal, vSphere or KubeVirt provider, refuses
+before registration. The served ISO is therefore secret-free; a later
+private-content path must extend the frozen request without changing its shape.
+
+**Capabilities.**
+
+- Substrate realizes the provider host: the hypervisor closure (libvirt, QEMU,
+  swtpm and the ISO tooling) installed and managed by Bootwright, on a remote
+  host through the Ansible boundary over SSH and on the controller through the
+  controller stage; the libvirt networks its attachments declare; and its
+  virtual-media pool. It realizes each Machine as a libvirt domain with disks,
+  deterministic UUID and MAC, ownership metadata and no autostart, together with
+  that Machine's own emulated BMC: one digest-pinned sushy-tools container
+  serving exactly that domain, so every guest has its own BMC endpoint as a
+  physical server does.
+- Managed OS installs the OS: it derives the kickstart from effective state,
+  builds the per-machine ISO from the frozen boot media, publishes it and the
+  DVD tree beneath the selected artifact server's served root, boots the guest
+  through its BMC over Redfish virtual media, proves completion through the
+  guest agent (install marker and host key), ejects the media and leaves the
+  guest running from disk.
+- State reconciliation resolves cross-capability requirements named by API
+  object into block dependencies, freezes the authorization a block consumes so
+  a destroy that deletes a machine's disks requires `data-loss`, keys the
+  capability resolver by kind and implementation, and owns the one Ansible
+  runner every capability crosses.
+
+**Open definitions.** D1: the libvirt attachment gains the network Bootwright
+manages (host address and prefix, forward mode, no DHCP or DNS), so a managed
+service bound on that address can require the provider host block. D2:
+per-Machine BMC port allocation from `bmcEmulationDefaults.port`, and the fate
+of `vMediaPort`, which the sushy-tools implementation does not use. D3: the
+host-wide media store under `/var/lib/bootwright/media/`, its record and
+bounds, and freezing through `media:<name>` host reservations held by the
+consuming context. D4: the publication contract for consumer content beneath an
+artifact server's served root. D5: the guest-agent identity proof as the
+Substrate identity operation. D6: the sushy-tools image and its qualification.
+
+Exit evidence: capability planning goldens over `examples/lab-rhel`; request
+round-trip, evidence-validation and refusal tests for both capabilities; the
+engine suite for requirements, consumed authorization and binding resolution;
+media store bounds, fault injection and cross-context freeze refusal; adapter
+protocol and module tests with fake HTTP and virsh runners; the collection gates
+over the new roles, playbooks and plugins; CLI goldens for the media commands
+and the authorization refusal; the example acceptance in
+`cmd/bootwright/lab_rhel_example_test.go`; and `make check`.
+
+**Verification model.** M1d's model continues; real-system acceptance on a
+prepared libvirt host is operator-run, preceded by a by-hand qualification of
+the sushy-tools image and of `mkksiso` against RHEL 9.6 boot media, recorded in
+[development](../docs/development.md).
+
 ## Later ordered outcomes
 
 These retain their intended order and scope, but all **need definition** before
@@ -315,7 +397,7 @@ implementation. Each must qualify exact releases and close its own contracts.
 | M2b — Ceph native files | Storage and Native artifacts: render typed storage intent into one release-specific declarative file set. | M1e, N3 | Qualify release schemas and reject unprovable fields; revise the API deliberately if needed. **N5:** define each storage secret consumer's validation, immutable binding and sensitive publication (M1c, N3), or prove outputs secret-free. Native goldens and negative disclosure tests. |
 | M3 — Ceph-pool script | Storage and Native artifacts: generate one deterministic native-CLI pool script. | M1e | **N4:** define the script manifest, bytes, fixed command structure, destination and generation journey (M1b). Prove argument encoding, replay semantics, diagnostics, sensitive classification, publication and goldens. No authored shell fragments, inline secrets or execution. |
 | M4 — OCP bare-metal lifecycle | State reconciliation, Substrate and Container cluster: extend full-context apply and destroy to OCP effects. | M1e, M2a | **L2:** extend pure plans, impacts, dependencies and digests. **L5:** add consumer-owned OCP remote ports. **L4:** extend durable execution, readiness and removal, preserving the M1e inverse and safely refusing incompatible state. **L6:** qualify exact implementations with contract, crash/lease, identity/ownership, replay, cancellation and real-system tests. Destroy a completed M1e snapshot before a fresh expanded apply. |
-| M5 — managed RHEL installation | Managed OS and Substrate: install one RHEL release using typed image, profile, entitlement, Secret and Machine intent. | M4, C17 | Extend L2/L4/L5; apply L6. Prove renderer/executor parity, identity, ownership, replay, secret custody and real-system acceptance. |
+| M5 — managed RHEL on bare metal | Managed OS and Substrate: extend M1h's Anaconda installation to physical machines and to the secret-bearing profile arms, using typed image, profile, entitlement, Secret and Machine intent. | M1h, M4, C9 | Extend L2/L4/L5; apply L6. Prove renderer/executor parity, exact Redfish system and disk identity, ownership, replay, secret custody and real-hardware acceptance. |
 | M6 — managed Ceph bare metal | Storage, Managed OS, Substrate and State reconciliation: provision one Ceph cluster slice. | M2b and required M5 OS-readiness slice | Extend L2/L4/L5; apply L6 to each implementation. Prove storage identity, ownership, destructive authorization, replay, secret custody and real-system acceptance. |
 
 Independent execution of M2a/M2b/M3 artifacts creates no Bootwright operation,
@@ -329,7 +411,7 @@ fill its concrete version, journey and evidence gaps when requested.
 
 | ID | Owner and bounded outcome | Deferred because / requires | Exit evidence |
 | --- | --- | --- | --- |
-| C1 | Substrate: one libvirt, vSphere or KubeVirt provisioning variant. | No variant/consumer selected; requires M1e and a named use case. | Exact release, adapter contract, failure/replay tests and real-system qualification. |
+| C1 | Substrate: one vSphere or KubeVirt provisioning variant; the libvirt variant is **promoted into M1h**. | No further variant/consumer selected; requires M1h's substrate contract and a named use case. | Exact release, adapter contract, failure/replay tests and real-system qualification. |
 | C2 | Infrastructure services: one managed `Registry` or `LoadBalancer` lifecycle. | No named consumer; requires M1f, whose shared managed-service capability both kinds would extend. | Typed port, exact implementation, lifecycle evidence, failure and acceptance tests. |
 | C3 | Storage: one Ceph pool, filesystem, gateway, NFS or export lifecycle. | Separate from operator-run scripts; requires M6 and a named service. | Ownership, replay, destroy and real-system qualification. |
 | C4 | Add-ons: one built-in package and binding lifecycle. | No exact package/target/release selected; requires a supported cluster. | [Package/driver contract](add-ons.md), compatibility, trust/secrets, readiness, ordering/replay/destroy and acceptance. |
@@ -345,9 +427,9 @@ fill its concrete version, journey and evidence gaps when requested.
 | C14 | Workspace and Secrets: explicit complete-store restore with logical identity preservation. **Needs definition.** | Copy restoration changes physical identities and may roll back seal reservations; storage simplification provides upgrades and safe refusal, not a backup/restore command. Requires M1b/M1c and a selected restore journey. | Coherent snapshot validation, authorized inode rebinding, fresh key before writes after rollback, interruption/retry and wrong-store refusal tests; preserve lifecycle recovery evidence. |
 | C15 | Secrets: replace per-ID reservations with bounded lifetime allocation. **Needs definition.** | Current opaque random version/binding IDs retain historical reservation files; a new allocation scheme must preserve issued-ID non-reuse across crashes and restore. Requires M1c and C14 restore semantics. | Bounded allocator state, reservation-before-use, counter/namespace exhaustion, migration of existing bindings and failed attempts, non-reuse and crash tests. |
 | C16 | Controller setup and host binding: **delivered by M1d**; local service ownership and conflict refusal **delivered by M1e**. | Relocation requires C14 and a separately defined journey. | M1d owns setup/binding evidence; M1e owns local service qualification and host reservations. |
-| C17 | Managed OS and Workspace: the media store for `media add`, `media list` and `media delete`: layout under the context root, record format, bounds, digest verification and retention while an operation freezes an image. **Needs definition.** | No storage contract exists behind the catalogued commands; requires M1b and M5's first media consumer. The three `media` commands stay unavailable until promoted. | Closed layout and record formats, fixed bounds, atomic publication, frozen-by-operation refusal, bounded download and negative effect tests. |
+| C17 | Managed OS and Workspace: the media store behind `media add`, `media list` and `media delete`, **promoted into M1h** as one host-wide store shared by every context (M1h D3). | The store is host-wide rather than per context because context-scoped artifact servers, not the store, publish media to consumers. The three `media` commands stay unavailable until M1h delivers them. | Owned by M1h: closed layout and record formats, fixed bounds, atomic publication, frozen-by-operation refusal across contexts, bounded download and negative effect tests. |
 | C19 | Secrets: one additional secret-store implementation (passphrase-protected store, external broker or KDF-based custody). | `local-keyring` meets the current scope; requires M1c and a named operator need. | Shared conformance suite pass, session-material contract, rotation, tamper refusal and non-disclosure tests. |
-| C20 | Infrastructure services and Native artifacts: publish generated content into a managed `ArtifactServer`'s served root as an owned lifecycle effect. **Needs definition.** | M1e serves an empty root; no content producer exists until C12 builds an ISO and M2a renders boot artifacts. Requires M1e and C12. | Typed content manifest and digests, destination and overwrite rules within the owned root, atomic publication, retention through destroy, bounded source reads, sensitive classification and negative effect tests. A frozen M1e plan cannot be appended; publication is a block of its own operation. |
+| C20 | Infrastructure services and Native artifacts: publish generated content into a managed `ArtifactServer`'s served root as an owned lifecycle effect. Consumer publication beneath the served root is **promoted into M1h** (D4); typed manifests for rendered native artifacts remain here. **Needs definition.** | M1e serves an empty root; the first content producer is M1h's installer ISO and package tree, and rendered boot artifacts arrive with C12 and M2a. Requires M1h and C12. | Typed content manifest and digests, destination and overwrite rules within the owned root, atomic publication, retention through destroy, bounded source reads, sensitive classification and negative effect tests. A frozen M1e plan cannot be appended; publication is a block of its own operation. |
 | C21 | Secrets and Workspace: bring `file`-sourced Secret material under the [copied-input rule](project.md#design-priorities-and-non-goals) so materialization reads only context custody. **Needs definition.** | The [file source](api/secrets.md#file-source) names operator-owned paths that a lifecycle operation reads at materialization, after admission; whether import copies them into the keyring, the `secret` tree does, or the arm is retired changes the Secrets API and custody contract. Requires M1c and M1e. | Closed import journey and record format, binding of imported bytes to the declaring Secret, refusal of a changed or missing source after import, non-disclosure and negative effect tests. |
 | C22 | State reconciliation and Secrets: one recovery for a registered operation whose frozen binding can no longer be reopened. **Needs definition.** | A continuation reopens the exact binding the operation froze, and an incomplete apply refuses every other verb, so a binding lost to an earlier defect or to operator action leaves the context with no continue, no destroy and no delete. Whether recovery re-binds under a proved-equivalent declaration, admits a destroy of a failed apply, or releases ownership explicitly changes both contracts. Requires M1e and M1c. | Exact recovery journey and its authorization, proof that re-acquired material is the material the operation froze or an explicit refusal, ownership and reservation release, and crash/replay tests over a lost binding. |
 
