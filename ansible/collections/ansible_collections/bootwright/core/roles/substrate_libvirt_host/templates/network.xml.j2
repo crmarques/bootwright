@@ -1,0 +1,19 @@
+{#- One managed libvirt network, exactly as the frozen request declares it.
+    The built-in resolver and address assignment stay off so a managed DNSServer
+    may bind the bridge address, and the ownership metadata is what makes this
+    network this context's to change and remove. -#}
+<network>
+  <name>{{ item.name }}</name>
+  <bridge name="{{ item.bridge }}" stp="on" delay="0"/>
+{% if item.forward | default('') and item.forward != 'none' %}
+  <forward mode="{{ item.forward }}"/>
+{% endif %}
+  <dns enable="no"/>
+  <ip address="{{ item.address.split('/')[0] }}" prefix="{{ item.address.split('/')[1] }}"/>
+  <metadata>
+    <bw:owner xmlns:bw="https://bootwright.io/substrate/v1">
+      <bw:context>{{ bootwright_substrate_host_request.identity.context }}</bw:context>
+      <bw:attachment>{{ item.name }}</bw:attachment>
+    </bw:owner>
+  </metadata>
+</network>

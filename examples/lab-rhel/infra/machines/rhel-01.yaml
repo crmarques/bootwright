@@ -10,7 +10,7 @@ spec:
 
   os:
     provided: false
-    installProfileRef: rhel-9-7
+    installProfileRef: rhel-9-8
 
     install:
       rootDeviceHints:

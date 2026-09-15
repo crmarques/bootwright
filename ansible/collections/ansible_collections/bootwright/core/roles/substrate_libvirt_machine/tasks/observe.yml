@@ -1,0 +1,41 @@
+---
+- name: Validate the frozen machine request
+  ansible.builtin.assert:
+    that:
+      - bootwright_substrate_machine_request.version == 'machine-libvirt-v1'
+      - bootwright_substrate_machine_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.substrate_machine_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Observe the machine without changing any of it
+  bootwright.core.libvirt_domain_inspect:
+    request: '{{ bootwright_substrate_machine_request }}'
+  register: substrate_libvirt_machine_observed
+
+- name: Read the power state its controller reports, when it answers
+  bootwright.core.redfish_boot:
+    endpoint: '{{ bootwright_substrate_machine_request.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerUser) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerPassword) }}'
+    operation: read
+  register: substrate_libvirt_machine_controller
+  failed_when: false
+  no_log: true
+
+- name: Publish bounded machine observation evidence
+  bootwright.core.substrate_machine_protocol:
+    phase: completed
+    outcome: unchanged
+    digest: '{{ bootwright_substrate_machine_digest }}'
+    observation: '{{ substrate_libvirt_machine_observed.observation }}'
+    power: '{{ substrate_libvirt_machine_controller.power | default("") }}'
+    system: '{{ substrate_libvirt_machine_observed.observation.uuid }}'
+    removed: >-
+      {{ substrate_libvirt_machine_observed.observation.domain | length == 0
+         and substrate_libvirt_machine_observed.observation.unit | length == 0 }}
+  no_log: true

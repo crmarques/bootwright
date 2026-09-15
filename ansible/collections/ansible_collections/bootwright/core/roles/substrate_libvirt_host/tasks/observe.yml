@@ -1,0 +1,29 @@
+---
+- name: Validate the frozen provider host request
+  ansible.builtin.assert:
+    that:
+      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v1'
+      - bootwright_substrate_host_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.substrate_host_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Observe the provider host without changing any of it
+  bootwright.core.libvirt_host_inspect:
+    request: '{{ bootwright_substrate_host_request }}'
+  register: substrate_libvirt_host_observed
+
+- name: Publish bounded provider host observation evidence
+  bootwright.core.substrate_host_protocol:
+    phase: completed
+    outcome: unchanged
+    digest: '{{ bootwright_substrate_host_digest }}'
+    observation: '{{ substrate_libvirt_host_observed.observation }}'
+    removed: >-
+      {{ not substrate_libvirt_host_observed.observation.uri
+         or substrate_libvirt_host_observed.observation.pool | length == 0 }}
+  no_log: true

@@ -14,10 +14,12 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
+	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
+	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -85,6 +87,15 @@ func buildCapabilities(clock systemClock, controller controllerDependencies) cap
 	resolver := capabilityResolver{{
 		kind: clients.Kind, implementation: clients.Implementation,
 		capability: clients.New(controller.Tools, controller.Native, controller.NativeInspector, controller.ClientInstaller),
+	}, {
+		kind: libvirt.MachineKind, implementation: libvirt.MachineImplementation,
+		capability: libvirt.NewMachine(runner),
+	}, {
+		kind: installation.Kind, implementation: installation.Implementation,
+		capability: installation.New(runner),
+	}, {
+		kind: libvirt.HostKind, implementation: libvirt.HostImplementation,
+		capability: libvirt.NewHost(runner),
 	}}
 	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(), ntpserver.Definition()} {
 		resolver = append(resolver, boundCapability{

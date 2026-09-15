@@ -329,7 +329,7 @@ and installer-tooling closures its stage installs) and State reconciliation
 adapter runner); using Secrets and Machine. **Requires:** M1g.
 **Definition:** Specified. **Delivery:** in progress.
 
-Deliver one Bootwright-installed RHEL 9.7 Machine on a libvirt guest that boots
+Deliver one Bootwright-installed RHEL 9.8 Machine on a libvirt guest that boots
 its installer through an emulated Redfish BMC, so the bare-metal installation
 path is rehearsed end to end without hardware. The `substrates` and `machines`
 stages gain their first capabilities; `media add`, `media list` and
@@ -392,15 +392,26 @@ the guest-agent identity proof, is the Substrate
 sushy-tools image, is pinned in the substrate catalog and qualified by hand
 before its role is written, with its identity and date recorded in
 [development](../docs/development.md); `mkksiso` is qualified against the
-RHEL 9.7 boot image the same way.
+RHEL 9.8 boot image the same way.
 
-**Task 0 progress.** The image is resolved and its container runtime is
+**Task 0 progress.** The image is resolved, pinned and its container runtime
 recorded in [emulated-BMC knowledge](../.agents/knowledge/sushy-tools-emulated-bmc.md),
 including the stock command this contract must not use. Its Redfish surface —
 the `Systems` collection, virtual media, boot override, power and basic
-authentication — and `mkksiso` against RHEL 9.7 boot media are still
-unqualified, and the third delivery is blocked on them: the media is
-subscription content this repository does not carry.
+authentication — and `mkksiso` against RHEL 9.8 boot media remain unqualified.
+The capabilities and their roles are written against the contract rather than
+against an observed run, so the first real-system acceptance is where those two
+are proved and anything they contradict is corrected.
+
+**Deviations to close.** Two parts of this contract are not yet as specified.
+The hypervisor closure is installed by the provider host block on either
+placement arm, rather than by the controller stage on the controller, because
+the controller stage's native closure is versioned per root and the daemon,
+emulator and TPM helper have no declared version intent yet; the installer-media
+tooling is likewise installed by the installation block. And managed OS composes
+the substrate's power and identity operations through its modules rather than
+through fixed task files of its roles. Both belong to M1h and neither changes a
+frozen request shape.
 
 **Implementation order.** Three coherent changes: the `media` commands with
 their store; the engine's requirements, consumed authorization,
@@ -423,7 +434,7 @@ and the authorization refusal; the example acceptance in
 
 **Verification model.** M1d's model continues; real-system acceptance on a
 prepared libvirt host is operator-run, preceded by a by-hand qualification of
-the sushy-tools image and of `mkksiso` against RHEL 9.7 boot media, recorded in
+the sushy-tools image and of `mkksiso` against RHEL 9.8 boot media, recorded in
 [development](../docs/development.md).
 
 ## Later ordered outcomes

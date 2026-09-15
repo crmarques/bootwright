@@ -60,10 +60,10 @@ func packageRoles() map[string]packageRole {
 		"containercluster/access", "containercluster/installation", "containercluster/preflight",
 		"controller/clients", "controller/prerequisites", "desiredstate/compilation",
 		"environment/access", "environment/inspection", "environment/preflight",
-		"machine/access", "machine/inventory", "managedos/media",
+		"machine/access", "machine/inventory", "managedos/media", "managedos/installation",
 		"nativeartifacts/rendering", "reconciliation/lifecycle",
 		"secrets/custody", "secrets/encryption", "storage/preflight", "storage/rendering",
-		"trust/enrollment", "workspace/contexts",
+		"substrate/libvirt", "trust/enrollment", "workspace/contexts",
 	} {
 		owner, _, _ := strings.Cut(capability, "/")
 		roles["internal/"+owner] = domainRole

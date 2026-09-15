@@ -1,0 +1,78 @@
+---
+- name: Validate the frozen installation request
+  ansible.builtin.assert:
+    that:
+      - bootwright_os_install_request.version == 'os-install-anaconda-v1'
+      - bootwright_os_install_request.image.path.startswith('/var/lib/bootwright-services/')
+      - bootwright_os_install_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.managedos_install_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Report published content removal
+  bootwright.core.managedos_install_protocol:
+    phase: group
+    group: remove-published
+    status: running
+  no_log: true
+
+- name: Observe what this installation published before removing it
+  bootwright.core.managedos_install_inspect:
+    request: '{{ bootwright_os_install_request }}'
+  register: managedos_install_anaconda_before
+
+- name: Remove the subtree this installation owns beneath the served root
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_image_dir }}'
+    state: absent
+  register: managedos_install_anaconda_image_removed
+
+- name: Remove the published package tree
+  ansible.builtin.file:
+    path: '{{ bootwright_os_install_request.tree.path }}'
+    state: absent
+  when: bootwright_os_install_request.tree is defined
+  register: managedos_install_anaconda_tree_removed
+
+- name: Report published content removal completion
+  bootwright.core.managedos_install_protocol:
+    phase: group
+    group: remove-published
+    status: ok
+  no_log: true
+
+- name: Report absence verification
+  bootwright.core.managedos_install_protocol:
+    phase: group
+    group: verify-absence
+    status: running
+  no_log: true
+
+- name: Prove every published file is gone
+  bootwright.core.managedos_install_inspect:
+    request: '{{ bootwright_os_install_request }}'
+  register: managedos_install_anaconda_after
+
+- name: Report absence verification completion
+  bootwright.core.managedos_install_protocol:
+    phase: group
+    group: verify-absence
+    status: ok
+  no_log: true
+
+- name: Publish bounded installation removal evidence
+  bootwright.core.managedos_install_protocol:
+    phase: completed
+    outcome: >-
+      {{ 'changed'
+         if (managedos_install_anaconda_image_removed is changed
+             or managedos_install_anaconda_tree_removed is changed)
+         else 'unchanged' }}
+    digest: '{{ bootwright_os_install_digest }}'
+    observation: '{{ managedos_install_anaconda_after.observation }}'
+    removed: true
+  no_log: true

@@ -1,0 +1,64 @@
+argument_specs:
+  apply:
+    short_description: Realize one frozen virtual machine and its management controller.
+    options: &request
+      bootwright_substrate_machine_request:
+        type: dict
+        required: true
+        options:
+          controller:
+            type: dict
+            required: true
+          directory:
+            type: str
+            required: true
+          disks:
+            type: list
+            elements: dict
+            required: true
+          domain:
+            type: str
+            required: true
+          identity:
+            type: dict
+            required: true
+          interfaces:
+            type: list
+            elements: dict
+            required: true
+          memoryMiB:
+            type: int
+            required: true
+          placement:
+            type: dict
+            required: true
+          poolPath:
+            type: str
+            required: true
+          tpm:
+            type: bool
+            required: true
+          uri:
+            type: str
+            required: true
+          uuid:
+            type: str
+            required: true
+          vcpu:
+            type: int
+            required: true
+          version:
+            type: str
+            required: true
+            choices: [machine-libvirt-v1]
+      bootwright_substrate_machine_material:
+        type: dict
+        required: true
+
+  observe:
+    short_description: Observe one frozen virtual machine without changing it.
+    options: *request
+
+  destroy:
+    short_description: Remove one frozen virtual machine and prove its absence.
+    options: *request

@@ -1,0 +1,279 @@
+---
+- name: Validate the frozen machine request
+  ansible.builtin.assert:
+    that:
+      - bootwright_substrate_machine_request.version == 'machine-libvirt-v1'
+      - bootwright_substrate_machine_request.directory.startswith('/var/lib/libvirt/images/bootwright/')
+      - bootwright_substrate_machine_request.controller.image is search('@sha256:[0-9a-f]{64}$')
+      - bootwright_substrate_machine_request.controller.port | int > 0
+      - bootwright_substrate_machine_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.substrate_machine_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Report disk creation
+  bootwright.core.substrate_machine_protocol:
+    phase: group
+    group: create-disks
+    status: running
+  no_log: true
+
+- name: Observe the machine before changing it
+  bootwright.core.libvirt_domain_inspect:
+    request: '{{ bootwright_substrate_machine_request }}'
+  register: substrate_libvirt_machine_before
+
+- name: Refuse a same-named domain this context does not own
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_machine_before.observation.domain | length == 0
+        or substrate_libvirt_machine_before.observation.owned
+    fail_msg: a libvirt domain of the same name exists without this context's ownership
+    quiet: true
+
+- name: Refuse an owned disk whose size is not the size the profile froze
+  ansible.builtin.assert:
+    that:
+      - not item.0.present or item.0.sizeGiB == item.1.sizeGiB
+    fail_msg: an owned disk is not the size the profile declares, and is never resized
+    quiet: true
+  loop: '{{ substrate_libvirt_machine_before.observation.disks | zip(bootwright_substrate_machine_request.disks) | list }}'
+  loop_control:
+    label: '{{ item.0.name }}'
+
+- name: Create the owned disk directory
+  ansible.builtin.file:
+    path: '{{ bootwright_substrate_machine_request.directory }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0711'
+  register: substrate_libvirt_machine_directory
+
+- name: Create each disk the profile declares
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/qemu-img
+      - create
+      - -f
+      - qcow2
+      - '{{ item.path }}'
+      - '{{ item.sizeGiB }}G'
+    creates: '{{ item.path }}'
+  loop: '{{ bootwright_substrate_machine_request.disks }}'
+  loop_control:
+    label: '{{ item.name }}'
+
+- name: Report disk creation completion
+  bootwright.core.substrate_machine_protocol:
+    phase: group
+    group: create-disks
+    status: ok
+  no_log: true
+
+- name: Report domain definition
+  bootwright.core.substrate_machine_protocol:
+    phase: group
+    group: define-domain
+    status: running
+  no_log: true
+
+- name: Create the private definition directory
+  ansible.builtin.file:
+    path: '{{ substrate_libvirt_machine_definitions }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  changed_when: false
+
+- name: Publish the domain definition
+  ansible.builtin.template:
+    src: domain.xml.j2
+    dest: '{{ substrate_libvirt_machine_domain_xml }}'
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+
+- name: Define the machine without autostart and leave it powered off
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/virsh
+      - --connect
+      - '{{ bootwright_substrate_machine_request.uri }}'
+      - define
+      - '{{ substrate_libvirt_machine_domain_xml }}'
+  changed_when: substrate_libvirt_machine_before.observation.domain | length == 0
+
+- name: Remove the private definition directory
+  ansible.builtin.file:
+    path: '{{ substrate_libvirt_machine_definitions }}'
+    state: absent
+  changed_when: false
+
+- name: Report domain definition completion
+  bootwright.core.substrate_machine_protocol:
+    phase: group
+    group: define-domain
+    status: ok
+  no_log: true
+
+- name: Report controller start
+  bootwright.core.substrate_machine_protocol:
+    phase: group
+    group: start-controller
+    status: running
+  no_log: true
+
+- name: Create the controller's private state directory
+  ansible.builtin.file:
+    path: '{{ substrate_libvirt_machine_state }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  register: substrate_libvirt_machine_state_directory
+
+- name: Publish the controller configuration
+  ansible.builtin.template:
+    src: emulator.conf.j2
+    dest: '{{ substrate_libvirt_machine_state }}/conf.py'
+    owner: root
+    group: root
+    mode: '0600'
+  register: substrate_libvirt_machine_configuration
+
+- name: Derive the controller's password hash without exposing the password
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/openssl
+      - passwd
+      - -6
+      - -stdin
+    stdin: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerPassword) }}'
+  register: substrate_libvirt_machine_hash
+  changed_when: false
+  no_log: true
+
+- name: Publish the controller's authentication file
+  ansible.builtin.copy:
+    content: >-
+      {{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerUser)
+         }}:{{ substrate_libvirt_machine_hash.stdout | trim }}
+    dest: '{{ substrate_libvirt_machine_state }}/htpasswd'
+    owner: root
+    group: root
+    mode: '0600'
+  register: substrate_libvirt_machine_credentials
+  no_log: true
+
+- name: Acquire the pinned controller image
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - pull
+      - '{{ bootwright_substrate_machine_request.controller.image }}'
+  register: substrate_libvirt_machine_pull
+  when: substrate_libvirt_machine_before.observation.controller | length == 0
+  changed_when: substrate_libvirt_machine_before.observation.controller | length == 0
+
+- name: Publish the controller unit definition
+  ansible.builtin.template:
+    src: unit.container.j2
+    dest: '{{ substrate_libvirt_machine_unit_path }}'
+    owner: root
+    group: root
+    mode: '0644'
+  register: substrate_libvirt_machine_unit
+
+- name: Reload the host service manager so the unit generator runs
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - daemon-reload
+  changed_when: false
+
+- name: Start the machine's management controller
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - start
+      - '{{ substrate_libvirt_machine_service }}'
+  when: substrate_libvirt_machine_before.observation.unit != 'active'
+  changed_when: substrate_libvirt_machine_before.observation.unit != 'active'
+
+- name: Restart the controller after a configuration change
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - restart
+      - '{{ substrate_libvirt_machine_service }}'
+  when:
+    - substrate_libvirt_machine_before.observation.unit == 'active'
+    - substrate_libvirt_machine_configuration is changed or substrate_libvirt_machine_unit is changed
+      or substrate_libvirt_machine_credentials is changed
+  changed_when: true
+
+- name: Report controller start completion
+  bootwright.core.substrate_machine_protocol:
+    phase: group
+    group: start-controller
+    status: ok
+  no_log: true
+
+- name: Report controller verification
+  bootwright.core.substrate_machine_protocol:
+    phase: group
+    group: verify-controller
+    status: running
+  no_log: true
+
+- name: Prove the controller answers for exactly this machine
+  bootwright.core.redfish_boot:
+    endpoint: '{{ bootwright_substrate_machine_request.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerUser) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerPassword) }}'
+    operation: read
+  register: substrate_libvirt_machine_controller
+  retries: 30
+  delay: 2
+  until: substrate_libvirt_machine_controller.power | length > 0
+  no_log: true
+
+- name: Report controller verification completion
+  bootwright.core.substrate_machine_protocol:
+    phase: group
+    group: verify-controller
+    status: ok
+  no_log: true
+
+- name: Prove the machine carries everything the request froze
+  bootwright.core.libvirt_domain_inspect:
+    request: '{{ bootwright_substrate_machine_request }}'
+  register: substrate_libvirt_machine_after
+
+- name: Publish bounded machine completion evidence
+  bootwright.core.substrate_machine_protocol:
+    phase: completed
+    outcome: >-
+      {{ 'changed'
+         if (substrate_libvirt_machine_directory is changed
+             or substrate_libvirt_machine_state_directory is changed
+             or substrate_libvirt_machine_configuration is changed
+             or substrate_libvirt_machine_credentials is changed
+             or substrate_libvirt_machine_unit is changed
+             or substrate_libvirt_machine_pull is changed
+             or substrate_libvirt_machine_missing_disks | length > 0
+             or substrate_libvirt_machine_before.observation.domain | length == 0
+             or substrate_libvirt_machine_before.observation.unit != 'active')
+         else 'unchanged' }}
+    digest: '{{ bootwright_substrate_machine_digest }}'
+    observation: '{{ substrate_libvirt_machine_after.observation }}'
+    power: '{{ substrate_libvirt_machine_controller.power }}'
+    system: '{{ substrate_libvirt_machine_after.observation.uuid }}'
+  no_log: true

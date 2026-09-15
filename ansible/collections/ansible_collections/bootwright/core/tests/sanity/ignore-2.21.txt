@@ -4,5 +4,13 @@ plugins/modules/controller_inventory.py validate-modules:missing-gplv3-license
 plugins/modules/controller_packages.py validate-modules:missing-gplv3-license
 plugins/modules/controller_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/controller_tool.py validate-modules:missing-gplv3-license
+plugins/modules/guest_agent_read.py validate-modules:missing-gplv3-license
 plugins/modules/infra_service_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/infra_service_protocol.py validate-modules:missing-gplv3-license
+plugins/modules/libvirt_domain_inspect.py validate-modules:missing-gplv3-license
+plugins/modules/libvirt_host_inspect.py validate-modules:missing-gplv3-license
+plugins/modules/managedos_install_inspect.py validate-modules:missing-gplv3-license
+plugins/modules/managedos_install_protocol.py validate-modules:missing-gplv3-license
+plugins/modules/redfish_boot.py validate-modules:missing-gplv3-license
+plugins/modules/substrate_host_protocol.py validate-modules:missing-gplv3-license
+plugins/modules/substrate_machine_protocol.py validate-modules:missing-gplv3-license

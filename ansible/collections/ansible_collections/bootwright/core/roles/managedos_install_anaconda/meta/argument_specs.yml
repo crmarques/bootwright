@@ -1,0 +1,68 @@
+argument_specs:
+  apply:
+    short_description: Install one Bootwright-managed operating system and prove it completed.
+    options: &request
+      bootwright_os_install_request:
+        type: dict
+        required: true
+        options:
+          address:
+            type: str
+            required: true
+          bootMedia:
+            type: dict
+            required: true
+          controller:
+            type: dict
+            required: true
+          domain:
+            type: str
+            required: true
+          fleetKeyRef:
+            type: str
+            required: true
+          hostname:
+            type: str
+            required: true
+          identity:
+            type: dict
+            required: true
+          image:
+            type: dict
+            required: true
+          kickstart:
+            type: str
+            required: true
+          markerPath:
+            type: str
+            required: true
+          placement:
+            type: dict
+            required: true
+          tree:
+            type: dict
+            required: false
+          treeMedia:
+            type: dict
+            required: false
+          uri:
+            type: str
+            required: true
+          user:
+            type: str
+            required: true
+          version:
+            type: str
+            required: true
+            choices: [os-install-anaconda-v1]
+      bootwright_os_install_material:
+        type: dict
+        required: true
+
+  observe:
+    short_description: Observe one frozen installation without changing it.
+    options: *request
+
+  destroy:
+    short_description: Remove what one frozen installation published and prove its absence.
+    options: *request

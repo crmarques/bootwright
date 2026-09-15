@@ -316,7 +316,7 @@ that implements a row updates the row and the stub fitness test together.
 | `validate`, `render effective` (Desired state) | `commands_desiredstate.go` | `desiredstate/compilation` | `desiredstate/inputfs`, `desiredstate/yamlstream`, `desiredstate/encoding` | I |
 | `setup`, `preflight controller` (Controller) | `commands_controller.go` | `controller/prerequisites` | `controller/hostlinux`, `controller/bundlelocal`, `controller/ansiblelocal`, `controller/nativelocal`, `workspace/contextfs` | I |
 | Local privilege boundary for every root-requiring command (Controller) | `invocation.go` classifies only | — | `controller/privilege`, bound in `run.go` | I |
-| `plan`, `status`, `apply`, `destroy` (State reconciliation) | `commands_reconciliation.go` | `reconciliation/lifecycle` | `reconciliation/operationstore`, `workspace/contextfs`, `desiredstate/compilation`, `secrets/custody`, `controller/hostlinux`, `controller/bundlelocal`, `controller/nativelocal`, `controller/ansiblelocal`, `controller/clients`, `infrastructureservices/artifactserver`, `infrastructureservices/managedservice` with the `proxy`, `dnsserver` and `ntpserver` definitions | I |
+| `plan`, `status`, `apply`, `destroy` (State reconciliation) | `commands_reconciliation.go` | `reconciliation/lifecycle` | `reconciliation/operationstore`, `workspace/contextfs`, `desiredstate/compilation`, `secrets/custody`, `controller/hostlinux`, `controller/bundlelocal`, `controller/nativelocal`, `controller/ansiblelocal`, `controller/clients`, `substrate/libvirt`, `managedos/installation`, `infrastructureservices/artifactserver`, `infrastructureservices/managedservice` with the `proxy`, `dnsserver` and `ntpserver` definitions, over `reconciliation/ansiblerunner` | I |
 | `render` (Native artifacts) | `commands_nativeartifacts.go` | `nativeartifacts/rendering` | — | S |
 | `render installer` (Container cluster) | `commands_containercluster.go` | `containercluster/installation` | — | S |
 | `render storage` (Storage) | `commands_storage.go` | `storage/rendering` | — | S |
@@ -426,6 +426,9 @@ reconciliation/lifecycle.Service
    ─AutomationIdentity────────────→ controller/bundlelocal catalog identity
    ─ExecutionGuard────────────────→ controller/bundlelocal.ExecutionGuard
    ─CapabilityResolver, Capability→ ordered set over controller/clients.Capability,
+                                     substrate/libvirt.MachineCapability,
+                                     managedos/installation.Capability,
+                                     substrate/libvirt.HostCapability,
                                      infrastructureservices/artifactserver.Capability
                                      and managedservice.Capability bound to the proxy,
                                      dnsserver and ntpserver definitions
@@ -505,6 +508,7 @@ production binding; tests substitute fakes through the same interface.
 | `managedos/media` | `View`, `Transaction` | Entries, Names, Digest, Frozen; Stage, Publish, Delete | `contextfs` host-wide media area |
 | `managedos/media` | `Acquirer`, `Payload` | Open; Read, Close | `managedos/medialocal.Acquirer` |
 | `managedos/media` | `Confirmer`, `Clock` | Confirm; Now | `internal/cli.Confirmation`; composition |
+| `substrate/libvirt`, `managedos/installation` | `Runner` | Run | `reconciliation/ansiblerunner.Runner` |
 | `secrets/material` | `InputReader` | Read | process standard input |
 | `secrets/material` | `Operator` | FileIdentity | the invoking account |
 | `secrets/material` | `Cryptography` | GenerateECDSA, GenerateRSA, CreateCertificate | the package default over the standard library |

@@ -1,0 +1,55 @@
+package installation
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"strings"
+)
+
+// Implementation is the frozen identity of this capability. A plan records it,
+// and a continuation refuses when the executable no longer offers it.
+const Implementation = "os-install-anaconda-v1"
+
+// Kind is the API kind this capability realizes. The substrate realizes the
+// same kind through another implementation, so a block resolves by both.
+const Kind = "Machine"
+
+const requestVersion = "os-install-anaconda-v1"
+
+// consumerPrefix is the subtree this capability owns beneath a managed artifact
+// server's served root. The server owns the root; this block owns exactly
+// os/<object>/ and removes it in its own inverse.
+const consumerPrefix = "os"
+
+// servedRoot is the directory the managed artifact server serves, beneath its
+// own content root.
+const servedRoot = "public"
+
+// MarkerPath is where a completed installation leaves its proof. It is read
+// through the substrate's identity operation, never over the network.
+const MarkerPath = "/etc/bootwright/install-marker.json"
+
+// installTooling is the closure that builds a per-Machine installer image and
+// extracts a DVD tree. On the controller the controller stage installs it; on
+// an SSH host this block does.
+var installTooling = []string{"lorax", "xorriso"}
+
+// InstallTooling is that closure in canonical order.
+func InstallTooling() []string { return append([]string(nil), installTooling...) }
+
+// BlockID names the block this capability contributes. A consumer states
+// requirements by API object, never by this identity.
+func BlockID(machine string) string { return "os-install-" + machine }
+
+// ContentDigest binds a plan to the exact behavior this build implements, so
+// changing the request shape, the derived Kickstart or the published layout
+// invalidates a frozen plan.
+func ContentDigest() string {
+	digest := sha256.Sum256([]byte(strings.Join([]string{
+		"bootwright.managedos.install-anaconda-v1",
+		Implementation, requestVersion, kickstartVersion,
+		consumerPrefix, servedRoot, MarkerPath,
+		strings.Join(installTooling, ","),
+	}, "\x00")))
+	return hex.EncodeToString(digest[:])
+}

@@ -1,0 +1,161 @@
+---
+- name: Validate the frozen provider host request
+  ansible.builtin.assert:
+    that:
+      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v1'
+      - bootwright_substrate_host_request.poolPath.startswith('/var/lib/libvirt/images/bootwright/')
+      - bootwright_substrate_host_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.substrate_host_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Report network removal
+  bootwright.core.substrate_host_protocol:
+    phase: group
+    group: remove-networks
+    status: running
+  no_log: true
+
+- name: Observe the provider host before removal
+  bootwright.core.libvirt_host_inspect:
+    request: '{{ bootwright_substrate_host_request }}'
+  register: substrate_libvirt_host_before
+
+- name: Refuse to remove a same-named network this context does not own
+  ansible.builtin.assert:
+    that:
+      - item.state | length == 0 or item.owned
+    fail_msg: a libvirt network of the same name exists without this context's ownership
+    quiet: true
+  loop: '{{ substrate_libvirt_host_before.observation.networks }}'
+  loop_control:
+    label: '{{ item.name }}'
+  when: item.managed
+
+- name: Destroy each owned network
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/virsh
+      - --connect
+      - '{{ bootwright_substrate_host_request.uri }}'
+      - net-destroy
+      - '{{ item.name }}'
+  loop: '{{ substrate_libvirt_host_owned_networks }}'
+  loop_control:
+    label: '{{ item.name }}'
+  register: substrate_libvirt_host_destroyed
+  failed_when:
+    - substrate_libvirt_host_destroyed.rc != 0
+    - '"not active" not in substrate_libvirt_host_destroyed.stderr'
+    - '"not found" not in substrate_libvirt_host_destroyed.stderr'
+  changed_when: substrate_libvirt_host_destroyed.rc == 0
+
+- name: Undefine each owned network
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/virsh
+      - --connect
+      - '{{ bootwright_substrate_host_request.uri }}'
+      - net-undefine
+      - '{{ item.name }}'
+  loop: '{{ substrate_libvirt_host_owned_networks }}'
+  loop_control:
+    label: '{{ item.name }}'
+  register: substrate_libvirt_host_undefined
+  failed_when:
+    - substrate_libvirt_host_undefined.rc != 0
+    - '"not found" not in substrate_libvirt_host_undefined.stderr'
+  changed_when: substrate_libvirt_host_undefined.rc == 0
+
+- name: Report network removal completion
+  bootwright.core.substrate_host_protocol:
+    phase: group
+    group: remove-networks
+    status: ok
+  no_log: true
+
+- name: Report pool removal
+  bootwright.core.substrate_host_protocol:
+    phase: group
+    group: remove-pool
+    status: running
+  no_log: true
+
+- name: Destroy the virtual-media pool
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/virsh
+      - --connect
+      - '{{ bootwright_substrate_host_request.uri }}'
+      - pool-destroy
+      - '{{ bootwright_substrate_host_request.poolName }}'
+  register: substrate_libvirt_host_pool_destroyed
+  failed_when:
+    - substrate_libvirt_host_pool_destroyed.rc != 0
+    - '"not active" not in substrate_libvirt_host_pool_destroyed.stderr'
+    - '"no storage pool" not in substrate_libvirt_host_pool_destroyed.stderr'
+  changed_when: substrate_libvirt_host_pool_destroyed.rc == 0
+
+- name: Undefine the virtual-media pool
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/virsh
+      - --connect
+      - '{{ bootwright_substrate_host_request.uri }}'
+      - pool-undefine
+      - '{{ bootwright_substrate_host_request.poolName }}'
+  register: substrate_libvirt_host_pool_undefined
+  failed_when:
+    - substrate_libvirt_host_pool_undefined.rc != 0
+    - '"no storage pool" not in substrate_libvirt_host_pool_undefined.stderr'
+  changed_when: substrate_libvirt_host_pool_undefined.rc == 0
+
+- name: Remove the owned pool directory
+  ansible.builtin.file:
+    path: '{{ bootwright_substrate_host_request.poolPath }}'
+    state: absent
+  register: substrate_libvirt_host_pool_directory
+
+- name: Report pool removal completion
+  bootwright.core.substrate_host_protocol:
+    phase: group
+    group: remove-pool
+    status: ok
+  no_log: true
+
+- name: Report absence verification
+  bootwright.core.substrate_host_protocol:
+    phase: group
+    group: verify-absence
+    status: running
+  no_log: true
+
+- name: Prove every owned resource is gone
+  bootwright.core.libvirt_host_inspect:
+    request: '{{ bootwright_substrate_host_request }}'
+  register: substrate_libvirt_host_after
+
+- name: Report absence verification completion
+  bootwright.core.substrate_host_protocol:
+    phase: group
+    group: verify-absence
+    status: ok
+  no_log: true
+
+- name: Publish bounded provider host removal evidence
+  bootwright.core.substrate_host_protocol:
+    phase: completed
+    outcome: >-
+      {{ 'changed'
+         if (substrate_libvirt_host_pool_directory is changed
+             or substrate_libvirt_host_before.observation.pool | length > 0
+             or substrate_libvirt_host_owned_networks | length > 0)
+         else 'unchanged' }}
+    digest: '{{ bootwright_substrate_host_digest }}'
+    observation: '{{ substrate_libvirt_host_after.observation }}'
+    removed: true
+  no_log: true

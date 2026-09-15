@@ -1,0 +1,260 @@
+---
+- name: Validate the frozen provider host request
+  ansible.builtin.assert:
+    that:
+      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v1'
+      - bootwright_substrate_host_request.uri is string
+      - bootwright_substrate_host_request.poolPath.startswith('/var/lib/libvirt/images/bootwright/')
+      - bootwright_substrate_host_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.substrate_host_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Report hypervisor preparation
+  bootwright.core.substrate_host_protocol:
+    phase: group
+    group: install-hypervisor
+    status: running
+  no_log: true
+
+- name: Observe the provider host before changing it
+  bootwright.core.libvirt_host_inspect:
+    request: '{{ bootwright_substrate_host_request }}'
+  register: substrate_libvirt_host_before
+
+- name: Install the hypervisor closure this provider runs
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/dnf
+      - --assumeyes
+      - --setopt=install_weak_deps=False
+      - install
+      - '{{ item }}'
+  loop: '{{ bootwright_substrate_host_request.packages }}'
+  register: substrate_libvirt_host_packages
+  when:
+    - bootwright_substrate_host_request.provisioned
+    - not substrate_libvirt_host_before.observation.hypervisor
+  changed_when: not substrate_libvirt_host_before.observation.hypervisor
+
+- name: Enable and start the virtualization daemon
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - enable
+      - --now
+      - '{{ bootwright_substrate_host_request.service }}'
+  register: substrate_libvirt_host_daemon
+  when: substrate_libvirt_host_before.observation.service != 'active'
+  changed_when: substrate_libvirt_host_before.observation.service != 'active'
+
+- name: Prove the declared connection answers before defining anything
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/virsh
+      - --connect
+      - '{{ bootwright_substrate_host_request.uri }}'
+      - version
+  register: substrate_libvirt_host_connection
+  retries: 30
+  delay: 2
+  until: substrate_libvirt_host_connection.rc == 0
+  changed_when: false
+
+- name: Report hypervisor preparation completion
+  bootwright.core.substrate_host_protocol:
+    phase: group
+    group: install-hypervisor
+    status: ok
+  no_log: true
+
+- name: Report network definition
+  bootwright.core.substrate_host_protocol:
+    phase: group
+    group: define-networks
+    status: running
+  no_log: true
+
+- name: Refuse a same-named network this context does not own
+  ansible.builtin.assert:
+    that:
+      - item.state | length == 0 or item.owned
+    fail_msg: a libvirt network of the same name exists without this context's ownership
+    quiet: true
+  loop: '{{ substrate_libvirt_host_before.observation.networks }}'
+  loop_control:
+    label: '{{ item.name }}'
+  when: item.managed
+
+- name: Prove every external bridge this provider requires is present
+  ansible.builtin.assert:
+    that:
+      - item.bridge
+    fail_msg: an external attachment names a bridge this host does not carry
+    quiet: true
+  loop: '{{ substrate_libvirt_host_before.observation.networks }}'
+  loop_control:
+    label: '{{ item.name }}'
+  when: not item.managed
+
+- name: Create the private definition directory
+  ansible.builtin.file:
+    path: '{{ substrate_libvirt_host_definitions }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  changed_when: false
+
+- name: Publish each managed network definition
+  ansible.builtin.template:
+    src: network.xml.j2
+    dest: '{{ substrate_libvirt_host_definitions }}/{{ item.name }}.xml'
+    owner: root
+    group: root
+    mode: '0600'
+  loop: '{{ substrate_libvirt_host_managed }}'
+  loop_control:
+    label: '{{ item.name }}'
+  changed_when: false
+
+- name: Define each managed network from its frozen definition
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/virsh
+      - --connect
+      - '{{ bootwright_substrate_host_request.uri }}'
+      - net-define
+      - '{{ substrate_libvirt_host_definitions }}/{{ item.name }}.xml'
+  loop: '{{ substrate_libvirt_host_managed }}'
+  loop_control:
+    label: '{{ item.name }}'
+  changed_when: false
+
+- name: Autostart each managed network
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/virsh
+      - --connect
+      - '{{ bootwright_substrate_host_request.uri }}'
+      - net-autostart
+      - '{{ item.name }}'
+  loop: '{{ substrate_libvirt_host_managed }}'
+  loop_control:
+    label: '{{ item.name }}'
+  changed_when: false
+
+- name: Start each managed network
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/virsh
+      - --connect
+      - '{{ bootwright_substrate_host_request.uri }}'
+      - net-start
+      - '{{ item.name }}'
+  loop: '{{ substrate_libvirt_host_managed }}'
+  loop_control:
+    label: '{{ item.name }}'
+  register: substrate_libvirt_host_started
+  failed_when:
+    - substrate_libvirt_host_started.rc != 0
+    - '"already active" not in substrate_libvirt_host_started.stderr'
+  changed_when: substrate_libvirt_host_started.rc == 0
+
+- name: Remove the private definition directory
+  ansible.builtin.file:
+    path: '{{ substrate_libvirt_host_definitions }}'
+    state: absent
+  changed_when: false
+
+- name: Report network definition completion
+  bootwright.core.substrate_host_protocol:
+    phase: group
+    group: define-networks
+    status: ok
+  no_log: true
+
+- name: Report pool definition
+  bootwright.core.substrate_host_protocol:
+    phase: group
+    group: define-pool
+    status: running
+  no_log: true
+
+- name: Create the virtual-media pool directory
+  ansible.builtin.file:
+    path: '{{ bootwright_substrate_host_request.poolPath }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  register: substrate_libvirt_host_pool_directory
+
+- name: Define the virtual-media pool
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/virsh
+      - --connect
+      - '{{ bootwright_substrate_host_request.uri }}'
+      - pool-define-as
+      - '{{ bootwright_substrate_host_request.poolName }}'
+      - dir
+      - --target
+      - '{{ bootwright_substrate_host_request.poolPath }}'
+  when: substrate_libvirt_host_before.observation.pool | length == 0
+  changed_when: substrate_libvirt_host_before.observation.pool | length == 0
+
+- name: Autostart the virtual-media pool
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/virsh
+      - --connect
+      - '{{ bootwright_substrate_host_request.uri }}'
+      - pool-autostart
+      - '{{ bootwright_substrate_host_request.poolName }}'
+  changed_when: false
+
+- name: Start the virtual-media pool
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/virsh
+      - --connect
+      - '{{ bootwright_substrate_host_request.uri }}'
+      - pool-start
+      - '{{ bootwright_substrate_host_request.poolName }}'
+  register: substrate_libvirt_host_pool_started
+  failed_when:
+    - substrate_libvirt_host_pool_started.rc != 0
+    - '"already active" not in substrate_libvirt_host_pool_started.stderr'
+  changed_when: substrate_libvirt_host_pool_started.rc == 0
+
+- name: Report pool definition completion
+  bootwright.core.substrate_host_protocol:
+    phase: group
+    group: define-pool
+    status: ok
+  no_log: true
+
+- name: Prove the provider host carries everything the request froze
+  bootwright.core.libvirt_host_inspect:
+    request: '{{ bootwright_substrate_host_request }}'
+  register: substrate_libvirt_host_after
+
+- name: Publish bounded provider host completion evidence
+  bootwright.core.substrate_host_protocol:
+    phase: completed
+    outcome: >-
+      {{ 'changed'
+         if (substrate_libvirt_host_packages is changed
+             or substrate_libvirt_host_daemon is changed
+             or substrate_libvirt_host_pool_directory is changed
+             or substrate_libvirt_host_before.observation.pool != 'active'
+             or substrate_libvirt_host_incomplete_networks | length > 0)
+         else 'unchanged' }}
+    digest: '{{ bootwright_substrate_host_digest }}'
+    observation: '{{ substrate_libvirt_host_after.observation }}'
+  no_log: true

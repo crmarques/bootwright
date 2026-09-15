@@ -1,0 +1,16 @@
+---
+# Derived from the frozen request only. Nothing here is authored by desired
+# state, and no value selects an executable, a role or a task file.
+substrate_libvirt_machine_definitions: /run/bootwright-substrate
+substrate_libvirt_machine_domain_xml: >-
+  {{ substrate_libvirt_machine_definitions }}/{{ bootwright_substrate_machine_request.domain }}.xml
+substrate_libvirt_machine_unit_path: >-
+  /etc/containers/systemd/{{ bootwright_substrate_machine_request.controller.unit }}.container
+substrate_libvirt_machine_service: >-
+  {{ bootwright_substrate_machine_request.controller.unit }}.service
+substrate_libvirt_machine_state: >-
+  /var/lib/bootwright-substrate/{{ bootwright_substrate_machine_request.identity.context }}/{{ bootwright_substrate_machine_request.identity.object }}
+# The disks the frozen profile declares that are not already present at their
+# frozen size. Their count is what makes an apply changed rather than a replay.
+substrate_libvirt_machine_missing_disks: >-
+  {{ substrate_libvirt_machine_before.observation.disks | rejectattr('present') | list }}

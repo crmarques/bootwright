@@ -1,0 +1,25 @@
+{#- The unit sets Entrypoint and Exec explicitly and never runs the image's own
+    wrapper, because that wrapper starts the emulator with its debugger active.
+    Host networking is what makes the declared bind address the real socket. -#}
+[Unit]
+Description=Bootwright management controller for {{ bootwright_substrate_machine_request.identity.object }}
+After=network-online.target libvirtd.service
+
+[Container]
+ContainerName={{ bootwright_substrate_machine_request.controller.unit }}
+Image={{ bootwright_substrate_machine_request.controller.image }}
+Network=host
+User=0
+Entrypoint=/usr/local/bin/sushy-emulator
+Exec=--config /etc/sushy/conf.py
+Volume={{ substrate_libvirt_machine_state }}/conf.py:/etc/sushy/conf.py:ro,Z
+Volume={{ substrate_libvirt_machine_state }}/htpasswd:/etc/sushy/htpasswd:ro,Z
+Volume=/var/run/libvirt:/var/run/libvirt:rw
+Volume={{ bootwright_substrate_machine_request.poolPath }}:{{ bootwright_substrate_machine_request.poolPath }}:rw,z
+
+[Service]
+Restart=always
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

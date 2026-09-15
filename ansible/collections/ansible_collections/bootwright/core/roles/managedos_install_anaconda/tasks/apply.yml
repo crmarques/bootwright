@@ -1,0 +1,280 @@
+---
+- name: Validate the frozen installation request
+  ansible.builtin.assert:
+    that:
+      - bootwright_os_install_request.version == 'os-install-anaconda-v1'
+      - bootwright_os_install_request.image.path.startswith('/var/lib/bootwright-services/')
+      - bootwright_os_install_request.markerPath == '/etc/bootwright/install-marker.json'
+      - bootwright_os_install_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.managedos_install_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Report package tree publication
+  bootwright.core.managedos_install_protocol:
+    phase: group
+    group: publish-tree
+    status: running
+  no_log: true
+
+- name: Install the tooling that builds an installer image and extracts a tree
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/dnf
+      - --assumeyes
+      - --setopt=install_weak_deps=False
+      - install
+      - '{{ item }}'
+    creates: '{{ "/usr/bin/mkksiso" if item == "lorax" else "/usr/bin/xorriso" }}'
+  loop: '{{ managedos_install_anaconda_tooling }}'
+  register: managedos_install_anaconda_tooling_installed
+
+- name: Prove every store entry this installation names is present
+  ansible.builtin.stat:
+    path: '{{ item }}'
+  loop: '{{ managedos_install_anaconda_required_media }}'
+  register: managedos_install_anaconda_media_present
+
+- name: Refuse a store entry this installation cannot use
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+    fail_msg: an installer image this operation froze is not in the host media store
+    quiet: true
+  loop: '{{ managedos_install_anaconda_media_present.results }}'
+  loop_control:
+    label: '{{ item.item }}'
+
+- name: Observe what this installation has already published
+  bootwright.core.managedos_install_inspect:
+    request: '{{ bootwright_os_install_request }}'
+  register: managedos_install_anaconda_before
+
+- name: Create the work directory this attempt owns
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_work }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  changed_when: false
+
+- name: Extract the package tree beside its published location
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/xorriso
+      - -osirrox
+      - 'on'
+      - -indev
+      - '{{ managedos_install_anaconda_tree_media }}'
+      - -extract
+      - /
+      - '{{ managedos_install_anaconda_staged_tree }}'
+  when: managedos_install_anaconda_publish_tree | bool
+  register: managedos_install_anaconda_extracted
+  changed_when: true
+
+- name: Label the staged tree so the serving process can read it
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/chcon
+      - --recursive
+      - --reference
+      - '{{ bootwright_os_install_request.image.path | dirname | dirname }}'
+      - '{{ managedos_install_anaconda_staged_tree }}'
+  when: managedos_install_anaconda_publish_tree | bool
+  changed_when: true
+
+- name: Publish the package tree by atomic rename
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/mv
+      - --no-target-directory
+      - '{{ managedos_install_anaconda_staged_tree }}'
+      - '{{ bootwright_os_install_request.tree.path }}'
+  when: managedos_install_anaconda_publish_tree | bool
+  changed_when: true
+
+- name: Report package tree publication completion
+  bootwright.core.managedos_install_protocol:
+    phase: group
+    group: publish-tree
+    status: ok
+  no_log: true
+
+- name: Report installer image construction
+  bootwright.core.managedos_install_protocol:
+    phase: group
+    group: build-image
+    status: running
+  no_log: true
+
+- name: Render the frozen kickstart with the values this attempt derived
+  ansible.builtin.copy:
+    content: >-
+      {{ bootwright_os_install_request.kickstart
+         | replace('@@BOOTWRIGHT_MARKER@@', bootwright_os_install_material.marker)
+         | replace('@@BOOTWRIGHT_AUTHORIZED_KEY@@', bootwright_os_install_material.authorizedKey) }}
+    dest: '{{ managedos_install_anaconda_work }}/ks.cfg'
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: true
+
+- name: Create the published image directory
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_image_dir }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  register: managedos_install_anaconda_image_directory
+
+- name: Build this machine's own installer image
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/mkksiso
+      - --ks
+      - '{{ managedos_install_anaconda_work }}/ks.cfg'
+      - --rm-args
+      - rd.live.check
+      - '{{ managedos_install_anaconda_boot_media }}'
+      - '{{ managedos_install_anaconda_work }}/install.iso'
+  register: managedos_install_anaconda_built
+  changed_when: true
+
+- name: Label the built image so the serving process can read it
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/chcon
+      - --reference
+      - '{{ managedos_install_anaconda_image_dir | dirname }}'
+      - '{{ managedos_install_anaconda_work }}/install.iso'
+  changed_when: false
+
+- name: Publish the installer image by atomic rename
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/mv
+      - --no-target-directory
+      - '{{ managedos_install_anaconda_work }}/install.iso'
+      - '{{ bootwright_os_install_request.image.path }}'
+  changed_when: true
+
+- name: Report installer image completion
+  bootwright.core.managedos_install_protocol:
+    phase: group
+    group: build-image
+    status: ok
+  no_log: true
+
+- name: Report installer boot
+  bootwright.core.managedos_install_protocol:
+    phase: group
+    group: boot-installer
+    status: running
+  no_log: true
+
+- name: Read what the guest already holds, so a replay boots nothing
+  bootwright.core.guest_agent_read:
+    uri: '{{ bootwright_os_install_request.uri }}'
+    domain: '{{ bootwright_os_install_request.domain }}'
+    path: '{{ bootwright_os_install_request.markerPath }}'
+  register: managedos_install_anaconda_existing
+
+- name: Refuse a guest that answers with another installation
+  ansible.builtin.assert:
+    that:
+      - not managedos_install_anaconda_existing.answered
+        or managedos_install_anaconda_existing.content | trim | length == 0
+        or managedos_install_anaconda_existing.content | trim == bootwright_os_install_material.marker
+    fail_msg: the guest holds another installation, and there is no reinstall path
+    quiet: true
+  no_log: true
+
+- name: Install the operating system when the guest holds nothing yet
+  ansible.builtin.include_tasks: boot.yml
+  when: not (managedos_install_anaconda_installed | bool)
+
+- name: Report installer boot completion
+  bootwright.core.managedos_install_protocol:
+    phase: group
+    group: boot-installer
+    status: ok
+  no_log: true
+
+- name: Report installation verification
+  bootwright.core.managedos_install_protocol:
+    phase: group
+    group: verify-installation
+    status: running
+  no_log: true
+
+- name: Read the install marker the completed installation left
+  bootwright.core.guest_agent_read:
+    uri: '{{ bootwright_os_install_request.uri }}'
+    domain: '{{ bootwright_os_install_request.domain }}'
+    path: '{{ bootwright_os_install_request.markerPath }}'
+  register: managedos_install_anaconda_marker
+  retries: 120
+  delay: 30
+  until: managedos_install_anaconda_marker.answered and managedos_install_anaconda_marker.content | trim | length > 0
+
+- name: Capture the guest's own host key without trusting the network
+  bootwright.core.guest_agent_read:
+    uri: '{{ bootwright_os_install_request.uri }}'
+    domain: '{{ bootwright_os_install_request.domain }}'
+    path: /etc/ssh/ssh_host_ed25519_key.pub
+  register: managedos_install_anaconda_host_key
+  retries: 20
+  delay: 15
+  until: managedos_install_anaconda_host_key.answered and managedos_install_anaconda_host_key.content | trim | length > 0
+
+- name: Eject the virtual media the installation booted from
+  bootwright.core.redfish_boot:
+    endpoint: '{{ bootwright_os_install_request.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
+    operation: eject
+  register: managedos_install_anaconda_ejected
+  no_log: true
+
+- name: Prove the installed machine answers on the exact key it reported
+  ansible.builtin.include_tasks: verify.yml
+
+- name: Report installation verification completion
+  bootwright.core.managedos_install_protocol:
+    phase: group
+    group: verify-installation
+    status: ok
+  no_log: true
+
+- name: Prove everything this installation publishes is in place
+  bootwright.core.managedos_install_inspect:
+    request: '{{ bootwright_os_install_request }}'
+  register: managedos_install_anaconda_after
+
+- name: Remove the work directory and the rendered kickstart with it
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_work }}'
+    state: absent
+  changed_when: false
+
+- name: Publish bounded installation completion evidence
+  bootwright.core.managedos_install_protocol:
+    phase: completed
+    outcome: >-
+      {{ 'unchanged' if managedos_install_anaconda_installed | bool else 'changed' }}
+    digest: '{{ bootwright_os_install_digest }}'
+    observation: '{{ managedos_install_anaconda_after.observation }}'
+    marker: '{{ managedos_install_anaconda_marker.content | trim }}'
+    hostKey: '{{ managedos_install_anaconda_host_key.content | trim }}'
+    address: '{{ bootwright_os_install_request.address }}'
+    media: '{{ managedos_install_anaconda_ejected.media }}'
+    power: '{{ managedos_install_anaconda_ejected.power }}'
+  no_log: true

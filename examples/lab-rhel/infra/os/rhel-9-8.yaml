@@ -1,17 +1,17 @@
 apiVersion: bootwright.io/v1alpha1
 kind: MachineInstallProfile
 metadata:
-  name: rhel-9-7
+  name: rhel-9-8
 
 spec:
   os:
     family: rhel
-    version: "9.7"
+    version: "9.8"
     architecture: x86_64
 
   installer:
     anaconda:
-      imageRef: rhel-9-7-boot
+      imageRef: rhel-9-8-boot
 
       redfishVirtualMedia:
         artifactServerEndpoint:
@@ -20,7 +20,7 @@ spec:
 
       packageSource:
         hostedTree:
-          fromMedia: local-media:rhel-9.7-x86_64-dvd.iso
+          fromMedia: local-media:rhel-9.8-x86_64-dvd.iso
           artifactServerEndpoint:
             serverRef: lab-artifacts
             endpointRef: ip-http

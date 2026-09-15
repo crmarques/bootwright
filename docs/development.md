@@ -140,6 +140,22 @@ and [network-service knowledge](../.agents/knowledge/managed-network-service-run
 An authored `spec.image` uses that reference instead, and any reference must
 resolve to an immutable digest.
 
+A realized Machine's emulated management controller runs the same way, pinned
+in `internal/substrate/libvirt/catalog.go`:
+
+| Role | Image | Qualified |
+| --- | --- | --- |
+| Emulated BMC | `quay.io/metal3-io/sushy-tools` (sushy-tools 2.2.1.dev14) | partial, 2026-09-15 |
+
+That qualification is deliberately marked partial. The image was resolved,
+pulled and started against session libvirt, which is what
+[emulated-BMC knowledge](../.agents/knowledge/sushy-tools-emulated-bmc.md)
+records, including the stock command the unit must not use. Its Redfish surface
+and `mkksiso` against RHEL 9.8 boot media are still unqualified, and both belong
+to the by-hand step
+[M1h](../specs/milestones.md#m1h--managed-rhel-on-emulated-bare-metal) schedules
+before a real-system acceptance.
+
 The embedded collection participates in the dependency-bundle identity, so a
 build that changes `ansible/` changes the bundle a context is bound to. Run
 `setup` again after such a build; `preflight controller`

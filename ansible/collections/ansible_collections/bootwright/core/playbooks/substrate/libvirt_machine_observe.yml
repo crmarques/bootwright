@@ -1,0 +1,13 @@
+---
+- name: Observe one virtual machine and its controller
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute the virtual machine observe capability
+      ansible.builtin.import_role:
+        name: bootwright.core.substrate_libvirt_machine
+        tasks_from: observe.yml

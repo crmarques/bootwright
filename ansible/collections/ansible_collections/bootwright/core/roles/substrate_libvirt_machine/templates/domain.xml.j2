@@ -1,0 +1,75 @@
+{#- One virtual machine, exactly as the frozen request declares it. The UUID
+    and every interface address are derived from the declaration, so one
+    declaration always realizes the same machine. The ownership metadata is what
+    makes this domain this context's to change and remove. -#}
+<domain type="kvm">
+  <name>{{ bootwright_substrate_machine_request.domain }}</name>
+  <uuid>{{ bootwright_substrate_machine_request.uuid }}</uuid>
+  <memory unit="MiB">{{ bootwright_substrate_machine_request.memoryMiB }}</memory>
+  <currentMemory unit="MiB">{{ bootwright_substrate_machine_request.memoryMiB }}</currentMemory>
+  <vcpu placement="static">{{ bootwright_substrate_machine_request.vcpu }}</vcpu>
+  <os>
+    <type arch="x86_64" machine="q35">hvm</type>
+    <boot dev="hd"/>
+    <bootmenu enable="no"/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+  <cpu mode="host-passthrough" check="none"/>
+  <clock offset="utc"/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+{% for disk in bootwright_substrate_machine_request.disks %}
+    <disk type="file" device="disk">
+      <driver name="qemu" type="qcow2" discard="unmap"/>
+      <source file="{{ disk.path }}"/>
+      <target dev="{{ disk.target }}" bus="virtio"/>
+    </disk>
+{% endfor %}
+    <disk type="file" device="cdrom">
+      <driver name="qemu" type="raw"/>
+      <target dev="sda" bus="sata"/>
+      <readonly/>
+    </disk>
+{% for interface in bootwright_substrate_machine_request.interfaces %}
+    <interface type="bridge">
+      <mac address="{{ interface.macAddress }}"/>
+      <source bridge="{{ interface.bridge }}"/>
+      <model type="virtio"/>
+    </interface>
+{% endfor %}
+{% if bootwright_substrate_machine_request.tpm %}
+    <tpm model="tpm-crb">
+      <backend type="emulator" version="2.0"/>
+    </tpm>
+{% endif %}
+    <channel type="unix">
+      <target type="virtio" name="org.qemu.guest_agent.0"/>
+    </channel>
+    <serial type="pty">
+      <target type="isa-serial" port="0"/>
+    </serial>
+    <console type="pty">
+      <target type="serial" port="0"/>
+    </console>
+    <graphics type="vnc" port="-1" autoport="yes" listen="127.0.0.1"/>
+    <video>
+      <model type="virtio"/>
+    </video>
+    <memballoon model="virtio"/>
+    <rng model="virtio">
+      <backend model="random">/dev/urandom</backend>
+    </rng>
+  </devices>
+  <metadata>
+    <bw:owner xmlns:bw="https://bootwright.io/substrate/v1">
+      <bw:context>{{ bootwright_substrate_machine_request.identity.context }}</bw:context>
+      <bw:machine>{{ bootwright_substrate_machine_request.identity.object }}</bw:machine>
+    </bw:owner>
+  </metadata>
+</domain>

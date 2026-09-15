@@ -1,0 +1,13 @@
+---
+- name: Realize one managed operating system
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute the managed operating system apply capability
+      ansible.builtin.import_role:
+        name: bootwright.core.managedos_install_anaconda
+        tasks_from: apply.yml

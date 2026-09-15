@@ -1,0 +1,36 @@
+---
+# The machine is booted through its own management controller over Redfish,
+# never through the hypervisor, so this path is the same one a physical server
+# takes. A request is not evidence: every step polls its own outcome.
+- name: Prove the machine is powered off before inserting anything
+  bootwright.core.redfish_boot:
+    endpoint: '{{ bootwright_os_install_request.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
+    operation: power-off
+  no_log: true
+
+- name: Insert the published installer image as virtual media
+  bootwright.core.redfish_boot:
+    endpoint: '{{ bootwright_os_install_request.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
+    operation: insert
+    image: '{{ bootwright_os_install_request.image.url }}'
+  no_log: true
+
+- name: Set a one-time boot from that media
+  bootwright.core.redfish_boot:
+    endpoint: '{{ bootwright_os_install_request.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
+    operation: boot
+  no_log: true
+
+- name: Power the machine on and poll it to running
+  bootwright.core.redfish_boot:
+    endpoint: '{{ bootwright_os_install_request.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
+    operation: power-on
+  no_log: true

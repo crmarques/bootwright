@@ -1,0 +1,20 @@
+---
+# Derived from the frozen request only. Nothing here is authored by desired
+# state, and no value selects an executable, a role or a task file.
+substrate_libvirt_host_definitions: /run/bootwright-substrate
+substrate_libvirt_host_managed: >-
+  {{ bootwright_substrate_host_request.networks | selectattr('managed') | list }}
+# The managed networks that were not already active and owned before this
+# attempt. Their count is what makes an apply changed rather than a replay.
+substrate_libvirt_host_incomplete_networks: >-
+  {{ substrate_libvirt_host_before.observation.networks
+     | selectattr('managed')
+     | rejectattr('state', 'equalto', 'active')
+     | list }}
+# The managed networks this context actually owns on the host right now. A
+# removal touches exactly these, never a foreign network of the same name.
+substrate_libvirt_host_owned_networks: >-
+  {{ substrate_libvirt_host_before.observation.networks
+     | selectattr('managed')
+     | selectattr('owned')
+     | list }}

@@ -45,5 +45,5 @@ The Redfish surface itself was not exercised: the `Systems` collection, the
 and the bcrypt basic-authentication file all remain for the by-hand
 qualification [M1h](../../specs/milestones.md#m1h--managed-rhel-on-emulated-bare-metal)
 schedules before the `substrate_libvirt_machine` role is written. `mkksiso`
-against RHEL 9.7 boot media is unqualified for the same reason: the media is
+against RHEL 9.8 boot media is unqualified for the same reason: the media is
 subscription content this repository does not carry.

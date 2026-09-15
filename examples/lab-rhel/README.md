@@ -4,7 +4,7 @@ This example is the complete shape the
 [M1h delivery](../../specs/milestones.md#m1h--managed-rhel-on-emulated-bare-metal)
 targets: one OS-ready Machine that is the Bootwright controller, the host of
 every managed infrastructure service, and the libvirt provider host for one
-guest whose RHEL 9.7 Bootwright installs through an emulated Redfish BMC. It
+guest whose RHEL 9.8 Bootwright installs through an emulated Redfish BMC. It
 exercises the `controller`, `infra-components`, `substrates` and `machines`
 stages, including plans, leases, operation records, secret binding, host
 reservations, readiness evidence and the inverse.
@@ -19,21 +19,22 @@ reservations, readiness evidence and the inverse.
 | [`lab-libvirt`](infra/providers/lab-libvirt.yaml) | The libvirt provider hosted on the controller: the guest profile, the managed guest network and the emulated BMC range starting at `8000`. |
 | [`lab-guests`](infra/networkconfigs/lab-guests.yaml) | The guest network: `198.51.100.0/24` with its static interface, search domain and default route. |
 | [`rhel-01`](infra/machines/rhel-01.yaml) | The Bootwright-installed guest; it authors no access, because the fleet account is derived. |
-| [`rhel-9-7-boot`](infra/os/rhel-9-7-boot.yaml) | The Anaconda boot media, named in the host-wide media store. |
-| [`rhel-9-7`](infra/os/rhel-9-7.yaml) | The install profile: hosted-tree packages from the DVD media, no subscription, no initial password and no disk encryption, so the served ISO carries no secret. |
+| [`rhel-9-8-boot`](infra/os/rhel-9-8-boot.yaml) | The Anaconda boot media, named in the host-wide media store. |
+| [`rhel-9-8`](infra/os/rhel-9-8.yaml) | The install profile: hosted-tree packages from the DVD media, no subscription, no initial password and no disk encryption, so the served ISO carries no secret. |
 | [`artifact-server-tls`](secret-descriptors/artifact-server-tls.yaml) | Generated serving certificate; its subject alternative names must cover every address an HTTPS endpoint serves. |
 | [`lab-bmc-credentials`](secret-descriptors/lab-bmc-credentials.yaml) | Generated credentials the emulated BMCs answer with. |
 | [`bootwright-machine-key`](secret-descriptors/bootwright-machine-key.yaml) | The fleet key installed for the `bootwright` account on every Machine this graph installs. |
 
-## What this build refuses
+## Before the first real run
 
-The `substrates` and `machines` stages of this example need the substrate and
-managed-OS capabilities. Until they are in the executable, every `plan` and
-`apply` of this context refuses and names `InfraProvider/lab-libvirt` and
-`Machine/rhel-01`, whatever stage is selected, rather than applying the
-services and leaving the rest silently undone. Everything up to `preflight`,
-including the media store, works today; the journey below is the complete one
-the delivery targets.
+This build realizes every object the example declares, and its plan orders the
+controller stage, the four services, the provider host, the machine and its
+installation in that dependency order. Every in-tree test is unitary, though:
+none of them creates a container, a network or a guest. Two things are still
+qualified by hand before a first real run, and both are recorded in
+[emulated-BMC knowledge](../../.agents/knowledge/sushy-tools-emulated-bmc.md):
+the Redfish surface of the pinned sushy-tools image, and `mkksiso` against the
+RHEL 9.8 boot media. Expect to correct something the first time through.
 
 ## Lab conventions
 
@@ -89,8 +90,8 @@ image once, under the exact name the `MachineImage` and the install profile
 select:
 
 ```sh
-./bin/bootwright media add --name rhel-9.7-x86_64-boot.iso --from-file /path/to/rhel-9.7-x86_64-boot.iso
-./bin/bootwright media add --name rhel-9.7-x86_64-dvd.iso --from-file /path/to/rhel-9.7-x86_64-dvd.iso
+./bin/bootwright media add --name rhel-9.8-x86_64-boot.iso --from-file /path/to/rhel-9.8-x86_64-boot.iso
+./bin/bootwright media add --name rhel-9.8-x86_64-dvd.iso --from-file /path/to/rhel-9.8-x86_64-dvd.iso
 ./bin/bootwright media list --checksums
 ```
 

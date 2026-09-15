@@ -1,0 +1,31 @@
+---
+# Derived from the frozen request only. Nothing here is authored by desired
+# state, and no value selects an executable, a role or a task file.
+managedos_install_anaconda_work: /var/tmp/bootwright-install
+managedos_install_anaconda_media: /var/lib/bootwright/media
+managedos_install_anaconda_tooling:
+  - lorax
+  - xorriso
+managedos_install_anaconda_boot_media: >-
+  {{ managedos_install_anaconda_media }}/{{ bootwright_os_install_request.bootMedia.name }}
+managedos_install_anaconda_tree_media: >-
+  {{ managedos_install_anaconda_media }}/{{ bootwright_os_install_request.treeMedia.name | default('') }}
+managedos_install_anaconda_image_dir: '{{ bootwright_os_install_request.image.path | dirname }}'
+managedos_install_anaconda_staged_tree: >-
+  {{ bootwright_os_install_request.tree.path | default('/dev/null') }}.staging
+# Every store entry this installation reads, so each is proved present before
+# the first attempt to use one.
+managedos_install_anaconda_required_media: >-
+  {{ [managedos_install_anaconda_boot_media] + ([managedos_install_anaconda_tree_media]
+     if bootwright_os_install_request.treeMedia is defined else []) }}
+# A guest that already holds exactly the marker this operation froze is
+# installed: the attempt boots nothing and reports the same evidence.
+managedos_install_anaconda_installed: >-
+  {{ managedos_install_anaconda_existing.answered | default(false)
+     and managedos_install_anaconda_existing.content | default('') | trim
+         == bootwright_os_install_material.marker }}
+# A hosted tree is extracted and published only when the profile uses one and
+# this installation has not published it yet.
+managedos_install_anaconda_publish_tree: >-
+  {{ bootwright_os_install_request.tree is defined
+     and not managedos_install_anaconda_before.observation.tree }}

@@ -1,0 +1,59 @@
+---
+- name: Validate the frozen installation request
+  ansible.builtin.assert:
+    that:
+      - bootwright_os_install_request.version == 'os-install-anaconda-v1'
+      - bootwright_os_install_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.managedos_install_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Observe what this installation publishes
+  bootwright.core.managedos_install_inspect:
+    request: '{{ bootwright_os_install_request }}'
+  register: managedos_install_anaconda_observed
+
+- name: Read the install marker through the identity operation
+  bootwright.core.guest_agent_read:
+    uri: '{{ bootwright_os_install_request.uri }}'
+    domain: '{{ bootwright_os_install_request.domain }}'
+    path: '{{ bootwright_os_install_request.markerPath }}'
+  register: managedos_install_anaconda_marker
+
+- name: Read the guest's own host key when it answers
+  bootwright.core.guest_agent_read:
+    uri: '{{ bootwright_os_install_request.uri }}'
+    domain: '{{ bootwright_os_install_request.domain }}'
+    path: /etc/ssh/ssh_host_ed25519_key.pub
+  register: managedos_install_anaconda_host_key
+
+- name: Read the power state and media its controller reports
+  bootwright.core.redfish_boot:
+    endpoint: '{{ bootwright_os_install_request.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
+    operation: read
+  register: managedos_install_anaconda_controller
+  failed_when: false
+  no_log: true
+
+- name: Publish bounded installation observation evidence
+  bootwright.core.managedos_install_protocol:
+    phase: completed
+    outcome: unchanged
+    digest: '{{ bootwright_os_install_digest }}'
+    observation: '{{ managedos_install_anaconda_observed.observation }}'
+    marker: '{{ managedos_install_anaconda_marker.content | trim }}'
+    hostKey: '{{ managedos_install_anaconda_host_key.content | trim }}'
+    address: '{{ bootwright_os_install_request.address }}'
+    media: '{{ managedos_install_anaconda_controller.media | default("") }}'
+    power: '{{ managedos_install_anaconda_controller.power | default("") }}'
+    removed: >-
+      {{ not managedos_install_anaconda_observed.observation.image
+         and not managedos_install_anaconda_observed.observation.tree
+         and managedos_install_anaconda_marker.content | trim | length == 0 }}
+  no_log: true

@@ -1,0 +1,241 @@
+package libvirt
+
+import (
+	"bytes"
+	"encoding/json"
+	"slices"
+	"strings"
+)
+
+const maxEvidenceBytes = 64 << 10
+
+// HostEvidence is the only result shape the provider host adapter may return.
+// Go validates it strictly, so an adapter cannot widen a postcondition or
+// report a network the operation did not freeze.
+type HostEvidence struct {
+	Absent        bool              `json:"absent"`
+	Hypervisor    bool              `json:"hypervisor"`
+	Networks      []NetworkEvidence `json:"networks"`
+	Pool          string            `json:"pool"`
+	Postcondition bool              `json:"postcondition"`
+	Request       string            `json:"request"`
+	Service       string            `json:"service"`
+	URI           bool              `json:"uri"`
+}
+
+type NetworkEvidence struct {
+	Bridge  bool   `json:"bridge"`
+	Managed bool   `json:"managed"`
+	Name    string `json:"name"`
+	Owned   bool   `json:"owned"`
+	State   string `json:"state"`
+}
+
+// MachineEvidence is the only result shape the machine adapter may return. It
+// proves the domain, its disks, the controller unit and the controller's own
+// answer; a power state it did not read is empty, never assumed.
+type MachineEvidence struct {
+	Absent        bool           `json:"absent"`
+	Controller    string         `json:"controller"`
+	Disks         []DiskEvidence `json:"disks"`
+	Domain        string         `json:"domain"`
+	Owned         bool           `json:"owned"`
+	Postcondition bool           `json:"postcondition"`
+	Power         string         `json:"power"`
+	Request       string         `json:"request"`
+	System        string         `json:"system"`
+	Unit          string         `json:"unit"`
+}
+
+type DiskEvidence struct {
+	Name    string `json:"name"`
+	Present bool   `json:"present"`
+	SizeGiB int    `json:"sizeGiB"`
+}
+
+// ValidateHostPresence accepts evidence only when it proves the exact frozen
+// request is realized: the closure present, the daemon active, the declared URI
+// answering, every managed network owned and active, every external bridge
+// present, and the pool active.
+func ValidateHostPresence(data []byte, request HostRequest, digest string) error {
+	evidence, err := decodeHostEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if !evidence.Postcondition || evidence.Absent {
+		return refusal("lifecycle.state", "the provider host adapter did not prove its postcondition", "")
+	}
+	if !evidence.Hypervisor {
+		return refusal("lifecycle.state", "the provider host does not carry the hypervisor closure", "")
+	}
+	if evidence.Service != "active" {
+		return refusal("lifecycle.state", "the provider host virtualization daemon is not active", "")
+	}
+	if !evidence.URI {
+		return refusal("lifecycle.state", "the declared libvirt connection does not answer", "")
+	}
+	if evidence.Pool != "active" {
+		return refusal("lifecycle.state", "the provider's virtual-media pool is not active", "")
+	}
+	return matchNetworks(evidence.Networks, request.Networks)
+}
+
+func matchNetworks(observed []NetworkEvidence, frozen []Network) error {
+	if len(observed) != len(frozen) {
+		return refusal("lifecycle.state", "the provider host evidence does not cover every declared network", "")
+	}
+	sorted := slices.Clone(observed)
+	slices.SortFunc(sorted, func(x, y NetworkEvidence) int { return strings.Compare(x.Name, y.Name) })
+	for index, network := range frozen {
+		entry := sorted[index]
+		if entry.Name != network.Name || entry.Managed != network.Managed {
+			return refusal("lifecycle.state", "the provider host evidence does not match its frozen networks", "")
+		}
+		if !entry.Bridge {
+			return refusal("lifecycle.state", "a declared network bridge is not present on the provider host", "")
+		}
+		if !network.Managed {
+			continue
+		}
+		if entry.State != "active" {
+			return refusal("lifecycle.state", "a managed libvirt network is not active", "")
+		}
+		if !entry.Owned {
+			return refusal("lifecycle.state", "a managed libvirt network does not carry this context's ownership", "")
+		}
+	}
+	return nil
+}
+
+// ValidateHostAbsence accepts evidence only when it positively proves that
+// every owned network and the pool are gone. Packages, foreign networks and
+// external bridges are never this block's to remove, so it reports nothing
+// about them.
+func ValidateHostAbsence(data []byte, digest string) error {
+	evidence, err := decodeHostEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if !evidence.Postcondition || !evidence.Absent {
+		return refusal("lifecycle.state", "the provider host adapter did not prove removal", "")
+	}
+	if evidence.Pool != "" {
+		return refusal("lifecycle.state", "the provider host removal evidence still reports its pool", "")
+	}
+	for _, network := range evidence.Networks {
+		if network.Managed {
+			return refusal("lifecycle.state", "the provider host removal evidence still reports a managed network", "")
+		}
+	}
+	return nil
+}
+
+// ValidateMachinePresence accepts evidence only when it proves the frozen
+// domain is defined and owned, every disk is present at its frozen size, the
+// controller unit runs the pinned image and its ComputerSystem answers.
+func ValidateMachinePresence(data []byte, request MachineRequest, digest string) error {
+	evidence, err := decodeMachineEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if !evidence.Postcondition || evidence.Absent {
+		return refusal("lifecycle.state", "the machine adapter did not prove its postcondition", "")
+	}
+	if evidence.Domain != request.Domain {
+		return refusal("lifecycle.state", "the machine evidence names another domain", "")
+	}
+	if !evidence.Owned {
+		return refusal("lifecycle.state", "the realized domain does not carry this context's ownership", "")
+	}
+	if evidence.Unit != "active" {
+		return refusal("lifecycle.state", "the machine's management controller unit is not active", "")
+	}
+	if evidence.Controller != request.Controller.Image {
+		return refusal("lifecycle.state", "the running management controller is not the frozen image", "")
+	}
+	if evidence.System != request.UUID {
+		return refusal("lifecycle.state", "the management controller does not expose this machine's system", "")
+	}
+	if evidence.Power == "" {
+		return refusal("lifecycle.state", "the management controller reported no power state", "")
+	}
+	return matchDisks(evidence.Disks, request.Disks)
+}
+
+func matchDisks(observed []DiskEvidence, frozen []Disk) error {
+	if len(observed) != len(frozen) {
+		return refusal("lifecycle.state", "the machine evidence does not cover every frozen disk", "")
+	}
+	sorted := slices.Clone(observed)
+	slices.SortFunc(sorted, func(x, y DiskEvidence) int { return strings.Compare(x.Name, y.Name) })
+	expected := slices.Clone(frozen)
+	slices.SortFunc(expected, func(x, y Disk) int { return strings.Compare(x.Name, y.Name) })
+	for index, disk := range expected {
+		entry := sorted[index]
+		if entry.Name != disk.Name || !entry.Present {
+			return refusal("lifecycle.state", "a frozen machine disk is missing", "")
+		}
+		if entry.SizeGiB != disk.SizeGiB {
+			return refusal("lifecycle.state", "a machine disk is not the size the profile froze", "")
+		}
+	}
+	return nil
+}
+
+// ValidateMachineAbsence accepts evidence only when it positively proves the
+// domain, its disks and the controller are gone.
+func ValidateMachineAbsence(data []byte, digest string) error {
+	evidence, err := decodeMachineEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if !evidence.Postcondition || !evidence.Absent {
+		return refusal("lifecycle.state", "the machine adapter did not prove removal", "")
+	}
+	if evidence.Domain != "" || evidence.Unit != "" || evidence.Controller != "" || evidence.System != "" || evidence.Power != "" {
+		return refusal("lifecycle.state", "the machine removal evidence still reports an owned resource", "")
+	}
+	for _, disk := range evidence.Disks {
+		if disk.Present {
+			return refusal("lifecycle.state", "the machine removal evidence still reports a disk", "")
+		}
+	}
+	return nil
+}
+
+func decodeHostEvidence(data []byte, digest string) (HostEvidence, error) {
+	var evidence HostEvidence
+	if err := decodeEvidence(data, &evidence, "provider host"); err != nil {
+		return HostEvidence{}, err
+	}
+	if evidence.Request != digest {
+		return HostEvidence{}, refusal("lifecycle.state", "the provider host evidence names another request", "")
+	}
+	return evidence, nil
+}
+
+func decodeMachineEvidence(data []byte, digest string) (MachineEvidence, error) {
+	var evidence MachineEvidence
+	if err := decodeEvidence(data, &evidence, "machine"); err != nil {
+		return MachineEvidence{}, err
+	}
+	if evidence.Request != digest {
+		return MachineEvidence{}, refusal("lifecycle.state", "the machine evidence names another request", "")
+	}
+	return evidence, nil
+}
+
+func decodeEvidence(data []byte, target any, subject string) error {
+	if len(data) == 0 || len(data) > maxEvidenceBytes {
+		return refusal("lifecycle.state", "the "+subject+" adapter returned no bounded evidence", "")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return refusal("lifecycle.state", "the "+subject+" adapter returned malformed evidence", "")
+	}
+	if decoder.More() {
+		return refusal("lifecycle.state", "the "+subject+" adapter returned trailing evidence", "")
+	}
+	return nil
+}

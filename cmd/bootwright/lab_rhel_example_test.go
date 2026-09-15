@@ -22,8 +22,10 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/inputfs"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 )
 
 const labExampleFiles = 14
@@ -105,7 +107,7 @@ func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.
 	}{
 		{api.Machine, "controller"}, {api.Machine, "rhel-01"},
 		{api.InfraProvider, "lab-libvirt"}, {api.NetworkConfig, "lab-guests"},
-		{api.MachineImage, "rhel-9-7-boot"}, {api.MachineInstallProfile, "rhel-9-7"},
+		{api.MachineImage, "rhel-9-8-boot"}, {api.MachineInstallProfile, "rhel-9-8"},
 		{api.Proxy, "lab-proxy"}, {api.DNSServer, "lab-dns"},
 		{api.NTPServer, "lab-ntp"}, {api.ArtifactServer, "lab-artifacts"},
 	} {
@@ -133,8 +135,8 @@ func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.
 	if access.Get("user").Text() != "bootwright" || access.Get("auth", "privateKeyRef").Text() != "bootwright-machine-key" {
 		t.Fatal("the installed guest did not derive the fleet account", access)
 	}
-	anaconda := requireObject(t, effective, api.MachineInstallProfile, "rhel-9-7").Spec().Get("installer", "anaconda")
-	if anaconda.Get("imageRef").Text() != "rhel-9-7-boot" || !anaconda.Has("packageSource", "hostedTree") || anaconda.Has("packageSource", "fromSubscription") {
+	anaconda := requireObject(t, effective, api.MachineInstallProfile, "rhel-9-8").Spec().Get("installer", "anaconda")
+	if anaconda.Get("imageRef").Text() != "rhel-9-8-boot" || !anaconda.Has("packageSource", "hostedTree") || anaconda.Has("packageSource", "fromSubscription") {
 		t.Fatal("the install profile is not the secret-free hosted-tree shape", anaconda)
 	}
 	for _, service := range []struct {
@@ -148,28 +150,26 @@ func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.
 	}
 }
 
-// The substrate and managed-OS capabilities are not in this build yet, so an
-// operation must name the provider and the guest it cannot realize rather than
-// apply the services and leave the rest silently undone.
-func TestLabRHELExampleNamesTheKindsThisBuildCannotRealize(t *testing.T) {
+// This build realizes every object the example declares, so nothing in it
+// refuses before registration: neither a kind no capability claims nor an arm
+// a capability cannot prove.
+func TestLabRHELExampleIsRealizableInFull(t *testing.T) {
 	state, _ := compileAcceptance(t, labExampleSources(t))
 	resolver := buildCapabilities(systemClock{}, localControllerDependencies(nil, processDependencies{}))
-	unsupported := lifecycle.Unrealizable(state.Effective(), claimedKinds(resolver))
-	if !slices.Equal(unsupported, []string{"InfraProvider/lab-libvirt", "Machine/rhel-01"}) {
-		t.Fatalf("unsupported = %v", unsupported)
+	if unsupported := lifecycle.Unrealizable(state.Effective(), claimedKinds(resolver)); len(unsupported) != 0 {
+		t.Fatalf("the example declares objects no capability claims: %v", unsupported)
 	}
-	for _, realizable := range []string{
-		"ArtifactServer/lab-artifacts", "DNSServer/lab-dns", "NTPServer/lab-ntp", "Proxy/lab-proxy",
-	} {
-		if slices.Contains(unsupported, realizable) {
-			t.Fatalf("%s was reported unsupported", realizable)
+	for _, capability := range []lifecycle.UnsupportedReporter{libvirt.NewHost(nil), installation.New(nil)} {
+		if unsupported := capability.Unsupported(state); len(unsupported) != 0 {
+			t.Fatalf("a capability cannot realize %v", unsupported)
 		}
 	}
 }
 
 // Each capability must derive a complete frozen request from the example
-// alone, because that request is what an operator's apply would freeze.
-func TestLabRHELExamplePlansOneBlockPerService(t *testing.T) {
+// alone, because that request is what an operator's apply would freeze, and
+// the whole set must order into one plan.
+func TestLabRHELExamplePlansTheWholeGraph(t *testing.T) {
 	state, _ := compileAcceptance(t, labExampleSources(t))
 	resolver := buildCapabilities(systemClock{}, localControllerDependencies(nil, processDependencies{}))
 	input := lifecycle.PlanInput{
@@ -206,11 +206,26 @@ func TestLabRHELExamplePlansOneBlockPerService(t *testing.T) {
 			t.Fatalf("%s consumes authorization %v for an apply that destroys nothing", block.ID, block.Consumes)
 		}
 	}
-	slices.Sort(blocks)
-	if !slices.Equal(blocks, []string{
-		"artifact-server-lab-artifacts", clients.BlockID, "dns-lab-dns", "ntp-lab-ntp", "proxy-lab-proxy",
+	ordered := slices.Clone(blocks)
+	slices.Sort(ordered)
+	if !slices.Equal(ordered, []string{
+		"artifact-server-lab-artifacts", clients.BlockID, "dns-lab-dns", "machine-rhel-01",
+		"ntp-lab-ntp", "os-install-rhel-01", "proxy-lab-proxy", "substrate-host-lab-libvirt",
 	}) {
 		t.Fatalf("blocks = %v", blocks)
+	}
+	// The plan's order is what makes it runnable: each block resolves after
+	// every block that realizes what it requires.
+	for _, pair := range [][2]string{
+		{"substrate-host-lab-libvirt", "machine-rhel-01"},
+		{"machine-rhel-01", "os-install-rhel-01"},
+		{"artifact-server-lab-artifacts", "os-install-rhel-01"},
+		{"dns-lab-dns", "os-install-rhel-01"},
+		{"ntp-lab-ntp", "os-install-rhel-01"},
+	} {
+		if slices.Index(blocks, pair[0]) > slices.Index(blocks, pair[1]) {
+			t.Fatalf("%s is ordered after %s: %v", pair[0], pair[1], blocks)
+		}
 	}
 	for service, want := range map[string][]string{
 		"lab-proxy":     {"socket:192.0.2.1:3128"},
