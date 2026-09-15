@@ -86,6 +86,7 @@ type MachineRequest struct {
 	Interfaces []Interface         `json:"interfaces"`
 	MemoryMiB  int                 `json:"memoryMiB"`
 	Placement  lifecycle.Placement `json:"placement"`
+	PoolName   string              `json:"poolName"`
 	PoolPath   string              `json:"poolPath"`
 	TPM        bool                `json:"tpm"`
 	URI        string              `json:"uri"`

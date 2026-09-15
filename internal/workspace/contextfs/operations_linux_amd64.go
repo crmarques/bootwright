@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
@@ -37,6 +38,14 @@ func safeOperationName(name string) bool {
 		}
 	}
 	return strings.Count(name, ".") <= 1
+}
+
+// unsafeEntry names the exact entry that would not open as this store's own,
+// because every lifecycle write measures the whole subtree first: without the
+// path, one foreign entry anywhere refuses every later operation and says only
+// that something, somewhere, is unsafe.
+func unsafeEntry(parent *directory, name string) error {
+	return state("lifecycle operation entry is not this store's own: " + filepath.Join(parent.path, name))
 }
 
 func operationPath(target string, minimum int) ([]string, error) {
@@ -126,7 +135,7 @@ func (a *operationArea) descend(ctx context.Context, parts []string, create bool
 			if errors.Is(err, syscall.ENOENT) {
 				return nil, "", nil, err
 			}
-			return nil, "", nil, state("lifecycle operation directory is unsafe")
+			return nil, "", nil, unsafeEntry(parent, part)
 		}
 		closers = append(closers, func() { child.file.Close() })
 		parent = child
@@ -190,20 +199,20 @@ func (a *operationArea) Entries(ctx context.Context, target string) ([]operation
 	entries := make([]operationstore.Entry, 0, len(names))
 	for _, name := range names {
 		if !safeOperationName(name) {
-			return nil, state("lifecycle operations contain an unsupported entry")
+			return nil, unsafeEntry(parent, name)
 		}
 		file, err := openRelative(parent, name, pathHandle, 0)
 		if err != nil {
-			return nil, state("lifecycle operation entry is unsafe")
+			return nil, unsafeEntry(parent, name)
 		}
 		stat, err := statHandle(file)
 		file.Close()
 		if err != nil {
-			return nil, state("lifecycle operation entry is unsafe")
+			return nil, unsafeEntry(parent, name)
 		}
 		directory := stat.Mode&syscall.S_IFMT == syscall.S_IFDIR
 		if !directory && stat.Mode&syscall.S_IFMT != syscall.S_IFREG {
-			return nil, state("lifecycle operations contain a special file")
+			return nil, unsafeEntry(parent, name)
 		}
 		entries = append(entries, operationstore.Entry{Name: name, Directory: directory, Size: stat.Size})
 	}
@@ -235,7 +244,7 @@ func (a *operationArea) directory(ctx context.Context, parts []string, create bo
 			if errors.Is(err, syscall.ENOENT) {
 				return nil, nil, err
 			}
-			return nil, nil, state("lifecycle operation directory is unsafe")
+			return nil, nil, unsafeEntry(parent, part)
 		}
 		closers = append(closers, func() { child.file.Close() })
 		parent = child
@@ -455,17 +464,17 @@ func (a *operationArea) scan(ctx context.Context, dir *directory, depth int) (in
 		entries++
 		child, err := openRelative(dir, name, pathHandle, 0)
 		if err != nil {
-			return 0, 0, state("lifecycle operation entry is unsafe")
+			return 0, 0, unsafeEntry(dir, name)
 		}
 		stat, statErr := statHandle(child)
 		child.Close()
 		if statErr != nil {
-			return 0, 0, state("lifecycle operation entry is unsafe")
+			return 0, 0, unsafeEntry(dir, name)
 		}
 		if stat.Mode&syscall.S_IFMT == syscall.S_IFDIR {
 			nested, err := openDirectory(dir, name)
 			if err != nil {
-				return 0, 0, state("lifecycle operation directory is unsafe")
+				return 0, 0, unsafeEntry(dir, name)
 			}
 			childEntries, childBytes, err := a.scan(ctx, nested, depth+1)
 			nested.file.Close()

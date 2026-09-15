@@ -222,7 +222,7 @@ func (c HostCapability) mutate(ctx context.Context, execution lifecycle.Executio
 	}
 	result, err := c.run(ctx, execution, operation, request)
 	if err != nil {
-		return unknown, err
+		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
 	outcome, err := usableOutcome(result, "provider host")
 	if err != nil {
@@ -298,7 +298,7 @@ func (c MachineCapability) mutate(ctx context.Context, execution lifecycle.Execu
 	}
 	result, err := c.run(ctx, execution, operation, request)
 	if err != nil {
-		return unknown, err
+		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
 	outcome, err := usableOutcome(result, "machine")
 	if err != nil {

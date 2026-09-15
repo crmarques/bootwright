@@ -148,13 +148,30 @@
     mode: '0600'
   register: substrate_libvirt_machine_configuration
 
-- name: Derive the controller's password hash without exposing the password
+
+- name: Acquire the pinned controller image
   ansible.builtin.command:
     argv:
-      - /usr/bin/openssl
-      - passwd
-      - -6
-      - -stdin
+      - /usr/bin/podman
+      - pull
+      - '{{ bootwright_substrate_machine_request.controller.image }}'
+  register: substrate_libvirt_machine_pull
+  when: substrate_libvirt_machine_before.observation.controller | length == 0
+  changed_when: substrate_libvirt_machine_before.observation.controller | length == 0
+
+- name: Derive the controller's password hash with the emulator's own bcrypt
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - run
+      - --rm
+      - --interactive
+      - --network=none
+      - --entrypoint
+      - python3
+      - '{{ bootwright_substrate_machine_request.controller.image }}'
+      - -c
+      - 'import bcrypt, sys; print(bcrypt.hashpw(sys.stdin.buffer.read().strip(), bcrypt.gensalt()).decode())'
     stdin: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerPassword) }}'
   register: substrate_libvirt_machine_hash
   changed_when: false
@@ -171,16 +188,6 @@
     mode: '0600'
   register: substrate_libvirt_machine_credentials
   no_log: true
-
-- name: Acquire the pinned controller image
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/podman
-      - pull
-      - '{{ bootwright_substrate_machine_request.controller.image }}'
-  register: substrate_libvirt_machine_pull
-  when: substrate_libvirt_machine_before.observation.controller | length == 0
-  changed_when: substrate_libvirt_machine_before.observation.controller | length == 0
 
 - name: Publish the controller unit definition
   ansible.builtin.template:

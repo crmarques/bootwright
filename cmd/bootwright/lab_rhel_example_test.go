@@ -67,6 +67,30 @@ func copySources(t *testing.T, sources desiredstate.Sources, destination string)
 	}
 }
 
+// requireCanonicalReservations repeats the store's own canonical rule over the
+// claims every capability together contributes. The store identifies a claim by
+// its context, kind and service and refuses a repeated identity at
+// registration, so two capabilities claiming one kind and service — or one
+// capability emitting a claim per key — refuses the whole apply before any
+// effect. No single capability's own tests can see that.
+func requireCanonicalReservations(t *testing.T, claims []prerequisites.HostReservation) {
+	t.Helper()
+	seen := map[string]bool{}
+	for _, claim := range claims {
+		identity := claim.Context + "/" + claim.Kind + "/" + claim.Service
+		if seen[identity] {
+			t.Fatalf("two reservations share the identity %q", identity)
+		}
+		seen[identity] = true
+		if !slices.IsSorted(claim.Keys) || len(slices.Compact(slices.Clone(claim.Keys))) != len(claim.Keys) {
+			t.Fatalf("%s reserved unordered or repeated keys: %v", identity, claim.Keys)
+		}
+		if len(claim.Keys) == 0 {
+			t.Fatalf("%s reserved nothing", identity)
+		}
+	}
+}
+
 func claimedKinds(resolver capabilityResolver) []string {
 	kinds := make([]string, 0, len(resolver))
 	for _, binding := range resolver.Bindings() {
@@ -177,6 +201,7 @@ func TestLabRHELExamplePlansTheWholeGraph(t *testing.T) {
 		Context: lifecycle.ContextIdentity{Name: "lab-rhel"},
 	}
 	var definitions []reconciliation.BlockDefinition
+	var claims []prerequisites.HostReservation
 	reservations := map[string][]string{}
 	for _, binding := range resolver.Bindings() {
 		capability, ok := resolver.Resolve(binding.Kind, binding.Implementation)
@@ -188,6 +213,7 @@ func TestLabRHELExamplePlansTheWholeGraph(t *testing.T) {
 			t.Fatalf("%s plan: %v", binding.Kind, err)
 		}
 		definitions = append(definitions, contribution.Definitions...)
+		claims = append(claims, contribution.Reservations...)
 		for _, reservation := range contribution.Reservations {
 			if reservation.Context != "lab-rhel" {
 				t.Fatalf("%s reserved for %q", binding.Kind, reservation.Context)
@@ -195,6 +221,7 @@ func TestLabRHELExamplePlansTheWholeGraph(t *testing.T) {
 			reservations[reservation.Service] = reservation.Keys
 		}
 	}
+	requireCanonicalReservations(t, claims)
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, definitions)
 	if err != nil {
 		t.Fatal("the example produced a block the plan model refuses:", err)

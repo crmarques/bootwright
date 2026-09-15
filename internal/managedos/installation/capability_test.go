@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -132,29 +133,56 @@ func TestPlanRequiresTheMachineAndEveryServiceItUses(t *testing.T) {
 	}
 }
 
-// Every store entry the installation names is frozen by a shared claim, which
-// blocks only deletion and replacement of what it names.
-func TestPlanFreezesEveryMediaEntryItNames(t *testing.T) {
+// Every store entry the installation names is frozen by one shared claim, which
+// blocks only deletion and replacement of what it names. A reservation is
+// identified by its context, kind and service, so the entries are keys of one
+// claim rather than a claim each: two of them would be a duplicate identity the
+// store refuses at registration.
+func TestPlanFreezesEveryMediaEntryUnderOneClaim(t *testing.T) {
 	plan, _ := New(nil).Plan(context.Background(), planInput(reconciliation.Apply))
-	var shared []string
+	var media []prerequisites.HostReservation
 	for _, reservation := range plan.Reservations {
-		if !reservation.Shared {
-			continue
+		if reservation.Shared {
+			media = append(media, reservation)
 		}
-		if reservation.Kind != "media" || reservation.Context != testContext {
-			t.Fatalf("media reservation = %+v", reservation)
-		}
-		shared = append(shared, reservation.Keys...)
+	}
+	if len(media) != 1 {
+		t.Fatalf("media claims = %+v", media)
+	}
+	if media[0].Kind != "media" || media[0].Service != "media" || media[0].Context != testContext {
+		t.Fatalf("media reservation = %+v", media[0])
 	}
 	want := []string{
 		managedos.MediaReservationKey("rhel-9.8-x86_64-boot.iso"),
 		managedos.MediaReservationKey("rhel-9.8-x86_64-dvd.iso"),
 	}
-	if !slices.Equal(shared, want) {
-		t.Fatalf("media claims = %v", shared)
+	if !slices.Equal(media[0].Keys, want) {
+		t.Fatalf("media claims = %v", media[0].Keys)
 	}
 	if !slices.Equal(plan.Secrets, []string{"bootwright-machine-key", "lab-bmc-credentials"}) {
 		t.Fatalf("secrets = %v", plan.Secrets)
+	}
+}
+
+// Two Machines installing from the same media still claim it once, because the
+// claim belongs to the context rather than to a Machine.
+func TestTwoInstallationsShareOneMediaClaim(t *testing.T) {
+	catalog := labCatalog(api.NewObject(api.Machine, "rhel-02", api.Value{}, guest().Spec()))
+	plan, err := New(nil).Plan(context.Background(), lifecycle.PlanInput{
+		Verb: reconciliation.Apply, State: compilation.NewState(catalog, catalog, nil),
+		Controller: "controller", Context: lifecycle.ContextIdentity{Name: testContext},
+	})
+	if err != nil || len(plan.Definitions) != 2 {
+		t.Fatalf("plan = %+v (%v)", plan, err)
+	}
+	claims := 0
+	for _, reservation := range plan.Reservations {
+		if reservation.Shared {
+			claims++
+		}
+	}
+	if claims != 1 {
+		t.Fatalf("two installations produced %d media claims", claims)
 	}
 }
 

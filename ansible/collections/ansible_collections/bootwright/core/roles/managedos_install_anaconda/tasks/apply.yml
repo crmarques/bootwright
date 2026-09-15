@@ -64,6 +64,15 @@
     mode: '0700'
   changed_when: false
 
+- name: Create the published tree's parent directory
+  ansible.builtin.file:
+    path: '{{ bootwright_os_install_request.tree.path | dirname }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: managedos_install_anaconda_publish_tree | bool
+
 - name: Extract the package tree beside its published location
   ansible.builtin.command:
     argv:
@@ -235,7 +244,7 @@
   delay: 15
   until: managedos_install_anaconda_host_key.answered and managedos_install_anaconda_host_key.content | trim | length > 0
 
-- name: Eject the virtual media the installation booted from
+- name: Prove the media is ejected and the installed system is running
   bootwright.core.redfish_boot:
     endpoint: '{{ bootwright_os_install_request.controller.endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'

@@ -30,7 +30,7 @@ func TestTheDerivedKickstartInstallsUnattended(t *testing.T) {
 	for _, line := range []string{
 		"text",
 		"eula --agreed",
-		"reboot",
+		"poweroff",
 		"url --url=http://192.0.2.1:8080/os/rhel-9-8/tree",
 		"lang en_US.UTF-8",
 		"keyboard --vckeymap=us",

@@ -23,7 +23,6 @@
   <on_reboot>restart</on_reboot>
   <on_crash>destroy</on_crash>
   <devices>
-    <emulator>/usr/bin/qemu-system-x86_64</emulator>
 {% for disk in bootwright_substrate_machine_request.disks %}
     <disk type="file" device="disk">
       <driver name="qemu" type="qcow2" discard="unmap"/>
@@ -31,11 +30,6 @@
       <target dev="{{ disk.target }}" bus="virtio"/>
     </disk>
 {% endfor %}
-    <disk type="file" device="cdrom">
-      <driver name="qemu" type="raw"/>
-      <target dev="sda" bus="sata"/>
-      <readonly/>
-    </disk>
 {% for interface in bootwright_substrate_machine_request.interfaces %}
     <interface type="bridge">
       <mac address="{{ interface.macAddress }}"/>

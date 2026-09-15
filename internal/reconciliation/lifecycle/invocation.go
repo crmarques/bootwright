@@ -7,6 +7,8 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
@@ -157,4 +159,28 @@ func MachineAddress(machine api.Object, reference string) (string, error) {
 		return value, nil
 	}
 	return "", failure("api.reference", "the address reference does not resolve on its Machine", "name an address declared on "+machine.Identity())
+}
+
+// AttemptOutcome maps an adapter failure to the outcome it justifies. The
+// runner separates a failure it diagnosed — the adapter exited within its
+// authorized boundary and said why, so a repeat is the capability's own
+// idempotent path — from one it cannot account for, such as a cancellation or
+// a lost result. Only a diagnosed failure that is not itself flagged unknown
+// leaves the block failed; anything else stays unknown, because a repeat could
+// race an effect still in flight.
+//
+// The distinction matters because nothing retries, destroys or deletes past an
+// unknown block: reporting every adapter failure that way strands the context
+// with no path forward.
+func AttemptOutcome(err error) reconciliation.Outcome {
+	reported := diagnostics.Of(err)
+	if len(reported) == 0 {
+		return reconciliation.OutcomeUnknown
+	}
+	for _, entry := range reported {
+		if entry.Code == "lifecycle.unknown" {
+			return reconciliation.OutcomeUnknown
+		}
+	}
+	return reconciliation.OutcomeFailed
 }

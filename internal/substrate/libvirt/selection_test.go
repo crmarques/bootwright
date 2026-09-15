@@ -121,6 +121,11 @@ func TestMachineRequestDerivesTheDomainDisksAndController(t *testing.T) {
 	if controller.Port != 8000 || controller.Address != "192.0.2.1" || controller.Unit != "bootwright-lab-bmc-rhel-01" {
 		t.Fatalf("controller = %+v", controller)
 	}
+	// The controller uploads inserted media into the provider's own pool, so
+	// the request names that pool as well as its path.
+	if request.PoolName != "bootwright-lab-lab-libvirt-vmedia" || request.PoolPath != "/var/lib/libvirt/images/bootwright/lab/lab-libvirt/vmedia" {
+		t.Fatalf("pool = %q at %q", request.PoolName, request.PoolPath)
+	}
 	if controller.Endpoint != "http://192.0.2.1:8000/redfish/v1/Systems/"+request.UUID {
 		t.Fatalf("endpoint = %q", controller.Endpoint)
 	}

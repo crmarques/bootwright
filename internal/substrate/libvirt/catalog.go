@@ -30,7 +30,10 @@ const emulatorImage = "quay.io/metal3-io/sushy-tools@sha256:f760343718e1175343f2
 
 // hypervisorPackages is the closure a libvirt provider host runs. It is the
 // same set the controller stage installs when the host is the controller.
-var hypervisorPackages = []string{"libvirt-client", "libvirt-daemon-driver-qemu", "libvirt-daemon-system", "qemu-img", "qemu-kvm", "swtpm"}
+var hypervisorPackages = []string{
+	"libvirt-client", "libvirt-daemon", "libvirt-daemon-driver-network", "libvirt-daemon-driver-qemu",
+	"libvirt-daemon-driver-storage-core", "qemu-img", "qemu-kvm", "swtpm", "swtpm-tools",
+}
 
 // HypervisorPackages is the closure a provider host needs, in canonical order.
 func HypervisorPackages() []string { return append([]string(nil), hypervisorPackages...) }

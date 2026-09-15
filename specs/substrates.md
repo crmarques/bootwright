@@ -61,8 +61,9 @@ declares `management: managed` becomes one persistent libvirt network named
 `bootwright-<context>-<attachment>`, owning the declared `bridge`, carrying the
 declared host address and prefix, forwarding as `forward` selects, with the
 built-in resolver and DHCP disabled so a managed `DNSServer` may bind the
-bridge address, and carrying ownership metadata naming the context and
-attachment. An `external` attachment is proved present as a link and never
+bridge address, placed in the host firewall's trusted zone so its guests reach
+the controller's managed services, and carrying ownership metadata naming the
+context and attachment. An `external` attachment is proved present as a link and never
 defined, changed or removed. A network that exists without this context's
 ownership metadata is foreign and refuses; an owned network whose definition
 differs from the frozen request is redefined.

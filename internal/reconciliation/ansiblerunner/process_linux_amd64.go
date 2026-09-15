@@ -19,7 +19,9 @@ import (
 )
 
 const (
-	invocationTimeout = 30 * time.Minute
+	// invocationTimeout covers the longest block this build runs: an unattended
+	// operating-system installation with its media extraction and image build.
+	invocationTimeout = 2 * time.Hour
 	resultDrain       = 5 * time.Second
 	maxVariableBytes  = 4 << 20
 )

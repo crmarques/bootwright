@@ -39,6 +39,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	}
 	plan := lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}
 	digest := ContentDigest()
+	var media []string
 	for index, request := range requests {
 		canonical, err := request.Canonical()
 		if err != nil {
@@ -58,13 +59,16 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			Request:        canonical,
 		})
 		plan.Secrets = append(plan.Secrets, request.SecretReferences()...)
-		plan.Reservations = append(plan.Reservations, mediaReservations(input.Context.Name, request)...)
+		media = append(media, request.MediaNames()...)
 		if !request.Placement.Local() {
 			continue
 		}
 		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
 			Context: input.Context.Name, Kind: "os-install", Service: request.Identity.Object, Keys: request.ReservationKeys(),
 		})
+	}
+	if claim, held := mediaReservation(input.Context.Name, media); held {
+		plan.Reservations = append(plan.Reservations, claim)
 	}
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)
@@ -87,18 +91,24 @@ func requires(needs Requirements) []reconciliation.ObjectRef {
 	return references
 }
 
-// mediaReservations freeze every store entry this installation names. The claim
-// is shared, so any number of contexts may hold it; it blocks only deletion and
-// replacement of what it names.
-func mediaReservations(contextName string, request Request) []prerequisites.HostReservation {
-	var reservations []prerequisites.HostReservation
-	for _, name := range request.MediaNames() {
-		reservations = append(reservations, prerequisites.HostReservation{
-			Context: contextName, Kind: "media", Service: "media", Shared: true,
-			Keys: []string{managedos.MediaReservationKey(name)},
-		})
+// mediaReservation freezes every store entry this context's installations name,
+// as one claim carrying one key each: a reservation is identified by its
+// context, kind and service, so the store entries are keys rather than
+// services of their own. The claim is shared, so any number of contexts may
+// hold it; it blocks only deletion and replacement of what it names.
+func mediaReservation(contextName string, names []string) (prerequisites.HostReservation, bool) {
+	keys := make([]string, 0, len(names))
+	for _, name := range names {
+		keys = append(keys, managedos.MediaReservationKey(name))
 	}
-	return reservations
+	slices.Sort(keys)
+	keys = slices.Compact(keys)
+	if len(keys) == 0 {
+		return prerequisites.HostReservation{}, false
+	}
+	return prerequisites.HostReservation{
+		Context: contextName, Kind: "media", Service: "media", Shared: true, Keys: keys,
+	}, true
 }
 
 func impacts(request Request) []string {
@@ -151,7 +161,7 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 	}
 	result, err := c.run(ctx, execution, operation, request, marker)
 	if err != nil {
-		return unknown, err
+		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
 	var outcome reconciliation.Outcome
 	switch result.Outcome {

@@ -1,10 +1,12 @@
 {#- One managed libvirt network, exactly as the frozen request declares it.
     The built-in resolver and address assignment stay off so a managed DNSServer
-    may bind the bridge address, and the ownership metadata is what makes this
-    network this context's to change and remove. -#}
+    may bind the bridge address; the bridge joins the host firewall's trusted
+    zone, because the guests exist to reach the controller's services and the
+    zone libvirt would choose rejects them; and the ownership metadata is what
+    makes this network this context's to change and remove. -#}
 <network>
   <name>{{ item.name }}</name>
-  <bridge name="{{ item.bridge }}" stp="on" delay="0"/>
+  <bridge name="{{ item.bridge }}" stp="on" delay="0" zone="trusted"/>
 {% if item.forward | default('') and item.forward != 'none' %}
   <forward mode="{{ item.forward }}"/>
 {% endif %}

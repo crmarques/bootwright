@@ -187,6 +187,7 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, placem
 		Interfaces: interfaces,
 		MemoryMiB:  int(memory),
 		Placement:  placement,
+		PoolName:   substrate.PoolName(contextName, provider.Name()),
 		PoolPath:   substrate.PoolPath(contextName, provider.Name()),
 		TPM:        profile.Has("tpm"),
 		URI:        provider.Spec().Get("libvirt", "uri").Text(),

@@ -39,6 +39,11 @@ options:
     description: The media URL to insert.
     type: str
     required: false
+  target:
+    description: The one-time boot device a boot operation selects.
+    type: str
+    default: Cd
+    choices: [Cd, Hdd]
   attempts:
     description: Bounded polls before the outcome is unproved.
     type: int
@@ -86,6 +91,7 @@ def main():
                 "choices": ["read", "insert", "eject", "boot", "power-on", "power-off"],
             },
             "image": {"type": "str", "required": False},
+            "target": {"type": "str", "default": "Cd", "choices": ["Cd", "Hdd"]},
             "attempts": {"type": "int", "default": 60},
         },
         supports_check_mode=False,
@@ -123,7 +129,7 @@ def drive(module, endpoint, user, password, operation, attempts):
         redfish_control.eject_media(endpoint, user, password)
         return True
     if operation == "boot":
-        redfish_control.boot_once(endpoint, user, password)
+        redfish_control.boot_once(endpoint, user, password, module.params["target"])
         return True
     expected = "On" if operation == "power-on" else "Off"
     if redfish_control.power_state(endpoint, user, password) == expected:

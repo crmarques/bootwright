@@ -224,7 +224,7 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 	}
 	result, err := c.run(ctx, execution, operation, request)
 	if err != nil {
-		return unknown, err
+		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
 	if result.Outcome != "changed" && result.Outcome != "unchanged" {
 		return unknown, Refusal("lifecycle.state", "the managed service adapter reported no usable outcome", "")
