@@ -202,3 +202,19 @@ func TestNativeMergeDiagnosticsDoNotExposeMapKeys(t *testing.T) {
 		t.Fatalf("native key exposed: count%d", len(issues))
 	}
 }
+
+func TestManagedLibvirtAttachmentContainsTheInstallAddress(t *testing.T) {
+	host := object(api.Machine, "host", m("capabilities", api.StringList("libvirt"), "os", m("provided", true)))
+	provider := object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulationDefaults", m("auth", m("credentialsRef", "bmc")), "machineProfiles", list(m("name", "small"))), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "virbr-lab", "management", "managed", "address", "192.0.2.1/24")))))
+	network := object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.0/24"), m("cidr", "198.51.100.0/24")), "nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet")))))
+	env := object(api.Environment, "env", m("domains", m("base", "example.test")))
+	for address, valid := range map[string]bool{"192.0.2.11/24": true, "198.51.100.11/24": false} {
+		guest := object(api.Machine, "guest", m("substrate", m("providerRef", "lab", "profileRef", "small"), "os", m("provided", false), "network", m("configRef", "net", "attachmentRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", address, "interface", "enp1s0")))))
+		c := api.NewCatalog([]api.Object{guest, host, provider, network, env})
+		guest, _ = Normalize(guest, c)
+		issues := Validate(guest, c)
+		if (len(issues) == 0) != valid {
+			t.Fatalf("%s: issues = %v", address, issues)
+		}
+	}
+}

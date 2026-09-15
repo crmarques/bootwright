@@ -30,7 +30,7 @@ func TestProviderVariantsAndNormalization(t *testing.T) {
 	domain := m("name", "zone-a", "server", "vcenter.example.test", "region", "region", "zone", "zone", "topology", m("datacenter", "dc", "computeCluster", "cluster", "datastore", "store", "networks", api.StringList("network")))
 	providers := map[string]api.Value{
 		"baremetal": m("baremetal", m("defaults", m("bmc", m("credentialsRef", "bmc")))),
-		"libvirt":   m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulationDefaults", bmc)),
+		"libvirt":   m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulationDefaults", bmc), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "virbr-lab", "management", "managed", "address", "192.0.2.1/24")))),
 		"vsphere":   m("vsphere", m("vcenters", list(m("server", "vcenter.example.test", "datacenters", api.StringList("dc"), "credentialsRef", "vcenter")), "failureDomains", list(domain), "isoStaging", m("folder", "media"), "machineProfiles", list(m("name", "small", "cpu", api.IntegerValue("2"), "memoryMiB", api.IntegerValue("4096"), "diskGiB", api.IntegerValue("20"))))),
 		"kubevirt":  m("kubevirt", m("kubeconfigRef", "host-access", "namespace", "workloads"), "networkAttachments", list(m("name", "net", "kubevirt", m("networkRef", m("kind", "UserDefinedNetwork", "name", "net"))))),
 	}
@@ -51,8 +51,8 @@ func TestProviderVariantsAndNormalization(t *testing.T) {
 					t.Fatal("TLS verification missing")
 				}
 			case "libvirt":
-				if o.Spec().Get(variant, "bmcEmulationDefaults", "vMediaPort").Text() != "8001" {
-					t.Fatal("vmedia port")
+				if o.Spec().Get("networkAttachments").Items()[0].Get("libvirt", "forward").Text() != "nat" {
+					t.Fatal("managed network forward default")
 				}
 			case "vsphere":
 				if o.Spec().Get(variant, "machineProfiles").Items()[0].Get("failureDomainRef").Text() != "zone-a" {
@@ -69,11 +69,13 @@ func TestProviderVariantsAndNormalization(t *testing.T) {
 }
 func TestProviderContradictions(t *testing.T) {
 	cases := map[string]api.Value{
-		"disabled emulation": m("libvirt", m("bmcEmulationDefaults", m("enabled", false))),
-		"port collision":     m("libvirt", m("bmcEmulationDefaults", m("port", api.IntegerValue("8000"), "vMediaPort", api.IntegerValue("8000")))),
-		"wrong attachment":   m("baremetal", m(), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "br0")))),
-		"cluster namespace":  m("kubevirt", m("namespace", "workloads"), "networkAttachments", list(m("name", "net", "kubevirt", m("networkRef", m("name", "net", "kind", "ClusterUserDefinedNetwork", "apiGroup", "k8s.ovn.org", "namespace", "workloads"))))),
-		"unknown group":      m("kubevirt", m("namespace", "workloads"), "networkAttachments", list(m("name", "net", "kubevirt", m("networkRef", m("name", "net", "kind", "CustomNetwork"))))),
+		"disabled emulation":      m("libvirt", m("bmcEmulationDefaults", m("enabled", false))),
+		"managed without address": m("libvirt", m("bmcEmulationDefaults", m("port", api.IntegerValue("8000"))), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "br0", "management", "managed")))),
+		"external with address":   m("libvirt", m("bmcEmulationDefaults", m("port", api.IntegerValue("8000"))), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "br0", "address", "192.0.2.1/24")))),
+		"network address":         m("libvirt", m("bmcEmulationDefaults", m("port", api.IntegerValue("8000"))), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "br0", "management", "managed", "address", "192.0.2.0/24")))),
+		"wrong attachment":        m("baremetal", m(), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "br0")))),
+		"cluster namespace":       m("kubevirt", m("namespace", "workloads"), "networkAttachments", list(m("name", "net", "kubevirt", m("networkRef", m("name", "net", "kind", "ClusterUserDefinedNetwork", "apiGroup", "k8s.ovn.org", "namespace", "workloads"))))),
+		"unknown group":           m("kubevirt", m("namespace", "workloads"), "networkAttachments", list(m("name", "net", "kubevirt", m("networkRef", m("name", "net", "kind", "CustomNetwork"))))),
 	}
 	for name, spec := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -86,14 +88,23 @@ func TestProviderContradictions(t *testing.T) {
 		t.Fatal("empty staging admitted")
 	}
 }
-func TestLibvirtSharedServiceIdentity(t *testing.T) {
-	base := m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulationDefaults", m("port", api.IntegerValue("8000"), "vMediaPort", api.IntegerValue("8001"), "bindAddress", "0.0.0.0", "auth", m("credentialsRef", "bmc"))))
-	a, b := obj(api.InfraProvider, "a", base), obj(api.InfraProvider, "b", base)
-	if issues := Validate(a, api.NewCatalog([]api.Object{a, b})); len(issues) != 0 {
-		t.Fatal("identical shared service rejected", issues)
+func TestLibvirtBMCPortRangesDoNotOverlapOnOneHost(t *testing.T) {
+	provider := func(name, port string) api.Object {
+		return obj(api.InfraProvider, name, m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulationDefaults", m("port", api.IntegerValue(port), "bindAddress", "0.0.0.0", "auth", m("credentialsRef", "bmc")))))
 	}
-	b = b.WithSpec(base.WithPath(api.StringValue("other-credential"), "libvirt", "bmcEmulationDefaults", "auth", "credentialsRef"))
-	if issues := Validate(a, api.NewCatalog([]api.Object{a, b})); len(issues) == 0 {
-		t.Fatal("conflicting shared service accepted")
+	machine := func(name, provider string) api.Object {
+		return obj(api.Machine, name, m("substrate", m("providerRef", provider)))
+	}
+	host := obj(api.Machine, "host", m("capabilities", api.StringList("libvirt")))
+	a, b := provider("a", "8000"), provider("b", "8001")
+	if issues := Validate(a, api.NewCatalog([]api.Object{a, b, host, machine("one", "a")})); len(issues) != 0 {
+		t.Fatal("adjacent ranges rejected", issues)
+	}
+	if issues := Validate(a, api.NewCatalog([]api.Object{a, b, host, machine("one", "a"), machine("two", "a")})); len(issues) == 0 {
+		t.Fatal("overlapping ranges accepted")
+	}
+	c := provider("c", "65535")
+	if issues := Validate(c, api.NewCatalog([]api.Object{c, host, machine("one", "c"), machine("two", "c")})); len(issues) == 0 {
+		t.Fatal("range beyond the last port accepted")
 	}
 }

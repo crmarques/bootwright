@@ -5,7 +5,6 @@ import (
 	"net/netip"
 	"net/url"
 	"slices"
-	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -37,11 +36,6 @@ func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 		if bmc.Present() {
 			bmc = NormalizeBMCDefaults(bmc)
 			arm = arm.WithPath(bmc, "defaults", "bmc")
-		}
-	case "libvirt":
-		bmc := arm.Get("bmcEmulationDefaults")
-		if port, ok := bmc.Get("port").Int64(); ok && !bmc.Has("vMediaPort") {
-			arm = arm.With("bmcEmulationDefaults", bmc.With("vMediaPort", api.IntegerValue(strconv.FormatInt(port+1, 10))))
 		}
 	case "vsphere":
 		for _, side := range []string{"external", "internal"} {
@@ -78,6 +72,17 @@ func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 	}
 	spec = spec.With(variant, arm)
 	attachments := spec.Get("networkAttachments").Items()
+	if variant == "libvirt" {
+		for index, attachment := range attachments {
+			libvirt := attachment.Get("libvirt")
+			if libvirt.Get("management").Text() == "managed" && !libvirt.Has("forward") {
+				attachments[index] = attachment.WithPath(api.StringValue("nat"), "libvirt", "forward")
+			}
+		}
+		if spec.Has("networkAttachments") {
+			spec = spec.With("networkAttachments", api.ListValue(attachments...))
+		}
+	}
 	if variant == "kubevirt" {
 		for index, attachment := range attachments {
 			ref := attachment.Get("kubevirt", "networkRef")
@@ -179,18 +184,18 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		if bmc.Has("enabled") && !bmc.Get("enabled").Bool() {
 			issues = add(issues, issue("$.spec.libvirt.bmcEmulationDefaults.enabled", "libvirt BMC emulation must be enabled"))
 		}
-		if bmc.Has("port") && bmc.Get("port").Equal(bmc.Get("vMediaPort")) {
-			issues = add(issues, issue("$.spec.libvirt.bmcEmulationDefaults.vMediaPort", "BMC and virtual-media ports must differ"))
+		first, last, ranged := bmcPortRange(o, c)
+		if ranged && last > 65535 {
+			issues = add(issues, issue("$.spec.libvirt.bmcEmulationDefaults.port", "the emulated BMC port range must end at or below 65535"))
 		}
 		for _, other := range c.OfKind(api.InfraProvider) {
 			peer := other.Spec().Get("libvirt")
 			if other.Identity() == o.Identity() || !peer.Present() || !peer.Get("machineRef").Equal(arm.Get("machineRef")) {
 				continue
 			}
-			peerBMC := peer.Get("bmcEmulationDefaults")
-			shared := bmc.Get("port").Equal(peerBMC.Get("port")) || bmc.Get("port").Equal(peerBMC.Get("vMediaPort")) || bmc.Get("vMediaPort").Equal(peerBMC.Get("port")) || bmc.Get("vMediaPort").Equal(peerBMC.Get("vMediaPort"))
-			if shared && (!arm.Get("uri").Equal(peer.Get("uri")) || !bmc.Get("bindAddress").Equal(peerBMC.Get("bindAddress")) || !bmc.Get("port").Equal(peerBMC.Get("port")) || !bmc.Get("vMediaPort").Equal(peerBMC.Get("vMediaPort")) || !bmc.Get("auth").Equal(peerBMC.Get("auth"))) {
-				issues = add(issues, issue("$.spec.libvirt.bmcEmulationDefaults", "provider services on one host have conflicting ports or shared-service identities"))
+			peerFirst, peerLast, peerRanged := bmcPortRange(other, c)
+			if ranged && peerRanged && first <= peerLast && peerFirst <= last {
+				issues = add(issues, issue("$.spec.libvirt.bmcEmulationDefaults.port", "emulated BMC port ranges of providers on one host must not overlap"))
 				break
 			}
 		}
@@ -231,6 +236,9 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		if !attachment.Has(variant) {
 			issues = add(issues, issue(path, "attachment arm must match its provider substrate"))
 		}
+		if variant == "libvirt" {
+			issues = add(issues, validateLibvirtAttachment(attachment.Get("libvirt"), path+".libvirt")...)
+		}
 		if variant == "vsphere" && arm.Get("failureDomains").Len() > 1 && !attachment.Get("vsphere").Has("distributedSwitch") {
 			issues = add(issues, issue(path+".vsphere.distributedSwitch", "multiple failure domains require an explicit distributed switch"))
 		}
@@ -246,6 +254,48 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		}
 	}
 	return issues[:min(len(issues), 999)]
+}
+
+// bmcPortRange is the contiguous range a provider's emulated BMCs claim: one
+// port per hosted Machine in canonical name order, or the base port alone while
+// no Machine selects the provider.
+func bmcPortRange(provider api.Object, c api.Catalog) (int64, int64, bool) {
+	first, ok := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "port").Int64()
+	if !ok {
+		return 0, 0, false
+	}
+	machines := int64(0)
+	for _, machine := range c.OfKind(api.Machine) {
+		if machine.Spec().Get("substrate", "providerRef").Text() == provider.Name() {
+			machines++
+		}
+	}
+	return first, first + max(machines, 1) - 1, true
+}
+
+func validateLibvirtAttachment(arm api.Value, path string) []api.Issue {
+	if !arm.Present() {
+		return nil
+	}
+	issues := []api.Issue{}
+	managed := arm.Get("management").Text() == "managed"
+	if managed && !arm.Has("address") {
+		issues = add(issues, issue(path+".address", "a managed libvirt network requires the host address and prefix"))
+	}
+	if !managed {
+		for _, key := range []string{"address", "forward"} {
+			if arm.Has(key) {
+				issues = add(issues, issue(path+"."+key, "an external libvirt bridge carries no managed network fields"))
+			}
+		}
+	}
+	if address := arm.Get("address"); address.Present() {
+		prefix, err := netip.ParsePrefix(address.Text())
+		if err != nil || prefix.Bits() == 0 || prefix.Addr() == prefix.Masked().Addr() {
+			issues = add(issues, issue(path+".address", "the managed network address must be a host IP with its prefix"))
+		}
+	}
+	return issues
 }
 
 func findNamed(values api.Value, key, name string) (api.Value, bool) {

@@ -11,8 +11,8 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 	if bmc.Has("enabled") && !bmc.Get("enabled").Bool() {
 		issues = add(issues, issue("$.spec.libvirt.bmcEmulationDefaults.enabled", "libvirt BMC emulation must be enabled"))
 	}
-	if bmc.Has("port") && bmc.Has("vMediaPort") && bmc.Get("port").Equal(bmc.Get("vMediaPort")) {
-		issues = add(issues, issue("$.spec.libvirt.bmcEmulationDefaults.vMediaPort", "BMC and virtual-media ports must differ"))
+	for _, attachment := range o.Spec().Get("networkAttachments").Items() {
+		issues = add(issues, validateLibvirtAttachment(attachment.Get("libvirt"), "$.spec.networkAttachments[].libvirt")...)
 	}
 	if variant := Variant(o); variant != "" {
 		for _, attachment := range o.Spec().Get("networkAttachments").Items() {

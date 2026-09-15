@@ -298,6 +298,9 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 					break
 				}
 			}
+			if found && variant == "libvirt" {
+				issues = appendIssues(issues, validateManagedAttachmentContainment(prefix, network, provider)...)
+			}
 		}
 		if installed(o) {
 			if profile, ok := c.Find(api.MachineInstallProfile, s.Get("os", "installProfileRef").Text()); ok && profile.Spec().Has("installer", "anaconda") {
@@ -326,6 +329,20 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		}
 	}
 	return issues
+}
+
+// validateManagedAttachmentContainment requires the install address to lie
+// inside the network Bootwright defines for a managed libvirt attachment.
+func validateManagedAttachmentContainment(address netip.Prefix, network api.Value, provider api.Object) []api.Issue {
+	attachment, ok := namedValue(provider.Spec().Get("networkAttachments"), network.Get("attachmentRef").Text())
+	if !ok || attachment.Get("libvirt", "management").Text() != "managed" {
+		return nil
+	}
+	managed, err := netip.ParsePrefix(attachment.Get("libvirt", "address").Text())
+	if err != nil || managed.Masked().Contains(address.Addr()) {
+		return nil
+	}
+	return []api.Issue{invariant("$.spec.network.installAddressRef", "install address must lie inside the managed libvirt attachment's network")}
 }
 
 func validateBaremetal(o api.Object) []api.Issue {

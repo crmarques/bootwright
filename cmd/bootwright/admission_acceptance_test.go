@@ -132,8 +132,8 @@ func TestActualCompilerAdmitsAllKindsAndAdditionalVariants(t *testing.T) {
 		t.Fatal("reserved playbook declaration changed")
 	}
 	libvirt := requireObject(t, state.Effective(), api.InfraProvider, "acceptance-libvirt")
-	if libvirt.Spec().Get("libvirt", "bmcEmulationDefaults", "vMediaPort").Text() != "8001" {
-		t.Fatal("libvirt dependent default missing")
+	if libvirt.Spec().Get("libvirt", "bmcEmulationDefaults", "port").Text() != "8000" || libvirt.Spec().Get("libvirt", "bmcEmulationDefaults", "emulator").Text() != "sushy-tools" {
+		t.Fatal("libvirt emulated BMC defaults missing")
 	}
 	vsphere := requireObject(t, state.Effective(), api.InfraProvider, "acceptance-vsphere")
 	if vsphere.Spec().Get("vsphere", "machineProfiles").Items()[0].Get("failureDomainRef").Text() != "example-zone" {

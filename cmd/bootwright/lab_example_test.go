@@ -110,7 +110,7 @@ func TestLabExampleSelectsControllerDependenciesFromDesiredState(t *testing.T) {
 		}
 	}
 	provider := requireObject(t, effective, api.InfraProvider, "lab-libvirt")
-	if provider.Spec().Get("libvirt", "bmcEmulationDefaults", "vMediaPort").Text() != "8001" || provider.Spec().Get("libvirt", "machineRef").Text() != "controller" {
+	if provider.Spec().Get("libvirt", "bmcEmulationDefaults", "port").Text() != "8000" || provider.Spec().Get("libvirt", "machineRef").Text() != "controller" || provider.Spec().Get("networkAttachments").Items()[0].Get("libvirt", "management").Text() != "external" {
 		t.Fatal("libvirt provider lost its emulated BMC defaults", provider.Spec())
 	}
 }

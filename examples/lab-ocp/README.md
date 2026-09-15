@@ -39,8 +39,8 @@ Adapt these values to the machine before importing them:
   selects `source.type: node`.
 - The guest profile requests 8 vCPUs, 16 GiB of memory, a 120 GiB root disk
   and an emulated TPM, the single-node OpenShift minimum.
-- The Redfish emulator listens on ports `8000` and `8001` of the controller
-  address; the artifact server uses `8443` and `8080`; Squid uses `3128`.
+- The guest's emulated BMC listens on port `8000` of the controller address;
+  the artifact server uses `8443` and `8080`; Squid uses `3128`.
 - The release is `4.21.33`. Setup resolves the matching `openshift-install`,
   `oc` and `kubectl` from the publisher, so the version must exist.
 

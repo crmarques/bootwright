@@ -14,7 +14,6 @@ spec:
       emulator: sushy-tools
       bindAddress: 192.0.2.1
       port: 8000
-      vMediaPort: 8001
       auth:
         credentialsRef: lab-bmc-credentials
 
