@@ -34,6 +34,11 @@ detail, the `(position/total)` counter and the `still running` note.
   in place of a terminal flag: no reader means rows are appended whole.
 - Width is counted in Unicode code points after display escaping, as the
   shared layout counts it, so a double-width glyph still overstates the fit.
+- A settled sub-step no longer writes a row, so a block that once occupied one
+  row per presentation group now occupies one. That shortens the stream rather
+  than the row: a lifecycle subject is as wide as before and still needs the
+  bound above. The position moved to the front of the subject, where eliding
+  the text after it cannot take the counter with it.
 
 Evidence: `TestTerminalProgressFitsEveryRowInTheTerminalWidth` drives a row
 wider than its window and fails on any drawn line that reaches the width,

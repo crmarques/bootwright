@@ -142,6 +142,9 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 		return Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
 	result := Result{Outcome: reconciliation.OutcomeUnknown}
+	// Completion is counted in proved groups, not in elapsed time: the adapter
+	// reports each group once it settles and the frozen block declares them all.
+	settled := map[string]struct{}{}
 	err = s.guard.WithPython(ctx, area, receipt.Definition.Execution, func(launch prerequisites.PythonLaunch, release func() error) error {
 		execution := Execution{
 			Operation: operation.ID, Attempt: attempt, Resolution: resolution, Block: block, Launch: launch, Bundle: location, Area: area,
@@ -174,7 +177,12 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 				return log.Append(inner, operationstore.LogRecord{Event: "adapter-output", Block: block.ID, Detail: path.Base(target)})
 			},
 			Progress: func(inner context.Context, group, status string) {
-				s.report(inner, ProgressEvent{Block: block.ID, Description: block.Description, Group: group, Detail: groupDescription(block, group), Status: status, Position: position, Total: total})
+				if status != "running" {
+					settled[group] = struct{}{}
+				}
+				s.report(inner, ProgressEvent{Block: block.ID, Description: block.Description, Group: group,
+					Detail: groupDescription(block, group), Status: status, Position: position, Total: total,
+					Completed: len(settled), Declared: len(block.Groups)})
 			},
 		}
 		value, callErr := call(ctx, execution)

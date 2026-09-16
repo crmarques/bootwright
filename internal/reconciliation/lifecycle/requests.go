@@ -133,6 +133,10 @@ type ProgressEvent struct {
 	Status      string
 	Position    int
 	Total       int
+	// Completed of Declared are the block's presentation groups that have
+	// reported a terminal outcome, out of the groups its frozen plan declares.
+	Completed int
+	Declared  int
 }
 
 type SetupCheck struct {

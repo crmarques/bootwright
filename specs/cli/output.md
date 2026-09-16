@@ -97,13 +97,14 @@ progress.
 
 Every row has this form. The status token is padded to the width of
 `[RUNNING]` so the subject column aligns without knowing which tokens follow;
-the step's position in its known total closes the subject; and a trailing
-`still running` note or elapsed time is separated by the column gap:
+the step's position in its known total opens the subject, padded to the total's
+width so every label starts at the same column; and a trailing `still running`
+note or elapsed time is separated by the column gap:
 
 ```text
-  [RUNNING]  <step>[: <detail>][ (<position>/<total>)]
-  [RUNNING]  <step>[: <detail>][ (<position>/<total>)]  still running, <elapsed>
-  [<STATUS>] <step>[: <detail>][ (<position>/<total>)][  <elapsed>]
+  [RUNNING]  [<position>/<total>] <step>[: <sub-step>[ - <completion>%]]
+  [RUNNING]  [<position>/<total>] <step>[: <sub-step>[ - <completion>%]]  still running, <elapsed>
+  [<STATUS>] [<position>/<total>] <step>[: <summary>][  <elapsed>]
 ```
 
 Four rules govern the stream:
@@ -118,15 +119,22 @@ Four rules govern the stream:
    repeated by the result that follows.
 2. **Silence bound.** While a step runs and ten seconds pass without a new
    row, the presenter repeats the current row with `still running` and the
-   time since that row first appeared. The CLI presenter owns the timer;
-   domain and adapter code emit events and never read a clock to present them.
-3. **Two levels.** A step may report sub-steps as its detail: the source being
-   acquired, the native transaction, the target tool, or the presentation
-   group in flight. A sub-step's own outcome row closes only the sub-step and
-   carries its duration. There is no third level.
+   time since the step started. The CLI presenter owns the timer; domain and
+   adapter code emit events and never read a clock to present them.
+3. **One row per step.** A step may report sub-steps as its detail: the source
+   being acquired, the native transaction, the target tool, or the
+   presentation group in flight. A sub-step never settles as a row of its own,
+   because a screen of settled sub-steps buries the step that is actually
+   running. Its outcome advances the step's completion instead, which the
+   step's next row reports as `<completion>%` of the sub-steps the step knows
+   it must take, counted in proved sub-steps rather than in elapsed time and
+   omitted by a step whose remaining work has no such count. There is no third
+   level.
 4. **Outcome with duration.** Every step closes with the outcome it proved and,
    when it took at least one second, the elapsed time truncated to whole
-   seconds in Go duration form, such as `1m48s`.
+   seconds in Go duration form, such as `1m48s`. The outcome row drops the
+   sub-step it last reported, because a settled step is no longer anywhere, and
+   keeps a summary the step proved about itself, such as a resolved version.
 
 Progress is presentation only. A failure to report never changes an effect, an
 outcome, or a recorded receipt, and progress rows never replace the ordered
@@ -137,10 +145,10 @@ presenter through an injected clock.
 
 When standard output is a terminal, the presenter rewrites the running row in
 place instead of appending: a carriage return and an erase-line sequence
-precede each replacement, the elapsed time refreshes every second, and the
-outcome overwrites the row, so each step settles as exactly one line. Only a
-step's own rows replace its line; another step, a heading, the result or a
-diagnostic first terminates it.
+precede each replacement, the elapsed time and completion refresh every second,
+and the outcome overwrites the row, so each step settles as exactly one line.
+Only a step's own rows replace its line; another step, a heading, the result or
+a diagnostic first terminates it.
 
 A redrawn row occupies one physical line: it is bounded by the width the
 terminal reports when it is drawn, measured again for every row so a resize

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -54,17 +55,19 @@ func systemProgressClock() progressClock {
 	}
 }
 
-// progressEvent is one row of the long-running progress stream. Nested marks
-// Detail as a sub-step of the running step, so a terminal status closes the
-// sub-step and leaves the step running.
+// progressEvent is one event of the long-running progress stream. Nested marks
+// Detail as a sub-step of the running step, which never settles as a row of its
+// own; Completed of Declared is how much of the step its sub-steps have proved.
 type progressEvent struct {
-	Heading  string
-	Label    string
-	Detail   string
-	Status   string
-	Position int
-	Total    int
-	Nested   bool
+	Heading   string
+	Label     string
+	Detail    string
+	Status    string
+	Position  int
+	Total     int
+	Completed int
+	Declared  int
+	Nested    bool
 }
 
 // progressPresenter streams progress rows and repeats a silent step's row on
@@ -88,9 +91,10 @@ type progressStep struct {
 	position   int
 	total      int
 	detail     string
+	completed  int
+	declared   int
 	ctx        context.Context
 	started    time.Time
-	since      time.Time
 	generation int
 	stop       func() bool
 }
@@ -107,32 +111,28 @@ func (p *progressPresenter) report(ctx context.Context, event progressEvent) {
 		// Only a step's own rows may overwrite its line.
 		p.stopHeartbeat()
 		p.closeLine()
-		step = &progressStep{label: event.Label, position: event.Position, total: event.Total, started: now, since: now}
+		step = &progressStep{label: event.Label, position: event.Position, total: event.Total, started: now}
 		p.step = step
 	}
-	p.openHeading(event.Heading)
 	step.ctx = ctx
-	suffix := ""
-	switch {
-	case event.Status == "running":
-		if step.detail != event.Detail {
-			step.detail, step.since = event.Detail, now
-		}
-	case event.Nested:
-		if step.detail == event.Detail {
-			suffix = formatElapsed(now.Sub(step.since))
-		}
-		step.detail, step.since = "", step.started
-	default:
-		suffix = formatElapsed(now.Sub(step.started))
+	if event.Declared > 0 {
+		step.completed, step.declared = event.Completed, event.Declared
 	}
-	p.write(event.Status, event.Label, event.Detail, event.Position, event.Total, suffix)
-	if event.Status != "running" && !event.Nested {
-		p.stopHeartbeat()
-		p.step = nil
+	// A settled sub-step proves part of its step; the step owns the only row,
+	// so the completion it just advanced is shown by the next one.
+	if event.Nested && event.Status != "running" {
 		return
 	}
-	p.arm(step)
+	p.openHeading(event.Heading)
+	if event.Nested || event.Status == "running" {
+		step.detail = event.Detail
+		p.write("running", step, step.detail, "")
+		p.arm(step)
+		return
+	}
+	p.write(event.Status, step, event.Detail, formatElapsed(now.Sub(step.started)))
+	p.stopHeartbeat()
+	p.step = nil
 }
 
 // finish terminates a row left open on the terminal and stops the heartbeat,
@@ -169,8 +169,8 @@ func (p *progressPresenter) beat(step *progressStep, generation int) {
 	if p.step != step || step.generation != generation || step.ctx.Err() != nil {
 		return
 	}
-	elapsed := formatElapsed(p.clock.now().Sub(step.since))
-	p.write("running", step.label, step.detail, step.position, step.total, "still running, "+elapsed)
+	elapsed := formatElapsed(p.clock.now().Sub(step.started))
+	p.write("running", step, step.detail, "still running, "+elapsed)
 	p.arm(step)
 }
 
@@ -203,15 +203,15 @@ func (p *progressPresenter) closeLine() {
 // write appends one row. On a terminal a running row stays unterminated and
 // its successor erases it first, so the step occupies one line until it
 // settles.
-func (p *progressPresenter) write(status, label, detail string, position, total int, suffix string) {
+func (p *progressPresenter) write(status string, step *progressStep, detail, suffix string) {
 	token := progressStatusToken(status)
 	lead := displayIndent + token + strings.Repeat(" ", max(progressTokenWidth-len(token), 0)+displayGap)
-	subject := escapeDisplayLine(label)
+	subject := progressPosition(step.position, step.total) + escapeDisplayLine(step.label)
 	if detail != "" {
 		subject += ": " + escapeDisplayLine(detail)
-	}
-	if total > 0 && position > 0 {
-		subject += fmt.Sprintf(" (%d/%d)", position, total)
+		if step.declared > 0 {
+			subject += fmt.Sprintf(" - %d%%", step.completed*100/step.declared)
+		}
 	}
 	tail := ""
 	if suffix != "" {
@@ -233,6 +233,16 @@ func (p *progressPresenter) write(status, label, detail string, position, total 
 	}
 	io.WriteString(p.out, prefix+row+"\n")
 	p.open = false
+}
+
+// progressPosition opens the subject with the step's place in its known total.
+// The position is padded to the total's width so every step's label starts at
+// the same column, whatever the counter reaches.
+func progressPosition(position, total int) string {
+	if position <= 0 || total <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("[%*d/%d] ", len(strconv.Itoa(total)), position, total)
 }
 
 // fitTerminalRow bounds a redrawn row to the terminal it is rewritten on. A

@@ -75,6 +75,7 @@ func (p *LifecycleProgressPresenter) ReportProgress(ctx context.Context, event l
 	p.progress.report(ctx, progressEvent{
 		Heading: "Progress", Label: label, Detail: detail, Status: event.Status,
 		Position: event.Position, Total: event.Total, Nested: event.Group != "",
+		Completed: event.Completed, Declared: event.Declared,
 	})
 }
 

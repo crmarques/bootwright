@@ -134,6 +134,13 @@ func (m *Manager) Prepare(ctx context.Context, area, retained prerequisites.Bund
 			progress(prerequisites.ProgressEvent{Status: "running", Detail: detail})
 		}
 	}
+	// Acquisition is the one phase whose remaining work is known before it
+	// starts, so it reports how many of its sources it has published.
+	acquiring := func(detail string, completed int) {
+		if progress != nil {
+			progress(prerequisites.ProgressEvent{Status: "running", Detail: detail, Completed: completed, Declared: len(record.Baseline)})
+		}
+	}
 	before, entries, err := inspectFiles(ctx, area, record, definition.Tools)
 	if err != nil {
 		return err
@@ -158,14 +165,13 @@ func (m *Manager) Prepare(ctx context.Context, area, retained prerequisites.Bund
 		}
 		name := sourcePath(source)
 		var data []byte
-		position := ", source " + strconv.Itoa(index+1) + " of " + strconv.Itoa(len(record.Baseline))
 		if _, found := entries[name]; found {
 			data, err = area.Read(ctx, name, int(source.Bytes))
 		} else if held := retainedSource(ctx, retained, source); held != nil {
-			report("recovering " + path.Base(source.ID) + position)
+			acquiring("recovering "+path.Base(source.ID), index)
 			data, err = held, nil
 		} else {
-			report("acquiring " + path.Base(source.ID) + position)
+			acquiring("acquiring "+path.Base(source.ID), index)
 			data, err = m.fetch(ctx, source, egress)
 		}
 		if err != nil {

@@ -460,7 +460,8 @@ changes, readiness and next safe command. Both commands stream
 one `Checks` row per host check as it is verified. Real setup adds one
 `Resolving` step per dependency family it resolves before the plan, and one
 `Progress` step per receipt action after confirmation, with the source, native
-transaction or target tool in flight as its detail. Host fingerprints, private paths,
+transaction or target tool in flight as its detail and, while it acquires them,
+the share of its sources already published. Host fingerprints, private paths,
 credentials, environment dumps and raw native-tool output are not public
 results. No new JSON flag, lifecycle receipt or private operation log is added.
 

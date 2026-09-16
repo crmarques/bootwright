@@ -97,16 +97,31 @@ func TestOperationResultLeadsWithItsOutcomeAndNamesItsLog(t *testing.T) {
 	}
 }
 
-func TestProgressReportsEachBlockAndGroupUnbuffered(t *testing.T) {
+// A block occupies one row: each group opens it with the work in flight and
+// the share of the block its settled groups have proved, and no group settles
+// as a row of its own.
+func TestProgressReportsEachBlockAsOneRowUnbuffered(t *testing.T) {
 	var out bytes.Buffer
 	presenter := NewLifecycleProgressPresenter(&out, nil)
-	presenter.ReportProgress(context.Background(), lifecycle.ProgressEvent{Block: "artifact-server-lab", Description: "serve artifacts on lab", Status: "running", Position: 1, Total: 2})
-	presenter.ReportProgress(context.Background(), lifecycle.ProgressEvent{Block: "artifact-server-lab", Description: "serve artifacts on lab", Group: "pull-image", Detail: "acquire the pinned server image", Status: "ok", Position: 1, Total: 2})
-	presenter.ReportProgress(context.Background(), lifecycle.ProgressEvent{Block: "artifact-server-lab", Description: "serve artifacts on lab", Status: "done", Position: 1, Total: 2})
+	block := lifecycle.ProgressEvent{Block: "artifact-server-lab", Description: "serve artifacts on lab", Position: 1, Total: 2}
+	group := func(id, detail, status string, completed int) lifecycle.ProgressEvent {
+		event := block
+		event.Group, event.Detail, event.Status = id, detail, status
+		event.Completed, event.Declared = completed, 2
+		return event
+	}
+	block.Status = "running"
+	presenter.ReportProgress(context.Background(), block)
+	presenter.ReportProgress(context.Background(), group("pull-image", "acquire the pinned server image", "running", 0))
+	presenter.ReportProgress(context.Background(), group("pull-image", "acquire the pinned server image", "ok", 1))
+	presenter.ReportProgress(context.Background(), group("start-service", "start the managed service", "running", 1))
+	block.Status = "done"
+	presenter.ReportProgress(context.Background(), block)
 	want := "\nProgress\n" +
-		"  [RUNNING]  serve artifacts on lab (1/2)\n" +
-		"  [OK]       serve artifacts on lab: acquire the pinned server image (1/2)\n" +
-		"  [DONE]     serve artifacts on lab (1/2)\n"
+		"  [RUNNING]  [1/2] serve artifacts on lab\n" +
+		"  [RUNNING]  [1/2] serve artifacts on lab: acquire the pinned server image - 0%\n" +
+		"  [RUNNING]  [1/2] serve artifacts on lab: start the managed service - 50%\n" +
+		"  [DONE]     [1/2] serve artifacts on lab\n"
 	if out.String() != want {
 		t.Fatalf("progress = %q, want %q", out.String(), want)
 	}

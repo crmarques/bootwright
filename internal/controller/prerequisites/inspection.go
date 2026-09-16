@@ -62,4 +62,8 @@ type ProgressEvent struct {
 	Detail string
 	Step   int
 	Steps  int
+	// Completed of Declared are the sub-steps this action has proved, out of
+	// the sub-steps it knows it must take. Zero reports no completion.
+	Completed int
+	Declared  int
 }

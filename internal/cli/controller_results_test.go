@@ -276,21 +276,23 @@ func TestControllerResolutionRowsPrecedeThePlanUnderOneHeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "execution-bundle", Status: "running", Step: 1, Steps: 1})
-	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "execution-bundle", Status: "running", Detail: "acquiring python.tar.gz, source 1 of 1", Step: 1, Steps: 1})
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "execution-bundle", Status: "running", Detail: "acquiring python.tar.gz", Step: 1, Steps: 1, Completed: 0, Declared: 2})
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "execution-bundle", Status: "running", Detail: "acquiring ansible.tar.gz", Step: 1, Steps: 1, Completed: 1, Declared: 2})
 	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "execution-bundle", Status: "changed", Step: 1, Steps: 1})
 	rendered := out.String()
 	prefix := "Controller setup\n\nResolving\n" +
-		"  [RUNNING]  Python and Ansible (1/2)\n" +
-		"  [OK]       Python and Ansible: Python 3.14.7, Ansible 2.21.4 (1/2)\n" +
-		"  [OK]       Native packages: no changes (2/2)\n" +
+		"  [RUNNING]  [1/2] Python and Ansible\n" +
+		"  [OK]       [1/2] Python and Ansible: Python 3.14.7, Ansible 2.21.4\n" +
+		"  [OK]       [2/2] Native packages: no changes\n" +
 		"\n  Scope     baseline\n"
 	if !strings.HasPrefix(rendered, prefix) {
 		t.Fatalf("result = %q, want prefix %q", rendered, prefix)
 	}
 	suffix := "\nProgress\n" +
-		"  [RUNNING]  Execution bundle (1/1)\n" +
-		"  [RUNNING]  Execution bundle: acquiring python.tar.gz, source 1 of 1 (1/1)\n" +
-		"  [DONE]     Execution bundle (1/1)\n"
+		"  [RUNNING]  [1/1] Execution bundle\n" +
+		"  [RUNNING]  [1/1] Execution bundle: acquiring python.tar.gz - 0%\n" +
+		"  [RUNNING]  [1/1] Execution bundle: acquiring ansible.tar.gz - 50%\n" +
+		"  [DONE]     [1/1] Execution bundle\n"
 	if strings.Count(rendered, "Controller setup\n") != 1 || !strings.Contains(rendered, "\nChecks\n") || !strings.HasSuffix(rendered, suffix) {
 		t.Fatalf("result = %q", rendered)
 	}
@@ -320,7 +322,7 @@ func TestControllerScopeChecksResolutionAndPlanStreamInOrder(t *testing.T) {
 		"  [RUNNING]  Execution bundle: verifying the retained bundle\n" +
 		"  [FAIL]     Execution bundle: required qualified Python and Ansible; observed missing or unverified\n" +
 		"\nResolving\n" +
-		"  [OK]       Native packages: no changes (1/1)\n" +
+		"  [OK]       [1/1] Native packages: no changes\n" +
 		"\nDependencies\n  qualified-source.tar.gz\n" +
 		"\nPlanned changes\n  1. Prepare the qualified execution bundle\n"
 	if out.String() != want {

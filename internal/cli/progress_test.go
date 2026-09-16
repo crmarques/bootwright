@@ -83,17 +83,18 @@ func TestProgressRowsAlignAndCloseWithElapsedTime(t *testing.T) {
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Execution bundle", Status: "changed", Position: 1, Total: 2})
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Controller binding", Status: "changed", Position: 2, Total: 2})
 	want := "\nProgress\n" +
-		"  [RUNNING]  Execution bundle (1/2)\n" +
-		"  [RUNNING]  Execution bundle: acquiring cpython, source 1 of 2 (1/2)\n" +
-		"  [DONE]     Execution bundle (1/2)  3s\n" +
-		"  [DONE]     Controller binding (2/2)\n"
+		"  [RUNNING]  [1/2] Execution bundle\n" +
+		"  [RUNNING]  [1/2] Execution bundle: acquiring cpython, source 1 of 2\n" +
+		"  [DONE]     [1/2] Execution bundle  3s\n" +
+		"  [DONE]     [2/2] Controller binding\n"
 	if out.String() != want {
 		t.Fatalf("progress = %q, want %q", out.String(), want)
 	}
 }
 
 // A step that stays silent is repeated on the heartbeat with the time since
-// its row first appeared; a new detail restarts that measurement.
+// the step started, which a new sub-step does not restart: the step owns the
+// row, so the row first appeared when the step did.
 func TestProgressHeartbeatRepeatsASilentStep(t *testing.T) {
 	presenter, clock, out := newTestProgress()
 	ctx := context.Background()
@@ -110,12 +111,12 @@ func TestProgressHeartbeatRepeatsASilentStep(t *testing.T) {
 	afterOutcome := out.Len()
 	clock.advance(3 * progressHeartbeat)
 	want := "\nResolving\n" +
-		"  [RUNNING]  Native packages (2/3)\n" +
-		"  [RUNNING]  Native packages (2/3)  still running, 10s\n" +
-		"  [RUNNING]  Native packages (2/3)  still running, 20s\n" +
-		"  [RUNNING]  Native packages: refreshing 3 repositories (2/3)\n" +
-		"  [RUNNING]  Native packages: refreshing 3 repositories (2/3)  still running, 10s\n" +
-		"  [OK]       Native packages: 14 changes (2/3)  30s\n"
+		"  [RUNNING]  [2/3] Native packages\n" +
+		"  [RUNNING]  [2/3] Native packages  still running, 10s\n" +
+		"  [RUNNING]  [2/3] Native packages  still running, 20s\n" +
+		"  [RUNNING]  [2/3] Native packages: refreshing 3 repositories\n" +
+		"  [RUNNING]  [2/3] Native packages: refreshing 3 repositories  still running, 30s\n" +
+		"  [OK]       [2/3] Native packages: 14 changes  30s\n"
 	if out.String() != want {
 		t.Fatalf("progress = %q, want %q", out.String(), want)
 	}
@@ -124,23 +125,37 @@ func TestProgressHeartbeatRepeatsASilentStep(t *testing.T) {
 	}
 }
 
-// A group's outcome closes only the group: its block keeps running, keeps its
-// heartbeat and reports its own duration when it finishes.
-func TestProgressNestedOutcomeClosesOnlyTheSubStep(t *testing.T) {
+// A settled sub-step writes no row of its own: it advances the completion its
+// step reports, and the step keeps its row, its heartbeat and its own duration.
+func TestProgressSettledSubStepAdvancesCompletionWithoutARow(t *testing.T) {
 	presenter, clock, out := newTestProgress()
 	ctx := context.Background()
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Status: "running", Position: 1, Total: 1})
-	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Detail: "acquire the pinned server image", Status: "running", Position: 1, Total: 1, Nested: true})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Detail: "acquire the pinned server image", Status: "running", Position: 1, Total: 1, Declared: 2, Nested: true})
 	clock.advance(4 * time.Second)
-	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Detail: "acquire the pinned server image", Status: "ok", Position: 1, Total: 1, Nested: true})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Detail: "acquire the pinned server image", Status: "ok", Position: 1, Total: 1, Completed: 1, Declared: 2, Nested: true})
 	clock.advance(progressHeartbeat)
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Status: "done", Position: 1, Total: 1})
 	want := "\nProgress\n" +
-		"  [RUNNING]  Serve artifacts (1/1)\n" +
-		"  [RUNNING]  Serve artifacts: acquire the pinned server image (1/1)\n" +
-		"  [OK]       Serve artifacts: acquire the pinned server image (1/1)  4s\n" +
-		"  [RUNNING]  Serve artifacts (1/1)  still running, 14s\n" +
-		"  [DONE]     Serve artifacts (1/1)  14s\n"
+		"  [RUNNING]  [1/1] Serve artifacts\n" +
+		"  [RUNNING]  [1/1] Serve artifacts: acquire the pinned server image - 0%\n" +
+		"  [RUNNING]  [1/1] Serve artifacts: acquire the pinned server image - 50%  still running, 10s\n" +
+		"  [DONE]     [1/1] Serve artifacts  14s\n"
+	if out.String() != want {
+		t.Fatalf("progress = %q, want %q", out.String(), want)
+	}
+}
+
+// A counter that reaches two digits still starts every label at one column, so
+// a long plan's steps read as a list rather than as a ragged edge.
+func TestProgressPadsThePositionToItsTotal(t *testing.T) {
+	presenter, _, out := newTestProgress()
+	ctx := context.Background()
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "install the operating system", Status: "done", Position: 9, Total: 12})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "verify the installation", Status: "done", Position: 10, Total: 12})
+	want := "\nProgress\n" +
+		"  [DONE]     [ 9/12] install the operating system\n" +
+		"  [DONE]     [10/12] verify the installation\n"
 	if out.String() != want {
 		t.Fatalf("progress = %q, want %q", out.String(), want)
 	}
@@ -155,11 +170,11 @@ func TestProgressOpensEachHeadingOnce(t *testing.T) {
 	presenter.report(ctx, progressEvent{Heading: "Resolving", Label: "Native packages", Status: "ok", Detail: "no changes", Position: 2, Total: 2})
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Execution bundle", Status: "running", Position: 1, Total: 1})
 	want := "\nResolving\n" +
-		"  [RUNNING]  Python and Ansible (1/2)\n" +
-		"  [OK]       Python and Ansible: Python 3.14.7, Ansible 2.21.4 (1/2)\n" +
-		"  [OK]       Native packages: no changes (2/2)\n" +
+		"  [RUNNING]  [1/2] Python and Ansible\n" +
+		"  [OK]       [1/2] Python and Ansible: Python 3.14.7, Ansible 2.21.4\n" +
+		"  [OK]       [2/2] Native packages: no changes\n" +
 		"\nProgress\n" +
-		"  [RUNNING]  Execution bundle (1/1)\n"
+		"  [RUNNING]  [1/1] Execution bundle\n"
 	if out.String() != want {
 		t.Fatalf("progress = %q, want %q", out.String(), want)
 	}
@@ -192,20 +207,20 @@ func TestTerminalProgressRewritesTheRunningRowInPlace(t *testing.T) {
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Execution bundle", Detail: "acquiring cpython, source 1 of 2", Status: "running", Position: 1, Total: 1, Nested: true})
 	presenter.finish()
 	want := "\nResolving\n" +
-		"  [RUNNING]  Native packages (2/2)" +
-		eraseLine + "  [RUNNING]  Native packages (2/2)  still running, 1s" +
-		eraseLine + "  [RUNNING]  Native packages (2/2)  still running, 2s" +
-		eraseLine + "  [OK]       Native packages: no changes (2/2)  2s\n" +
+		"  [RUNNING]  [2/2] Native packages" +
+		eraseLine + "  [RUNNING]  [2/2] Native packages  still running, 1s" +
+		eraseLine + "  [RUNNING]  [2/2] Native packages  still running, 2s" +
+		eraseLine + "  [OK]       [2/2] Native packages: no changes  2s\n" +
 		"\nProgress\n" +
-		"  [RUNNING]  Execution bundle (1/1)" +
-		eraseLine + "  [RUNNING]  Execution bundle: acquiring cpython, source 1 of 2 (1/1)\n"
+		"  [RUNNING]  [1/1] Execution bundle" +
+		eraseLine + "  [RUNNING]  [1/1] Execution bundle: acquiring cpython, source 1 of 2\n"
 	if out.String() != want {
 		t.Fatalf("progress = %q, want %q", out.String(), want)
 	}
 }
 
-// A new step or heading never overwrites another step's row, and a nested
-// outcome leaves its block's line to the next refresh.
+// A new step or heading never overwrites another step's row, and a settled
+// sub-step leaves its step's line to the next refresh.
 func TestTerminalProgressClosesALineBeforeAnotherStepOrHeading(t *testing.T) {
 	presenter, clock, out := newTestTerminalProgress(120)
 	ctx := context.Background()
@@ -218,9 +233,8 @@ func TestTerminalProgressClosesALineBeforeAnotherStepOrHeading(t *testing.T) {
 		"  [RUNNING]  Installed host: verifying local identity\n" +
 		"  [RUNNING]  Execution bundle: verifying the retained bundle\n" +
 		"\nProgress\n" +
-		"  [RUNNING]  Serve artifacts (1/1)" +
-		eraseLine + "  [OK]       Serve artifacts: acquire the pinned server image (1/1)\n" +
-		"  [RUNNING]  Serve artifacts (1/1)  still running, 1s"
+		"  [RUNNING]  [1/1] Serve artifacts" +
+		eraseLine + "  [RUNNING]  [1/1] Serve artifacts  still running, 1s"
 	if out.String() != want {
 		t.Fatalf("progress = %q, want %q", out.String(), want)
 	}

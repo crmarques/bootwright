@@ -99,6 +99,7 @@ func (p *ControllerPresenter) ReportProgress(ctx context.Context, event prerequi
 	p.progress.report(ctx, progressEvent{
 		Heading: heading, Label: controllerActionLabel(event.Action), Detail: event.Detail,
 		Status: event.Status, Position: event.Step, Total: event.Steps, Nested: nested,
+		Completed: event.Completed, Declared: event.Declared,
 	})
 }
 
