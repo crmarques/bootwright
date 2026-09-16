@@ -20,6 +20,19 @@ var unsupportedCustomizations = [][]string{
 	{"customizations", "security", "diskEncryption"},
 }
 
+// refusedCustomization reports whether a profile selects an arm this contract
+// cannot install. FIPS is read rather than detected, because a profile that
+// declares it disabled has selected nothing, while one that enables it would
+// otherwise install a machine that is not in the mode it asked for.
+func refusedCustomization(spec api.Value) bool {
+	for _, path := range unsupportedCustomizations {
+		if spec.Has(path...) {
+			return true
+		}
+	}
+	return spec.Get("customizations", "security", "fips", "enabled").Bool()
+}
+
 // Unsupported lists every installation this contract cannot realize. A profile
 // arm it refuses is named through the Machine that selects it, because that is
 // the object an operator removes or changes.
@@ -43,11 +56,8 @@ func Unsupported(catalog api.Catalog) []string {
 			found = append(found, machine.Identity())
 			continue
 		}
-		for _, path := range unsupportedCustomizations {
-			if profile.Spec().Has(path...) {
-				found = append(found, machine.Identity())
-				break
-			}
+		if refusedCustomization(profile.Spec()) {
+			found = append(found, machine.Identity())
 		}
 	}
 	slices.Sort(found)

@@ -179,6 +179,9 @@ func TestUnsupportedNamesEveryProfileArmThisContractRefuses(t *testing.T) {
 		"disk encryption": installProfile(field("customizations", customizations.With("security", api.MapValue(
 			field("diskEncryption", api.MapValue(text("recoveryPassphraseRef", "luks"))),
 		)))),
+		"fips": installProfile(field("customizations", customizations.With("security", api.MapValue(
+			field("fips", api.MapValue(field("enabled", api.BoolValue(true)))),
+		)))),
 	} {
 		t.Run(name, func(t *testing.T) {
 			unsupported := Unsupported(labCatalog(profile))
@@ -189,6 +192,14 @@ func TestUnsupportedNamesEveryProfileArmThisContractRefuses(t *testing.T) {
 	}
 	if unsupported := Unsupported(labCatalog()); len(unsupported) != 0 {
 		t.Fatalf("the supported shape reported %v", unsupported)
+	}
+	// A profile that declares FIPS disabled has selected nothing, so it
+	// installs exactly as one that never mentioned it.
+	disabled := installProfile(field("customizations", customizations.With("security", api.MapValue(
+		field("fips", api.MapValue(field("enabled", api.BoolValue(false)))),
+	))))
+	if unsupported := Unsupported(labCatalog(disabled)); len(unsupported) != 0 {
+		t.Fatalf("a disabled FIPS declaration reported %v", unsupported)
 	}
 }
 
