@@ -19,8 +19,17 @@ type HostEvidence struct {
 	Pool          string            `json:"pool"`
 	Postcondition bool              `json:"postcondition"`
 	Request       string            `json:"request"`
-	Service       string            `json:"service"`
+	Services      []ServiceEvidence `json:"services"`
 	URI           bool              `json:"uri"`
+}
+
+// ServiceEvidence is one driver daemon's observed state. Enablement is proved
+// through the state the host reports, never through the request that asked for
+// it.
+type ServiceEvidence struct {
+	Enabled bool   `json:"enabled"`
+	Name    string `json:"name"`
+	State   string `json:"state"`
 }
 
 type NetworkEvidence struct {
@@ -74,8 +83,8 @@ func ValidateHostPresence(data []byte, request HostRequest, digest string) error
 	if !evidence.Hypervisor {
 		return refusal("lifecycle.state", "the provider host does not carry the hypervisor closure", "")
 	}
-	if evidence.Service != "active" {
-		return refusal("lifecycle.state", "the provider host virtualization daemon is not active", "")
+	if err := matchServices(evidence.Services, request.Services); err != nil {
+		return err
 	}
 	if !evidence.URI {
 		return refusal("lifecycle.state", "the declared libvirt connection does not answer", "")
@@ -84,6 +93,32 @@ func ValidateHostPresence(data []byte, request HostRequest, digest string) error
 		return refusal("lifecycle.state", "the provider's virtual-media pool is not active", "")
 	}
 	return matchNetworks(evidence.Networks, request.Networks)
+}
+
+// matchServices requires every frozen driver daemon to be running and enabled.
+// A daemon that runs only because something woke it leaves the networks and
+// pool it owns absent after the host restarts, so enablement is as much a
+// postcondition as the running state is.
+func matchServices(observed []ServiceEvidence, frozen []string) error {
+	if len(observed) != len(frozen) {
+		return refusal("lifecycle.state", "the provider host evidence does not cover every libvirt driver daemon", "")
+	}
+	sorted := slices.Clone(observed)
+	slices.SortFunc(sorted, func(x, y ServiceEvidence) int { return strings.Compare(x.Name, y.Name) })
+	ordered := slices.Sorted(slices.Values(frozen))
+	for index, name := range ordered {
+		entry := sorted[index]
+		if entry.Name != name {
+			return refusal("lifecycle.state", "the provider host evidence does not match its frozen driver daemons", "")
+		}
+		if entry.State != "active" {
+			return refusal("lifecycle.state", "a libvirt driver daemon the provider depends on is not active", "")
+		}
+		if !entry.Enabled {
+			return refusal("lifecycle.state", "a libvirt driver daemon the provider depends on does not start with the host", "")
+		}
+	}
+	return nil
 }
 
 func matchNetworks(observed []NetworkEvidence, frozen []Network) error {

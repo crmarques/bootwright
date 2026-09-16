@@ -31,11 +31,19 @@
     </disk>
 {% endfor %}
 {% for interface in bootwright_substrate_machine_request.interfaces %}
+{% if interface.network %}
+    <interface type="network">
+      <mac address="{{ interface.macAddress }}"/>
+      <source network="{{ interface.network }}"/>
+      <model type="virtio"/>
+    </interface>
+{% else %}
     <interface type="bridge">
       <mac address="{{ interface.macAddress }}"/>
       <source bridge="{{ interface.bridge }}"/>
       <model type="virtio"/>
     </interface>
+{% endif %}
 {% endfor %}
 {% if bootwright_substrate_machine_request.tpm %}
     <tpm model="tpm-crb">

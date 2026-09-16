@@ -147,9 +147,13 @@ func hostEvidence(request HostRequest, digest string) json.RawMessage {
 		}
 		networks = append(networks, entry)
 	}
+	services := make([]ServiceEvidence, 0, len(request.Services))
+	for _, service := range request.Services {
+		services = append(services, ServiceEvidence{Enabled: true, Name: service, State: "active"})
+	}
 	data, _ := json.Marshal(HostEvidence{
 		Hypervisor: true, Networks: networks, Pool: "active", Postcondition: true,
-		Request: digest, Service: "active", URI: true,
+		Request: digest, Services: services, URI: true,
 	})
 	return data
 }

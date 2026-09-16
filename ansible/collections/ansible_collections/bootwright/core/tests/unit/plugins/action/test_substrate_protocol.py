@@ -18,7 +18,7 @@ def host_observation(**overrides):
         "hypervisor": True,
         "networks": [{"bridge": True, "busy": False, "managed": True, "name": "n", "owned": True, "state": "active", "uuid": "u"}],
         "pool": "active",
-        "service": "active",
+        "services": [{"enabled": True, "name": "virtnetworkd.service", "state": "active"}],
         "uri": True,
     }
     observation.update(overrides)
@@ -29,7 +29,8 @@ def test_a_provider_host_postcondition_needs_every_proof():
     assert substrate_host_protocol.presence(host_observation(), DIGEST)["postcondition"]
     for overrides in (
         {"hypervisor": False},
-        {"service": "failed"},
+        {"services": [{"enabled": True, "name": "virtnetworkd.service", "state": "failed"}]},
+        {"services": [{"enabled": False, "name": "virtnetworkd.service", "state": "active"}]},
         {"uri": False},
         {"pool": ""},
         {"networks": [{"bridge": True, "busy": False, "managed": True, "name": "n", "owned": False, "state": "active", "uuid": "u"}]},
@@ -68,10 +69,13 @@ def test_an_unmet_provider_host_realization_names_what_is_unproved():
     complete = substrate_host_protocol.presence(host_observation(), DIGEST)
     assert substrate_host_protocol.unproved(complete) == []
     bare = substrate_host_protocol.presence(
-        host_observation(hypervisor=False, uri=False, service="failed", pool="", networks=[forgotten_network()]),
+        host_observation(
+            hypervisor=False, uri=False, pool="", networks=[forgotten_network()],
+            services=[{"enabled": False, "name": "virtnetworkd.service", "state": "failed"}],
+        ),
         DIGEST,
     )
-    assert substrate_host_protocol.unproved(bare) == ["hypervisor", "uri", "service", "pool", "networks"]
+    assert substrate_host_protocol.unproved(bare) == ["hypervisor", "uri", "services", "pool", "networks"]
 
 
 def test_a_provider_host_removal_proves_only_what_it_owns():

@@ -41,10 +41,14 @@ type HostRequest struct {
 	// the host's own package manager. The controller stage installs only the
 	// libvirt client a provider selects, so the daemon, its emulator and the
 	// TPM helper are this block's on either placement arm.
-	Provisioned bool   `json:"provisioned"`
-	Service     string `json:"service"`
-	URI         string `json:"uri"`
-	Version     string `json:"version"`
+	Provisioned bool `json:"provisioned"`
+	// Services are the libvirt driver daemons this provider depends on, in
+	// canonical order. Each is enabled as well as started, because a network
+	// and a pool set to autostart only come back after a restart when the
+	// driver that owns them does.
+	Services []string `json:"services"`
+	URI      string   `json:"uri"`
+	Version  string   `json:"version"`
 }
 
 // Disk is one qcow2 image a domain owns, at the exact size the profile froze.
@@ -55,12 +59,16 @@ type Disk struct {
 	Target  string `json:"target"`
 }
 
-// Interface is one attachment the domain is wired to, on the bridge its
-// provider realized, with the address this declaration always derives.
+// Interface is one attachment the domain is wired to, with the address this
+// declaration always derives. A managed attachment names the libvirt network
+// that owns the bridge, so the hypervisor holds the dependency and refuses to
+// start a domain whose network is not up; an external one names the bridge
+// alone, because nothing on this host defines it.
 type Interface struct {
 	Bridge     string `json:"bridge"`
 	MACAddress string `json:"macAddress"`
 	Name       string `json:"name"`
+	Network    string `json:"network"`
 }
 
 // Controller is the emulated BMC this Machine is managed through: its own

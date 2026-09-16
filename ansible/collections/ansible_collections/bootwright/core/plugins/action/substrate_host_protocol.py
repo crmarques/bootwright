@@ -15,11 +15,13 @@ PHASES = ("loaded", "group", "completed")
 GROUP_STATUSES = ("running", "ok", "failed", "skipped")
 OUTCOMES = ("changed", "unchanged")
 MAX_NETWORKS = 64
+MAX_SERVICES = 16
 HEX = set("0123456789abcdef")
 # The observation carries each network's UUID so a definition can be offered
 # back to libvirt under the identity it already holds. Evidence stays narrower:
 # Go validates exactly the facts below, and rejects any field it does not know.
 OBSERVED_NETWORK = {"bridge", "busy", "managed", "name", "owned", "state", "uuid"}
+OBSERVED_SERVICE = {"enabled", "name", "state"}
 
 
 def digest(value):
@@ -41,6 +43,23 @@ def network_evidence(entry):
     }
 
 
+def service_evidence(entry):
+    if set(entry) != OBSERVED_SERVICE:
+        raise ValueError("service evidence")
+    return {
+        "enabled": bool(entry["enabled"]),
+        "name": str(entry["name"]),
+        "state": str(entry["state"]),
+    }
+
+
+def services_of(observation):
+    services = observation.get("services") or []
+    if len(services) > MAX_SERVICES:
+        raise ValueError("service count")
+    return [service_evidence(entry) for entry in services]
+
+
 def presence(observation, request_digest):
     networks = observation.get("networks") or []
     if len(networks) > MAX_NETWORKS:
@@ -52,10 +71,12 @@ def presence(observation, request_digest):
         "pool": str(observation.get("pool", "")),
         "postcondition": False,
         "request": digest(request_digest),
-        "service": str(observation.get("service", "")),
+        "services": services_of(observation),
         "uri": bool(observation.get("uri")),
     }
-    complete = evidence["hypervisor"] and evidence["service"] == "active" and evidence["uri"] and evidence["pool"] == "active"
+    complete = evidence["hypervisor"] and evidence["uri"] and evidence["pool"] == "active"
+    for entry in evidence["services"]:
+        complete = complete and entry["state"] == "active" and entry["enabled"]
     for entry in evidence["networks"]:
         complete = complete and entry["bridge"] and (not entry["managed"] or (entry["owned"] and entry["state"] == "active"))
     evidence["postcondition"] = complete
@@ -88,8 +109,10 @@ def unproved(evidence):
         names.append("hypervisor")
     if not evidence["uri"]:
         names.append("uri")
-    if evidence["service"] != "active":
-        names.append("service")
+    for entry in evidence["services"]:
+        if entry["state"] != "active" or not entry["enabled"]:
+            names.append("services")
+            break
     if evidence["pool"] != "active":
         names.append("pool")
     for entry in evidence["networks"]:
@@ -109,7 +132,7 @@ def absence(observation, request_digest):
         "pool": "",
         "postcondition": bool(gone),
         "request": digest(request_digest),
-        "service": "",
+        "services": [],
         "uri": False,
     }
 

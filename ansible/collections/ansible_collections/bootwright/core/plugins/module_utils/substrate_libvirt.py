@@ -79,6 +79,17 @@ def unit_state(runner, service):
     return active if active in UNIT_STATES else ""
 
 
+def unit_enabled(runner, service):
+    """Report whether the unit starts with the host.
+
+    A libvirt driver that only answers because something woke its socket takes
+    the networks and pools it owns down with it, so what the host does at boot
+    is the question, not whether the daemon happens to be running now.
+    """
+    _code, shown = invoke(runner, [SYSTEMCTL, "is-enabled", service], 256)
+    return shown.strip() == "enabled"
+
+
 def uri_answers(runner, uri):
     code, _output = virsh(runner, uri, "version")
     return code == 0
@@ -163,7 +174,12 @@ def running_domains(runner, uri):
 
 
 def domain_bridges(runner, uri, name):
-    """Name every bridge one domain attaches an interface to."""
+    """Name every bridge and libvirt network one domain attaches to.
+
+    A domain wired to a managed network names that network, and libvirt adds
+    the bridge it resolved to while the domain runs. Both are collected, so an
+    attachment stays observably in use whichever form its interface takes.
+    """
     code, output = virsh(runner, uri, "dumpxml", name)
     if code != 0:
         return []
@@ -171,24 +187,25 @@ def domain_bridges(runner, uri, name):
         root = ElementTree.fromstring(output)
     except ElementTree.ParseError:
         return []
-    bridges = []
+    attachments = []
     for source in root.findall("./devices/interface/source"):
-        bridge = source.get("bridge")
-        if bridge:
-            bridges.append(bridge)
-    return bridges
+        for attribute in ("bridge", "network"):
+            value = source.get(attribute)
+            if value:
+                attachments.append(value)
+    return attachments
 
 
 def busy_bridges(runner, uri):
-    """Every bridge a running domain is attached to.
+    """Every bridge and network a running domain is attached to.
 
     A network carrying a running guest is in use whoever owns the guest, so
     this reads the whole hypervisor rather than only this context's domains.
     """
-    bridges = set()
+    attachments = set()
     for name in running_domains(runner, uri):
-        bridges.update(domain_bridges(runner, uri, name))
-    return bridges
+        attachments.update(domain_bridges(runner, uri, name))
+    return attachments
 
 
 def disk_size_gib(runner, path):
@@ -218,18 +235,25 @@ def observe_host(runner, request):
     busy = busy_bridges(runner, request["uri"]) if answers else set()
     for network in request.get("networks") or []:
         entry = {"name": network["name"], "managed": bool(network["managed"]), "bridge": bridge_present(network["bridge"])}
-        entry["busy"] = network["bridge"] in busy
+        entry["busy"] = network["bridge"] in busy or network["name"] in busy
         if entry["managed"] and answers:
             state = network_state(runner, request["uri"], network["name"])
             entry["state"], entry["owned"], entry["uuid"] = state["state"], state["owned"], state["uuid"]
         else:
             entry["state"], entry["owned"], entry["uuid"] = "", False, ""
         networks.append(entry)
+    services = []
+    for service in request.get("services") or []:
+        services.append({
+            "name": service,
+            "state": unit_state(runner, service),
+            "enabled": unit_enabled(runner, service),
+        })
     return {
         "hypervisor": packages_present(runner, request.get("packages") or []),
         "networks": networks,
         "pool": pool_state(runner, request["uri"], request["poolName"]) if answers else "",
-        "service": unit_state(runner, request["service"]),
+        "services": services,
         "uri": answers,
     }
 

@@ -29,8 +29,9 @@ argument_specs:
           provisioned:
             type: bool
             required: true
-          service:
-            type: str
+          services:
+            type: list
+            elements: str
             required: true
           uri:
             type: str

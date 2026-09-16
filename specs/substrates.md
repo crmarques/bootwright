@@ -66,8 +66,14 @@ selected by the provider's host reference, so the controller block installs it
 and this block proves presence only. On an SSH host this block installs it
 through the host's native package manager, freezing the exact transaction in
 its attempt before authorizing it under the same before-state rules the
-controller stage has. The daemon is enabled and started, and the declared
-`uri` must answer before any network or pool is defined.
+controller stage has. The libvirt driver daemons this provider's own resources
+live in — the hypervisor the `uri` answers on, the network driver that owns a
+managed attachment's bridge, and the storage driver that owns the media pool —
+are each started and enabled to start with the host, because a network or pool
+set to autostart is only restored by the driver that owns it: a socket-activated
+driver leaves both absent until something asks for them, so a host that
+restarts carries neither. The declared `uri` must answer before any network or
+pool is defined.
 
 **Managed networks.** Each `networkAttachments[]` entry whose libvirt arm
 declares `management: managed` becomes one persistent libvirt network named
@@ -94,8 +100,9 @@ under a guest that is using it.
 bridge name is host-global; `libvirt-network:<name>` for every managed network;
 `path:` for the pool directory.
 
-**Evidence.** Completion requires the hypervisor present by package name, the
-daemon active, the `uri` answering, every managed network active with the frozen
+**Evidence.** Completion requires the hypervisor present by package name, every
+driver daemon active and enabled to start with the host, the `uri` answering,
+every managed network active with the frozen
 definition and ownership metadata, every external bridge present, and the pool
 active. Replay reports `completed` with no change when live state matches. The
 differences it converges are an owned network whose definition differs, which
@@ -120,11 +127,14 @@ deterministic UUID derived from the context and Machine names, `q35` machine
 type with KVM and BIOS firmware, the selected profile's vCPU count and memory,
 a root disk of `diskGiB` and one disk per `dataDisks[]` entry as `qcow2` images
 beneath `/var/lib/libvirt/images/bootwright/<context>/<machine>/`, one
-interface per effective attachment on the attachment's bridge with a
-deterministic locally administered MAC, an emulated TPM 2.0 when the profile
-declares `tpm`, a serial console, and ownership metadata naming the context and
-Machine. The domain is defined without autostart and left powered off; booting
-it is [managed OS](managed-os.md) work. A same-name domain without this
+interface per effective attachment with a deterministic locally administered
+MAC, an emulated TPM 2.0 when the profile declares `tpm`, a serial console, and
+ownership metadata naming the context and Machine. An interface attaches to the
+libvirt network a managed attachment defines, and to the bridge alone for an
+external one, so the hypervisor holds the dependency on a network this context
+owns and refuses to start a Machine whose network is down rather than starting
+it unreachable. The domain is defined without autostart and left powered off;
+booting it is [managed OS](managed-os.md) work. A same-name domain without this
 context's metadata is foreign and refuses; an owned domain whose root disk size
 differs from the profile refuses rather than resizing.
 

@@ -38,8 +38,16 @@ var hypervisorPackages = []string{
 // HypervisorPackages is the closure a provider host needs, in canonical order.
 func HypervisorPackages() []string { return append([]string(nil), hypervisorPackages...) }
 
-// serviceUnit is the daemon whose socket the declared URI answers on.
-const serviceUnit = "libvirtd.service"
+// serviceUnits are the modular libvirt drivers this provider's own resources
+// live in: the hypervisor the URI answers on, the network driver that owns a
+// managed attachment's bridge, and the storage driver that owns the media
+// pool. Each is socket-activated by default, which starts autostart networks
+// and pools only once something asks the driver for them, so a host that
+// restarts carries neither until this block enables them.
+var serviceUnits = []string{"virtqemud.service", "virtnetworkd.service", "virtstoraged.service"}
+
+// ServiceUnits are the driver daemons a provider host runs, in canonical order.
+func ServiceUnits() []string { return append([]string(nil), serviceUnits...) }
 
 // domainOff is the one state libvirt reports for a domain that holds nothing.
 // Every other state, including paused and suspended, still holds the memory
@@ -62,7 +70,7 @@ func MachineBlockID(machine string) string { return "machine-" + machine }
 // the host layout invalidates a frozen plan.
 func HostContentDigest() string {
 	return contentDigest("bootwright.substrate.libvirt.host-v1", HostImplementation, hostRequestVersion,
-		strings.Join(hypervisorPackages, ","), substrate.ImagePrefix, substrate.Prefix, serviceUnit)
+		strings.Join(hypervisorPackages, ","), substrate.ImagePrefix, substrate.Prefix, strings.Join(serviceUnits, ","))
 }
 
 func MachineContentDigest() string {

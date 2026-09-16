@@ -41,16 +41,19 @@
     - not substrate_libvirt_host_before.observation.hypervisor
   changed_when: not substrate_libvirt_host_before.observation.hypervisor
 
-- name: Enable and start the virtualization daemon
+- name: Enable and start each libvirt driver daemon this provider depends on
   ansible.builtin.command:
     argv:
       - /usr/bin/systemctl
       - enable
       - --now
-      - '{{ bootwright_substrate_host_request.service }}'
+      - '{{ item.name }}'
+  loop: '{{ substrate_libvirt_host_before.observation.services }}'
+  loop_control:
+    label: '{{ item.name }}'
   register: substrate_libvirt_host_daemon
-  when: substrate_libvirt_host_before.observation.service != 'active'
-  changed_when: substrate_libvirt_host_before.observation.service != 'active'
+  when: item.state != 'active' or not item.enabled
+  changed_when: item.state != 'active' or not item.enabled
 
 - name: Prove the declared connection answers before defining anything
   ansible.builtin.command:

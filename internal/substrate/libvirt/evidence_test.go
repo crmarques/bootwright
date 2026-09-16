@@ -48,7 +48,10 @@ func TestHostPresenceRequiresEveryProof(t *testing.T) {
 	}
 	for name, damage := range map[string]func(*HostEvidence){
 		"no hypervisor":     func(e *HostEvidence) { e.Hypervisor = false },
-		"daemon inactive":   func(e *HostEvidence) { e.Service = "failed" },
+		"daemon inactive":   func(e *HostEvidence) { e.Services[0].State = "failed" },
+		"daemon not booted": func(e *HostEvidence) { e.Services[0].Enabled = false },
+		"daemon dropped":    func(e *HostEvidence) { e.Services = e.Services[1:] },
+		"daemon renamed":    func(e *HostEvidence) { e.Services[0].Name = "libvirtd.service" },
 		"uri silent":        func(e *HostEvidence) { e.URI = false },
 		"pool inactive":     func(e *HostEvidence) { e.Pool = "" },
 		"no postcondition":  func(e *HostEvidence) { e.Postcondition = false },

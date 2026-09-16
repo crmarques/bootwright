@@ -68,6 +68,31 @@ func TestAnExternalAttachmentFreezesNoManagedNetworkFields(t *testing.T) {
 	}
 }
 
+// A domain wired to a bridge name starts whether or not the network that owns
+// the bridge is up, and a host that restarts brings neither back on its own.
+// Naming the network instead hands libvirt the dependency.
+func TestAManagedAttachmentWiresTheDomainToItsLibvirtNetwork(t *testing.T) {
+	requests, err := MachineRequests(labCatalog(), "controller", testContext)
+	if err != nil || len(requests) == 0 {
+		t.Fatalf("requests = %d (%v)", len(requests), err)
+	}
+	wired := requests[0].Interfaces[0]
+	if wired.Network != "bootwright-lab-lab-guests" || wired.Bridge != "virbr-lab" {
+		t.Fatalf("managed interface = %+v", wired)
+	}
+	external := provider(field("networkAttachments", api.ListValue(api.MapValue(
+		text("name", "lab-guests"),
+		field("libvirt", api.MapValue(text("bridge", "br0"), text("management", "external"))),
+	))))
+	requests, err = MachineRequests(catalogOf(controller(), external, networkConfig(), guest("rhel-01")), "controller", testContext)
+	if err != nil || len(requests) == 0 {
+		t.Fatalf("external requests = %d (%v)", len(requests), err)
+	}
+	if named := requests[0].Interfaces[0]; named.Network != "" || named.Bridge != "br0" {
+		t.Fatalf("external interface = %+v", named)
+	}
+}
+
 func TestHostReservationsClaimEveryManagedNetworkAndThePool(t *testing.T) {
 	requests, _ := HostRequests(labCatalog(), "controller", testContext)
 	want := []string{"bridge:virbr-lab", "libvirt-network:bootwright-lab-lab-guests", "path:/var/lib/libvirt/images/bootwright/lab/lab-libvirt/vmedia"}

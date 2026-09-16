@@ -12,6 +12,7 @@ from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt 
     network_state,
     observe_host,
     packages_present,
+    unit_enabled,
     unit_state,
 )
 
@@ -74,6 +75,16 @@ def test_only_a_known_unit_state_is_reported():
     assert unit_state(runner_for({"libvirtd.service": loaded("bananas")}), "libvirtd.service") == ""
 
 
+# A socket-activated driver answers `indirect`: it runs when something asks for
+# it and takes the networks and pools it owns down with it, which is exactly
+# the host that loses its guest network across a restart.
+def test_only_an_enabled_unit_starts_with_the_host():
+    for reported in ("enabled\n", "enabled-runtime\n", "indirect\n", "disabled\n", "static\n"):
+        runner = runner_for({"is-enabled virtnetworkd.service": (0, reported, "")})
+        assert unit_enabled(runner, "virtnetworkd.service") == (reported.strip() == "enabled")
+    assert not unit_enabled(runner_for({}), "virtnetworkd.service")
+
+
 # systemd reports `inactive` for a unit it has never heard of, so a removal that
 # read the active state alone could never prove the unit gone.
 def test_a_unit_systemd_does_not_know_is_absent_rather_than_inactive():
@@ -124,7 +135,7 @@ def test_an_observed_network_carries_the_identity_libvirt_assigned_it():
         "networks": [{"name": "bootwright-lab-guests", "bridge": "virbr-lab", "managed": True}],
         "packages": ["qemu-kvm"],
         "poolName": "bootwright-lab-p-vmedia",
-        "service": "libvirtd.service",
+        "services": ["virtnetworkd.service"],
         "uri": "qemu:///system",
     }
     observation = observe_host(runner, request)
@@ -152,7 +163,7 @@ def test_a_host_whose_connection_is_silent_reports_nothing_it_cannot_read():
         "networks": [{"name": "bootwright-lab-guests", "bridge": "virbr-lab", "managed": True}],
         "packages": ["qemu-kvm"],
         "poolName": "bootwright-lab-p-vmedia",
-        "service": "libvirtd.service",
+        "services": ["virtnetworkd.service"],
         "uri": "qemu:///system",
     }
     observation = observe_host(runner_for({}), request)
@@ -169,6 +180,34 @@ RUNNING_DOMAIN = """<domain type="kvm">
     <interface type="bridge"><source bridge="virbr-lab"/></interface>
   </devices>
 </domain>"""
+
+NETWORK_DOMAIN = """<domain type="kvm">
+  <name>other-guest</name>
+  <devices>
+    <interface type="network"><source network="bootwright-lab-guests"/></interface>
+  </devices>
+</domain>"""
+
+
+# Every driver the provider depends on is observed the same way, because a
+# daemon that is running but not enabled is the state this block converges.
+def test_each_declared_driver_daemon_reports_its_state_and_enablement():
+    runner = runner_for({
+        "is-enabled virtnetworkd.service": (0, "disabled\n", ""),
+        "virtnetworkd.service": loaded("active"),
+        "version": (0, "", ""),
+        "--query qemu-kvm": (0, "", ""),
+    })
+    request = {
+        "networks": [],
+        "packages": ["qemu-kvm"],
+        "poolName": "bootwright-lab-p-vmedia",
+        "services": ["virtnetworkd.service"],
+        "uri": "qemu:///system",
+    }
+    assert observe_host(runner, request)["services"] == [
+        {"name": "virtnetworkd.service", "state": "active", "enabled": False},
+    ]
 
 
 # Only `shut off` means removing a domain interrupts nothing. Every other state
@@ -194,6 +233,13 @@ def test_a_bridge_is_busy_while_any_running_guest_is_attached():
     assert busy_bridges(attached, "qemu:///system") == {"virbr-lab"}
     idle = runner_for({"list --name --state-running": (0, "\n", "")})
     assert busy_bridges(idle, "qemu:///system") == set()
+    # A domain wired to a managed network names the network, so a removal that
+    # read bridges alone would call an attachment carrying a guest quiescent.
+    by_network = runner_for({
+        "list --name --state-running": (0, "other-guest\n", ""),
+        "dumpxml other-guest": (0, NETWORK_DOMAIN, ""),
+    })
+    assert busy_bridges(by_network, "qemu:///system") == {"bootwright-lab-guests"}
     # A hypervisor that will not list its domains proves no bridge is free, and
     # the empty answer it gives is why the engine treats an unreadable probe as
     # live rather than as idle.

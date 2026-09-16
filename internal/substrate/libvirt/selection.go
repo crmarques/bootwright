@@ -70,7 +70,7 @@ func hostRequestFor(catalog api.Catalog, provider api.Object, controllerMachine,
 		PoolName:    substrate.PoolName(contextName, name),
 		PoolPath:    substrate.PoolPath(contextName, name),
 		Provisioned: true,
-		Service:     serviceUnit,
+		Services:    ServiceUnits(),
 		URI:         uri,
 		Version:     hostRequestVersion,
 	}, nil
@@ -227,6 +227,10 @@ func interfacesFor(catalog api.Catalog, provider, machine api.Object, contextNam
 		return nil, refusal("api.reference", "the Machine's attachment does not resolve on its provider", "correct spec.network.attachmentRef on "+machine.Identity())
 	}
 	bridge := attachment.Get("libvirt", "bridge").Text()
+	defined := ""
+	if attachment.Get("libvirt", "management").Text() == "managed" {
+		defined = substrate.NetworkName(contextName, reference)
+	}
 	names, err := ethernetInterfaces(catalog, machine)
 	if err != nil {
 		return nil, err
@@ -234,7 +238,7 @@ func interfacesFor(catalog api.Catalog, provider, machine api.Object, contextNam
 	interfaces := make([]Interface, 0, len(names))
 	for _, name := range names {
 		interfaces = append(interfaces, Interface{
-			Bridge: bridge, MACAddress: substrate.InterfaceMAC(contextName, machine.Name(), name), Name: name,
+			Bridge: bridge, MACAddress: substrate.InterfaceMAC(contextName, machine.Name(), name), Name: name, Network: defined,
 		})
 	}
 	return interfaces, nil
