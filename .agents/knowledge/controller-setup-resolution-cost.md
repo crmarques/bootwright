@@ -40,18 +40,36 @@ why each removed step was expensive, which is the reason those rules matter.
   `internal/controller/nativelocal/resolver_linux_amd64.go` (`Check`,
   `decodePresence`), `ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/native_resolution.py`
   (`present`).
-- None of this reuse survives a change to the embedded automation. `Digest()`
+- An automation revision still names a new bundle area, because `Digest()`
   hashes every embedded file into `BootstrapDefinition.AutomationDigest`, which
-  enters the bootstrap digest and through it `CatalogDigest`, the name of the
-  bundle area itself. Editing one collection file therefore names an empty area:
-  the retained resolution is refused as incompatible, and the unchanged
-  interpreter, wheels and native closure are acquired again at full price. Only
-  the native roots stay, because their readiness is host presence. Expect this
-  after any build that touched `ansible/`, and expect the superseded area to
-  remain. Code: `ansible/assets.go` (`Digest`),
+  enters the bootstrap digest and through it `CatalogDigest`. It no longer costs
+  a resolution. `validateDefinition` checks the provided execution foundation
+  first and reports an automation-only mismatch as `ErrAutomationSuperseded`
+  beside `ErrBootstrapIncompatible`; `Setup` then carries that resolution
+  forward instead of replacing it. `Manager.Rebase` reads the retained sources
+  out of the sealed area, projects them under the embedded automation and
+  returns the same resolution under its new projection identity, and `Prepare`
+  reads each source from that area before contacting a publisher. Nothing is
+  downloaded and nothing is solved when the native roots are still installed.
+  The superseded area still remains. Code: `ansible/assets.go` (`Digest`),
   `internal/controller/prerequisites/definition.go` (`resolvedContentDigest`),
-  `internal/controller/bundlelocal/manager.go` (`validateDefinition`). Retirement
-  and an identity split are deferred to milestone candidate C24.
+  `internal/controller/bundlelocal/manager.go` (`validateDefinition`,
+  `qualifiedFoundation`, `Rebase`, `retainedSource`),
+  `internal/controller/prerequisites/resolution.go` (`carryForward`, `rebind`).
+  Retirement of the replaced area is deferred to milestone candidate C24.
+- Staging acquires only the repository members the provided solver opens:
+  `primary` and `filelists` for DNF5, plus `updateinfo` and `modules` for DNF4,
+  whose sack fill reads them. The publisher's own `repomd.xml` is still staged
+  whole and still names the authenticated snapshot. Code:
+  `internal/controller/nativelocal/resolver_linux_amd64.go` (`solverMetadata`,
+  `stageRepository`).
+- The inventory snapshot is taken once per invocation. `Resolver` retains the
+  copy and reuses it while the live database still has the identity it was
+  copied from, so a setup that proves presence three or four times copies the
+  database once; `Close`, returned through `localControllerDependencies` and
+  deferred by `run`, releases it. Code:
+  `internal/controller/nativelocal/resolver_linux_amd64.go` (`stageDatabase`,
+  `databaseState`, `retainedDatabase.serves`, `Close`).
 - Evidence: `internal/controller/prerequisites` tests asserting that a ready
   controller, a retry after a terminal failure and a missing native root contact
   no bootstrap or tool publisher
@@ -61,7 +79,23 @@ why each removed step was expensive, which is the reason those rules matter.
   test in `internal/controller/bundlelocal` (`TestSealedBundleReadinessIsPresenceOnly`),
   the presence evidence test in `internal/controller/nativelocal`, and the
   helper unit test `test_present_reports_roots_by_name_without_verifying_files`.
+  For carrying a resolution forward:
+  `TestSupersededAutomationCarriesTheRetainedResolutionForward` and
+  `TestCarryForwardRefusesWithoutTheRetainedBundleItReadsFrom` in
+  `internal/controller/prerequisites`, and
+  `TestRebaseKeepsEveryRetainedIdentityAndOnlyMovesTheAutomation`,
+  `TestRebaseRefusesRetainedSourcesThatAreNotTheirApprovedBytes` and
+  `TestPreparationRecoversRetainedSourcesInsteadOfAcquiringThem` in
+  `internal/controller/bundlelocal`. For staging and the snapshot:
+  `TestSolverMetadataNamesOnlyWhatTheProvidedSolverLoads`,
+  `TestStagingSkipsAdvertisedMembersTheSolverNeverOpens` and
+  `TestRetainedDatabaseServesOnlyTheStateItWasCopiedFrom`.
 
 Applies to the Linux/amd64 `bundlelocal` and `nativelocal` adapters. Revisit if
 a publisher offers a projection identity without payload acquisition, or if a
 presence-only readiness ever admits a broken dependency in practice.
+
+Not yet qualified on a real host: that DNF5 with `optional_metadata_types` set
+to `filelists`, and DNF4's `fill_sack`, open no repository member outside the
+staged set. A solver that does opens a member the staging no longer wrote, and
+the resolve fails loudly rather than solving against partial metadata.

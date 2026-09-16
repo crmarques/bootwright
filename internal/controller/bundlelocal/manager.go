@@ -105,7 +105,21 @@ func presentFiles(ctx context.Context, area prerequisites.BundleArea, record cat
 	return prerequisites.BundleInspection{Ready: ready, ToolsReady: toolsReady, Recoverable: true}, nil
 }
 
-func (m *Manager) Prepare(ctx context.Context, area prerequisites.BundleArea, definition prerequisites.Definition, egress prerequisites.SetupEgress, progress func(prerequisites.ProgressEvent)) error {
+// retainedSource reads one approved source from a sealed area this host already
+// holds. A missing, unreadable or unexpected entry is not a failure: the caller
+// acquires that source from its publisher exactly as it otherwise would.
+func retainedSource(ctx context.Context, retained prerequisites.BundleArea, source prerequisites.DependencySource) []byte {
+	if retained == nil || source.Bytes <= 0 || source.Bytes > maxMemberBytes {
+		return nil
+	}
+	data, err := retained.Read(ctx, sourcePath(source), int(source.Bytes))
+	if err != nil || !approvedBytes(source, data) {
+		return nil
+	}
+	return data
+}
+
+func (m *Manager) Prepare(ctx context.Context, area, retained prerequisites.BundleArea, definition prerequisites.Definition, egress prerequisites.SetupEgress, progress func(prerequisites.ProgressEvent)) error {
 	record, err := validateDefinition(definition)
 	if err != nil {
 		return err
@@ -144,10 +158,14 @@ func (m *Manager) Prepare(ctx context.Context, area prerequisites.BundleArea, de
 		}
 		name := sourcePath(source)
 		var data []byte
+		position := ", source " + strconv.Itoa(index+1) + " of " + strconv.Itoa(len(record.Baseline))
 		if _, found := entries[name]; found {
 			data, err = area.Read(ctx, name, int(source.Bytes))
+		} else if held := retainedSource(ctx, retained, source); held != nil {
+			report("recovering " + path.Base(source.ID) + position)
+			data, err = held, nil
 		} else {
-			report("acquiring " + path.Base(source.ID) + ", source " + strconv.Itoa(index+1) + " of " + strconv.Itoa(len(record.Baseline)))
+			report("acquiring " + path.Base(source.ID) + position)
 			data, err = m.fetch(ctx, source, egress)
 		}
 		if err != nil {
@@ -218,18 +236,14 @@ func validateDefinition(definition prerequisites.Definition) (catalogRecord, err
 			return catalogRecord{}, err
 		}
 		bootstrap := definition.Bootstrap
-		if bootstrap.AutomationDigest != ansible.Digest() {
-			return catalogRecord{}, errors.Join(prerequisites.ErrBootstrapIncompatible, bundleFailure("retained bootstrap automation is incompatible with the current executable"))
-		}
-		foundation, _, err := compiledCatalog()
-		if err != nil {
+		// The provided execution profile is checked first because no local
+		// reprojection can repair it, so a resolution failing both must not be
+		// reported as the automation revision a host can settle by itself.
+		if err := qualifiedFoundation(bootstrap); err != nil {
 			return catalogRecord{}, err
 		}
-		native, ok := selectNative(foundation, bootstrap.Platform)
-		expectedExecution := cloneExecution(native.Execution)
-		expectedExecution.PythonExecutable = bootstrap.PythonExecutable
-		if !ok || !equalExecution(expectedExecution, bootstrap.Execution) || !slices.Equal(bootstrap.ExecutionPackages, executionPackageOwners()) {
-			return catalogRecord{}, errors.Join(prerequisites.ErrBootstrapIncompatible, bundleFailure("retained bootstrap requires a different provided execution foundation"))
+		if bootstrap.AutomationDigest != ansible.Digest() {
+			return catalogRecord{}, errors.Join(prerequisites.ErrBootstrapIncompatible, prerequisites.ErrAutomationSuperseded, bundleFailure("retained bootstrap automation is superseded by the current executable"))
 		}
 		record := catalogRecord{Bootstrap: bootstrap, PythonVersion: bootstrap.PythonVersion, AnsibleVersion: bootstrap.AnsibleVersion, Baseline: slices.Clone(bootstrap.Sources)}
 		if definition.Native != nil {
@@ -272,6 +286,67 @@ func validateDefinition(definition prerequisites.Definition) (catalogRecord, err
 		return record, nil
 	}
 	return record, bundleFailure("bundle definition differs from its exact compiled native and frozen target tool closure")
+}
+
+// qualifiedFoundation admits a retained bootstrap against the provided
+// execution profile this executable was compiled against. That profile is host
+// evidence rather than retained content, so a mismatch is a plain
+// incompatibility no reprojection can settle.
+func qualifiedFoundation(bootstrap *prerequisites.BootstrapDefinition) error {
+	foundation, _, err := compiledCatalog()
+	if err != nil {
+		return err
+	}
+	native, ok := selectNative(foundation, bootstrap.Platform)
+	expected := cloneExecution(native.Execution)
+	expected.PythonExecutable = bootstrap.PythonExecutable
+	if !ok || !equalExecution(expected, bootstrap.Execution) || !slices.Equal(bootstrap.ExecutionPackages, executionPackageOwners()) {
+		return errors.Join(prerequisites.ErrBootstrapIncompatible, bundleFailure("retained bootstrap requires a different provided execution foundation"))
+	}
+	return nil
+}
+
+// Rebase carries a retained resolution onto the automation this executable
+// embeds. It reads that resolution's own approved sources from the sealed area
+// holding them and projects them again, so every release, byte count, signer
+// and publisher origin survives unchanged and nothing is acquired. Only the
+// automation digest and the projection identity it produces may differ.
+func (m *Manager) Rebase(ctx context.Context, area prerequisites.BundleArea, retained prerequisites.BootstrapDefinition) (prerequisites.BootstrapDefinition, error) {
+	if area == nil {
+		return prerequisites.BootstrapDefinition{}, bundleFailure("retained bundle inspection capability is unavailable")
+	}
+	if err := prerequisites.ValidateBootstrap(retained); err != nil {
+		return prerequisites.BootstrapDefinition{}, err
+	}
+	if err := qualifiedFoundation(&retained); err != nil {
+		return prerequisites.BootstrapDefinition{}, err
+	}
+	projected := newProjection()
+	projected.site = retained.SitePackages
+	if err := projected.automation(ctx); err != nil {
+		return prerequisites.BootstrapDefinition{}, err
+	}
+	for index, source := range retained.Sources {
+		if err := ctx.Err(); err != nil {
+			return prerequisites.BootstrapDefinition{}, err
+		}
+		data, err := area.Read(ctx, sourcePath(source), int(source.Bytes))
+		if err != nil {
+			return prerequisites.BootstrapDefinition{}, err
+		}
+		if !approvedBytes(source, data) {
+			return prerequisites.BootstrapDefinition{}, bundleFailure("retained dependency source differs from its approved identity")
+		}
+		if err := projectSource(ctx, projected, index, data); err != nil {
+			return prerequisites.BootstrapDefinition{}, err
+		}
+	}
+	if _, found := projected.files[retained.PythonExecutable]; !found {
+		return prerequisites.BootstrapDefinition{}, bundleFailure("retained Python projection lacks its declared executable")
+	}
+	retained.AutomationDigest = ansible.Digest()
+	retained.ProjectionSHA256, retained.FileCount, retained.ExpandedBytes = projected.identity(), len(projected.files), projected.bytes
+	return prerequisites.CanonicalBootstrap(retained)
 }
 
 func equalDefinition(a, b prerequisites.Definition) bool {

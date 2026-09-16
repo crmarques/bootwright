@@ -16,7 +16,9 @@ import (
 )
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	return runServices(ctx, args, stdout, stderr, wireServices(processDependencies{}))
+	services, release := wireServices(processDependencies{})
+	defer release()
+	return runServices(ctx, args, stdout, stderr, services)
 }
 
 func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -102,7 +104,9 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 		controllerPresenter.Finish()
 		lifecycleProgress.Finish()
 	}}
-	return runServices(ctx, args, stdout, stderr, wireServices(process), hooks)
+	services, release := wireServices(process)
+	defer release()
+	return runServices(ctx, args, stdout, stderr, services, hooks)
 }
 
 // invocationHooks carries what only an interactive process supplies to the

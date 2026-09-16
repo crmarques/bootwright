@@ -29,7 +29,17 @@ type DependencyCatalog interface {
 
 type BundleManager interface {
 	Inspect(context.Context, BundleArea, Definition, bool) (BundleInspection, error)
-	Prepare(context.Context, BundleArea, Definition, SetupEgress, func(ProgressEvent)) error
+	// Prepare publishes the approved closure into the first area. The second is
+	// a sealed area this host already holds, or nil: every approved source is
+	// read there before its publisher is contacted, so a resolution carried
+	// onto new automation acquires nothing again. A source that area cannot
+	// serve is acquired exactly as it would be without it.
+	Prepare(context.Context, BundleArea, BundleArea, Definition, SetupEgress, func(ProgressEvent)) error
+	// Rebase reprojects a retained resolution under the automation the running
+	// executable embeds, reading its sources from the sealed area that holds
+	// them. It contacts no publisher and changes no release, byte count or
+	// signer; only the projection identity that carries the automation moves.
+	Rebase(context.Context, BundleArea, BootstrapDefinition) (BootstrapDefinition, error)
 }
 
 // RuntimeInstaller reports the phase of its native transaction and each target

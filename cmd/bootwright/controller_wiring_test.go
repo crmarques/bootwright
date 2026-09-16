@@ -61,7 +61,12 @@ func (p *controllerPorts) Inspect(context.Context, prerequisites.BundleArea, pre
 	p.effects++
 	return prerequisites.BundleInspection{}, errors.New("unexpected bundle inspection")
 }
-func (p *controllerPorts) Prepare(context.Context, prerequisites.BundleArea, prerequisites.Definition, prerequisites.SetupEgress, func(prerequisites.ProgressEvent)) error {
+func (p *controllerPorts) Rebase(context.Context, prerequisites.BundleArea, prerequisites.BootstrapDefinition) (prerequisites.BootstrapDefinition, error) {
+	p.effects++
+	return prerequisites.BootstrapDefinition{}, errors.New("unexpected bundle rebase")
+}
+
+func (p *controllerPorts) Prepare(context.Context, prerequisites.BundleArea, prerequisites.BundleArea, prerequisites.Definition, prerequisites.SetupEgress, func(prerequisites.ProgressEvent)) error {
 	p.effects++
 	return errors.New("unexpected bundle preparation")
 }
@@ -69,7 +74,9 @@ func (p *controllerPorts) Prepare(context.Context, prerequisites.BundleArea, pre
 func TestComposedControllerSuppliesEveryPort(t *testing.T) {
 	presenter := cli.NewControllerPresenter(io.Discard, nil)
 	process := processDependencies{Progress: presenter, Presenter: presenter}
-	deps := reflect.ValueOf(localControllerDependencies(testRepository(t.TempDir()), process))
+	composed, release := localControllerDependencies(testRepository(t.TempDir()), process)
+	defer release()
+	deps := reflect.ValueOf(composed)
 	fields := deps.Type()
 	for index := range fields.NumField() {
 		if deps.Field(index).IsNil() {

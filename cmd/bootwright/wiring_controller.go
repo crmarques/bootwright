@@ -27,7 +27,10 @@ type controllerDependencies struct {
 	Progress        prerequisites.ProgressReporter
 }
 
-func localControllerDependencies(storage prerequisites.Storage, process processDependencies) controllerDependencies {
+// localControllerDependencies also returns the release its native resolver
+// needs: that resolver retains one copy of the installed package database
+// between inspections, and the invocation that took it owns removing it.
+func localControllerDependencies(storage prerequisites.Storage, process processDependencies) (controllerDependencies, func()) {
 	native := nativelocal.New(bundlelocal.FetchMetadata)
 	guard := bundlelocal.ExecutionGuard{}
 	installer := ansiblelocal.New(guard)
@@ -44,7 +47,7 @@ func localControllerDependencies(storage prerequisites.Storage, process processD
 		NativeInspector: native,
 		Presenter:       process.Presenter,
 		Progress:        process.Progress,
-	}
+	}, native.Close
 }
 
 func wireController(deps controllerDependencies, compiler prerequisites.Compiler, confirmer prerequisites.Confirmer) cli.ControllerService {

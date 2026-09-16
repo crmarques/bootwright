@@ -154,7 +154,7 @@ func toolVersionSummary(tools []ToolDefinition) string {
 func (s Service) resolveDependencies(ctx context.Context, before inspection) (inspection, error) {
 	total, step := 2, 1
 	var bootstrap BootstrapDefinition
-	if before.reusable {
+	if before.frozenBootstrap() {
 		total, bootstrap = 1, *before.definition.Bootstrap
 	} else {
 		err := s.resolutionStep(ctx, &before.report, step, total, "Python and Ansible", func() (string, error) {
@@ -202,10 +202,64 @@ func (s Service) resolveDependencies(ctx context.Context, before inspection) (in
 	if before.definition.Bootstrap != nil && unchangedResolvedDependencies(before.definition, definition) {
 		definition = CloneDefinition(before.definition)
 	}
+	return s.rebind(ctx, before, definition)
+}
+
+// carryForward keeps a retained resolution whose only incompatibility is the
+// automation this executable embeds. Every release, byte count and signer it
+// froze still stands, so the closure is reprojected from the sources its own
+// sealed bundle holds rather than solved again: no publisher or repository is
+// consulted, and the native transaction is reused whenever its roots remain
+// installed. Only the projection identity, and with it the bundle this setup
+// publishes, is new.
+func (s Service) carryForward(ctx context.Context, before inspection) (inspection, error) {
+	retained := before.definition
+	if retained.Bootstrap == nil || retained.Native == nil || retained.CatalogDigest == "" {
+		return before, failure("controller.state", "superseded automation has no retained resolution to carry forward", setupCommand())
+	}
+	var rebased BootstrapDefinition
+	err := s.resolutionStep(ctx, &before.report, 1, 1, "Retained Python and Ansible", func() (string, error) {
+		err := s.storage.ReadController(ctx, "", func(view StorageView) error {
+			if view.OpenBundle == nil {
+				return failure("controller.unsupported", "retained bundle inspection is not configured", "use a compatible executable")
+			}
+			area, err := view.OpenBundle(ctx, retained.CatalogDigest)
+			if err != nil {
+				return err
+			}
+			if area == nil {
+				return failure("controller.state", "the retained bundle this resolution is carried from is missing", setupCommand())
+			}
+			rebased, err = s.bundle.Rebase(ctx, area, *retained.Bootstrap)
+			return err
+		})
+		return "Python " + retained.PythonVersion + ", Ansible " + retained.AnsibleVersion, err
+	})
+	if err != nil {
+		return before, err
+	}
+	definition, err := NewResolvedDefinition(rebased, *retained.Native)
+	if err != nil {
+		return before, err
+	}
+	return s.rebind(ctx, before, definition, retained.CatalogDigest)
+}
+
+// rebind binds a definition produced outside shared-state locks to unchanged
+// host, input and receipt evidence, and returns the inspection whose plan is
+// presented for confirmation. Retained, when given, names the sealed bundle
+// whose sources preparation may read instead of acquiring them again.
+func (s Service) rebind(ctx context.Context, before inspection, definition Definition, retained ...string) (inspection, error) {
+	frozen := inspectionResolution{Definition: &definition}
+	if len(retained) != 0 {
+		frozen.Retained = retained[0]
+	} else {
+		frozen.Retained = before.retainedDigest
+	}
 	var after inspection
-	err = s.storage.ReadController(ctx, "", func(view StorageView) error {
+	err := s.storage.ReadController(ctx, "", func(view StorageView) error {
 		var err error
-		after, err = s.inspect(ctx, view, false, "", inspectionResolution{Definition: &definition})
+		after, err = s.inspect(ctx, view, false, "", frozen)
 		if err != nil {
 			return err
 		}

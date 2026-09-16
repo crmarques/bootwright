@@ -43,7 +43,7 @@ func TestRepositoryMetadataRequiresExactBoundedPublisherMembers(t *testing.T) {
 			}}
 			repo := repository{ID: "test", BaseURL: "https://publisher.example.test/os"}
 			directory := t.TempDir()
-			err := resolver.stageRepository(t.Context(), directory, &repo, prerequisites.SetupEgress{})
+			err := resolver.stageRepository(t.Context(), directory, &repo, solverMetadata(prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}), prerequisites.SetupEgress{})
 			if corrupt {
 				if err == nil {
 					t.Fatal("changed metadata accepted")

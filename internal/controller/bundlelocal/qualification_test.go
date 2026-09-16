@@ -78,7 +78,7 @@ func TestQualifiedUnprivilegedBundlePreparationAndReadOnlyReuse(t *testing.T) {
 	}
 	var details []string
 	progress := func(event prerequisites.ProgressEvent) { details = append(details, event.Detail) }
-	if err := manager.Prepare(t.Context(), area, definition, prerequisites.SetupEgress{}, progress); err != nil {
+	if err := manager.Prepare(t.Context(), area, nil, definition, prerequisites.SetupEgress{}, progress); err != nil {
 		t.Fatal(err)
 	}
 	// Each slow phase announces itself: every acquisition, then the projection,
@@ -102,7 +102,7 @@ func TestQualifiedUnprivilegedBundlePreparationAndReadOnlyReuse(t *testing.T) {
 		}
 	}
 	details = nil
-	if err := manager.Prepare(t.Context(), area, definition, prerequisites.SetupEgress{}, progress); err != nil {
+	if err := manager.Prepare(t.Context(), area, nil, definition, prerequisites.SetupEgress{}, progress); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(details, []string{"qualifying the private interpreter"}) {

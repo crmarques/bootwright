@@ -20,6 +20,14 @@ import (
 // from corruption and never authorizes replacement of an unfinished receipt.
 var ErrBootstrapIncompatible = errors.New("retained bootstrap is incompatible with the current executable")
 
+// ErrAutomationSuperseded narrows ErrBootstrapIncompatible to the one cause a
+// host can settle from what it already holds: the retained resolution names
+// every release, byte and signer this executable wants, and only the embedded
+// automation it carries has moved. Setup reprojects that resolution instead of
+// resolving a new one, so no publisher is consulted and nothing is acquired
+// again. It always accompanies ErrBootstrapIncompatible, never replaces it.
+var ErrAutomationSuperseded = errors.New("retained bootstrap automation is superseded by the current executable")
+
 // MinimumBootstrapAnsibleVersion is required by the collection's templating
 // trust and strict Boolean semantics. Latest resolution does not lower it.
 const MinimumBootstrapAnsibleVersion = "2.19.0"

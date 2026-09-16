@@ -91,6 +91,16 @@ func requireCanonicalReservations(t *testing.T, claims []prerequisites.HostReser
 	}
 }
 
+// exampleControllerPorts composes the real local controller ports for a
+// resolver that only reports what it claims, and releases what that
+// composition retains when the test ends.
+func exampleControllerPorts(t *testing.T) controllerDependencies {
+	t.Helper()
+	ports, release := localControllerDependencies(nil, processDependencies{})
+	t.Cleanup(release)
+	return ports
+}
+
 func claimedKinds(resolver capabilityResolver) []string {
 	kinds := make([]string, 0, len(resolver))
 	for _, binding := range resolver.Bindings() {
@@ -179,7 +189,7 @@ func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.
 // a capability cannot prove.
 func TestLabRHELExampleIsRealizableInFull(t *testing.T) {
 	state, _ := compileAcceptance(t, labExampleSources(t))
-	resolver := buildCapabilities(systemClock{}, localControllerDependencies(nil, processDependencies{}))
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t))
 	if unsupported := lifecycle.Unrealizable(state.Effective(), claimedKinds(resolver)); len(unsupported) != 0 {
 		t.Fatalf("the example declares objects no capability claims: %v", unsupported)
 	}
@@ -195,7 +205,7 @@ func TestLabRHELExampleIsRealizableInFull(t *testing.T) {
 // the whole set must order into one plan.
 func TestLabRHELExamplePlansTheWholeGraph(t *testing.T) {
 	state, _ := compileAcceptance(t, labExampleSources(t))
-	resolver := buildCapabilities(systemClock{}, localControllerDependencies(nil, processDependencies{}))
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t))
 	input := lifecycle.PlanInput{
 		Verb: reconciliation.Apply, State: state, Controller: "controller",
 		Context: lifecycle.ContextIdentity{Name: "lab-rhel"},
@@ -272,7 +282,7 @@ func TestLabRHELExamplePlansTheWholeGraph(t *testing.T) {
 // must already carry the graph's own clients, records and upstream sources.
 func TestLabRHELRequestsCarryTheirDerivedIntent(t *testing.T) {
 	state, _ := compileAcceptance(t, labExampleSources(t))
-	resolver := buildCapabilities(systemClock{}, localControllerDependencies(nil, processDependencies{}))
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t))
 	requests := map[string]managedservice.Request{}
 	for kind, implementation := range map[string]string{
 		"Proxy": "proxy-squid-v1", "DNSServer": "dns-server-dnsmasq-v1", "NTPServer": "ntp-server-chrony-v1",
@@ -361,7 +371,12 @@ func (p *labControllerPorts) Inspect(context.Context, prerequisites.BundleArea, 
 	return prerequisites.BundleInspection{Recoverable: true}, nil
 }
 
-func (p *labControllerPorts) Prepare(context.Context, prerequisites.BundleArea, prerequisites.Definition, prerequisites.SetupEgress, func(prerequisites.ProgressEvent)) error {
+func (p *labControllerPorts) Rebase(context.Context, prerequisites.BundleArea, prerequisites.BootstrapDefinition) (prerequisites.BootstrapDefinition, error) {
+	p.effects++
+	return prerequisites.BootstrapDefinition{}, errors.New("unexpected bundle rebase")
+}
+
+func (p *labControllerPorts) Prepare(context.Context, prerequisites.BundleArea, prerequisites.BundleArea, prerequisites.Definition, prerequisites.SetupEgress, func(prerequisites.ProgressEvent)) error {
 	p.effects++
 	return errors.New("unexpected bundle preparation")
 }
@@ -470,7 +485,7 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 // complete before any effect.
 func TestLabRHELExamplePlansOneControllerPrerequisitesBlock(t *testing.T) {
 	state, _ := compileAcceptance(t, labExampleSources(t))
-	resolver := buildCapabilities(systemClock{}, localControllerDependencies(nil, processDependencies{}))
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t))
 	capability, ok := resolver.Resolve(clients.Kind, clients.Implementation)
 	if !ok {
 		t.Fatal("this build offers no controller prerequisites capability")

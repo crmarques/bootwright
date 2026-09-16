@@ -67,6 +67,25 @@ func (i inspection) matchesActions(actions []SetupAction) bool {
 	return true
 }
 
+// retainedArea opens the sealed bundle a carried resolution was reprojected
+// from, so preparation can read its approved sources instead of acquiring them
+// again. It is an optimization and never a prerequisite: an area that is absent
+// or cannot be opened simply leaves every source to its publisher.
+func retainedArea(ctx context.Context, tx StorageTransaction, current inspection) BundleArea {
+	if current.retainedDigest == "" || current.retainedDigest == current.definition.CatalogDigest {
+		return nil
+	}
+	open := tx.Snapshot().OpenBundle
+	if open == nil {
+		return nil
+	}
+	area, err := open(ctx, current.retainedDigest)
+	if err != nil {
+		return nil
+	}
+	return area
+}
+
 func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *inspection) error {
 	state := current.view.State
 	// The receipt is the authority on what actually happened, so progress is
@@ -177,7 +196,7 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 				var area BundleArea
 				area, err = tx.Bundle(ctx, current.definition.CatalogDigest)
 				if err == nil {
-					err = s.bundle.Prepare(ctx, area, current.definition, current.route(), progress)
+					err = s.bundle.Prepare(ctx, area, retainedArea(ctx, tx, *current), current.definition, current.route(), progress)
 				}
 				if err == nil {
 					current.bundle, err = s.bundle.Inspect(ctx, area, current.definition, true)

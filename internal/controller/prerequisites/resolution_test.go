@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -219,16 +220,94 @@ type obsoleteBundle struct {
 	BundleManager
 	digest string
 	err    error
+	// onRefusal runs as the incompatibility is reported, so a test can stage
+	// what the host looks like once setup acts on it.
+	onRefusal func()
 }
 
 func (b obsoleteBundle) Inspect(ctx context.Context, area BundleArea, definition Definition, probe bool) (BundleInspection, error) {
 	if definition.CatalogDigest == b.digest {
+		if b.onRefusal != nil {
+			b.onRefusal()
+		}
 		return BundleInspection{}, b.err
 	}
 	return b.BundleManager.Inspect(ctx, area, definition, probe)
 }
 
-func TestFreshSetupCanReplaceObsoleteCompletedAutomation(t *testing.T) {
+// An executable whose embedded automation moved needs a new bundle, not new
+// dependencies. Setup reprojects the closure the host already holds, so no
+// publisher or repository is consulted, every release it froze survives, and
+// preparation is offered the retained bundle to read those bytes from.
+func TestSupersededAutomationCarriesTheRetainedResolutionForward(t *testing.T) {
+	f, r := dynamicFixture(t)
+	if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	previous := f.store.state.Receipt.CatalogDigest
+	retained := CloneDefinition(*f.store.state.Receipt.Definition)
+	superseded := errors.Join(ErrBootstrapIncompatible, ErrAutomationSuperseded, failure("controller.setup", "superseded automation", ""))
+	f.service.bundle = obsoleteBundle{BundleManager: &f.bundle, digest: previous, err: superseded}
+	f.bundle.ready, f.bundle.sealed = false, false
+	f.bundle.automation = strings.Repeat("9", 64)
+	r.bootstrapError = errors.New("no publisher may be contacted for a carried resolution")
+	r.nativeError = errors.New("no repository may be refreshed for a carried resolution")
+	report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+	if err != nil || report.Outcome != "changed" {
+		t.Fatalf("carrying the resolution forward: %#v %v", report, err)
+	}
+	if r.bootstrapCalls != 1 || r.nativeCalls != 1 || f.bundle.rebases != 1 {
+		t.Fatalf("resolution was repeated: bootstrap=%d native=%d rebases=%d", r.bootstrapCalls, r.nativeCalls, f.bundle.rebases)
+	}
+	carried := f.store.state.Receipt.Definition
+	if carried == nil || carried.CatalogDigest == previous || carried.Bootstrap.AutomationDigest != f.bundle.automation {
+		t.Fatalf("the carried resolution kept its superseded identity: %#v", carried)
+	}
+	if !slices.Equal(carried.Sources, retained.Sources) || carried.PythonVersion != retained.PythonVersion ||
+		carried.AnsibleVersion != retained.AnsibleVersion || !reflect.DeepEqual(carried.Native, retained.Native) {
+		t.Fatalf("carrying the resolution forward moved more than its automation: %#v", carried)
+	}
+	if !slices.Contains(f.bundle.retainedSeeds, true) {
+		t.Fatal("preparation was not offered the retained bundle to read")
+	}
+}
+
+// A retained resolution whose bundle cannot be read is not carried forward on
+// assumption: the closure it names has to come from somewhere.
+func TestCarryForwardRefusesWithoutTheRetainedBundleItReadsFrom(t *testing.T) {
+	for _, cause := range []string{"missing", "refused"} {
+		t.Run(cause, func(t *testing.T) {
+			f, r := dynamicFixture(t)
+			if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err != nil {
+				t.Fatal(err)
+			}
+			previous := f.store.state.Receipt.CatalogDigest
+			superseded := errors.Join(ErrBootstrapIncompatible, ErrAutomationSuperseded, failure("controller.setup", "superseded automation", ""))
+			refused := obsoleteBundle{BundleManager: &f.bundle, digest: previous, err: superseded}
+			if cause == "missing" {
+				// The area is gone by the time the resolution would be read
+				// out of it, which is the one way carrying forward has nothing
+				// to carry.
+				refused.onRefusal = func() { f.store.hidden = previous }
+			} else {
+				f.bundle.rebaseErr = errors.New("retained source differs from its approved identity")
+			}
+			f.service.bundle = refused
+			f.bundle.ready, f.bundle.sealed = false, false
+			writes, prepares := f.store.writes, f.bundle.prepares
+			report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+			if err == nil || r.bootstrapCalls != 1 || f.store.writes != writes || f.bundle.prepares != prepares {
+				t.Fatalf("an unreadable retained bundle was carried forward: %#v %v", report, err)
+			}
+		})
+	}
+}
+
+// An incompatibility a reprojection cannot settle, such as a different
+// provided execution foundation, still needs a whole new resolution. Only a
+// completed receipt may be replaced that way: an unfinished or corrupt one
+// protects the setup it belongs to.
+func TestIncompatibleFoundationResolvesFreshOnlyFromACompletedReceipt(t *testing.T) {
 	for _, state := range []string{"complete", "pending", "corrupt"} {
 		t.Run(state, func(t *testing.T) {
 			f, r := dynamicFixture(t)
@@ -236,7 +315,7 @@ func TestFreshSetupCanReplaceObsoleteCompletedAutomation(t *testing.T) {
 				t.Fatal(err)
 			}
 			previous := f.store.state.Receipt.CatalogDigest
-			incompatible := errors.Join(ErrBootstrapIncompatible, failure("controller.unsupported", "obsolete automation", "use the original executable"))
+			incompatible := errors.Join(ErrBootstrapIncompatible, failure("controller.unsupported", "unqualified execution foundation", "use the original executable"))
 			if state == "pending" {
 				f.store.state.Receipt.Status = "pending"
 			} else if state == "corrupt" {

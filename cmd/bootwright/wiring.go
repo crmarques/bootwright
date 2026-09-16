@@ -46,17 +46,20 @@ type serviceDependencies struct {
 	Media           mediaDependencies
 }
 
-func wireServices(process processDependencies) cli.Services {
+// wireServices also returns the release for every local resource the assembled
+// services retain for the length of one invocation.
+func wireServices(process processDependencies) (cli.Services, func()) {
 	repository := contextfs.New(contextfs.Options{})
 	account := invokingAccount{resolver: privilege.Resolver{}}
-	return assembleServices(serviceDependencies{
+	controller, release := localControllerDependencies(repository, process)
+	services := assembleServices(serviceDependencies{
 		Repository:  repository,
 		Workspace:   repository,
 		Selection:   account,
 		Operator:    account,
 		Confirmer:   process.Confirmer,
 		SecretInput: process.SecretInput,
-		Controller:  localControllerDependencies(repository, process),
+		Controller:  controller,
 		Media:       localMediaDependencies(repository, process.Confirmer),
 		Lifecycle: lifecycleDependencies{
 			Workspace: repository, Inputs: contexts.Inputs{Repository: repository, Selection: account},
@@ -65,6 +68,7 @@ func wireServices(process processDependencies) cli.Services {
 			Confirmer: process.Confirmer, Executable: process.Executable,
 		},
 	})
+	return services, release
 }
 
 // assembleServices is the complete service graph. Secrets is assembled first

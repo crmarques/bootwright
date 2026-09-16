@@ -38,18 +38,24 @@ func New(storage Storage, compiler Compiler, host HostInspector, catalog Depende
 }
 
 type inspection struct {
-	view          StorageView
-	selection     controller.Selection
-	definition    Definition
-	host          controller.InstalledHostIdentity
-	platform      Platform
-	bundle        BundleInspection
-	runtime       RuntimeInspection
-	bound         bool
-	reusable      bool
-	report        Report
-	toolRequests  []controller.ToolRequest
-	toolsResolved bool
+	view       StorageView
+	selection  controller.Selection
+	definition Definition
+	host       controller.InstalledHostIdentity
+	platform   Platform
+	bundle     BundleInspection
+	runtime    RuntimeInspection
+	bound      bool
+	reusable   bool
+	// carried marks a resolution this executable rebased from a closure the
+	// host already holds, and retainedDigest names the sealed bundle those
+	// bytes come from. Its publisher identities never changed, so it is frozen
+	// exactly like a reusable one even though its own area is still empty.
+	carried        bool
+	retainedDigest string
+	report         Report
+	toolRequests   []controller.ToolRequest
+	toolsResolved  bool
 	// tools, toolsPresent, libvirtClient and libvirtPresent describe what one
 	// selected context adds to a ready host. They are evidence for preflight;
 	// setup never selects, plans or installs them.
@@ -120,6 +126,15 @@ func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, erro
 		current.report.Outcome = "planned"
 		return &current.report, nil
 	}
+	// An executable whose embedded automation moved needs a new bundle, not new
+	// dependencies. The retained closure is reprojected from the sources this
+	// host already holds, so the releases, bytes and signers stay frozen.
+	if err != nil && errors.Is(err, ErrAutomationSuperseded) {
+		current, err = s.carryForward(ctx, current)
+		if err != nil {
+			return &current.report, err
+		}
+	}
 	if err == nil && current.ready() {
 		current.report.Outcome = "unchanged"
 		return &current.report, nil
@@ -167,7 +182,7 @@ func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, erro
 	}
 	approved := current
 	err = s.storage.MutateController(ctx, current.view.Context, true, func(tx StorageTransaction) error {
-		frozen := inspectionResolution{Sources: approved.definition.Sources}
+		frozen := inspectionResolution{Sources: approved.definition.Sources, Retained: approved.retainedDigest}
 		if approved.definition.Bootstrap != nil {
 			frozen.Definition = &approved.definition
 		}
@@ -204,6 +219,10 @@ func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, erro
 type inspectionResolution struct {
 	Sources    []DependencySource
 	Definition *Definition
+	// Retained names the sealed bundle a carried definition was reprojected
+	// from, so every later inspection of that plan keeps reading its sources
+	// from the host instead of a publisher.
+	Retained string
 }
 
 // inspect verifies the host. A non-empty phase streams the scope and each
@@ -211,6 +230,9 @@ type inspectionResolution struct {
 // guard the transaction pass no phase, so every check is shown exactly once.
 func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, phase string, frozen ...inspectionResolution) (inspection, error) {
 	current := inspection{view: view, selection: controller.Baseline(), bundle: BundleInspection{Recoverable: true}, toolsResolved: true}
+	if len(frozen) != 0 && frozen[0].Retained != "" {
+		current.carried, current.retainedDigest = true, frozen[0].Retained
+	}
 	if view.Context.Name != "" {
 		state, _, err := s.compiler.Compile(ctx, view.Sources)
 		if err != nil {
@@ -511,12 +533,16 @@ func (i inspection) dependenciesReady() bool {
 	return !i.selection.ContainerRuntime() || i.runtime.Ready
 }
 
+// frozenBootstrap reports that this inspection already holds the exact Python
+// and Ansible closure it will publish, either because its retained bundle
+// serves it or because it was reprojected from one. No publisher can move it.
+func (i inspection) frozenBootstrap() bool { return i.reusable || i.carried }
+
 // resolutionRequired reports whether publisher metadata must be consulted. A
-// reusable retained resolution installs from its frozen closure, except that a
-// missing native root needs a new transaction bound to the host's current
-// package inventory.
+// frozen bootstrap installs from its own closure, except that a missing native
+// root needs a new transaction bound to the host's current package inventory.
 func (i inspection) resolutionRequired() bool {
-	return !i.reusable || i.selection.ContainerRuntime() && !i.runtime.Ready
+	return !i.frozenBootstrap() || i.selection.ContainerRuntime() && !i.runtime.Ready
 }
 
 func (i inspection) canPrepare() error {

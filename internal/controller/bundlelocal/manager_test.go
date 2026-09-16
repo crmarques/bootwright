@@ -89,6 +89,12 @@ func TestBootstrapIncompatibilityNeverMasksCorruptResolution(t *testing.T) {
 			if err == nil || errors.Is(err, prerequisites.ErrBootstrapIncompatible) != (change != "corruption") {
 				t.Fatalf("wrong incompatibility boundary: %v", err)
 			}
+			// Only a resolution this host can reproject names itself as one. A
+			// changed provided foundation is checked first precisely so that a
+			// resolution failing both is never offered as settleable.
+			if errors.Is(err, prerequisites.ErrAutomationSuperseded) != (change == "automation") {
+				t.Fatalf("automation supersession claimed for a %s change: %v", change, err)
+			}
 		})
 	}
 }

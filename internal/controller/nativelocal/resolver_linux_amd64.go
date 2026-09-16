@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -29,9 +30,68 @@ import (
 )
 
 type MetadataReader func(context.Context, string, string, int64, prerequisites.SetupEgress) ([]byte, int64, error)
-type Resolver struct{ metadata MetadataReader }
+
+// Resolver retains one database snapshot between operations. Every inspection
+// copies the complete installed inventory, and one setup proves presence
+// several times, so the copy is repeated only when the provided host's own
+// package state has moved. Close releases what it retains.
+type Resolver struct {
+	metadata MetadataReader
+	mu       sync.Mutex
+	retained *retainedDatabase
+}
+
+type retainedDatabase struct {
+	parent   string
+	root     string
+	platform prerequisites.Platform
+	identity databaseIdentity
+}
+
+// databaseIdentity is what the live database must still look like for a
+// snapshot of it to remain usable. A package transaction moves the size and
+// both timestamps, so a stale snapshot can never be mistaken for a current one.
+type databaseIdentity struct {
+	Files [2]fileIdentity
+}
+
+type fileIdentity struct {
+	Present           bool
+	Device, Inode     uint64
+	Size              int64
+	Modified, Changed int64
+}
+
+// serves reports whether this snapshot still describes the installed state a
+// caller is asking about. Anything that moved the database — a completed
+// transaction, a rebuilt or replaced file — makes it describe the past instead.
+func (d *retainedDatabase) serves(platform prerequisites.Platform, identity databaseIdentity) bool {
+	return d != nil && d.platform == platform && d.identity == identity
+}
+
+const unprivilegedID = 65534
+
+var databaseMembers = [2]string{"rpmdb.sqlite", "rpmdb.sqlite-wal"}
 
 func New(metadata MetadataReader) *Resolver { return &Resolver{metadata: metadata} }
+
+// Close releases the retained database snapshot. It is safe to call on a
+// resolver that never took one and to call more than once.
+func (r *Resolver) Close() {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.discard()
+}
+
+func (r *Resolver) discard() {
+	if r.retained != nil {
+		_ = os.RemoveAll(r.retained.parent)
+		r.retained = nil
+	}
+}
 
 var _ prerequisites.NativeResolver = (*Resolver)(nil)
 var _ prerequisites.NativeInspector = (*Resolver)(nil)
@@ -65,15 +125,16 @@ func (r *Resolver) Resolve(ctx context.Context, platform prerequisites.Platform,
 	if err != nil {
 		return prerequisites.NativeResolvedPlan{}, err
 	}
-	stage, err := newStage(platform)
+	stage, err := r.newStage(platform)
 	if err != nil {
 		return prerequisites.NativeResolvedPlan{}, err
 	}
 	defer os.RemoveAll(stage.root)
 	bounded, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
+	members := solverMetadata(platform)
 	for index := range repositories {
-		if err := r.stageRepository(bounded, stage.work, &repositories[index], egress); err != nil {
+		if err := r.stageRepository(bounded, stage.work, &repositories[index], members, egress); err != nil {
 			return prerequisites.NativeResolvedPlan{}, err
 		}
 	}
@@ -114,10 +175,13 @@ func (r *Resolver) Check(ctx context.Context, plan prerequisites.NativeResolvedP
 	if err := ctx.Err(); err != nil {
 		return prerequisites.NativePresence{}, err
 	}
+	if r == nil {
+		return prerequisites.NativePresence{}, failure("native dependency inspection is unavailable")
+	}
 	if prerequisites.ValidateNativePlan(plan) != nil {
 		return prerequisites.NativePresence{}, failure("native readiness requires an exact frozen plan")
 	}
-	stage, err := newStage(plan.Platform)
+	stage, err := r.newStage(plan.Platform)
 	if err != nil {
 		return prerequisites.NativePresence{}, err
 	}
@@ -203,7 +267,20 @@ type repomd struct {
 	} `xml:"data"`
 }
 
-func (r *Resolver) stageRepository(ctx context.Context, work string, repo *repository, egress prerequisites.SetupEgress) error {
+// solverMetadata names the repository members the provided solver actually
+// opens. DNF5 is configured to load filelists and no other optional metadata,
+// while DNF4 fills its sack from update and modular metadata as well. Every
+// other member the publisher advertises is never read, so acquiring it would
+// only cost the operator the time to download it.
+func solverMetadata(platform prerequisites.Platform) map[string]bool {
+	members := map[string]bool{"primary": true, "filelists": true}
+	if platform.OS == "rhel" {
+		members["updateinfo"], members["modules"] = true, true
+	}
+	return members
+}
+
+func (r *Resolver) stageRepository(ctx context.Context, work string, repo *repository, members map[string]bool, egress prerequisites.SetupEgress) error {
 	data, _, err := r.metadata(ctx, http.MethodGet, repo.BaseURL+"/repodata/repomd.xml", 1<<20, egress)
 	if err != nil {
 		return err
@@ -221,7 +298,7 @@ func (r *Resolver) stageRepository(ctx context.Context, work string, repo *repos
 	}
 	selected := map[string]bool{}
 	for _, entry := range metadata.Data {
-		if entry.Type != "primary" && entry.Type != "filelists" && entry.Type != "modules" && entry.Type != "group" && entry.Type != "group_gz" && entry.Type != "updateinfo" && entry.Type != "other" {
+		if !members[entry.Type] {
 			continue
 		}
 		relative := entry.Location.Href
@@ -252,7 +329,120 @@ type nativeStage struct {
 	uid, gid                                  int
 }
 
-func newStage(platform prerequisites.Platform) (*nativeStage, error) {
+// stageDatabase returns a snapshot root the unprivileged helper can read,
+// reusing the retained one while the live database still has the identity it
+// was copied from. The copy itself remains the only way a solver or query sees
+// installed state, so nothing here reads the live database directly.
+func (r *Resolver) stageDatabase(platform prerequisites.Platform) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	identity, err := databaseState(platform)
+	if err != nil {
+		return "", err
+	}
+	if r.retained.serves(platform, identity) {
+		return r.retained.root, nil
+	}
+	parent, err := os.MkdirTemp("/tmp", "bootwright-rpmdb-")
+	if err != nil {
+		return "", failure("native database snapshot staging failed")
+	}
+	root, taken, err := copyDatabase(platform, parent)
+	if err == nil {
+		err = shareDatabase(parent, root)
+	}
+	if err != nil {
+		_ = os.RemoveAll(parent)
+		return "", err
+	}
+	r.discard()
+	r.retained = &retainedDatabase{parent: parent, root: root, platform: platform, identity: taken}
+	return root, nil
+}
+
+// shareDatabase grants the snapshot to the unprivileged helper identity exactly
+// as the rest of the stage is granted, because the snapshot no longer lives
+// inside the staging tree that is handed over per operation.
+func shareDatabase(parent, root string) error {
+	if os.Geteuid() != 0 {
+		return nil
+	}
+	if os.Chmod(parent, 0755) != nil {
+		return failure("native resolver privilege separation failed")
+	}
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return errors.New("native snapshot symlink")
+		}
+		return os.Chown(path, unprivilegedID, unprivilegedID)
+	})
+	if err != nil {
+		return failure("native resolver staging privilege separation failed")
+	}
+	return nil
+}
+
+// databaseState reads the live database identity under the same read lock a
+// snapshot is taken with, so a transaction cannot complete between the check
+// and the decision it settles.
+func databaseState(platform prerequisites.Platform) (databaseIdentity, error) {
+	directory, err := databaseDirectory(platform)
+	if err != nil {
+		return databaseIdentity{}, err
+	}
+	release, err := lockDatabase(directory)
+	if err != nil {
+		return databaseIdentity{}, err
+	}
+	defer release()
+	var identity databaseIdentity
+	for index, name := range databaseMembers {
+		var info unix.Stat_t
+		if err := unix.Stat(directory+"/"+name, &info); err != nil {
+			if errors.Is(err, unix.ENOENT) && strings.HasSuffix(name, "-wal") {
+				continue
+			}
+			return databaseIdentity{}, failure("native SQLite database is unavailable")
+		}
+		identity.Files[index] = fileIdentity{Present: true, Device: uint64(info.Dev), Inode: info.Ino, Size: info.Size, Modified: info.Mtim.Nano(), Changed: info.Ctim.Nano()}
+	}
+	return identity, nil
+}
+
+func databaseDirectory(platform prerequisites.Platform) (string, error) {
+	switch platform.OS {
+	case "fedora":
+		return "/usr/lib/sysimage/rpm", nil
+	case "rhel":
+		return "/var/lib/rpm", nil
+	}
+	return "", failure("native dependency resolution requires a supported Fedora 43 or RHEL 9.8 package-manager foundation")
+}
+
+// lockDatabase holds the provided host's own read lock, so no package
+// transaction can change the database while it is being identified or copied.
+func lockDatabase(directory string) (func(), error) {
+	descriptor, err := unix.Open(directory+"/.rpm.lock", unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, failure("native database read lock is unavailable")
+	}
+	var info unix.Stat_t
+	if unix.Fstat(descriptor, &info) != nil || info.Uid != 0 || info.Mode&unix.S_IFMT != unix.S_IFREG || info.Mode&0022 != 0 {
+		unix.Close(descriptor)
+		return nil, failure("native database lock lacks provided-host authority")
+	}
+	lock := unix.Flock_t{Type: unix.F_RDLCK, Whence: 0, Start: 0, Len: 0}
+	if unix.FcntlFlock(uintptr(descriptor), unix.F_OFD_SETLK, &lock) != nil {
+		unix.Close(descriptor)
+		return nil, failure("native database is busy; retry after the current package transaction finishes")
+	}
+	return func() { unix.Close(descriptor) }, nil
+}
+
+func (r *Resolver) newStage(platform prerequisites.Platform) (*nativeStage, error) {
 	interpreter := "/usr/bin/python3"
 	if platform.OS == "rhel" {
 		interpreter = "/usr/bin/python3.9"
@@ -276,12 +466,12 @@ func newStage(platform prerequisites.Platform) (*nativeStage, error) {
 	if len(asset) == 0 || os.Mkdir(stage.work, 0700) != nil || os.WriteFile(stage.script, asset, 0600) != nil {
 		return nil, failure("native resolution helper is unavailable")
 	}
-	stage.snapshot, err = copyDatabase(platform, stage.work)
+	stage.snapshot, err = r.stageDatabase(platform)
 	if err != nil {
 		return nil, err
 	}
 	if os.Geteuid() == 0 {
-		stage.uid, stage.gid = 65534, 65534
+		stage.uid, stage.gid = unprivilegedID, unprivilegedID
 		if os.Chmod(root, 0755) != nil || os.Chmod(stage.script, 0444) != nil {
 			return nil, failure("native resolver privilege separation failed")
 		}
@@ -313,64 +503,62 @@ func providedFile(path string, executable bool) error {
 	}
 	return nil
 }
-func copyDatabase(platform prerequisites.Platform, work string) (string, error) {
-	directory := "/usr/lib/sysimage/rpm"
-	if platform.OS == "rhel" {
-		directory = "/var/lib/rpm"
-	}
-	descriptor, err := unix.Open(directory+"/.rpm.lock", unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+
+// copyDatabase returns the snapshot root and the identity the live database had
+// while it was copied, so a later operation can tell whether that copy still
+// describes the installed state.
+func copyDatabase(platform prerequisites.Platform, work string) (string, databaseIdentity, error) {
+	var identity databaseIdentity
+	directory, err := databaseDirectory(platform)
 	if err != nil {
-		return "", failure("native database read lock is unavailable")
+		return "", identity, err
 	}
-	defer unix.Close(descriptor)
-	var info unix.Stat_t
-	if unix.Fstat(descriptor, &info) != nil || info.Uid != 0 || info.Mode&unix.S_IFMT != unix.S_IFREG || info.Mode&0022 != 0 {
-		return "", failure("native database lock lacks provided-host authority")
+	release, err := lockDatabase(directory)
+	if err != nil {
+		return "", identity, err
 	}
-	lock := unix.Flock_t{Type: unix.F_RDLCK, Whence: 0, Start: 0, Len: 0}
-	if unix.FcntlFlock(uintptr(descriptor), unix.F_OFD_SETLK, &lock) != nil {
-		return "", failure("native database is busy; retry after the current package transaction finishes")
-	}
+	defer release()
 	root := filepath.Join(work, "snapshot")
 	target := filepath.Join(root, strings.TrimPrefix(directory, "/"))
 	if os.MkdirAll(target, 0700) != nil {
-		return "", failure("native database snapshot staging failed")
+		return "", identity, failure("native database snapshot staging failed")
 	}
 	var total int64
-	for _, name := range []string{"rpmdb.sqlite", "rpmdb.sqlite-wal"} {
+	for index, name := range databaseMembers {
 		fd, err := unix.Open(directory+"/"+name, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 		if errors.Is(err, unix.ENOENT) && strings.HasSuffix(name, "-wal") {
 			continue
 		}
 		if err != nil {
-			return "", failure("native SQLite database is unavailable")
+			return "", identity, failure("native SQLite database is unavailable")
 		}
 		input := os.NewFile(uintptr(fd), name)
 		before, err := input.Stat()
 		if err != nil {
 			input.Close()
-			return "", failure("native database snapshot failed")
+			return "", identity, failure("native database snapshot failed")
 		}
 		statinfo, ok := before.Sys().(*syscall.Stat_t)
 		total += before.Size()
 		if !ok || statinfo.Uid != 0 || !before.Mode().IsRegular() || before.Mode().Perm()&0022 != 0 || total > 512<<20 {
 			input.Close()
-			return "", failure("native database snapshot exceeds its trusted bound")
+			return "", identity, failure("native database snapshot exceeds its trusted bound")
 		}
 		output, err := os.OpenFile(filepath.Join(target, name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 		if err != nil {
 			input.Close()
-			return "", failure("native database snapshot staging failed")
+			return "", identity, failure("native database snapshot staging failed")
 		}
 		copied, copyErr := io.Copy(output, io.LimitReader(input, before.Size()+1))
 		closeErr := output.Close()
 		after, statErr := input.Stat()
 		input.Close()
 		if copyErr != nil || closeErr != nil || statErr != nil || copied != before.Size() || !sameFile(before, after) {
-			return "", failure("native database changed while creating its read-only snapshot")
+			return "", identity, failure("native database changed while creating its read-only snapshot")
 		}
+		identity.Files[index] = fileIdentity{Present: true, Device: uint64(statinfo.Dev), Inode: statinfo.Ino, Size: before.Size(), Modified: statinfo.Mtim.Nano(), Changed: statinfo.Ctim.Nano()}
 	}
-	return root, nil
+	return root, identity, nil
 }
 func sameFile(a, b os.FileInfo) bool {
 	before, beforeOK := a.Sys().(*syscall.Stat_t)

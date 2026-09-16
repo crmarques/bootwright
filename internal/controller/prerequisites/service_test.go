@@ -74,6 +74,7 @@ type memoryStorage struct {
 	reads, writes   int
 	exists          bool
 	bundleExists    bool
+	hidden          string
 	bundleRequests  []string
 	failPublication int
 	mutationError   error
@@ -87,6 +88,10 @@ func (m *memoryStorage) view() StorageView {
 		m.bundleRequests = append(m.bundleRequests, id)
 		if decoded, err := hex.DecodeString(id); err != nil || len(decoded) != 32 {
 			return nil, errors.New("controller bundle identity is invalid")
+		}
+		// hidden is an area this host no longer has, however it was reserved.
+		if id == m.hidden {
+			return nil, nil
 		}
 		if m.bundleExists {
 			return dummyArea{}, nil
@@ -205,14 +210,40 @@ type testBundle struct {
 	prepares, inspections int
 	err                   error
 	cancel                context.CancelFunc
+	// automation is the digest a rebase stamps, rebaseErr its refusal, and
+	// retainedSeeds records for each preparation whether it was offered the
+	// sealed area a carried resolution came from.
+	rebases       int
+	automation    string
+	rebaseErr     error
+	retainedSeeds []bool
 }
 
 func (b *testBundle) Inspect(context.Context, BundleArea, Definition, bool) (BundleInspection, error) {
 	b.inspections++
 	return BundleInspection{Ready: b.ready, ToolsReady: b.toolsReady, Sealed: b.sealed, Recoverable: b.recoverable}, nil
 }
-func (b *testBundle) Prepare(ctx context.Context, _ BundleArea, _ Definition, _ SetupEgress, _ func(ProgressEvent)) error {
+
+// Rebase reprojects the retained resolution under a different automation, which
+// is the whole observable effect: the returned bootstrap names the same
+// releases and sources and only its digest moves.
+func (b *testBundle) Rebase(_ context.Context, area BundleArea, retained BootstrapDefinition) (BootstrapDefinition, error) {
+	b.rebases++
+	b.owner.events = append(b.owner.events, "rebase")
+	if area == nil {
+		return BootstrapDefinition{}, errors.New("rebase without the retained bundle to read")
+	}
+	if b.rebaseErr != nil {
+		return BootstrapDefinition{}, b.rebaseErr
+	}
+	value := retained
+	value.AutomationDigest = b.automation
+	return CanonicalBootstrap(value)
+}
+
+func (b *testBundle) Prepare(ctx context.Context, _ BundleArea, retained BundleArea, _ Definition, _ SetupEgress, _ func(ProgressEvent)) error {
 	b.prepares++
+	b.retainedSeeds = append(b.retainedSeeds, retained != nil)
 	b.owner.events = append(b.owner.events, "prepare")
 	if b.owner.store.state.Receipt.Actions[0].Phase != "intent" {
 		return errors.New("installation without recorded intent")

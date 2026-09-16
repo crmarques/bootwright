@@ -137,6 +137,18 @@ setup reuses its exact frozen resolution without metadata refresh. Moving a
 `latest` dependency to a newer release requires declaring that release in
 `dependencyVersions`.
 
+A retained resolution that differs from the running executable only by the
+automation it carries is not superseded: it is carried forward. Setup reads
+that resolution's own approved sources from the sealed bundle holding them,
+projects them again under the embedded automation, and publishes the result as
+the new bundle that identity names. Every release, byte count, signer and
+publisher origin is preserved, no publisher or repository is consulted, and the
+native transaction is reused unless a selected root is missing. A source the
+retained bundle cannot serve as its approved bytes is acquired from its
+publisher as usual, and a resolution needing a different provided execution
+foundation is refused rather than carried, because no local projection can
+establish one. Preflight reports the incompatibility and carries nothing.
+
 A dependency is checked for identity, version and integrity when setup
 acquires, publishes or installs it. Afterwards readiness is presence only, with
 no version comparison: the sealed bundle's published files by count and size,
@@ -194,8 +206,12 @@ which names the restored host.
 Real setup first resolves dependencies in disposable unprivileged staging.
 This phase may download verified public bootstrap payloads, run wheel-only pip
 resolution and use the provided OS's DNF4/DNF5 foundation to inspect a private
-inventory snapshot and solve the exact native transaction. All metadata,
-caches, logs and resolver outputs stay in bounded scratch storage. Scratch is
+inventory snapshot and solve the exact native transaction. Only the repository
+members the provided solver opens are staged, and the inventory snapshot is
+taken once and reused by every later inspection of the same invocation while
+the installed database still has the identity it was copied from; the
+invocation that took it releases it. All metadata, caches, logs and resolver
+outputs stay in bounded scratch storage. Scratch is
 private Bootwright-owned durable temporary storage, never the shared ambient
 temporary directory and never the verified context store, so an interrupted run
 leaves no unrecognized state behind. Setup refuses before any effect when that
