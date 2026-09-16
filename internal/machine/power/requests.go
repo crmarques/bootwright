@@ -22,11 +22,16 @@ type Identity struct {
 	Object  string `json:"object"`
 }
 
-// Controller is the Redfish endpoint this Machine is managed through, and the
-// declaration whose credential answers it. No material is named here.
+// Controller is the Redfish endpoint this Machine is managed through, the
+// declaration whose credential answers it, and whether its transport is
+// verified. No material is named here.
 type Controller struct {
 	CredentialsRef string `json:"credentialsRef"`
 	Endpoint       string `json:"endpoint"`
+	// TLSVerify carries the Machine's own declared trust to the adapter, so a
+	// controller with an internal certificate authority is reached exactly as
+	// the operator declared rather than always verified or never.
+	TLSVerify bool `json:"tlsVerify"`
 }
 
 // Request is the complete frozen intent for one power operation. It carries no

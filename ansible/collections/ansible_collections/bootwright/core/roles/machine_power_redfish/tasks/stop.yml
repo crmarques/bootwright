@@ -14,6 +14,7 @@
     endpoint: '{{ bootwright_machine_power_request.controller.endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerPassword) }}'
+    verify: '{{ bootwright_machine_power_request.controller.tlsVerify }}'
     operation: "{{ 'power-off' if bootwright_machine_power_request.force else 'shutdown' }}"
     attempts: '{{ machine_power_redfish_attempts }}'
   no_log: true

@@ -31,11 +31,62 @@ type Publication struct {
 	URL  string `json:"url"`
 }
 
-// Controller is the Redfish endpoint this Machine is booted through, and the
-// declaration whose credential answers it. No material is named here.
+// Controller is the Redfish endpoint this Machine is booted through, the
+// declaration whose credential answers it, and the trust each of its two
+// transport legs carries. No material is named here.
 type Controller struct {
 	CredentialsRef string `json:"credentialsRef"`
 	Endpoint       string `json:"endpoint"`
+	// TLSVerify covers the controller's own transport; VirtualMedia covers the
+	// separate leg on which it fetches what this block publishes.
+	TLSVerify    bool         `json:"tlsVerify"`
+	VirtualMedia VirtualMedia `json:"virtualMedia"`
+}
+
+// VirtualMedia is how the controller is made to trust the artifact server it
+// fetches published media from.
+type VirtualMedia struct {
+	RemoveCertificate   bool   `json:"removeCertificate"`
+	RestoreVerification bool   `json:"restoreVerification"`
+	Trust               string `json:"trust"`
+}
+
+// Interface is one NIC a physical machine must report for it to be the machine
+// this installation is aimed at.
+type Interface struct {
+	MACAddress string `json:"macAddress"`
+	Name       string `json:"name"`
+}
+
+// Hardware is what a physical machine proves about itself before anything it
+// holds is erased. A machine its substrate created carries none.
+type Hardware struct {
+	Interfaces []Interface `json:"interfaces"`
+	RootDevice string      `json:"rootDevice,omitempty"`
+}
+
+// Target is the realized machine this installation acts on, exactly as the
+// substrate derived it. Everything this contract does differently for one
+// substrate follows from these fields, so the installation reads them and
+// names no substrate of its own.
+type Target struct {
+	// Channel is how completion is proved: a bounded read through the
+	// hypervisor, or a connection pinned to the key this installation
+	// delivered.
+	Channel    string     `json:"channel"`
+	Controller Controller `json:"controller"`
+	// Domain and URI address the hypervisor a guest-agent channel reaches
+	// through, and are absent on every other channel.
+	Domain   string    `json:"domain,omitempty"`
+	Hardware *Hardware `json:"hardware,omitempty"`
+	// HostKeyRef names the key pair a delivered-key installation installs as
+	// the machine's own, and is absent on every other channel.
+	HostKeyRef string `json:"hostKeyRef,omitempty"`
+	// Physical is operator-owned hardware: what it already held is what this
+	// installation erases, and its removal retains it.
+	Physical  bool   `json:"physical"`
+	Substrate string `json:"substrate"`
+	URI       string `json:"uri,omitempty"`
 }
 
 // Request is the complete frozen intent for one Anaconda installation. It
@@ -43,10 +94,8 @@ type Controller struct {
 // installation this operation would perform, and no secret value: the fleet
 // key's public half and the install marker reach the adapter at execution.
 type Request struct {
-	Address    string     `json:"address"`
-	BootMedia  Media      `json:"bootMedia"`
-	Controller Controller `json:"controller"`
-	Domain     string     `json:"domain"`
+	Address   string `json:"address"`
+	BootMedia Media  `json:"bootMedia"`
 	// FleetKeyRef names the Secret whose public half the installation
 	// authorizes for the product-owned account. Only that half ever leaves the
 	// binding, and it reaches the adapter at execution rather than in the plan.
@@ -58,11 +107,15 @@ type Request struct {
 	Kickstart   string              `json:"kickstart"`
 	MarkerPath  string              `json:"markerPath"`
 	Placement   lifecycle.Placement `json:"placement"`
-	Tree        *Publication        `json:"tree,omitempty"`
-	TreeMedia   *Media              `json:"treeMedia,omitempty"`
-	URI         string              `json:"uri"`
-	User        string              `json:"user"`
-	Version     string              `json:"version"`
+	// Private is the subtree this block owns for material only the installing
+	// machine may read. The attempt mints the unguessable final segment, so
+	// this names the parent it owns and never the path itself.
+	Private   *Publication `json:"private,omitempty"`
+	Target    Target       `json:"target"`
+	Tree      *Publication `json:"tree,omitempty"`
+	TreeMedia *Media       `json:"treeMedia,omitempty"`
+	User      string       `json:"user"`
+	Version   string       `json:"version"`
 }
 
 // Canonical encodes the request exactly as the plan digest and the adapter both
@@ -158,7 +211,10 @@ func (r Request) ReservationKeys() []string {
 // SecretReferences names every declaration this request's execution needs
 // bound, so the operation freezes them before it registers.
 func (r Request) SecretReferences() []string {
-	references := append(r.Placement.SecretReferences(), r.Controller.CredentialsRef, r.FleetKeyRef)
+	references := append(r.Placement.SecretReferences(), r.Target.Controller.CredentialsRef, r.FleetKeyRef)
+	if r.Target.HostKeyRef != "" {
+		references = append(references, r.Target.HostKeyRef)
+	}
 	out := make([]string, 0, len(references))
 	for _, reference := range references {
 		if reference != "" {

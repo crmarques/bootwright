@@ -28,6 +28,7 @@
     endpoint: '{{ bootwright_machine_power_request.controller.endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerPassword) }}'
+    verify: '{{ bootwright_machine_power_request.controller.tlsVerify }}'
     operation: read
   register: machine_power_redfish_before
   no_log: true
@@ -54,6 +55,7 @@
     endpoint: '{{ bootwright_machine_power_request.controller.endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerPassword) }}'
+    verify: '{{ bootwright_machine_power_request.controller.tlsVerify }}'
     operation: read
   register: machine_power_redfish_after
   no_log: true

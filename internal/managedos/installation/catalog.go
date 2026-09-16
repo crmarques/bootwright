@@ -14,7 +14,7 @@ const Implementation = "os-install-anaconda-v1"
 // same kind through another implementation, so a block resolves by both.
 const Kind = "Machine"
 
-const requestVersion = "os-install-anaconda-v2"
+const requestVersion = "os-install-anaconda-v3"
 
 // consumerPrefix is the subtree this capability owns beneath a managed artifact
 // server's served root. The server owns the root; this block owns exactly

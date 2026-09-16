@@ -118,7 +118,7 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	if err != nil {
 		return Request{}, Requirements{}, err
 	}
-	controller, domain, uri, err := controllerFor(catalog, machine, contextName)
+	target, err := targetFor(catalog, machine, contextName, controllerMachine)
 	if err != nil {
 		return Request{}, Requirements{}, err
 	}
@@ -134,15 +134,13 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	request := Request{
 		Address:     "",
 		BootMedia:   boot,
-		Controller:  controller,
-		Domain:      domain,
 		FleetKeyRef: fleetKeyRef(catalog),
 		HostKeyPath: HostKeyPath,
 		Identity:    Identity{Block: BlockID(name), Context: contextName, Object: name, Profile: profile.Name()},
 		Image:       image,
 		MarkerPath:  MarkerPath,
 		Placement:   placement,
-		URI:         uri,
+		Target:      target,
 		User:        installUser,
 		Version:     requestVersion,
 	}
@@ -287,30 +285,44 @@ func serverPlacement(catalog api.Catalog, server api.Object, controllerMachine s
 	return lifecycle.PlacementFor(machine, controllerMachine)
 }
 
-// controllerFor derives the Redfish endpoint this Machine is booted through,
-// from its provider's own allocation rule.
-func controllerFor(catalog api.Catalog, machine api.Object, contextName string) (Controller, string, string, error) {
-	reference := machine.Spec().Get("substrate", "providerRef").Text()
-	provider, ok := catalog.Find(api.InfraProvider, reference)
-	if !ok {
-		return Controller{}, "", "", refusal("api.reference", "the Machine's provider is not in the selected graph", "declare "+reference+" or correct spec.substrate.providerRef on "+machine.Identity())
+// targetFor reads the realized machine this installation acts on. Everything
+// substrate-specific about the installation follows from the answer, so this
+// is the one place the installation asks and it never asks which substrate.
+func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerMachine string) (Target, error) {
+	derived, err := substrate.TargetFor(catalog, machine, contextName, controllerMachine)
+	if err != nil {
+		return Target{}, err
 	}
-	if !provider.Spec().Has("libvirt") {
-		return Controller{}, "", "", refusal("lifecycle.state", "this installation supports only a libvirt provider", "place "+machine.Identity()+" on a libvirt provider")
+	target := Target{
+		Channel: derived.Identity.Channel,
+		Controller: Controller{
+			CredentialsRef: derived.Controller.CredentialsRef,
+			Endpoint:       derived.Controller.Endpoint,
+			TLSVerify:      derived.Controller.TLSVerify,
+			VirtualMedia: VirtualMedia{
+				RemoveCertificate:   derived.Controller.VirtualMedia.RemoveCertificate,
+				RestoreVerification: derived.Controller.VirtualMedia.RestoreVerification,
+				Trust:               derived.Controller.VirtualMedia.Trust,
+			},
+		},
+		Domain:     derived.Identity.Domain,
+		HostKeyRef: derived.Identity.HostKeyRef,
+		Physical:   derived.Physical,
+		Substrate:  derived.Substrate,
+		URI:        derived.Identity.URI,
 	}
-	port, ok := substrate.ControllerPort(catalog, provider, machine.Name())
-	if !ok {
-		return Controller{}, "", "", refusal("api.value", "the Machine's emulated controller port does not allocate", "correct spec.libvirt.bmcEmulationDefaults.port on "+provider.Identity())
+	if derived.Controller.VirtualMedia.Trust == substrate.TrustImportCertificate {
+		return Target{}, refusal("lifecycle.state", "importing a certificate into a management controller is not implemented",
+			"select disable-verification or established virtual-media trust on "+machine.Identity())
 	}
-	credentials := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "auth", "credentialsRef").Text()
-	if credentials == "" {
-		return Controller{}, "", "", refusal("api.required", "the provider declares no emulated controller credential", "set spec.libvirt.bmcEmulationDefaults.auth.credentialsRef on "+provider.Identity())
+	if len(derived.Hardware.Interfaces) != 0 {
+		hardware := Hardware{RootDevice: derived.Hardware.RootDevice}
+		for _, declared := range derived.Hardware.Interfaces {
+			hardware.Interfaces = append(hardware.Interfaces, Interface{MACAddress: declared.MACAddress, Name: declared.Name})
+		}
+		target.Hardware = &hardware
 	}
-	address := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text()
-	endpoint := substrate.ControllerEndpoint(address, port, substrate.DomainUUID(contextName, machine.Name()))
-	return Controller{CredentialsRef: credentials, Endpoint: endpoint},
-		substrate.DomainName(contextName, machine.Name()),
-		provider.Spec().Get("libvirt", "uri").Text(), nil
+	return target, nil
 }
 
 func findNamed(values api.Value, key, name string) (api.Value, bool) {

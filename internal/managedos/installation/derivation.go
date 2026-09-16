@@ -9,8 +9,9 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-// guestAgent is installed on every libvirt Machine, because the identity this
-// contract proves completion with is read through it.
+// guestAgent is installed on a Machine whose identity channel reads through it,
+// because that channel is how completion is proved. A machine proved another
+// way does not need it and does not get it.
 const guestAgent = "qemu-guest-agent"
 
 // installationFor derives the complete unattended installation from effective
@@ -42,7 +43,7 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 	if err != nil {
 		return Installation{}, err
 	}
-	return Installation{
+	installation := Installation{
 		Address:          address,
 		AdditionalLocale: customizations.Get("localization", "additionalLocales").Strings(),
 		DisabledServices: SortedUnique(customizations.Get("services", "disabled").Strings()),
@@ -59,7 +60,7 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 		MarkerPath:       MarkerPath,
 		Nameservers:      nameservers,
 		NTPServers:       timeSources,
-		Packages:         SortedUnique(append(customizations.Get("packages", "install").Strings(), guestAgent)),
+		Packages:         SortedUnique(append(customizations.Get("packages", "install").Strings(), identityPackages(request.Target)...)),
 		PackageSource:    source,
 		Prefix:           prefix,
 		Repositories:     repositoriesFor(customizations),
@@ -68,7 +69,45 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 		Timezone:         orDefault(customizations.Get("localization", "timezone").Text(), "UTC"),
 		User:             installUser,
 		WeakDeps:         weakDepsChoice(customizations),
-	}, nil
+	}
+	installation.Channel, installation.Physical = request.Target.Channel, request.Target.Physical
+	if request.Target.Hardware != nil {
+		installation.InterfaceMAC = installInterfaceMAC(machine, request.Target.Hardware, iface)
+		for _, declared := range request.Target.Hardware.Interfaces {
+			installation.ExpectedMACs = append(installation.ExpectedMACs, declared.MACAddress)
+		}
+		installation.ExpectedMACs = SortedUnique(installation.ExpectedMACs)
+	}
+	return installation, nil
+}
+
+// identityPackages are what the machine needs installed for its own identity
+// channel to answer afterwards.
+func identityPackages(target Target) []string {
+	if target.Channel == substrate.ChannelGuestAgent {
+		return []string{guestAgent}
+	}
+	return nil
+}
+
+// installInterfaceMAC resolves the hardware address of the interface the
+// installation configures. A physical machine is addressed by that address
+// rather than by a kernel interface name, because the name a booted installer
+// assigns is not the name the declaration used.
+func installInterfaceMAC(machine api.Object, hardware *Hardware, iface string) string {
+	nic := iface
+	for _, binding := range machine.Spec().Get("network", "interfaceBinding").Items() {
+		if binding.Get("interfaceName").Text() == iface {
+			nic = binding.Get("nicRef").Text()
+			break
+		}
+	}
+	for _, declared := range hardware.Interfaces {
+		if declared.Name == nic {
+			return declared.MACAddress
+		}
+	}
+	return ""
 }
 
 // packageSource is what Anaconda installs from: the boot media itself when the

@@ -16,7 +16,7 @@ func NetworkSpec(catalog api.Catalog, machine api.Object) (api.Value, error) {
 	}
 	config, found := catalog.Find(api.NetworkConfig, network.Get("configRef").Text())
 	if !found {
-		return api.Value{}, networkRefusal("api.reference", "the Machine's network configuration is not in the selected graph", "declare it or correct spec.network.configRef on "+machine.Identity())
+		return api.Value{}, refusal("api.reference", "the Machine's network configuration is not in the selected graph", "declare it or correct spec.network.configRef on "+machine.Identity())
 	}
 	return config.Spec(), nil
 }
@@ -42,6 +42,8 @@ func DefaultGateway(template api.Value) string {
 	return ""
 }
 
-func networkRefusal(code, message, remediation string) error {
+// refusal is the one shape every pure substrate derivation refuses in, so a
+// caller reads the same diagnostic whichever derivation produced it.
+func refusal(code, message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
 }

@@ -49,6 +49,10 @@ options:
     description: Bounded polls before the outcome is unproved.
     type: int
     default: 60
+  verify:
+    description: Whether the controller's own transport is verified.
+    type: bool
+    default: true
 author:
   - Bootwright contributors (@crmarques)
 """
@@ -94,6 +98,7 @@ def main():
             "image": {"type": "str", "required": False},
             "target": {"type": "str", "default": "Cd", "choices": ["Cd", "Hdd"]},
             "attempts": {"type": "int", "default": 60},
+            "verify": {"type": "bool", "default": True},
         },
         supports_check_mode=False,
     )
@@ -101,18 +106,19 @@ def main():
     user, password = module.params["user"], module.params["password"]
     operation = module.params["operation"]
     attempts = max(1, min(int(module.params["attempts"]), MAX_ATTEMPTS))
+    verify = bool(module.params["verify"])
     try:
-        changed = drive(module, endpoint, user, password, operation, attempts)
+        changed = drive(module, endpoint, user, password, operation, attempts, verify)
         module.exit_json(
             changed=changed,
-            power=redfish_control.power_state(endpoint, user, password),
-            media=redfish_control.media_inserted(endpoint, user, password),
+            power=redfish_control.power_state(endpoint, user, password, verify=verify),
+            media=redfish_control.media_inserted(endpoint, user, password, verify=verify),
         )
     except (urllib.error.URLError, OSError, ValueError) as failure:
         module.fail_json(msg="the management controller did not complete %s: %s" % (operation, type(failure).__name__))
 
 
-def drive(module, endpoint, user, password, operation, attempts):
+def drive(module, endpoint, user, password, operation, attempts, verify=True):
     """Perform exactly the one operation asked for, and prove its outcome."""
     if operation == "read":
         return False
@@ -120,30 +126,29 @@ def drive(module, endpoint, user, password, operation, attempts):
         image = module.params["image"]
         if not image:
             raise ValueError("image")
-        if redfish_control.media_inserted(endpoint, user, password) == image:
+        if redfish_control.media_inserted(endpoint, user, password, verify=verify) == image:
             return False
-        redfish_control.insert_media(endpoint, user, password, image)
+        redfish_control.insert_media(endpoint, user, password, image, verify=verify)
         return True
     if operation == "eject":
-        if not redfish_control.media_inserted(endpoint, user, password):
+        if not redfish_control.media_inserted(endpoint, user, password, verify=verify):
             return False
-        redfish_control.eject_media(endpoint, user, password)
+        redfish_control.eject_media(endpoint, user, password, verify=verify)
         return True
     if operation == "boot":
-        redfish_control.boot_once(endpoint, user, password, module.params["target"])
+        redfish_control.boot_once(endpoint, user, password, module.params["target"], verify=verify)
         return True
     expected = "On" if operation == "power-on" else "Off"
-    if redfish_control.power_state(endpoint, user, password) == expected:
+    if redfish_control.power_state(endpoint, user, password, verify=verify) == expected:
         return False
     # A graceful request asks the operating system to stop; forcing the power
     # off does not. Both are polled to the state they asked for, so neither is
     # reported as settled before the controller says it is.
     kind = {"power-on": "On", "power-off": "ForceOff", "shutdown": "GracefulShutdown"}[operation]
-    redfish_control.reset(endpoint, user, password, kind)
-    if not redfish_control.await_power(endpoint, user, password, expected, attempts):
+    redfish_control.reset(endpoint, user, password, kind, verify=verify)
+    if not redfish_control.await_power(endpoint, user, password, expected, attempts, verify=verify):
         raise ValueError("power state")
     return True
-
 
 if __name__ == "__main__":
     main()

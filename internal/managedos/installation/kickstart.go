@@ -5,9 +5,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const kickstartVersion = "kickstart-anaconda-v3"
+const kickstartVersion = "kickstart-anaconda-v4"
 
 // hostKeySource is the key the installation republishes. Ed25519 is the type
 // the identity operation binds, and generating it here rather than at first
@@ -46,6 +48,17 @@ type Repository struct {
 type Installation struct {
 	Address          string
 	AdditionalLocale []string
+	// Channel is the identity channel this machine will answer on, which
+	// decides what the %post has to establish for it to answer at all.
+	Channel string
+	// ExpectedMACs and Physical belong to operator-owned hardware: the
+	// installer proves it is running on the machine the declaration names
+	// before it erases anything.
+	ExpectedMACs []string
+	Physical     bool
+	// InterfaceMAC addresses the installation interface by hardware address
+	// rather than by a kernel name the booted installer may not reproduce.
+	InterfaceMAC     string
 	DisabledServices []string
 	EnabledServices  []string
 	ExcludeDocs      bool
@@ -124,8 +137,12 @@ func networkLine(input Installation) (string, error) {
 	if input.Prefix < 1 || input.Prefix > 32 {
 		return "", refusal("api.value", "the Machine's install address carries no usable prefix", "correct the selected install address")
 	}
+	device := input.Interface
+	if input.InterfaceMAC != "" {
+		device = input.InterfaceMAC
+	}
 	fields := []string{
-		"network", "--bootproto=static", "--device=" + input.Interface,
+		"network", "--bootproto=static", "--device=" + device,
 		"--ip=" + input.Address, "--netmask=" + netmask(input.Prefix),
 		"--hostname=" + input.Hostname, "--onboot=on", "--activate",
 	}
@@ -236,21 +253,37 @@ func postSection(input Installation) []string {
 		MarkerToken,
 		"BOOTWRIGHT_MARKER_EOF",
 		"chmod 0444 " + input.MarkerPath,
-		"/usr/bin/ssh-keygen -A",
-		"install -m 0444 " + hostKeySource + " " + input.HostKeyPath,
-		"test -s " + input.HostKeyPath,
+	}
+	lines = append(lines, identityLines(input)...)
+	lines = append(lines, []string{
 		"install -d -m 0750 /etc/sudoers.d",
 		"printf '%s\\n' '" + input.User + " ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/60-bootwright",
 		"chmod 0440 /etc/sudoers.d/60-bootwright",
 		"install -d -m 0755 /etc/ssh/sshd_config.d",
 		"printf '%s\\n' 'PasswordAuthentication no' 'PermitRootLogin prohibit-password' > /etc/ssh/sshd_config.d/60-bootwright.conf",
 		"chmod 0600 /etc/ssh/sshd_config.d/60-bootwright.conf",
-	}
-	lines = append(lines, agentFilterLines()...)
+	}...)
 	return append(lines,
 		"rm -f /root/anaconda-ks.cfg /root/original-ks.cfg /run/install/ks.cfg",
 		"%end",
 	)
+}
+
+// identityLines establish whatever the machine's own identity channel needs in
+// order to answer once the installation is over. A guest agent reads files the
+// installation wrote, so the key is generated and republished where the agent
+// may reach it and the agent is permitted those reads; a delivered key is
+// installed as sshd's own before any key is generated, so the machine presents
+// exactly the key that was frozen with the plan.
+func identityLines(input Installation) []string {
+	if input.Channel != substrate.ChannelGuestAgent {
+		return nil
+	}
+	return append([]string{
+		"/usr/bin/ssh-keygen -A",
+		"install -m 0444 " + hostKeySource + " " + input.HostKeyPath,
+		"test -s " + input.HostKeyPath,
+	}, agentFilterLines()...)
 }
 
 // agentFilterLines permit exactly the identity operation's reads and prove the

@@ -9,6 +9,16 @@ argument_specs:
           controller:
             type: dict
             required: true
+            options:
+              credentialsRef:
+                type: str
+                required: true
+              endpoint:
+                type: str
+                required: true
+              tlsVerify:
+                type: bool
+                required: true
           force:
             type: bool
             required: true

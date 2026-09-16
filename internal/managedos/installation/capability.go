@@ -274,8 +274,8 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		Canonical:      canonical,
 		Placement:      request.Placement,
 		Materials: append([]lifecycle.MaterialFile{
-			{Name: "bmc-user", Part: secrets.UsernamePart, Secret: request.Controller.CredentialsRef, Variable: "controllerUser"},
-			{Name: "bmc-password", Part: secrets.PasswordPart, Secret: request.Controller.CredentialsRef, Variable: "controllerPassword"},
+			{Name: "bmc-user", Part: secrets.UsernamePart, Secret: request.Target.Controller.CredentialsRef, Variable: "controllerUser"},
+			{Name: "bmc-password", Part: secrets.PasswordPart, Secret: request.Target.Controller.CredentialsRef, Variable: "controllerPassword"},
 			{Name: "fleet-id", Part: secrets.PrivateKeyPart, Secret: request.FleetKeyRef, Variable: "fleetIdentity"},
 		}, lifecycle.Materials(request.Placement)...),
 		MaterialValues: values,

@@ -7,6 +7,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 func expectRefusal(t *testing.T, err error, code string) {
@@ -53,17 +54,25 @@ func TestRequestFreezesThePublishedContentAndItsURLs(t *testing.T) {
 }
 
 // The Machine is booted through its own controller, at the endpoint its
-// provider's allocation rule derives.
+// provider's allocation rule derives, and proved through the channel that
+// substrate offers. The installation reads both from the derived target and
+// names no substrate itself.
 func TestRequestBootsThroughTheMachinesOwnController(t *testing.T) {
 	request, _ := onlyRequest(t, labCatalog())
-	if !strings.HasPrefix(request.Controller.Endpoint, "http://192.0.2.1:8000/redfish/v1/Systems/") {
-		t.Fatalf("endpoint = %q", request.Controller.Endpoint)
+	if !strings.HasPrefix(request.Target.Controller.Endpoint, "http://192.0.2.1:8000/redfish/v1/Systems/") {
+		t.Fatalf("endpoint = %q", request.Target.Controller.Endpoint)
 	}
-	if request.Controller.CredentialsRef != "lab-bmc-credentials" {
-		t.Fatalf("credentials = %q", request.Controller.CredentialsRef)
+	if request.Target.Controller.CredentialsRef != "lab-bmc-credentials" {
+		t.Fatalf("credentials = %q", request.Target.Controller.CredentialsRef)
 	}
-	if request.Domain != "bootwright-lab-rhel-01" || request.URI != "qemu:///system" {
-		t.Fatalf("identity operation target = %q over %q", request.Domain, request.URI)
+	if request.Target.Domain != "bootwright-lab-rhel-01" || request.Target.URI != "qemu:///system" {
+		t.Fatalf("identity operation target = %q over %q", request.Target.Domain, request.Target.URI)
+	}
+	if request.Target.Channel != substrate.ChannelGuestAgent || request.Target.Physical {
+		t.Fatalf("target = %+v", request.Target)
+	}
+	if request.Target.Hardware != nil {
+		t.Fatal("a machine its substrate creates carries no hardware to prove")
 	}
 }
 
