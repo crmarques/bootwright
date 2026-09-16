@@ -126,6 +126,14 @@ type PlanPresenter interface {
 	PresentControllerPlan(context.Context, Report) error
 }
 
+// RunOutput receives an adapter process's own standard output and error as it
+// is produced, so an operator can read what a run did when its structured
+// events do not say. The shape is declared here rather than imported, because
+// the domains that cross this execution boundary depend on no I/O package.
+type RunOutput interface {
+	Write([]byte) (int, error)
+}
+
 // ProgressReporter receives events while setup runs. Reporting is best effort:
 // a reporting failure never changes an effect or its recorded outcome.
 type ProgressReporter interface {

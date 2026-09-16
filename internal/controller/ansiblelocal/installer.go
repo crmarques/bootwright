@@ -71,7 +71,7 @@ func (installer Installer) Clients(ctx context.Context, installation prerequisit
 	if err != nil {
 		return result, err
 	}
-	return run(ctx, installation.Launch, request, installation.Release, installation.Publish, installation.Progress)
+	return run(ctx, installation.Launch, request, installation.Release, installation.Publish, installation.Progress, installation.Output)
 }
 
 func (installer Installer) invoke(ctx context.Context, area prerequisites.BundleArea, platform prerequisites.Platform, definition prerequisites.Definition, egress prerequisites.SetupEgress, publish func(context.Context, prerequisites.NativePreparation) error, preparation *prerequisites.NativePreparation, progress func(prerequisites.ProgressEvent)) (prerequisites.ActionResult, error) {
@@ -95,7 +95,7 @@ func (installer Installer) invoke(ctx context.Context, area prerequisites.Bundle
 	}
 	err = installer.ExecutionGuard.WithPython(ctx, area, definition.Execution, func(launch prerequisites.PythonLaunch, release func() error) error {
 		var runErr error
-		result, runErr = run(ctx, launch, request, release, publish, progress)
+		result, runErr = run(ctx, launch, request, release, publish, progress, nil)
 		return runErr
 	})
 	return result, err

@@ -78,7 +78,7 @@ type RunRequest struct {
 	Log            func(context.Context, operationstore.LogRecord) error
 	Progress       func(context.Context, string, string)
 	// Output receives the adapter process's own standard output and error.
-	Output RunOutput
+	Output prerequisites.RunOutput
 }
 
 type RunResult struct {

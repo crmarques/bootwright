@@ -99,7 +99,7 @@ func TestRunnerDrainsCompletionAfterChildExit(t *testing.T) {
 		}
 		published = true
 		return nil
-	}, nil, boundary)
+	}, nil, nil, boundary)
 	if err != nil || result.Outcome != "unchanged" || !released || !published {
 		t.Fatalf("completion lost: %s %v", result.Outcome, err)
 	}
@@ -117,7 +117,7 @@ func TestRunnerReportsProtocolPhasesAsProgress(t *testing.T) {
 	defer cancel()
 	var details []string
 	progress := func(event prerequisites.ProgressEvent) { details = append(details, event.Status+": "+event.Detail) }
-	if _, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, progress, boundary); err != nil {
+	if _, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, progress, nil, boundary); err != nil {
 		t.Fatal(err)
 	}
 	if want := []string{"running: starting the private Ansible runtime", "running: reading the native package inventory"}; !slices.Equal(details, want) {
@@ -132,7 +132,7 @@ func TestRunnerReportsProtocolPhasesAsProgress(t *testing.T) {
 	}
 	request.Preparation = &prerequisites.NativePreparation{InventorySHA256: request.Native.BeforeSHA256, AfterInventorySHA256: request.Native.AfterSHA256, PlanDigest: request.Native.Digest, TransitionsSHA256: transitions, AddedSources: []string{"native-one"}}
 	details = nil
-	if _, err := runProcess(ctx, launch, request, func() error { return nil }, nil, progress, boundary); err != nil {
+	if _, err := runProcess(ctx, launch, request, func() error { return nil }, nil, progress, nil, boundary); err != nil {
 		t.Fatal(err)
 	}
 	if want := []string{"running: starting the private Ansible runtime", "running: verifying the recorded native transaction", "running: installing 1 native package"}; !slices.Equal(details, want) {
@@ -144,7 +144,7 @@ func TestRunnerRefusesCancellationAtDurablePreparation(t *testing.T) {
 	launch, request, boundary := runnerFixture(t, "complete")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { cancel(); return nil }, nil, boundary)
+	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { cancel(); return nil }, nil, nil, boundary)
 	if !errors.Is(err, context.Canceled) || result.Outcome != "unknown" {
 		t.Fatalf("cancellation lost durable intent: %s %v", result.Outcome, err)
 	}
@@ -157,7 +157,7 @@ func TestRunnerSanitizesInvalidProtocol(t *testing.T) {
 	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error {
 		t.Error("invalid phase published intent")
 		return nil
-	}, nil, boundary)
+	}, nil, nil, boundary)
 	if err == nil || result.Outcome != "failed" || strings.Contains(err.Error(), "private-child-diagnostic") {
 		t.Fatalf("invalid protocol accepted: %s %v", result.Outcome, err)
 	}
@@ -174,7 +174,7 @@ func TestRunnerAcknowledgesFrozenNativeRecoveryWithoutNewPreparation(t *testing.
 	request.Preparation = &prerequisites.NativePreparation{InventorySHA256: request.Native.BeforeSHA256, AfterInventorySHA256: request.Native.AfterSHA256, PlanDigest: request.Native.Digest, TransitionsSHA256: transitions, AddedSources: []string{"native-one"}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	result, err := runProcess(ctx, launch, request, func() error { return nil }, nil, nil, boundary)
+	result, err := runProcess(ctx, launch, request, func() error { return nil }, nil, nil, nil, boundary)
 	if err != nil || result.Outcome != "changed" {
 		t.Fatalf("frozen native recovery failed: %s %v", result.Outcome, err)
 	}
@@ -194,7 +194,7 @@ func TestRunnerReapsUnauthorizedChildOnCancellationDuringRecovery(t *testing.T) 
 			// authorization pipe cannot end it instead of the reap.
 			go func() { time.Sleep(500 * time.Millisecond); cancel() }()
 			started := time.Now()
-			result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, boundary)
+			result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary)
 			if elapsed := time.Since(started); elapsed > 10*time.Second {
 				t.Fatalf("unauthorized child was not reaped: %s took %s", operation, elapsed)
 			}
@@ -218,7 +218,7 @@ func TestRunnerStagesInPrivateDurableScratch(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if _, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, boundary); err != nil {
+	if _, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary); err != nil {
 		t.Fatal(err)
 	}
 	var scratch string
@@ -266,7 +266,7 @@ func TestRunnerBoundsDrainWhenDescendantRetainsResultChannel(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	started := time.Now()
-	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, boundary)
+	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary)
 	elapsed := time.Since(started)
 	if ctx.Err() != nil {
 		t.Fatal("run outlived its own drain bound and hit the test deadline")
@@ -280,5 +280,23 @@ func TestRunnerBoundsDrainWhenDescendantRetainsResultChannel(t *testing.T) {
 	}
 	if elapsed > 10*time.Second {
 		t.Fatalf("drain bound was not applied: %s", elapsed)
+	}
+}
+
+// The controller stage runs as one lifecycle block, so what its Ansible prints
+// belongs to that block's attempt. A run given no retention discards it rather
+// than letting it reach the operator's terminal.
+func TestRunnerRetainsWhatAnsiblePrintsWhenGivenSomewhereToPutIt(t *testing.T) {
+	launch, request, boundary := runnerFixture(t, "complete")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var retained strings.Builder
+	result, err := runProcess(ctx, launch, request, func() error { return nil },
+		func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, &retained, boundary)
+	if err != nil || result.Outcome != "unchanged" {
+		t.Fatalf("run = %s (%v)", result.Outcome, err)
+	}
+	if !strings.Contains(retained.String(), "private-child-diagnostic") {
+		t.Fatalf("retained = %q, want what the run printed", retained.String())
 	}
 }

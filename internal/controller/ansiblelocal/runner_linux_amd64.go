@@ -38,11 +38,11 @@ const (
 	authorizedResultDrain = 60 * time.Second
 )
 
-func run(ctx context.Context, launch prerequisites.PythonLaunch, request capabilityRequest, release func() error, publish func(context.Context, prerequisites.NativePreparation) error, progress func(prerequisites.ProgressEvent)) (prerequisites.ActionResult, error) {
+func run(ctx context.Context, launch prerequisites.PythonLaunch, request capabilityRequest, release func() error, publish func(context.Context, prerequisites.NativePreparation) error, progress func(prerequisites.ProgressEvent), retain prerequisites.RunOutput) (prerequisites.ActionResult, error) {
 	// Invocation state is small and must not survive a reboot, so it lives on
 	// the runtime filesystem. Package staging is large and must not, so it goes
 	// to durable temporary storage instead.
-	return runProcess(ctx, launch, request, release, publish, progress, processBoundary{owner: 0, jobParent: "/run", scratchParent: "/var/tmp", command: exec.Command})
+	return runProcess(ctx, launch, request, release, publish, progress, retain, processBoundary{owner: 0, jobParent: "/run", scratchParent: "/var/tmp", command: exec.Command})
 }
 
 type processBoundary struct {
@@ -56,7 +56,7 @@ type processBoundary struct {
 	authorizedDrain time.Duration
 }
 
-func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request capabilityRequest, release func() error, publish func(context.Context, prerequisites.NativePreparation) error, progress func(prerequisites.ProgressEvent), boundary processBoundary) (prerequisites.ActionResult, error) {
+func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request capabilityRequest, release func() error, publish func(context.Context, prerequisites.NativePreparation) error, progress func(prerequisites.ProgressEvent), retain prerequisites.RunOutput, boundary processBoundary) (prerequisites.ActionResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	// Each protocol phase names the work Ansible is about to do, so the native
@@ -127,7 +127,12 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 		"TMPDIR="+scratch,
 		"PATH=/usr/bin:/usr/sbin")
 	command.ExtraFiles = []*os.File{childOutput, childInput}
+	// A run that retains its output is readable afterwards; one that does not
+	// discards it rather than letting it reach the operator's terminal.
 	command.Stdout, command.Stderr = io.Discard, io.Discard
+	if retain != nil {
+		command.Stdout, command.Stderr = retain, retain
+	}
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := ctx.Err(); err != nil {
 		return result, err

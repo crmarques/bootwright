@@ -305,6 +305,11 @@ before-state into the running attempt before it is authorized. The block
 completes only after every selected client is proved present by presence alone
 and the area is sealed.
 
+Because the stage is a lifecycle block, what its Ansible prints is retained as
+that block's [attempt output](cli/output.md#private-operation-logs), exactly as
+every other adapter run's is. Local setup retains nothing: it allocates no
+operation identity, so it has nowhere of its own to put it.
+
 The closure is shared host state. Two contexts selecting the same clients prove
 the same sealed files, a different closure gets its own area, and removing a
 context retains both: destroying a context uninstalls no native package and

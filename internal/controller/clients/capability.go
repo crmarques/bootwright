@@ -256,6 +256,7 @@ func (c Capability) publish(ctx context.Context, execution lifecycle.Execution, 
 		Progress: func(event prerequisites.ProgressEvent) {
 			report(ctx, execution, "publish-clients", event.Status)
 		},
+		Output: execution.Output,
 	})
 	if err != nil {
 		if result.Outcome == "failed" {

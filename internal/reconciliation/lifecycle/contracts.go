@@ -216,14 +216,7 @@ type Execution struct {
 	// error, for an operator to read when no structured event explains what a
 	// run did. An adapter hands it the process's streams and writes nothing
 	// itself; whoever opened it owns closing it.
-	Output RunOutput
-}
-
-// RunOutput receives an adapter process's own standard output and error as it
-// is produced. The shape is declared here rather than imported, because this
-// domain depends on no I/O package for one field an adapter fills.
-type RunOutput interface {
-	Write([]byte) (int, error)
+	Output prerequisites.RunOutput
 }
 
 type Result struct {

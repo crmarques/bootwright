@@ -19,4 +19,8 @@ type ClientInstallation struct {
 	Release    func() error
 	Publish    func(context.Context, NativePreparation) error
 	Progress   func(ProgressEvent)
+	// Output retains what this run prints on its own standard output and
+	// error. The stage runs as one lifecycle block, so its output belongs to
+	// that block's attempt exactly as any other adapter run's does.
+	Output RunOutput
 }
