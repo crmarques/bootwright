@@ -57,6 +57,7 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils.artifact_server import (
     observe,
     probe,
+    probe_failure,
     probe_targets,
 )
 
@@ -92,7 +93,7 @@ def main():
                 answer = probe(target)
                 break
             except (OSError, ValueError) as failure:
-                last = type(failure).__name__
+                last = probe_failure(failure)
                 if remaining + 1 < attempts:
                     time.sleep(RETRY_DELAY)
         if answer is None:

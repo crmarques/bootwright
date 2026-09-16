@@ -12,9 +12,27 @@ PODMAN = "/usr/bin/podman"
 
 MAX_OUTPUT = 4096
 MAX_STATUS = 128
+PROBE_REASON = 120
 PROBE_TIMEOUT = 5
 UNIT_STATES = ("active", "activating", "deactivating", "inactive", "failed")
 ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C.UTF-8"}
+
+
+def probe_failure(error):
+    """Why a readiness probe did not answer, bounded to one line.
+
+    The exception class alone cannot tell a refused port from an address this
+    host does not hold, and those need opposite repairs, so the system's own
+    number and message are carried with it.
+    """
+    name = type(error).__name__
+    number = getattr(error, "errno", None)
+    detail = getattr(error, "strerror", None) or str(error)
+    if number is not None:
+        return ("%s(%d): %s" % (name, number, detail))[:PROBE_REASON]
+    if detail:
+        return ("%s: %s" % (name, detail))[:PROBE_REASON]
+    return name
 
 
 def invoke(runner, argv):

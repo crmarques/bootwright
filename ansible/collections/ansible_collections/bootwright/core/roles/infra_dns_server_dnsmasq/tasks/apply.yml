@@ -162,7 +162,9 @@
   ansible.builtin.assert:
     that:
       - infra_dns_server_dnsmasq_after.unproved | length == 0
-    fail_msg: a declared managed service address did not answer within its readiness window
+    fail_msg: >-
+      a declared managed service address did not answer within its readiness
+      window: {{ infra_dns_server_dnsmasq_after.unproved | join("; ") }}
     quiet: true
 
 - name: Report readiness completion

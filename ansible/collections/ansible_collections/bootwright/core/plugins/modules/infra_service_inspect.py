@@ -57,6 +57,7 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils.infra_service import (
     observe,
     probe_dns,
+    probe_failure,
     probe_http,
     probe_ntp,
     probe_targets,
@@ -109,7 +110,7 @@ def main():
                 answer = answer_for(request, address)
                 break
             except (OSError, ValueError) as failure:
-                last = type(failure).__name__
+                last = probe_failure(failure)
                 if remaining + 1 < attempts:
                     time.sleep(RETRY_DELAY)
         if answer is None:

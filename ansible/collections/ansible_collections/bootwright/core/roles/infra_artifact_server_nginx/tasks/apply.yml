@@ -203,7 +203,9 @@
   ansible.builtin.assert:
     that:
       - infra_artifact_server_nginx_after.unproved | length == 0
-    fail_msg: a declared artifact-server listener did not answer within its readiness window
+    fail_msg: >-
+      a declared artifact-server listener did not answer within its readiness
+      window: {{ infra_artifact_server_nginx_after.unproved | join("; ") }}
     quiet: true
 
 - name: Report readiness completion
