@@ -150,5 +150,6 @@ def drive(module, endpoint, user, password, operation, attempts, verify=True):
         raise ValueError("power state")
     return True
 
+
 if __name__ == "__main__":
     main()

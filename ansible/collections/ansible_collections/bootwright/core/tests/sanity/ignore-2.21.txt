@@ -13,5 +13,7 @@ plugins/modules/machine_power_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_install_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_install_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/redfish_boot.py validate-modules:missing-gplv3-license
+plugins/modules/redfish_system_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/substrate_host_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/substrate_machine_protocol.py validate-modules:missing-gplv3-license
+plugins/modules/substrate_physical_protocol.py validate-modules:missing-gplv3-license

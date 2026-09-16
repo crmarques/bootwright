@@ -213,7 +213,7 @@ class Client:
         members = []
         for reference in collection["Members"]:
             url = reference.get("@odata.id") if isinstance(reference, dict) else ""
-            member_status, member, _ = self.fetch(url)
+            member_status, member, _headers = self.fetch(url)
             members.append(member if member_status == 200 else None)
         observed, failures = redfish_discovery.reported_macs(members)
         if not observed and not failures:
@@ -306,7 +306,7 @@ class Client:
             return "the controller refused the attach with HTTP %d" % status
         if status == 202 and not self._await_task(redfish_discovery.task_reference(body, headers), sleep):
             return "the controller reported the attach as failed"
-        for _ in range(MEDIA_PROBES):
+        for _probe in range(MEDIA_PROBES):
             if redfish_discovery.image_matches(self.inserted(), image):
                 return ""
             sleep(MEDIA_PROBE_DELAY)
@@ -335,7 +335,7 @@ class Client:
     def _await_task(self, reference, sleep):
         if not reference:
             return True
-        for _ in range(TASK_POLLS):
+        for _poll in range(TASK_POLLS):
             status, task, _headers = self.fetch(reference)
             if status not in (200, 202):
                 return False
@@ -362,7 +362,7 @@ class Client:
             break
         else:
             self.fetch(member.rstrip("/") + "/Actions/VirtualMedia.EjectMedia", method="POST", payload={})
-        for _ in range(MEDIA_PROBES):
+        for _probe in range(MEDIA_PROBES):
             status, resource, _headers = self.fetch(member)
             if status == 404 or (status == 200 and not redfish_discovery.inserted_image(resource)):
                 return True
