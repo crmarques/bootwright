@@ -39,6 +39,41 @@ def test_a_provider_host_postcondition_needs_every_proof():
         assert not substrate_host_protocol.presence(host_observation(**overrides), DIGEST)["postcondition"]
 
 
+def forgotten_network():
+    return {"bridge": False, "managed": True, "name": "n", "owned": False, "state": "", "uuid": ""}
+
+
+# `managed` echoes the request and stays true after removal, so an absence proof
+# that read it alone could never be satisfied for any context owning a network.
+def test_a_provider_host_removal_proves_the_hypervisor_forgot_the_network():
+    removed = host_observation(pool="", networks=[forgotten_network()])
+    assert substrate_host_protocol.absence(removed, DIGEST)["postcondition"]
+    assert substrate_host_protocol.remaining(removed) == []
+
+
+def test_a_provider_host_removal_names_what_is_still_defined():
+    defined = host_observation(pool="")
+    assert not substrate_host_protocol.absence(defined, DIGEST)["postcondition"]
+    assert substrate_host_protocol.remaining(defined) == ["networks"]
+    assert substrate_host_protocol.remaining(host_observation()) == ["pool", "networks"]
+
+
+def test_an_unmanaged_network_never_blocks_a_removal():
+    foreign = {"bridge": True, "managed": False, "name": "n", "owned": False, "state": "active", "uuid": ""}
+    removed = host_observation(pool="", networks=[foreign])
+    assert substrate_host_protocol.absence(removed, DIGEST)["postcondition"]
+
+
+def test_an_unmet_provider_host_realization_names_what_is_unproved():
+    complete = substrate_host_protocol.presence(host_observation(), DIGEST)
+    assert substrate_host_protocol.unproved(complete) == []
+    bare = substrate_host_protocol.presence(
+        host_observation(hypervisor=False, uri=False, service="failed", pool="", networks=[forgotten_network()]),
+        DIGEST,
+    )
+    assert substrate_host_protocol.unproved(bare) == ["hypervisor", "uri", "service", "pool", "networks"]
+
+
 def test_a_provider_host_removal_proves_only_what_it_owns():
     gone = substrate_host_protocol.absence(host_observation(pool="", networks=[]), DIGEST)
     assert gone["postcondition"] and gone["absent"]

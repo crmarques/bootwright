@@ -61,9 +61,46 @@ def presence(observation, request_digest):
     return evidence
 
 
+def still_defined(entry):
+    """Whether a managed network the hypervisor still defines remains.
+
+    `managed` echoes the request and is true for every network this context
+    owns, before and after removal, so it proves nothing on its own. What the
+    hypervisor answers for the name is the only observation of absence.
+    """
+    return bool(entry["managed"]) and bool(entry["state"] or entry["owned"])
+
+
+def remaining(observation):
+    """What an absence proof still sees, named so the refusal can say so."""
+    names = ["pool"] if observation.get("pool") else []
+    networks = [network_evidence(entry) for entry in observation.get("networks") or []]
+    if any(still_defined(entry) for entry in networks):
+        names.append("networks")
+    return names
+
+
+def unproved(evidence):
+    """What a presence proof still lacks, named for the same reason."""
+    names = []
+    if not evidence["hypervisor"]:
+        names.append("hypervisor")
+    if not evidence["uri"]:
+        names.append("uri")
+    if evidence["service"] != "active":
+        names.append("service")
+    if evidence["pool"] != "active":
+        names.append("pool")
+    for entry in evidence["networks"]:
+        if not entry["bridge"] or (entry["managed"] and not (entry["owned"] and entry["state"] == "active")):
+            names.append("networks")
+            break
+    return names
+
+
 def absence(observation, request_digest):
     networks = [network_evidence(entry) for entry in observation.get("networks") or []]
-    gone = not observation.get("pool") and not any(entry["managed"] for entry in networks)
+    gone = not observation.get("pool") and not any(still_defined(entry) for entry in networks)
     return {
         "absent": True,
         "hypervisor": False,
@@ -103,10 +140,15 @@ class ActionModule(ActionBase):
             observation = arguments.get("observation") or {}
             if arguments.get("removed"):
                 evidence = absence(observation, request_digest)
+                unmet, verb = remaining(observation), "still present"
             else:
                 evidence = presence(observation, request_digest)
+                unmet, verb = unproved(evidence), "not proved"
             if not evidence["postcondition"]:
-                return {"failed": True, "msg": "the provider host did not reach its postcondition"}
+                return {
+                    "failed": True,
+                    "msg": "the provider host did not reach its postcondition; %s: %s" % (verb, ", ".join(unmet) or "unknown"),
+                }
             emit({"phase": "completed", "outcome": outcome, "evidence": evidence})
             return {"changed": False}
         except (ValueError, TypeError, OSError):

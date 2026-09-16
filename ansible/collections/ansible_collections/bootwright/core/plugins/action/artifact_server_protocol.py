@@ -57,6 +57,24 @@ def presence(request, observation, listeners, request_digest):
     }
 
 
+def remaining(observation):
+    """What an absence proof still sees, named so the refusal can say so."""
+    names = ["unit"] if observation.get("unit") else []
+    if observation.get("container") or observation.get("containerPresent"):
+        names.append("container")
+    if observation.get("contentRoot"):
+        names.append("contentRoot")
+    return names
+
+
+def unproved(observation):
+    """What a presence proof still lacks, named for the same reason."""
+    names = [] if observation.get("unit") == "active" else ["unit"]
+    if not observation.get("contentRoot"):
+        names.append("contentRoot")
+    return names
+
+
 def absence(observation, request_digest):
     gone = (
         not observation.get("unit")
@@ -110,7 +128,12 @@ class ActionModule(ActionBase):
                     request_digest,
                 )
             if not evidence["postcondition"]:
-                return {"failed": True, "msg": "the artifact server did not reach its postcondition"}
+                unmet = remaining(observation) if arguments.get("removed") else unproved(observation)
+                verb = "still present" if arguments.get("removed") else "not proved"
+                return {
+                    "failed": True,
+                    "msg": "the artifact server did not reach its postcondition; %s: %s" % (verb, ", ".join(unmet) or "unknown"),
+                }
             emit({"phase": "completed", "outcome": outcome, "evidence": evidence})
             return {"changed": False}
         except (ValueError, TypeError, OSError):
