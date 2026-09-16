@@ -1,0 +1,25 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: controller
+
+spec:
+  capabilities:
+    - container-runtime
+
+  os:
+    provided: true
+
+  proxy:
+    direct: {}
+
+  network:
+    addresses:
+      - name: fqdn
+        address: controller.metal.example.test
+
+      - name: ip
+        address: 192.0.2.1
+
+  access:
+    local: true

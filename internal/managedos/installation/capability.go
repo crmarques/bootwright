@@ -45,7 +45,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		if err != nil {
 			return lifecycle.CapabilityPlan{}, err
 		}
-		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{
+		definition := reconciliation.BlockDefinition{
 			ID:             request.Identity.Block,
 			Description:    description(input.Verb, request),
 			Stage:          reconciliation.StageMachines,
@@ -57,7 +57,16 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			Implementation: Implementation,
 			ContentDigest:  digest,
 			Request:        canonical,
-		})
+		}
+		// A machine its substrate created holds nothing until this installs
+		// something, and its disks are acknowledged when that substrate
+		// destroys them. A physical machine already holds whatever it holds,
+		// and this installation is the moment that content is lost, so the
+		// acknowledgement belongs to the apply that erases it.
+		if request.Target.Physical && input.Verb == reconciliation.Apply {
+			definition.Consumes = []string{reconciliation.AuthorizationDataLoss}
+		}
+		plan.Definitions = append(plan.Definitions, definition)
 		plan.Secrets = append(plan.Secrets, request.SecretReferences()...)
 		media = append(media, request.MediaNames()...)
 		if !request.Placement.Local() {

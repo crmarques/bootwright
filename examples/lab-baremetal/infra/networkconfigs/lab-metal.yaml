@@ -1,0 +1,29 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: lab-metal
+
+spec:
+  machineNetwork:
+    - cidr: 198.51.100.0/24
+
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+
+  nmstate:
+    interfaces:
+      - name: eno1
+        type: ethernet
+        state: up
+        ipv4:
+          enabled: true
+          dhcp: false
+        ipv6:
+          enabled: false
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          next-hop-address: 198.51.100.1
+          next-hop-interface: eno1
+          table-id: 254

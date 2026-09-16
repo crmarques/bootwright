@@ -1,0 +1,14 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: lab-baremetal
+
+spec:
+  domains:
+    base: metal.example.test
+
+  controller:
+    machineRef: controller
+
+  remoteMachinesAccessKey:
+    keyRef: bootwright-machine-key

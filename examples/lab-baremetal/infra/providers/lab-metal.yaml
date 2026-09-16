@@ -1,0 +1,26 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-metal
+
+spec:
+  baremetal:
+    boot:
+      method: redfishVirtualMedia
+
+    defaults:
+      bmc:
+        credentialsRef: lab-bmc-credentials
+        tls:
+          # The lab controllers present their own certificate authority, which
+          # this context does not carry, so the opt-out is declared here and
+          # reaches exactly these endpoints.
+          verify: false
+        virtualMedia:
+          tls:
+            trust: disable-verification
+
+  networkAttachments:
+    - name: lab-metal
+      baremetal:
+        vlan: 0
