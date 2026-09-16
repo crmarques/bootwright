@@ -249,6 +249,7 @@ type testCapability struct {
 	applyErr     error
 	material     []map[string]secrets.Material
 	executions   []Execution
+	extraGroup   string
 }
 
 func (c *testCapability) Plan(_ context.Context, input PlanInput) (CapabilityPlan, error) {
@@ -276,6 +277,9 @@ func (c *testCapability) Apply(ctx context.Context, execution Execution) (Result
 	if execution.Progress != nil {
 		execution.Progress(ctx, "pull-image", "running")
 		execution.Progress(ctx, "pull-image", "ok")
+	}
+	if c.extraGroup != "" {
+		execution.Progress(ctx, c.extraGroup, "ok")
 	}
 	if execution.Output != nil {
 		_, _ = execution.Output.Write([]byte("TASK [acquire the image]\nok: [controller]\n"))
@@ -1512,3 +1516,33 @@ func TestASucceededAttemptRetainsWhatItsAdapterPrinted(t *testing.T) {
 		t.Fatalf("the attempt log did not record the retained output: %q", record)
 	}
 }
+
+// Completion is measured against what the block froze, so a group the plan
+// never declared cannot push a step past the work it declared.
+func TestOnlyDeclaredGroupsAdvanceCompletion(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	var reported []ProgressEvent
+	h.service.options.Progress = progressFunc(func(_ context.Context, event ProgressEvent) {
+		reported = append(reported, event)
+	})
+	h.capability.extraGroup = "never-declared"
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	injected := false
+	for _, event := range reported {
+		if event.Group == "never-declared" {
+			injected = true
+		}
+		if event.Declared > 0 && event.Completed > event.Declared {
+			t.Fatalf("an undeclared group advanced completion to %d of %d", event.Completed, event.Declared)
+		}
+	}
+	if !injected {
+		t.Fatal("the undeclared group never reached the presenter, so nothing was proved")
+	}
+}
+
+type progressFunc func(context.Context, ProgressEvent)
+
+func (f progressFunc) ReportProgress(ctx context.Context, event ProgressEvent) { f(ctx, event) }

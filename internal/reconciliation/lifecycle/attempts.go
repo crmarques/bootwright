@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path"
+	"slices"
 	"strconv"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -186,7 +187,9 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 			},
 			Output: output,
 			Progress: func(inner context.Context, group, status string) {
-				if status != "running" {
+				// Only a group the frozen block declares may advance completion,
+				// because the declaration is what the count is measured against.
+				if status != "running" && declaresGroup(block, group) {
 					settled[group] = struct{}{}
 				}
 				s.report(inner, ProgressEvent{Block: block.ID, Description: block.Description, Group: group,
@@ -216,6 +219,10 @@ func groupDescription(block reconciliation.Block, id string) string {
 		}
 	}
 	return id
+}
+
+func declaresGroup(block reconciliation.Block, id string) bool {
+	return slices.ContainsFunc(block.Groups, func(group reconciliation.Group) bool { return group.ID == id })
 }
 
 // project publishes the context mutation evidence the operation state implies.
