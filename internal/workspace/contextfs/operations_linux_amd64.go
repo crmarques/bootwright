@@ -202,6 +202,9 @@ func (a *operationArea) Entries(ctx context.Context, target string) ([]operation
 			return nil, unsafeEntry(parent, name)
 		}
 		file, err := openRelative(parent, name, pathHandle, 0)
+		if errors.Is(err, syscall.ENOENT) {
+			continue
+		}
 		if err != nil {
 			return nil, unsafeEntry(parent, name)
 		}
@@ -448,6 +451,12 @@ func (a *operationArea) capacity(ctx context.Context, additional int) error {
 	return nil
 }
 
+// scan measures the subtree. An entry that disappears between the listing and
+// its own open is skipped rather than refused: every atomic publication stages
+// a pending name beside its target and every write and log append measures the
+// whole subtree first, so a concurrent publication legitimately removes a name
+// this walk already listed. Only an entry that still exists and will not open
+// as this store's own is foreign.
 func (a *operationArea) scan(ctx context.Context, dir *directory, depth int) (int, int64, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, 0, err
@@ -461,8 +470,15 @@ func (a *operationArea) scan(ctx context.Context, dir *directory, depth int) (in
 	}
 	entries, total := 0, int64(0)
 	for _, name := range names {
+		if err := a.store.checkpoint(ctx, "measure-operation-entry"); err != nil {
+			return 0, 0, err
+		}
 		entries++
 		child, err := openRelative(dir, name, pathHandle, 0)
+		if errors.Is(err, syscall.ENOENT) {
+			entries--
+			continue
+		}
 		if err != nil {
 			return 0, 0, unsafeEntry(dir, name)
 		}
@@ -473,6 +489,10 @@ func (a *operationArea) scan(ctx context.Context, dir *directory, depth int) (in
 		}
 		if stat.Mode&syscall.S_IFMT == syscall.S_IFDIR {
 			nested, err := openDirectory(dir, name)
+			if errors.Is(err, syscall.ENOENT) {
+				entries--
+				continue
+			}
 			if err != nil {
 				return 0, 0, unsafeEntry(dir, name)
 			}

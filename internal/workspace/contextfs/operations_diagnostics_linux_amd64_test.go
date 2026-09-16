@@ -47,6 +47,39 @@ func TestAForeignOperationEntryIsRefusedByName(t *testing.T) {
 	}
 }
 
+// Every atomic publication stages a pending name beside its target and renames
+// it away, while every write and log append measures the whole subtree first.
+// The walk lists a directory and then opens each entry separately, so a name it
+// already listed can be gone by the time it opens it. That is a vanished entry,
+// not a foreign one, and refusing the write over it is what failed a real first
+// apply and then passed on a retry that could no longer reproduce it.
+func TestAnEntryThatVanishesDuringMeasurementDoesNotRefuseTheWrite(t *testing.T) {
+	ctx := context.Background()
+	store, _ := lifecycleFixture(t)
+	root := operationsRoot(t, store, "example")
+	vanishing := filepath.Join(root, "pending-0123456789abcdef.json")
+	if err := os.WriteFile(vanishing, []byte("{}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	removed := false
+	store.fail = func(name string) error {
+		if name != "measure-operation-entry" || removed {
+			return nil
+		}
+		removed = true
+		return os.Remove(vanishing)
+	}
+	err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		return tx.Operations().WriteExclusive(ctx, "index.json", []byte("{}\n"))
+	})
+	if !removed {
+		t.Fatal("the measuring walk never reached an entry")
+	}
+	if err != nil {
+		t.Fatalf("a vanished entry refused the write: %#v", diagnostics.Of(err))
+	}
+}
+
 // A file where a directory component belongs fails to open as a directory,
 // which is neither absence nor a permission fault; it is named the same way.
 func TestAFileInPlaceOfAnOperationDirectoryIsRefusedByName(t *testing.T) {

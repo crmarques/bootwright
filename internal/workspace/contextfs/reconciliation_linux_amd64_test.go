@@ -384,7 +384,7 @@ func TestReservationRequiresACompletedSetup(t *testing.T) {
 // proves nothing about interruption.
 func TestLifecyclePublicationCheckpointsFireAndFailClosed(t *testing.T) {
 	ctx := context.Background()
-	for _, checkpoint := range []string{"before-evidence", "before-reservation", "before-operation-rename", "after-operation-rename", "append-operation-log"} {
+	for _, checkpoint := range []string{"before-evidence", "before-reservation", "before-operation-rename", "after-operation-rename", "append-operation-log", "measure-operation-entry"} {
 		t.Run(checkpoint, func(t *testing.T) {
 			store, record := lifecycleFixture(t)
 			reserveFixture(t, store, record)
