@@ -60,6 +60,38 @@ def presence(observation, power, system, request_digest):
     return evidence
 
 
+def remaining(observation):
+    """What an absence proof still sees, named so the refusal can say so.
+
+    These are field names, never values, so naming them is safe in a message
+    that `no_log` would otherwise censor along with the evidence.
+    """
+    names = []
+    for name in ("domain", "unit", "controller"):
+        if observation.get(name):
+            names.append(name)
+    if any(entry.get("present") for entry in observation.get("disks") or []):
+        names.append("disks")
+    return names
+
+
+def unproved(evidence):
+    """What a presence proof still lacks, named for the same reason."""
+    names = []
+    if not evidence["domain"]:
+        names.append("domain")
+    if not evidence["owned"]:
+        names.append("ownership")
+    if evidence["unit"] != "active":
+        names.append("unit")
+    for name in ("controller", "system", "power"):
+        if not evidence[name]:
+            names.append(name)
+    if not evidence["disks"] or not all(entry["present"] for entry in evidence["disks"]):
+        names.append("disks")
+    return names
+
+
 def absence(observation, request_digest):
     disks = [disk_evidence(entry) for entry in observation.get("disks") or []]
     gone = (
@@ -107,10 +139,15 @@ class ActionModule(ActionBase):
             observation = arguments.get("observation") or {}
             if arguments.get("removed"):
                 evidence = absence(observation, request_digest)
+                unmet, verb = remaining(observation), "still present"
             else:
                 evidence = presence(observation, arguments.get("power"), arguments.get("system"), request_digest)
+                unmet, verb = unproved(evidence), "not proved"
             if not evidence["postcondition"]:
-                return {"failed": True, "msg": "the machine did not reach its postcondition"}
+                return {
+                    "failed": True,
+                    "msg": "the machine did not reach its postcondition; %s: %s" % (verb, ", ".join(unmet) or "unknown"),
+                }
             emit({"phase": "completed", "outcome": outcome, "evidence": evidence})
             return {"changed": False}
         except (ValueError, TypeError, OSError):

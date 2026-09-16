@@ -58,6 +58,28 @@ def presence(arguments, request_digest):
     return evidence
 
 
+def remaining(arguments):
+    """What an absence proof still sees, named so the refusal can say so.
+
+    These are field names, never values, so naming them is safe in a message
+    that `no_log` would otherwise censor along with the evidence.
+    """
+    observation = arguments.get("observation") or {}
+    return [name for name in ("image", "tree") if observation.get(name)]
+
+
+def unproved(evidence):
+    """What a completion proof still lacks, named for the same reason."""
+    names = [name for name in ("marker", "hostKey", "address") if not evidence[name]]
+    if evidence["media"]:
+        names.append("media")
+    if evidence["power"] != "On":
+        names.append("power")
+    if not evidence["image"]:
+        names.append("image")
+    return names
+
+
 def absence(arguments, request_digest):
     observation = arguments.get("observation") or {}
     gone = not observation.get("image") and not observation.get("tree")
@@ -101,10 +123,15 @@ class ActionModule(ActionBase):
             request_digest = arguments.get("digest")
             if arguments.get("removed"):
                 evidence = absence(arguments, request_digest)
+                unmet, verb = remaining(arguments), "still present"
             else:
                 evidence = presence(arguments, request_digest)
+                unmet, verb = unproved(evidence), "not proved"
             if not evidence["postcondition"]:
-                return {"failed": True, "msg": "the installation did not reach its postcondition"}
+                return {
+                    "failed": True,
+                    "msg": "the installation did not reach its postcondition; %s: %s" % (verb, ", ".join(unmet) or "unknown"),
+                }
             emit({"phase": "completed", "outcome": outcome, "evidence": evidence})
             return {"changed": False}
         except (ValueError, TypeError, OSError):

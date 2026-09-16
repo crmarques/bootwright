@@ -98,6 +98,26 @@ def test_a_power_state_the_controller_never_reported_is_refused():
         substrate_machine_protocol.presence(machine_observation(), "Spinning", "uuid", DIGEST)
 
 
+# A refused postcondition publishes no evidence, and `no_log` censors the result,
+# so the field names are the only thing an operator can be told.
+def test_an_unmet_machine_removal_names_what_is_still_there():
+    assert substrate_machine_protocol.remaining({"domain": "", "unit": "", "controller": "", "disks": []}) == []
+    assert substrate_machine_protocol.remaining(machine_observation()) == ["domain", "unit", "controller", "disks"]
+    only_unit = {"domain": "", "unit": "inactive", "controller": "", "disks": [{"present": False}]}
+    assert substrate_machine_protocol.remaining(only_unit) == ["unit"]
+
+
+def test_an_unmet_machine_realization_names_what_is_unproved():
+    complete = substrate_machine_protocol.presence(machine_observation(), "Off", "uuid", DIGEST)
+    assert substrate_machine_protocol.unproved(complete) == []
+    bare = substrate_machine_protocol.presence(
+        machine_observation(domain="", owned=False, unit="failed", controller="", disks=[]), "Off", "uuid", DIGEST,
+    )
+    assert substrate_machine_protocol.unproved(bare) == [
+        "domain", "ownership", "unit", "controller", "disks",
+    ]
+
+
 def test_evidence_must_name_a_well_formed_digest():
     for value in ("", "abc", "z" * 64, None):
         with pytest.raises(ValueError):
@@ -135,6 +155,20 @@ def test_an_installation_removal_proves_the_published_content_is_gone():
     assert gone["postcondition"] and gone["absent"]
     remaining = managedos_install_protocol.absence({"observation": {"image": True, "tree": False}}, DIGEST)
     assert not remaining["postcondition"]
+
+
+def test_an_unmet_installation_names_what_is_unproved():
+    assert managedos_install_protocol.unproved(
+        managedos_install_protocol.presence(install_arguments(), DIGEST)
+    ) == []
+    # The media staying inserted is the failure an operator most needs named,
+    # because every other proof can hold while the eject silently did not.
+    inserted = managedos_install_protocol.presence(
+        install_arguments(media="http://s/install.iso"), DIGEST,
+    )
+    assert managedos_install_protocol.unproved(inserted) == ["media"]
+    assert managedos_install_protocol.remaining({"observation": {"image": True, "tree": False}}) == ["image"]
+    assert managedos_install_protocol.remaining({"observation": {"image": False, "tree": False}}) == []
 
 
 def test_bounded_values_refuse_anything_oversized():
