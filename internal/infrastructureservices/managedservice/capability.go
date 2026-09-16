@@ -23,8 +23,12 @@ type Definition struct {
 	Version        string
 	Slug           string
 	Variable       string
-	Purpose        string
-	Image          string
+	// Purpose is what an apply makes this service do; Subject is what a
+	// removal takes away. A plan needs both, because a destroy that borrows
+	// the apply's wording reads as though it were installing.
+	Purpose string
+	Subject string
+	Image   string
 	// Extend adds the kind's own frozen intent to a request whose shared
 	// fields are already derived.
 	Extend func(catalog api.Catalog, spec api.Value, request *Request) error
@@ -78,9 +82,9 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		}
 		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{
 			ID:             request.Identity.Block,
-			Description:    c.definition.Purpose + " for " + request.Identity.Service + " on " + request.Placement.Machine,
+			Description:    c.definition.describe(input.Verb, request),
 			Stage:          reconciliation.StageInfraComponents,
-			Impacts:        impacts(request),
+			Impacts:        impacts(input.Verb, request),
 			Groups:         groups(input.Verb, request),
 			Kind:           string(c.definition.Kind),
 			Object:         request.Identity.Service,
@@ -177,10 +181,21 @@ func (c Capability) requestFor(catalog api.Catalog, object api.Object, controlle
 	return request, nil
 }
 
-func impacts(request Request) []string {
-	impacts := []string{"create-container-unit " + request.Unit, "create-path " + request.ContentRoot}
+func (d Definition) describe(verb reconciliation.Verb, request Request) string {
+	if verb == reconciliation.Destroy {
+		return "remove the " + d.Subject + " " + request.Identity.Service + " from " + request.Placement.Machine
+	}
+	return d.Purpose + " for " + request.Identity.Service + " on " + request.Placement.Machine
+}
+
+func impacts(verb reconciliation.Verb, request Request) []string {
+	unit, root, listener := "create-container-unit", "create-path", "open-listener"
+	if verb == reconciliation.Destroy {
+		unit, root, listener = "remove-container-unit", "remove-path", "close-listener"
+	}
+	impacts := []string{unit + " " + request.Unit, root + " " + request.ContentRoot}
 	for _, address := range request.ProbeTargets() {
-		impacts = append(impacts, "open-listener "+address+":"+FormatPort(request.Port))
+		impacts = append(impacts, listener+" "+address+":"+FormatPort(request.Port))
 	}
 	slices.Sort(impacts)
 	return slices.Compact(impacts)

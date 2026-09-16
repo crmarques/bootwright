@@ -242,6 +242,11 @@ func TestLabRHELExamplePlansTheWholeGraph(t *testing.T) {
 		if len(block.Consumes) != 0 {
 			t.Fatalf("%s consumes authorization %v for an apply that destroys nothing", block.ID, block.Consumes)
 		}
+		for _, impact := range block.Impacts {
+			if strings.HasPrefix(impact, "remove-") || strings.HasPrefix(impact, "close-") {
+				t.Fatalf("%s plans %q for an apply that removes nothing", block.ID, impact)
+			}
+		}
 	}
 	ordered := slices.Clone(blocks)
 	slices.Sort(ordered)
@@ -275,6 +280,72 @@ func TestLabRHELExamplePlansTheWholeGraph(t *testing.T) {
 				t.Fatalf("%s reserved %v, missing %q", service, reservations[service], key)
 			}
 		}
+	}
+}
+
+// A destroy plan is what an operator reads before authorizing data loss, so
+// every block says what the removal does and lists only effects it performs.
+// Blocks that reused the apply's wording made a destroy read as an install.
+func TestLabRHELExampleDestroyPlanDescribesOnlyRemoval(t *testing.T) {
+	state, _ := compileAcceptance(t, labExampleSources(t))
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t))
+	input := lifecycle.PlanInput{
+		Verb: reconciliation.Destroy, State: state, Controller: "controller",
+		Context: lifecycle.ContextIdentity{Name: "lab-rhel"},
+	}
+	described := map[string]string{}
+	for _, binding := range resolver.Bindings() {
+		capability, ok := resolver.Resolve(binding.Kind, binding.Implementation)
+		if !ok {
+			t.Fatalf("%s/%s does not resolve", binding.Kind, binding.Implementation)
+		}
+		contribution, err := capability.Plan(context.Background(), input)
+		if err != nil {
+			t.Fatalf("%s plan: %v", binding.Kind, err)
+		}
+		for _, definition := range contribution.Definitions {
+			described[definition.ID] = definition.Description
+			for _, impact := range definition.Impacts {
+				if !strings.HasPrefix(impact, "remove-") && !strings.HasPrefix(impact, "close-") {
+					t.Fatalf("%s plans %q, which a destroy never performs", definition.ID, impact)
+				}
+			}
+		}
+	}
+	for id, want := range map[string]string{
+		"artifact-server-lab-artifacts": "remove the artifact server lab-artifacts from controller",
+		clients.BlockID:                 "retain the shared clients of lab-rhel on controller",
+		"dns-lab-dns":                   "remove the DNS server lab-dns from controller",
+		"machine-rhel-01":               "remove the virtual machine rhel-01 and its controller",
+		"ntp-lab-ntp":                   "remove the NTP server lab-ntp from controller",
+		"os-install-rhel-01":            "remove the installer media of rhel-01",
+		"proxy-lab-proxy":               "remove the proxy lab-proxy from controller",
+		"substrate-host-lab-libvirt":    "remove the networks and virtual-media pool of lab-libvirt from controller",
+	} {
+		if described[id] != want {
+			t.Fatalf("%s describes %q, want %q", id, described[id], want)
+		}
+	}
+}
+
+// The clients this host shares outlive the context that selected them, so the
+// one block that removes nothing promises nothing.
+func TestLabRHELExampleDestroyRetainsTheSharedClients(t *testing.T) {
+	state, _ := compileAcceptance(t, labExampleSources(t))
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t))
+	capability, ok := resolver.Resolve(clients.Kind, clients.Implementation)
+	if !ok {
+		t.Fatal("this build offers no controller prerequisites capability")
+	}
+	contribution, err := capability.Plan(context.Background(), lifecycle.PlanInput{
+		Verb: reconciliation.Destroy, State: state, Controller: "controller",
+		Context: lifecycle.ContextIdentity{Name: "lab-rhel"},
+	})
+	if err != nil || len(contribution.Definitions) != 1 {
+		t.Fatalf("contributed %d blocks (%v)", len(contribution.Definitions), err)
+	}
+	if impacts := contribution.Definitions[0].Impacts; len(impacts) != 0 {
+		t.Fatalf("a block that uninstalls nothing plans %v", impacts)
 	}
 }
 

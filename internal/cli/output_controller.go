@@ -334,5 +334,9 @@ func controllerPlanText(text *display, report *prerequisites.Report, scope, chec
 		text.lines(report.Dependencies)
 	}
 	text.section("Planned changes")
-	text.steps(report.Actions)
+	actions := make([]step, 0, len(report.Actions))
+	for _, action := range report.Actions {
+		actions = append(actions, step{Text: action})
+	}
+	text.steps(actions)
 }

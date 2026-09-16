@@ -77,9 +77,18 @@ func (d *display) table(headers []string, rows [][]string) {
 	}
 }
 
+// step is one numbered planned change with the effects it causes. An effect
+// belongs to its step, so an operator never has to guess which change in the
+// list produces the one they are reading.
+type step struct {
+	Text    string
+	Effects []string
+}
+
 // steps numbers an ordered list. The marker column is padded so a two-digit
 // step keeps its text aligned, and a single space follows it as prose expects.
-func (d *display) steps(items []string) {
+// Effects are indented one unit past their step's text.
+func (d *display) steps(items []step) {
 	width := 0
 	markers := make([]string, len(items))
 	for index := range items {
@@ -88,12 +97,18 @@ func (d *display) steps(items []string) {
 			width = size
 		}
 	}
+	effectIndent := displayIndent + strings.Repeat(" ", width+1) + displayIndent
 	for index, item := range items {
 		d.text.WriteString(displayIndent)
 		d.text.WriteString(markers[index])
 		d.text.WriteString(strings.Repeat(" ", width-utf8.RuneCountInString(markers[index])+1))
-		d.text.WriteString(escapeDisplayLine(item))
+		d.text.WriteString(escapeDisplayLine(item.Text))
 		d.text.WriteByte('\n')
+		for _, effect := range item.Effects {
+			d.text.WriteString(effectIndent)
+			d.text.WriteString(escapeDisplayLine(effect))
+			d.text.WriteByte('\n')
+		}
 	}
 }
 

@@ -396,12 +396,13 @@ public `destroy` invocation itself retains the `cli.not-implemented` behavior.
 
 `plan` is a pure text preview of the next legal full operation or frozen
 continuation point. With no operation it previews the fresh operation the
-current state would start, listing every block in frozen order with its
-description and impacts. With an incomplete operation it previews that exact
-continuation point instead, showing which blocks are already done and which
-block resumes, and never a re-planned alternative. With a completed apply it
-previews the destroy that the recorded ownership evidence defines. It reads
-context state, allocates no identity, writes nothing and creates no log.
+current state would start, listing every block in frozen order with the
+description and impacts of the verb it previews. With an incomplete operation
+it previews that exact continuation point instead, showing which blocks are
+already done and which block resumes, and never a re-planned alternative. With
+a completed apply it previews the destroy that the recorded ownership evidence
+defines. It reads context state, allocates no identity, writes nothing and
+creates no log.
 
 `apply` and `destroy` present the frozen plan, then any required
 authorizations, then the ordinary confirmation. During execution they report

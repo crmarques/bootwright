@@ -108,48 +108,38 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 		return
 	}
 	text.section("Plan")
-	items := make([]string, 0, len(result.Steps))
-	for _, step := range result.Steps {
-		line := escapeDisplayLine(step.Description)
-		if step.Stage != "" {
-			line += " [" + escapeDisplayLine(step.Stage) + "]"
+	items := make([]step, 0, len(result.Steps))
+	for _, planned := range result.Steps {
+		line := planned.Description
+		if planned.Stage != "" {
+			line += " [" + planned.Stage + "]"
 		}
 		if result.Continuation {
-			line += " [" + escapeDisplayLine(step.State) + "]"
+			line += " [" + planned.State + "]"
 		}
-		if marker := selectionMarker(step); marker != "" {
+		if marker := selectionMarker(planned); marker != "" {
 			line += " [" + marker + "]"
 		}
-		items = append(items, line)
+		items = append(items, step{Text: line, Effects: planned.Impacts})
 	}
 	text.steps(items)
 	if len(result.Stages) != 0 {
 		text.section("")
-		text.fields(field{Label: "Stages", Value: escapeDisplayLine(strings.Join(result.Stages, ", "))},
+		text.fields(field{Label: "Stages", Value: strings.Join(result.Stages, ", ")},
 			field{Label: "Starts", Value: startSummary(result)})
-	}
-	impacts := []string{}
-	for _, step := range result.Steps {
-		for _, impact := range step.Impacts {
-			impacts = append(impacts, escapeDisplayLine(impact))
-		}
-	}
-	if len(impacts) != 0 {
-		text.section("Impacts")
-		text.lines(impacts)
 	}
 }
 
 // selectionMarker says what a stage selection would do with one pending step,
 // so the operator sees the consequence of the selection before confirming it.
-func selectionMarker(step lifecycle.PlanStep) string {
-	switch step.Selection {
+func selectionMarker(planned lifecycle.PlanStep) string {
+	switch planned.Selection {
 	case lifecycle.StepStart:
 		return "start"
 	case lifecycle.StepNotSelected:
 		return "not selected"
 	case lifecycle.StepWaiting:
-		return "deferred: waits on " + escapeDisplayLine(step.WaitsOn)
+		return "deferred: waits on " + planned.WaitsOn
 	}
 	return ""
 }

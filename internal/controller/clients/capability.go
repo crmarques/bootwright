@@ -59,9 +59,9 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	}
 	return lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{{
 		ID:             BlockID,
-		Description:    "controller prerequisites for " + selection.EnvironmentName() + " on " + request.Machine,
+		Description:    description(input.Verb, selection.EnvironmentName(), request.Machine),
 		Stage:          reconciliation.StageController,
-		Impacts:        impacts(request),
+		Impacts:        impacts(input.Verb, request),
 		Groups:         groups(input.Verb, request.Machine),
 		Kind:           Kind,
 		Object:         selection.EnvironmentName(),
@@ -71,8 +71,23 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	}}}, nil
 }
 
-func impacts(request Request) []string {
+// description says what the planned verb does here. A removal retains, so it
+// says so rather than borrowing the install wording for a block that takes
+// nothing away.
+func description(verb reconciliation.Verb, environment, machine string) string {
+	if verb == reconciliation.Destroy {
+		return "retain the shared clients of " + environment + " on " + machine
+	}
+	return "install the controller prerequisites of " + environment + " on " + machine
+}
+
+// impacts is empty for a removal: this block uninstalls nothing, so a plan that
+// listed anything here would promise an effect the destroy never performs.
+func impacts(verb reconciliation.Verb, request Request) []string {
 	impacts := []string{}
+	if verb == reconciliation.Destroy {
+		return impacts
+	}
 	for _, tool := range request.Tools {
 		impacts = append(impacts, "publish-target-client "+tool.Kind+" "+tool.Version)
 	}

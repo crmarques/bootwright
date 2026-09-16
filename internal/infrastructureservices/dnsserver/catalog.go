@@ -23,6 +23,7 @@ func Definition() managedservice.Definition {
 		Slug:           "dns",
 		Variable:       "bootwright_dns_server",
 		Purpose:        "resolve names",
+		Subject:        "DNS server",
 		Image:          defaultImage,
 		Extend: func(catalog api.Catalog, spec api.Value, request *managedservice.Request) error {
 			request.Records = managedservice.MachineRecords(catalog)

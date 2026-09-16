@@ -54,9 +54,9 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		}
 		definition := reconciliation.BlockDefinition{
 			ID:             request.Identity.Block,
-			Description:    "serve artifacts for " + request.Identity.Service + " on " + request.Placement.Machine,
+			Description:    description(input.Verb, request),
 			Stage:          reconciliation.StageInfraComponents,
-			Impacts:        impacts(request),
+			Impacts:        impacts(input.Verb, request),
 			Groups:         groups(input.Verb, request),
 			Kind:           Kind,
 			Object:         request.Identity.Service,
@@ -81,10 +81,21 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	return plan, nil
 }
 
-func impacts(request Request) []string {
-	impacts := []string{"create-container-unit " + request.Unit, "create-path " + request.ContentRoot}
+func description(verb reconciliation.Verb, request Request) string {
+	if verb == reconciliation.Destroy {
+		return "remove the artifact server " + request.Identity.Service + " from " + request.Placement.Machine
+	}
+	return "serve artifacts for " + request.Identity.Service + " on " + request.Placement.Machine
+}
+
+func impacts(verb reconciliation.Verb, request Request) []string {
+	unit, root, listener := "create-container-unit", "create-path", "open-listener"
+	if verb == reconciliation.Destroy {
+		unit, root, listener = "remove-container-unit", "remove-path", "close-listener"
+	}
+	impacts := []string{unit + " " + request.Unit, root + " " + request.ContentRoot}
 	for _, target := range request.ProbeTargets() {
-		impacts = append(impacts, "open-listener "+target.Address+":"+formatPort(target.Port))
+		impacts = append(impacts, listener+" "+target.Address+":"+formatPort(target.Port))
 	}
 	slices.Sort(impacts)
 	return slices.Compact(impacts)

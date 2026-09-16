@@ -55,9 +55,9 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 		}
 		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{
 			ID:             request.Identity.Block,
-			Description:    "realize the libvirt host of " + request.Identity.Object + " on " + request.Placement.Machine,
+			Description:    hostDescription(input.Verb, request),
 			Stage:          reconciliation.StageSubstrates,
-			Impacts:        hostImpacts(request),
+			Impacts:        hostImpacts(input.Verb, request),
 			Groups:         hostGroups(input.Verb, request),
 			Kind:           HostKind,
 			Object:         request.Identity.Object,
@@ -78,16 +78,30 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 	return plan, nil
 }
 
-func hostImpacts(request HostRequest) []string {
-	impacts := []string{"create-path " + request.PoolPath, "create-libvirt-pool " + request.PoolName}
-	if request.Provisioned {
+// hostDescription names what the planned verb does to this provider. A removal
+// names the networks and pool alone, because the hypervisor closure an apply
+// installed is shared host software this context never uninstalls.
+func hostDescription(verb reconciliation.Verb, request HostRequest) string {
+	if verb == reconciliation.Destroy {
+		return "remove the networks and virtual-media pool of " + request.Identity.Object + " from " + request.Placement.Machine
+	}
+	return "realize the libvirt host of " + request.Identity.Object + " on " + request.Placement.Machine
+}
+
+func hostImpacts(verb reconciliation.Verb, request HostRequest) []string {
+	path, pool, network, bridge := "create-path", "create-libvirt-pool", "create-libvirt-network", "create-bridge"
+	if verb == reconciliation.Destroy {
+		path, pool, network, bridge = "remove-path", "remove-libvirt-pool", "remove-libvirt-network", "remove-bridge"
+	}
+	impacts := []string{path + " " + request.PoolPath, pool + " " + request.PoolName}
+	if request.Provisioned && verb != reconciliation.Destroy {
 		for _, name := range request.Packages {
 			impacts = append(impacts, "install-package "+name)
 		}
 	}
-	for _, network := range request.Networks {
-		if network.Managed {
-			impacts = append(impacts, "create-libvirt-network "+network.Name, "create-bridge "+network.Bridge)
+	for _, declared := range request.Networks {
+		if declared.Managed {
+			impacts = append(impacts, network+" "+declared.Name, bridge+" "+declared.Bridge)
 		}
 	}
 	slices.Sort(impacts)
@@ -135,10 +149,10 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 		machine, _ := catalog.Find(api.Machine, request.Identity.Object)
 		definition := reconciliation.BlockDefinition{
 			ID:             request.Identity.Block,
-			Description:    "realize the virtual machine " + request.Identity.Object + " and its controller",
+			Description:    machineDescription(input.Verb, request),
 			Stage:          reconciliation.StageMachines,
 			Requires:       []reconciliation.ObjectRef{{Kind: HostKind, Object: machine.Spec().Get("substrate", "providerRef").Text()}},
-			Impacts:        machineImpacts(request),
+			Impacts:        machineImpacts(input.Verb, request),
 			Groups:         machineGroups(input.Verb, request),
 			Kind:           MachineKind,
 			Object:         request.Identity.Object,
@@ -165,15 +179,28 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 	return plan, nil
 }
 
-func machineImpacts(request MachineRequest) []string {
-	impacts := []string{
-		"create-libvirt-domain " + request.Domain,
-		"create-container-unit " + request.Controller.Unit,
-		"create-path " + request.Directory,
-		"open-listener " + request.Controller.Address + ":" + substrate.FormatPort(request.Controller.Port),
+func machineDescription(verb reconciliation.Verb, request MachineRequest) string {
+	if verb == reconciliation.Destroy {
+		return "remove the virtual machine " + request.Identity.Object + " and its controller"
 	}
-	for _, disk := range request.Disks {
-		impacts = append(impacts, "create-disk "+disk.Path)
+	return "realize the virtual machine " + request.Identity.Object + " and its controller"
+}
+
+func machineImpacts(verb reconciliation.Verb, request MachineRequest) []string {
+	domain, unit, path, listener, disk :=
+		"create-libvirt-domain", "create-container-unit", "create-path", "open-listener", "create-disk"
+	if verb == reconciliation.Destroy {
+		domain, unit, path, listener, disk =
+			"remove-libvirt-domain", "remove-container-unit", "remove-path", "close-listener", "remove-disk"
+	}
+	impacts := []string{
+		domain + " " + request.Domain,
+		unit + " " + request.Controller.Unit,
+		path + " " + request.Directory,
+		listener + " " + request.Controller.Address + ":" + substrate.FormatPort(request.Controller.Port),
+	}
+	for _, declared := range request.Disks {
+		impacts = append(impacts, disk+" "+declared.Path)
 	}
 	slices.Sort(impacts)
 	return slices.Compact(impacts)

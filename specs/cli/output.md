@@ -76,7 +76,9 @@ a command supplies content and never its own spacing, padding, or separators.
   are indented by two spaces. Status rows lead with a status token.
 - A **table** adds an uppercase column header above unindented rows. The header
   participates in column width.
-- **Steps** number an ordered list of planned changes from `1.`.
+- **Steps** number an ordered list of planned changes from `1.`. A step may
+  carry the effects it causes as unnumbered lines indented one unit past its
+  own text, so an effect is always read against the change that performs it.
 
 Trailing padding is never written, so no line ends in whitespace. Column width
 is measured in Unicode code points after display escaping. Values cross the
@@ -363,16 +365,16 @@ unavailable command still follows the no-context-read
 
 `plan`, `apply` and `destroy` are text only. Their human result composes the
 [shared layout](#shared-human-layout): an optional headline, a `Plan` section
-whose steps are the frozen blocks in plan order, each naming its stage, a
-`Progress` section while effects run, a `Result` section of status rows, the
-`Logs` reference when an operation log exists, and the receipt as
-the final four lines. With a stage selection, each pending step also says
-whether this invocation would start it, that it is not selected, or which block
-it waits on, and a closing field reports how many blocks would start and how
-many are deferred. A block row leads with its status token and names the block description
-and its outcome; group rows follow their block under
-[multi-machine presentation](#multi-machine-presentation). A preview and a
-refusal have no progress, result rows or log reference.
+whose steps are the frozen blocks in plan order, each naming its stage and
+carrying its own impacts as indented lines, a `Progress` section while effects
+run, a `Result` section of status rows, the `Logs` reference when an operation
+log exists, and the receipt as the final four lines. With a stage selection,
+each pending step also says whether this invocation would start it, that it is
+not selected, or which block it waits on, and a closing field reports how many
+blocks would start and how many are deferred. A block row leads with its status
+token and names the block description and its outcome; group rows follow their
+block under [multi-machine presentation](#multi-machine-presentation). A
+preview and a refusal have no progress, result rows or log reference.
 
 `status` is the machine-readable view of the same durable state and performs no
 probe. Its result orders these fields:

@@ -47,6 +47,9 @@ func TestPlanResultEndsWithItsReceipt(t *testing.T) {
 	if !strings.Contains(rendered, "open-listener 192.0.2.1:8443") {
 		t.Fatal("the plan omitted its impacts")
 	}
+	if strings.Contains(rendered, "\nImpacts\n") {
+		t.Fatalf("the plan lists impacts apart from the steps that cause them: %q", rendered)
+	}
 	if !strings.HasSuffix(rendered, "operation: none\nverb: plan\nstate: preview\nnext: apply\n") {
 		t.Fatalf("plan does not end with its receipt: %q", rendered)
 	}
@@ -54,6 +57,30 @@ func TestPlanResultEndsWithItsReceipt(t *testing.T) {
 		if strings.TrimRight(line, " \t") != line {
 			t.Fatalf("a rendered line has trailing whitespace: %q", line)
 		}
+	}
+}
+
+// An effect means nothing without the change that causes it, so each block's
+// impacts are indented under its own step rather than pooled in one list.
+func TestPlanNestsEachImpactUnderTheStepThatCausesIt(t *testing.T) {
+	result := previewResult()
+	result.Steps[0].Impacts = []string{"open-listener 192.0.2.1:8443", "create-path /var/lib/artifacts"}
+	result.Steps = append(result.Steps, lifecycle.PlanStep{
+		ID: "dns-lab", Description: "resolve names for lab-dns on controller", Stage: "infra-components",
+		Impacts: []string{"open-listener 192.0.2.1:53"}, State: "pending",
+	})
+	var out bytes.Buffer
+	if err := writeLifecyclePlan(&out, result); err != nil {
+		t.Fatal(err)
+	}
+	want := "Plan\n" +
+		"  1. serve artifacts for lab on controller [infra-components]\n" +
+		"       open-listener 192.0.2.1:8443\n" +
+		"       create-path /var/lib/artifacts\n" +
+		"  2. resolve names for lab-dns on controller [infra-components]\n" +
+		"       open-listener 192.0.2.1:53\n"
+	if !strings.Contains(out.String(), want) {
+		t.Fatalf("plan text = %q, want %q", out.String(), want)
 	}
 }
 

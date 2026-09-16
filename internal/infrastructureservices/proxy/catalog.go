@@ -27,6 +27,7 @@ func Definition() managedservice.Definition {
 		Slug:           "proxy",
 		Variable:       "bootwright_proxy",
 		Purpose:        "proxy egress",
+		Subject:        "proxy",
 		Image:          defaultImage,
 		Extend: func(catalog api.Catalog, _ api.Value, request *managedservice.Request) error {
 			request.Clients = managedservice.Clients(catalog)

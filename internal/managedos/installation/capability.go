@@ -47,10 +47,10 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		}
 		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{
 			ID:             request.Identity.Block,
-			Description:    "install the operating system of " + request.Identity.Object,
+			Description:    description(input.Verb, request),
 			Stage:          reconciliation.StageMachines,
 			Requires:       requires(requirements[index]),
-			Impacts:        impacts(request),
+			Impacts:        impacts(input.Verb, request),
 			Groups:         groups(input.Verb, request),
 			Kind:           Kind,
 			Object:         request.Identity.Object,
@@ -111,14 +111,33 @@ func mediaReservation(contextName string, names []string) (prerequisites.HostRes
 	}, true
 }
 
-func impacts(request Request) []string {
-	impacts := []string{
-		"publish-content " + request.Image.Path,
-		"install-operating-system " + request.Identity.Object,
-		"power-on " + request.Identity.Object,
+// description states what the planned verb does to this installation. A
+// removal takes back the media this block published; the installed system
+// itself leaves with the disks the machine block deletes.
+func description(verb reconciliation.Verb, request Request) string {
+	if verb == reconciliation.Destroy {
+		return "remove the installer media of " + request.Identity.Object
 	}
+	return "install the operating system of " + request.Identity.Object
+}
+
+func impacts(verb reconciliation.Verb, request Request) []string {
+	published := []string{request.Image.Path}
 	if request.Tree != nil {
-		impacts = append(impacts, "publish-content "+request.Tree.Path)
+		published = append(published, request.Tree.Path)
+	}
+	var impacts []string
+	for _, path := range published {
+		if verb == reconciliation.Destroy {
+			impacts = append(impacts, "remove-content "+path)
+			continue
+		}
+		impacts = append(impacts, "publish-content "+path)
+	}
+	if verb != reconciliation.Destroy {
+		impacts = append(impacts,
+			"install-operating-system "+request.Identity.Object,
+			"power-on "+request.Identity.Object)
 	}
 	slices.Sort(impacts)
 	return slices.Compact(impacts)

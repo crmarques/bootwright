@@ -22,6 +22,7 @@ func Definition() managedservice.Definition {
 		Slug:           "ntp",
 		Variable:       "bootwright_ntp_server",
 		Purpose:        "serve time",
+		Subject:        "NTP server",
 		Image:          defaultImage,
 		Extend: func(catalog api.Catalog, spec api.Value, request *managedservice.Request) error {
 			request.Clients = managedservice.Clients(catalog)

@@ -214,6 +214,13 @@ stage, dependencies, impacts, and execution kind. Operations are `running`,
 `paused`, `failed`, `unknown`, or `done`; blocks are `pending`, `running`,
 `failed`, `unknown`, or `done`.
 
+A block's description and impacts state what the planned verb does, never what
+the opposite verb would do. A destroy block describes the removal it performs
+and lists only the effects it performs: a resource an apply creates, publishes
+or opens is one the destroy removes or closes, and one a removal deliberately
+retains, such as shared host software another context may still need, appears
+in no impact at all. The description of such a block says that it retains.
+
 A capability names what its blocks depend on in domain terms, not by block
 identity: a definition may carry *requirements*, each the kind and name of an
 API object whose realization must be done first. Reconciliation resolves every
