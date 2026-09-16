@@ -63,9 +63,27 @@ def test_a_closure_is_present_only_when_every_package_is():
     assert not packages_present(complete, [])
 
 
+def loaded(state):
+    return (0, "LoadState=loaded\nActiveState=%s\n" % state, "")
+
+
 def test_only_a_known_unit_state_is_reported():
-    assert unit_state(runner_for({"--value libvirtd.service": (0, "active\n", "")}), "libvirtd.service") == "active"
-    assert unit_state(runner_for({"--value libvirtd.service": (0, "bananas\n", "")}), "libvirtd.service") == ""
+    assert unit_state(runner_for({"libvirtd.service": loaded("active")}), "libvirtd.service") == "active"
+    assert unit_state(runner_for({"libvirtd.service": loaded("bananas")}), "libvirtd.service") == ""
+
+
+# systemd reports `inactive` for a unit it has never heard of, so a removal that
+# read the active state alone could never prove the unit gone.
+def test_a_unit_systemd_does_not_know_is_absent_rather_than_inactive():
+    removed = runner_for({
+        "bootwright-lab-bmc-rhel-01.service": (0, "LoadState=not-found\nActiveState=inactive\n", ""),
+    })
+    assert unit_state(removed, "bootwright-lab-bmc-rhel-01.service") == ""
+
+
+def test_a_stopped_unit_that_still_exists_is_still_reported():
+    stopped = runner_for({"bootwright-lab-bmc-rhel-01.service": loaded("inactive")})
+    assert unit_state(stopped, "bootwright-lab-bmc-rhel-01.service") == "inactive"
 
 
 def test_a_network_without_this_contexts_metadata_is_foreign():

@@ -59,9 +59,18 @@ def packages_present(runner, names):
 
 
 def unit_state(runner, service):
-    _code, shown = invoke(runner, [SYSTEMCTL, "show", "--property=ActiveState", "--value", service], 128)
-    shown = shown.strip()
-    return shown if shown in UNIT_STATES else ""
+    """Report the unit's state, or the empty string when it is not defined.
+
+    systemd answers `inactive` for a unit it has never heard of, so the load
+    state is what separates a unit that is stopped from one that is gone. A
+    removal proves absence through this, and `inactive` would never prove it.
+    """
+    _code, shown = invoke(runner, [SYSTEMCTL, "show", "--property=LoadState", "--property=ActiveState", service], 256)
+    properties = dict(line.split("=", 1) for line in shown.splitlines() if "=" in line)
+    if properties.get("LoadState", "").strip() == "not-found":
+        return ""
+    active = properties.get("ActiveState", "").strip()
+    return active if active in UNIT_STATES else ""
 
 
 def uri_answers(runner, uri):
