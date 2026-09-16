@@ -130,8 +130,12 @@ is a definite failure. A socket that never answers within the bounded readiness
 window is unknown, not failure.
 
 **Replay.** An apply whose frozen request already matches the live host reports
-`completed` with the same completion evidence and no change. Configuration
-bytes that differ restart the service; identical bytes do not.
+`completed` with the same completion evidence and no change. The differences it
+converges are the configuration bytes, which restart the service when they
+differ and do not when they are identical, and any owned unit, container or
+content root that is missing, which is created again. Everything it owns
+carries the context in its name, so a same-name object it did not create cannot
+occur without a reservation conflict refusing first.
 
 **Inverse.** Destroy stops the service, removes the unit definition, removes
 the container, removes the owned content root and then reobserves. Positive
@@ -143,8 +147,9 @@ and no unrelated file.
 **Unknown resolution.** Observation is read-only against the frozen request and
 exact identity. Live state matching the frozen request in full is positive
 completion; nothing present, with a before-state that recorded nothing, is
-positive no effect; anything else, including a partial or contradictory
-observation, remains unknown.
+positive no effect; and any of the unit, container or content root present
+without the whole is a positive partial realization, which the next attempt
+converges. Only an observation that cannot be made remains unknown.
 
 **Cancellation.** Cancellation stops authorization of new effects and
 terminates the owned process tree. An attempt whose effect was already
@@ -219,8 +224,12 @@ show it unsynchronized without being a failure. An address that never answers
 within the bounded readiness window is unknown, not failure.
 
 **Replay.** An apply whose frozen request already matches the live host reports
-`completed` with the same completion evidence and no change. Configuration
-bytes that differ restart the service; identical bytes do not.
+`completed` with the same completion evidence and no change. The differences it
+converges are the configuration bytes, which restart the service when they
+differ and do not when they are identical, and any owned unit, container or
+content root that is missing, which is created again. Everything it owns
+carries the context in its name, so a same-name object it did not create cannot
+occur without a reservation conflict refusing first.
 
 **Inverse.** Destroy stops the service, removes the unit definition, removes
 the container, removes the owned content root and then reobserves. Positive

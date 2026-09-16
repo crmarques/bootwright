@@ -209,3 +209,16 @@ def test_an_unmet_installation_names_what_is_unproved():
 def test_bounded_values_refuse_anything_oversized():
     with pytest.raises(ValueError):
         managedos_install_protocol.bounded("x" * (managedos_install_protocol.MAX_MARKER + 1), managedos_install_protocol.MAX_MARKER)
+
+
+# A mutation that cannot prove its postcondition fails, because an unproved
+# effect is never reported as success. An observation is the exception: the
+# engine resolves an unknown effect from exactly the evidence an observation
+# reports, and a target part way realized is what it most needs to see.
+def test_only_an_observation_publishes_an_unmet_postcondition():
+    for protocol in (substrate_host_protocol, substrate_machine_protocol, managedos_install_protocol):
+        assert protocol.publishes({"postcondition": True}, False)
+        assert protocol.publishes({"postcondition": True}, True)
+        assert protocol.publishes({"postcondition": False}, True)
+        assert not protocol.publishes({"postcondition": False}, False)
+        assert not protocol.publishes({"postcondition": False}, None)

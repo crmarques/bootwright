@@ -80,11 +80,18 @@ bridge name is host-global; `libvirt-network:<name>` for every managed network;
 **Evidence.** Completion requires the hypervisor present by package name, the
 daemon active, the `uri` answering, every managed network active with the frozen
 definition and ownership metadata, every external bridge present, and the pool
-active. Replay reports `completed` with no change when live state matches.
+active. Replay reports `completed` with no change when live state matches. The
+differences it converges are an owned network whose definition differs, which
+is redefined under the identity it already holds, and a missing network or
+pool, which is defined again.
 The inverse destroys and undefines the networks and pool this context owns,
 removes the pool directory, proves each absent, and leaves packages, foreign
 networks and external bridges untouched. Observation is read-only against the
-frozen request; contradictory or partial state stays unknown.
+frozen request: the pool or an owned managed network present without the whole
+is a positive partial realization the next attempt converges, while a managed
+network the hypervisor defines without this context's ownership is foreign and
+stays unknown. The hypervisor closure is shared host software this block never
+removes, so its presence alone is not a partial realization.
 
 ## Machine realization
 
@@ -129,13 +136,18 @@ disk directory.
 and ownership metadata, every disk present at its frozen size, the BMC unit
 active running the pinned image, and the ComputerSystem answering with the
 bound credential and a reported power state. Replay reports `completed` with no
-change when live state matches. The inverse stops and removes the BMC unit,
+change when live state matches; the differences it converges are a missing
+disk, domain definition or controller unit, each realized again, while an owned
+domain whose root disk size differs refuses rather than resizing.
+The inverse stops and removes the BMC unit,
 container and state, forces the domain off, undefines it, deletes the disks
 this context owns and proves each absent. Because the deleted disks may hold an
 installed operating system, the block consumes `data-loss` on destroy, so the
 operator acknowledges the loss before the plan registers. Observation is
-read-only; nothing present with no recorded before-state is positive no
-effect, anything partial stays unknown.
+read-only; nothing present with no recorded before-state is positive no effect;
+the domain, its controller unit or one of its disks present without the whole
+is a positive partial realization the next attempt converges; and a same-name
+domain without this context's ownership is foreign and stays unknown.
 
 **Cancellation.** Cancellation stops authorization of new effects and
 terminates the owned process tree; an authorized effect becomes unknown unless

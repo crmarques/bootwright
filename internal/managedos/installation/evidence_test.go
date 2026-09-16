@@ -55,6 +55,39 @@ func TestAbsenceRequiresPositiveRemovalOfPublishedContent(t *testing.T) {
 	}
 }
 
+// A partial installation is content this operation published on a guest that
+// never installed, or its own marker with the completion not yet true. A guest
+// holding another installation, and one powered on with none, are never
+// converged: the first belongs to someone else and the second may be running
+// the installer right now.
+func TestPartialRequiresThisOperationsOwnUnfinishedWork(t *testing.T) {
+	for name, evidence := range map[string]Evidence{
+		"image published, guest never booted": {Image: true, Power: "Off", Request: "digest"},
+		"tree published, guest never booted":  {Power: "Off", Request: "digest", Tree: true},
+		"installed, media still inserted":     {Marker: "{}", Media: "http://ip/os/m/install.iso", Power: "On", Image: true, Request: "digest"},
+		"installed, content withdrawn":        {Marker: "{}", Power: "On", Request: "digest"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := ValidatePartial(encode(t, evidence), "digest", "{}"); err != nil {
+				t.Fatalf("partial evidence was refused: %v", err)
+			}
+		})
+	}
+	for name, evidence := range map[string]Evidence{
+		"another installation":  {Marker: "{\"other\":true}", Power: "On", Request: "digest"},
+		"booted with no marker": {Image: true, Power: "On", Request: "digest"},
+		"nothing published":     {Power: "Off", Request: "digest"},
+		"already complete":      {Marker: "{}", Postcondition: true, Power: "On", Request: "digest"},
+		"already absent":        {Absent: true, Request: "digest"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := ValidatePartial(encode(t, evidence), "digest", "{}"); err == nil {
+				t.Fatal("evidence that proves no partial installation was accepted")
+			}
+		})
+	}
+}
+
 // Evidence that names another request proves nothing about this one, whatever
 // else it reports.
 func TestEvidenceMustNameItsOwnRequest(t *testing.T) {

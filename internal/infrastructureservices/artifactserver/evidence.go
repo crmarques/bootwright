@@ -152,4 +152,26 @@ func ValidateAbsence(data []byte, digest string) error {
 	return nil
 }
 
+// ValidatePartial accepts evidence only when it positively proves this
+// context's own server is part way realized: the unit, container or content
+// root it names is present while the whole is not. Each carries the context in
+// its name and is claimed by its host reservation, so their presence is never
+// another context's work, and repeating the operation converges them.
+func ValidatePartial(data []byte, digest string) error {
+	evidence, err := decodeEvidence(data)
+	if err != nil {
+		return err
+	}
+	if evidence.Request != digest {
+		return refusal("lifecycle.state", "the artifact-server evidence names another request", "")
+	}
+	if evidence.Postcondition || evidence.Absent {
+		return refusal("lifecycle.state", "the artifact-server evidence proves a settled state, not a partial one", "")
+	}
+	if evidence.Unit == "" && evidence.Container == "" && !evidence.ContentRoot {
+		return refusal("lifecycle.state", "the artifact-server evidence reports nothing this context owns", "")
+	}
+	return nil
+}
+
 const maxEvidenceBytes = 64 << 10

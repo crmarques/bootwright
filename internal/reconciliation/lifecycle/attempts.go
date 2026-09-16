@@ -111,12 +111,21 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 		return reconciliation.BlockUnknown, err
 	}
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: string(state), Position: position, Total: total})
-	if state != reconciliation.BlockDone {
-		return state, failure("lifecycle.unknown",
-			"the frozen effect could not be resolved from live evidence",
-			"repeat the operation once the target is reachable, or restore the host it ran against")
+	switch {
+	case state == reconciliation.BlockDone:
+		return state, nil
+	case resolvedEffect == reconciliation.EffectNoEffect:
+		return state, failure("lifecycle.state",
+			"the frozen effect was never performed",
+			"repeat the operation to perform it")
+	case resolvedEffect == reconciliation.EffectPartial:
+		return state, failure("lifecycle.state",
+			"the frozen effect is partly realized and owned by this context",
+			"repeat the operation to converge it, or destroy what it owns")
 	}
-	return state, nil
+	return state, failure("lifecycle.unknown",
+		"the frozen effect could not be resolved from live evidence",
+		"repeat the operation once the target is reachable, or restore the host it ran against")
 }
 
 // invoke opens the controller's approved bundle and runs the capability inside

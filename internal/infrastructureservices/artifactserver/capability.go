@@ -161,8 +161,9 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 }
 
 // Observe is read-only. Live state matching the frozen request in full is
-// positive completion; nothing present is positive no effect; anything else,
-// including a partial observation, stays unknown.
+// positive completion; nothing present is positive no effect; this context's
+// own server part way realized is positive partial; anything else, including
+// an observation that could not be made, stays unknown.
 func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, fingerprint, err := c.prepare(ctx, execution, false)
@@ -183,6 +184,9 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 	}
 	if ValidateAbsence(result.Evidence, digest) == nil {
 		return lifecycle.Observation{Effect: reconciliation.EffectNoEffect, Evidence: result.Evidence}, nil
+	}
+	if ValidatePartial(result.Evidence, digest) == nil {
+		return lifecycle.Observation{Effect: reconciliation.EffectPartial, Evidence: result.Evidence}, nil
 	}
 	return lifecycle.Observation{Effect: reconciliation.EffectUnknown, Evidence: result.Evidence}, nil
 }

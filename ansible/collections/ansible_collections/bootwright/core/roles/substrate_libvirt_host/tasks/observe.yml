@@ -20,6 +20,7 @@
 - name: Publish bounded provider host observation evidence
   bootwright.core.substrate_host_protocol:
     phase: completed
+    observed: true
     outcome: unchanged
     digest: '{{ bootwright_substrate_host_digest }}'
     observation: '{{ substrate_libvirt_host_observed.observation }}'

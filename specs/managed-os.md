@@ -120,7 +120,10 @@ host public key and the address; a later consumer that connects to the
 Machine binds that key, never a first-use answer from the network.
 
 **Replay.** A Machine whose guest already answers with the frozen marker
-reports `completed` with the same evidence and boots nothing. A guest that
+reports `completed` with the same evidence and boots nothing. The only
+differences it converges are its own published content and an ejection it did
+not complete, each performed again for a guest already holding that marker. A
+guest that
 answers with a different marker, or a powered-on guest with none, refuses:
 there is no reinstall path, and a fresh installation requires the Machine's
 realization to be destroyed and applied again. A powered-off Machine with no
@@ -134,7 +137,13 @@ consumes no authorization of its own.
 **Unknown resolution.** Observation reads the marker through the identity
 operation and the published content's presence. A matching marker with the
 content present is positive completion; a powered-off Machine with no marker
-and no published content is positive no effect; anything else stays unknown.
+and no published content is positive no effect; and this operation's own
+unfinished work is a positive partial realization the next attempt converges,
+which is either content it published on a powered-off guest that never
+installed, or the frozen marker with the completion not yet true. Anything else
+stays unknown, including a guest answering with another marker and a powered-on
+guest with none, because the first belongs to another installation and the
+second may be running the installer now.
 
 **Cancellation.** Cancellation stops authorization of new effects and
 terminates the owned process tree. An installer that was already booted keeps

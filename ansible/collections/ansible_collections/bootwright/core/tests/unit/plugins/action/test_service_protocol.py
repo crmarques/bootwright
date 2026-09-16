@@ -44,3 +44,14 @@ def test_a_service_that_never_started_names_what_is_unproved():
         assert protocol.unproved(GONE) == ["unit", "contentRoot"]
         assert protocol.unproved(dict(RUNNING, unit="failed")) == ["unit"]
         assert protocol.unproved(dict(RUNNING, contentRoot=False)) == ["contentRoot"]
+
+
+# Both service protocols follow the same rule: only a read-only observation may
+# publish evidence that proves no postcondition, so the engine can resolve a
+# service part way realized instead of leaving its effect unproved.
+def test_only_an_observation_publishes_an_unmet_postcondition():
+    for protocol in PROTOCOLS:
+        assert protocol.publishes({"postcondition": True}, False)
+        assert protocol.publishes({"postcondition": False}, True)
+        assert not protocol.publishes({"postcondition": False}, False)
+        assert not protocol.publishes({"postcondition": False}, None)

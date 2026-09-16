@@ -356,6 +356,25 @@ with positive `no-effect` is a typed failure and never success. An idempotent
 already-complete apply reports `completed` with completion evidence, and an
 already-absent destroy reports `completed` with positive absence evidence.
 
+### Converging an effect
+
+Every attempt converges rather than acts: it observes the target, proves what
+is this context's own, and performs only the difference between that and its
+frozen request. An absent target is created. A target that is ours and already
+equals the request reports `unchanged` and changes nothing. A target that is
+ours and differs is converged only where its capability declares that
+difference convergible, and otherwise fails naming the difference rather than
+replacing what it cannot safely replace. A target that is not ours is foreign
+and fails without exception. Identities a capability derives are deterministic,
+and an identity a target already holds is offered back to the provider rather
+than allocated again, so a repeated attempt addresses the same object instead
+of colliding with it.
+
+This is what makes a retry safe, and every retry in this contract depends on
+it: a failed block is retried by repeating its operation, and a block resolved
+from a partial realization is retried the same way. Each capability owns which
+of its own differences are convergible and names them beside its replay rules.
+
 A lost response, dead executor, cancellation, required-log failure, or
 contradictory observation moves the attempt effect state, block, and operation
 to durable `unknown` unless positive evidence already proves completion or no
@@ -376,14 +395,23 @@ Resolution permits only these evidence-backed transitions:
 | Durable evidence | Effect state | Block | Operation |
 | --- | --- | --- | --- |
 | Positive completion | `completed` | `done` | `running` or `done`, as the frozen plan requires |
-| Positive no effect | `no-effect` | `failed` | `failed`; a new attempt requires the capability's safe retry contract |
-| Failed, forbidden, empty, malformed, contradictory, or incomplete observation | `unknown` | `unknown` | `unknown` |
+| Positive no effect | `no-effect` | `failed` | `failed`; a new attempt converges it |
+| Positive partial realization this context owns | `partial` | `failed` | `failed`; a new attempt converges it |
+| Failed, forbidden, empty, malformed, contradictory, or foreign observation | `unknown` | `unknown` | `unknown` |
+
+A partial realization is the ordinary outcome of an interrupted effect, and
+resolving it to `failed` is what lets the context move: an `unknown` block
+starts no retry, no dependent block, no removal and no deletion, so a target
+that is provably this context's own and provably incomplete must not be left
+there. What a capability accepts as partial is its own, under the converge
+rule below, and it is never a target it cannot prove is ours: a foreign or
+unreadable observation stays `unknown`.
 
 Resolution-log failure requests cancellation, preserves its identity without
 reuse, and sets or preserves the durable log fault. It permits a transition
-only when independent positive completion or no-effect evidence is durable;
-otherwise the unknown states remain unchanged. The log fault blocks later work
-even after an evidence-backed transition.
+only when independent positive completion, no-effect or partial evidence is
+durable; otherwise the unknown states remain unchanged. The log fault blocks
+later work even after an evidence-backed transition.
 
 While a block is `unknown`, Bootwright starts no retry, dependent block,
 destroy effect, or replacement operation. Confirmation, authorization, manual

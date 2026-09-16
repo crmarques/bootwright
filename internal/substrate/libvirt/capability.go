@@ -268,8 +268,9 @@ func (c HostCapability) mutate(ctx context.Context, execution lifecycle.Executio
 }
 
 // Observe is read-only against the frozen request. Live state matching it in
-// full is positive completion, nothing present is positive no effect, and
-// anything partial or contradictory stays unknown.
+// full is positive completion, nothing present is positive no effect, this
+// context's own networks or pool part way realized is positive partial, and a
+// foreign or contradictory observation stays unknown.
 func (c HostCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, err := c.prepare(ctx, execution)
@@ -287,6 +288,9 @@ func (c HostCapability) Observe(ctx context.Context, execution lifecycle.Executi
 	}
 	if ValidateHostAbsence(result.Evidence, digest) == nil {
 		return lifecycle.Observation{Effect: reconciliation.EffectNoEffect, Evidence: result.Evidence}, nil
+	}
+	if ValidateHostPartial(result.Evidence, digest) == nil {
+		return lifecycle.Observation{Effect: reconciliation.EffectPartial, Evidence: result.Evidence}, nil
 	}
 	return lifecycle.Observation{Effect: reconciliation.EffectUnknown, Evidence: result.Evidence}, nil
 }
@@ -344,7 +348,8 @@ func (c MachineCapability) mutate(ctx context.Context, execution lifecycle.Execu
 }
 
 // Observe is read-only. Nothing present with no recorded before-state is
-// positive no effect; anything partial stays unknown.
+// positive no effect; this context's own domain, controller or disks part way
+// realized is positive partial; a foreign domain stays unknown.
 func (c MachineCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, err := c.prepare(ctx, execution)
@@ -362,6 +367,9 @@ func (c MachineCapability) Observe(ctx context.Context, execution lifecycle.Exec
 	}
 	if ValidateMachineAbsence(result.Evidence, digest) == nil {
 		return lifecycle.Observation{Effect: reconciliation.EffectNoEffect, Evidence: result.Evidence}, nil
+	}
+	if ValidateMachinePartial(result.Evidence, digest) == nil {
+		return lifecycle.Observation{Effect: reconciliation.EffectPartial, Evidence: result.Evidence}, nil
 	}
 	return lifecycle.Observation{Effect: reconciliation.EffectUnknown, Evidence: result.Evidence}, nil
 }

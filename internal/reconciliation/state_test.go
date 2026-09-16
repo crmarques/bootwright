@@ -39,14 +39,18 @@ func TestResolutionTransitionFollowsTheEvidenceTable(t *testing.T) {
 	for observed, want := range map[EffectState][3]string{
 		EffectCompleted: {string(EffectCompleted), string(BlockDone), string(OperationRunning)},
 		EffectNoEffect:  {string(EffectNoEffect), string(BlockFailed), string(OperationFailed)},
-		EffectUnknown:   {string(EffectUnknown), string(BlockUnknown), string(OperationUnknown)},
+		// A target the capability proves is part way realized and its own is
+		// converged by repeating the operation, so it fails rather than
+		// stranding the context behind an unproved effect.
+		EffectPartial: {string(EffectPartial), string(BlockFailed), string(OperationFailed)},
+		EffectUnknown: {string(EffectUnknown), string(BlockUnknown), string(OperationUnknown)},
 	} {
 		effect, block, operation, err := ResolutionTransition(observed)
 		if err != nil || string(effect) != want[0] || string(block) != want[1] || string(operation) != want[2] {
 			t.Fatalf("%s resolution = %s/%s/%s (%v), want %v", observed, effect, block, operation, err, want)
 		}
 	}
-	if _, _, _, err := ResolutionTransition("partial"); err == nil {
+	if _, _, _, err := ResolutionTransition("half"); err == nil {
 		t.Fatal("an unrecognized observation produced a transition")
 	}
 }

@@ -205,8 +205,10 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 
 // Observe is read-only. A guest holding the frozen marker with its content
 // published is positive completion; a powered-off guest with neither is
-// positive no effect; anything else stays unknown, including a guest that
-// answers with a different marker.
+// positive no effect; published content on a guest that never installed, or
+// the frozen marker with the completion incomplete, is positive partial;
+// anything else stays unknown, including a guest that answers with a different
+// marker and one powered on without any.
 func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, marker, err := c.prepare(ctx, execution)
@@ -224,6 +226,9 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 	}
 	if ValidateNoEffect(result.Evidence, digest) == nil {
 		return lifecycle.Observation{Effect: reconciliation.EffectNoEffect, Evidence: result.Evidence}, nil
+	}
+	if ValidatePartial(result.Evidence, digest, string(marker)) == nil {
+		return lifecycle.Observation{Effect: reconciliation.EffectPartial, Evidence: result.Evidence}, nil
 	}
 	return lifecycle.Observation{Effect: reconciliation.EffectUnknown, Evidence: result.Evidence}, nil
 }

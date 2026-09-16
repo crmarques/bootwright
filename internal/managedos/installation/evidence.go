@@ -89,6 +89,35 @@ func ValidateNoEffect(data []byte, digest string) error {
 	return nil
 }
 
+// ValidatePartial accepts evidence only when it positively proves this
+// installation is part way through: content it published is present on a guest
+// that never installed, or the guest holds exactly the frozen marker while
+// something the completion requires is not yet true. A guest that answers with
+// another marker is another installation and is never converged; a powered-on
+// guest with no marker may be installing right now, so neither is partial and
+// both leave the effect unknown.
+func ValidatePartial(data []byte, digest, marker string) error {
+	evidence, err := decodeEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if evidence.Postcondition || evidence.Absent {
+		return refusal("lifecycle.state", "the installation evidence proves a settled state, not a partial one", "")
+	}
+	if evidence.Marker != "" && evidence.Marker != marker {
+		return refusal("lifecycle.state", "the guest holds an installation this operation did not perform", "")
+	}
+	if evidence.Marker == "" {
+		if evidence.Power != "Off" {
+			return refusal("lifecycle.state", "the machine is not powered off, so its installation is unproved", "")
+		}
+		if !evidence.Image && !evidence.Tree {
+			return refusal("lifecycle.state", "the installation evidence reports nothing this operation published", "")
+		}
+	}
+	return nil
+}
+
 func decodeEvidence(data []byte, digest string) (Evidence, error) {
 	if len(data) == 0 || len(data) > maxEvidenceBytes {
 		return Evidence{}, refusal("lifecycle.state", "the installation adapter returned no bounded evidence", "")

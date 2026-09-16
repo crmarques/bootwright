@@ -198,7 +198,8 @@ func TestObserveMapsLiveEvidenceToItsEffectState(t *testing.T) {
 	}{
 		"complete":       {lifecycle.RunResult{Outcome: "unchanged", Evidence: presenceEvidence(request, call.Block.RequestDigest, fingerprint)}, nil, reconciliation.EffectCompleted},
 		"absent":         {lifecycle.RunResult{Outcome: "unchanged", Evidence: absenceEvidence(call.Block.RequestDigest)}, nil, reconciliation.EffectNoEffect},
-		"partial":        {lifecycle.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(`{"absent":false,"container":"","contentRoot":true,"listeners":[],"postcondition":false,"request":"` + call.Block.RequestDigest + `","unit":"active"}`)}, nil, reconciliation.EffectUnknown},
+		"partial":        {lifecycle.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(`{"absent":false,"container":"","contentRoot":true,"listeners":[],"postcondition":false,"request":"` + call.Block.RequestDigest + `","unit":"active"}`)}, nil, reconciliation.EffectPartial},
+		"nothing owned":  {lifecycle.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(`{"absent":false,"container":"","contentRoot":false,"listeners":[],"postcondition":false,"request":"` + call.Block.RequestDigest + `","unit":""}`)}, nil, reconciliation.EffectUnknown},
 		"adapter failed": {lifecycle.RunResult{}, errors.New("unreachable"), reconciliation.EffectUnknown},
 	} {
 		t.Run(name, func(t *testing.T) {

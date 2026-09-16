@@ -44,6 +44,7 @@
 - name: Publish bounded installation observation evidence
   bootwright.core.managedos_install_protocol:
     phase: completed
+    observed: true
     outcome: unchanged
     digest: '{{ bootwright_os_install_digest }}'
     observation: '{{ managedos_install_anaconda_observed.observation }}'

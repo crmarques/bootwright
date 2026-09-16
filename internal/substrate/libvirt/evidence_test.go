@@ -144,6 +144,64 @@ func TestMachineAbsenceRequiresPositiveRemoval(t *testing.T) {
 	}
 }
 
+// A partial realization is what an interrupted effect usually leaves. It is
+// accepted only for what this context owns, because a foreign object is never
+// converged and the hypervisor closure is shared software this block never
+// removes.
+func TestHostPartialRequiresSomethingThisContextOwns(t *testing.T) {
+	for name, evidence := range map[string]HostEvidence{
+		"pool alone":       {Request: "digest", Pool: "active"},
+		"owned network":    {Request: "digest", Networks: []NetworkEvidence{{Managed: true, Name: "n", Owned: true, State: "inactive"}}},
+		"network and pool": {Request: "digest", Pool: "inactive", Networks: []NetworkEvidence{{Managed: true, Name: "n", Owned: true, State: "active"}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := ValidateHostPartial(encode(t, evidence), "digest"); err != nil {
+				t.Fatalf("partial evidence was refused: %v", err)
+			}
+		})
+	}
+	for name, evidence := range map[string]HostEvidence{
+		"nothing owned":    {Request: "digest"},
+		"hypervisor alone": {Request: "digest", Hypervisor: true},
+		"foreign network":  {Request: "digest", Networks: []NetworkEvidence{{Managed: true, Name: "n", State: "active"}}},
+		"external bridge":  {Request: "digest", Networks: []NetworkEvidence{{Name: "n", Bridge: true}}},
+		"already complete": {Request: "digest", Postcondition: true, Pool: "active"},
+		"already absent":   {Request: "digest", Absent: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := ValidateHostPartial(encode(t, evidence), "digest"); err == nil {
+				t.Fatal("evidence that proves no partial realization was accepted")
+			}
+		})
+	}
+}
+
+func TestMachinePartialRequiresSomethingThisContextOwns(t *testing.T) {
+	for name, evidence := range map[string]MachineEvidence{
+		"owned domain":    {Request: "digest", Domain: "bootwright-lab-rhel-01", Owned: true},
+		"controller only": {Request: "digest", Unit: "active"},
+		"disk only":       {Request: "digest", Disks: []DiskEvidence{{Name: "root", Present: true, SizeGiB: 40}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := ValidateMachinePartial(encode(t, evidence), "digest"); err != nil {
+				t.Fatalf("partial evidence was refused: %v", err)
+			}
+		})
+	}
+	for name, evidence := range map[string]MachineEvidence{
+		"nothing present":  {Request: "digest"},
+		"foreign domain":   {Request: "digest", Domain: "bootwright-lab-rhel-01"},
+		"already complete": {Request: "digest", Postcondition: true, Domain: "bootwright-lab-rhel-01", Owned: true},
+		"already absent":   {Request: "digest", Absent: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := ValidateMachinePartial(encode(t, evidence), "digest"); err == nil {
+				t.Fatal("evidence that proves no partial realization was accepted")
+			}
+		})
+	}
+}
+
 // An adapter cannot widen the result shape: unknown fields, trailing data and
 // an unbounded payload are refused before anything is read from them.
 func TestEvidenceIsBoundedAndStrictlyShaped(t *testing.T) {

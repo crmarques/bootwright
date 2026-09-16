@@ -855,6 +855,7 @@ func TestUnknownOutcomeIsResolvedFromLiveEvidence(t *testing.T) {
 	}{
 		"completed": {reconciliation.EffectCompleted, "done", "none"},
 		"no effect": {reconciliation.EffectNoEffect, "failed", "continue-apply"},
+		"partial":   {reconciliation.EffectPartial, "failed", "continue-apply"},
 		"unknown":   {reconciliation.EffectUnknown, "unknown", "resolve"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -876,6 +877,79 @@ func TestUnknownOutcomeIsResolvedFromLiveEvidence(t *testing.T) {
 				t.Fatal("an unresolved block started another attempt")
 			}
 		})
+	}
+}
+
+// A target the capability proves is part way realized and its own is the
+// ordinary outcome of an interrupted effect. Resolving it to failed is what
+// lets the next invocation converge it: an unknown block would start no retry,
+// no removal and no deletion, so the context would have nowhere to go.
+func TestAPartlyRealizedBlockIsConvergedByRepeatingTheOperation(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("an unproved effect completed")
+	}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectPartial}}
+	resolved, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err == nil || resolved.Receipt.State != "failed" {
+		t.Fatalf("partial resolution = %+v (%v)", resolved.Receipt, err)
+	}
+	if code := firstCode(err); code != "lifecycle.state" {
+		t.Fatalf("a partial resolution reported %q, want a failure an operator can retry", code)
+	}
+	converged, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil || converged.Receipt.State != "done" {
+		t.Fatalf("convergence = %+v (%v)", converged.Receipt, err)
+	}
+	if len(h.capability.applies) != 2 || len(h.capability.observes) != 1 {
+		t.Fatalf("applies = %v, observes = %v", h.capability.applies, h.capability.observes)
+	}
+}
+
+// The same resolution frees a removal, because a failed operation admits a
+// fresh destroy while an unknown one admits nothing at all.
+func TestAPartlyRealizedBlockIsAlsoRemovable(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("an unproved effect completed")
+	}
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("an unknown block admitted a removal")
+	}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectPartial}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("a partial resolution completed the operation")
+	}
+	removed, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil || removed.Receipt.State != "done" {
+		t.Fatalf("removal after a partial resolution = %+v (%v)", removed, err)
+	}
+	if !slices.Equal(h.capability.destroys, []string{"artifact-server-lab"}) {
+		t.Fatalf("destroyed blocks = %v", h.capability.destroys)
+	}
+}
+
+// An interrupted removal is converged the same way, so a partial resolution is
+// not an apply-only road out.
+func TestAPartlyRemovedBlockIsConvergedByRepeatingTheRemoval(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("an unproved removal completed")
+	}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectPartial}}
+	resolved, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err == nil || resolved.Receipt.State != "failed" || resolved.Receipt.Verb != "destroy" {
+		t.Fatalf("partial removal resolution = %+v (%v)", resolved.Receipt, err)
+	}
+	converged, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil || converged.Receipt.State != "done" {
+		t.Fatalf("removal convergence = %+v (%v)", converged.Receipt, err)
 	}
 }
 

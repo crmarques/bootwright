@@ -130,6 +130,37 @@ func ValidateHostAbsence(data []byte, digest string) error {
 	return nil
 }
 
+// ValidateHostPartial accepts evidence only when it positively proves this
+// context's own provider host is part way realized: its pool or one of its
+// owned managed networks is present while the whole is not. A managed network
+// the hypervisor defines without this context's ownership is foreign, so it
+// proves nothing here and leaves the effect unknown. The hypervisor closure is
+// shared host software this block never removes, so its presence alone is not
+// a partial realization.
+func ValidateHostPartial(data []byte, digest string) error {
+	evidence, err := decodeHostEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if evidence.Postcondition || evidence.Absent {
+		return refusal("lifecycle.state", "the provider host evidence proves a settled state, not a partial one", "")
+	}
+	present := evidence.Pool != ""
+	for _, network := range evidence.Networks {
+		if !network.Managed || (network.State == "" && !network.Owned) {
+			continue
+		}
+		if !network.Owned {
+			return refusal("lifecycle.state", "a managed libvirt network exists without this context's ownership", "")
+		}
+		present = true
+	}
+	if !present {
+		return refusal("lifecycle.state", "the provider host evidence reports nothing this context owns", "")
+	}
+	return nil
+}
+
 // ValidateMachinePresence accepts evidence only when it proves the frozen
 // domain is defined and owned, every disk is present at its frozen size, the
 // controller unit runs the pinned image and its ComputerSystem answers.
@@ -199,6 +230,32 @@ func ValidateMachineAbsence(data []byte, digest string) error {
 		if disk.Present {
 			return refusal("lifecycle.state", "the machine removal evidence still reports a disk", "")
 		}
+	}
+	return nil
+}
+
+// ValidateMachinePartial accepts evidence only when it positively proves this
+// context's own machine is part way realized: its domain, controller unit or
+// one of its disks is present while the whole is not. A same-name domain
+// without this context's ownership is foreign and is never converged, so it
+// leaves the effect unknown rather than failed.
+func ValidateMachinePartial(data []byte, digest string) error {
+	evidence, err := decodeMachineEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if evidence.Postcondition || evidence.Absent {
+		return refusal("lifecycle.state", "the machine evidence proves a settled state, not a partial one", "")
+	}
+	if evidence.Domain != "" && !evidence.Owned {
+		return refusal("lifecycle.state", "a domain of the same name exists without this context's ownership", "")
+	}
+	present := evidence.Domain != "" || evidence.Unit != "" || evidence.Controller != ""
+	for _, disk := range evidence.Disks {
+		present = present || disk.Present
+	}
+	if !present {
+		return refusal("lifecycle.state", "the machine evidence reports nothing this context owns", "")
 	}
 	return nil
 }

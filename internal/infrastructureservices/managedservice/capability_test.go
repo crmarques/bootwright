@@ -283,6 +283,37 @@ func TestAbsenceRequiresEveryOwnedResourceGone(t *testing.T) {
 	}
 }
 
+// A service part way realized is converged by repeating the operation, so the
+// resolution fails its block instead of leaving the context behind an unproved
+// effect. Everything the evidence reports carries this context in its name and
+// is claimed by its reservation, so presence alone proves the work is ours.
+func TestPartialRequiresSomethingThisContextOwns(t *testing.T) {
+	digest := strings.Repeat("d", 64)
+	for name, evidence := range map[string]Evidence{
+		"unit without its root": {Answers: []Answer{}, Request: digest, Unit: "active"},
+		"root without its unit": {Answers: []Answer{}, ContentRoot: true, Request: digest},
+		"container left behind": {Answers: []Answer{}, Container: "image", Request: digest},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := ValidatePartial(encode(t, evidence), digest); err != nil {
+				t.Fatalf("partial evidence was refused: %v", err)
+			}
+		})
+	}
+	for name, evidence := range map[string]Evidence{
+		"nothing present":  {Answers: []Answer{}, Request: digest},
+		"already complete": {Answers: []Answer{}, ContentRoot: true, Postcondition: true, Request: digest, Unit: "active"},
+		"already absent":   {Absent: true, Answers: []Answer{}, Request: digest},
+		"another request":  {Answers: []Answer{}, Request: strings.Repeat("e", 64), Unit: "active"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := ValidatePartial(encode(t, evidence), digest); err == nil {
+				t.Fatal("evidence that proves no partial realization was accepted")
+			}
+		})
+	}
+}
+
 func encode(t *testing.T, evidence Evidence) []byte {
 	t.Helper()
 	data, err := json.Marshal(evidence)

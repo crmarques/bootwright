@@ -97,6 +97,16 @@ def absence(arguments, request_digest):
     }
 
 
+def publishes(evidence, observed):
+    """Whether this phase may publish evidence proving no postcondition.
+
+    A read-only observation reports what it found, including a target that is
+    part way realized, because the engine resolves an unproved effect from that
+    evidence. A mutation has to reach its postcondition or fail.
+    """
+    return bool(evidence["postcondition"]) or bool(observed)
+
+
 class ActionModule(ActionBase):
     TRANSFERS_FILES = False
     _requires_connection = False
@@ -127,7 +137,7 @@ class ActionModule(ActionBase):
             else:
                 evidence = presence(arguments, request_digest)
                 unmet, verb = unproved(evidence), "not proved"
-            if not evidence["postcondition"]:
+            if not publishes(evidence, arguments.get("observed")):
                 return {
                     "failed": True,
                     "msg": "the installation did not reach its postcondition; %s: %s" % (verb, ", ".join(unmet) or "unknown"),

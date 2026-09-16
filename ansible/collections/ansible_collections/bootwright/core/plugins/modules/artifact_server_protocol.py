@@ -49,6 +49,12 @@ options:
     description: Whether the completion publishes removal rather than presence.
     type: bool
     required: false
+  observed:
+    description:
+      - Whether this publication is a read-only observation, which may report
+        evidence that proves no postcondition rather than failing.
+    type: bool
+    required: false
 author:
   - Bootwright contributors (@crmarques)
 """

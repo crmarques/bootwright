@@ -93,6 +93,16 @@ def absence(observation, request_digest):
     }
 
 
+def publishes(evidence, observed):
+    """Whether this phase may publish evidence proving no postcondition.
+
+    A read-only observation reports what it found, including a target that is
+    part way realized, because the engine resolves an unproved effect from that
+    evidence. A mutation has to reach its postcondition or fail.
+    """
+    return bool(evidence["postcondition"]) or bool(observed)
+
+
 class ActionModule(ActionBase):
     TRANSFERS_FILES = False
     _requires_connection = False
@@ -127,7 +137,7 @@ class ActionModule(ActionBase):
                     arguments.get("listeners") or [],
                     request_digest,
                 )
-            if not evidence["postcondition"]:
+            if not publishes(evidence, arguments.get("observed")):
                 unmet = remaining(observation) if arguments.get("removed") else unproved(observation)
                 verb = "still present" if arguments.get("removed") else "not proved"
                 return {

@@ -426,7 +426,7 @@ func (s *Store) CompleteResolution(ctx context.Context, id, block string, attemp
 	switch effect {
 	case reconciliation.EffectCompleted:
 		outcome = reconciliation.OutcomeChanged
-	case reconciliation.EffectNoEffect:
+	case reconciliation.EffectNoEffect, reconciliation.EffectPartial:
 		outcome = reconciliation.OutcomeFailed
 	}
 	target := path.Join(id, "blocks", block, "attempt-"+attemptName+"-resolution-"+name+".json")

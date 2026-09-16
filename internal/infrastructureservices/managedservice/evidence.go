@@ -78,6 +78,30 @@ func ValidatePresence(data []byte, request Request, digest string) error {
 	return nil
 }
 
+// ValidatePartial accepts evidence only when it positively proves this
+// context's own service is part way realized: something the frozen request
+// names is present while the whole of it is not. The unit, container and
+// content root all carry the context in their names and are claimed by its
+// host reservation, so their presence is never another context's work. A
+// partial realization is converged by repeating the operation, so it leaves
+// the block failed rather than unproved.
+func ValidatePartial(data []byte, digest string) error {
+	evidence, err := DecodeEvidence(data)
+	if err != nil {
+		return err
+	}
+	if evidence.Request != digest {
+		return Refusal("lifecycle.state", "the managed service evidence names another request", "")
+	}
+	if evidence.Postcondition || evidence.Absent {
+		return Refusal("lifecycle.state", "the managed service evidence proves a settled state, not a partial one", "")
+	}
+	if evidence.Unit == "" && evidence.Container == "" && !evidence.ContentRoot {
+		return Refusal("lifecycle.state", "the managed service evidence reports nothing this context owns", "")
+	}
+	return nil
+}
+
 // ValidateAbsence accepts a removal only with positive absence of everything
 // the capability owns.
 func ValidateAbsence(data []byte, digest string) error {

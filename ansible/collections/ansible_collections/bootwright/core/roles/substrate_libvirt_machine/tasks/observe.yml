@@ -30,6 +30,7 @@
 - name: Publish bounded machine observation evidence
   bootwright.core.substrate_machine_protocol:
     phase: completed
+    observed: true
     outcome: unchanged
     digest: '{{ bootwright_substrate_machine_digest }}'
     observation: '{{ substrate_libvirt_machine_observed.observation }}'
