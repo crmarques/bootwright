@@ -284,3 +284,10 @@ func (Capability) Unsupported(state *compilation.State) []string {
 	}
 	return Unsupported(state.Effective())
 }
+
+// Quiescent is derived rather than probed, exactly as the managed network
+// services are: what fetches from this server is the installations of this
+// same context, and a removal probes the Machines behind them.
+func (Capability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiescence, error) {
+	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its consumers are probed in this removal"}, nil
+}

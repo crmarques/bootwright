@@ -428,3 +428,10 @@ func report(ctx context.Context, execution lifecycle.Execution, group, status st
 		execution.Progress(ctx, group, status)
 	}
 }
+
+// Quiescent is always settled: this block's removal retains the shared client
+// closure it published rather than deleting it, so nothing it owns can be
+// taken away from anything still using it.
+func (Capability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiescence, error) {
+	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its removal retains the shared closure"}, nil
+}

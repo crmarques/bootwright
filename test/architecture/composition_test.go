@@ -39,9 +39,11 @@ func applicationValues() packageSymbols {
 		"internal/reconciliation": {"Plan": true, "Evidence": true},
 		// The invocation every capability crosses: immutable request and
 		// placement values an adapter constructs and reads, binding no
-		// replaceable service.
+		// replaceable service. Probe and Quiescence are the same kind of value
+		// for the removal gate — what a capability is asked and what it answers.
 		"internal/reconciliation/lifecycle": {
 			"RunRequest": true, "RunResult": true, "MaterialFile": true, "Placement": true,
+			"Probe": true, "Quiescence": true,
 		},
 		// The two private records an operation opens and hands to the work it
 		// is recording. Each is an owned handle over the area it was opened

@@ -498,7 +498,7 @@ production binding; tests substitute fakes through the same interface.
 | `reconciliation/lifecycle` | `HostIdentity` | Identity | `controller/hostlinux.Inspector` |
 | `reconciliation/lifecycle` | `AutomationIdentity` | CatalogDigest | composition value over `controller/bundlelocal` and the embedded collection |
 | `reconciliation/lifecycle` | `ExecutionGuard` | WithPython | `controller/bundlelocal.ExecutionGuard` |
-| `reconciliation/lifecycle` | `CapabilityResolver`, `Capability` | Bindings, Resolve; Plan, Apply, Observe, Destroy | immutable ordered composition set over `controller/clients.Capability`, `infrastructureservices/artifactserver.Capability` and `infrastructureservices/managedservice.Capability` |
+| `reconciliation/lifecycle` | `CapabilityResolver`, `Capability` | Bindings, Resolve; Plan, Apply, Observe, Quiescent, Destroy | immutable ordered composition set over `controller/clients.Capability`, `infrastructureservices/artifactserver.Capability`, `infrastructureservices/managedservice.Capability`, `substrate/libvirt.HostCapability`, `substrate/libvirt.MachineCapability` and `managedos/installation.Capability` |
 | `reconciliation/lifecycle` | `Confirmer`, `PlanPresenter`, `ProgressReporter` | Confirm; PresentLifecyclePlan; ReportProgress | `internal/cli` |
 | `reconciliation/lifecycle` | `Clock`, `Entropy` | Now; Read | composition |
 | `reconciliation/operationstore` | `Area` | Read, Entries, EnsureDirectory, WriteExclusive, Replace, Append, Sync | `contextfs` operation area |

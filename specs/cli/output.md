@@ -458,6 +458,7 @@ repeating unbounded authored text in every diagnostic. The shared codes are:
 | `lifecycle.authorization` | The frozen plan requires an authorization that was not validly supplied. |
 | `lifecycle.lease` | The context mutation lease cannot be safely acquired or recovered. |
 | `lifecycle.unknown` | A frozen block has an unresolved unknown effect outcome. |
+| `lifecycle.live` | A removal would take back state that is still in use, and refuses before registering. |
 | `trust.identity` | SSH identity is missing, changed, contradictory, or not authorized. |
 | `cluster.not-applicable` | The resolved cluster kind or variant does not support the requested cluster command. |
 | `access.unavailable` | An applicable access request lacks required local access metadata or an available credential artifact. |

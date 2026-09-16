@@ -41,6 +41,11 @@ func HypervisorPackages() []string { return append([]string(nil), hypervisorPack
 // serviceUnit is the daemon whose socket the declared URI answers on.
 const serviceUnit = "libvirtd.service"
 
+// domainOff is the one state libvirt reports for a domain that holds nothing.
+// Every other state, including paused and suspended, still holds the memory
+// and disks a removal would delete.
+const domainOff = "shut off"
+
 const (
 	hostRequestVersion    = "substrate-host-libvirt-v1"
 	machineRequestVersion = "machine-libvirt-v1"

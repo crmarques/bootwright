@@ -323,3 +323,10 @@ func (Capability) Unsupported(state *compilation.State) []string {
 	}
 	return Unsupported(state.Effective())
 }
+
+// Quiescent is derived rather than probed. This block owns published installer
+// content, which an installed Machine no longer reads; a Machine still reading
+// it is one that is running, and its own block is probed in the same removal.
+func (Capability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiescence, error) {
+	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its machine is probed in this removal"}, nil
+}

@@ -79,6 +79,45 @@ it settles, for the reason C26 records for local `setup`; and `machine trust`
 remains unavailable, because the context-managed trust store it maintains is
 undefined (C27).
 
+### Sequential idempotence and the removal gate
+
+**Owner:** State reconciliation, with every lifecycle capability (each defines
+what its own assets being in use means) and CLI. **Delivered on explicit
+request**, outside the milestone sequence, so it adds no exit gate of its own.
+
+Three rules, so that repeating a verb is always safe and a removal never
+destroys work that is still running. A verb whose work durable state already
+proves [settles](state-reconciliation.md#lifecycle-unit) without an effect,
+authorization or confirmation, rather than refusing. A resolution that proves
+a target is this context's own and part way realized
+[fails its block](state-reconciliation.md#attempts-and-unknown-outcomes)
+instead of leaving it unproved, so the next attempt converges it and a removal
+is admitted; only a foreign or unreadable observation still stays unknown. And
+a fresh removal [proves every asset it would take back is out of
+use](state-reconciliation.md#quiescence-before-removal) before it registers,
+refusing `lifecycle.live` with no operation and naming the command that stops
+each one, while every inverse revalidates its own target and fails rather than
+forcing — the machine inverse no longer cuts the power to a running domain.
+
+Guarded by the `internal/reconciliation/lifecycle` journey suite (a settled
+apply and destroy that touch no record, a changed input that refuses, a partial
+resolution converged by a retry and removable by a destroy, a refusal that
+registers nothing and releases its binding, every block probed, an unprovable
+probe treated as live, a superseding removal gated and a continuation not),
+the `reconciliation` resolution table tests, the per-capability partial and
+quiescence classifiers, the collection's `test_removal_never_forces.py`,
+`test_substrate_libvirt.py` and protocol suites, and the CLI settled-result
+goldens.
+
+Constraints left behind: the gate runs one observation per owned block before
+every fresh removal, which is real time on a large context and is not reported
+as progress beyond a row per block; those probe runs retain no adapter output,
+for the reason C26 records for local `setup`; component quiescence is derived
+from the Machines that consume a service rather than probed on the service
+itself, so a consumer outside the context is not seen; and an asset whose state
+cannot be read is reported live, which refuses a removal on a host whose
+hypervisor is down until it answers again.
+
 ## Completed milestones
 
 ### M1a — complete CLI skeleton

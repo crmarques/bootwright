@@ -252,6 +252,22 @@ type testCapability struct {
 	material     []map[string]secrets.Material
 	executions   []Execution
 	extraGroup   string
+	probes       []string
+	quiescence   map[string]Quiescence
+	quiescentErr error
+}
+
+// Quiescent answers from the fixture, and settles by default so a removal that
+// is not exercising the gate is not written as though it were.
+func (c *testCapability) Quiescent(_ context.Context, probe Probe) (Quiescence, error) {
+	c.probes = append(c.probes, probe.Block.ID)
+	if c.quiescentErr != nil {
+		return Quiescence{}, c.quiescentErr
+	}
+	if state, found := c.quiescence[probe.Block.ID]; found {
+		return state, nil
+	}
+	return Quiescence{State: Quiescent, Reason: "nothing it owns is in use"}, nil
 }
 
 func (c *testCapability) Plan(_ context.Context, input PlanInput) (CapabilityPlan, error) {
@@ -950,6 +966,122 @@ func TestAPartlyRemovedBlockIsConvergedByRepeatingTheRemoval(t *testing.T) {
 	converged, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
 	if err != nil || converged.Receipt.State != "done" {
 		t.Fatalf("removal convergence = %+v (%v)", converged.Receipt, err)
+	}
+}
+
+// A removal takes dependents before dependencies, so a gate that only checked
+// each effect as it ran would delete the quiescent leaves and then stop at the
+// running machine, leaving a context that can only continue a destroy it
+// should never have started. Nothing is registered until every owned asset is
+// proved idle.
+func TestFreshDestroyRefusesLiveStateBeforeRegistering(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab", "machine-rhel-01")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	registered := h.workspace.area.clone()
+	h.capability.quiescence = map[string]Quiescence{
+		"machine-rhel-01": {State: Live, Reason: "its domain is running", Stop: "bootwright machine stop --name rhel-01"},
+	}
+	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if code := firstCode(err); code != "lifecycle.live" {
+		t.Fatalf("destroy over a running machine = %q (%v)", code, err)
+	}
+	reported := diagnostics.Of(err)[0]
+	if !strings.Contains(reported.Message, "its domain is running") {
+		t.Fatalf("the refusal did not say what is in use: %q", reported.Message)
+	}
+	if !strings.Contains(reported.Remediation, "bootwright machine stop --name rhel-01") {
+		t.Fatalf("the refusal did not name the command that stops it: %q", reported.Remediation)
+	}
+	if len(h.capability.destroys) != 0 {
+		t.Fatalf("a refused removal destroyed %v", h.capability.destroys)
+	}
+	if !maps.EqualFunc(h.workspace.area.files, registered.files, slices.Equal) {
+		t.Fatal("a refused removal changed durable operation state")
+	}
+	if len(h.binder.released) == 0 {
+		t.Fatal("a refused removal kept the binding it acquired for itself")
+	}
+}
+
+// Every block is probed, so an operator is told everything to stop rather than
+// discovering the next obstacle each time they repeat the command.
+func TestFreshDestroyProbesEveryBlockAndNamesEachLiveOne(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab", "machine-rhel-01")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	h.capability.quiescence = map[string]Quiescence{
+		"artifact-server-lab": {State: Live, Reason: "a fetch is in flight"},
+		"machine-rhel-01":     {State: Live, Reason: "its domain is running", Stop: "bootwright machine stop --name rhel-01"},
+	}
+	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	message := diagnostics.Of(err)[0].Message
+	for _, named := range []string{"a fetch is in flight", "its domain is running"} {
+		if !strings.Contains(message, named) {
+			t.Fatalf("the refusal omitted %q: %q", named, message)
+		}
+	}
+	if len(h.capability.probes) != 2 {
+		t.Fatalf("probed %v, want every block", h.capability.probes)
+	}
+}
+
+// An environment that cannot prove it is idle is never assumed to be.
+func TestUnprovedActivityCountsAsLive(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	h.capability.quiescence = map[string]Quiescence{
+		"artifact-server-lab": {State: Unproved, Reason: "its state could not be read"},
+	}
+	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if code := firstCode(err); code != "lifecycle.live" {
+		t.Fatalf("destroy over an unprovable target = %q", code)
+	}
+}
+
+// A removal that supersedes a failed one is a fresh removal, so it is gated
+// exactly like any other: repairing an adapter never buys a way past the gate.
+func TestASupersedingRemovalIsGatedToo(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab", "machine-rhel-01")
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeChanged}, {Outcome: reconciliation.OutcomeFailed}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("the seeded apply failure did not fire")
+	}
+	h.capability.quiescence = map[string]Quiescence{
+		"machine-rhel-01": {State: Live, Reason: "its domain is running"},
+	}
+	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if code := firstCode(err); code != "lifecycle.live" {
+		t.Fatalf("a superseding removal over a running machine = %q", code)
+	}
+}
+
+// A continuation is not gated before registration: its operation already
+// exists, its effects were authorized when it registered, and each one
+// revalidates in the adapter that performs it.
+func TestContinuedDestroyIsNotGatedBeforeRegistration(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("the seeded unproved removal did not fire")
+	}
+	probes := len(h.capability.probes)
+	h.capability.quiescence = map[string]Quiescence{
+		"artifact-server-lab": {State: Live, Reason: "a fetch is in flight"},
+	}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatalf("a continued removal was gated: %v", err)
+	}
+	if len(h.capability.probes) != probes {
+		t.Fatalf("a continued removal probed %v", h.capability.probes[probes:])
 	}
 }
 

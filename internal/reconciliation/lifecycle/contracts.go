@@ -91,14 +91,61 @@ type ExecutionGuard interface {
 }
 
 // Capability is one domain's lifecycle implementation. It plans its own blocks
-// and owns what their completion, readiness and absence mean; it never
-// schedules another domain's work or writes lifecycle state.
+// and owns what their completion, readiness, quiescence and absence mean; it
+// never schedules another domain's work or writes lifecycle state.
 type Capability interface {
 	Plan(context.Context, PlanInput) (CapabilityPlan, error)
 	Apply(context.Context, Execution) (Result, error)
 	Observe(context.Context, Execution) (Observation, error)
+	// Quiescent reports whether what this block owns is still in use. It is
+	// part of the port rather than an optional extra, so a capability cannot be
+	// silently left out of the gate that protects a live environment.
+	Quiescent(context.Context, Probe) (Quiescence, error)
 	Destroy(context.Context, Execution) (Result, error)
 }
+
+// Probe is one read-only quiescence observation against a frozen block. It
+// carries no operation identity, log or before-state publication, because it
+// runs before any operation is registered and may change nothing.
+type Probe struct {
+	Block    reconciliation.Block
+	Launch   prerequisites.PythonLaunch
+	Bundle   prerequisites.BundleLocation
+	Area     prerequisites.BundleArea
+	Material map[string]secrets.Material
+}
+
+// Execution presents the probe as one bounded adapter call, so a capability
+// reaches its own observation the same way it always does. It carries no log,
+// progress or before-state hook, because a probe runs before any operation
+// exists to record against and may change nothing.
+func (p Probe) Execution() Execution {
+	return Execution{Block: p.Block, Launch: p.Launch, Bundle: p.Bundle, Area: p.Area, Material: p.Material}
+}
+
+// QuiescenceState is what a probe proved about one block's targets.
+const (
+	// Quiescent means nothing this block owns is in use, so removing it
+	// interrupts nothing.
+	Quiescent = "quiescent"
+	// Live means something it owns is in use.
+	Live = "live"
+	// Unproved means the probe could not tell. It is treated as live, because
+	// an environment that cannot prove it is idle is never assumed to be.
+	Unproved = "unproved"
+)
+
+// Quiescence is one block's answer. Reason says what is in use in the
+// operator's terms, and Stop is the exact command that ends it, so a refusal
+// names the way forward rather than only the obstacle.
+type Quiescence struct {
+	State  string
+	Reason string
+	Stop   string
+}
+
+// Settled reports the one state that admits removal.
+func (q Quiescence) Settled() bool { return q.State == Quiescent }
 
 // CapabilityBinding is one implementation this executable offers for one API
 // kind. Several capabilities may realize the same kind through different

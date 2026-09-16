@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
@@ -226,5 +227,82 @@ func TestUnsupportedReadsTheCompiledStateOrNothing(t *testing.T) {
 	catalog := labCatalog()
 	if unsupported := NewHost(nil).Unsupported(compilation.NewState(catalog, catalog, nil)); len(unsupported) != 0 {
 		t.Fatalf("the lab graph reported %v", unsupported)
+	}
+}
+
+// Removing a machine takes its memory and disks out from under whatever is
+// using them, so only a domain the hypervisor reports shut off admits removal.
+// A paused or suspended domain still holds both.
+func TestMachineQuiescenceAdmitsOnlyAShutOffDomain(t *testing.T) {
+	requests, _ := MachineRequests(labCatalog(), "controller", testContext)
+	request := requests[0]
+	canonical, err := request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := lifecycle.Probe{Block: reconciliation.Block{
+		BlockDefinition: reconciliation.BlockDefinition{ID: "machine-rhel-01", Request: canonical},
+		RequestDigest:   "digest",
+	}}
+	for name, tc := range map[string]struct {
+		evidence MachineEvidence
+		want     string
+	}{
+		"shut off":         {MachineEvidence{Request: "digest", Domain: request.Domain, State: "shut off"}, lifecycle.Quiescent},
+		"never defined":    {MachineEvidence{Request: "digest"}, lifecycle.Quiescent},
+		"controller off":   {MachineEvidence{Request: "digest", Domain: request.Domain, Power: "Off"}, lifecycle.Quiescent},
+		"running":          {MachineEvidence{Request: "digest", Domain: request.Domain, State: "running"}, lifecycle.Live},
+		"paused":           {MachineEvidence{Request: "digest", Domain: request.Domain, State: "paused"}, lifecycle.Live},
+		"suspended":        {MachineEvidence{Request: "digest", Domain: request.Domain, State: "pmsuspended"}, lifecycle.Live},
+		"controller on":    {MachineEvidence{Request: "digest", Domain: request.Domain, Power: "On"}, lifecycle.Live},
+		"nothing readable": {MachineEvidence{Request: "digest", Domain: request.Domain}, lifecycle.Unproved},
+	} {
+		t.Run(name, func(t *testing.T) {
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, tc.evidence)}}
+			state, err := NewMachine(runner).Quiescent(context.Background(), probe)
+			if err != nil || state.State != tc.want {
+				t.Fatalf("quiescence = %+v (%v), want %s", state, err, tc.want)
+			}
+			if tc.want == lifecycle.Quiescent {
+				return
+			}
+			if state.Stop != "bootwright machine stop --name "+request.Identity.Object {
+				t.Fatalf("a machine that is not idle did not name the command that stops it: %q", state.Stop)
+			}
+		})
+	}
+	runner := &fakeRunner{err: errors.New("unreachable")}
+	state, err := NewMachine(runner).Quiescent(context.Background(), probe)
+	if err != nil || state.State != lifecycle.Unproved {
+		t.Fatalf("an unreachable host = %+v (%v), want unproved", state, err)
+	}
+}
+
+// A network carrying a running guest is in use whoever owns that guest, so the
+// provider host refuses while any of its bridges is busy.
+func TestHostQuiescenceRefusesABridgeCarryingAGuest(t *testing.T) {
+	requests, _ := HostRequests(labCatalog(), "controller", testContext)
+	canonical, err := requests[0].Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := lifecycle.Probe{Block: reconciliation.Block{
+		BlockDefinition: reconciliation.BlockDefinition{ID: "substrate-host-lab", Request: canonical},
+		RequestDigest:   "digest",
+	}}
+	idle := HostEvidence{Request: "digest", Networks: []NetworkEvidence{{Name: "lab-network", Managed: true}}}
+	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, idle)}}
+	state, err := NewHost(runner).Quiescent(context.Background(), probe)
+	if err != nil || state.State != lifecycle.Quiescent {
+		t.Fatalf("an idle provider host = %+v (%v)", state, err)
+	}
+	busy := HostEvidence{Request: "digest", Networks: []NetworkEvidence{{Name: "lab-network", Managed: true, Busy: true}}}
+	runner = &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, busy)}}
+	state, err = NewHost(runner).Quiescent(context.Background(), probe)
+	if err != nil || state.State != lifecycle.Live {
+		t.Fatalf("a busy provider host = %+v (%v)", state, err)
+	}
+	if !strings.Contains(state.Reason, "lab-network") {
+		t.Fatalf("the refusal did not name the network in use: %q", state.Reason)
 	}
 }

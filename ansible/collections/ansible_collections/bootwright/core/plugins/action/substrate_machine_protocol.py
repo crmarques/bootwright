@@ -15,6 +15,10 @@ PHASES = ("loaded", "group", "completed")
 GROUP_STATUSES = ("running", "ok", "failed", "skipped")
 OUTCOMES = ("changed", "unchanged")
 POWER_STATES = ("", "On", "Off")
+# The domain's own state, in libvirt's vocabulary. It is what a removal reads
+# to prove the machine is not in use; the controller's power state is the
+# second opinion for a host whose hypervisor will not answer.
+DOMAIN_STATES = ("", "running", "idle", "paused", "in shutdown", "shut off", "crashed", "pmsuspended")
 MAX_DISKS = 32
 HEX = set("0123456789abcdef")
 
@@ -22,6 +26,14 @@ HEX = set("0123456789abcdef")
 def digest(value):
     if not isinstance(value, str) or len(value) != 64 or set(value) - HEX:
         raise ValueError("digest")
+    return value
+
+
+def state(value):
+    """Accept one domain state, refusing a word libvirt does not use."""
+    value = str(value or "")
+    if value not in DOMAIN_STATES:
+        raise ValueError("domain state")
     return value
 
 
@@ -48,6 +60,7 @@ def presence(observation, power, system, request_digest):
         "postcondition": False,
         "power": str(power),
         "request": digest(request_digest),
+        "state": state(observation.get("state")),
         "system": str(system or ""),
         "unit": str(observation.get("unit", "")),
     }
@@ -107,6 +120,7 @@ def absence(observation, request_digest):
         "postcondition": bool(gone),
         "power": "",
         "request": digest(request_digest),
+        "state": "",
         "system": "",
         "unit": "",
     }

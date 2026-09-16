@@ -145,6 +145,12 @@ stays unknown, including a guest answering with another marker and a powered-on
 guest with none, because the first belongs to another installation and the
 second may be running the installer now.
 
+**Quiescence.** This block owns published installer content, which an installed
+Machine no longer reads, so it is quiescent whenever the
+[removal gate](state-reconciliation.md#quiescence-before-removal) asks. A
+Machine still reading it is one that is running, and the same removal probes
+that Machine's own block.
+
 **Cancellation.** Cancellation stops authorization of new effects and
 terminates the owned process tree. An installer that was already booted keeps
 running on the guest; the attempt becomes unknown and is resolved from the

@@ -73,6 +73,10 @@ beneath `/var/lib/libvirt/images/bootwright/<context>/<provider>/vmedia`,
 active and set to autostart, is the only location the provider's emulated BMCs
 may fetch media into.
 
+A managed network is quiescent only while no running domain is attached to its
+bridge, whoever owns that domain, so a removal never pulls a network out from
+under a guest that is using it.
+
 **Reservations.** `bridge:<name>` for every managed attachment, because a
 bridge name is host-global; `libvirt-network:<name>` for every managed network;
 `path:` for the pool directory.
@@ -148,6 +152,16 @@ read-only; nothing present with no recorded before-state is positive no effect;
 the domain, its controller unit or one of its disks present without the whole
 is a positive partial realization the next attempt converges; and a same-name
 domain without this context's ownership is foreign and stays unknown.
+
+**Quiescence.** A Machine is quiescent only when the hypervisor reports its
+domain `shut off`, or when no domain is defined at all. Every other state,
+including paused and suspended, still holds the memory and disks a removal
+would delete. A hypervisor that will not answer leaves the management
+controller's power state as the second opinion, and a Machine neither can
+account for is treated as in use. The refusal names
+`bootwright machine stop --name <machine>`, and the inverse refuses a domain
+that is not shut off rather than forcing it, under the
+[removal gate](state-reconciliation.md#quiescence-before-removal).
 
 **Cancellation.** Cancellation stops authorization of new effects and
 terminates the owned process tree; an authorized effect becomes unknown unless

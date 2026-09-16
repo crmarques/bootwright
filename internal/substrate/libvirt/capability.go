@@ -3,6 +3,7 @@ package libvirt
 import (
 	"context"
 	"slices"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -217,7 +218,7 @@ func machineGroups(verb reconciliation.Verb, request MachineRequest) []reconcili
 	if verb == reconciliation.Destroy {
 		steps = [][2]string{
 			{"stop-controller", "stop and remove the management controller"},
-			{"remove-domain", "force the machine off and undefine it"},
+			{"remove-domain", "undefine the stopped machine"},
 			{"remove-disks", "delete every owned disk"},
 			{"verify-absence", "verify every owned resource is gone"},
 		}
@@ -450,4 +451,81 @@ func (HostCapability) Unsupported(state *compilation.State) []string {
 		return nil
 	}
 	return Unsupported(state.Effective())
+}
+
+// Quiescent proves nothing this provider host owns is carrying a guest. A
+// managed network with a running domain on its bridge is in use whoever owns
+// that domain, so the removal refuses rather than pulling the network out from
+// under it.
+func (c HostCapability) Quiescent(ctx context.Context, probe lifecycle.Probe) (lifecycle.Quiescence, error) {
+	execution := probe.Execution()
+	request, err := c.prepare(ctx, execution)
+	if err != nil {
+		return lifecycle.Quiescence{}, err
+	}
+	result, err := c.run(ctx, execution, "observe", request)
+	if err != nil {
+		return unproved("its networks could not be read"), nil
+	}
+	evidence, err := decodeHostEvidence(result.Evidence, execution.Block.RequestDigest)
+	if err != nil {
+		return unproved("its networks could not be read"), nil
+	}
+	var busy []string
+	for _, network := range evidence.Networks {
+		if network.Busy {
+			busy = append(busy, network.Name)
+		}
+	}
+	if len(busy) == 0 {
+		return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "no guest is attached to its networks"}, nil
+	}
+	slices.Sort(busy)
+	return lifecycle.Quiescence{
+		State:  lifecycle.Live,
+		Reason: "a guest is attached to " + strings.Join(slices.Compact(busy), ", "),
+	}, nil
+}
+
+// Quiescent proves this machine is not running. Only a domain the hypervisor
+// reports shut off is idle: paused, suspended and crashed domains still hold
+// the memory and disks the removal would delete. A hypervisor that will not
+// answer leaves the management controller's power state as the second opinion,
+// and when neither answers the machine is treated as live.
+func (c MachineCapability) Quiescent(ctx context.Context, probe lifecycle.Probe) (lifecycle.Quiescence, error) {
+	execution := probe.Execution()
+	request, err := c.prepare(ctx, execution)
+	if err != nil {
+		return lifecycle.Quiescence{}, err
+	}
+	stop := "bootwright machine stop --name " + request.Identity.Object
+	result, err := c.run(ctx, execution, "observe", request)
+	if err != nil {
+		return unprovedStop("its power state could not be read", stop), nil
+	}
+	evidence, err := decodeMachineEvidence(result.Evidence, execution.Block.RequestDigest)
+	if err != nil {
+		return unprovedStop("its power state could not be read", stop), nil
+	}
+	switch {
+	case evidence.State == domainOff:
+		return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its domain is shut off"}, nil
+	case evidence.State != "":
+		return lifecycle.Quiescence{State: lifecycle.Live, Reason: "its domain is " + evidence.State, Stop: stop}, nil
+	case evidence.Domain == "":
+		return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its domain is not defined"}, nil
+	case evidence.Power == "Off":
+		return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its controller reports it off"}, nil
+	case evidence.Power == "On":
+		return lifecycle.Quiescence{State: lifecycle.Live, Reason: "its controller reports it on", Stop: stop}, nil
+	}
+	return unprovedStop("its power state could not be read", stop), nil
+}
+
+func unproved(reason string) lifecycle.Quiescence {
+	return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: reason}
+}
+
+func unprovedStop(reason, stop string) lifecycle.Quiescence {
+	return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: reason, Stop: stop}
 }

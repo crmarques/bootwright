@@ -155,6 +155,12 @@ converges. Only an observation that cannot be made remains unknown.
 terminates the owned process tree. An attempt whose effect was already
 authorized becomes unknown unless positive evidence already proves its outcome.
 
+**Quiescence.** A managed service is quiescent whenever the
+[removal gate](state-reconciliation.md#quiescence-before-removal) asks, because
+what consumes it is the Machines and installations of its own context and the
+same removal probes every one of them. Refusing on its own listener would
+instead refuse a removal whose consumers are already gone.
+
 ### Consumer publication
 
 A capability that produces content for others to fetch publishes it beneath a

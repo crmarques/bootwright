@@ -164,7 +164,10 @@ executing automation the receipt does not cover. An operation left incomplete
 by the previous build cannot be continued under the new one, because a
 continuation runs the automation it froze. A failed one is removed instead: a
 fresh `destroy` runs under the build in hand, which is the ordinary loop when
-the repair is to the role that failed.
+the repair is to the role that failed. A removal first proves everything it
+would take back is out of use, so stop any running machine with
+`bootwright machine stop` before it; the refusal names each one and the command
+that stops it, and nothing is registered until they are.
 
 Changing a frozen block's Go request or plan shape changes its digests, so an
 operation registered by an earlier build can be neither continued nor removed

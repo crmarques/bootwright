@@ -5,7 +5,9 @@ from __future__ import annotations
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import (
+    busy_bridges,
     domain_metadata,
+    domain_state,
     invoke,
     network_state,
     observe_host,
@@ -159,3 +161,40 @@ def test_a_host_whose_connection_is_silent_reports_nothing_it_cannot_read():
     assert observation["networks"][0]["state"] == ""
     assert observation["networks"][0]["owned"] is False
     assert observation["networks"][0]["uuid"] == ""
+
+
+RUNNING_DOMAIN = """<domain type="kvm">
+  <name>other-guest</name>
+  <devices>
+    <interface type="bridge"><source bridge="virbr-lab"/></interface>
+  </devices>
+</domain>"""
+
+
+# Only `shut off` means removing a domain interrupts nothing. Every other state
+# holds the memory and disks the removal would delete, and a domain whose state
+# cannot be read proves nothing at all.
+def test_only_a_shut_off_domain_reports_itself_idle():
+    for reported in ("running", "paused", "pmsuspended", "crashed", "shut off"):
+        answers = runner_for({"domstate bootwright-lab-rhel-01": (0, reported + "\n", "")})
+        assert domain_state(answers, "qemu:///system", "bootwright-lab-rhel-01") == reported
+    unreadable = runner_for({"domstate bootwright-lab-rhel-01": (1, "", "error: failed to get domain")})
+    assert domain_state(unreadable, "qemu:///system", "bootwright-lab-rhel-01") == ""
+    invented = runner_for({"domstate bootwright-lab-rhel-01": (0, "bananas\n", "")})
+    assert domain_state(invented, "qemu:///system", "bootwright-lab-rhel-01") == ""
+
+
+# A bridge is busy whoever owns the guest attached to it, so the whole
+# hypervisor is read rather than only this context's domains.
+def test_a_bridge_is_busy_while_any_running_guest_is_attached():
+    attached = runner_for({
+        "list --name --state-running": (0, "other-guest\n", ""),
+        "dumpxml other-guest": (0, RUNNING_DOMAIN, ""),
+    })
+    assert busy_bridges(attached, "qemu:///system") == {"virbr-lab"}
+    idle = runner_for({"list --name --state-running": (0, "\n", "")})
+    assert busy_bridges(idle, "qemu:///system") == set()
+    # A hypervisor that will not list its domains proves no bridge is free, and
+    # the empty answer it gives is why the engine treats an unreadable probe as
+    # live rather than as idle.
+    assert busy_bridges(runner_for({}), "qemu:///system") == set()

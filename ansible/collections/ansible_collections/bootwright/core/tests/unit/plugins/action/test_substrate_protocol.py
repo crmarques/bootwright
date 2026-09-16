@@ -16,7 +16,7 @@ DIGEST = "a" * 64
 def host_observation(**overrides):
     observation = {
         "hypervisor": True,
-        "networks": [{"bridge": True, "managed": True, "name": "n", "owned": True, "state": "active", "uuid": "u"}],
+        "networks": [{"bridge": True, "busy": False, "managed": True, "name": "n", "owned": True, "state": "active", "uuid": "u"}],
         "pool": "active",
         "service": "active",
         "uri": True,
@@ -32,15 +32,15 @@ def test_a_provider_host_postcondition_needs_every_proof():
         {"service": "failed"},
         {"uri": False},
         {"pool": ""},
-        {"networks": [{"bridge": True, "managed": True, "name": "n", "owned": False, "state": "active", "uuid": "u"}]},
-        {"networks": [{"bridge": True, "managed": True, "name": "n", "owned": True, "state": "inactive", "uuid": "u"}]},
-        {"networks": [{"bridge": False, "managed": False, "name": "n", "owned": False, "state": "", "uuid": ""}]},
+        {"networks": [{"bridge": True, "busy": False, "managed": True, "name": "n", "owned": False, "state": "active", "uuid": "u"}]},
+        {"networks": [{"bridge": True, "busy": False, "managed": True, "name": "n", "owned": True, "state": "inactive", "uuid": "u"}]},
+        {"networks": [{"bridge": False, "busy": False, "managed": False, "name": "n", "owned": False, "state": "", "uuid": ""}]},
     ):
         assert not substrate_host_protocol.presence(host_observation(**overrides), DIGEST)["postcondition"]
 
 
 def forgotten_network():
-    return {"bridge": False, "managed": True, "name": "n", "owned": False, "state": "", "uuid": ""}
+    return {"bridge": False, "busy": False, "managed": True, "name": "n", "owned": False, "state": "", "uuid": ""}
 
 
 # `managed` echoes the request and stays true after removal, so an absence proof
@@ -59,7 +59,7 @@ def test_a_provider_host_removal_names_what_is_still_defined():
 
 
 def test_an_unmanaged_network_never_blocks_a_removal():
-    foreign = {"bridge": True, "managed": False, "name": "n", "owned": False, "state": "active", "uuid": ""}
+    foreign = {"bridge": True, "busy": False, "managed": False, "name": "n", "owned": False, "state": "active", "uuid": ""}
     removed = host_observation(pool="", networks=[foreign])
     assert substrate_host_protocol.absence(removed, DIGEST)["postcondition"]
 
@@ -82,7 +82,7 @@ def test_a_provider_host_removal_proves_only_what_it_owns():
     # An external bridge is never this block's to remove, so it does not keep
     # a removal from completing.
     external = substrate_host_protocol.absence(
-        host_observation(pool="", networks=[{"bridge": True, "managed": False, "name": "n", "owned": False, "state": "", "uuid": ""}]),
+        host_observation(pool="", networks=[{"bridge": True, "busy": False, "managed": False, "name": "n", "owned": False, "state": "", "uuid": ""}]),
         DIGEST,
     )
     assert external["postcondition"]
@@ -91,12 +91,12 @@ def test_a_provider_host_removal_proves_only_what_it_owns():
 def test_a_networks_identity_is_observed_but_never_reported_as_evidence():
     """Go rejects an evidence field it does not know, so the UUID stays here."""
     evidence = substrate_host_protocol.presence(host_observation(), DIGEST)
-    assert set(evidence["networks"][0]) == {"bridge", "managed", "name", "owned", "state"}
+    assert set(evidence["networks"][0]) == {"bridge", "busy", "managed", "name", "owned", "state"}
     # An observation that does not carry the identity is refused rather than
     # silently shaped into evidence, because a definition without it collides.
     with pytest.raises(ValueError):
         substrate_host_protocol.presence(
-            host_observation(networks=[{"bridge": True, "managed": True, "name": "n", "owned": True, "state": "active"}]),
+            host_observation(networks=[{"bridge": True, "busy": False, "managed": True, "name": "n", "owned": True, "state": "active"}]),
             DIGEST,
         )
 
@@ -107,6 +107,7 @@ def machine_observation(**overrides):
         "disks": [{"name": "root", "present": True, "sizeGiB": 60}],
         "domain": "bootwright-lab-rhel-01",
         "owned": True,
+        "state": "shut off",
         "unit": "active",
     }
     observation.update(overrides)
@@ -222,3 +223,19 @@ def test_only_an_observation_publishes_an_unmet_postcondition():
         assert protocol.publishes({"postcondition": False}, True)
         assert not protocol.publishes({"postcondition": False}, False)
         assert not protocol.publishes({"postcondition": False}, None)
+
+
+# The domain's own state is what a removal reads to prove the machine is not in
+# use, so it is carried as evidence and never invented. A removal proving
+# absence reports no state at all, because a domain that is gone has none.
+def test_a_machine_carries_the_state_its_hypervisor_reports():
+    evidence = substrate_machine_protocol.presence(machine_observation(), "Off", "uuid", DIGEST)
+    assert evidence["state"] == "shut off"
+    running = substrate_machine_protocol.presence(machine_observation(state="running"), "On", "uuid", DIGEST)
+    assert running["state"] == "running"
+    # A machine that is running is still completely realized, so the state is
+    # evidence for the removal gate rather than another postcondition.
+    assert running["postcondition"]
+    assert substrate_machine_protocol.absence(machine_observation(), DIGEST)["state"] == ""
+    with pytest.raises(ValueError):
+        substrate_machine_protocol.presence(machine_observation(state="bananas"), "Off", "uuid", DIGEST)

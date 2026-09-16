@@ -24,7 +24,10 @@ type HostEvidence struct {
 }
 
 type NetworkEvidence struct {
-	Bridge  bool   `json:"bridge"`
+	Bridge bool `json:"bridge"`
+	// Busy reports that a running domain is attached to this network's bridge,
+	// whoever owns that domain. A network carrying a guest is in use.
+	Busy    bool   `json:"busy"`
 	Managed bool   `json:"managed"`
 	Name    string `json:"name"`
 	Owned   bool   `json:"owned"`
@@ -43,8 +46,11 @@ type MachineEvidence struct {
 	Postcondition bool           `json:"postcondition"`
 	Power         string         `json:"power"`
 	Request       string         `json:"request"`
-	System        string         `json:"system"`
-	Unit          string         `json:"unit"`
+	// State is what the hypervisor says the domain is doing, in libvirt's own
+	// words. Only `shut off` means removing it interrupts nothing.
+	State  string `json:"state"`
+	System string `json:"system"`
+	Unit   string `json:"unit"`
 }
 
 type DiskEvidence struct {
@@ -223,7 +229,7 @@ func ValidateMachineAbsence(data []byte, digest string) error {
 	if !evidence.Postcondition || !evidence.Absent {
 		return refusal("lifecycle.state", "the machine adapter did not prove removal", "")
 	}
-	if evidence.Domain != "" || evidence.Unit != "" || evidence.Controller != "" || evidence.System != "" || evidence.Power != "" {
+	if evidence.Domain != "" || evidence.Unit != "" || evidence.Controller != "" || evidence.System != "" || evidence.Power != "" || evidence.State != "" {
 		return refusal("lifecycle.state", "the machine removal evidence still reports an owned resource", "")
 	}
 	for _, disk := range evidence.Disks {

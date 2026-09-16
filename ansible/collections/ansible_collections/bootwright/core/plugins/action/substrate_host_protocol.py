@@ -19,7 +19,7 @@ HEX = set("0123456789abcdef")
 # The observation carries each network's UUID so a definition can be offered
 # back to libvirt under the identity it already holds. Evidence stays narrower:
 # Go validates exactly the facts below, and rejects any field it does not know.
-OBSERVED_NETWORK = {"bridge", "managed", "name", "owned", "state", "uuid"}
+OBSERVED_NETWORK = {"bridge", "busy", "managed", "name", "owned", "state", "uuid"}
 
 
 def digest(value):
@@ -33,6 +33,7 @@ def network_evidence(entry):
         raise ValueError("network evidence")
     return {
         "bridge": bool(entry["bridge"]),
+        "busy": bool(entry["busy"]),
         "managed": bool(entry["managed"]),
         "name": str(entry["name"]),
         "owned": bool(entry["owned"]),

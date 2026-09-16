@@ -146,8 +146,16 @@ input settles without an effect, and editing the input first refuses with
 The inverse removes exactly what the apply created, and the destroy that
 deletes the guest's disks consumes the `data-loss` authorization:
 
+A removal proves everything it would take back is out of use before it
+registers, so a destroy while the guest is still running refuses
+`lifecycle.live` and names the command that stops it. Nothing is removed and no
+operation is created, so stopping the guest and repeating the command is the
+whole recovery:
+
 ```sh
 ./bin/bootwright apply --yes    # settles: nothing to do
+./bin/bootwright destroy        # refuses while rhel-01 is running
+./bin/bootwright machine stop --name rhel-01
 ./bin/bootwright destroy
 ./bin/bootwright destroy        # settles: nothing to remove
 ./bin/bootwright context delete --name lab-rhel --purge
@@ -173,9 +181,14 @@ collection refuses one, while a fresh removal runs under the build in hand:
 
 ```sh
 make build && sudo ./bin/bootwright setup   # publish the repaired automation
+./bin/bootwright machine stop --name rhel-01 --force   # if its guest is running
 ./bin/bootwright destroy                    # names any authorization it needs
 ./bin/bootwright apply --yes
 ```
+
+A failed install usually leaves the guest powered on, which the removal refuses
+until it is stopped; `--force` cuts the power, which an installer that never
+finished has nothing to lose from.
 
 The removal covers only the blocks that apply started, so it consumes
 `data-loss` only when the guest whose disks it deletes is among them.

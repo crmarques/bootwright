@@ -449,6 +449,16 @@ func clearMaterial(material map[string]secrets.Material) {
 // reservations, sequential block execution and the evidence projection.
 func (s Service) run(ctx context.Context, tx Transaction, decided transition, binding string, material map[string]secrets.Material) (*OperationResult, error) {
 	store := s.store(tx)
+	// A removal proves every asset it would take back is out of use before it
+	// registers. A per-effect check alone would not do: a removal takes
+	// dependents first, so it would delete the quiescent leaves and then stop
+	// at the running machine, leaving a context that can only continue the
+	// destroy it should never have started.
+	if decided.fresh && decided.verb == reconciliation.Destroy {
+		if err := s.proveQuiescent(ctx, tx, decided.plan, material); err != nil {
+			return nil, err
+		}
+	}
 	operation, plan, err := s.register(ctx, tx, store, decided, binding)
 	if err != nil {
 		return nil, err
@@ -499,6 +509,63 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 	}
 	final, terminal := s.finish(ctx, tx, store, operation, plan, states, boundary, result)
 	return final, withCause(cause, terminal)
+}
+
+// proveQuiescent observes every block a removal would take back and refuses
+// while any of it is still in use. Every block is probed rather than the first
+// live one alone, so an operator is told everything to stop instead of
+// discovering the next obstacle each time they repeat the command. A probe
+// that cannot read its target reports live, because an environment that cannot
+// prove it is idle is never assumed to be.
+func (s Service) proveQuiescent(ctx context.Context, tx Transaction, plan reconciliation.Plan, material map[string]secrets.Material) error {
+	area, location, requirement, err := approvedBundle(ctx, tx)
+	if err != nil {
+		return err
+	}
+	var live, stops []string
+	err = s.guard.WithPython(ctx, area, requirement, func(launch prerequisites.PythonLaunch, _ func() error) error {
+		for index, block := range plan.Blocks {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
+			if !ok {
+				return failure("lifecycle.state",
+					"this executable does not offer the implementation this block froze",
+					"install the executable that registered this operation")
+			}
+			s.report(ctx, ProgressEvent{
+				Block: block.ID, Description: block.Description,
+				Detail: "proving nothing it owns is still in use", Status: "running",
+				Position: index + 1, Total: len(plan.Blocks),
+			})
+			state, err := capability.Quiescent(ctx, Probe{
+				Block: block, Launch: launch, Bundle: location, Area: area, Material: material,
+			})
+			if err != nil {
+				return err
+			}
+			if state.Settled() {
+				continue
+			}
+			live = append(live, block.Kind+"/"+block.Object+" ("+state.Reason+")")
+			if state.Stop != "" && !slices.Contains(stops, state.Stop) {
+				stops = append(stops, state.Stop)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if len(live) == 0 {
+		return nil
+	}
+	remediation := "stop what is running, then repeat the removal"
+	if len(stops) != 0 {
+		remediation = "stop it with " + strings.Join(stops, ", then ")
+	}
+	return failure("lifecycle.live", "this removal would take back state that is still in use: "+strings.Join(live, ", "), remediation)
 }
 
 // withCause keeps the block's own diagnostics beside the terminal state. The

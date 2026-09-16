@@ -484,8 +484,8 @@ environment ready themselves.
 - Validate and plan the complete context before the first side effect.
 - Admit one mutator per context through a durable lease.
 - Immediately before every effect, revalidate exact target identity, ownership,
-  authorization, power/readiness, dependency integrity, and required positive
-  absence.
+  authorization, [quiescence](#quiescence-before-removal), dependency integrity,
+  and required positive absence.
 - A name or controller record may locate a target but never proves ownership or
   identity.
 - A Bootwright-created resource requires positive absence or exact agreement
@@ -498,6 +498,41 @@ environment ready themselves.
   action. It never invents a force command.
 - Human plan, confirmation, progress, status, and refusal views derive from the
   same immutable plan and registry.
+
+### Quiescence before removal
+
+Bootwright removes and replaces only what is out of use. Each capability
+defines, for every asset it realizes, one *quiescent* predicate observed from
+the host itself: never a value echoed back from its own request, never a record
+of what Bootwright intended, and never a state a live system also reports for
+something that is gone.
+
+A fresh removal observes every asset it would take back **before it registers**,
+and refuses `lifecycle.live` with no operation, no reservation and no effect
+when any of them is in use, naming each one and the command that stops it. The
+check cannot be per-effect alone, because a removal takes dependents before
+dependencies: it would delete the quiescent leaves and then stop at the running
+machine, leaving a context that can only continue a removal it should never
+have started. Every block is probed rather than the first live one alone, so an
+operator learns everything to stop at once. Each inverse then revalidates its
+own target immediately before its effect and fails its block rather than
+forcing, which covers an asset started while the removal ran. A continuation is
+not gated again: its operation is already registered and each of its effects
+still revalidates.
+
+An asset whose state cannot be read is live. An environment that cannot prove
+it is idle is never assumed to be.
+
+Stopping is never a side effect of removal. An inverse never powers a target
+off, and the operator stops it explicitly — through
+[the Machine power commands](cli/commands.md#command-and-flag-catalog) or their
+own means — so a removal never destroys work that was still running. An asset
+that exists before Bootwright touches it, such as operator-owned bare metal,
+must be quiescent before it is changed for the same reason.
+
+This composes with authorization rather than replacing it: `data-loss`
+acknowledges that removal destroys data, and quiescence proves that nothing is
+using that data now. Neither substitutes for the other.
 
 Existing operator-owned bare metal is the explicit external-substrate
 exception: Bootwright never claims ownership of or destroys the physical

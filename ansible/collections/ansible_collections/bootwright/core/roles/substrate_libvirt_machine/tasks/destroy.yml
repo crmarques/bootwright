@@ -33,6 +33,20 @@
     fail_msg: a libvirt domain of the same name exists without this context's ownership
     quiet: true
 
+# Removing a running machine takes its memory and disks out from under whatever
+# is using them, so the operator stops it first and the removal proves that
+# rather than doing it. The engine proves the same thing before it registers;
+# this is the guard against a machine started in between.
+- name: Refuse to remove a machine that is not shut off
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_machine_before.observation.domain | length == 0
+        or substrate_libvirt_machine_before.observation.state == 'shut off'
+    fail_msg: >-
+      the machine is not shut off; stop it with bootwright machine stop --name
+      {{ bootwright_substrate_machine_request.identity.object }} and repeat the removal
+    quiet: true
+
 - name: Stop the machine's management controller
   ansible.builtin.command:
     argv:
@@ -84,21 +98,6 @@
     group: remove-domain
     status: running
   no_log: true
-
-- name: Force the machine off
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/virsh
-      - --connect
-      - '{{ bootwright_substrate_machine_request.uri }}'
-      - destroy
-      - '{{ bootwright_substrate_machine_request.domain }}'
-  register: substrate_libvirt_machine_forced
-  failed_when:
-    - substrate_libvirt_machine_forced.rc != 0
-    - '"not running" not in substrate_libvirt_machine_forced.stderr'
-    - '"failed to get domain" not in substrate_libvirt_machine_forced.stderr'
-  changed_when: substrate_libvirt_machine_forced.rc == 0
 
 - name: Undefine the machine and its firmware state
   ansible.builtin.command:

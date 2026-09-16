@@ -324,3 +324,12 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 // Unsupported names every managed service of this kind the capability cannot
 // realize. Every declared shape is realizable today, so the list is empty.
 func (Capability) Unsupported(*compilation.State) []string { return nil }
+
+// Quiescent is derived rather than probed. What consumes a managed service is
+// the Machines and installations of this same context, and a removal probes
+// every one of them, so a service whose consumers are all idle is idle too.
+// Refusing on the service's own listener would instead refuse a removal whose
+// consumers are already gone.
+func (Capability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiescence, error) {
+	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its consumers are probed in this removal"}, nil
+}
