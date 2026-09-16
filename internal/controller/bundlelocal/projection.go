@@ -35,12 +35,17 @@ type projectedFile struct {
 
 type projection struct {
 	files map[string]projectedFile
-	bytes int64
-	site  string
+	// parents holds every ancestor directory of every added file, so a
+	// file-directory collision is a lookup rather than a scan of the whole
+	// projection. A closure reaches thousands of files and is rebuilt for every
+	// inspection, so that scan was the projection's dominant cost.
+	parents map[string]bool
+	bytes   int64
+	site    string
 }
 
 func newProjection() *projection {
-	return &projection{files: make(map[string]projectedFile), site: sitePackages}
+	return &projection{files: make(map[string]projectedFile), parents: make(map[string]bool), site: sitePackages}
 }
 
 func projectionFor(record catalogRecord) *projection {
@@ -116,18 +121,22 @@ func (p *projection) add(name string, data []byte, executable bool) error {
 	if _, found := p.files[name]; found {
 		return bundleFailure("dependency archive contains conflicting file entries")
 	}
+	// A path something was already added beneath is a directory, and an ancestor
+	// that already holds content is a file. Either way this entry collides.
+	if p.parents[name] {
+		return bundleFailure("dependency archive contains a file-directory collision")
+	}
 	for parent := path.Dir(name); parent != "."; parent = path.Dir(parent) {
 		if _, found := p.files[parent]; found {
 			return bundleFailure("dependency archive contains a file-directory collision")
 		}
 	}
-	for existing := range p.files {
-		if strings.HasPrefix(existing, name+"/") {
-			return bundleFailure("dependency archive contains a file-directory collision")
-		}
-	}
 	p.files[name] = projectedFile{data: data, executable: executable}
 	p.bytes += int64(len(data))
+	// Ancestors above the first one already recorded were recorded with it.
+	for parent := path.Dir(name); parent != "." && !p.parents[parent]; parent = path.Dir(parent) {
+		p.parents[parent] = true
+	}
 	return nil
 }
 
@@ -262,14 +271,8 @@ func (p *projection) wheel(ctx context.Context, data []byte) error {
 }
 
 func (p *projection) directories() []string {
-	directories := map[string]bool{}
-	for name := range p.files {
-		for parent := path.Dir(name); parent != "."; parent = path.Dir(parent) {
-			directories[parent] = true
-		}
-	}
-	result := make([]string, 0, len(directories))
-	for name := range directories {
+	result := make([]string, 0, len(p.parents))
+	for name := range p.parents {
 		result = append(result, name)
 	}
 	sort.Strings(result)

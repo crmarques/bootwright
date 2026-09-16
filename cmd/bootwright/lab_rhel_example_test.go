@@ -376,9 +376,9 @@ func (p *labControllerPorts) Rebase(context.Context, prerequisites.BundleArea, p
 	return prerequisites.BootstrapDefinition{}, errors.New("unexpected bundle rebase")
 }
 
-func (p *labControllerPorts) Prepare(context.Context, prerequisites.BundleArea, prerequisites.BundleArea, prerequisites.Definition, prerequisites.SetupEgress, func(prerequisites.ProgressEvent)) error {
+func (p *labControllerPorts) Prepare(context.Context, prerequisites.BundleArea, prerequisites.BundleArea, prerequisites.Definition, prerequisites.SetupEgress, func(prerequisites.ProgressEvent)) (prerequisites.BundleInspection, error) {
 	p.effects++
-	return errors.New("unexpected bundle preparation")
+	return prerequisites.BundleInspection{}, errors.New("unexpected bundle preparation")
 }
 
 type labToolCatalog struct{ ports *labControllerPorts }

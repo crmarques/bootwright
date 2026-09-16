@@ -66,9 +66,9 @@ func (p *controllerPorts) Rebase(context.Context, prerequisites.BundleArea, prer
 	return prerequisites.BootstrapDefinition{}, errors.New("unexpected bundle rebase")
 }
 
-func (p *controllerPorts) Prepare(context.Context, prerequisites.BundleArea, prerequisites.BundleArea, prerequisites.Definition, prerequisites.SetupEgress, func(prerequisites.ProgressEvent)) error {
+func (p *controllerPorts) Prepare(context.Context, prerequisites.BundleArea, prerequisites.BundleArea, prerequisites.Definition, prerequisites.SetupEgress, func(prerequisites.ProgressEvent)) (prerequisites.BundleInspection, error) {
 	p.effects++
-	return errors.New("unexpected bundle preparation")
+	return prerequisites.BundleInspection{}, errors.New("unexpected bundle preparation")
 }
 
 func TestComposedControllerSuppliesEveryPort(t *testing.T) {

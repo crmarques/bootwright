@@ -459,6 +459,8 @@ func (a *controllerBundleArea) Write(ctx context.Context, path string, data []by
 	if err != nil || !sameIdentity(before, after) || after.Size != int64(size) {
 		return state("controller bundle file changed during publication")
 	}
+	// Reopening through the parent proves both the file and the directory that
+	// names it, so no separate directory verification is needed here.
 	current, err := openRelative(parent, name, pathHandle, 0)
 	if err != nil {
 		return state("controller bundle file was replaced")
@@ -468,9 +470,11 @@ func (a *controllerBundleArea) Write(ctx context.Context, path string, data []by
 	if err != nil || !sameFile(after, actual) {
 		return state("controller bundle file was replaced")
 	}
-	if err := a.store.syncDirectory(ctx, parent); err != nil {
-		return err
-	}
+	// The file's own contents are made durable above so an interrupted
+	// publication always resumes from correct bytes. Its directory entry is not
+	// synced per file: completion syncs the whole tree before sealing, and a
+	// name lost to a crash leaves the file absent, which the exact replay
+	// publishes again, rather than present with content it cannot attribute.
 	a.entries++
 	a.bytes += int64(size)
 	a.scanned = true

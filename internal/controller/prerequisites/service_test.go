@@ -241,22 +241,22 @@ func (b *testBundle) Rebase(_ context.Context, area BundleArea, retained Bootstr
 	return CanonicalBootstrap(value)
 }
 
-func (b *testBundle) Prepare(ctx context.Context, _ BundleArea, retained BundleArea, _ Definition, _ SetupEgress, _ func(ProgressEvent)) error {
+func (b *testBundle) Prepare(ctx context.Context, _ BundleArea, retained BundleArea, _ Definition, _ SetupEgress, _ func(ProgressEvent)) (BundleInspection, error) {
 	b.prepares++
 	b.retainedSeeds = append(b.retainedSeeds, retained != nil)
 	b.owner.events = append(b.owner.events, "prepare")
 	if b.owner.store.state.Receipt.Actions[0].Phase != "intent" {
-		return errors.New("installation without recorded intent")
+		return BundleInspection{}, errors.New("installation without recorded intent")
 	}
 	if b.cancel != nil {
 		b.cancel()
-		return ctx.Err()
+		return BundleInspection{}, ctx.Err()
 	}
 	if b.err != nil {
-		return b.err
+		return BundleInspection{}, b.err
 	}
 	b.ready = true
-	return nil
+	return BundleInspection{Ready: true, ToolsReady: b.toolsReady, Sealed: b.sealed, Recoverable: b.recoverable}, nil
 }
 
 type testCompiler struct {

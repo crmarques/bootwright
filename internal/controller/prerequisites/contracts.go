@@ -33,8 +33,10 @@ type BundleManager interface {
 	// a sealed area this host already holds, or nil: every approved source is
 	// read there before its publisher is contacted, so a resolution carried
 	// onto new automation acquires nothing again. A source that area cannot
-	// serve is acquired exactly as it would be without it.
-	Prepare(context.Context, BundleArea, BundleArea, Definition, SetupEgress, func(ProgressEvent)) error
+	// serve is acquired exactly as it would be without it. It returns the
+	// verification of what it published, so a complete closure is read back and
+	// qualified once rather than once by the adapter and again by its caller.
+	Prepare(context.Context, BundleArea, BundleArea, Definition, SetupEgress, func(ProgressEvent)) (BundleInspection, error)
 	// Rebase reprojects a retained resolution under the automation the running
 	// executable embeds, reading its sources from the sealed area that holds
 	// them. It contacts no publisher and changes no release, byte count or

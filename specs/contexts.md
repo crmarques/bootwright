@@ -185,7 +185,11 @@ identity. A bundle is bounded to 8 GiB total, 1 GiB per file, 32768 entries and
 depth 32. Symlinks, hard links, nested
 mounts, unsafe modes, unexpected entries and replacement refuse. Completion
 verifies and syncs the complete tree before sealing; sealed contents cannot be
-rewritten.
+rewritten. Each published file's own contents are made durable as it is written,
+so an interrupted publication always resumes from bytes it can attribute, while
+the directory entries naming them are synced with that tree at completion: a
+name lost to a crash leaves the file absent for the replay to publish again,
+never present with content the replay cannot attribute.
 
 Two kinds of namespace share that list and those rules, and differ only in what
 grants their write capability. The setup bundle is named by the approved

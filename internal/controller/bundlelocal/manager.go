@@ -119,13 +119,16 @@ func retainedSource(ctx context.Context, retained prerequisites.BundleArea, sour
 	return data
 }
 
-func (m *Manager) Prepare(ctx context.Context, area, retained prerequisites.BundleArea, definition prerequisites.Definition, egress prerequisites.SetupEgress, progress func(prerequisites.ProgressEvent)) error {
+// Prepare returns the verification of what it published, so the complete
+// closure is read back and the private interpreter qualified exactly once. The
+// caller decides on that evidence rather than repeating the whole pass.
+func (m *Manager) Prepare(ctx context.Context, area, retained prerequisites.BundleArea, definition prerequisites.Definition, egress prerequisites.SetupEgress, progress func(prerequisites.ProgressEvent)) (prerequisites.BundleInspection, error) {
 	record, err := validateDefinition(definition)
 	if err != nil {
-		return err
+		return prerequisites.BundleInspection{}, err
 	}
 	if m == nil || m.fetch == nil || m.probe == nil {
-		return bundleFailure("bundle preparation adapters are unavailable")
+		return prerequisites.BundleInspection{}, bundleFailure("bundle preparation adapters are unavailable")
 	}
 	// Every phase that can take seconds is announced first, because a silent
 	// acquisition, projection or interpreter probe looks identical to a hang.
@@ -143,25 +146,30 @@ func (m *Manager) Prepare(ctx context.Context, area, retained prerequisites.Bund
 	}
 	before, entries, err := inspectFiles(ctx, area, record, definition.Tools)
 	if err != nil {
-		return err
+		return prerequisites.BundleInspection{}, err
 	}
 	if !before.Recoverable {
-		return bundleFailure("existing bundle content is not attributable to the approved closure")
+		return prerequisites.BundleInspection{}, bundleFailure("existing bundle content is not attributable to the approved closure")
 	}
 	if before.Ready {
+		// An earlier attempt published this closure. Its bytes were just read
+		// back, so only the interpreter still has to prove that it runs.
 		report("qualifying the private interpreter")
-		return m.probe(ctx, area, definition)
+		if err := m.probe(ctx, area, definition); err != nil {
+			return prerequisites.BundleInspection{}, err
+		}
+		return before, nil
 	}
 	if err := area.EnsureDirectory(ctx, "sources"); err != nil {
-		return err
+		return prerequisites.BundleInspection{}, err
 	}
 	projected := projectionFor(record)
 	if err := projected.automation(ctx); err != nil {
-		return err
+		return prerequisites.BundleInspection{}, err
 	}
 	for index, source := range record.Baseline {
 		if err := ctx.Err(); err != nil {
-			return err
+			return prerequisites.BundleInspection{}, err
 		}
 		name := sourcePath(source)
 		var data []byte
@@ -175,29 +183,29 @@ func (m *Manager) Prepare(ctx context.Context, area, retained prerequisites.Bund
 			data, err = m.fetch(ctx, source, egress)
 		}
 		if err != nil {
-			return err
+			return prerequisites.BundleInspection{}, err
 		}
 		if !approvedBytes(source, data) {
-			return bundleFailure("dependency source changed before bundle publication")
+			return prerequisites.BundleInspection{}, bundleFailure("dependency source changed before bundle publication")
 		}
 		if err := projectSource(ctx, projected, index, data); err != nil {
-			return err
+			return prerequisites.BundleInspection{}, err
 		}
 		if _, found := entries[name]; !found {
 			// Retain verified publisher bytes before any derived file. Exact
 			// retry can then reconstruct every attributable partial projection.
 			if err := area.Write(ctx, name, data, false); err != nil {
-				return err
+				return prerequisites.BundleInspection{}, err
 			}
 		}
 	}
 	if !projected.matches(record.Bootstrap) {
-		return bundleFailure("bootstrap projection differs from its frozen file closure")
+		return prerequisites.BundleInspection{}, bundleFailure("bootstrap projection differs from its frozen file closure")
 	}
 	report("publishing " + strconv.Itoa(len(projected.files)) + " bundle files")
 	for _, name := range projected.directories() {
 		if err := area.EnsureDirectory(ctx, name); err != nil {
-			return err
+			return prerequisites.BundleInspection{}, err
 		}
 	}
 	names := make([]string, 0, len(projected.files))
@@ -207,33 +215,36 @@ func (m *Manager) Prepare(ctx context.Context, area, retained prerequisites.Bund
 	sort.Strings(names)
 	for _, name := range names {
 		if err := ctx.Err(); err != nil {
-			return err
+			return prerequisites.BundleInspection{}, err
 		}
 		file := projected.files[name]
 		if existing, found := entries[name]; found {
 			data, err := area.Read(ctx, name, len(file.data))
 			if err != nil {
-				return err
+				return prerequisites.BundleInspection{}, err
 			}
 			if existing.Directory || existing.Executable != file.executable || !bytes.Equal(data, file.data) {
-				return bundleFailure("existing bundle file changed during preparation")
+				return prerequisites.BundleInspection{}, bundleFailure("existing bundle file changed during preparation")
 			}
 			continue
 		}
 		if err := area.Write(ctx, name, file.data, file.executable); err != nil {
-			return err
+			return prerequisites.BundleInspection{}, err
 		}
 	}
 	report("verifying the published bundle")
 	after, _, err := inspectFiles(ctx, area, record, definition.Tools)
 	if err != nil {
-		return err
+		return prerequisites.BundleInspection{}, err
 	}
 	if !after.Ready {
-		return bundleFailure("published bundle does not match its complete approved projection")
+		return after, bundleFailure("published bundle does not match its complete approved projection")
 	}
 	report("qualifying the private interpreter")
-	return m.probe(ctx, area, definition)
+	if err := m.probe(ctx, area, definition); err != nil {
+		return prerequisites.BundleInspection{}, err
+	}
+	return after, nil
 }
 
 func validateDefinition(definition prerequisites.Definition) (catalogRecord, error) {

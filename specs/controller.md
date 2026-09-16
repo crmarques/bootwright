@@ -150,7 +150,10 @@ foundation is refused rather than carried, because no local projection can
 establish one. Preflight reports the incompatibility and carries nothing.
 
 A dependency is checked for identity, version and integrity when setup
-acquires, publishes or installs it. Afterwards readiness is presence only, with
+acquires, publishes or installs it. Publication reads the complete closure back
+and qualifies the private interpreter once, and that verification is the
+postcondition its caller decides on; the same closure is never read back and
+probed twice for one effect. Afterwards readiness is presence only, with
 no version comparison: the sealed bundle's published files by count and size,
 its retained sources by size, the private interpreter, each target tool's
 source and files, and each selected native root package by name. The report

@@ -196,10 +196,10 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 				var area BundleArea
 				area, err = tx.Bundle(ctx, current.definition.CatalogDigest)
 				if err == nil {
-					err = s.bundle.Prepare(ctx, area, retainedArea(ctx, tx, *current), current.definition, current.route(), progress)
-				}
-				if err == nil {
-					current.bundle, err = s.bundle.Inspect(ctx, area, current.definition, true)
+					// Preparation reads back and qualifies exactly what it
+					// published, so its verification is the postcondition
+					// rather than a second full pass over the same closure.
+					current.bundle, err = s.bundle.Prepare(ctx, area, retainedArea(ctx, tx, *current), current.definition, current.route(), progress)
 					if err == nil && !current.bundle.Ready {
 						err = failure("controller.unknown", "execution bundle postcondition could not be verified", "repeat the exact setup after inspecting the retained evidence")
 					}

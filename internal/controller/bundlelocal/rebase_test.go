@@ -168,7 +168,11 @@ func TestRebaseRefusesADifferentProvidedFoundation(t *testing.T) {
 func TestPreparationRecoversRetainedSourcesInsteadOfAcquiringThem(t *testing.T) {
 	retained, held := retainedBootstrap(t)
 	manager := New(nil)
-	manager.probe = func(context.Context, prerequisites.BundleArea, prerequisites.Definition) error { return nil }
+	probes := 0
+	manager.probe = func(context.Context, prerequisites.BundleArea, prerequisites.Definition) error {
+		probes++
+		return nil
+	}
 	manager.fetch = func(_ context.Context, source prerequisites.DependencySource, _ prerequisites.SetupEgress) ([]byte, error) {
 		t.Fatalf("acquired %s although this host retains it", source.ID)
 		return nil, nil
@@ -183,10 +187,16 @@ func TestPreparationRecoversRetainedSourcesInsteadOfAcquiringThem(t *testing.T) 
 	}
 	var details []string
 	area := newMemoryArea()
-	if err := manager.Prepare(t.Context(), area, held, definition, prerequisites.SetupEgress{}, func(event prerequisites.ProgressEvent) {
+	published, err := manager.Prepare(t.Context(), area, held, definition, prerequisites.SetupEgress{}, func(event prerequisites.ProgressEvent) {
 		details = append(details, event.Detail)
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatal(err)
+	}
+	// Preparation returns what it verified, so the closure is read back and the
+	// interpreter qualified once rather than again by the caller.
+	if !published.Ready || !published.Recoverable || probes != 1 {
+		t.Fatalf("preparation returned %+v after %d interpreter probes", published, probes)
 	}
 	recovered := 0
 	for _, detail := range details {
