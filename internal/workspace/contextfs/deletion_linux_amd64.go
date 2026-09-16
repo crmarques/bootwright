@@ -25,6 +25,13 @@ const (
 	maxContextEntries = maxSecretEntries + maxOperationEntries + maxRevisions*(desiredstate.MaxFiles+desiredstate.MaxMarkers+3) + 16
 )
 
+// contextStateEntry names everything one context's runtime state may hold: its
+// reservation and mutation records, the operations a registered lifecycle
+// operation owns, and the runs a bounded operation retains its output in.
+func contextStateEntry(name string) bool {
+	return name == "reservation.json" || name == "mutation.json" || name == "operations" || name == "runs"
+}
+
 // Context traversal accepts only the owned layout. It never follows a link or
 // interprets a path supplied by desired state or secret material.
 func contextEntryAllowed(path, name string, directory bool) bool {
@@ -32,10 +39,10 @@ func contextEntryAllowed(path, name string, directory bool) bool {
 	case "":
 		return directory && (name == "state" || name == "desired-state" || name == "secrets") || !directory && name == "context.yaml"
 	case "state":
-		if directory {
-			return name == "operations"
+		if !contextStateEntry(name) {
+			return false
 		}
-		return name == "reservation.json" || name == "mutation.json"
+		return directory == (name == "operations" || name == "runs")
 	case "desired-state":
 		return directory && name == "revisions"
 	case "desired-state/revisions":
@@ -65,10 +72,14 @@ func contextEntryAllowed(path, name string, directory bool) bool {
 		_, err := secretPath(name, 1, 1)
 		return !directory && err == nil
 	}
-	// The operations area owns its own naming and bounds, so deletion admits
-	// exactly what that area was allowed to create. Without this a context that
-	// ever ran one operation can never be deleted.
+	// The operations and runs areas own their own naming and bounds, so
+	// deletion admits exactly what those areas were allowed to create. Without
+	// this a context that ever ran one operation or one bounded run can never
+	// be deleted.
 	if path == "state/operations" || strings.HasPrefix(path, "state/operations/") {
+		return safeOperationName(name)
+	}
+	if path == "state/runs" || strings.HasPrefix(path, "state/runs/") {
 		return safeOperationName(name)
 	}
 	return false
@@ -109,11 +120,11 @@ func contextDirectoryLimit(path string) int {
 	case "":
 		return 4
 	case "state":
-		// reservation.json, mutation.json and operations: exactly what
+		// reservation.json, mutation.json, operations and runs: exactly what
 		// verifyContextLayout admits. A released reservation is an empty
-		// record, not a removed file, so a destroyed context always has all
-		// three and a lower bound here would refuse to delete it.
-		return 3
+		// record, not a removed file, so a destroyed context always has the
+		// first three and a lower bound here would refuse to delete it.
+		return 4
 	case "desired-state":
 		return 1
 	case "desired-state/revisions":
@@ -123,6 +134,9 @@ func contextDirectoryLimit(path string) int {
 		return maxSecretEntries
 	}
 	if path == "state/operations" || strings.HasPrefix(path, "state/operations/") {
+		return maxOperationEntries
+	}
+	if path == "state/runs" || strings.HasPrefix(path, "state/runs/") {
 		return maxOperationEntries
 	}
 	return desiredstate.MaxFiles + desiredstate.MaxMarkers + 1

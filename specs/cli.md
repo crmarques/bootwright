@@ -588,7 +588,11 @@ operation and a lifecycle mutation never run against the same host at once.
 A request is not evidence: the result reports the state the controller proved
 once the operation settled, together with the state before it and whether
 anything changed. A state that never arrived within the bounded window is
-`lifecycle.unknown` with exit `1`, never a success. Stopping asks the operating
+`lifecycle.unknown` with exit `1`, never a success. What the adapter printed is
+[retained for the run](cli/output.md#bounded-run-output) and named as `Logs`
+before it runs and again in its result, because a power request that refuses
+reports a diagnostic rather than a result and that output is all there is to
+read. Stopping asks the operating
 system to shut down and polls it to off; `--force` cuts the power instead, and
 is a separate request rather than a fallback. Restarting proves the stop before
 it starts, so an interrupted restart is never reported as settled.

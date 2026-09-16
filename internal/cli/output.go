@@ -143,6 +143,16 @@ func writeHumanDiagnostics(out io.Writer, diagnostics []diagnostic) error {
 	return nil
 }
 
+// displayLines escapes each entry of a list a result names, and is never nil,
+// because an envelope field that lists nothing still lists it.
+func displayLines(values []string) []string {
+	escaped := make([]string, 0, len(values))
+	for _, value := range values {
+		escaped = append(escaped, escapeDisplayLine(value))
+	}
+	return escaped
+}
+
 func escapeDisplayLine(value string) string {
 	var escaped strings.Builder
 	for len(value) > 0 {

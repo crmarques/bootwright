@@ -31,6 +31,16 @@ type View interface {
 	Operations() operationstore.Area
 }
 
+// RunView is what a bounded operation outside the lifecycle reads. It adds
+// exactly two things an inspection has no use for: the controller's approved
+// execution bundle, which the adapter call runs inside, and a writable area
+// holding what that adapter printed. Neither is desired state, ownership or a
+// continuation cursor, so a bounded run still registers no operation.
+type RunView interface {
+	View
+	Runs() operationstore.Area
+}
+
 // Transaction adds the publications an operation performs. Each holds the root
 // lock and the context lease for the whole callback, so reservations,
 // controller evidence and operation records stay coherent while effects run.
@@ -56,6 +66,7 @@ type Transaction interface {
 
 type Workspace interface {
 	ReadLifecycle(context.Context, string, func(View) error) error
+	RunLifecycle(context.Context, string, func(RunView) error) error
 	MutateLifecycle(context.Context, string, func(Transaction) error) error
 }
 

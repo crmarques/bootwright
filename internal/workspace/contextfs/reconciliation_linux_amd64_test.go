@@ -480,18 +480,34 @@ func TestLifecycleTransactionOpensTheApprovedBundle(t *testing.T) {
 	}
 }
 
-// A bounded runtime registers no operation, so it reads the context instead of
-// mutating it. The read must open the same approved bundle, and the capability
-// must expire with the callback that received it.
-func TestLifecycleReadOpensTheApprovedBundle(t *testing.T) {
+// A bounded run registers no operation, so it reads the context instead of
+// mutating it. It still executes inside the approved bundle and still retains
+// what its adapter printed, and both capabilities expire with the callback.
+func TestABoundedRunOpensTheApprovedBundleAndRetainsItsOutput(t *testing.T) {
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	digest := sealedBundleFixture(t, store, record)
 	var opener func(context.Context, string) (prerequisites.BundleArea, error)
-	if err := store.ReadLifecycle(ctx, "example", func(view lifecycle.View) error {
+	var runs operationstore.Area
+	if err := store.RunLifecycle(ctx, "example", func(view lifecycle.RunView) error {
 		opener = view.Controller().OpenBundle
+		runs = view.Runs()
 		if opener == nil {
-			t.Fatal("the lifecycle read offers no execution bundle")
+			t.Fatal("the bounded run offers no execution bundle")
+		}
+		if err := runs.EnsureDirectory(ctx, "run-"+strings.Repeat("a", 32)); err != nil {
+			t.Fatalf("a bounded run could not open its own area: %v", err)
+		}
+		target := "run-" + strings.Repeat("a", 32) + "/run.output"
+		if err := runs.Append(ctx, target, []byte("what the adapter printed\n")); err != nil {
+			t.Fatalf("a bounded run could not retain its output: %v", err)
+		}
+		data, found, err := runs.Read(ctx, target, 4096)
+		if err != nil || !found || string(data) != "what the adapter printed\n" {
+			t.Fatalf("retained output = %q %t (%v)", data, found, err)
+		}
+		if location := runs.Location(); !strings.HasSuffix(location, "/state/runs") {
+			t.Fatalf("a bounded run names %q rather than its own area", location)
 		}
 		area, err := opener(ctx, digest)
 		if err != nil || area == nil {
@@ -507,10 +523,32 @@ func TestLifecycleReadOpensTheApprovedBundle(t *testing.T) {
 		}
 		return nil
 	}); err != nil {
-		t.Fatalf("lifecycle read failed: %#v", diagnostics.Of(err))
+		t.Fatalf("bounded run failed: %#v", diagnostics.Of(err))
 	}
 	if area, err := opener(ctx, digest); err == nil || area != nil {
-		t.Fatalf("the execution bundle opened after the read closed: %v (%v)", area, err)
+		t.Fatalf("the execution bundle opened after the run closed: %v (%v)", area, err)
+	}
+	if err := runs.Append(ctx, "run-"+strings.Repeat("a", 32)+"/run.output", []byte("late\n")); err == nil {
+		t.Fatal("an expired bounded run still retained output")
+	}
+}
+
+// An inspection runs no adapter, so it is offered neither the bundle nor a
+// writable area: a read that creates nothing is what plan and status rely on.
+func TestALifecycleInspectionRunsNothing(t *testing.T) {
+	ctx := context.Background()
+	store, record := lifecycleFixture(t)
+	sealedBundleFixture(t, store, record)
+	if err := store.ReadLifecycle(ctx, "example", func(view lifecycle.View) error {
+		if view.Controller().OpenBundle != nil {
+			t.Fatal("an inspection was offered the execution bundle")
+		}
+		if _, ok := view.(lifecycle.RunView); ok {
+			t.Fatal("an inspection was offered a bounded run's own area")
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("lifecycle read failed: %#v", diagnostics.Of(err))
 	}
 }
 
@@ -549,6 +587,43 @@ func TestDestroyedContextIsDeletable(t *testing.T) {
 		return tx.Delete(ctx, record)
 	}); err != nil {
 		t.Fatalf("deleting a destroyed context failed: %#v", diagnostics.Of(err))
+	}
+}
+
+// The runs area is a fourth entry under a context's state, and every guard
+// that enumerates that layout has to admit it: otherwise one bounded run
+// leaves a context that can never be deleted and refuses every later secret
+// mutation.
+func TestAContextThatRanABoundedRunStaysUsableAndDeletable(t *testing.T) {
+	ctx := context.Background()
+	store, record := lifecycleFixture(t)
+	// All four entries at once: a context that ran an operation and a bounded
+	// run is the layout every guard has to walk.
+	if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		return tx.Operations().WriteExclusive(ctx, "index.json", []byte("{\"version\":1}\n"))
+	}); err != nil {
+		t.Fatalf("operation publication failed: %#v", diagnostics.Of(err))
+	}
+	if err := store.RunLifecycle(ctx, "example", func(view lifecycle.RunView) error {
+		identity := "run-" + strings.Repeat("a", 32)
+		if err := view.Runs().EnsureDirectory(ctx, identity); err != nil {
+			return err
+		}
+		return view.Runs().Append(ctx, identity+"/run.output", []byte("what the adapter printed\n"))
+	}); err != nil {
+		t.Fatalf("bounded run failed: %#v", diagnostics.Of(err))
+	}
+	selected := secretstore.Context{Name: record.Name, Mode: string(record.Mode), Revision: record.Revision}
+	if err := store.MutateSecrets(ctx, selected, func(secretstore.Area) error { return nil }); err != nil {
+		t.Fatalf("a retained run refused a later secret mutation: %#v", diagnostics.Of(err))
+	}
+	if err := store.Transact(ctx, false, nil, func(tx contexts.Transaction) error {
+		if _, err := tx.MutationState(ctx, record.Name); err != nil {
+			return err
+		}
+		return tx.Delete(ctx, record)
+	}); err != nil {
+		t.Fatalf("deleting a context that ran one bounded run failed: %#v", diagnostics.Of(err))
 	}
 }
 

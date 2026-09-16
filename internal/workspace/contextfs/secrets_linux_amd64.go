@@ -266,12 +266,12 @@ func verifyContextLayout(ctx context.Context, dir *directory) error {
 			if name != "secrets" {
 				maximum := 1
 				if name == "state" {
-					maximum = 3
+					maximum = 4
 				}
 				entries, listErr := directoryNames(child, maximum)
 				if listErr == nil {
 					for _, entry := range entries {
-						if name == "state" && entry != "reservation.json" && entry != "mutation.json" && entry != "operations" || name == "desired-state" && entry != "revisions" {
+						if name == "state" && !contextStateEntry(entry) || name == "desired-state" && entry != "revisions" {
 							listErr = state("context contains unsupported state; mutation is refused")
 							break
 						}

@@ -71,22 +71,26 @@ func operationPath(target string, minimum int) ([]string, error) {
 // is valid only while its owning callback holds the root lock and the context
 // lease, and it never interprets the records it publishes.
 type operationArea struct {
-	store    *Store
+	store *Store
+	// subtree is the one directory of the context's state this area may reach:
+	// the operation records a registered lifecycle operation owns, or the runs
+	// a bounded operation retains beside them. Neither area can name the other.
+	subtree  string
 	context  *directory
 	name     string
 	active   func() bool
 	readOnly bool
 }
 
-// Location names this context's operation subtree on the host. It is built for
-// a human to read, never opened through: every access still descends from the
-// held, verified handles above.
+// Location names this area's subtree on the host. It is built for a human to
+// read, never opened through: every access still descends from the held,
+// verified handles above.
 func (a *operationArea) Location() string {
 	root, err := a.store.rootPath()
-	if err != nil || a.name == "" {
+	if err != nil || a.name == "" || a.subtree == "" {
 		return ""
 	}
-	return filepath.Join(root, "contexts", a.name, "state", "operations")
+	return filepath.Join(root, "contexts", a.name, "state", a.subtree)
 }
 
 func (a *operationArea) available(ctx context.Context, mutation bool) error {
@@ -102,16 +106,19 @@ func (a *operationArea) available(ctx context.Context, mutation bool) error {
 	return a.context.verify()
 }
 
-// root opens the operations directory, creating it only for a mutation. A read
+// root opens this area's own subtree, creating it only for a mutation. A read
 // never repairs or initializes state.
 func (a *operationArea) root(ctx context.Context, create bool) (*directory, func(), error) {
+	if !safeOperationName(a.subtree) {
+		return nil, nil, state("lifecycle area subtree is unsafe")
+	}
 	runtime, err := openDirectory(a.context, "state")
 	if err != nil {
 		return nil, nil, state("context state directory is unsafe")
 	}
-	operations, err := openDirectory(runtime, "operations")
+	operations, err := openDirectory(runtime, a.subtree)
 	if errors.Is(err, syscall.ENOENT) && create {
-		operations, err = a.store.newDirectory(ctx, runtime, "operations")
+		operations, err = a.store.newDirectory(ctx, runtime, a.subtree)
 	}
 	if err != nil {
 		runtime.file.Close()

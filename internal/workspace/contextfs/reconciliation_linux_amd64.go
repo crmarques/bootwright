@@ -34,6 +34,16 @@ func (v *lifecycleView) Controller() prerequisites.StorageView { return v.contro
 func (v *lifecycleView) Evidence() []byte                      { return slices.Clone(v.evidence) }
 func (v *lifecycleView) Operations() operationstore.Area       { return v.operations }
 
+// lifecycleRun is the view one bounded operation outside the lifecycle holds.
+// It adds the area its adapter output is retained in and nothing else: it
+// publishes no evidence, takes no lease and registers no operation.
+type lifecycleRun struct {
+	*lifecycleView
+	runs *operationArea
+}
+
+func (r *lifecycleRun) Runs() operationstore.Area { return r.runs }
+
 type lifecycleTransaction struct {
 	lifecycleView
 	base    *transaction
@@ -69,6 +79,26 @@ func (s *Store) ReadLifecycle(ctx context.Context, name string, callback func(li
 	if callback == nil {
 		return state("lifecycle inspection callback is missing")
 	}
+	return s.readLifecycle(ctx, name, false, func(view *lifecycleView, _ *operationArea) error {
+		return callback(view)
+	})
+}
+
+// RunLifecycle takes the same coherent read and adds the two capabilities one
+// bounded operation outside the lifecycle needs: the controller's approved
+// execution bundle, which its adapter call runs inside, and a writable area
+// for what that adapter prints. It registers no operation, freezes no plan and
+// publishes no evidence, so what it retains is troubleshooting material alone.
+func (s *Store) RunLifecycle(ctx context.Context, name string, callback func(lifecycle.RunView) error) error {
+	if callback == nil {
+		return state("bounded lifecycle run callback is missing")
+	}
+	return s.readLifecycle(ctx, name, true, func(view *lifecycleView, runs *operationArea) error {
+		return callback(&lifecycleRun{lifecycleView: view, runs: runs})
+	})
+}
+
+func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, callback func(*lifecycleView, *operationArea) error) error {
 	if !contextName(name) {
 		return state("lifecycle inspection requires an explicit context name")
 	}
@@ -131,38 +161,42 @@ func (s *Store) ReadLifecycle(ctx context.Context, name string, callback func(li
 			area.close()
 		}
 	}()
-	// A bounded runtime registers no operation, so the read it takes must
-	// offer the same opener a mutation does; without it nothing outside the
-	// lifecycle can execute inside the approved bundle at all.
-	guard := func(call context.Context) error {
-		actual, err := readControllerStored(call, root, registry)
-		if err != nil || !bytes.Equal(actual.data, stored.data) || actual.data != nil && !sameFile(actual.identity, stored.identity) {
-			return state("controller evidence changed during inspection")
+	// A bounded run executes inside the controller's approved bundle, so it
+	// needs the same opener a mutation has. An inspection runs nothing and is
+	// offered none.
+	if bounded {
+		guard := func(call context.Context) error {
+			actual, err := readControllerStored(call, root, registry)
+			if err != nil || !bytes.Equal(actual.data, stored.data) || actual.data != nil && !sameFile(actual.identity, stored.identity) {
+				return state("controller evidence changed during the run")
+			}
+			return nil
 		}
-		return nil
+		controllerView.OpenBundle = func(call context.Context, id string) (prerequisites.BundleArea, error) {
+			if !active {
+				return nil, state("bounded lifecycle run capability has closed")
+			}
+			if err := guard(call); err != nil {
+				return nil, err
+			}
+			area, err := openControllerBundle(call, s, root, registry, stored, id, func() bool { return active }, false, guard)
+			if err != nil || area == nil {
+				return nil, err
+			}
+			areas = append(areas, area)
+			return area, nil
+		}
 	}
-	controllerView.OpenBundle = func(call context.Context, id string) (prerequisites.BundleArea, error) {
-		if !active {
-			return nil, state("lifecycle inspection capability has closed")
-		}
-		if err := guard(call); err != nil {
-			return nil, err
-		}
-		area, err := openControllerBundle(call, s, root, registry, stored, id, func() bool { return active }, false, guard)
-		if err != nil || area == nil {
-			return nil, err
-		}
-		areas = append(areas, area)
-		return area, nil
-	}
+	live := func() bool { return active }
 	view := &lifecycleView{
 		identity:   lifecycle.ContextIdentity{Name: record.Name, Revision: record.Revision},
 		inputs:     inputs,
 		controller: controllerView,
 		evidence:   evidence,
-		operations: &operationArea{store: s, context: dir, name: record.Name, active: func() bool { return active }, readOnly: true},
+		operations: &operationArea{store: s, subtree: "operations", context: dir, name: record.Name, active: live, readOnly: true},
 	}
-	return safeError(callback(view))
+	runs := &operationArea{store: s, subtree: "runs", context: dir, name: record.Name, active: live, readOnly: !bounded}
+	return safeError(callback(view, runs))
 }
 
 // MutateLifecycle holds the exclusive root lock and the context lease for the
@@ -204,7 +238,7 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 				inputs:     inputs,
 				controller: controllerView,
 				evidence:   evidence,
-				operations: &operationArea{store: s, context: dir, name: record.Name, active: func() bool { return active }},
+				operations: &operationArea{store: s, subtree: "operations", context: dir, name: record.Name, active: func() bool { return active }},
 			},
 			base: t, stored: stored, context: dir,
 		}

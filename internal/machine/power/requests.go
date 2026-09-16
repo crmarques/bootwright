@@ -57,6 +57,11 @@ type Result struct {
 	Power    string
 	Previous string
 	Changed  bool
+	// LogLocation and Logs name where this run's adapter output was retained:
+	// the directory on this host, and the file inside the context's own state.
+	// They are troubleshooting material, never evidence of what happened.
+	LogLocation string
+	Logs        []string
 }
 
 // Canonical encodes the request exactly as the adapter consumes it, refusing

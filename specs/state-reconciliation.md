@@ -107,7 +107,11 @@ Context-free read-only commands do not access the root except available
 [Controller inspection](controller.md#selection-and-command-journeys), which
 may read shared host metadata without selecting a context. Context-backed reads
 acquire the existing store's shared lock and never create, repair or migrate
-state. Workspace defines the narrow explicit retry of pending creation/deletion.
+state. A bounded run takes the same shared lock and creates exactly one thing:
+the file its own adapter output is
+[retained](cli/output.md#bounded-run-output) in. That file is troubleshooting
+material, never state, so a run still repairs and migrates nothing.
+Workspace defines the narrow explicit retry of pending creation/deletion.
 
 State reconciliation owns `<operation-id>`, `<block-id>`, and effect- and
 resolution-attempt numbers. The identity contract is:
@@ -116,6 +120,7 @@ resolution-attempt numbers. The identity contract is:
 | --- | --- |
 | `<context-id>` | Stable and unique within `<state-root>` for one lifecycle unit. |
 | `<operation-id>` | Immutable and unique within one context; allocated before its operation record. |
+| `<run-id>` | Immutable and unique within one context; allocated before the bounded run it names, and never an operation identity. |
 | `<block-id>` | Immutable and unique within one operation's frozen plan. |
 | `<attempt-number>` | Monotonic within one block, from `1` through `999999`, never reused, and rendered as six decimal digits. |
 | `<resolution-number>` | Monotonic within one effect attempt, from `1` through `999999`, never reused, and rendered as six decimal digits. |
@@ -133,7 +138,8 @@ A context is identified by its name alone, under the
 [context identity contract](contexts.md#identity-and-selection); Workspace
 reserves it at creation, before input or operations exist.
 State reconciliation allocates operation IDs as `op-` followed by 32 lowercase
-hexadecimal characters from 128 OS cryptographically secure random bits.
+hexadecimal characters from 128 OS cryptographically secure random bits, and
+run IDs the same way under `run-`, so no identity can be read as the other's.
 
 Reserve operation candidates exclusively, checking existing identities; a
 collision retries with fresh entropy at most 16 times. Random failure has no

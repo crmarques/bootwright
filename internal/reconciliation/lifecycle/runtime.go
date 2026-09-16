@@ -2,11 +2,19 @@ package lifecycle
 
 import (
 	"context"
+	"path"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 )
+
+// runOutputName is what one bounded run retains beside nothing else: it
+// publishes no structured events, so there is no log for its output to sit
+// next to.
+const runOutputName = "run.output"
 
 // RuntimeRequest names the context whose approved bundle a bounded operation
 // runs inside, and the Secret declarations that operation needs bound.
@@ -24,6 +32,14 @@ type Runtime struct {
 	Bundle   prerequisites.BundleLocation
 	Area     prerequisites.BundleArea
 	Material map[string]secrets.Material
+	// Output retains what this run's adapter prints. LogLocation names the
+	// directory holding it on this host, and Logs names the same file inside
+	// the context's own state. A caller hands Output to the adapter and names
+	// both in its result; nothing reads them back, and a retention fault never
+	// changes what the run reports.
+	Output      prerequisites.RunOutput
+	LogLocation string
+	Logs        []string
 }
 
 // WithRuntime lends the controller's approved execution boundary to one
@@ -55,17 +71,51 @@ func (s Service) WithRuntime(ctx context.Context, request RuntimeRequest, call f
 			_, _ = s.binder.Release(ctx, custody.BindingRequest{ContextName: name, BindingID: binding})
 		}
 	}()
-	return s.workspace.ReadLifecycle(ctx, name, func(view View) error {
+	return s.workspace.RunLifecycle(ctx, name, func(view RunView) error {
 		area, location, requirement, err := approvedBundle(ctx, view)
 		if err != nil {
 			return err
 		}
+		output, target, directory, err := s.retain(ctx, view)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = output.Close(ctx) }()
 		return s.guard.WithPython(ctx, area, requirement, func(launch prerequisites.PythonLaunch, _ func() error) error {
 			return call(ctx, Runtime{
 				Context: view.Identity(), Launch: launch, Bundle: location, Area: area, Material: material,
+				Output: output, LogLocation: directory, Logs: []string{target},
 			})
 		})
 	})
+}
+
+// retain opens the file this run's adapter output is kept in, under an
+// identity of its own. The directory exists before the call, so the path a
+// result names is one an operator can open while the run is still going.
+func (s Service) retain(ctx context.Context, view RunView) (*operationstore.AdapterOutput, string, string, error) {
+	area := view.Runs()
+	identity, err := reconciliation.AllocateRunID(s.options.Entropy, func(candidate string) bool {
+		_, found, _ := area.Read(ctx, path.Join(candidate, runOutputName), 1)
+		return found
+	})
+	if err != nil {
+		return nil, "", "", err
+	}
+	target := path.Join(identity, runOutputName)
+	if err := area.EnsureDirectory(ctx, identity); err != nil {
+		return nil, "", "", err
+	}
+	// Exclusive creation is what proves the name is this run's own, and it
+	// leaves the file an operator was told about already there to open.
+	if err := area.WriteExclusive(ctx, target, nil); err != nil {
+		return nil, "", "", err
+	}
+	directory := area.Location()
+	if directory != "" {
+		directory = path.Join(directory, identity)
+	}
+	return s.options.Operations(area).OpenAdapterOutput(ctx, target), target, directory, nil
 }
 
 // lend freezes exactly the Secret versions one bounded operation reads. The

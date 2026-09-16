@@ -388,6 +388,7 @@ machine/power.Service
    ─Runtime────────→ reconciliation/lifecycle.Service, which lends the approved bundle and binds its Secrets
    ─Runner─────────→ reconciliation/ansiblerunner.Runner
    ─Confirmer──────→ internal/cli.Confirmation
+   ─Reporter───────→ internal/cli.LifecycleProgressPresenter, for the one line it reports
 
 workspace/contexts.Service
    ─Repository, Transaction, ControllerInputGuard→ workspace/contextfs.Store
@@ -498,13 +499,14 @@ production binding; tests substitute fakes through the same interface.
 | `reconciliation/lifecycle` | `Inputs` | ReadInputs | `workspace/contexts.Inputs` |
 | `reconciliation/lifecycle` | `Compiler` | Compile | `desiredstate/compilation.Compiler` |
 | `reconciliation/lifecycle` | `SecretBinder` | Bind, Reopen, Release | `secrets/custody.Service` |
-| `reconciliation/lifecycle` | `Workspace` | ReadLifecycle, MutateLifecycle | `workspace/contextfs.Store` |
+| `reconciliation/lifecycle` | `Workspace` | ReadLifecycle, RunLifecycle, MutateLifecycle | `workspace/contextfs.Store` |
 | `reconciliation/lifecycle` | `LifecycleTransaction` | Context, Inputs, Controller, Operations, Evidence, PublishEvidence, Bind, Reserve, Release, ClientArea, SealClientArea, RetainDependencies | `contextfs` lifecycle transaction |
 | `reconciliation/lifecycle` | `OperationStore` | Index, Register, ReadOperation, ReadPlan, BlockState, PublishBlock, PublishAttempt, RecordPreparation, OpenLog, Complete | `reconciliation/operationstore.Store` |
 | `machine/inventory`, `machine/access`, `machine/power` | `EffectiveState` | RenderEffective | `desiredstate/compilation.Service` |
 | `machine/inventory`, `machine/power` | `Ownership` | Ownership | composition adapter over `reconciliation/lifecycle.Service` |
 | `machine/power` | `Runtime` | WithRuntime | `reconciliation/lifecycle.Service` |
 | `machine/power` | `Runner` | Run | `reconciliation/ansiblerunner.Runner` |
+| `machine/power` | `Reporter` | ReportLogLocation | `internal/cli.LifecycleProgressPresenter` |
 | `reconciliation/lifecycle` | `HostIdentity` | Identity | `controller/hostlinux.Inspector` |
 | `reconciliation/lifecycle` | `AutomationIdentity` | CatalogDigest | composition value over `controller/bundlelocal` and the embedded collection |
 | `reconciliation/lifecycle` | `ExecutionGuard` | WithPython | `controller/bundlelocal.ExecutionGuard` |

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"slices"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/availability"
@@ -20,11 +21,12 @@ type Service struct {
 	runtime   Runtime
 	runner    Runner
 	confirmer Confirmer
+	reporter  Reporter
 	selection machine.CurrentSelection
 }
 
-func New(state EffectiveState, ownership Ownership, runtime Runtime, runner Runner, confirmer Confirmer, selection machine.CurrentSelection) Service {
-	return Service{state: state, ownership: ownership, runtime: runtime, runner: runner, confirmer: confirmer, selection: selection}
+func New(state EffectiveState, ownership Ownership, runtime Runtime, runner Runner, confirmer Confirmer, reporter Reporter, selection machine.CurrentSelection) Service {
+	return Service{state: state, ownership: ownership, runtime: runtime, runner: runner, confirmer: confirmer, reporter: reporter, selection: selection}
 }
 
 // Start converges one Machine to powered on.
@@ -110,6 +112,12 @@ func (s Service) execute(ctx context.Context, name string, frozen Request) (*Res
 	references := append([]string{frozen.Controller.CredentialsRef}, frozen.Placement.SecretReferences()...)
 	var result *Result
 	err = s.runtime.WithRuntime(ctx, lifecycle.RuntimeRequest{ContextName: name, Secrets: references}, func(inner context.Context, runtime lifecycle.Runtime) error {
+		// The location is named before the adapter runs, because a run that
+		// refuses reports a diagnostic rather than this result, and its output
+		// is exactly what the operator is then told to read.
+		if s.reporter != nil {
+			s.reporter.ReportLogLocation(inner, runtime.LogLocation)
+		}
 		run, err := s.runner.Run(inner, invocation(runtime, frozen, canonical, digest))
 		if err != nil {
 			return err
@@ -121,6 +129,7 @@ func (s Service) execute(ctx context.Context, name string, frozen Request) (*Res
 		result = &Result{
 			Context: name, Machine: frozen.Identity.Object, Verb: frozen.Verb,
 			Power: evidence.Power, Previous: evidence.Previous, Changed: evidence.Changed,
+			LogLocation: runtime.LogLocation, Logs: slices.Clone(runtime.Logs),
 		}
 		return nil
 	})
@@ -148,6 +157,7 @@ func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, dig
 		Bundle:         runtime.Bundle,
 		Area:           runtime.Area,
 		Material:       runtime.Material,
+		Output:         runtime.Output,
 	}
 }
 

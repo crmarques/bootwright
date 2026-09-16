@@ -39,6 +39,14 @@ type Confirmer interface {
 	Confirm(context.Context, string, string) error
 }
 
+// Reporter names where this run retains what its adapter prints, before that
+// adapter runs. It is the only thing a power operation reports while it works:
+// a run that refuses reports a diagnostic rather than a result, and its
+// retained output is what an operator is told to read.
+type Reporter interface {
+	ReportLogLocation(context.Context, string)
+}
+
 func failure(code, message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
 }

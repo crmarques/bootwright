@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
@@ -29,7 +30,26 @@ type boundary struct{ requested []string }
 
 func (b *boundary) WithRuntime(ctx context.Context, request lifecycle.RuntimeRequest, call func(context.Context, lifecycle.Runtime) error) error {
 	b.requested = slices.Clone(request.Secrets)
-	return call(ctx, lifecycle.Runtime{Material: map[string]secrets.Material{}})
+	return call(ctx, lifecycle.Runtime{
+		Material: map[string]secrets.Material{}, Output: &retained{},
+		LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/run-" + strings.Repeat("a", 32),
+		Logs:        []string{"run-" + strings.Repeat("a", 32) + "/run.output"},
+	})
+}
+
+// retained stands in for the file a bounded run keeps its adapter output in.
+type retained struct{ written []byte }
+
+func (r *retained) Write(value []byte) (int, error) {
+	r.written = append(r.written, value...)
+	return len(value), nil
+}
+
+// announced records what an operator is told before the adapter runs.
+type announced struct{ locations []string }
+
+func (a *announced) ReportLogLocation(_ context.Context, location string) {
+	a.locations = append(a.locations, location)
 }
 
 type adapter struct {
@@ -65,7 +85,7 @@ func (a *answer) Confirm(_ context.Context, action, name string) error {
 }
 
 func service(runtime Runtime, runner Runner, confirmer Confirmer) Service {
-	return New(stateSource{}, evidenceSource{}, runtime, runner, confirmer, nil)
+	return New(stateSource{}, evidenceSource{}, runtime, runner, confirmer, nil, nil)
 }
 
 func TestAStopCrossesTheAdapterWithItsFrozenRequestAndBoundCredential(t *testing.T) {
@@ -94,6 +114,37 @@ func TestAStopCrossesTheAdapterWithItsFrozenRequestAndBoundCredential(t *testing
 	}
 	if len(confirmer.asked) != 1 || confirmer.asked[0] != "stop machine guest" {
 		t.Fatalf("confirmation = %+v", confirmer.asked)
+	}
+}
+
+// A power run registers no operation, so its retained output is the only
+// record of what its adapter did. The location is named before the adapter
+// runs, because a run that refuses never reaches the result that carries it.
+func TestAPowerRunRetainsItsAdapterOutputAndNamesWhereFirst(t *testing.T) {
+	runtime, runner, confirmer, reporter := &boundary{}, &adapter{power: "off"}, &answer{}, &announced{}
+	service := New(stateSource{}, evidenceSource{}, runtime, runner, confirmer, reporter, nil)
+	result, err := service.Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	location := "/var/lib/bootwright/contexts/lab/state/runs/run-" + strings.Repeat("a", 32)
+	if len(reporter.locations) != 1 || reporter.locations[0] != location {
+		t.Fatalf("announced locations = %+v", reporter.locations)
+	}
+	if runner.seen.Output == nil {
+		t.Fatal("the adapter was run with nothing to retain its output in")
+	}
+	if result.LogLocation != location || !slices.Equal(result.Logs, []string{"run-" + strings.Repeat("a", 32) + "/run.output"}) {
+		t.Fatalf("result logs = %q %+v", result.LogLocation, result.Logs)
+	}
+	refusing := &adapter{err: errors.New("the adapter operation did not complete")}
+	reporter = &announced{}
+	if _, err := New(stateSource{}, evidenceSource{}, runtime, refusing, confirmer, reporter, nil).
+		Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest"}); err == nil {
+		t.Fatal("a refused run reported success")
+	}
+	if len(reporter.locations) != 1 || reporter.locations[0] != location {
+		t.Fatalf("a refused run left nothing named to read: %+v", reporter.locations)
 	}
 }
 

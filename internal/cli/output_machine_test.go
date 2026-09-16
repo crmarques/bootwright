@@ -145,6 +145,31 @@ func TestPowerResultReportsTheProvedStateAndWhetherItChanged(t *testing.T) {
 	}
 }
 
+// A power run retains what its adapter printed, so the result names it the way
+// an operation names its logs: the directory to open in the human result, and
+// the path inside the context's state in JSON.
+func TestPowerResultNamesWhereItsAdapterOutputWasRetained(t *testing.T) {
+	var out bytes.Buffer
+	result := &power.Result{
+		Context: "lab", Machine: "guest", Verb: "stop", Power: "off", Previous: "on", Changed: true,
+		LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/run-abc",
+		Logs:        []string{"run-abc/run.output"},
+	}
+	if err := writeMachinePower(&out, "machine stop", result, false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Logs      /var/lib/bootwright/contexts/lab/state/runs/run-abc\n") {
+		t.Fatalf("the result did not name where its output is: %q", out.String())
+	}
+	var encoded bytes.Buffer
+	if err := writeMachinePower(&encoded, "machine stop", result, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(encoded.String(), `"logs":["run-abc/run.output"]`) {
+		t.Fatalf("JSON = %q", encoded.String())
+	}
+}
+
 func TestPowerRefusesToPresentAStateItCannotName(t *testing.T) {
 	if validMachinePower(nil) || validMachinePower(&power.Result{Machine: "guest", Verb: "stop", Power: "paused"}) {
 		t.Fatal("an unreportable power state was presented")

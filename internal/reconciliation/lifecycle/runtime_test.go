@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -99,6 +100,42 @@ func TestWithRuntimeReleasesItsBindingWhenTheOperationFails(t *testing.T) {
 	}
 	if len(h.binder.released) != 1 {
 		t.Fatalf("released bindings = %+v", h.binder.released)
+	}
+}
+
+// A bounded run has no attempt log for its output to sit beside, so it keeps
+// one file of its own under an identity of its own. The file exists before the
+// adapter runs, and what the adapter printed is on disk once the call returns.
+func TestWithRuntimeRetainsWhatItsAdapterPrinted(t *testing.T) {
+	h := newHarness(t)
+	var identity string
+	err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName},
+		func(ctx context.Context, runtime Runtime) error {
+			if len(runtime.Logs) != 1 || !strings.HasSuffix(runtime.Logs[0], "/"+runOutputName) {
+				t.Fatalf("retained paths = %+v", runtime.Logs)
+			}
+			identity = strings.TrimSuffix(runtime.Logs[0], "/"+runOutputName)
+			if !reconciliation.ValidRunID(identity) {
+				t.Fatalf("run identity = %q", identity)
+			}
+			if !strings.HasSuffix(runtime.LogLocation, identity) {
+				t.Fatalf("named location %q does not hold %q", runtime.LogLocation, identity)
+			}
+			if _, found, err := h.workspace.runArea.Read(ctx, runtime.Logs[0], 16); err != nil || !found {
+				t.Fatalf("the retained file did not exist before the adapter ran: %t (%v)", found, err)
+			}
+			_, _ = runtime.Output.Write([]byte("what the adapter printed\n"))
+			return nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, found, err := h.workspace.runArea.Read(context.Background(), identity+"/"+runOutputName, 4096)
+	if err != nil || !found || string(data) != "what the adapter printed\n" {
+		t.Fatalf("retained output = %q %t (%v)", data, found, err)
+	}
+	if h.workspace.area.written(identity) {
+		t.Fatal("a bounded run wrote into the operation records")
 	}
 }
 

@@ -496,7 +496,8 @@ no lifecycle identity or log. Setup uses only its
 [private recovery receipt](../controller.md#publication-and-interrupted-setup),
 separate from the lifecycle receipt and operation logs. Only lifecycle effects
 and unknown-effect resolution use the state-owned operation, block, and attempt
-log tree below.
+log tree below; a [bounded run](#bounded-run-output) retains what its own
+adapter printed and nothing else.
 
 Managed operations use this tree:
 
@@ -509,11 +510,13 @@ Managed operations use this tree:
       attempt-000001.output
       attempt-000002.jsonl
       attempt-000002-resolution-000001.jsonl
+<state-root>/contexts/<context-name>/state/runs/<run-id>/
+  run.output
 ```
 
 Workspace owns `/var/lib/bootwright` and `<context-name>`; state reconciliation
-owns `<operation-id>`, `<block-id>`, and attempt numbers. Their safe grammar,
-allocation, collision, and crash-gap rules are defined by
+owns `<operation-id>`, `<run-id>`, `<block-id>`, and attempt numbers. Their safe
+grammar, allocation, collision, and crash-gap rules are defined by
 [state reconciliation](../state-reconciliation.md#durable-identities-and-private-paths).
 Directories are `0700`; files are `0600`. Creation is exclusive beneath a held,
 verified root handle and never follows a link or overwrites unrelated content.
@@ -565,6 +568,30 @@ state root, and lists created paths once: operation log first, then blocks in
 frozen plan order, effect attempts in numeric order, each attempt's retained
 adapter output directly after its own log, and their resolution attempts in
 numeric order.
+
+### Bounded run output
+
+A [bounded operation](../cli.md#machine-power-operations) registers no lifecycle
+operation, so it has no attempt log for its adapter's output to sit beside. It
+allocates a `<run-id>` of its own and keeps exactly one file, `run.output`,
+holding what that adapter printed on its own standard output and error, raw and
+unparsed. It writes no structured log, because it publishes no events, and it
+publishes no evidence, ownership or continuation: a run is never an operation,
+and nothing resumes, continues or is resolved through one.
+
+The file is created exclusively, under the same grammar, modes and retention
+bounds an attempt's retained output has, before the adapter runs, so the path
+an operator is given exists whether or not the run reaches its result. Its
+content is retained while the run produces it, under the same masking
+obligation: every adapter task that reads bound material marks itself `no_log`,
+so a retained run carries none. Neither retaining it nor failing to changes what
+the run reports.
+
+Human output names the run's own directory as the same `Logs` field, before the
+adapter runs and again after the result, for the same reason an operation names
+its log tree twice. Naming it first is what a refused run depends on, because a
+run that fails reports a diagnostic instead of a result. JSON `logs` names the
+retained file the same way an operation's logs are named.
 
 ## Multi-machine presentation
 

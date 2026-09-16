@@ -155,7 +155,7 @@ func writeMachinePower(out io.Writer, command string, result *power.Result, json
 				Verb: escapeDisplayLine(result.Verb), Power: escapeDisplayLine(result.Power),
 				Previous: escapeDisplayLine(result.Previous), Changed: result.Changed,
 			},
-			Diagnostics: []diagnostic{}, Logs: []string{},
+			Diagnostics: []diagnostic{}, Logs: displayLines(result.Logs),
 		})
 	}
 	var text display
@@ -165,10 +165,14 @@ func writeMachinePower(out io.Writer, command string, result *power.Result, json
 	}
 	text.headline(status, headline)
 	text.section("")
-	text.fields(
-		field{Label: "Machine", Value: escapeDisplayLine(result.Machine)},
-		field{Label: "Power", Value: escapeDisplayLine(result.Power)},
-		field{Label: "Previous", Value: displayValue(result.Previous)},
-	)
+	fields := []field{
+		{Label: "Machine", Value: escapeDisplayLine(result.Machine)},
+		{Label: "Power", Value: escapeDisplayLine(result.Power)},
+		{Label: "Previous", Value: displayValue(result.Previous)},
+	}
+	if result.LogLocation != "" {
+		fields = append(fields, field{Label: logLocationLabel, Value: escapeDisplayLine(result.LogLocation)})
+	}
+	text.fields(fields...)
 	return text.writeTo(out)
 }

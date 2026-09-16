@@ -10,6 +10,7 @@ import (
 const (
 	MaxAttempt          = 999999
 	operationIDPrefix   = "op-"
+	runIDPrefix         = "run-"
 	allocationAttempts  = 16
 	operationEntropy    = 16
 	numberDigits        = 6
@@ -24,6 +25,18 @@ type Entropy func([]byte) (int, error)
 // clock, process-identity or hash fallback: an operation that cannot be named
 // from cryptographic entropy is not started at all.
 func AllocateOperationID(entropy Entropy, taken func(string) bool) (string, error) {
+	return allocateIdentity(operationIDPrefix, entropy, taken)
+}
+
+// AllocateRunID names one bounded run outside the lifecycle. It is allocated
+// the same way and from the same entropy, and carries its own prefix because a
+// run is never an operation: nothing continues, resumes or claims ownership
+// through it.
+func AllocateRunID(entropy Entropy, taken func(string) bool) (string, error) {
+	return allocateIdentity(runIDPrefix, entropy, taken)
+}
+
+func allocateIdentity(prefix string, entropy Entropy, taken func(string) bool) (string, error) {
 	if entropy == nil || taken == nil {
 		return "", stateError("operation identity allocation is not configured")
 	}
@@ -32,7 +45,7 @@ func AllocateOperationID(entropy Entropy, taken func(string) bool) (string, erro
 		if err := readFull(entropy, buffer); err != nil {
 			return "", stateError("operation identity requires operating-system entropy")
 		}
-		candidate := operationIDPrefix + hex.EncodeToString(buffer)
+		candidate := prefix + hex.EncodeToString(buffer)
 		if !taken(candidate) {
 			return candidate, nil
 		}
@@ -40,12 +53,16 @@ func AllocateOperationID(entropy Entropy, taken func(string) bool) (string, erro
 	return "", stateError("operation identity allocation exhausted its collision attempts")
 }
 
-func ValidOperationID(value string) bool {
-	if !strings.HasPrefix(value, operationIDPrefix) || len(value) != len(operationIDPrefix)+2*operationEntropy {
+func ValidOperationID(value string) bool { return validIdentity(operationIDPrefix, value) }
+
+func ValidRunID(value string) bool { return validIdentity(runIDPrefix, value) }
+
+func validIdentity(prefix, value string) bool {
+	if !strings.HasPrefix(value, prefix) || len(value) != len(prefix)+2*operationEntropy {
 		return false
 	}
-	decoded, err := hex.DecodeString(value[len(operationIDPrefix):])
-	return err == nil && hex.EncodeToString(decoded) == value[len(operationIDPrefix):]
+	decoded, err := hex.DecodeString(value[len(prefix):])
+	return err == nil && hex.EncodeToString(decoded) == value[len(prefix):]
 }
 
 // FormatNumber renders an attempt or resolution ordinal. Exhaustion refuses

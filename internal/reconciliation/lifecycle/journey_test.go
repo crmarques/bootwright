@@ -41,6 +41,17 @@ type memoryArea struct {
 
 func newArea() *memoryArea { return &memoryArea{files: map[string][]byte{}, fail: map[string]error{}} }
 
+// written reports whether this area holds anything under one identity, so a
+// test can prove a bounded run left the operation records alone.
+func (a *memoryArea) written(identity string) bool {
+	for name := range a.files {
+		if strings.HasPrefix(name, identity+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *memoryArea) clone() *memoryArea {
 	copied := newArea()
 	for name, data := range a.files {
@@ -124,11 +135,13 @@ func (a *memoryArea) Location() string { return "/var/lib/bootwright/contexts/la
 // operation records, with the same read and mutate boundaries the store has.
 type testWorkspace struct {
 	area         *memoryArea
+	runArea      *memoryArea
 	evidence     []byte
 	reservations []prerequisites.HostReservation
 	controller   prerequisites.StorageView
 	inputs       desiredstate.Sources
 	mutations    int
+	runs         int
 	binds        int
 	areas        map[string]bool
 	retained     []prerequisites.DependencySource
@@ -147,6 +160,14 @@ func (w *testWorkspace) ReadLifecycle(ctx context.Context, name string, callback
 	return callback(w.view())
 }
 
+func (w *testWorkspace) RunLifecycle(ctx context.Context, name string, callback func(RunView) error) error {
+	if name == "" {
+		return errors.New("explicit context required")
+	}
+	w.runs++
+	return callback(w.view())
+}
+
 func (w *testWorkspace) MutateLifecycle(ctx context.Context, name string, callback func(Transaction) error) error {
 	w.mutations++
 	return callback(w.view())
@@ -161,6 +182,7 @@ func (v *testView) Inputs() desiredstate.Sources          { return v.workspace.i
 func (v *testView) Controller() prerequisites.StorageView { return v.workspace.controller }
 func (v *testView) Evidence() []byte                      { return slices.Clone(v.workspace.evidence) }
 func (v *testView) Operations() operationstore.Area       { return v.workspace.area }
+func (v *testView) Runs() operationstore.Area             { return v.workspace.runArea }
 
 func (v *testView) PublishEvidence(_ context.Context, data []byte) error {
 	if v.workspace.failPublish != nil {
@@ -503,7 +525,7 @@ func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinitio
 		t.Fatal(err)
 	}
 	workspace := &testWorkspace{
-		area: newArea(), evidence: pristine,
+		area: newArea(), runArea: newArea(), evidence: pristine,
 		inputs: desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{
 			desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte("kind: Environment\n")),
 		}},

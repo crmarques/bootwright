@@ -20,6 +20,7 @@ type machineDependencies struct {
 	State     inventory.EffectiveState
 	Lifecycle lifecycle.Service
 	Confirmer power.Confirmer
+	Reporter  power.Reporter
 	Selection contexts.SelectionStore
 }
 
@@ -33,7 +34,7 @@ func wireMachine(deps machineDependencies) cli.Services {
 		MachineInventory: inventory.New(deps.State, evidence, selection),
 		MachineAccess:    machineaccess.New(deps.State, selection),
 		MachinePower: power.New(deps.State, evidence, deps.Lifecycle, ansiblerunner.New(),
-			deps.Confirmer, selection),
+			deps.Confirmer, deps.Reporter, selection),
 	}
 }
 

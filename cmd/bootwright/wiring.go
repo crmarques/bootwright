@@ -8,6 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/hostlinux"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/controller/privilege"
+	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/material"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
@@ -44,6 +45,7 @@ type serviceDependencies struct {
 	Controller      controllerDependencies
 	Lifecycle       lifecycleDependencies
 	Media           mediaDependencies
+	Reporter        power.Reporter
 }
 
 // wireServices also returns the release for every local resource the assembled
@@ -59,6 +61,7 @@ func wireServices(process processDependencies) (cli.Services, func()) {
 		Operator:    account,
 		Confirmer:   process.Confirmer,
 		SecretInput: process.SecretInput,
+		Reporter:    process.LifecycleProgress,
 		Controller:  controller,
 		Media:       localMediaDependencies(repository, process.Confirmer),
 		Lifecycle: lifecycleDependencies{
@@ -85,7 +88,8 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	reconciler := wireLifecycle(deps.Lifecycle, deps.Controller, compiler, secrets.binder)
 	services.Lifecycle = reconciler
 	machine := wireMachine(machineDependencies{
-		State: services.DesiredState, Lifecycle: reconciler, Confirmer: deps.Confirmer, Selection: deps.Selection,
+		State: services.DesiredState, Lifecycle: reconciler, Confirmer: deps.Confirmer,
+		Reporter: deps.Reporter, Selection: deps.Selection,
 	})
 	services.MachineInventory, services.MachineAccess, services.MachinePower = machine.MachineInventory, machine.MachineAccess, machine.MachinePower
 	return services
