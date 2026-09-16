@@ -69,18 +69,39 @@ func openRelative(parent *directory, name string, flags int, mode uint32) (*os.F
 	return openWithin(parent, name, flags, mode)
 }
 
+// resolutionRetries bounds how often a resolution is re-attempted. The race it
+// answers is the width of one rename, so a handful of immediate attempts covers
+// it and a wedged tree still fails rather than spinning.
+const resolutionRetries = 16
+
+// retryResolution re-attempts a resolution the kernel refused with EAGAIN.
+// openat2 answers EAGAIN when a rename moved part of the path while it was
+// being resolved under RESOLVE_BENEATH: the kernel is asking for a retry, not
+// reporting an unsafe path. A caller that treats it as a refusal fails a whole
+// operation because a writer happened to be a millisecond early.
+func retryResolution(open func() (*os.File, error)) (*os.File, error) {
+	for attempt := 0; ; attempt++ {
+		file, err := open()
+		if !errors.Is(err, syscall.EAGAIN) || attempt == resolutionRetries {
+			return file, err
+		}
+	}
+}
+
 func openWithin(parent *directory, name string, flags int, mode uint32) (*os.File, error) {
 	pointer, err := syscall.BytePtrFromString(name)
 	if err != nil {
 		return nil, state("state path component is invalid")
 	}
 	how := struct{ Flags, Mode, Resolve uint64 }{uint64(flags | syscall.O_CLOEXEC | syscall.O_NOFOLLOW), uint64(mode), resolveBeneathNoLinksNoMounts}
-	fd, _, errno := syscall.Syscall6(openat2Trap, parent.file.Fd(), uintptr(unsafe.Pointer(pointer)), uintptr(unsafe.Pointer(&how)), unsafe.Sizeof(how), 0, 0)
-	runtime.KeepAlive(pointer)
-	if errno != 0 {
-		return nil, errno
-	}
-	return os.NewFile(fd, filepath.Join(parent.path, name)), nil
+	return retryResolution(func() (*os.File, error) {
+		fd, _, errno := syscall.Syscall6(openat2Trap, parent.file.Fd(), uintptr(unsafe.Pointer(pointer)), uintptr(unsafe.Pointer(&how)), unsafe.Sizeof(how), 0, 0)
+		runtime.KeepAlive(pointer)
+		if errno != 0 {
+			return nil, errno
+		}
+		return os.NewFile(fd, filepath.Join(parent.path, name)), nil
+	})
 }
 
 func openDirectory(parent *directory, name string) (*directory, error) {
