@@ -1,0 +1,32 @@
+---
+- name: Validate the frozen machine request
+  ansible.builtin.assert:
+    that:
+      - bootwright_substrate_physical_request.version == 'machine-baremetal-v1'
+      - bootwright_substrate_physical_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.substrate_physical_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Observe the machine without changing any of it
+  bootwright.core.redfish_system_inspect:
+    endpoint: '{{ bootwright_substrate_physical_request.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_substrate_physical_material.controllerUser) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_substrate_physical_material.controllerPassword) }}'
+    verify: '{{ bootwright_substrate_physical_request.controller.tlsVerify }}'
+  register: substrate_baremetal_machine_observed
+  failed_when: false
+  no_log: true
+
+- name: Publish bounded machine observation
+  bootwright.core.substrate_physical_protocol:
+    phase: completed
+    outcome: unchanged
+    digest: '{{ bootwright_substrate_physical_digest }}'
+    observation: '{{ substrate_baremetal_machine_observed.observation | default({}) }}'
+    expected: '{{ substrate_baremetal_machine_expected }}'
+  no_log: true

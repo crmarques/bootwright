@@ -11,20 +11,13 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-// Unsupported lists every selected object this contract cannot realize, in
-// canonical order: a provider on another substrate arm, every non-provided
-// Machine hosted on one, and a libvirt provider whose controllers would bind a
-// wildcard address no consumer can name.
+// Unsupported lists every selected object this contract cannot realize: an
+// arm no capability implements, which the substrate root owns so that adding
+// one narrows the refusal in a single place, and a libvirt provider whose
+// controllers would bind a wildcard address no consumer can name.
 func Unsupported(catalog api.Catalog) []string {
-	var found []string
-	for _, provider := range catalog.OfKind(api.InfraProvider) {
-		if !provider.Spec().Has("libvirt") {
-			found = append(found, provider.Identity())
-			for _, machine := range substrate.HostedMachines(catalog, provider.Name()) {
-				found = append(found, machine.Identity())
-			}
-			continue
-		}
+	found := substrate.Unrealizable(catalog)
+	for _, provider := range substrate.ProvidersOn(catalog, substrate.ArmLibvirt) {
 		if address := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text(); wildcard(address) {
 			found = append(found, provider.Identity())
 		}
@@ -42,7 +35,7 @@ func HostRequests(catalog api.Catalog, controllerMachine, contextName string) ([
 		return nil, refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
 	}
 	var requests []HostRequest
-	for _, provider := range substrate.LibvirtProviders(catalog) {
+	for _, provider := range substrate.ProvidersOn(catalog, substrate.ArmLibvirt) {
 		request, err := hostRequestFor(catalog, provider, controllerMachine, contextName)
 		if err != nil {
 			return nil, err
@@ -123,7 +116,7 @@ func MachineRequests(catalog api.Catalog, controllerMachine, contextName string)
 		return nil, refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
 	}
 	var requests []MachineRequest
-	for _, provider := range substrate.LibvirtProviders(catalog) {
+	for _, provider := range substrate.ProvidersOn(catalog, substrate.ArmLibvirt) {
 		placement, err := placementFor(catalog, provider, controllerMachine)
 		if err != nil {
 			return nil, err

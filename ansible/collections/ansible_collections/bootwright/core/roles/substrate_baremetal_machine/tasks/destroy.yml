@@ -1,0 +1,39 @@
+---
+# A removal takes back the claim and nothing else. The machine, its firmware
+# settings, its disks and whatever operating system is installed on it are
+# retained exactly as they are, so this performs no effect on the machine at
+# all and says so.
+- name: Validate the frozen machine request
+  ansible.builtin.assert:
+    that:
+      - bootwright_substrate_physical_request.version == 'machine-baremetal-v1'
+      - bootwright_substrate_physical_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.substrate_physical_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Report releasing the claim
+  bootwright.core.substrate_physical_protocol:
+    phase: group
+    group: release-claim
+    status: running
+  no_log: true
+
+- name: Report the claim released
+  bootwright.core.substrate_physical_protocol:
+    phase: group
+    group: release-claim
+    status: ok
+  no_log: true
+
+- name: Publish bounded removal evidence
+  bootwright.core.substrate_physical_protocol:
+    phase: completed
+    outcome: changed
+    digest: '{{ bootwright_substrate_physical_digest }}'
+    released: true
+  no_log: true

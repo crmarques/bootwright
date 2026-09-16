@@ -77,19 +77,6 @@ func ControllerEndpoint(address string, port int, uuid string) string {
 	return "http://" + address + ":" + FormatPort(port) + "/redfish/v1/Systems/" + uuid
 }
 
-// LibvirtProviders lists the libvirt providers of a selected graph in canonical
-// name order. Every other arm is unsupported, not absent.
-func LibvirtProviders(catalog api.Catalog) []api.Object {
-	var found []api.Object
-	for _, provider := range catalog.OfKind(api.InfraProvider) {
-		if provider.Spec().Has("libvirt") {
-			found = append(found, provider)
-		}
-	}
-	slices.SortFunc(found, func(x, y api.Object) int { return strings.Compare(x.Name(), y.Name()) })
-	return found
-}
-
 // HostedMachines lists the Machines one provider realizes, in canonical name
 // order. That order is what the emulated controller port allocation counts, so
 // it is derived once and never re-derived per Machine.

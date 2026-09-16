@@ -221,13 +221,16 @@ func TestSelectionRefusesWhatItCannotDerive(t *testing.T) {
 // Every object this contract cannot realize is named before registration, so an
 // operation never applies part of a graph it only half supports.
 func TestUnsupportedNamesEveryObjectThisContractCannotRealize(t *testing.T) {
-	metal := api.NewObject(api.InfraProvider, "rack", api.Value{}, api.MapValue(field("baremetal", api.MapValue())))
+	// Bare metal is realized by its own implementation, so the refusal covers
+	// only the arms no capability implements and every Machine hosted on one.
+	vsphere := api.NewObject(api.InfraProvider, "vc", api.Value{}, api.MapValue(field("vsphere", api.MapValue())))
 	hosted := api.NewObject(api.Machine, "node-01", api.Value{}, api.MapValue(
-		field("substrate", api.MapValue(text("providerRef", "rack"))),
+		field("substrate", api.MapValue(text("providerRef", "vc"))),
 		field("os", api.MapValue(field("provided", api.BoolValue(false)))),
 	))
-	unsupported := Unsupported(catalogOf(controller(), provider(), networkConfig(), guest("rhel-01"), metal, hosted))
-	if !slices.Equal(unsupported, []string{"InfraProvider/rack", "Machine/node-01"}) {
+	metal := api.NewObject(api.InfraProvider, "rack", api.Value{}, api.MapValue(field("baremetal", api.MapValue())))
+	unsupported := Unsupported(catalogOf(controller(), provider(), networkConfig(), guest("rhel-01"), vsphere, hosted, metal))
+	if !slices.Equal(unsupported, []string{"InfraProvider/vc", "Machine/node-01"}) {
 		t.Fatalf("unsupported = %v", unsupported)
 	}
 }

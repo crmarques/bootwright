@@ -18,6 +18,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
+	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -89,6 +90,9 @@ func buildCapabilities(clock systemClock, controller controllerDependencies) cap
 	}, {
 		kind: libvirt.MachineKind, implementation: libvirt.MachineImplementation,
 		capability: libvirt.NewMachine(runner),
+	}, {
+		kind: baremetal.Kind, implementation: baremetal.Implementation,
+		capability: baremetal.NewMachine(runner),
 	}, {
 		kind: installation.Kind, implementation: installation.Implementation,
 		capability: installation.New(runner),

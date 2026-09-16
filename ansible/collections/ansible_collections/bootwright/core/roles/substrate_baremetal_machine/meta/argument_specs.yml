@@ -1,0 +1,49 @@
+argument_specs:
+  apply:
+    short_description: Claim one physical machine and prove it is the declared one.
+    options: &request
+      bootwright_substrate_physical_request:
+        type: dict
+        required: true
+        options:
+          controller:
+            type: dict
+            required: true
+            options:
+              credentialsRef:
+                type: str
+                required: true
+              endpoint:
+                type: str
+                required: true
+              tlsVerify:
+                type: bool
+                required: true
+          hardware:
+            type: list
+            elements: dict
+            required: true
+          identity:
+            type: dict
+            required: true
+          placement:
+            type: dict
+            required: true
+          provider:
+            type: str
+            required: true
+          version:
+            type: str
+            required: true
+            choices: [machine-baremetal-v1]
+      bootwright_substrate_physical_material:
+        type: dict
+        required: true
+
+  observe:
+    short_description: Observe one physical machine without changing it.
+    options: *request
+
+  destroy:
+    short_description: Release the claim on one physical machine and retain it.
+    options: *request

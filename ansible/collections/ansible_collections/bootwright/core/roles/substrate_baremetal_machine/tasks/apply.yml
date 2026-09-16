@@ -1,0 +1,64 @@
+---
+# This block realizes nothing. A physical server exists before Bootwright is
+# told about it, so what an apply does is prove that the machine answering at
+# the declared controller is the machine the declaration names, and claim it.
+- name: Validate the frozen machine request
+  ansible.builtin.assert:
+    that:
+      - bootwright_substrate_physical_request.version == 'machine-baremetal-v1'
+      - bootwright_substrate_physical_request.controller.endpoint is search('/redfish/v1/Systems/')
+      - bootwright_substrate_physical_request.hardware | length > 0
+      - bootwright_substrate_physical_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.substrate_physical_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Report reaching the management controller
+  bootwright.core.substrate_physical_protocol:
+    phase: group
+    group: reach-controller
+    status: running
+  no_log: true
+
+- name: Read the machine through its own management controller
+  bootwright.core.redfish_system_inspect:
+    endpoint: '{{ bootwright_substrate_physical_request.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_substrate_physical_material.controllerUser) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_substrate_physical_material.controllerPassword) }}'
+    verify: '{{ bootwright_substrate_physical_request.controller.tlsVerify }}'
+  register: substrate_baremetal_machine_observed
+  no_log: true
+
+- name: Report the controller answered
+  bootwright.core.substrate_physical_protocol:
+    phase: group
+    group: reach-controller
+    status: ok
+  no_log: true
+
+- name: Report proving the machine's identity
+  bootwright.core.substrate_physical_protocol:
+    phase: group
+    group: prove-identity
+    status: running
+  no_log: true
+
+- name: Report the proved machine
+  bootwright.core.substrate_physical_protocol:
+    phase: group
+    group: prove-identity
+    status: ok
+  no_log: true
+
+- name: Publish bounded machine proof
+  bootwright.core.substrate_physical_protocol:
+    phase: completed
+    outcome: changed
+    digest: '{{ bootwright_substrate_physical_digest }}'
+    observation: '{{ substrate_baremetal_machine_observed.observation }}'
+    expected: '{{ substrate_baremetal_machine_expected }}'
+  no_log: true

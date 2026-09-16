@@ -1,0 +1,8 @@
+---
+# Derived from the frozen request only. Nothing here is authored by desired
+# state, and no value selects an executable, a role or a task file.
+#
+# The addresses this machine must report for it to be the one the declaration
+# names. The proof compares the complete reported inventory against these.
+substrate_baremetal_machine_expected: >-
+  {{ bootwright_substrate_physical_request.hardware | map(attribute='macAddress') | list }}
