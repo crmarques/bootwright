@@ -257,7 +257,7 @@ digest. A stage names the kind of platform work its block performs:
 | `controller` | The [context prerequisites](controller.md) this Environment adds to its controller host: the target clients its graph selects and the libvirt client it declares. |
 | `infra-components` | Managed shared services: proxying, name resolution, time, artifact serving, registries and load balancing. |
 | `substrates` | [Provider host realization](substrates.md#provider-host-realization) for a declared `InfraProvider`: its virtualization runtime, managed networks and virtual-media pool. |
-| `machines` | [Machine realization](substrates.md#machine-realization) with its management controller, and [managed operating-system installation](managed-os.md#installation). |
+| `machines` | [Machine realization](substrates.md#machine-realization) with its management controller, the [claim and proof](substrates.md#physical-machine-realization) of a physical machine, and [managed operating-system installation](managed-os.md#installation). |
 | `clusters` | Container and storage cluster installation. |
 | `add-ons` | Add-on instances bound to a cluster. |
 
@@ -540,11 +540,19 @@ machine. Before changing it, an implementation must durably hold an exclusive
 context claim, prove the exact management controller/System identity, prove
 the complete live MAC set matches the immutable `Machine`, select one whole
 root disk from the authored hint, prove the machine is off, and consume
-`data-loss`. The claim serializes use but cannot replace any live proof. The
-agent installer's remaining disk-safety limitation is recorded in
-`.agents/knowledge/openshift-agent-disk-safety.md`. Physical destroy and
+`data-loss`. The claim serializes use but cannot replace any live proof.
+[Physical machine realization](substrates.md#physical-machine-realization)
+holds the claim and the controller-side proof, and
+[physical installation](managed-os.md#physical-installation) repeats that proof
+immediately before it boots and again inside the installer itself.
+
+Two limits remain and are stated rather than closed. The interval between the
+controller's last proof and the installer's first write is a residual race,
+narrowed by the in-installer check but not eliminated; the agent installer,
+which admits no equivalent check, is recorded in
+`.agents/knowledge/openshift-agent-disk-safety.md`. And physical destroy and
 offline disk erase remain unsupported until a separate spec defines and tests
-a safe path.
+a safe path, so a removal retains the machine and the system installed on it.
 
 ### Controller-host protection
 

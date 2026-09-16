@@ -316,7 +316,7 @@ that implements a row updates the row and the stub fitness test together.
 | `validate`, `render effective` (Desired state) | `commands_desiredstate.go` | `desiredstate/compilation` | `desiredstate/inputfs`, `desiredstate/yamlstream`, `desiredstate/encoding` | I |
 | `setup`, `preflight controller` (Controller) | `commands_controller.go` | `controller/prerequisites` | `controller/hostlinux`, `controller/bundlelocal`, `controller/ansiblelocal`, `controller/nativelocal`, `workspace/contextfs` | I |
 | Local privilege boundary for every root-requiring command (Controller) | `invocation.go` classifies only | — | `controller/privilege`, bound in `run.go` | I |
-| `plan`, `status`, `apply`, `destroy` (State reconciliation) | `commands_reconciliation.go` | `reconciliation/lifecycle` | `reconciliation/operationstore`, `workspace/contextfs`, `desiredstate/compilation`, `secrets/custody`, `controller/hostlinux`, `controller/bundlelocal`, `controller/nativelocal`, `controller/ansiblelocal`, `controller/clients`, `substrate/libvirt`, `managedos/installation`, `infrastructureservices/artifactserver`, `infrastructureservices/managedservice` with the `proxy`, `dnsserver` and `ntpserver` definitions, over `reconciliation/ansiblerunner` | I |
+| `plan`, `status`, `apply`, `destroy` (State reconciliation) | `commands_reconciliation.go` | `reconciliation/lifecycle` | `reconciliation/operationstore`, `workspace/contextfs`, `desiredstate/compilation`, `secrets/custody`, `controller/hostlinux`, `controller/bundlelocal`, `controller/nativelocal`, `controller/ansiblelocal`, `controller/clients`, `substrate/libvirt`, `substrate/baremetal`, `managedos/installation`, `infrastructureservices/artifactserver`, `infrastructureservices/managedservice` with the `proxy`, `dnsserver` and `ntpserver` definitions, over `reconciliation/ansiblerunner` | I |
 | `render` (Native artifacts) | `commands_nativeartifacts.go` | `nativeartifacts/rendering` | — | S |
 | `render installer` (Container cluster) | `commands_containercluster.go` | `containercluster/installation` | — | S |
 | `render storage` (Storage) | `commands_storage.go` | `storage/rendering` | — | S |
@@ -345,7 +345,14 @@ their owning contexts. Machine inspection belongs to
 `machine/inventory`, explicit Machine access to `machine/access` and day-2
 power to `machine/power`, which reads the Machine domain's own ownership
 vocabulary rather than the engine that published it. Substrate realization with
-its identity and power operations belongs to `substrate/libvirt`, managed-OS installation to
+its identity and power operations belongs to one package per substrate arm,
+`substrate/libvirt` and `substrate/baremetal`, while the pure derivation that
+answers which arm realizes a Machine, and with which management controller and
+identity channel, belongs to the `substrate` context root beside its admission
+rules. That placement is what keeps a consumer substrate-agnostic: managed-OS
+installation and day-2 power both read that one answer, and neither imports a
+substrate package nor grows a branch when an arm is added. Managed-OS
+installation belongs to
 `managedos/installation`, the media store to `managedos/media` over the
 `managedos/medialocal` adapter, and the one Ansible runner every lifecycle
 capability crosses to `reconciliation/ansiblerunner`, whose request, placement
@@ -444,11 +451,14 @@ reconciliation/lifecycle.Service
    ─ExecutionGuard────────────────→ controller/bundlelocal.ExecutionGuard
    ─CapabilityResolver, Capability→ ordered set over controller/clients.Capability,
                                      substrate/libvirt.MachineCapability,
+                                     substrate/baremetal.MachineCapability,
                                      managedos/installation.Capability,
                                      substrate/libvirt.HostCapability,
                                      infrastructureservices/artifactserver.Capability
                                      and managedservice.Capability bound to the proxy,
                                      dnsserver and ntpserver definitions
+   pure: substrate.TargetFor answers which arm realizes a Machine; managedos and
+         machine/power consume it and import no substrate package
         ─Runner───────────────────→ reconciliation/ansiblerunner.Runner
              ─process boundary────→ embedded bootwright.core collection
 
@@ -498,7 +508,7 @@ production binding; tests substitute fakes through the same interface.
 | `reconciliation/lifecycle` | `HostIdentity` | Identity | `controller/hostlinux.Inspector` |
 | `reconciliation/lifecycle` | `AutomationIdentity` | CatalogDigest | composition value over `controller/bundlelocal` and the embedded collection |
 | `reconciliation/lifecycle` | `ExecutionGuard` | WithPython | `controller/bundlelocal.ExecutionGuard` |
-| `reconciliation/lifecycle` | `CapabilityResolver`, `Capability` | Bindings, Resolve; Plan, Apply, Observe, Quiescent, Destroy | immutable ordered composition set over `controller/clients.Capability`, `infrastructureservices/artifactserver.Capability`, `infrastructureservices/managedservice.Capability`, `substrate/libvirt.HostCapability`, `substrate/libvirt.MachineCapability` and `managedos/installation.Capability` |
+| `reconciliation/lifecycle` | `CapabilityResolver`, `Capability` | Bindings, Resolve; Plan, Apply, Observe, Quiescent, Destroy | immutable ordered composition set over `controller/clients.Capability`, `infrastructureservices/artifactserver.Capability`, `infrastructureservices/managedservice.Capability`, `substrate/libvirt.HostCapability`, `substrate/libvirt.MachineCapability`, `substrate/baremetal.MachineCapability` and `managedos/installation.Capability` |
 | `reconciliation/lifecycle` | `Confirmer`, `PlanPresenter`, `ProgressReporter` | Confirm; PresentLifecyclePlan; ReportProgress | `internal/cli` |
 | `reconciliation/lifecycle` | `Clock`, `Entropy` | Now; Read | composition |
 | `reconciliation/operationstore` | `Area` | Read, Entries, EnsureDirectory, WriteExclusive, Replace, Append, Sync | `contextfs` operation area |
@@ -532,7 +542,7 @@ production binding; tests substitute fakes through the same interface.
 | `managedos/media` | `View`, `Transaction` | Entries, Names, Digest, Frozen; Stage, Publish, Delete | `contextfs` host-wide media area |
 | `managedos/media` | `Acquirer`, `Payload` | Open; Read, Close | `managedos/medialocal.Acquirer` |
 | `managedos/media` | `Confirmer`, `Clock` | Confirm; Now | `internal/cli.Confirmation`; composition |
-| `substrate/libvirt`, `managedos/installation` | `Runner` | Run | `reconciliation/ansiblerunner.Runner` |
+| `substrate/libvirt`, `substrate/baremetal`, `managedos/installation` | `Runner` | Run | `reconciliation/ansiblerunner.Runner` |
 | `secrets/material` | `InputReader` | Read | process standard input |
 | `secrets/material` | `Operator` | FileIdentity | the invoking account |
 | `secrets/material` | `Cryptography` | GenerateECDSA, GenerateRSA, CreateCertificate | the package default over the standard library |

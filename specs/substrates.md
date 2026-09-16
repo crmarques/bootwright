@@ -12,27 +12,40 @@ owns what is installed on a realized Machine; availability follows
 A substrate is a [lifecycle capability](state-reconciliation.md#plan-and-execution)
 that plans two block families: one provider-host block per `InfraProvider` in
 the `substrates` stage, and one machine block per hosted Machine in the
-`machines` stage. Each block resolves to exactly one implementation whose
-identity, content digest and request digest freeze with the plan. The
-capability owns what its blocks mean; it never schedules another domain's
-work, allocates an operation identity or writes lifecycle state.
+`machines` stage. A substrate whose provider host runs nothing Bootwright
+installs plans no host block at all, so an Environment of physical machines
+has an empty `substrates` stage. Each block resolves to exactly one
+implementation whose identity, content digest and request digest freeze with
+the plan, and the machine family has one implementation per substrate arm, so
+a block resolves by kind and implementation together. The capability owns what
+its blocks mean; it never schedules another domain's work, allocates an
+operation identity or writes lifecycle state.
 
 ## Selection and refusal
 
-This contract realizes the libvirt arm. A provider host block is planned for
-every libvirt `InfraProvider` in the selected graph, and a machine block for
-every Machine on it whose effective `os.provided` is `false`. Provided Machines
-are never realized. A bare-metal, vSphere or KubeVirt provider, and every
-non-provided Machine on one, refuses before operation registration with one
-diagnostic naming every unsupported object.
+This contract realizes the libvirt and bare-metal arms. A provider host block
+is planned for every libvirt `InfraProvider` in the selected graph, and a
+machine block for every Machine on any realized provider whose effective
+`os.provided` is `false`. Provided Machines are never realized. A vSphere or
+KubeVirt provider, and every non-provided Machine on one, refuses before
+operation registration with one diagnostic naming every unsupported object.
 
-The provider host is the Machine `spec.libvirt.machineRef` names. It must be
-OS-ready and reachable through one of the
+Which arm realizes a Machine is settled once, from the substrate its provider
+declares, and every consumer of a realized Machine reads that one answer
+rather than deriving its own. A consumer therefore never learns which
+substrates exist: it receives the Machine's management controller, its identity
+channel and the block that realizes it, and a substrate added later reaches
+every consumer without changing one of them.
+
+The libvirt provider host is the Machine `spec.libvirt.machineRef` names. It
+must be OS-ready and reachable through one of the
 [placement arms](infrastructure-services.md#placement-arms-and-credentials)
 managed services use: the controller arm when it is the Environment
 controller, otherwise the SSH arm with its bound identity and host key. The
 controller arm claims the [host reservations](infrastructure-services.md#host-reservations)
-below; the SSH arm is coordinated by the context lease alone.
+below; the SSH arm is coordinated by the context lease alone. A bare-metal
+provider has no host: its Machines are reached at the controllers they
+declare, always from the controller Machine.
 
 A provider whose emulated BMC binds a wildcard address refuses before
 registration: every hosted Machine's controller endpoint must be one address
@@ -167,6 +180,72 @@ that is not shut off rather than forcing it, under the
 terminates the owned process tree; an authorized effect becomes unknown unless
 positive evidence proves its outcome.
 
+## Physical machine realization
+
+The block `machine-<machine>` on a bare-metal provider realizes nothing. A
+physical server exists before Bootwright is told about it and outlives every
+context that uses it, so this block proves the exact machine the desired state
+names and claims it for this context; it creates no hardware, changes no
+firmware setting and powers nothing on or off. What it establishes is the
+identity every later effect depends on, proved once, in one place, rather than
+re-derived by each consumer.
+
+**Target proof.** The Machine's `hardware.management.bmc.address` names one
+exact ComputerSystem. The block reads that resource with the bound credential
+and records its reported `UUID`, `SerialNumber`, `Manufacturer` and `Model`;
+then reads the system's complete `EthernetInterfaces` collection and requires
+every MAC the Machine declares to appear in it. The collection must be present,
+non-empty and readable in full: a member that answers with an error, a
+malformed body or no MAC leaves the proof unknown, never satisfied, because a
+partial inventory cannot show that this is the server the operator meant. A
+declared MAC the hardware does not report refuses. The power state is read and
+recorded but never changed here.
+
+This proof is what the [installation](managed-os.md#physical-installation)
+relies on before it erases a disk, and it is deliberately stricter than a name
+or an address: those locate a machine, and only the complete MAC set together
+with the ComputerSystem identity distinguishes it from another server that
+answers at the same endpoint after a re-cabling or a re-addressing.
+
+**Claim.** The block claims `bmc:<host>:<port>/<system>` for the normalized
+endpoint, so two contexts cannot both drive one physical server. The claim
+serializes use; it is not ownership of the machine and never authorizes
+destroying it.
+
+**Reservations.** `bmc:<host>:<port>/<system>` alone. A physical block owns no
+path, unit, socket or hypervisor object.
+
+**Evidence.** Completion requires the ComputerSystem answering with the bound
+credential, its recorded identity, every declared MAC observed, and a reported
+power state. Replay reports `completed` with no change whenever the same
+machine still answers with the same identity, because nothing was realized
+that could drift. The differences it converges are none: hardware is not
+converged, and a machine that answers as a *different* system, or whose MAC
+set no longer matches, fails naming the difference rather than adopting the
+new hardware. Observation is read-only: the exact identity with its complete
+MAC set is positive completion, an endpoint that answers as another system or
+does not answer at all stays unknown, and there is no absence to prove, because
+this block never created anything whose removal could be observed. It therefore
+reports positive no effect only when its own claim was never published.
+
+**Inverse.** Destroy releases the claim and proves nothing else. The server,
+its firmware settings, its disks and whatever operating system is installed on
+it are retained exactly as they are, so the block's removal description says it
+retains the machine and lists no impact. It consumes no authorization, because
+it destroys nothing. Physical erasure is deliberately not part of this contract
+and remains [deferred](milestones.md#candidates).
+
+**Quiescence.** The removal takes back only a claim, which nothing reads, so
+this block is always quiescent under the
+[removal gate](state-reconciliation.md#quiescence-before-removal) and says so.
+The running operating system is not this block's to stop: a removal that leaves
+the machine untouched interrupts nothing, and the installation that would
+change it has its own gate below.
+
+**Cancellation.** Cancellation stops authorization of new reads and terminates
+the owned process tree. No effect of this block can be left half performed,
+because it performs none.
+
 ## Identity and power operations
 
 Substrate publishes the operations other domains use to act on a realized
@@ -191,16 +270,22 @@ emulates a controller is reached at its allocated port from the provider host,
 and only while the context owns the realization that controller belongs to.
 The [CLI journey](cli.md#machine-power-operations) owns the rest.
 
-The identity operation is substrate-specific. For libvirt it reads a bounded
-guest file through the QEMU guest agent over the hypervisor's channel,
-returning its bytes and nothing else; a guest without the agent, or a file
-outside the allowed set, is unknown. An unknown answer carries the agent's own
-refusal, bounded to one line, so a channel that will never answer is told apart
-from one that has not answered yet by reading the result rather than by waiting
-out the consumer's whole retry budget. Managed OS consumes it to prove an
-installation's marker and to capture the guest's SSH host public key without
-trusting the network. A substrate with no such channel must define its own
-identity proof before its installation path is promoted.
+Every controller leg carries the trust its declaration sets. The
+controller-to-BMC leg follows `bmc.tls.verify`, so a physical controller with
+an internal certificate authority is reached exactly as the operator declared
+and an opt-out is endpoint-scoped, recorded in effective state and never a
+global default. The emulated controller serves plain HTTP and selects nothing.
+
+The identity operation proves what a machine holds without trusting the
+network, and each substrate supplies the channel it has. Two exist.
+
+**Guest agent**, for libvirt. It reads a bounded guest file through the QEMU
+guest agent over the hypervisor's channel, returning its bytes and nothing
+else; a guest without the agent, or a file outside the allowed set, is unknown.
+An unknown answer carries the agent's own refusal, bounded to one line, so a
+channel that will never answer is told apart from one that has not answered yet
+by reading the result rather than by waiting out the consumer's whole retry
+budget.
 
 The allowed set holds only files the installation itself wrote, beneath one
 directory it owns. A confined guest agent cannot read the directory sshd keeps
@@ -210,14 +295,50 @@ reaching for it where it was generated. The allowed set is the channel's only
 boundary: it is fixed in the adapter, never derived from a request, and every
 addition is a deliberate widening of what the channel can ever read.
 
+**Delivered key**, for a substrate with no out-of-band channel into the
+machine, which is every physical server. The installation delivers the host
+key the installed system will present, so the key is known before the machine
+is ever contacted, and the operation reads the machine over SSH pinned to
+exactly that key and to the fleet identity. What makes this a proof is the
+order: the key is declared in desired state and bound with the plan, the
+installation writes it, and the read accepts no other key, so a machine
+answering on the network can neither be substituted nor be trusted on first
+sight. A reachable machine that presents a different key is not this
+installation; an unreachable one has not answered yet. Each is unknown, and
+neither is absence.
+
+The channel a Machine uses is fixed by its substrate and frozen with the
+request, so a consumer asks for the marker and the host key and never learns
+which mechanism answered. A substrate that has neither channel must define its
+own identity proof before its installation path is promoted.
+
 ## Adapter boundary
 
 Every substrate effect crosses the
 [Go/Ansible boundary](architecture.md#go-and-ansible-responsibility-boundary)
-through one fixed entrypoint per block family and operation. Go freezes the
-request, authorizes each phase and validates the returned evidence strictly;
-the adapter invokes `virsh`, `qemu-img`, `podman` and `systemctl` with exact
-argument vectors, chooses no target, implementation or workflow, and returns
-bounded structured results. Both placement arms use the same roles, requests
-and evidence. Secret material reaches the adapter only through operation-scoped
-`0600` files beneath a `0700` directory that is removed after the run.
+through one fixed entrypoint per block family, implementation and operation.
+Go freezes the request, authorizes each phase and validates the returned
+evidence strictly; the adapter invokes `virsh`, `qemu-img`, `podman` and
+`systemctl` with exact argument vectors, or speaks Redfish to exactly the
+endpoint the frozen request names, chooses no target, implementation or
+workflow, and returns bounded structured results. Both placement arms use the
+same roles, requests and evidence. Secret material reaches the adapter only
+through operation-scoped `0600` files beneath a `0700` directory that is
+removed after the run.
+
+Each substrate's machine role also publishes two fixed task files that
+[managed OS](managed-os.md#adapter-boundary) composes by qualified name, so the
+installation never branches on a substrate itself: one proves the exact target
+immediately before destructive media is inserted, and one performs the identity
+read above. A substrate supplies both or its installation path is not
+promoted. Because they are named task files of a role rather than free
+variables, the binding is allowlisted and frozen: authored data can never
+select which of them runs.
+
+A Redfish client speaks to one endpoint and follows no redirect, uses no
+ambient proxy or credential, bounds every request and response, and treats a
+request it issued as a request rather than an outcome. Firmware differs widely
+in where virtual media lives, whether an update needs the resource's current
+entity tag, and whether an insertion completes synchronously, so the client
+discovers what a controller offers and adapts to it, and records what it could
+not determine as unknown rather than assuming the common case.

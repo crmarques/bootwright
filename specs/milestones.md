@@ -50,6 +50,73 @@ preserve its scope. Further delivery evidence lives in Git history.
 
 ## Out-of-sequence delivery
 
+### M5a — managed RHEL on physical bare metal
+
+**Owners:** Substrate and Managed OS, with Infrastructure services (private
+consumer publication), Machine (the host key a physical installation delivers)
+and State reconciliation (the authorization an installation consumes).
+**Requires:** M1h. **Definition:** Specified. **Delivery:** not started.
+**Delivered on explicit request**, outside the milestone sequence: it is the
+physical half of M5, bounded to the Anaconda path M1h already proves on
+emulated hardware, and it neither requires nor delivers M4 or C9.
+
+Install RHEL on an operator-owned physical server through its own Redfish
+management controller, over the same contract that installs a libvirt guest.
+The `machines` stage gains a second Machine implementation, `substrates` may
+be empty, and one Environment may mix virtual and physical Machines.
+
+**The general seam.** Which substrate realizes a Machine is derived once, in
+the Substrate context root, into the management controller a consumer boots
+through, the [identity channel](substrates.md#identity-and-power-operations) it
+proves completion with, whether the machine is physical, and the block that
+realizes it. [Managed OS](managed-os.md#installation) and the
+[power commands](substrates.md#identity-and-power-operations) consume that one
+answer and name no substrate, so the vSphere, KubeVirt and cloud arms that
+follow add a capability package and one derivation case rather than a branch in
+every consumer. This retires the second, duplicated controller dispatch the
+machine commands introduced, and with it the reason `machine start` ignored
+`bmc.tls.verify`.
+
+**Supported shape.** A bare-metal `InfraProvider` whose Machines declare their
+NICs, boot NIC, management controller and root device, install through
+`redfishVirtualMedia` and name the `sshKeyPair` their installation delivers.
+Every M1h refusal stands, and `import-certificate` virtual-media trust refuses
+before registration until it is qualified against real firmware.
+
+**Capabilities.** [Physical machine realization](substrates.md#physical-machine-realization)
+claims one server by its normalized controller endpoint, proves its exact
+ComputerSystem identity and complete MAC set, realizes nothing and retains
+everything on removal. [Physical installation](managed-os.md#physical-installation)
+consumes `data-loss` on apply, repeats the target proof immediately before it
+inserts media and again inside the installer, delivers the host key through
+[private publication](infrastructure-services.md#private-consumer-publication)
+and proves completion over SSH pinned to that key.
+
+Exit evidence: the `substrate` target-derivation tests (each arm's controller,
+channel and requirement, and a consumer that reads only the derived answer);
+the `substrate/baremetal` capability suite (identity and MAC proof, an
+incomplete inventory left unknown, the claim key, a removal that retains and
+consumes nothing, always-quiescent); the `managedos/installation` suite for the
+physical arm (authorization on apply, private publication removed at
+completion, delivered-key completion, the Kickstart's in-installer proof);
+`internal/machine/power` honouring declared controller trust; the collection's
+Redfish client suite against three firmware shapes, its system-inspection and
+protocol suites; the `examples/lab-baremetal` acceptance; and `make check`.
+
+**Verification model.** M1d's model continues. The physical path is rehearsed
+in-tree and by hand against an emulated controller, which exercises every
+contract above without hardware; acceptance against a real server is
+operator-run and is not a gate of this delivery.
+
+Constraints left behind: the interval between the controller's last proof and
+the installer's first write remains a
+[residual race](state-reconciliation.md#mutation-safety); physical destroy and
+offline erase remain C9, so a removal retains the installed system; a bonded or
+VLAN installation interface is not yet derived, so an install address on one
+refuses; `import-certificate` trust is refused rather than implemented; and two
+contexts claiming one controller from different controller hosts are not
+coordinated, exactly as the SSH placement arm is not.
+
 ### Machine commands
 
 **Owners:** Machine, with State reconciliation (the bounded runtime and the
@@ -536,7 +603,7 @@ implementation. Each must qualify exact releases and close its own contracts.
 | M2b — Ceph native files | Storage and Native artifacts: render typed storage intent into one release-specific declarative file set. | M1e, N3 | Qualify release schemas and reject unprovable fields; revise the API deliberately if needed. **N5:** define each storage secret consumer's validation, immutable binding and sensitive publication (M1c, N3), or prove outputs secret-free. Native goldens and negative disclosure tests. |
 | M3 — Ceph-pool script | Storage and Native artifacts: generate one deterministic native-CLI pool script. | M1e | **N4:** define the script manifest, bytes, fixed command structure, destination and generation journey (M1b). Prove argument encoding, replay semantics, diagnostics, sensitive classification, publication and goldens. No authored shell fragments, inline secrets or execution. |
 | M4 — OCP bare-metal lifecycle | State reconciliation, Substrate and Container cluster: extend full-context apply and destroy to OCP effects. | M1e, M2a | **L2:** extend pure plans, impacts, dependencies and digests. **L5:** add consumer-owned OCP remote ports. **L4:** extend durable execution, readiness and removal, preserving the M1e inverse and safely refusing incompatible state. **L6:** qualify exact implementations with contract, crash/lease, identity/ownership, replay, cancellation and real-system tests. Destroy a completed M1e snapshot before a fresh expanded apply. |
-| M5 — managed RHEL on bare metal | Managed OS and Substrate: extend M1h's Anaconda installation to physical machines and to the secret-bearing profile arms, using typed image, profile, entitlement, Secret and Machine intent. | M1h, M4, C9 | Extend L2/L4/L5; apply L6. Prove renderer/executor parity, exact Redfish system and disk identity, ownership, replay, secret custody and real-hardware acceptance. |
+| M5 — managed RHEL on bare metal | Managed OS and Substrate: the secret-bearing profile arms and the cluster-facing remainder of physical installation, using typed image, profile, entitlement, Secret and Machine intent. The Anaconda path itself is **delivered by M5a**, which also delivers the private publication those arms need. | M5a, M4, C9 | Extend L2/L4/L5; apply L6. Prove renderer/executor parity, ownership, replay, secret custody over the private path, a bonded or VLAN installation interface, and real-hardware acceptance. |
 | M6 — managed Ceph bare metal | Storage, Managed OS, Substrate and State reconciliation: provision one Ceph cluster slice. | M2b and required M5 OS-readiness slice | Extend L2/L4/L5; apply L6 to each implementation. Prove storage identity, ownership, destructive authorization, replay, secret custody and real-system acceptance. |
 
 Independent execution of M2a/M2b/M3 artifacts creates no Bootwright operation,
@@ -550,7 +617,7 @@ fill its concrete version, journey and evidence gaps when requested.
 
 | ID | Owner and bounded outcome | Deferred because / requires | Exit evidence |
 | --- | --- | --- | --- |
-| C1 | Substrate: one vSphere or KubeVirt provisioning variant; the libvirt variant is **promoted into M1h**. | No further variant/consumer selected; requires M1h's substrate contract and a named use case. | Exact release, adapter contract, failure/replay tests and real-system qualification. |
+| C1 | Substrate: one vSphere or KubeVirt provisioning variant; the libvirt variant is **promoted into M1h** and the bare-metal variant into M5a. | No further variant/consumer selected; requires a named use case. M5a made the shape of this work clear: an arm is a capability package plus one case of the [target derivation](substrates.md#selection-and-refusal), and no consumer of a realized Machine changes. | Exact release, adapter contract, its two fixed identity and pre-boot task files, failure/replay tests and real-system qualification. |
 | C2 | Infrastructure services: one managed `Registry` or `LoadBalancer` lifecycle. | No named consumer; requires M1f, whose shared managed-service capability both kinds would extend. | Typed port, exact implementation, lifecycle evidence, failure and acceptance tests. |
 | C3 | Storage: one Ceph pool, filesystem, gateway, NFS or export lifecycle. | Separate from operator-run scripts; requires M6 and a named service. | Ownership, replay, destroy and real-system qualification. |
 | C4 | Add-ons: one built-in package and binding lifecycle. | No exact package/target/release selected; requires a supported cluster. | [Package/driver contract](add-ons.md), compatibility, trust/secrets, readiness, ordering/replay/destroy and acceptance. |
@@ -558,7 +625,7 @@ fill its concrete version, journey and evidence gaps when requested.
 | C6 | UX: one additional view of available evidence or explicit access, or a dashboard/completion extension. | No journey selected; requires the underlying capability. | Complete human/machine journey, diagnostics, safety and end-to-end tests. |
 | C7 | State reconciliation: bounded parallel block execution, and the lease-only mutation boundary it needs. | Sequential execution must be qualified first; requires L4. A lifecycle operation holds the exclusive root lock for its whole duration, so a concurrent read waits; narrowing that to the context lease alone, which would let `status --watch` observe a running operation, belongs here. | Ordering/exclusion, deterministic scheduling, cancellation, persistence, partial-failure and replay tests, plus concurrent-reader evidence for the narrowed lock. |
 | C8 | Custom automation: one typed, invertible executable playbook journey. **Needs definition.** | Reserved schema cannot prove effects/ownership/non-exfiltration; requires M1e, L2/L4/L5 and a named journey. | Same-change API replacement, immutable source/dependencies, exact targets, bounded secrets, authorization, continuation, failure injection and isolated-runner qualification. |
-| C9 | Bare-metal safety: physical offline disk erase and managed-machine destroy. **Blocked.** | Exact disk identity is unproved during the controller-to-installer interval; needs new safety evidence that closes or explicitly bounds it. | Separate safety contract, immutable target proof at erase, failure injection and real-hardware qualification. |
+| C9 | Bare-metal safety: physical offline disk erase and managed-machine destroy. **Blocked.** | Exact disk identity is unproved during the controller-to-installer interval; needs new safety evidence that closes or explicitly bounds it. M5a narrowed that interval with an in-installer identity check but did not close it, and deliberately kept removal retaining: a physical removal releases its claim and erases nothing. | Separate safety contract, immutable target proof at erase, failure injection and real-hardware qualification. |
 | C10 | Add-ons, Workspace and CLI: custom-catalog acquisition, immutable publication, selection and removal, including the storage location and record format of `add-ons add` registrations and the meaning of the [`add-ons/_store` selection exception](api/environment.md#resource-and-cluster-selection). **Needs definition.** | No source/trust/storage/selection contract; requires M1b and C4. The three `add-ons` commands stay unavailable until promoted. | Closed schemas and formats, fixed bounds, authenticity, atomic/crash-safe storage, deterministic selection, retention through destroy and security/acceptance tests. |
 | C11 | Add-ons: one declarative custom-package lifecycle. | No package/target/driver selected; requires C4, C10 and a supported cluster. | Exact identities, qualified driver, host-contract suite, code-content refusal and apply/readiness/replay/destroy acceptance. |
 | C12 | Container cluster and Native artifacts: one local bootable installer ISO from M2a inputs and declared server endpoints. **Needs definition.** | No builder journey; requires M1e and M2a. No remote publication. | Exact builder/dependencies, bounded inputs, sensitive classification, typed manifest/digest, atomic publication, metadata goldens, negative effect tests and boot evidence. |

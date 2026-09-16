@@ -35,7 +35,7 @@ required fields inside the selected arm.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `spec.baremetal.boot.method` | string | no | — | Non-empty provider boot-method name when present. |
+| `spec.baremetal.boot.method` | string | no | `redfishVirtualMedia` | `redfishVirtualMedia`; the default materializes. Another value fails validation rather than naming a boot path no implementation performs. |
 | `spec.baremetal.defaults.bmc.credentialsRef` | string | no | — | Default `usernamePassword` `Secret` reference for a Machine that omits its own BMC credentials. |
 | `spec.baremetal.defaults.bmc.tls.verify` | boolean | no | `true` | Default for a machine BMC whose own `tls.verify` is absent. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.trust` | string | no | `disable-verification` | `disable-verification`, `import-certificate`, or `established`. |
@@ -171,6 +171,7 @@ downstream installer supplies.
 | `spec.os.installProfileRef` | string | conditional | — | Global `MachineInstallProfile`; valid only when `provided: false`. |
 | `spec.os.install.ntp` | array of selections | no | install-profile selections | NTPServer selections for a Bootwright-installed Machine; `[]` clears profile selections. |
 | `spec.os.install.rootDeviceHints` | object | conditional | — | Exact root-device fields below; bare-metal install requires `deviceName` or `wwn`. |
+| `spec.os.install.hostKeyRef` | string | conditional | — | `sshKeyPair` `Secret` whose pair the installation delivers as this machine's SSH host key; required for a bare-metal Bootwright-installed Machine and forbidden on every other Machine. Unique across Machines. |
 | `spec.proxy` | choice object | no | profile choice or direct access | Lifecycle-dependent atomic Machine-owned selection below; emits immediately after `os`. |
 | `spec.network` | object | no | contacts normalized below | Network selection, named contacts/static assignments, attachments, and bindings below. |
 | `spec.access` | object | lifecycle-dependent | normalized as below | Local or SSH access plus optional root-login posture. |
@@ -199,6 +200,15 @@ A bare-metal non-provided machine has at least one NIC; every NIC has a MAC;
 address selects one exact `/redfish/v1/Systems/<id>` ComputerSystem; and root
 device hints contain `deviceName` or `wwn`. These declarations identify an
 install target but do not authorize a destructive operation.
+
+A bare-metal Bootwright-installed machine also names `os.install.hostKeyRef`,
+because a physical machine offers no out-of-band channel to read back what it
+holds, so the key it will answer with is declared in advance and
+[delivered by the installation](../substrates.md#identity-and-power-operations)
+rather than discovered. Two Machines never name one key: a host key identifies
+exactly one machine, and sharing it would make either of them satisfy the
+other's proof. An installer-provisioned or provided machine declares none,
+having no Bootwright-performed installation to deliver it.
 
 NIC names and canonical MACs are unique in a machine, and authored MACs are
 unique across the complete graph. Effective normalization writes MACs as

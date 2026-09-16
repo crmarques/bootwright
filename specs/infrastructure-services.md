@@ -73,6 +73,7 @@ A reservation key is one of:
 | `bridge:<name>` | One host bridge, whichever network defines it. |
 | `libvirt-network:<name>` | One libvirt network definition. |
 | `libvirt-domain:<name>` | One libvirt domain definition. |
+| `bmc:<host>:<port>/<system>` | One [physical machine](substrates.md#physical-machine-realization), named by its normalized management-controller endpoint and exact ComputerSystem, so two contexts never drive one server. The claim serializes use; it is never ownership of the machine and authorizes nothing about it. |
 | `media:<filename.iso>` | A shared claim on one image of the [media store](managed-os.md#media-store); it conflicts with nothing and blocks only that image's deletion or replacement while any context holds it. |
 
 Every key is exclusive except the class marked shared. Reservations are
@@ -173,9 +174,36 @@ the subtree is atomic, labels published files so the serving process can read
 them, and is recorded in the consumer's evidence alone: the server's evidence
 never enumerates consumer content, its replay ignores it, and its inverse
 removes the root only after every consumer subtree is gone. Published content
-is non-sensitive; a consumer that must serve secret bytes needs a separate
-private publication contract. The first consumer is the installer image and
-package tree of [managed OS](managed-os.md#installation).
+is non-sensitive. The first consumer is the installer image and package tree of
+[managed OS](managed-os.md#installation).
+
+### Private consumer publication
+
+A consumer that must hand one machine a secret it cannot embed in publicly
+served content publishes it beneath `private/<object>/<token>/` of the same
+served root. The final segment is an unguessable token of at least 32 bytes
+from the operating system's cryptographic random source, minted by the attempt
+that publishes it and never by the plan, so it appears in no frozen request, no
+evidence, no progress output and no log. The consumer block owns
+`private/<object>/` as its reserved path; every directory from `private/` down
+is `0711` and every file `0600` for the serving process, so nothing is
+listable and the token is the only way to name what it contains.
+
+Its confidentiality rests on two properties together, and each must hold. The
+token is unguessable, so the path cannot be found by enumeration. And the
+fetch is made over a listener whose certificate the fetching machine verifies
+against the bound certificate it was given, so the path cannot be learned by
+observing the network. A consumer that would have to disable verification to
+fetch it must not publish confidentially this way.
+
+Published material is removed as soon as the work that needed it completes,
+and its absence is part of that block's completion evidence, because material
+that existed for one boot must not outlive it. An observation that finds a
+private tree whose work has completed treats it as unfinished work to converge,
+and the inverse removes it. This contract carries no operator-authored secret:
+its one consumer is the host key a
+[physical installation](managed-os.md#physical-installation) delivers, and any
+further use is specified before it is built.
 
 ## Managed network services
 
