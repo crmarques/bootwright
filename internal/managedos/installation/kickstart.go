@@ -7,7 +7,16 @@ import (
 	"strings"
 )
 
-const kickstartVersion = "kickstart-anaconda-v1"
+const kickstartVersion = "kickstart-anaconda-v2"
+
+// agentFilter is the guest agent's RPC filter, and identityRPCs are the
+// commands the identity operation reads a bounded guest file through. RHEL
+// ships an allow list that omits all three, so an installation that left the
+// filter alone would complete and then prove nothing.
+const (
+	agentFilter  = "/etc/sysconfig/qemu-ga"
+	identityRPCs = "guest-file-open,guest-file-close,guest-file-read"
+)
 
 // MarkerToken and AuthorizedKeyToken are the two values the adapter substitutes
 // into the frozen Kickstart at render time. Both are derived at execution: the
@@ -209,11 +218,11 @@ func packagesSection(input Installation) []string {
 	return append(lines, "%end")
 }
 
-// postSection writes the install marker, the account's passwordless escalation
-// and the daemon policy, then removes every retained copy of the Kickstart so
-// the installed system keeps none.
+// postSection writes the install marker, the account's passwordless escalation,
+// the daemon policy and the guest agent's RPC filter, then removes every
+// retained copy of the Kickstart so the installed system keeps none.
 func postSection(input Installation) []string {
-	return []string{
+	lines := []string{
 		"%post --erroronfail",
 		"set -eu",
 		"install -d -m 0755 " + parentOf(input.MarkerPath),
@@ -227,8 +236,26 @@ func postSection(input Installation) []string {
 		"install -d -m 0755 /etc/ssh/sshd_config.d",
 		"printf '%s\\n' 'PasswordAuthentication no' 'PermitRootLogin prohibit-password' > /etc/ssh/sshd_config.d/60-bootwright.conf",
 		"chmod 0600 /etc/ssh/sshd_config.d/60-bootwright.conf",
+	}
+	lines = append(lines, agentFilterLines()...)
+	return append(lines,
 		"rm -f /root/anaconda-ks.cfg /root/original-ks.cfg /run/install/ks.cfg",
 		"%end",
+	)
+}
+
+// agentFilterLines permit exactly the identity operation's reads and prove the
+// edit took, so a release that spells the filter differently fails the
+// installation rather than leaving a guest that can never prove completion.
+func agentFilterLines() []string {
+	return []string{
+		`if grep -q '^FILTER_RPC_ARGS=.*--allow-rpcs=' ` + agentFilter + `; then`,
+		`sed -i '/^FILTER_RPC_ARGS=/s/--allow-rpcs=/--allow-rpcs=` + identityRPCs + `,/' ` + agentFilter,
+		`grep -q '^FILTER_RPC_ARGS=.*--allow-rpcs=` + identityRPCs + `,' ` + agentFilter,
+		`elif grep -q '^FILTER_RPC_ARGS=.*--block-rpcs=' ` + agentFilter + `; then`,
+		`sed -i '/^FILTER_RPC_ARGS=/s/guest-file-open,//;/^FILTER_RPC_ARGS=/s/guest-file-close,//;/^FILTER_RPC_ARGS=/s/guest-file-read,//' ` + agentFilter,
+		`! grep -q '^FILTER_RPC_ARGS=.*guest-file-open' ` + agentFilter,
+		`fi`,
 	}
 }
 

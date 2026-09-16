@@ -206,6 +206,26 @@
     quiet: true
   no_log: true
 
+- name: Read the power state that decides whether this machine may be installed
+  bootwright.core.redfish_boot:
+    endpoint: '{{ bootwright_os_install_request.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
+    operation: read
+  register: managedos_install_anaconda_state
+  no_log: true
+
+- name: Refuse a running machine that proves no installation
+  ansible.builtin.assert:
+    that:
+      - managedos_install_anaconda_installed | bool
+        or managedos_install_anaconda_state.power != 'On'
+    fail_msg: >-
+      the machine is running and proves no installation, so a fresh one requires
+      its realization to be destroyed and applied again
+    quiet: true
+  no_log: true
+
 - name: Install the operating system when the guest holds nothing yet
   ansible.builtin.include_tasks: boot.yml
   when: not (managedos_install_anaconda_installed | bool)

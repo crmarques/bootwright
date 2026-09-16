@@ -107,6 +107,33 @@ func TestThePostSectionLeavesTheProofAndNoCopyOfItself(t *testing.T) {
 	}
 }
 
+// The installed guest permits the reads completion is proved through. RHEL
+// ships an allow list without them, so an installation that left the filter
+// alone would answer a ping and refuse every file the marker is read from.
+func TestThePostSectionPermitsTheIdentityReads(t *testing.T) {
+	kickstart := kickstartOf(t, labCatalog())
+	permitted := "guest-file-open,guest-file-close,guest-file-read"
+	requireLine(t, kickstart, `if grep -q '^FILTER_RPC_ARGS=.*--allow-rpcs=' /etc/sysconfig/qemu-ga; then`)
+	requireLine(t, kickstart, `sed -i '/^FILTER_RPC_ARGS=/s/--allow-rpcs=/--allow-rpcs=`+permitted+`,/' /etc/sysconfig/qemu-ga`)
+	requireLine(t, kickstart, `grep -q '^FILTER_RPC_ARGS=.*--allow-rpcs=`+permitted+`,' /etc/sysconfig/qemu-ga`)
+	requireLine(t, kickstart, `fi`)
+}
+
+// A guest agent whose filter this installation cannot recognize fails the
+// installation, because the alternative is a guest that installs and then
+// proves nothing for the identity operation's full retry budget.
+func TestTheAgentFilterEditIsProvedRatherThanAssumed(t *testing.T) {
+	kickstart := kickstartOf(t, labCatalog())
+	edit := strings.Index(kickstart, "s/--allow-rpcs=")
+	proof := strings.Index(kickstart, `grep -q '^FILTER_RPC_ARGS=.*--allow-rpcs=guest-file-open`)
+	if edit < 0 || proof < 0 || proof < edit {
+		t.Fatalf("the filter edit is not proved after it is made:\n%s", kickstart)
+	}
+	if !strings.Contains(kickstart, "%post --erroronfail") {
+		t.Fatalf("an unproved filter would not fail the installation:\n%s", kickstart)
+	}
+}
+
 // A Machine with no root-device hint lets the installer choose, because a
 // predicate the graph never declared is not a target selector.
 func TestAMachineWithoutHintsPartitionsAutomatically(t *testing.T) {

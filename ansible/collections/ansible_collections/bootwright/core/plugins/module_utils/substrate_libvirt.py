@@ -38,6 +38,17 @@ def virsh(runner, uri, *arguments):
     return invoke(runner, [VIRSH, "--connect", uri] + [str(value) for value in arguments])
 
 
+def virsh_reason(runner, uri, *arguments):
+    """Run virsh and keep the diagnosis it writes to standard error.
+
+    A caller that reports an unknown answer rather than an error has nothing
+    else to report with, because the refusal is never on standard output.
+    """
+    argv = [VIRSH, "--connect", uri] + [str(value) for value in arguments]
+    code, out, err = runner(argv, check_rc=False, environ_update=ENVIRONMENT)
+    return code, out[:MAX_OUTPUT], err[:MAX_OUTPUT]
+
+
 def packages_present(runner, names):
     """Report whether every package of the closure is installed, by name."""
     for name in names:

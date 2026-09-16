@@ -156,7 +156,10 @@ not arrive.
 The identity operation is substrate-specific. For libvirt it reads a bounded
 guest file through the QEMU guest agent over the hypervisor's channel,
 returning its bytes and nothing else; a guest without the agent, or a file
-outside the allowed set, is unknown. Managed OS consumes it to prove an
+outside the allowed set, is unknown. An unknown answer carries the agent's own
+refusal, bounded to one line, so a channel that will never answer is told apart
+from one that has not answered yet by reading the result rather than by waiting
+out the consumer's whole retry budget. Managed OS consumes it to prove an
 installation's marker and to capture the guest's SSH host public key without
 trusting the network. A substrate with no such channel must define its own
 identity proof before its installation path is promoted.

@@ -55,13 +55,17 @@ answered:
   description: Whether the guest agent answered at all.
   returned: always
   type: bool
+reason:
+  description: The agent's own refusal when it did not answer, bounded to one line.
+  returned: always
+  type: str
 """
 
 import base64
 import json
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import virsh
+from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import virsh_reason
 
 # ALLOWED is the closed set this operation may read. A consumer that needs
 # another file adds it here deliberately, so the channel can never be used to
@@ -73,19 +77,37 @@ ALLOWED = (
 )
 
 MAX_LIMIT = 1 << 16
+REASON_LIMIT = 200
+
+
+class Unanswered(ValueError):
+    """An agent that did not answer, carrying its own refusal."""
+
+    def __init__(self, reason):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def diagnosis(text):
+    """The first meaningful line the agent refused with, bounded."""
+    for line in (text or "").splitlines():
+        stripped = line.strip()
+        if stripped:
+            return stripped[:REASON_LIMIT]
+    return "the guest agent returned nothing"
 
 
 def agent(runner, uri, domain, payload):
-    code, output = virsh(runner, uri, "qemu-agent-command", domain, json.dumps(payload))
+    code, output, error = virsh_reason(runner, uri, "qemu-agent-command", domain, json.dumps(payload))
     if code != 0 or not output.strip():
-        raise ValueError("agent")
+        raise Unanswered(diagnosis(error))
     return json.loads(output).get("return")
 
 
 def read_file(runner, uri, domain, path, limit):
     handle = agent(runner, uri, domain, {"execute": "guest-file-open", "arguments": {"path": path, "mode": "r"}})
     if not isinstance(handle, int):
-        raise ValueError("handle")
+        raise Unanswered("the guest agent opened no handle")
     try:
         answer = agent(runner, uri, domain, {
             "execute": "guest-file-read", "arguments": {"handle": handle, "count": limit},
@@ -116,10 +138,13 @@ def main():
     limit = max(1, min(int(module.params["limit"]), MAX_LIMIT))
     try:
         content = read_file(module.run_command, module.params["uri"], module.params["domain"], path, limit)
-    except (OSError, ValueError, TypeError):
-        module.exit_json(changed=False, answered=False, content="")
+    except Unanswered as unanswered:
+        module.exit_json(changed=False, answered=False, content="", reason=unanswered.reason)
         return
-    module.exit_json(changed=False, answered=True, content=content)
+    except (OSError, ValueError, TypeError):
+        module.exit_json(changed=False, answered=False, content="", reason="the guest agent answer could not be read")
+        return
+    module.exit_json(changed=False, answered=True, content=content, reason="")
 
 
 if __name__ == "__main__":

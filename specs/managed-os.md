@@ -77,9 +77,14 @@ automatic partitioning when the Machine names none; the `minimal` environment,
 the profile's packages, and `qemu-guest-agent` on every libvirt Machine; the
 profile's enabled and disabled services; SELinux and firewall as selected; the
 profile's configured repositories; and a `%post` that writes the install
-marker, the sudoers and SSH daemon drop-ins, and removes every retained copy of
-the Kickstart. The marker is bounded JSON naming the context, Machine, profile,
-image digest and the request digest, and its content is frozen with the plan.
+marker, the sudoers and SSH daemon drop-ins, permits the guest agent the
+bounded reads the [identity operation](substrates.md#identity-and-power-operations)
+proves completion through, and removes every retained copy of the Kickstart.
+The agent's shipped filter answers a ping while refusing every file, so the
+`%post` proves its own edit took and fails the installation when it did not,
+rather than leaving a guest that installs and can never prove it. The marker is
+bounded JSON naming the context, Machine, profile, image digest and the request
+digest, and its content is frozen with the plan.
 
 **Publication.** The block publishes beneath the selected artifact server's
 served root under the
