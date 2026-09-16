@@ -113,6 +113,52 @@ server. Bootwright requires the Machine's BMC address to name one exact
 [admission](../../specs/api/machines.md#os-lifecycle-and-substrate-invariants)
 refuses a bare-metal install address that does not.
 
+## How to stay vendor-neutral
+
+The reference implementation supported iBMC, iDRAC-style and OpenBMC
+controllers with no vendor branch anywhere, and the technique is worth keeping
+exactly: **discover capabilities from the controller's own metadata, and let
+the metadata decide**. A vendor name never appears in a condition.
+
+- **Actions are collected from two places.** A resource's `Actions.<name>` is
+  the standard location; `Oem.<vendor>.Actions.<name>` is where a vendor puts
+  its own. Walking both, and recording which one an action came from, finds
+  xFusion's `#VirtualMedia.VmmControl` without knowing that xFusion exists.
+- **An OEM action is used only when its `@Redfish.ActionInfo` proves it fits.**
+  The reference accepted `VmmControl` only when its ActionInfo declared both an
+  `Image` and a `VmmControlType` parameter, and the latter's `AllowableValues`
+  contained `Connect` and `Disconnect` (an absent `AllowableValues` is treated
+  as permissive). So the capability is proved, not assumed.
+- **Standard wins.** The OEM path is taken only when no standard
+  `InsertMedia` action is advertised at all, so a controller that implements
+  the specification is driven by the specification.
+- **Power likewise.** `ResetType@Redfish.AllowableValues`, on the action or in
+  its ActionInfo, selects `ForceOn` before `On` before `PushPowerButton`
+  rather than sending a fixed value and hoping.
+- **Media members are unioned and de-duplicated** across the system and every
+  manager view, keyed on the resolved URL, then narrowed by `MediaTypes` or an
+  id suffix.
+
+The one place a fixed value was unavoidable is the iBMC certificate slot
+(`RootCertId` 8, because that firmware admits only 5 through 8). That is data
+beside its own method file, not a branch in the shared flow, and the method
+itself is chosen by discovery.
+
+## Prove by observation, not by response status
+
+Every mutating call in the reference accepts a wide status set and then
+confirms by reading the resource back. Eject accepts 200, 202, 204, 400, 404,
+409 and even 500, then polls the VirtualMedia member until `Inserted` is false,
+treating a 404 as ejected because some controllers remove the resource
+entirely. Insert accepts its own status, then polls the asynchronous task, then
+confirms `Inserted` with a matching image. The status of a request is never the
+evidence; the state of the resource is.
+
+Bounds it settled on: 60 s per request, 3 insert attempts 10 s apart, 60 task
+polls 2 s apart, 24 media probes 5 s apart, 12 power-state polls 5 s apart, and
+1800 s for a physical host to reach TCP/22 after power-on, because a production
+server's POST is minutes long.
+
 ## Proving the target before erasing it
 
 The system's `EthernetInterfaces` collection is the live MAC inventory, and
