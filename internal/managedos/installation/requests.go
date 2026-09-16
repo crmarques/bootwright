@@ -51,6 +51,7 @@ type Request struct {
 	// authorizes for the product-owned account. Only that half ever leaves the
 	// binding, and it reaches the adapter at execution rather than in the plan.
 	FleetKeyRef string              `json:"fleetKeyRef"`
+	HostKeyPath string              `json:"hostKeyPath"`
 	Hostname    string              `json:"hostname"`
 	Identity    Identity            `json:"identity"`
 	Image       Publication         `json:"image"`

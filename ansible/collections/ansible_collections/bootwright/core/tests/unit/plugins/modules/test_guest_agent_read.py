@@ -10,10 +10,25 @@ from __future__ import annotations
 import pytest
 
 from ansible_collections.bootwright.core.plugins.modules.guest_agent_read import (
+    ALLOWED,
     Unanswered,
     diagnosis,
     read_file,
 )
+
+
+# The allow list is the channel's only boundary, so widening it must never be
+# incidental. Both entries are files the installation itself wrote: sshd's own
+# key directory is unreadable to a confined agent, and the policy that would
+# open it also reaches the private halves.
+def test_the_channel_reads_only_what_the_installation_published():
+    assert ALLOWED == (
+        "/etc/bootwright/install-marker.json",
+        "/etc/bootwright/host-key.pub",
+    )
+    for outside in ("/etc/ssh/ssh_host_ed25519_key.pub", "/etc/ssh/ssh_host_ed25519_key", "/etc/shadow"):
+        assert outside not in ALLOWED
+
 
 MARKER = "/etc/bootwright/install-marker.json"
 

@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v1'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v2'
       - bootwright_os_install_digest is match('[0-9a-f]{64}')
     quiet: true
   no_log: true
@@ -28,7 +28,7 @@
   bootwright.core.guest_agent_read:
     uri: '{{ bootwright_os_install_request.uri }}'
     domain: '{{ bootwright_os_install_request.domain }}'
-    path: /etc/ssh/ssh_host_ed25519_key.pub
+    path: '{{ bootwright_os_install_request.hostKeyPath }}'
   register: managedos_install_anaconda_host_key
 
 - name: Read the power state and media its controller reports

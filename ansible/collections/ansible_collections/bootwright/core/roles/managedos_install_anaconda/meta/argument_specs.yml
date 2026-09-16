@@ -21,6 +21,9 @@ argument_specs:
           fleetKeyRef:
             type: str
             required: true
+          hostKeyPath:
+            type: str
+            required: true
           hostname:
             type: str
             required: true
@@ -54,7 +57,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [os-install-anaconda-v1]
+            choices: [os-install-anaconda-v2]
       bootwright_os_install_material:
         type: dict
         required: true

@@ -137,6 +137,7 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 		Controller:  controller,
 		Domain:      domain,
 		FleetKeyRef: fleetKeyRef(catalog),
+		HostKeyPath: HostKeyPath,
 		Identity:    Identity{Block: BlockID(name), Context: contextName, Object: name, Profile: profile.Name()},
 		Image:       image,
 		MarkerPath:  MarkerPath,

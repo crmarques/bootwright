@@ -14,7 +14,7 @@ const Implementation = "os-install-anaconda-v1"
 // same kind through another implementation, so a block resolves by both.
 const Kind = "Machine"
 
-const requestVersion = "os-install-anaconda-v1"
+const requestVersion = "os-install-anaconda-v2"
 
 // consumerPrefix is the subtree this capability owns beneath a managed artifact
 // server's served root. The server owns the root; this block owns exactly
@@ -25,9 +25,16 @@ const consumerPrefix = "os"
 // own content root.
 const servedRoot = "public"
 
-// MarkerPath is where a completed installation leaves its proof. It is read
-// through the substrate's identity operation, never over the network.
-const MarkerPath = "/etc/bootwright/install-marker.json"
+// MarkerPath is where a completed installation leaves its proof, and
+// HostKeyPath is where it republishes the guest's own SSH host public key.
+// Both are read through the substrate's identity operation, never over the
+// network. The key is republished here rather than read where sshd keeps it
+// because a confined guest agent cannot read `sshd_key_t`, and widening that
+// policy would let the channel reach the private halves too.
+const (
+	MarkerPath  = "/etc/bootwright/install-marker.json"
+	HostKeyPath = "/etc/bootwright/host-key.pub"
+)
 
 // installTooling is the closure that builds a per-Machine installer image and
 // extracts a DVD tree. On the controller the controller stage installs it; on
@@ -48,7 +55,7 @@ func ContentDigest() string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		"bootwright.managedos.install-anaconda-v1",
 		Implementation, requestVersion, kickstartVersion,
-		consumerPrefix, servedRoot, MarkerPath,
+		consumerPrefix, servedRoot, MarkerPath, HostKeyPath,
 		strings.Join(installTooling, ","),
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])

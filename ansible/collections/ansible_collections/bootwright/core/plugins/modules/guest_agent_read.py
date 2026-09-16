@@ -69,11 +69,13 @@ from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt 
 
 # ALLOWED is the closed set this operation may read. A consumer that needs
 # another file adds it here deliberately, so the channel can never be used to
-# exfiltrate arbitrary guest state.
+# exfiltrate arbitrary guest state. Both entries are written by the
+# installation itself: a confined guest agent cannot read sshd's own key
+# directory, and the policy that would permit it also reaches the private
+# halves, so the installation republishes the public key it owns instead.
 ALLOWED = (
     "/etc/bootwright/install-marker.json",
-    "/etc/ssh/ssh_host_ed25519_key.pub",
-    "/etc/ssh/ssh_host_rsa_key.pub",
+    "/etc/bootwright/host-key.pub",
 )
 
 MAX_LIMIT = 1 << 16

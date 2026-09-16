@@ -119,6 +119,35 @@ func TestThePostSectionPermitsTheIdentityReads(t *testing.T) {
 	requireLine(t, kickstart, `fi`)
 }
 
+// The installation republishes the host key it generated, because the guest
+// agent is confined and cannot read sshd's own key directory. Generating the
+// key here rather than at first boot means the published copy is the one sshd
+// will present, so the two can never diverge unnoticed.
+func TestThePostSectionRepublishesTheHostKeyItGenerated(t *testing.T) {
+	kickstart := kickstartOf(t, labCatalog())
+	requireLine(t, kickstart, "/usr/bin/ssh-keygen -A")
+	requireLine(t, kickstart, "install -m 0444 /etc/ssh/ssh_host_ed25519_key.pub /etc/bootwright/host-key.pub")
+	requireLine(t, kickstart, "test -s /etc/bootwright/host-key.pub")
+	generated := strings.Index(kickstart, "ssh-keygen -A")
+	published := strings.Index(kickstart, "install -m 0444 /etc/ssh")
+	proved := strings.Index(kickstart, "test -s /etc/bootwright/host-key.pub")
+	if generated < 0 || published < generated || proved < published {
+		t.Fatalf("the host key is published before it is generated or proved:\n%s", kickstart)
+	}
+}
+
+// The frozen request carries both paths the identity operation reads, so the
+// adapter never names one of its own.
+func TestTheRequestCarriesEveryPathTheIdentityOperationReads(t *testing.T) {
+	request, _ := onlyRequest(t, labCatalog())
+	if request.MarkerPath != MarkerPath || request.HostKeyPath != HostKeyPath {
+		t.Fatalf("the request omits an identity path: %q %q", request.MarkerPath, request.HostKeyPath)
+	}
+	if request.Version != requestVersion {
+		t.Fatalf("the request version is not the frozen one: %q", request.Version)
+	}
+}
+
 // A guest agent whose filter this installation cannot recognize fails the
 // installation, because the alternative is a guest that installs and then
 // proves nothing for the identity operation's full retry budget.

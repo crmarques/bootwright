@@ -77,14 +77,18 @@ automatic partitioning when the Machine names none; the `minimal` environment,
 the profile's packages, and `qemu-guest-agent` on every libvirt Machine; the
 profile's enabled and disabled services; SELinux and firewall as selected; the
 profile's configured repositories; and a `%post` that writes the install
-marker, the sudoers and SSH daemon drop-ins, permits the guest agent the
-bounded reads the [identity operation](substrates.md#identity-and-power-operations)
-proves completion through, and removes every retained copy of the Kickstart.
-The agent's shipped filter answers a ping while refusing every file, so the
-`%post` proves its own edit took and fails the installation when it did not,
-rather than leaving a guest that installs and can never prove it. The marker is
-bounded JSON naming the context, Machine, profile, image digest and the request
-digest, and its content is frozen with the plan.
+marker, generates the guest's SSH host keys and republishes the public half
+beside that marker, writes the sudoers and SSH daemon drop-ins, permits the
+guest agent the bounded reads the
+[identity operation](substrates.md#identity-and-power-operations) proves
+completion through, and removes every retained copy of the Kickstart. The agent
+is confined and can read neither its own shipped filter's refusals nor sshd's
+key directory, so the `%post` both permits those reads and republishes the key,
+and proves each edit took rather than leaving a guest that installs and can
+never prove it. Generating the host keys during installation rather than at
+first boot is what makes the republished copy the key sshd will present. The
+marker is bounded JSON naming the context, Machine, profile, image digest and
+the request digest, and its content is frozen with the plan.
 
 **Publication.** The block publishes beneath the selected artifact server's
 served root under the

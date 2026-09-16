@@ -7,7 +7,12 @@ import (
 	"strings"
 )
 
-const kickstartVersion = "kickstart-anaconda-v2"
+const kickstartVersion = "kickstart-anaconda-v3"
+
+// hostKeySource is the key the installation republishes. Ed25519 is the type
+// the identity operation binds, and generating it here rather than at first
+// boot means the published copy is the key sshd will actually present.
+const hostKeySource = "/etc/ssh/ssh_host_ed25519_key.pub"
 
 // agentFilter is the guest agent's RPC filter, and identityRPCs are the
 // commands the identity operation reads a bounded guest file through. RHEL
@@ -47,6 +52,7 @@ type Installation struct {
 	Firewall         string
 	Formats          string
 	Gateway          string
+	HostKeyPath      string
 	Hostname         string
 	Interface        string
 	Keyboard         string
@@ -230,6 +236,9 @@ func postSection(input Installation) []string {
 		MarkerToken,
 		"BOOTWRIGHT_MARKER_EOF",
 		"chmod 0444 " + input.MarkerPath,
+		"/usr/bin/ssh-keygen -A",
+		"install -m 0444 " + hostKeySource + " " + input.HostKeyPath,
+		"test -s " + input.HostKeyPath,
 		"install -d -m 0750 /etc/sudoers.d",
 		"printf '%s\\n' '" + input.User + " ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/60-bootwright",
 		"chmod 0440 /etc/sudoers.d/60-bootwright",

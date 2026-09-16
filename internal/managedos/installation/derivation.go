@@ -55,6 +55,7 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 		Interface:        iface,
 		Keyboard:         orDefault(customizations.Get("localization", "keyboard").Text(), "us"),
 		Language:         orDefault(customizations.Get("localization", "language").Text(), "en_US.UTF-8"),
+		HostKeyPath:      HostKeyPath,
 		MarkerPath:       MarkerPath,
 		Nameservers:      nameservers,
 		NTPServers:       timeSources,

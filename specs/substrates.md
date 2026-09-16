@@ -164,6 +164,14 @@ installation's marker and to capture the guest's SSH host public key without
 trusting the network. A substrate with no such channel must define its own
 identity proof before its installation path is promoted.
 
+The allowed set holds only files the installation itself wrote, beneath one
+directory it owns. A confined guest agent cannot read the directory sshd keeps
+its keys in, and the policy that would permit it reaches the private halves as
+well, so the installation republishes the public key rather than the operation
+reaching for it where it was generated. The allowed set is the channel's only
+boundary: it is fixed in the adapter, never derived from a request, and every
+addition is a deliberate widening of what the channel can ever read.
+
 ## Adapter boundary
 
 Every substrate effect crosses the
