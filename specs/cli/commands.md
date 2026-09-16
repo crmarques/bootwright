@@ -102,6 +102,9 @@ explicit `--context` changes nothing they do.
 | `bootwright machine rsh` | required `--name <machine>` | bounded handoff for an interactive SSH session to the exact Machine | read target and access metadata only |
 | `bootwright machine exec` | required `--name <machine>` and `<command>...` | bounded handoff for the exact remote command argument vector | read target and access metadata only |
 | `bootwright machine trust` | `--machines <list>` default all; `--replace <list>` default none; `--dry-run` false; `--yes` false; `--output text\|json` default `text` | exact host-key trust plan and result | bounded SSH identity observation; local trust-store write unless dry-run |
+| `bootwright machine start` | required `--name <machine>`; `--output text\|json` default `text` | the power state the Machine's management controller proved once the operation settled | bounded power operation through that controller |
+| `bootwright machine stop` | required `--name <machine>`; `--force` false; `--yes` false; `--output text\|json` default `text` | same, after the operating system is asked to shut down | same |
+| `bootwright machine restart` | required `--name <machine>`; `--force` false; `--yes` false; `--output text\|json` default `text` | same, after a proved stop and a proved start | same |
 | `bootwright setup` | `--dry-run` false; `--yes` false | [context-independent controller prerequisite plan or completed setup](../controller.md#selection-and-command-journeys) | bounded dependency acquisition and local installation; no context selection or binding; dry-run only previews |
 | `bootwright cluster list` | `--output text\|json` default `text` | container and storage cluster names and kinds in canonical order | read local state |
 | `bootwright cluster info` | `--name <cluster>` default all unless `--secrets`; `--secrets` false; `--output text\|json` default `text` | cluster kinds, endpoints, access-command applicability and availability, artifact availability, and optional explicit sensitive values | read local state and optional confidential material |
@@ -289,6 +292,16 @@ and requires `--output-dir`. A non-empty `--context` or
 with a resolved `--output json`. The conflict is `cli.usage` with exit `2`
 and the normal JSON failure envelope; `--silent=false` permits JSON output.
 This relationship uses final scalar values and follows explicit-help precedence.
+
+`machine start`, `machine stop` and `machine restart` each resolve one exact
+Machine and converge it to the power state their name means, through
+[the Machine's own management controller](../substrates.md#identity-and-power-operations).
+`--force` cuts the power instead of asking the operating system to shut down,
+and is accepted only by `stop` and `restart`, which interrupt a running system;
+those two also take the ordinary confirmation, while `start` interrupts nothing
+and takes neither. A `stop` or `restart` with a resolved `--output json`
+requires `--yes`; without it the invocation is `cli.usage` with exit `2` and
+acts on nothing.
 
 `status --watch` is text-only and conflicts with JSON. A valid
 `--watch-interval` without `--watch` is accepted but has no effect; with watch,

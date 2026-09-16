@@ -10,8 +10,6 @@ import (
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
 	"github.com/crmarques/bootwright/internal/environment/inspection"
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
-	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
-	"github.com/crmarques/bootwright/internal/machine/inventory"
 	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
 	storagepreflight "github.com/crmarques/bootwright/internal/storage/preflight"
 	storagerendering "github.com/crmarques/bootwright/internal/storage/rendering"
@@ -34,8 +32,7 @@ func wireStubs() cli.Services {
 		StoragePreflight:      storagepreflight.Service{},
 		StorageArtifacts:      storagerendering.Service{},
 		Artifacts:             artifactrendering.Service{},
-		MachineInventory:      inventory.Service{},
-		MachineAccess:         machineaccess.Service{},
-		MachineTrust:          enrollment.Service{},
+
+		MachineTrust: enrollment.Service{},
 	}
 }

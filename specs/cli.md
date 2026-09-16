@@ -512,6 +512,23 @@ vector, never shell text. `rsh` accepts no command tail. `oc` and `kubectl`
 preserve the payload argument vector but never inherit ambient kubeconfig,
 plugins, credentials, proxy settings, cache, or executable lookup.
 
+`machine list` reports each selected Machine with the state its context's
+durable evidence proves: `owned` when an apply proved its realization,
+`pending` while an operation has not, `failed` or `unknown` when an attempt
+said so or proved nothing, `released` once a destroy completed, and
+`unmanaged` when no frozen plan names it. A declaration alone never reports
+ownership, and a Machine outside the evidence is never reported as absent.
+
+A Machine handoff names the pinned client, the target address and port, the
+account, and an explicitly borrowed identity file. When the Machine's own
+authentication is confidential material this context holds, the descriptor
+names neither a value nor a path: standard output carries the descriptor and
+standard error carries one warning naming the `secret show` export the operator
+performs themselves and the `--ssh-id-file` that offers it back. A borrowed
+account reaches a Bootwright-installed Machine only with
+`--ssh-user-for-provisioned`; without it the request fails
+`access.unavailable` and resolves no descriptor.
+
 ### Cluster node selection
 
 `cluster rsh` and `cluster exec` resolve `--node` only within the selected
@@ -538,3 +555,30 @@ never falls through from an ambiguous tier or silently selects the default.
 The diagnostic names the requested selector and gives the safe next action of
 choosing one declared node name. Node selection changes no desired state,
 canonical serialization, or lifecycle scope.
+
+### Machine power operations
+
+`machine start`, `machine stop` and `machine restart` converge one exact
+Machine to a power state. They are bounded operations, not desired state: they
+register no lifecycle operation, freeze no plan, and change no ownership,
+continuation, or frozen plan, so a machine an operator stopped is still a
+machine this context owns and will reconcile.
+
+Resolution follows explicit access: an unknown or excluded name fails
+`access.target`, and a Machine this executable cannot reach a management
+controller for fails `access.unavailable`, both with exit `1`, empty standard
+output and no effect. A Machine whose controller is emulated by its provider
+is reachable only while the context owns its realization, because the
+controller is one of that realization's own effects; a Machine that authors its
+own controller is reachable whenever that controller answers.
+
+Every power request crosses [the Machine's management controller](substrates.md#identity-and-power-operations)
+over the one adapter boundary, under the context's shared lock, so a power
+operation and a lifecycle mutation never run against the same host at once.
+A request is not evidence: the result reports the state the controller proved
+once the operation settled, together with the state before it and whether
+anything changed. A state that never arrived within the bounded window is
+`lifecycle.unknown` with exit `1`, never a success. Stopping asks the operating
+system to shut down and polls it to off; `--force` cuts the power instead, and
+is a separate request rather than a fallback. Restarting proves the stop before
+it starts, so an interrupted restart is never reported as settled.

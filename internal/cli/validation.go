@@ -172,6 +172,10 @@ func validateInvocation(command *cobra.Command, path string) string {
 		if boolValue(flags, "silent") && selectedJSON(command) {
 			return "--silent conflicts with JSON output"
 		}
+	case "machine stop", "machine restart":
+		if selectedJSON(command) && !boolValue(flags, "yes") {
+			return "JSON power changes require --yes"
+		}
 	case "machine trust":
 		if selectedJSON(command) && !boolValue(flags, "yes") && !boolValue(flags, "dry-run") {
 			return "JSON trust changes require --yes or --dry-run"

@@ -27,12 +27,15 @@ func NewConfirmation(read func(context.Context, []byte) (int, error), out io.Wri
 
 func (c *Confirmation) Confirm(ctx context.Context, action, name string) error {
 	media, mediaVerb := strings.CutPrefix(action, "media ")
+	machine, machineVerb := strings.CutSuffix(action, " machine")
 	failure := func(reason string) error {
 		switch {
 		case action == "setup":
 			return diagnostics.NewFailure("controller.setup", "setup confirmation "+reason, "")
 		case mediaVerb:
 			return diagnostics.NewFailure("media.store", "media confirmation "+reason, "")
+		case machineVerb:
+			return diagnostics.NewFailure("machine.power", "power confirmation "+reason, "")
 		}
 		return contexts.StateError("context confirmation " + reason)
 	}
@@ -55,6 +58,8 @@ func (c *Confirmation) Confirm(ctx context.Context, action, name string) error {
 		prompt = fmt.Sprintf("Confirm controller setup on %s? [y/N] ", escapeDisplayLine(name))
 	case mediaVerb:
 		prompt = fmt.Sprintf("Confirm %s of stored media %s? [y/N] ", escapeDisplayLine(media), escapeDisplayLine(name))
+	case machineVerb:
+		prompt = fmt.Sprintf("Confirm %s of machine %s? [y/N] ", escapeDisplayLine(machine), escapeDisplayLine(name))
 	}
 	if n, err := io.WriteString(c.out, prompt); err != nil || n != len(prompt) {
 		return failure("prompt could not be written")

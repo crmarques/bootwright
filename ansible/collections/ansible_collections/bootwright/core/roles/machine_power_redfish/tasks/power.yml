@@ -1,0 +1,77 @@
+---
+# Power goes through the machine's own management controller over Redfish,
+# never through a hypervisor, so a virtual and a physical server take exactly
+# this path. Every step polls the resource to the state it asked for.
+- name: Validate the frozen power request
+  ansible.builtin.assert:
+    that:
+      - bootwright_machine_power_request.version == 'machine-power-redfish-v1'
+      - bootwright_machine_power_request.verb in ['start', 'stop', 'restart']
+      - bootwright_machine_power_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.machine_power_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Report the power state read
+  bootwright.core.machine_power_protocol:
+    phase: group
+    group: read-state
+    status: running
+  no_log: true
+
+- name: Read the state the management controller reports
+  bootwright.core.redfish_boot:
+    endpoint: '{{ bootwright_machine_power_request.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerUser) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerPassword) }}'
+    operation: read
+  register: machine_power_redfish_before
+  no_log: true
+
+- name: Publish the state that was read
+  bootwright.core.machine_power_protocol:
+    phase: group
+    group: read-state
+    status: ok
+  no_log: true
+
+- name: Stop the machine and poll it to off
+  ansible.builtin.include_tasks: stop.yml
+  when:
+    - bootwright_machine_power_request.verb in ['stop', 'restart']
+    - machine_power_redfish_before.power == 'On'
+
+- name: Start the machine and poll it to on
+  ansible.builtin.include_tasks: start.yml
+  when: bootwright_machine_power_request.verb in ['start', 'restart']
+
+- name: Read the state the operation settled at
+  bootwright.core.redfish_boot:
+    endpoint: '{{ bootwright_machine_power_request.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerUser) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerPassword) }}'
+    operation: read
+  register: machine_power_redfish_after
+  no_log: true
+
+- name: Publish bounded power evidence
+  bootwright.core.machine_power_protocol:
+    phase: completed
+    outcome: >-
+      {{ 'changed' if machine_power_redfish_after.power != machine_power_redfish_before.power
+         or bootwright_machine_power_request.verb == 'restart'
+         and machine_power_redfish_before.power == 'On' else 'unchanged' }}
+    digest: '{{ bootwright_machine_power_digest }}'
+    machine: '{{ bootwright_machine_power_request.identity.object }}'
+    verb: '{{ bootwright_machine_power_request.verb }}'
+    power: '{{ machine_power_redfish_after.power }}'
+    previous: '{{ machine_power_redfish_before.power }}'
+    changed: >-
+      {{ machine_power_redfish_after.power != machine_power_redfish_before.power
+         or bootwright_machine_power_request.verb == 'restart'
+         and machine_power_redfish_before.power == 'On' }}
+  no_log: true

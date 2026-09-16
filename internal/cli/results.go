@@ -98,6 +98,18 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		if result.mediaList != nil {
 			return true, writeMediaList(out, path, result.mediaList, selectedJSON(command))
 		}
+	case "machine list":
+		if validMachineList(result.machines) {
+			return true, writeMachineList(out, path, result.machines, boolValue(command.Flags(), "silent"), selectedJSON(command))
+		}
+	case "machine rsh", "machine exec":
+		if validDescriptor(result.descriptor) {
+			return true, writeDescriptor(out, errOut, path, result.descriptor)
+		}
+	case "machine start", "machine stop", "machine restart":
+		if validMachinePower(result.power) {
+			return true, writeMachinePower(out, path, result.power, selectedJSON(command))
+		}
 	case "secret show":
 		part := secrets.Part(stringValue(command.Flags(), "part"))
 		if result.secretReveal != nil && result.secretReveal.Part == part && validSecretPart(part) {

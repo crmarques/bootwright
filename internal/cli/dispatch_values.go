@@ -50,6 +50,15 @@ func (v *requestValues) boolean(name string) bool {
 	return value
 }
 
+// optionalBoolean reads a flag only the commands that offer it declare, so one
+// shared request shape can carry an arm its sibling command does not take.
+func (v *requestValues) optionalBoolean(name string) bool {
+	if v.flags.Lookup(name) == nil {
+		return false
+	}
+	return v.boolean(name)
+}
+
 func (v *requestValues) strings(name string) []string {
 	value, err := v.flags.GetStringArray(name)
 	v.recordFirstError(err)

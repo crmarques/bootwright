@@ -327,8 +327,9 @@ that implements a row updates the row and the stub fitness test together.
 | `cluster list/info` (Environment) | `commands_environment.go` | `environment/inspection` | — | S |
 | `cluster rsh/exec` (Environment) | `commands_environment.go` | `environment/access` | — | S |
 | `cluster oc/kubectl/kubeconfig` (Container cluster) | `commands_containercluster.go` | `containercluster/access` | — | S |
-| `machine list` (Machine) | `commands_machine.go` | `machine/inventory` | — | S |
-| `machine rsh/exec` (Machine) | `commands_machine.go` | `machine/access` | — | S |
+| `machine list` (Machine) | `commands_machine.go` | `machine/inventory` | `desiredstate/compilation`, `reconciliation/lifecycle` evidence | I |
+| `machine rsh/exec` (Machine) | `commands_machine.go` | `machine/access` | `desiredstate/compilation` | I |
+| `machine start/stop/restart` (Machine) | `commands_machine.go` | `machine/power` | `desiredstate/compilation`, `reconciliation/lifecycle` runtime and evidence, over `reconciliation/ansiblerunner` | I |
 | `machine trust` (Trust) | `commands_trust.go` | `trust/enrollment` | — | S |
 | `media add/list/delete` (Managed OS) | `commands_managedos.go` | `managedos/media` | `managedos/medialocal`, `workspace/contextfs` | I |
 | `add-ons list/add/delete` (Add-ons) | `commands_addons.go` | `addons/catalog` | — | S |
@@ -340,8 +341,11 @@ The kind admission rules that the compiler composes live at the context roots
 `infrastructureservices`. Environment's three preflight methods belong to
 `environment/preflight`, its two inspection methods to `environment/inspection`,
 and its two access methods to `environment/access`; platform rules remain with
-their owning contexts. Substrate realization with its identity and power
-operations belongs to `substrate/libvirt`, managed-OS installation to
+their owning contexts. Machine inspection belongs to
+`machine/inventory`, explicit Machine access to `machine/access` and day-2
+power to `machine/power`, which reads the Machine domain's own ownership
+vocabulary rather than the engine that published it. Substrate realization with
+its identity and power operations belongs to `substrate/libvirt`, managed-OS installation to
 `managedos/installation`, the media store to `managedos/media` over the
 `managedos/medialocal` adapter, and the one Ansible runner every lifecycle
 capability crosses to `reconciliation/ansiblerunner`, whose request, placement
@@ -363,7 +367,20 @@ internal/cli ─DesiredStateService─→ desiredstate/compilation.Service
 internal/cli ─ControllerService───→ controller/prerequisites.Service
 internal/cli ─MediaService────────→ managedos/media.Service
 internal/cli ─LifecycleService────→ reconciliation/lifecycle.Service
-internal/cli ─fourteen stub ports─→ <capability>.Service{} returning availability.ErrNotImplemented
+internal/cli ─MachineInventoryService→ machine/inventory.Service
+internal/cli ─MachineAccessService──→ machine/access.Service
+internal/cli ─MachinePowerService───→ machine/power.Service
+internal/cli ─twelve stub ports────→ <capability>.Service{} returning availability.ErrNotImplemented
+
+machine/inventory.Service and machine/access.Service
+   ─EffectiveState─→ desiredstate/compilation.Service
+   ─Ownership──────→ reconciliation/lifecycle.Service, through composition's own evidence adapter
+   ─fn CurrentSelection→ workspace/selectionfs.Store, through the invoking account
+machine/power.Service
+   ─EffectiveState, Ownership, fn CurrentSelection→ as above
+   ─Runtime────────→ reconciliation/lifecycle.Service, which lends the approved bundle and binds its Secrets
+   ─Runner─────────→ reconciliation/ansiblerunner.Runner
+   ─Confirmer──────→ internal/cli.Confirmation
 
 workspace/contexts.Service
    ─Repository, Transaction, ControllerInputGuard→ workspace/contextfs.Store
@@ -464,13 +481,20 @@ production binding; tests substitute fakes through the same interface.
 | `internal/cli` | `ControllerService` | Check, Setup | `controller/prerequisites.Service` |
 | `internal/cli` | `MediaService` | Add, List, Delete | `managedos/media.Service` |
 | `internal/cli` | `LifecycleService` | Plan, Status, Apply, Destroy | `reconciliation/lifecycle.Service` |
-| `internal/cli` | fourteen stub ports, one per `S` row of the map | one method per command | `<capability>.Service{}` |
+| `internal/cli` | `MachineInventoryService` | List | `machine/inventory.Service` |
+| `internal/cli` | `MachineAccessService` | Rsh, Exec | `machine/access.Service` |
+| `internal/cli` | `MachinePowerService` | Start, Stop, Restart | `machine/power.Service` |
+| `internal/cli` | twelve stub ports, one per `S` row of the map | one method per command | `<capability>.Service{}` |
 | `reconciliation/lifecycle` | `Inputs` | ReadInputs | `workspace/contexts.Inputs` |
 | `reconciliation/lifecycle` | `Compiler` | Compile | `desiredstate/compilation.Compiler` |
 | `reconciliation/lifecycle` | `SecretBinder` | Bind, Reopen, Release | `secrets/custody.Service` |
 | `reconciliation/lifecycle` | `Workspace` | ReadLifecycle, MutateLifecycle | `workspace/contextfs.Store` |
 | `reconciliation/lifecycle` | `LifecycleTransaction` | Context, Inputs, Controller, Operations, Evidence, PublishEvidence, Bind, Reserve, Release, ClientArea, SealClientArea, RetainDependencies | `contextfs` lifecycle transaction |
 | `reconciliation/lifecycle` | `OperationStore` | Index, Register, ReadOperation, ReadPlan, BlockState, PublishBlock, PublishAttempt, RecordPreparation, OpenLog, Complete | `reconciliation/operationstore.Store` |
+| `machine/inventory`, `machine/access`, `machine/power` | `EffectiveState` | RenderEffective | `desiredstate/compilation.Service` |
+| `machine/inventory`, `machine/power` | `Ownership` | Ownership | composition adapter over `reconciliation/lifecycle.Service` |
+| `machine/power` | `Runtime` | WithRuntime | `reconciliation/lifecycle.Service` |
+| `machine/power` | `Runner` | Run | `reconciliation/ansiblerunner.Runner` |
 | `reconciliation/lifecycle` | `HostIdentity` | Identity | `controller/hostlinux.Inspector` |
 | `reconciliation/lifecycle` | `AutomationIdentity` | CatalogDigest | composition value over `controller/bundlelocal` and the embedded collection |
 | `reconciliation/lifecycle` | `ExecutionGuard` | WithPython | `controller/bundlelocal.ExecutionGuard` |

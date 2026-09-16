@@ -1,0 +1,13 @@
+---
+- name: Drive one machine to a requested power state
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute the machine power capability
+      ansible.builtin.import_role:
+        name: bootwright.core.machine_power_redfish
+        tasks_from: power.yml

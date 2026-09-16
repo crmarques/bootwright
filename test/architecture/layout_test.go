@@ -20,8 +20,6 @@ func stubCapabilities() map[string]bool {
 		"internal/environment/access":            true,
 		"internal/environment/inspection":        true,
 		"internal/environment/preflight":         true,
-		"internal/machine/access":                true,
-		"internal/machine/inventory":             true,
 		"internal/nativeartifacts/rendering":     true,
 		"internal/storage/preflight":             true,
 		"internal/storage/rendering":             true,

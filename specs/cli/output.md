@@ -221,6 +221,7 @@ Successful result objects have stable top-level fields:
 | `render storage` | `clusters` |
 | `machine list` | `context`, `machines` |
 | `machine trust` | `context`, `dryRun`, `hosts` |
+| `machine start`, `machine stop`, `machine restart` | `context`, `machine`, `verb`, `power`, `previous`, `changed` |
 | `cluster list` | `context`, `clusters` |
 | `cluster info` | `context`, `clusters`, `storage` |
 
@@ -462,6 +463,7 @@ repeating unbounded authored text in every diagnostic. The shared codes are:
 | `access.unavailable` | An applicable access request lacks required local access metadata or an available credential artifact. |
 | `access.target` | Explicit access cannot resolve one exact authorized target. |
 | `access.handoff` | An explicit access descriptor cannot be safely resolved or encoded. |
+| `machine.power` | A power transition was refused before it ran, or its confirmation could not be answered. |
 
 Command contexts may add narrower codes beneath these namespaces before the
 corresponding failure is exposed. A namespace alone is not a fallback code.

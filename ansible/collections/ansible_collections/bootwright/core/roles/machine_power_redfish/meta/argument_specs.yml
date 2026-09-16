@@ -1,0 +1,31 @@
+argument_specs:
+  power:
+    short_description: Drive one machine to a requested power state through its controller.
+    options:
+      bootwright_machine_power_request:
+        type: dict
+        required: true
+        options:
+          controller:
+            type: dict
+            required: true
+          force:
+            type: bool
+            required: true
+          identity:
+            type: dict
+            required: true
+          placement:
+            type: dict
+            required: true
+          verb:
+            type: str
+            required: true
+            choices: [start, stop, restart]
+          version:
+            type: str
+            required: true
+            choices: [machine-power-redfish-v1]
+      bootwright_machine_power_material:
+        type: dict
+        required: true

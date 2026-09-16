@@ -15,6 +15,7 @@ import (
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
+	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -254,18 +255,32 @@ func (s storageArtifactsSpy) Render(ctx context.Context, request storagerenderin
 
 type machineInventorySpy struct{ record *dispatchRecord }
 
-func (s machineInventorySpy) List(ctx context.Context, request inventory.ListRequest) error {
-	return s.record.called(ctx, "machine list", request)
+func (s machineInventorySpy) List(ctx context.Context, request inventory.ListRequest) (*inventory.ListResult, error) {
+	return nil, s.record.called(ctx, "machine list", request)
 }
 
 type machineAccessSpy struct{ record *dispatchRecord }
 
-func (s machineAccessSpy) Rsh(ctx context.Context, request machineaccess.RshRequest) error {
-	return s.record.called(ctx, "machine rsh", request)
+func (s machineAccessSpy) Rsh(ctx context.Context, request machineaccess.RshRequest) (*machineaccess.Descriptor, error) {
+	return nil, s.record.called(ctx, "machine rsh", request)
 }
 
-func (s machineAccessSpy) Exec(ctx context.Context, request machineaccess.ExecRequest) error {
-	return s.record.called(ctx, "machine exec", request)
+func (s machineAccessSpy) Exec(ctx context.Context, request machineaccess.ExecRequest) (*machineaccess.Descriptor, error) {
+	return nil, s.record.called(ctx, "machine exec", request)
+}
+
+type machinePowerSpy struct{ record *dispatchRecord }
+
+func (s machinePowerSpy) Start(ctx context.Context, request power.PowerRequest) (*power.Result, error) {
+	return nil, s.record.called(ctx, "machine start", request)
+}
+
+func (s machinePowerSpy) Stop(ctx context.Context, request power.PowerRequest) (*power.Result, error) {
+	return nil, s.record.called(ctx, "machine stop", request)
+}
+
+func (s machinePowerSpy) Restart(ctx context.Context, request power.PowerRequest) (*power.Result, error) {
+	return nil, s.record.called(ctx, "machine restart", request)
 }
 
 type machineTrustSpy struct{ record *dispatchRecord }
@@ -309,6 +324,7 @@ func dispatchSpies(record *dispatchRecord) Services {
 		StorageArtifacts:      storageArtifactsSpy{record},
 		MachineInventory:      machineInventorySpy{record},
 		MachineAccess:         machineAccessSpy{record},
+		MachinePower:          machinePowerSpy{record},
 		MachineTrust:          machineTrustSpy{record},
 		ClusterAccess:         clusterAccessSpy{record},
 	}

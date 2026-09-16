@@ -36,6 +36,8 @@ func TestCommandModesComeFromTheCatalog(t *testing.T) {
 		"media add": true, "media list": true, "media delete": true,
 		"setup": true, "preflight controller": true,
 		"plan": true, "status": true, "apply": true, "destroy": true,
+		"machine list": true, "machine rsh": true, "machine exec": true,
+		"machine start": true, "machine stop": true, "machine restart": true,
 	}
 	for _, spec := range commandCatalog() {
 		if implementedOperation(spec.path) != want[spec.path] {
@@ -45,7 +47,7 @@ func TestCommandModesComeFromTheCatalog(t *testing.T) {
 			t.Errorf("%s: privileged = %t, want %t", spec.path, privilegedOperation(spec.path), want[spec.path])
 		}
 	}
-	if implementedOperation("controller") || privilegedOperation("machine list") {
+	if implementedOperation("controller") || privilegedOperation("machine trust") {
 		t.Fatal("an incomplete path or unavailable command claimed a mode")
 	}
 }

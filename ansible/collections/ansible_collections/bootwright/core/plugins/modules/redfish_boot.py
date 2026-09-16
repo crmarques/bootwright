@@ -15,7 +15,8 @@ short_description: Read or drive one machine through its management controller
 version_added: "0.1.0"
 description:
   - Reads the power state and inserted media, inserts or ejects virtual media,
-    sets a one-time boot device, and powers a machine on or off.
+    sets a one-time boot device, asks the operating system to shut down, and
+    powers a machine on or off.
   - The read operation performs no change and is safe to repeat.
 options:
   endpoint:
@@ -34,7 +35,7 @@ options:
     description: What to read or drive.
     type: str
     required: true
-    choices: [read, insert, eject, boot, power-on, power-off]
+    choices: [read, insert, eject, boot, power-on, power-off, shutdown]
   image:
     description: The media URL to insert.
     type: str
@@ -88,7 +89,7 @@ def main():
             "password": {"type": "str", "required": True, "no_log": True},
             "operation": {
                 "type": "str", "required": True,
-                "choices": ["read", "insert", "eject", "boot", "power-on", "power-off"],
+                "choices": ["read", "insert", "eject", "boot", "power-on", "power-off", "shutdown"],
             },
             "image": {"type": "str", "required": False},
             "target": {"type": "str", "default": "Cd", "choices": ["Cd", "Hdd"]},
@@ -134,7 +135,11 @@ def drive(module, endpoint, user, password, operation, attempts):
     expected = "On" if operation == "power-on" else "Off"
     if redfish_control.power_state(endpoint, user, password) == expected:
         return False
-    redfish_control.reset(endpoint, user, password, "On" if expected == "On" else "ForceOff")
+    # A graceful request asks the operating system to stop; forcing the power
+    # off does not. Both are polled to the state they asked for, so neither is
+    # reported as settled before the controller says it is.
+    kind = {"power-on": "On", "power-off": "ForceOff", "shutdown": "GracefulShutdown"}[operation]
+    redfish_control.reset(endpoint, user, password, kind)
     if not redfish_control.await_power(endpoint, user, password, expected, attempts):
         raise ValueError("power state")
     return True

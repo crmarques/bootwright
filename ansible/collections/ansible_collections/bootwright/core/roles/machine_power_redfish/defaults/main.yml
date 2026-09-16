@@ -1,0 +1,8 @@
+---
+# Derived from the frozen request only. Nothing here is authored by desired
+# state, and no value selects an executable, a role or a task file.
+#
+# A graceful shutdown waits for the operating system rather than for a
+# hypervisor, so the poll bound is the one an ordinary shutdown needs and
+# never becomes an unbounded wait.
+machine_power_redfish_attempts: 150

@@ -1,0 +1,26 @@
+---
+# A graceful request asks the operating system to stop and is polled to off.
+# Cutting the power is a separate, explicitly requested operation, because a
+# running system loses whatever it had not written.
+- name: Report the power-off
+  bootwright.core.machine_power_protocol:
+    phase: group
+    group: power-off
+    status: running
+  no_log: true
+
+- name: Bring the machine to off through its management controller
+  bootwright.core.redfish_boot:
+    endpoint: '{{ bootwright_machine_power_request.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerUser) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerPassword) }}'
+    operation: "{{ 'power-off' if bootwright_machine_power_request.force else 'shutdown' }}"
+    attempts: '{{ machine_power_redfish_attempts }}'
+  no_log: true
+
+- name: Publish the proved power-off
+  bootwright.core.machine_power_protocol:
+    phase: group
+    group: power-off
+    status: ok
+  no_log: true

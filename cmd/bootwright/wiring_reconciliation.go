@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/ansible"
-	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller/clients"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
@@ -109,7 +108,7 @@ func buildCapabilities(clock systemClock, controller controllerDependencies) cap
 	})
 }
 
-func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies, compiler compilation.Compiler, binder *custody.Service) cli.LifecycleService {
+func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies, compiler compilation.Compiler, binder *custody.Service) lifecycle.Service {
 	if deps.Workspace == nil || deps.Inputs == nil || deps.Host == nil || deps.Guard == nil {
 		return lifecycle.Service{}
 	}
@@ -129,8 +128,9 @@ func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies
 }
 
 // currentSelection resolves an omitted context name through the invoking
-// user's own marker.
-func currentSelection(store contexts.SelectionStore) lifecycle.CurrentSelection {
+// user's own marker. Every context-backed service binds this one reader, so a
+// stale marker is caught in the same place for all of them.
+func currentSelection(store contexts.SelectionStore) func(context.Context) (string, error) {
 	if store == nil {
 		return nil
 	}

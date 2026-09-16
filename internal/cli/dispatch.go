@@ -6,6 +6,9 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
+	"github.com/crmarques/bootwright/internal/machine/inventory"
+	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
@@ -34,6 +37,10 @@ type commandResult struct {
 
 	mediaMutation *media.MutationResult
 	mediaList     *media.ListResult
+
+	machines   *inventory.ListResult
+	descriptor *machineaccess.Descriptor
+	power      *power.Result
 
 	secretMutation     *custody.MutationResult
 	secretCheck        *custody.CheckResult
@@ -93,9 +100,11 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 	case "render storage":
 		return commandResult{}, s.invokeStorageArtifacts(ctx, path, &values, args)
 	case "machine list":
-		return commandResult{}, s.invokeMachineInventory(ctx, path, &values, args)
+		return s.invokeMachineInventory(ctx, path, &values, args)
 	case "machine rsh", "machine exec":
-		return commandResult{}, s.invokeMachineAccess(ctx, path, &values, args)
+		return s.invokeMachineAccess(ctx, path, &values, args)
+	case "machine start", "machine stop", "machine restart":
+		return s.invokeMachinePower(ctx, path, &values, args)
 	case "machine trust":
 		return commandResult{}, s.invokeMachineTrust(ctx, path, &values, args)
 	case "cluster oc", "cluster kubectl", "cluster kubeconfig":

@@ -155,7 +155,14 @@ func (s Service) capabilityKinds() []string {
 }
 
 func controllerMachine(state *compilation.State) (string, error) {
-	environments := state.Effective().OfKind(api.Environment)
+	return ControllerMachine(state.Effective())
+}
+
+// ControllerMachine names the Machine this context's controller runs on. Every
+// placement decision starts from it: the controller is local, and every other
+// host is reached through the SSH access its Machine authors.
+func ControllerMachine(catalog api.Catalog) (string, error) {
+	environments := catalog.OfKind(api.Environment)
 	if len(environments) != 1 {
 		return "", failure("lifecycle.state", "the selected state does not contain exactly one Environment", "repair the input with validate")
 	}

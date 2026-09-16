@@ -31,6 +31,83 @@ func (s Service) Status(ctx context.Context, request StatusRequest) (*StatusResu
 	return result, nil
 }
 
+// ObjectOwnership is what the context's current operation proves about one API
+// object: the verb that froze its blocks and the least settled state they
+// reached. Several blocks may realize one object, so the reported state is the
+// one an operator must act on, never the most favorable of them.
+type ObjectOwnership struct {
+	Verb  string
+	State string
+}
+
+// Ownership reports what durable evidence proves about each object the current
+// operation's frozen plan names, keyed by the object's API identity. It
+// performs no probe and writes nothing. An object no plan names has no entry:
+// the absence of a record is not evidence that nothing was realized.
+func (s Service) Ownership(ctx context.Context, contextName string) (map[string]ObjectOwnership, error) {
+	if err := s.available(ctx); err != nil {
+		return nil, err
+	}
+	name, err := s.resolve(ctx, contextName)
+	if err != nil {
+		return nil, err
+	}
+	owned := map[string]ObjectOwnership{}
+	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
+		store := s.store(view)
+		index, err := store.Index(ctx)
+		if err != nil || index.Current == "" {
+			return err
+		}
+		operation, err := store.ReadOperation(ctx, index.Current)
+		if err != nil {
+			return err
+		}
+		plan, err := store.ReadPlan(ctx, operation.ID)
+		if err != nil {
+			return err
+		}
+		states, err := store.BlockStates(ctx, operation.ID, plan)
+		if err != nil {
+			return err
+		}
+		for _, block := range plan.Blocks {
+			state := states[block.ID]
+			if state == "" {
+				state = reconciliation.BlockPending
+			}
+			identity := block.Kind + "/" + block.Object
+			current, seen := owned[identity]
+			if !seen || settlement(string(state)) < settlement(current.State) {
+				owned[identity] = ObjectOwnership{Verb: string(operation.Verb), State: string(state)}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return owned, nil
+}
+
+// settlement ranks how completely a block's effect is settled. A lower rank is
+// the state an operator must act on first.
+func settlement(state string) int {
+	switch reconciliation.BlockState(state) {
+	case reconciliation.BlockUnknown:
+		return 0
+	case reconciliation.BlockRunning:
+		return 1
+	case reconciliation.BlockFailed:
+		return 2
+	case reconciliation.BlockPending:
+		return 3
+	case reconciliation.BlockDone:
+		return 4
+	}
+	return 0
+}
+
 func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	result := &StatusResult{
 		Context:         view.Identity(),

@@ -9,7 +9,10 @@ Linux/amd64; the lifecycle engine with managed artifact serving, so `plan`,
 `status`, `apply` and `destroy` are available; the complete `infra-components`
 stage with stage selection; and the `controller` stage, which installs the
 clients one context's own graph selects. M1h delivers a managed RHEL
-installation on emulated bare metal. Every other catalogued command retains
+installation on emulated bare metal. The Machine command family was delivered
+out of sequence on explicit request, so `machine list`, `machine rsh`,
+`machine exec`, `machine start`, `machine stop` and `machine restart` are also
+available. Every other catalogued command, `machine trust` included, retains
 the [unavailable result](cli.md#recognized-but-unavailable-commands).
 
 This file owns delivery scope and deferred work. Product specs describe target
@@ -44,6 +47,37 @@ preserve its scope. Further delivery evidence lives in Git history.
   from the start.
 - A gate is reported as passing only with the command and result that produced
   it. Failed, skipped, flaky, unavailable and unrun gates are not passes.
+
+## Out-of-sequence delivery
+
+### Machine commands
+
+**Owners:** Machine, with State reconciliation (the bounded runtime and the
+durable evidence a Machine command reads) and Substrate (the power operations
+it consumes). **Delivered on explicit request**, outside the milestone
+sequence, so it adds no exit gate of its own.
+
+`machine list` reports every selected Machine with the state its context's
+durable evidence proves, filtered by cluster membership alone. `machine rsh`
+and `machine exec` resolve one bounded SSH handoff, naming a Secret-backed
+identity as an export the operator performs rather than materializing it.
+`machine start`, `machine stop` and `machine restart` converge one Machine to a
+power state through its own management controller, over the one Ansible
+boundary, registering no operation and publishing no ownership.
+
+Guarded by `internal/machine/inventory`, `internal/machine/access` and
+`internal/machine/power` package tests, the `internal/cli` presentation tests
+for the three result shapes, the `internal/reconciliation/lifecycle` runtime
+and ownership tests, and the collection's own
+`test_machine_power_protocol.py` and `test_redfish_boot.py` unit suites.
+
+Constraints left behind: a power operation holds the context's shared lock for
+its whole run, so it waits on a running lifecycle mutation and delays one that
+starts while it runs; it reports no progress and retains no adapter output
+while it runs, so a graceful stop polling a guest to off prints nothing until
+it settles, for the reason C26 records for local `setup`; and `machine trust`
+remains unavailable, because the context-managed trust store it maintains is
+undefined (C27).
 
 ## Completed milestones
 
@@ -502,6 +536,7 @@ fill its concrete version, journey and evidence gaps when requested.
 | C24 | Controller setup and Workspace: retirement of a superseded execution bundle. **Needs definition.** | An automation-only revision no longer re-resolves or re-acquires anything: that resolution is [carried forward](controller.md#supported-host-and-dependency-selection) from the bundle the host already holds. It still names a new bundle area, and [no uninstall or garbage collection](controller.md#supported-host-and-dependency-selection) retires the area it replaced. Retained resolutions and bundle areas are bounded at sixteen, so the sixteenth distinct automation revision on one host refuses every later setup with no operator recovery. Whether the automation projection becomes its own layer over a shared foundation, or retirement stays an explicit operator journey, changes the sealed-bundle and attribution contracts. Requires M1d and M1e. | Closed layer identities and their attribution; proof that a foundation is reused only when its resolved closure is unchanged and that sealed-bundle immutability survives an automation-only revision; authorized retirement that refuses a bundle any retained receipt or frozen lifecycle still needs; bounded reacquisition; and crash/replay tests over a partially retired area and over the exhausted retention limit. |
 | C25 | State reconciliation and Controller setup: one upgrade journey for a context whose completed apply a newer build can no longer destroy, **reachable from the installed executable alone**. **Needs definition.** | A removal proves it describes exactly the effects its apply created by comparing each block's request digest, so any change to a capability's content digest refuses `destroy` on every context that applied under the old one. The refusal's own instruction — restore the executable that registered the apply — then collides with [bundle identity](controller.md#selection-and-command-journeys), because that older executable's embedded automation no longer matches the installed bundle. The two digests move independently and each has its own refusal, so an operator is bounced between them with no command that reconciles the pair. M1h is the worked example: a Kickstart version bump refused the destroy, the pre-change executable refused the sealed bundle, and the paths that worked were a build carrying the old renderer beside the new automation, or resealing the bundle to an older executable — four destroy attempts across one afternoon. `destroy` also admits no stage or block scope, so the recovery removes every block the context owns rather than the one whose digest moved. **Building and running a previous revision of the executable is not an acceptable recovery**: it requires the source tree, a toolchain and knowledge of which commit registered the apply, none of which an operator of a released binary has. | The exact upgrade journey and its authorization, offered by the installed executable with no rebuild of any prior revision; whether a removal may be planned from the frozen plan rather than re-derived from current code; how a context names the executable and bundle identity its frozen operation needs, so the refusal can state the remedy instead of the obstacle; scoped removal if one is admitted; and proof that no effect outside the completed apply is ever removed. |
 | C26 | Controller setup and Workspace: a durable home for what local `setup` prints. **Needs definition.** | Setup allocates [no lifecycle identity and no operation log](cli/output.md#private-operation-logs), so the Ansible that installs the container runtime and publishes the execution bundle discards its own output, and a failure it does not diagnose leaves nothing to read. The controller stage has no such gap, because it is a lifecycle block whose attempt already owns a retained output file. Whether setup gains a bounded log tree beside its [private recovery receipt](controller.md#publication-and-interrupted-setup), reuses the receipt itself, or keeps discarding changes what a local command is permitted to leave behind. Requires M1d. | Closed path grammar, ownership and retention bound beneath the root-owned controller area; exclusive creation that follows no link and overwrites no unrelated content; proof that a retention fault never changes a setup outcome or its receipt; the `Logs` reference in the human result; and negative tests over a full, unwritable and pre-existing destination. |
+| C27 | Trust and Workspace: the context-managed host-key trust `machine trust` maintains. **Needs definition.** | The [Machine access schema](api/machines.md#addresses-and-access) defaults `knownHostsRef` to context-managed trust, but no contract says where that trust is stored, how an observed key enters it, or how `--replace` supersedes one; the installed-machine path instead captures a guest's host key into its own [installation evidence](substrates.md#identity-and-power-operations). Whether the store is a context area of its own, an entry of the existing secret custody, or a projection of installation evidence changes both the Secrets and Workspace contracts, and the observation itself needs an adapter, because a key is read from a remote endpoint. Requires M1c and M1e. The command stays unavailable until promoted. | Closed storage layout and record format; bounded observation of exactly the authorized endpoint; proof that an unknown key is never accepted without `machine trust` and that a changed key refuses without `--replace`; dry-run purity; and the JSON confirmation rule the [catalog](cli/commands.md) already fixes. |
 
 When a cluster inspection or access slice under C6 is promoted, its exit evidence
 must exercise the [cluster discovery](cli/output.md#cluster-discovery) and

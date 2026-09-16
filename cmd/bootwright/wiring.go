@@ -82,7 +82,12 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	services.DesiredState = wireDesiredState(deps, compiler)
 	services.Controller = wireController(deps.Controller, compiler, deps.Confirmer)
 	services.Media = wireMedia(deps.Media)
-	services.Lifecycle = wireLifecycle(deps.Lifecycle, deps.Controller, compiler, secrets.binder)
+	reconciler := wireLifecycle(deps.Lifecycle, deps.Controller, compiler, secrets.binder)
+	services.Lifecycle = reconciler
+	machine := wireMachine(machineDependencies{
+		State: services.DesiredState, Lifecycle: reconciler, Confirmer: deps.Confirmer, Selection: deps.Selection,
+	})
+	services.MachineInventory, services.MachineAccess, services.MachinePower = machine.MachineInventory, machine.MachineAccess, machine.MachinePower
 	return services
 }
 

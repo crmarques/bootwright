@@ -44,6 +44,7 @@ var operationPlaybook = map[string]string{
 	"machine-libvirt-v1/apply":          "substrate/libvirt_machine_apply.yml",
 	"machine-libvirt-v1/observe":        "substrate/libvirt_machine_observe.yml",
 	"machine-libvirt-v1/destroy":        "substrate/libvirt_machine_destroy.yml",
+	"machine-power-redfish-v1/power":    "machine/power.yml",
 	"os-install-anaconda-v1/apply":      "managedos/install_apply.yml",
 	"os-install-anaconda-v1/observe":    "managedos/install_observe.yml",
 	"os-install-anaconda-v1/destroy":    "managedos/install_destroy.yml",

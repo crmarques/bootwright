@@ -60,7 +60,7 @@ func packageRoles() map[string]packageRole {
 		"containercluster/access", "containercluster/installation", "containercluster/preflight",
 		"controller/clients", "controller/prerequisites", "desiredstate/compilation",
 		"environment/access", "environment/inspection", "environment/preflight",
-		"machine/access", "machine/inventory", "managedos/media", "managedos/installation",
+		"machine/access", "machine/inventory", "machine/power", "managedos/media", "managedos/installation",
 		"nativeartifacts/rendering", "reconciliation/lifecycle",
 		"secrets/custody", "secrets/encryption", "storage/preflight", "storage/rendering",
 		"substrate/libvirt", "trust/enrollment", "workspace/contexts",

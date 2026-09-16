@@ -3,11 +3,11 @@ package lifecycle
 import (
 	"context"
 	"encoding/json"
-	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -146,20 +146,14 @@ func MachineAddress(machine api.Object, reference string) (string, error) {
 	if reference == "" {
 		return "", failure("api.required", "the address reference is empty", "name an address on "+machine.Identity())
 	}
-	for _, address := range machine.Spec().Get("network", "addresses").Items() {
-		if address.Get("name").Text() != reference {
-			continue
-		}
-		value := address.Get("address").Text()
-		if host, _, found := strings.Cut(value, "/"); found {
-			value = host
-		}
-		if value == "" {
-			return "", failure("api.value", "the referenced Machine address is empty", "correct the address on "+machine.Identity())
-		}
-		return value, nil
+	address, declared := machineref.Address(machine, reference)
+	if !declared {
+		return "", failure("api.reference", "the address reference does not resolve on its Machine", "name an address declared on "+machine.Identity())
 	}
-	return "", failure("api.reference", "the address reference does not resolve on its Machine", "name an address declared on "+machine.Identity())
+	if address == "" {
+		return "", failure("api.value", "the referenced Machine address is empty", "correct the address on "+machine.Identity())
+	}
+	return address, nil
 }
 
 // AttemptOutcome maps an adapter failure to the outcome it justifies. The

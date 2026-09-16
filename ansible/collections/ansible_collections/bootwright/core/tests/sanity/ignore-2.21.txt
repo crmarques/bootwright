@@ -9,6 +9,7 @@ plugins/modules/infra_service_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/infra_service_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/libvirt_domain_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/libvirt_host_inspect.py validate-modules:missing-gplv3-license
+plugins/modules/machine_power_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_install_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_install_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/redfish_boot.py validate-modules:missing-gplv3-license

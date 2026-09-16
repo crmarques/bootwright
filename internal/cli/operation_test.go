@@ -21,8 +21,8 @@ func TestOperationBoundaryIsLazyForInformationalMalformedAndUnavailablePaths(t *
 		"context init --name example -f one -f two", "context delete --name example --purge=false",
 		"validate --output json --unknown", "render effective -f input", "render --output json",
 		"add-ons list", "preflight all", "preflight container-cluster",
-		"preflight storage-cluster", "preflight add-ons", "machine list", "machine trust", "cluster list",
-		"cluster kubeconfig --name example", "machine exec --name example uptime", "cluster oc --name example get pods",
+		"preflight storage-cluster", "preflight add-ons", "machine trust", "cluster list",
+		"cluster kubeconfig --name example", "cluster oc --name example get pods",
 		"render --output-dir artifacts --sensitive", "render installer", "render storage",
 	} {
 		t.Run(invocation, func(t *testing.T) {
@@ -48,7 +48,11 @@ func TestOperationBoundaryOwnsContextAndCleanupForEveryImplementedPath(t *testin
 		[]string{"secret", "encryption", "init"}, []string{"secret", "encryption", "status"}, []string{"secret", "encryption", "rotate"},
 		[]string{"media", "add", "--name", "example.iso", "--from-file", "image.iso"}, []string{"media", "list"}, []string{"media", "delete", "--name", "example.iso"},
 		[]string{"setup"}, []string{"setup", "--dry-run"}, []string{"preflight", "controller"},
-		[]string{"plan"}, []string{"status"}, []string{"apply", "--yes"}, []string{"destroy", "--yes"})
+		[]string{"plan"}, []string{"status"}, []string{"apply", "--yes"}, []string{"destroy", "--yes"},
+		[]string{"machine", "list"}, []string{"machine", "rsh", "--name", "example"},
+		[]string{"machine", "exec", "--name", "example", "uptime"},
+		[]string{"machine", "start", "--name", "example"}, []string{"machine", "stop", "--name", "example", "--yes"},
+		[]string{"machine", "restart", "--name", "example", "--yes"})
 	for _, args := range invocations {
 		begins, finishes := 0, 0
 		parent := context.WithValue(context.Background(), dispatchContextKey{}, "parent")

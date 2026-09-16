@@ -123,23 +123,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 // the private Python execution boundary, exactly as controller setup does.
 func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, log *operationstore.Log, attempt, resolution, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
 	view := tx.Controller()
-	receipt := view.State.Receipt
-	if receipt.Definition == nil {
-		return Result{Outcome: reconciliation.OutcomeFailed}, failure("controller.state",
-			"the retained controller setup has no execution definition",
-			"run bootwright setup")
-	}
-	if view.OpenBundle == nil {
-		return Result{Outcome: reconciliation.OutcomeFailed}, failure("controller.state", "the approved execution bundle is unavailable", "run bootwright setup")
-	}
-	area, err := view.OpenBundle(ctx, receipt.CatalogDigest)
-	if err != nil {
-		return Result{Outcome: reconciliation.OutcomeFailed}, err
-	}
-	if area == nil {
-		return Result{Outcome: reconciliation.OutcomeFailed}, failure("controller.state", "the approved execution bundle is missing", "run bootwright setup")
-	}
-	location, err := area.Location(ctx)
+	area, location, requirement, err := approvedBundle(ctx, tx)
 	if err != nil {
 		return Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
@@ -164,7 +148,7 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 			_ = log.Append(ctx, operationstore.LogRecord{Event: "adapter-output", Block: block.ID, Detail: detail})
 		}
 	}()
-	err = s.guard.WithPython(ctx, area, receipt.Definition.Execution, func(launch prerequisites.PythonLaunch, release func() error) error {
+	err = s.guard.WithPython(ctx, area, requirement, func(launch prerequisites.PythonLaunch, release func() error) error {
 		execution := Execution{
 			Operation: operation.ID, Attempt: attempt, Resolution: resolution, Block: block, Launch: launch, Bundle: location, Area: area,
 			Material: material, Setup: view,

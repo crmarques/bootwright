@@ -1,0 +1,23 @@
+---
+- name: Report the power-on
+  bootwright.core.machine_power_protocol:
+    phase: group
+    group: power-on
+    status: running
+  no_log: true
+
+- name: Bring the machine to on through its management controller
+  bootwright.core.redfish_boot:
+    endpoint: '{{ bootwright_machine_power_request.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerUser) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerPassword) }}'
+    operation: power-on
+    attempts: '{{ machine_power_redfish_attempts }}'
+  no_log: true
+
+- name: Publish the proved power-on
+  bootwright.core.machine_power_protocol:
+    phase: group
+    group: power-on
+    status: ok
+  no_log: true

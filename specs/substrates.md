@@ -153,6 +153,18 @@ off. A power request is not evidence; every operation polls the resource to
 its expected state within a bounded window and reports unknown when it does
 not arrive.
 
+Day-2 power commands consume exactly these operations. `machine start`,
+`machine stop` and `machine restart` freeze one request naming the Machine's
+controller endpoint and the declaration whose credential answers it, then cross
+the same adapter boundary a lifecycle block does, under the context's shared
+lock. They register no operation and publish no ownership, because a power
+state is not desired state. Where the endpoint comes from is the only
+difference between the arms: a Machine that authors `hardware.management.bmc`
+is reached at that address from the controller, and a Machine whose provider
+emulates a controller is reached at its allocated port from the provider host,
+and only while the context owns the realization that controller belongs to.
+The [CLI journey](cli.md#machine-power-operations) owns the rest.
+
 The identity operation is substrate-specific. For libvirt it reads a bounded
 guest file through the QEMU guest agent over the hypervisor's channel,
 returning its bytes and nothing else; a guest without the agent, or a file
