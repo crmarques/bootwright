@@ -25,7 +25,18 @@ Supported operation modes are:
   apply is exactly the blocks it completed.
 
 There is no reconciliation, partial planning, adoption, reclaim, or force path.
-A completed apply must be destroyed before another apply can start.
+A completed apply must be destroyed before an apply of *changed* desired state
+can start, and an edited input refuses by naming that removal.
+
+A verb whose work durable state already proves performs none of it and
+succeeds: an `apply` repeated over the unchanged input its completed apply
+froze, and a `destroy` of a context that owns nothing, each report the
+completed operation and `done` without registering an operation, opening a
+transaction, binding a Secret, claiming a reservation or reaching a host. Such
+an invocation requires no authorization and no confirmation, because it has no
+consequence to acknowledge, and a token it is given authorizes nothing and
+refuses nothing. Repeating a verb is therefore always safe, which is what lets
+an operator or a script ask whether anything is left to do.
 
 An implementation may make `apply` operational before public `destroy` only
 for one complete selected Environment whose lifecycle obligations are fully
@@ -180,12 +191,12 @@ overwriting durable evidence.
 
 | Durable state | Allowed lifecycle transition |
 | --- | --- |
-| no operation, or completed destroy | start a fresh apply |
+| no operation, or completed destroy | start a fresh apply; a `destroy` settles without effect |
 | apply running | continue that exact apply |
 | apply failed | continue that exact apply, or start a fresh destroy of the blocks it started |
 | apply paused | continue that exact apply under any stage selection, or start a fresh destroy of the blocks it completed |
 | apply unknown | resolve the exact unknown block; start no effect or retry |
-| apply done | start a fresh destroy |
+| apply done | start a fresh destroy; an `apply` of the unchanged input settles without effect, and of a changed input refuses |
 | destroy running | continue that exact destroy |
 | destroy failed | continue that exact destroy, or start a fresh destroy of what it has not removed |
 | destroy unknown | resolve the exact unknown block; start no effect or retry |

@@ -710,14 +710,38 @@ func TestUnsupportedObjectsRefuseBeforeRegistration(t *testing.T) {
 	}
 }
 
-func TestAppliedContextRefusesASecondApplyAndDestroysInstead(t *testing.T) {
+// Repeating a completed apply over the same desired state is the ordinary way
+// an operator asks whether anything is left to do. It settles without an
+// effect, so a script may repeat the verb, and the destroy that follows still
+// removes exactly what the first apply created.
+func TestAppliedContextRepeatsWithoutEffectAndDestroysInstead(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
-	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+	first, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil {
 		t.Fatal(err)
 	}
-	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "lifecycle.state" {
-		t.Fatalf("second apply = %q", code)
+	applies, mutations, bound := len(h.capability.applies), h.workspace.mutations, len(h.binder.bound)
+	repeated, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil {
+		t.Fatalf("a repeated apply failed: %v", err)
+	}
+	if !repeated.Settled || repeated.Receipt.State != "done" || repeated.Receipt.Next != "none" {
+		t.Fatalf("repeated apply = %+v", repeated.Receipt)
+	}
+	if repeated.Receipt.Operation != first.Receipt.Operation {
+		t.Fatalf("a repeated apply named operation %q, want the completed %q", repeated.Receipt.Operation, first.Receipt.Operation)
+	}
+	if len(h.capability.applies) != applies {
+		t.Fatalf("a repeated apply ran %d blocks", len(h.capability.applies)-applies)
+	}
+	if h.workspace.mutations != mutations {
+		t.Fatal("a repeated apply opened a mutation transaction")
+	}
+	if len(h.binder.bound) != bound {
+		t.Fatal("a repeated apply bound Secret material")
+	}
+	if len(repeated.Blocks) != 1 || repeated.Blocks[0].State != "done" {
+		t.Fatalf("repeated apply blocks = %+v", repeated.Blocks)
 	}
 	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
 	if err != nil || result.Receipt.State != "done" || result.Receipt.Next != "none" {
@@ -738,11 +762,64 @@ func TestAppliedContextRefusesASecondApplyAndDestroysInstead(t *testing.T) {
 	}
 }
 
-func TestDestroyWithoutAnAppliedOperationRefuses(t *testing.T) {
+// A context that owns nothing is already in the state a removal would leave
+// it in, so the verb succeeds having done nothing rather than refusing.
+func TestDestroyWithNothingOwnedSucceedsWithoutEffects(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
-	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil {
+		t.Fatalf("destroy without apply = %v", err)
+	}
+	if !result.Settled || result.Receipt.State != "done" || result.Receipt.Next != "none" {
+		t.Fatalf("destroy without apply = %+v", result.Receipt)
+	}
+	if result.Receipt.Operation != "none" || len(result.Blocks) != 0 {
+		t.Fatalf("destroy without apply named %q over %d blocks", result.Receipt.Operation, len(result.Blocks))
+	}
+	if len(h.capability.destroys) != 0 || h.workspace.mutations != 0 {
+		t.Fatal("destroy without apply performed work")
+	}
+	if h.confirmer.asked != 0 {
+		t.Fatal("destroy without apply asked for confirmation")
+	}
+}
+
+// A completed removal leaves nothing to remove, so repeating it settles too.
+func TestDestroyOverACompletedDestroySucceedsWithoutEffects(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	removals := len(h.capability.destroys)
+	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil || !result.Settled || result.Receipt.State != "done" {
+		t.Fatalf("repeated destroy = %+v (%v)", result, err)
+	}
+	if len(h.capability.destroys) != removals {
+		t.Fatal("a repeated destroy removed something again")
+	}
+}
+
+// Desired state changes only at rest, and a completed apply is not at rest
+// until what it owns is removed: a changed input names the destroy it needs
+// rather than being silently realized over the old one.
+func TestApplyOverACompletedApplyWithChangedInputRefuses(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	h.workspace.inputs = desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{
+		desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte("kind: Environment\n# edited\n")),
+	}}
+	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	if code := firstCode(err); code != "lifecycle.state" {
-		t.Fatalf("destroy without apply = %q", code)
+		t.Fatalf("apply over a changed input = %q (%+v)", code, result)
+	}
+	if len(h.capability.applies) != 1 {
+		t.Fatalf("a refused apply ran %d blocks", len(h.capability.applies))
 	}
 }
 

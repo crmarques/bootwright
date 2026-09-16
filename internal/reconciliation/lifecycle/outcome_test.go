@@ -84,19 +84,27 @@ func TestAnIncompleteOperationStillNamesItsContinuation(t *testing.T) {
 }
 
 // A next action names a transition, not a command. Concatenating it onto
-// "bootwright " produced `bootwright none` for a finished context and
-// `bootwright continue-apply` for an interrupted one, neither of which an
-// operator can run.
+// "bootwright " produced `bootwright none` for a finished context,
+// `bootwright continue-apply` for an interrupted one and `bootwright resolve`
+// for an unproved one, none of which an operator can run.
 func TestANextStepIsACommandAnOperatorCanRun(t *testing.T) {
-	for action, expected := range map[string]string{
-		"none":             "",
-		"continue-apply":   "bootwright apply",
-		"continue-destroy": "bootwright destroy",
-		"apply":            "bootwright apply",
-		"destroy":          "bootwright destroy",
+	for _, offer := range []struct {
+		verb     reconciliation.Verb
+		action   string
+		expected string
+	}{
+		{reconciliation.Apply, "none", ""},
+		{reconciliation.Apply, "continue-apply", "bootwright apply"},
+		{reconciliation.Apply, "apply", "bootwright apply"},
+		{reconciliation.Apply, "destroy", "bootwright destroy"},
+		{reconciliation.Destroy, "continue-destroy", "bootwright destroy"},
+		// An unproved effect is resolved by repeating the operation that left
+		// it, so each verb offers its own command rather than a `resolve` one.
+		{reconciliation.Apply, "resolve", "bootwright apply"},
+		{reconciliation.Destroy, "resolve", "bootwright destroy"},
 	} {
-		if command := nextCommand(action); command != expected {
-			t.Fatalf("%q offers %q, want %q", action, command, expected)
+		if command := nextCommand(offer.verb, offer.action); command != offer.expected {
+			t.Fatalf("a %s %q offers %q, want %q", offer.verb, offer.action, command, offer.expected)
 		}
 	}
 }

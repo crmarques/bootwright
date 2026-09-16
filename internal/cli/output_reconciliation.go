@@ -169,6 +169,10 @@ func writeLifecycleOperation(out io.Writer, result *lifecycle.OperationResult) e
 	}
 	verb := strings.ToUpper(result.Verb[:1]) + result.Verb[1:]
 	text.headline(status, verb+" "+escapeDisplayLine(result.Receipt.State))
+	if result.Settled {
+		text.section("")
+		text.lines([]string{settledNote(result.Verb)})
+	}
 	if len(result.Blocks) != 0 {
 		text.section("Result")
 		rows := make([][]string, 0, len(result.Blocks))
@@ -185,6 +189,15 @@ func writeLifecycleOperation(out io.Writer, result *lifecycle.OperationResult) e
 		return err
 	}
 	return writeReceipt(out, result.Receipt)
+}
+
+// settledNote says why an operation performed nothing. Without it a result
+// listing only completed blocks reads as though this invocation did that work.
+func settledNote(verb string) string {
+	if verb == "destroy" {
+		return "Nothing to remove: this context owns no realized state."
+	}
+	return "Nothing to do: this context already holds the state it declares."
 }
 
 // writeReceipt emits the stable machine-readable tail. Its labels, order and

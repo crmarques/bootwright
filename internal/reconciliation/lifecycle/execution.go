@@ -31,9 +31,12 @@ func (s Service) Destroy(ctx context.Context, request DestroyRequest) (*Operatio
 	return s.mutate(ctx, reconciliation.Destroy, request.ContextName, nil, request.Authorizations, request.SkipConfirmation, request.SSH.Borrowed())
 }
 
-// transition is the single legal next step the durable state permits.
+// transition is the single legal next step the durable state permits. A noop
+// transition is the legal step that has nothing left to do: the context
+// already holds the state its verb would leave it in.
 type transition struct {
 	fresh     bool
+	noop      bool
 	verb      reconciliation.Verb
 	operation operationstore.Operation
 	plan      reconciliation.Plan
@@ -58,12 +61,21 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 		return nil, err
 	}
 	var decided transition
+	var identity ContextIdentity
 	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
+		identity = view.Identity()
 		decided, err = s.decide(ctx, view, verb, selection)
 		return err
 	})
 	if err != nil {
 		return nil, err
+	}
+	// A verb with nothing to do ends here. It registers nothing and performs
+	// no effect, so it needs neither authorization nor confirmation: there is
+	// no consequence to acknowledge and nothing a habitual token could
+	// pre-authorize, and repeating a completed verb stays safe.
+	if decided.noop {
+		return settled(identity, decided), nil
 	}
 	if err := authorize(decided.plan, authorizations); err != nil {
 		return nil, err
@@ -126,7 +138,7 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 	}
 	if index.Current == "" {
 		if verb == reconciliation.Destroy {
-			return transition{}, failure("lifecycle.state", "this context owns no applied state to destroy", "run apply first")
+			return transition{noop: true, verb: verb}, nil
 		}
 		return s.freshApply(ctx, view, selection)
 	}
@@ -168,14 +180,50 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 	}
 	if operation.Verb == reconciliation.Apply {
 		if verb == reconciliation.Apply {
-			return transition{}, failure("lifecycle.state", "this context already owns a completed apply", "destroy it before applying again")
+			if unchangedInput(view, operation) {
+				return transition{noop: true, verb: verb, operation: operation, plan: frozen, states: states}, nil
+			}
+			return transition{}, failure("lifecycle.state",
+				"the desired state changed after this apply completed",
+				"destroy what it owns before applying the changed input")
 		}
 		return s.freshDestroy(ctx, view, operation.ID, operation.Bindings, reconciliation.OwnedSubset(frozen, states))
 	}
 	if verb == reconciliation.Destroy {
-		return transition{}, failure("lifecycle.state", "this context owns no applied state to destroy", "run apply first")
+		return transition{noop: true, verb: verb, operation: operation, plan: frozen, states: states}, nil
 	}
 	return s.freshApply(ctx, view, selection)
+}
+
+// unchangedInput reports whether this context still holds exactly the desired
+// state its completed operation froze. That equality is what makes repeating
+// the verb a no-op rather than a request to realize something else.
+func unchangedInput(view View, operation operationstore.Operation) bool {
+	identity := view.Identity()
+	return operation.Context == identity.Name &&
+		operation.Revision == identity.Revision &&
+		operation.InputDigest == inputDigest(view)
+}
+
+// settled reports the verb whose work durable state already proves. It touches
+// no record, so the operation it names keeps the state and identity it
+// finished with.
+func settled(identity ContextIdentity, decided transition) *OperationResult {
+	operation := decided.operation.ID
+	if operation == "" {
+		operation = "none"
+	}
+	return &OperationResult{
+		Context: identity,
+		Verb:    string(decided.verb),
+		Steps:   steps(decided.plan, decided.states),
+		Blocks:  blockResults(decided.plan, decided.states),
+		Settled: true,
+		Receipt: Receipt{
+			Operation: operation, Verb: string(decided.verb),
+			State: string(reconciliation.OperationDone), Next: "none",
+		},
+	}
 }
 
 // refuseStageBoundary refuses before any effect when the selected stages admit
@@ -270,8 +318,13 @@ func (s Service) supersede(ctx context.Context, view View, store OperationStore,
 // freshDestroy re-plans removal from the context's own frozen input and proves
 // it still describes exactly the effects the superseded operation left behind.
 func (s Service) freshDestroy(ctx context.Context, view View, source string, release []string, owned reconciliation.Plan) (transition, error) {
+	// A context that owns nothing settles before it reaches here, so an empty
+	// owned set means the operation this removal supersedes contradicts its
+	// own block records rather than that there is nothing to do.
 	if len(owned.Blocks) == 0 {
-		return transition{}, failure("lifecycle.state", "this context owns no applied state to destroy", "run apply first")
+		return transition{}, failure("lifecycle.state",
+			"the operation this removal supersedes records no block it started",
+			"review its durable state with bootwright status")
 	}
 	plan, binding, err := s.freshPlan(ctx, view, reconciliation.Destroy)
 	if err != nil {

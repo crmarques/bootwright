@@ -124,7 +124,11 @@ type OperationResult struct {
 	// operator to open. It is human presentation only and is absent from every
 	// structured result, which keeps naming paths relative to the state root.
 	LogLocation string
-	Receipt     Receipt
+	// Settled marks a result that performed no work because durable state
+	// already proves it. Its blocks are what an earlier operation completed,
+	// never what this invocation did.
+	Settled bool
+	Receipt Receipt
 }
 
 // ProgressEvent is one row of an operation's progress. Description names the

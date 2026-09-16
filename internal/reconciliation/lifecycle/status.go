@@ -172,7 +172,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	result.LogLocation = store.LogDirectory(operation.ID)
 	result.Secrets.Bound = len(operation.Bindings)
 	result.Shared = applyBlockStatus(result.Shared, plan, states)
-	if command := nextCommand(summary.Next); command != "" {
+	if command := nextCommand(operation.Verb, summary.Next); command != "" {
 		result.NextSteps = append(result.NextSteps, command)
 	}
 	// A pause owns everything it completed, so removal is a safe next action

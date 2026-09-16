@@ -293,16 +293,14 @@ func nextAction(verb reconciliation.Verb, state reconciliation.OperationState) s
 
 // nextCommand is the command an operator actually runs for a next action. The
 // action names a transition rather than a verb this executable offers: a
-// continuation is reached by repeating the operation, and a completed one asks
-// for nothing at all.
-func nextCommand(action string) string {
+// continuation and a resolution are both reached by repeating the operation's
+// own verb, and a completed one asks for nothing at all.
+func nextCommand(verb reconciliation.Verb, action string) string {
 	switch action {
 	case "none":
 		return ""
-	case "continue-apply":
-		return "bootwright apply"
-	case "continue-destroy":
-		return "bootwright destroy"
+	case "resolve", "continue-apply", "continue-destroy":
+		return "bootwright " + string(verb)
 	}
 	return "bootwright " + action
 }

@@ -125,6 +125,39 @@ func TestOperationResultLeadsWithItsOutcomeAndNamesItsLog(t *testing.T) {
 	}
 }
 
+// A settled result lists blocks an earlier operation completed, so it says so
+// rather than leaving them to read as work this invocation performed.
+func TestSettledOperationSaysItDidNothing(t *testing.T) {
+	var out bytes.Buffer
+	result := &lifecycle.OperationResult{
+		Context: lifecycle.ContextIdentity{Name: "lab"}, Verb: "apply",
+		Blocks:  []lifecycle.BlockResult{{ID: "artifact-server-lab", Description: "serve artifacts", State: "done"}},
+		Settled: true,
+		Receipt: lifecycle.Receipt{Operation: "op-abc", Verb: "apply", State: "done", Next: "none"},
+	}
+	if err := writeLifecycleOperation(&out, result); err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	if !strings.HasPrefix(rendered, "[OK] Apply done") {
+		t.Fatalf("headline = %q", rendered)
+	}
+	if !strings.Contains(rendered, "Nothing to do: this context already holds the state it declares.") {
+		t.Fatalf("a settled apply did not say it did nothing: %q", rendered)
+	}
+	if !strings.HasSuffix(rendered, "operation: op-abc\nverb: apply\nstate: done\nnext: none\n") {
+		t.Fatalf("settled result does not end with its receipt: %q", rendered)
+	}
+	out.Reset()
+	result.Verb, result.Blocks, result.Receipt = "destroy", nil, lifecycle.Receipt{Operation: "none", Verb: "destroy", State: "done", Next: "none"}
+	if err := writeLifecycleOperation(&out, result); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Nothing to remove: this context owns no realized state.") {
+		t.Fatalf("a settled destroy did not say it removed nothing: %q", out.String())
+	}
+}
+
 // A block occupies one row: each group opens it with the work in flight and
 // the share of the block its settled groups have proved, and no group settles
 // as a row of its own.

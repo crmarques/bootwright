@@ -139,15 +139,17 @@ systemctl list-units 'bootwright-*'
 
 An empty served root answers `404` and the proxy answers `400` to a request
 that is not a proxy request; both are well-formed answers and both are what
-readiness proves. A completed apply is terminal: repeating it refuses with
+readiness proves. A completed apply is terminal: repeating it over the same
+input settles without an effect, and editing the input first refuses with
 `lifecycle.state`, because there is
 [no reconciliation path](../../specs/state-reconciliation.md#lifecycle-unit).
 The inverse removes exactly what the apply created, and the destroy that
 deletes the guest's disks consumes the `data-loss` authorization:
 
 ```sh
-./bin/bootwright apply --yes    # refuses: destroy it before applying again
+./bin/bootwright apply --yes    # settles: nothing to do
 ./bin/bootwright destroy
+./bin/bootwright destroy        # settles: nothing to remove
 ./bin/bootwright context delete --name lab-rhel --purge
 ```
 

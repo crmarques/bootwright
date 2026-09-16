@@ -91,8 +91,8 @@ explicit `--context` changes nothing they do.
 | `bootwright render effective` | `--output text\|json` default `text` | normalized effective desired state and object counts | none |
 | `bootwright render installer` | `--clusters <list>` default all ContainerClusters; `--sensitive` false; `--output text\|json` default `text` | installer artifact manifest | local placeholder files and optional sensitive files |
 | `bootwright render storage` | `--clusters <list>` default all StorageClusters; `--output text\|json` default `text` | storage artifact manifest | local native files or scripts only; never execution |
-| `bootwright apply` | repeatable `--authorize <token>[,<token>...]`; `--stage <list>` default all stages; `--yes` false; `-v, --verbose` false | completed full apply, a pause at the selected stage boundary, or exact continued state | complete planned mutation |
-| `bootwright destroy` | repeatable `--authorize <token>[,<token>...]`; `--yes` false; `-v, --verbose` false | completed full destroy or exact continued state | complete planned removal |
+| `bootwright apply` | repeatable `--authorize <token>[,<token>...]`; `--stage <list>` default all stages; `--yes` false; `-v, --verbose` false | completed full apply, a pause at the selected stage boundary, exact continued state, or a settled result when the declared state is already realized | complete planned mutation, or none when it settles |
+| `bootwright destroy` | repeatable `--authorize <token>[,<token>...]`; `--yes` false; `-v, --verbose` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles |
 
 ### Resource, access, and general commands
 
