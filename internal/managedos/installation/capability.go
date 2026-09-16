@@ -173,6 +173,22 @@ func groups(verb reconciliation.Verb, request Request) []reconciliation.Group {
 	return out
 }
 
+// Removal reads a frozen installation block as the removal of what it
+// published. The installed system is retained on every arm, and the erasure a
+// physical installation performed was acknowledged by the apply that performed
+// it, so removing this block consumes nothing.
+func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
+	request, err := DecodeRequest(block.Request)
+	if err != nil {
+		return lifecycle.Removal{}, err
+	}
+	return lifecycle.Removal{
+		Description: description(reconciliation.Destroy, request),
+		Impacts:     impacts(reconciliation.Destroy, request),
+		Groups:      groups(reconciliation.Destroy, request),
+	}, nil
+}
+
 func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
 	return c.mutate(ctx, execution, "apply")
 }

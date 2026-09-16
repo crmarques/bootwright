@@ -103,6 +103,21 @@ func groups(verb reconciliation.Verb, request Request) []reconciliation.Group {
 	return out
 }
 
+// Removal reads a frozen physical-machine block as the release of the claim it
+// took. The server and everything installed on it are retained, so removing it
+// consumes nothing.
+func (c MachineCapability) Removal(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
+	request, err := DecodeRequest(block.Request)
+	if err != nil {
+		return lifecycle.Removal{}, err
+	}
+	return lifecycle.Removal{
+		Description: description(reconciliation.Destroy, request),
+		Impacts:     impacts(reconciliation.Destroy, request),
+		Groups:      groups(reconciliation.Destroy, request),
+	}, nil
+}
+
 func (c MachineCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
 	return c.mutate(ctx, execution, "apply")
 }

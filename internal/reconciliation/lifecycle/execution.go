@@ -42,6 +42,10 @@ type transition struct {
 	plan      reconciliation.Plan
 	binding   capabilityBinding
 	source    string
+	// reopen is the binding a fresh removal inherits: the one its apply froze,
+	// so a removal presents the material that created what it removes rather
+	// than whatever the current declarations name.
+	reopen    string
 	release   []string
 	states    map[string]reconciliation.BlockState
 	selection reconciliation.StageSelection
@@ -187,7 +191,8 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 				"the desired state changed after this apply completed",
 				"destroy what it owns before applying the changed input")
 		}
-		return s.freshDestroy(ctx, view, operation.ID, operation.Bindings, reconciliation.OwnedSubset(frozen, states))
+		return s.freshDestroy(ctx, operation.Executable, operation.ID, firstBinding(operation.Bindings),
+			operation.Bindings, reconciliation.OwnedSubset(frozen, states))
 	}
 	if verb == reconciliation.Destroy {
 		return transition{noop: true, verb: verb, operation: operation, plan: frozen, states: states}, nil
@@ -300,24 +305,45 @@ func supersedable(operation operationstore.Operation) bool {
 // the blocks an apply started, or the blocks a removal has not yet proved gone.
 func (s Service) supersede(ctx context.Context, view View, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (transition, error) {
 	if operation.Verb == reconciliation.Apply {
-		return s.freshDestroy(ctx, view, operation.ID, operation.Bindings, reconciliation.OwnedSubset(frozen, states))
+		return s.freshDestroy(ctx, operation.Executable, operation.ID, firstBinding(operation.Bindings),
+			operation.Bindings, reconciliation.OwnedSubset(frozen, states))
 	}
 	// A superseded removal is continued by nothing, so its own binding is
-	// released beside the apply's once the replacement completes.
+	// released beside the apply's once the replacement completes. The one it
+	// reopens is the apply's, because that is the material the effects it takes
+	// back were created with.
 	release := slices.Clone(operation.Bindings)
+	reopen := firstBinding(operation.Bindings)
 	if operation.Source != "" {
 		applied, err := store.ReadOperation(ctx, operation.Source)
 		if err != nil {
 			return transition{}, err
 		}
-		release = append(release, applied.Bindings...)
+		for _, binding := range applied.Bindings {
+			if !slices.Contains(release, binding) {
+				release = append(release, binding)
+			}
+		}
+		if inherited := firstBinding(applied.Bindings); inherited != "" {
+			reopen = inherited
+		}
 	}
-	return s.freshDestroy(ctx, view, operation.Source, release, reconciliation.RemainingSubset(frozen, states))
+	return s.freshDestroy(ctx, operation.Executable, operation.Source, reopen, release,
+		reconciliation.RemainingSubset(frozen, states))
 }
 
-// freshDestroy re-plans removal from the context's own frozen input and proves
-// it still describes exactly the effects the superseded operation left behind.
-func (s Service) freshDestroy(ctx context.Context, view View, source string, release []string, owned reconciliation.Plan) (transition, error) {
+func firstBinding(bindings []string) string {
+	if len(bindings) == 0 {
+		return ""
+	}
+	return bindings[0]
+}
+
+// freshDestroy plans removal from the plan the operation being removed froze,
+// so a build whose derivation has moved since still removes exactly the effects
+// that exist. It reads no desired state: the frozen requests are the effects,
+// and this executable only reads them.
+func (s Service) freshDestroy(ctx context.Context, frozenBy operationstore.Executable, source, reopen string, release []string, owned reconciliation.Plan) (transition, error) {
 	// A context that owns nothing settles before it reaches here, so an empty
 	// owned set means the operation this removal supersedes contradicts its
 	// own block records rather than that there is nothing to do.
@@ -326,38 +352,91 @@ func (s Service) freshDestroy(ctx context.Context, view View, source string, rel
 			"the operation this removal supersedes records no block it started",
 			"review its durable state with bootwright status")
 	}
-	plan, binding, err := s.freshPlan(ctx, view, reconciliation.Destroy)
+	plan, err := s.removalOf(ctx, owned, frozenBy)
 	if err != nil {
 		return transition{}, err
+	}
+	return transition{
+		fresh: true, verb: reconciliation.Destroy, plan: plan,
+		source: source, reopen: reopen, release: release,
+	}, nil
+}
+
+// removalOf turns the frozen blocks an operation still owns into the plan that
+// removes them. Every block keeps the identity, implementation, content digest
+// and request its apply froze; its capability supplies only what removing it
+// decides, so the plan describes the effects that exist rather than the effects
+// this executable would create from the same input today.
+func (s Service) removalOf(ctx context.Context, owned reconciliation.Plan, executable operationstore.Executable) (reconciliation.Plan, error) {
+	inverted, err := invertOwned(owned)
+	if err != nil {
+		return reconciliation.Plan{}, err
+	}
+	definitions := make([]reconciliation.BlockDefinition, 0, len(inverted.Blocks))
+	for _, block := range inverted.Blocks {
+		capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
+		if !ok {
+			return reconciliation.Plan{}, failure("lifecycle.state",
+				"this executable provides no "+block.Implementation+" to remove the block "+block.ID+" with",
+				removeWith(executable))
+		}
+		removal, err := capability.Removal(ctx, block)
+		if err != nil {
+			return reconciliation.Plan{}, unreadable(block, executable, err)
+		}
+		definition := block.BlockDefinition
+		definition.Dependencies = slices.Clone(definition.Dependencies)
+		// Requirements are already resolved into the frozen dependencies this
+		// removal inverted, and a subset may no longer contain the block a
+		// requirement names.
+		definition.Requires = nil
+		definition.Description, definition.Impacts = removal.Description, removal.Impacts
+		definition.Consumes, definition.Groups = removal.Consumes, removal.Groups
+		definitions = append(definitions, definition)
+	}
+	return reconciliation.NewPlan(reconciliation.Destroy, definitions)
+}
+
+// invertOwned shapes the owned set as a removal. An apply's plan is inverted so
+// every block waits on its own dependents; a removal's own plan already is that
+// inverse and is only narrowed, which drops the edges to blocks it no longer
+// carries.
+func invertOwned(owned reconciliation.Plan) (reconciliation.Plan, error) {
+	if owned.Verb == reconciliation.Apply {
+		return owned.Inverse()
 	}
 	identities := make([]string, 0, len(owned.Blocks))
 	for _, block := range owned.Blocks {
 		identities = append(identities, block.ID)
 	}
-	if plan, err = plan.Retain(identities); err != nil {
-		return transition{}, err
-	}
-	if err := sameEffects(owned, plan); err != nil {
-		return transition{}, err
-	}
-	return transition{fresh: true, verb: reconciliation.Destroy, plan: plan, binding: binding, source: source, release: release}, nil
+	return owned.Retain(identities)
 }
 
-// sameEffects proves a destroy removes exactly what its apply created.
-func sameEffects(applied, removal reconciliation.Plan) error {
-	if len(applied.Blocks) != len(removal.Blocks) {
-		return failure("lifecycle.state", "the removal plan does not cover the completed apply", "restore the executable and input that registered the apply")
+// unreadable reports a frozen block this executable cannot read, naming what it
+// holds and the executable that wrote it, so the remedy is a command rather
+// than the obstacle that stopped it.
+func unreadable(block reconciliation.Block, executable operationstore.Executable, err error) error {
+	detail := ""
+	if reported := diagnostics.Of(err); len(reported) != 0 {
+		detail = ": " + reported[0].Message
 	}
-	digests := map[string]string{}
-	for _, block := range applied.Blocks {
-		digests[block.ID] = block.RequestDigest
+	return failure("lifecycle.state",
+		"the request the block "+block.ID+" froze cannot be read by this executable"+detail,
+		removeWith(executable))
+}
+
+// removeWith names the executable that registered what is being removed. An
+// operation recorded before that identity existed names none, and the operator
+// is pointed at the record instead.
+func removeWith(executable operationstore.Executable) string {
+	if executable.Version == "" {
+		return "remove it with the executable its operation.json records"
 	}
-	for _, block := range removal.Blocks {
-		if digests[block.ID] != block.RequestDigest {
-			return failure("lifecycle.state", "the removal plan describes different effects than the completed apply", "restore the executable and input that registered the apply")
-		}
+	identity := executable.Version
+	if executable.Commit != "" {
+		identity += " (" + executable.Commit + ")"
 	}
-	return nil
+	return "remove it with bootwright " + identity
 }
 
 func (s Service) present(ctx context.Context, name string, decided transition) error {
@@ -391,11 +470,14 @@ func (s Service) execute(ctx context.Context, name string, decided transition) (
 		return err
 	})
 	if err != nil {
-		// Only a failed registration releases what it just bound. Once the
-		// operation is registered it owns that binding for its whole lifetime,
-		// because every later attempt reopens it; releasing here would leave a
-		// durable operation that can never be continued.
-		if decided.fresh && binding != "" && result == nil {
+		// Only a failed registration releases what it just bound, and only when
+		// it bound it: a removal inherits its apply's binding, and releasing
+		// that would leave a context whose effects no later removal can ever
+		// present the material for. Once the operation is registered it owns
+		// its binding for its whole lifetime, because every later attempt
+		// reopens it; releasing here would leave a durable operation that can
+		// never be continued.
+		if decided.fresh && decided.reopen == "" && binding != "" && result == nil {
 			_, _ = s.binder.Release(ctx, custody.BindingRequest{ContextName: name, BindingID: binding})
 		}
 		return result, err
@@ -411,7 +493,9 @@ func (s Service) execute(ctx context.Context, name string, decided transition) (
 
 func (s Service) bind(ctx context.Context, name string, decided transition) (string, map[string]secrets.Material, error) {
 	references := decided.binding.secrets
-	if !decided.fresh {
+	// A removal inherits its apply's binding, so it neither re-binds current
+	// declarations nor needs the plan to have named any.
+	if !decided.fresh || decided.reopen != "" {
 		references = nil
 	}
 	identity := ""
@@ -421,6 +505,9 @@ func (s Service) bind(ctx context.Context, name string, decided transition) (str
 			return "", nil, err
 		}
 		identity = result.ID
+	}
+	if decided.reopen != "" {
+		identity = decided.reopen
 	}
 	if !decided.fresh && len(decided.operation.Bindings) != 0 {
 		identity = decided.operation.Bindings[0]

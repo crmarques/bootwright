@@ -66,6 +66,9 @@ func TestAPlanThatConsumesAnAuthorizationRefusesWithoutIt(t *testing.T) {
 // the operator is acknowledging.
 func TestEachMutationOfADestructivePlanIsAuthorizedOnItsOwn(t *testing.T) {
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("artifacts"), definition("network")})
+	// Removing this block is destructive in its own right, which is what its
+	// capability says when the removal is planned from the frozen block.
+	h.capability.consumes = map[string][]string{"artifacts": {reconciliation.AuthorizationDataLoss}}
 	_, err := h.service.Apply(context.Background(), ApplyRequest{
 		ContextName: "lab", Authorizations: []string{"data-loss"}, SkipConfirmation: true,
 	})

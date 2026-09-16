@@ -177,6 +177,21 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 // Apply installs exactly what is missing. A host that already carries the
 // selected closure is proved from retained identities alone, so a repeated
 // apply contacts no publisher and reads no repository metadata.
+// Removal reads a frozen controller-stage block as its own removal. The clients
+// it installed are shared host state a context never uninstalls, so removing it
+// takes back nothing and consumes nothing.
+func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
+	request, err := DecodeRequest(block.Request)
+	if err != nil {
+		return lifecycle.Removal{}, err
+	}
+	return lifecycle.Removal{
+		Description: description(reconciliation.Destroy, block.Object, request.Machine),
+		Impacts:     impacts(reconciliation.Destroy, request),
+		Groups:      groups(reconciliation.Destroy, request.Machine),
+	}, nil
+}
+
 func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
 	failed := lifecycle.Result{Outcome: reconciliation.OutcomeFailed}
 	if err := ctx.Err(); err != nil {

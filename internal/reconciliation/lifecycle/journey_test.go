@@ -278,6 +278,24 @@ type testCapability struct {
 	quiescence   map[string]Quiescence
 	quiescentErr error
 	observeErr   error
+	removals     []string
+	removalErr   error
+	consumes     map[string][]string
+}
+
+// Removal answers from the fixture. It records which frozen blocks a removal
+// read, so a test can prove a plan came from them rather than from input.
+func (c *testCapability) Removal(_ context.Context, block reconciliation.Block) (Removal, error) {
+	c.removals = append(c.removals, block.ID)
+	if c.removalErr != nil {
+		return Removal{}, c.removalErr
+	}
+	return Removal{
+		Description: "remove " + block.Object,
+		Impacts:     []string{"remove-" + block.Object},
+		Consumes:    c.consumes[block.ID],
+		Groups:      []reconciliation.Group{{ID: "remove", Description: "remove it", Machines: []string{block.Object}}},
+	}, nil
 }
 
 // Quiescent answers from the fixture, and settles by default so a removal that
@@ -1059,8 +1077,11 @@ func TestFreshDestroyRefusesLiveStateBeforeRegistering(t *testing.T) {
 	if !maps.EqualFunc(h.workspace.area.files, registered.files, slices.Equal) {
 		t.Fatal("a refused removal changed durable operation state")
 	}
-	if len(h.binder.released) == 0 {
-		t.Fatal("a refused removal kept the binding it acquired for itself")
+	// A removal inherits its apply's binding rather than acquiring one, so a
+	// refusal must leave it alone: releasing it would leave a context whose
+	// effects no later removal could present the material for.
+	if len(h.binder.released) != 0 {
+		t.Fatalf("a refused removal released %v", h.binder.released)
 	}
 }
 
@@ -1503,8 +1524,8 @@ func TestRepairedAutomationLeavesAFailedApplyDestroyable(t *testing.T) {
 }
 
 // A removal can fail the same way, so a fresh one supersedes it over exactly
-// what it never proved gone, and the binding it can no longer reopen is
-// released with the apply's.
+// what it never proved gone. Both removals inherit the apply's own binding
+// rather than minting one, so the replacement releases exactly that.
 func TestDestroyOverAFailedDestroyCoversOnlyWhatRemains(t *testing.T) {
 	h := newPlannedHarness(t, nestedDefinitions())
 	h.capability.secrets = []string{"lab-bmc-credentials"}
@@ -1527,7 +1548,7 @@ func TestDestroyOverAFailedDestroyCoversOnlyWhatRemains(t *testing.T) {
 	if !slices.Equal(h.capability.destroys, want) {
 		t.Fatalf("destroyed blocks = %v", h.capability.destroys)
 	}
-	if !slices.Equal(h.binder.released, []string{"bind-2", "bind-1"}) {
+	if !slices.Equal(h.binder.released, []string{"bind-1"}) {
 		t.Fatalf("released bindings = %v", h.binder.released)
 	}
 }

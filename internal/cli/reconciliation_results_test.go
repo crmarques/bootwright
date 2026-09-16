@@ -217,15 +217,18 @@ func TestStatusRendersTextAndJSON(t *testing.T) {
 		NextSteps:   []string{"bootwright destroy"},
 		Lifecycle: &lifecycle.LifecycleSummary{
 			Operation: "op-abc", Verb: "apply", State: "done", Next: "destroy",
-			Blocks: []lifecycle.BlockResult{{ID: "artifact-server-lab", Description: "serve artifacts", State: "done"}},
-			Logs:   []string{},
+			Blocks:     []lifecycle.BlockResult{{ID: "artifact-server-lab", Description: "serve artifacts", State: "done"}},
+			Logs:       []string{},
+			Executable: "1.4.0 (9f2c1ab)",
 		},
 	}
 	var text bytes.Buffer
 	if err := writeLifecycleStatus(&text, result, false); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Context lab", "controller-binding", "ArtifactServer/lab", "bootwright destroy"} {
+	// The build that registered the operation is what a removal is planned
+	// from, so a refusal naming it as the remedy is readable in advance.
+	for _, want := range []string{"Context lab", "controller-binding", "ArtifactServer/lab", "bootwright destroy", "Registered by", "1.4.0 (9f2c1ab)"} {
 		if !strings.Contains(text.String(), want) {
 			t.Fatalf("status text = %q, missing %q", text.String(), want)
 		}

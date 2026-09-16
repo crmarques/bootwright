@@ -123,6 +123,21 @@ func groups(verb reconciliation.Verb, request Request) []reconciliation.Group {
 	return out
 }
 
+// Removal reads a frozen artifact-server block as the removal of the service it
+// installed. What it served is published beneath its own root by its consumers,
+// so removing it consumes nothing of its own.
+func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
+	request, err := DecodeRequest(block.Request)
+	if err != nil {
+		return lifecycle.Removal{}, err
+	}
+	return lifecycle.Removal{
+		Description: description(reconciliation.Destroy, request),
+		Impacts:     impacts(reconciliation.Destroy, request),
+		Groups:      groups(reconciliation.Destroy, request),
+	}, nil
+}
+
 func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
 	return c.mutate(ctx, execution, "apply")
 }

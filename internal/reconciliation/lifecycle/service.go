@@ -139,8 +139,18 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 	if err != nil {
 		return nil, err
 	}
+	// A removal is planned from the plan its apply froze, so the preview shows
+	// the removal destroy would perform rather than what this executable would
+	// derive from the same input today.
 	if operation.Verb == reconciliation.Apply && operation.State == reconciliation.OperationDone {
-		return fresh(reconciliation.Destroy, "destroy")
+		removal, err := s.removalOf(ctx, reconciliation.OwnedSubset(frozen, states), operation.Executable)
+		if err != nil {
+			return nil, err
+		}
+		result := planPreview(removal, nil, selection)
+		result.Context, result.Verb = view.Identity(), string(reconciliation.Destroy)
+		result.Receipt = Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "destroy"}
+		return &result, nil
 	}
 	if operation.Verb == reconciliation.Destroy && operation.State == reconciliation.OperationDone {
 		return fresh(reconciliation.Apply, "apply")

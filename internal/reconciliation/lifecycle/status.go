@@ -7,6 +7,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
 // Status derives the machine-readable view of durable state. It performs no
@@ -164,6 +165,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	summary := &LifecycleSummary{
 		Operation: operation.ID, Verb: string(operation.Verb), State: string(operation.State),
 		Next: nextAction(operation.Verb, operation.State), Blocks: blockResults(plan, states), Logs: logs,
+		Executable: executableIdentity(operation.Executable),
 	}
 	if summary.Logs == nil {
 		summary.Logs = []string{}
@@ -268,4 +270,16 @@ func applyBlockStatus(services []ServiceSummary, plan reconciliation.Plan, state
 		}
 	}
 	return services
+}
+
+// executableIdentity names the build an operation recorded, in the spelling the
+// version command reports, so it can be read back as a command to run.
+func executableIdentity(executable operationstore.Executable) string {
+	if executable.Version == "" {
+		return ""
+	}
+	if executable.Commit == "" {
+		return executable.Version
+	}
+	return executable.Version + " (" + executable.Commit + ")"
 }

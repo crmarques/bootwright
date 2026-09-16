@@ -234,6 +234,21 @@ func groupsFor(steps [][2]string, machines []string) []reconciliation.Group {
 	return out
 }
 
+// Removal reads a frozen provider-host block as the removal of what it
+// realized. The host runs shared software this block never installed away, so
+// removing it consumes nothing.
+func (c HostCapability) Removal(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
+	request, err := DecodeHostRequest(block.Request)
+	if err != nil {
+		return lifecycle.Removal{}, err
+	}
+	return lifecycle.Removal{
+		Description: hostDescription(reconciliation.Destroy, request),
+		Impacts:     hostImpacts(reconciliation.Destroy, request),
+		Groups:      hostGroups(reconciliation.Destroy, request),
+	}, nil
+}
+
 func (c HostCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
 	return c.mutate(ctx, execution, "apply")
 }
@@ -312,6 +327,22 @@ func (c HostCapability) run(ctx context.Context, execution lifecycle.Execution, 
 		return lifecycle.RunResult{}, err
 	}
 	return c.runner.Run(ctx, invocation(execution, HostImplementation, hostVariable, operation, canonical, request.Placement, nil, nil))
+}
+
+// Removal reads a frozen machine block as the removal of what it realized. The
+// disks it deletes may hold an installed operating system, so removing it is
+// acknowledged exactly as its own plan acknowledged it.
+func (c MachineCapability) Removal(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
+	request, err := DecodeMachineRequest(block.Request)
+	if err != nil {
+		return lifecycle.Removal{}, err
+	}
+	return lifecycle.Removal{
+		Description: machineDescription(reconciliation.Destroy, request),
+		Impacts:     machineImpacts(reconciliation.Destroy, request),
+		Consumes:    []string{reconciliation.AuthorizationDataLoss},
+		Groups:      machineGroups(reconciliation.Destroy, request),
+	}, nil
 }
 
 func (c MachineCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {

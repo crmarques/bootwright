@@ -106,6 +106,11 @@ type ExecutionGuard interface {
 // never schedules another domain's work or writes lifecycle state.
 type Capability interface {
 	Plan(context.Context, PlanInput) (CapabilityPlan, error)
+	// Removal reads one frozen block as the removal of what it created. It is
+	// part of the port rather than an optional extra, because a block left out
+	// would be removed under the authorization its apply acknowledged instead
+	// of the authorization removing it needs.
+	Removal(context.Context, reconciliation.Block) (Removal, error)
 	Apply(context.Context, Execution) (Result, error)
 	Observe(context.Context, Execution) (Observation, error)
 	// Quiescent reports whether what this block owns is still in use. It is
@@ -113,6 +118,17 @@ type Capability interface {
 	// silently left out of the gate that protects a live environment.
 	Quiescent(context.Context, Probe) (Quiescence, error)
 	Destroy(context.Context, Execution) (Result, error)
+}
+
+// Removal is the half of a frozen block that removing it decides: the words it
+// is planned and reported in, the impacts it lists and the authorization it
+// consumes. The block's identity, request and digests are deliberately absent,
+// so planning a removal from a frozen plan can never change what is removed.
+type Removal struct {
+	Description string
+	Impacts     []string
+	Consumes    []string
+	Groups      []reconciliation.Group
 }
 
 // Probe is one read-only quiescence observation against a frozen block. It

@@ -223,6 +223,21 @@ func groups(verb reconciliation.Verb, request Request) []reconciliation.Group {
 	return out
 }
 
+// Removal reads a frozen managed-service block as the removal of the service it
+// installed. It takes back only what it created, so removing it consumes
+// nothing.
+func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
+	request, err := DecodeRequest(block.Request, c.definition.Version)
+	if err != nil {
+		return lifecycle.Removal{}, err
+	}
+	return lifecycle.Removal{
+		Description: c.definition.describe(reconciliation.Destroy, request),
+		Impacts:     impacts(reconciliation.Destroy, request),
+		Groups:      groups(reconciliation.Destroy, request),
+	}, nil
+}
+
 func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
 	return c.mutate(ctx, execution, "apply")
 }

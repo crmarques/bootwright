@@ -259,6 +259,12 @@ func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMod
 		text.rows(rows)
 	}
 	var tail []field
+	// A removal is planned from what the registering build froze, so the
+	// operator reads which build that was before meeting a refusal that names
+	// it as the remedy.
+	if result.Lifecycle != nil && result.Lifecycle.Executable != "" {
+		tail = append(tail, field{Label: "Registered by", Value: escapeDisplayLine(result.Lifecycle.Executable)})
+	}
 	if result.LogLocation != "" {
 		tail = append(tail, field{Label: logLocationLabel, Value: escapeDisplayLine(result.LogLocation)})
 	}

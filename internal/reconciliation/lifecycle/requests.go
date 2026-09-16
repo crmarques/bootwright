@@ -184,6 +184,10 @@ type LifecycleSummary struct {
 	Next      string
 	Blocks    []BlockResult
 	Logs      []string
+	// Executable is the identity of the build that registered this operation.
+	// A removal is planned from what that build froze, so an operator reads the
+	// remedy for a request this one cannot read before meeting the refusal.
+	Executable string
 }
 
 type StatusResult struct {
