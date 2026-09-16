@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -19,9 +20,14 @@ const (
 	// truncate rather than a write the area refuses.
 	MaxAdapterOutputBytes = 4 << 20
 	// adapterOutputFlush bounds what a running adapter's output holds in
-	// memory, so a run that wedges is readable before it ends.
+	// memory.
 	adapterOutputFlush = 8 << 10
-	maxLogDetail       = 512
+	// adapterOutputInterval bounds how long output waits before it is on disk,
+	// which is what makes a run readable while it is still going. Publishing
+	// costs a walk of the whole operation subtree, so a burst of lines is
+	// coalesced into one write rather than paying that walk per line.
+	adapterOutputInterval = time.Second
+	maxLogDetail          = 512
 )
 
 // LogRecord is the only shape a private operation log accepts. Every field is
@@ -88,10 +94,12 @@ type AdapterOutput struct {
 	// adapter process's own goroutine. Close takes the live one instead.
 	ctx       context.Context
 	area      Area
+	clock     func() time.Time
 	path      string
 	mutex     sync.Mutex
 	pending   []byte
 	written   int
+	flushed   time.Time
 	truncated bool
 	closed    bool
 }
@@ -100,7 +108,7 @@ type AdapterOutput struct {
 // log, whose own directory it shares. It cannot fail, because retention is not
 // a precondition of the effect it records.
 func (s *Store) OpenAdapterOutput(ctx context.Context, target string) *AdapterOutput {
-	return &AdapterOutput{ctx: ctx, area: s.area, path: target}
+	return &AdapterOutput{ctx: ctx, area: s.area, clock: s.clock, path: target}
 }
 
 func (o *AdapterOutput) Write(value []byte) (int, error) {
@@ -118,7 +126,7 @@ func (o *AdapterOutput) Write(value []byte) (int, error) {
 		value = value[:max(room, 0)]
 	}
 	o.pending = append(o.pending, value...)
-	if len(o.pending) >= adapterOutputFlush {
+	if o.due() {
 		_ = o.flush(o.ctx)
 	}
 	return size, nil
@@ -150,9 +158,24 @@ func (o *AdapterOutput) Retained() (int, bool) {
 	return o.written, o.truncated
 }
 
+// due reports whether what is buffered has grown large enough, or waited long
+// enough, to be worth publishing. The first write is always due, so an operator
+// following the run sees it start rather than a file that stays absent.
+func (o *AdapterOutput) due() bool {
+	if len(o.pending) >= adapterOutputFlush {
+		return true
+	}
+	return o.clock != nil && !o.clock().Before(o.flushed.Add(adapterOutputInterval))
+}
+
 func (o *AdapterOutput) flush(ctx context.Context) error {
 	if len(o.pending) == 0 {
 		return nil
+	}
+	if o.clock != nil {
+		// Recorded even when the write fails, so a failing area is retried on
+		// the interval instead of on every line.
+		o.flushed = o.clock()
 	}
 	if err := o.area.Append(ctx, o.path, o.pending); err != nil {
 		return err

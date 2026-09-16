@@ -80,7 +80,9 @@ func runnerFixture(t *testing.T, mode string) (prerequisites.PythonLaunch, capab
 	launch := prerequisites.PythonLaunch{Loader: "/qualified/loader", Arguments: []string{"--inhibit-cache", "/qualified/python"}, Directory: bundle, Environment: []string{"LANG=C.UTF-8"}}
 	request := capabilityRequest{Operation: "setup", Identity: strings.Repeat("a", 64), Bundle: bundleLocation{Path: bundle, Writable: true}, Packages: []prerequisites.NativePackage{}, Tools: []prerequisites.ToolDefinition{}}
 	boundary := processBoundary{owner: os.Geteuid(), jobParent: t.TempDir(), scratchParent: t.TempDir(), command: func(path string, arguments ...string) *exec.Cmd {
-		if path != launch.Loader || !strings.Contains(strings.Join(arguments, "\x00"), "-I\x00-B\x00-S\x00-c") {
+		// -u belongs to the boundary: without it the child holds its output
+		// back until it exits, and nothing can be followed while it runs.
+		if path != launch.Loader || !strings.Contains(strings.Join(arguments, "\x00"), "-u\x00-I\x00-B\x00-S\x00-c") {
 			t.Fatal("qualified isolated Python boundary changed")
 		}
 		return exec.Command(os.Args[0], "-test.run=^TestRunnerProtocolChild$", "--", "controller-child-"+mode)

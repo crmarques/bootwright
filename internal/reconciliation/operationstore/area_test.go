@@ -17,6 +17,7 @@ type memoryArea struct {
 	directories map[string]bool
 	fail        map[string]error
 	reads       int
+	appends     int
 	location    string
 }
 
@@ -116,6 +117,7 @@ func (a *memoryArea) Replace(ctx context.Context, target string, data, expected 
 }
 
 func (a *memoryArea) Append(ctx context.Context, target string, data []byte) error {
+	a.appends++
 	if err := a.check("append", target); err != nil {
 		return err
 	}

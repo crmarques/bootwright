@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLogOpensBeforeItsEffectAndReportsFailure(t *testing.T) {
@@ -212,5 +213,45 @@ func TestAdapterOutputTruncatesAndNeverFailsItsRun(t *testing.T) {
 	}
 	if n, err := output.Write([]byte("after close")); n != 11 || err != nil {
 		t.Fatalf("a closed output reported a short write: %d (%v)", n, err)
+	}
+}
+
+// manualClock advances only when a test says so, so the flush cadence is
+// asserted rather than waited for.
+type manualClock struct{ moment time.Time }
+
+func (c *manualClock) now() time.Time { return c.moment }
+
+// Output has to reach disk while the run is still going, or the file an
+// operator was told to follow stays empty until the work is already over. The
+// first line is published at once and a burst behind it costs one write, not
+// one per line.
+func TestAdapterOutputPublishesTheFirstLineAndCoalescesABurst(t *testing.T) {
+	ctx := context.Background()
+	clock := &manualClock{moment: time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)}
+	area := newArea()
+	store := New(area, clock.now)
+	target := "op-" + strings.Repeat("ab", 16) + "/logs/blocks/one/attempt-000001.output"
+	output := store.OpenAdapterOutput(ctx, target)
+	if _, err := output.Write([]byte("TASK [boot the machine]\n")); err != nil {
+		t.Fatal(err)
+	}
+	if string(area.files[target]) != "TASK [boot the machine]\n" {
+		t.Fatalf("the first line was not published: %q", area.files[target])
+	}
+	for range 50 {
+		if _, err := output.Write([]byte("ok: [rhel-01]\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if area.appends != 1 {
+		t.Fatalf("a burst inside the interval cost %d writes, want 1", area.appends)
+	}
+	clock.moment = clock.moment.Add(adapterOutputInterval)
+	if _, err := output.Write([]byte("TASK [eject the media]\n")); err != nil {
+		t.Fatal(err)
+	}
+	if area.appends != 2 || !strings.HasSuffix(string(area.files[target]), "TASK [eject the media]\n") {
+		t.Fatalf("the interval did not publish what had accumulated: %d writes, %q", area.appends, area.files[target])
 	}
 }

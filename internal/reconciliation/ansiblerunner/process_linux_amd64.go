@@ -136,7 +136,11 @@ func (r Runner) execute(ctx context.Context, job, scratch, playbook string, requ
 	}
 	automation := filepath.Join(request.Bundle.Path, "automation")
 	collection := filepath.Join(automation, "collections/ansible_collections/bootwright/core")
-	arguments := append(slices.Clone(request.Launch.Arguments), "-I", "-B", "-S", "-c", entrypoint,
+	// -u is what makes the retained output readable while the run is still
+	// going. Ansible writes its callback output and lets the system flush it,
+	// so a child whose stdout is a pipe holds roughly eight kilobytes back
+	// until it exits. -E is implied by -I, so PYTHONUNBUFFERED cannot do this.
+	arguments := append(slices.Clone(request.Launch.Arguments), "-u", "-I", "-B", "-S", "-c", entrypoint,
 		filepath.Join(collection, "plugins/module_utils/controller_supervisor.py"),
 		"-i", filepath.Join(job, "inventory.json"), "--extra-vars", "@"+filepath.Join(job, "request.json"),
 		filepath.Join(collection, "playbooks", playbook))

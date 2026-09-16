@@ -114,7 +114,11 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 	defer childInput.Close()
 	defer input.Close()
 	automation := filepath.Join(request.Bundle.Path, "automation")
-	arguments := append(slices.Clone(launch.Arguments), "-I", "-B", "-S", "-c", entrypoint, filepath.Join(automation, "collections/ansible_collections/bootwright/core/plugins/module_utils/controller_supervisor.py"),
+	// -u is what makes the retained output readable while the run is still
+	// going. Ansible writes its callback output and lets the system flush it,
+	// so a child whose stdout is a pipe holds roughly eight kilobytes back
+	// until it exits. -E is implied by -I, so PYTHONUNBUFFERED cannot do this.
+	arguments := append(slices.Clone(launch.Arguments), "-u", "-I", "-B", "-S", "-c", entrypoint, filepath.Join(automation, "collections/ansible_collections/bootwright/core/plugins/module_utils/controller_supervisor.py"),
 		"-i", filepath.Join(job, "inventory.json"), "--extra-vars", "@"+filepath.Join(job, "request.json"),
 		filepath.Join(automation, "collections/ansible_collections/bootwright/core/playbooks/controller/setup.yml"))
 	command := boundary.command(launch.Loader, arguments...)

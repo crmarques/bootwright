@@ -529,8 +529,12 @@ the adapter did inside them, so a run that succeeded is as worth reading as one
 that failed. Keeping material out of a retained run is the adapter's own
 obligation, discharged where the material is used: every task that reads bound
 material marks itself `no_log`, so the adapter's output never carries it. The
-file is appended to as the run produces it, so a run that wedges is readable
-before it ends, and is bounded and truncated at its limit without an inline
+file is appended to while the run produces it, within a bounded delay, so a run
+that wedges is readable before it ends rather than only once it stops. That
+requires the adapter process to be launched so that it does not withhold its own
+output, because a tool that buffers until it exits defeats the retention
+whatever this side does. Publishing is coalesced rather than written a line at a
+time, and the file is bounded and truncated at its limit without an inline
 marker. It is troubleshooting material only: nothing reads it back, it is never
 product output, ownership evidence or a continuation cursor, and its attempt log
 records the file by name with the bytes it holds and whether the bound cut it
