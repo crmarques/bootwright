@@ -55,10 +55,16 @@ preserve its scope. Further delivery evidence lives in Git history.
 **Owners:** Substrate and Managed OS, with Infrastructure services (private
 consumer publication), Machine (the host key a physical installation delivers)
 and State reconciliation (the authorization an installation consumes).
-**Requires:** M1h. **Definition:** Specified. **Delivery:** not started.
+**Requires:** M1h. **Definition:** Specified. **Delivery:** in progress.
 **Delivered on explicit request**, outside the milestone sequence: it is the
 physical half of M5, bounded to the Anaconda path M1h already proves on
 emulated hardware, and it neither requires nor delivers M4 or C9.
+
+Every capability, adapter and test below is implemented and its exit evidence
+passes. What remains is the by-hand rehearsal this delivery's verification
+model requires: the physical path driven end to end against an emulated
+controller, which is also where the pinned emulator's `EthernetInterfaces`
+collection is first proved.
 
 Install RHEL on an operator-owned physical server through its own Redfish
 management controller, over the same contract that installs a libvirt guest.
@@ -113,9 +119,10 @@ the installer's first write remains a
 [residual race](state-reconciliation.md#mutation-safety); physical destroy and
 offline erase remain C9, so a removal retains the installed system; a bonded or
 VLAN installation interface is not yet derived, so an install address on one
-refuses; `import-certificate` trust is refused rather than implemented; and two
-contexts claiming one controller from different controller hosts are not
-coordinated, exactly as the SSH placement arm is not.
+refuses; a FIPS-enabled profile refuses with every other arm that carries
+effects this contract does not prove; `import-certificate` trust is refused
+rather than implemented; and two contexts claiming one controller from different
+controller hosts are not coordinated, exactly as the SSH placement arm is not.
 
 ### Machine commands
 
@@ -491,7 +498,7 @@ service set, one libvirt `InfraProvider` whose host Machine is the controller or
 an SSH-reachable OS-ready Machine and whose emulated BMCs bind a unicast
 address, and Bootwright-installed Machines on that provider whose Anaconda
 profile selects `hostedTree` or no package source. A profile selecting
-`initialPassword`, `diskEncryption`, `fromSubscription`, `mirror` or
+`initialPassword`, `diskEncryption`, `fips`, `fromSubscription`, `mirror` or
 `templateClone`, and every bare-metal, vSphere or KubeVirt provider, refuses
 before registration. The served ISO is therefore secret-free; a later
 private-content path must extend the frozen request without changing its shape.
@@ -540,22 +547,26 @@ RHEL 9.8 boot image the same way.
 
 **Task 0 progress.** The image is resolved, pinned and its container runtime
 recorded in [emulated-BMC knowledge](../.agents/knowledge/sushy-tools-emulated-bmc.md),
-including the stock command this contract must not use. Its Redfish surface —
-the `Systems` collection, virtual media, boot override, power and basic
-authentication — and `mkksiso` against RHEL 9.8 boot media remain unqualified.
-The capabilities and their roles are written against the contract rather than
-against an observed run, so the first real-system acceptance is where those two
-are proved and anything they contradict is corrected.
+including the stock command this contract must not use. The by-hand
+qualification this milestone scheduled before its acceptance was deliberately
+deferred, and the first real `lab-rhel` install performed it instead: that run
+drove the `Systems` collection, virtual media insert and eject, boot override,
+power and basic authentication, and built its per-machine image with `mkksiso`
+against RHEL 9.8 boot media. The guest it produced installed, booted and served
+SSH, so both are qualified by an observed run rather than by contract. What that
+run contradicted is corrected and recorded in
+[development](../docs/development.md).
 
-**Deviations to close.** Two parts of this contract are not yet as specified.
-The hypervisor closure is installed by the provider host block on either
-placement arm, rather than by the controller stage on the controller, because
-the controller stage's native closure is versioned per root and the daemon,
+**Deviation to close.** One part of this contract is not yet as specified. The
+hypervisor closure is installed by the provider host block on either placement
+arm, rather than by the controller stage on the controller, because the
+controller stage's native closure is versioned per root and the daemon,
 emulator and TPM helper have no declared version intent yet; the installer-media
-tooling is likewise installed by the installation block. And managed OS composes
-the substrate's power and identity operations through its modules rather than
-through fixed task files of its roles. Both belong to M1h and neither changes a
-frozen request shape.
+tooling is likewise installed by the installation block. It belongs to M1h and
+changes no frozen request shape. The second deviation is closed: managed OS now
+composes each substrate's proof and identity read through the two fixed task
+files every substrate machine role exposes, which is the composition M5a's
+general seam required.
 
 **Operator output and retained adapter logs.** The first real `lab-rhel` apply
 showed both gaps. A block occupied one row per presentation group, so eight
@@ -607,7 +618,7 @@ implementation. Each must qualify exact releases and close its own contracts.
 | M2b — Ceph native files | Storage and Native artifacts: render typed storage intent into one release-specific declarative file set. | M1e, N3 | Qualify release schemas and reject unprovable fields; revise the API deliberately if needed. **N5:** define each storage secret consumer's validation, immutable binding and sensitive publication (M1c, N3), or prove outputs secret-free. Native goldens and negative disclosure tests. |
 | M3 — Ceph-pool script | Storage and Native artifacts: generate one deterministic native-CLI pool script. | M1e | **N4:** define the script manifest, bytes, fixed command structure, destination and generation journey (M1b). Prove argument encoding, replay semantics, diagnostics, sensitive classification, publication and goldens. No authored shell fragments, inline secrets or execution. |
 | M4 — OCP bare-metal lifecycle | State reconciliation, Substrate and Container cluster: extend full-context apply and destroy to OCP effects. | M1e, M2a | **L2:** extend pure plans, impacts, dependencies and digests. **L5:** add consumer-owned OCP remote ports. **L4:** extend durable execution, readiness and removal, preserving the M1e inverse and safely refusing incompatible state. **L6:** qualify exact implementations with contract, crash/lease, identity/ownership, replay, cancellation and real-system tests. Destroy a completed M1e snapshot before a fresh expanded apply. |
-| M5 — managed RHEL on bare metal | Managed OS and Substrate: the secret-bearing profile arms and the cluster-facing remainder of physical installation, using typed image, profile, entitlement, Secret and Machine intent. The Anaconda path itself is **delivered by M5a**, which also delivers the private publication those arms need. | M5a, M4, C9 | Extend L2/L4/L5; apply L6. Prove renderer/executor parity, ownership, replay, secret custody over the private path, a bonded or VLAN installation interface, and real-hardware acceptance. |
+| M5 — managed RHEL on bare metal | Managed OS and Substrate: the secret-bearing profile arms and the cluster-facing remainder of physical installation, using typed image, profile, entitlement, Secret and Machine intent. The Anaconda path itself is **delivered by M5a**, which also delivers the private publication those arms need. The install arms alone — a bonded or VLAN installation interface, FIPS, registration and disk encryption — depend on M5a and on nothing else here, so they are separable as a bounded out-of-sequence slice when a consumer needs them; the cluster-facing remainder is what requires M4 and C9. | M5a, M4, C9 | Extend L2/L4/L5; apply L6. Prove renderer/executor parity, ownership, replay, secret custody over the private path, a bonded or VLAN installation interface, and real-hardware acceptance. |
 | M6 — managed Ceph bare metal | Storage, Managed OS, Substrate and State reconciliation: provision one Ceph cluster slice. | M2b and required M5 OS-readiness slice | Extend L2/L4/L5; apply L6 to each implementation. Prove storage identity, ownership, destructive authorization, replay, secret custody and real-system acceptance. |
 
 Independent execution of M2a/M2b/M3 artifacts creates no Bootwright operation,

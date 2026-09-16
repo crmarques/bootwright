@@ -145,16 +145,19 @@ in `internal/substrate/libvirt/catalog.go`:
 
 | Role | Image | Qualified |
 | --- | --- | --- |
-| Emulated BMC | `quay.io/metal3-io/sushy-tools` (sushy-tools 2.2.1.dev14) | partial, 2026-09-15 |
+| Emulated BMC | `quay.io/metal3-io/sushy-tools` (sushy-tools 2.2.1.dev14) | 2026-09-15 |
 
-That qualification is deliberately marked partial. The image was resolved,
-pulled and started against session libvirt, which is what
-[emulated-BMC knowledge](../.agents/knowledge/sushy-tools-emulated-bmc.md)
-records, including the stock command the unit must not use. Its Redfish surface
-and `mkksiso` against RHEL 9.8 boot media are still unqualified, and both belong
-to the by-hand step
-[M1h](../specs/milestones.md#m1h--managed-rhel-on-emulated-bare-metal) schedules
-before a real-system acceptance.
+The image was resolved, pulled and started against session libvirt, which is
+what [emulated-BMC knowledge](../.agents/knowledge/sushy-tools-emulated-bmc.md)
+records, including the stock command the unit must not use. The Redfish surface
+this contract drives — the `Systems` collection, virtual media insert and eject,
+boot override, power and basic authentication — and `mkksiso` against RHEL 9.8
+boot media were qualified by the first real `lab-rhel` install rather than
+ahead of it, and the guest that install produced booted and served SSH. One part
+of that surface is still unproved against this image: the
+`EthernetInterfaces` collection the
+[physical target proof](../specs/substrates.md#physical-machine-realization)
+reads, which only the M5a rehearsal exercises.
 
 The embedded collection participates in the dependency-bundle identity, so a
 build that changes `ansible/` changes the bundle a context is bound to. Run
@@ -212,3 +215,33 @@ by any in-tree gate:
 | --- | --- |
 | `apply --stage controller` for a context selecting OpenShift clients and Helm, then a repeated apply that reports `unchanged` without publisher access | by hand as root on a prepared controller |
 | The same for a context declaring the `libvirt` capability, on Fedora; RHEL refuses before acquisition until an entitled source is defined | by hand as root on a prepared Fedora controller |
+
+## M1h managed RHEL on emulated bare metal
+
+The [M1h delivery](../specs/milestones.md#m1h--managed-rhel-on-emulated-bare-metal)
+installs one RHEL Machine on a libvirt guest that boots its installer through an
+emulated Redfish BMC. Its in-tree gates are unitary and host-independent: they
+create no domain, start no container and contact no controller.
+
+The verification model stays M1d's. Executed installation is not covered by any
+in-tree gate:
+
+| Acceptance | How it is run |
+| --- | --- |
+| The complete journey in [`examples/lab-rhel`](../examples/lab-rhel/README.md): apply, a replay that settles, a removal refused while the guest runs, `machine stop`, destroy and a fresh apply | by hand as root on a prepared libvirt host |
+| A host restart followed by `machine start`, which proves the provider host carries its networks and pool across the restart | by hand as root on that host |
+
+## M5a managed RHEL on physical bare metal
+
+The [M5a delivery](../specs/milestones.md#m5a--managed-rhel-on-physical-bare-metal)
+installs the same operating system on an operator-owned server through its own
+management controller. Its in-tree gates drive the Redfish client against canned
+firmware shapes rather than hardware.
+
+Two acceptances are operator-run, and the first is a gate of the delivery
+because it is what proves the physical contract without hardware:
+
+| Acceptance | How it is run |
+| --- | --- |
+| The rehearsal in [`examples/lab-baremetal`](../examples/lab-baremetal/README.md): one context realizes a guest and its emulated controller, a second claims that guest as a physical Machine and installs it | by hand as root on a prepared libvirt host |
+| Installation of a real server through its own controller | by hand against qualified firmware, after the client is driven by hand against that controller |
