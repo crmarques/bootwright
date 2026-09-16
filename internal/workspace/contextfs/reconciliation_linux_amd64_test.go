@@ -480,6 +480,40 @@ func TestLifecycleTransactionOpensTheApprovedBundle(t *testing.T) {
 	}
 }
 
+// A bounded runtime registers no operation, so it reads the context instead of
+// mutating it. The read must open the same approved bundle, and the capability
+// must expire with the callback that received it.
+func TestLifecycleReadOpensTheApprovedBundle(t *testing.T) {
+	ctx := context.Background()
+	store, record := lifecycleFixture(t)
+	digest := sealedBundleFixture(t, store, record)
+	var opener func(context.Context, string) (prerequisites.BundleArea, error)
+	if err := store.ReadLifecycle(ctx, "example", func(view lifecycle.View) error {
+		opener = view.Controller().OpenBundle
+		if opener == nil {
+			t.Fatal("the lifecycle read offers no execution bundle")
+		}
+		area, err := opener(ctx, digest)
+		if err != nil || area == nil {
+			t.Fatalf("the approved bundle did not open (%v)", err)
+		}
+		location, err := area.Location(ctx)
+		if err != nil || !location.Sealed || location.Path == "" {
+			t.Fatalf("bundle location = %+v (%v)", location, err)
+		}
+		missing, err := opener(ctx, strings.Repeat("c", 64))
+		if err != nil || missing != nil {
+			t.Fatalf("an unreserved bundle identity opened an area: %v (%v)", missing, err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("lifecycle read failed: %#v", diagnostics.Of(err))
+	}
+	if area, err := opener(ctx, digest); err == nil || area != nil {
+		t.Fatalf("the execution bundle opened after the read closed: %v (%v)", area, err)
+	}
+}
+
 // A destroyed context carries all three state entries: releasing a reservation
 // writes an empty record rather than removing the file. Deleting it must not
 // refuse the very layout the store admits.

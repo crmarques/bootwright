@@ -98,7 +98,7 @@ func (s *Store) ReadLifecycle(ctx context.Context, name string, callback func(li
 	if err != nil {
 		return err
 	}
-	controllerView, _, err := controllerSnapshot(ctx, root, registry, name)
+	controllerView, stored, err := controllerSnapshot(ctx, root, registry, name)
 	if err != nil {
 		return safeError(err)
 	}
@@ -124,7 +124,37 @@ func (s *Store) ReadLifecycle(ctx context.Context, name string, callback func(li
 		return safeError(err)
 	}
 	active := true
-	defer func() { active = false }()
+	areas := []*controllerBundleArea{}
+	defer func() {
+		active = false
+		for _, area := range areas {
+			area.close()
+		}
+	}()
+	// A bounded runtime registers no operation, so the read it takes must
+	// offer the same opener a mutation does; without it nothing outside the
+	// lifecycle can execute inside the approved bundle at all.
+	guard := func(call context.Context) error {
+		actual, err := readControllerStored(call, root, registry)
+		if err != nil || !bytes.Equal(actual.data, stored.data) || actual.data != nil && !sameFile(actual.identity, stored.identity) {
+			return state("controller evidence changed during inspection")
+		}
+		return nil
+	}
+	controllerView.OpenBundle = func(call context.Context, id string) (prerequisites.BundleArea, error) {
+		if !active {
+			return nil, state("lifecycle inspection capability has closed")
+		}
+		if err := guard(call); err != nil {
+			return nil, err
+		}
+		area, err := openControllerBundle(call, s, root, registry, stored, id, func() bool { return active }, false, guard)
+		if err != nil || area == nil {
+			return nil, err
+		}
+		areas = append(areas, area)
+		return area, nil
+	}
 	view := &lifecycleView{
 		identity:   lifecycle.ContextIdentity{Name: record.Name, Revision: record.Revision},
 		inputs:     inputs,
