@@ -47,6 +47,17 @@ def inventory(value):
     return ordered
 
 
+def refusal_reason(error):
+    """The refusal's own token, so one generic message still names a cause.
+
+    Only the raised token is reported, never an operating-system message, so a
+    path this stage happened to touch never reaches the result.
+    """
+    if isinstance(error, (ValueError, KeyError)) and error.args:
+        return str(error.args[0])[:120]
+    return type(error).__name__
+
+
 def preparation(request, observed):
     plan = request["native"]
     before = digest(observed)
@@ -186,9 +197,9 @@ class ActionModule(ActionBase):
                 )
                 return result
             raise ValueError("request")
-        except (KeyError, TypeError, ValueError, OSError):
+        except (KeyError, TypeError, ValueError, OSError) as refusal:
             return dict(
                 result,
                 failed=True,
-                msg="Controller dependency protocol or evidence was refused.",
+                msg="Controller dependency protocol or evidence was refused: %s" % refusal_reason(refusal),
             )

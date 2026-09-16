@@ -6,7 +6,26 @@ import unittest
 from ansible_collections.bootwright.core.plugins.action.controller_protocol import (
     digest,
     preparation,
+    refusal_reason,
 )
+
+
+class RefusalReason(unittest.TestCase):
+    """Every refusal here reaches one generic message, so it carries its token."""
+
+    def test_a_raised_token_is_what_the_message_reports(self):
+        self.assertEqual(refusal_reason(ValueError("native postcondition")), "native postcondition")
+        self.assertEqual(refusal_reason(KeyError("preparation")), "preparation")
+
+    def test_an_operating_system_failure_reports_its_kind_and_no_path(self):
+        reported = refusal_reason(OSError(2, "No such file", "/var/lib/bootwright/x"))
+        self.assertEqual(reported, "FileNotFoundError")
+        self.assertNotIn("/var/lib/bootwright", reported)
+        self.assertEqual(refusal_reason(TypeError("unhashable")), "TypeError")
+
+    def test_a_token_is_bounded_and_a_bare_refusal_still_names_its_kind(self):
+        self.assertEqual(refusal_reason(ValueError("x" * 500)), "x" * 120)
+        self.assertEqual(refusal_reason(ValueError()), "ValueError")
 
 
 class Preparation(unittest.TestCase):
