@@ -151,16 +151,44 @@ func TestDeferralsExplainEveryPendingBlock(t *testing.T) {
 	}
 }
 
-// A removal covers what an apply completed, so a paused operation destroys
-// exactly its done blocks and nothing it never started.
-func TestDoneSubsetKeepsFrozenOrder(t *testing.T) {
+// A removal covers what an apply started, so it destroys its done and failed
+// blocks in frozen order and nothing it never started.
+func TestOwnedSubsetKeepsStartedBlocksInFrozenOrder(t *testing.T) {
 	plan := nestedPlan(t)
 	states := map[string]BlockState{"artifacts": BlockDone, "provider-metal": BlockDone, "host-node": BlockFailed}
-	owned := DoneSubset(plan, states)
-	if !slices.Equal(ids(owned.Blocks), []string{"artifacts", "provider-metal"}) {
+	owned := OwnedSubset(plan, states)
+	if !slices.Equal(ids(owned.Blocks), []string{"artifacts", "provider-metal", "host-node"}) {
 		t.Fatalf("owned = %v", ids(owned.Blocks))
 	}
-	if got := ids(owned.Inverse().Blocks); !slices.Equal(got, []string{"provider-metal", "artifacts"}) {
+	removal, err := owned.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(removal.Blocks); !slices.Equal(got, []string{"artifacts", "host-node", "provider-metal"}) {
 		t.Fatalf("removal order = %v", got)
+	}
+}
+
+// A pause leaves no failed block, so a removal planned from it is unchanged by
+// the failed arm above.
+func TestOwnedSubsetOfAPausedApplyIsItsDoneBlocks(t *testing.T) {
+	plan := nestedPlan(t)
+	states := map[string]BlockState{"artifacts": BlockDone, "provider-metal": BlockDone, "host-node": BlockPending}
+	if got := ids(OwnedSubset(plan, states).Blocks); !slices.Equal(got, []string{"artifacts", "provider-metal"}) {
+		t.Fatalf("owned = %v", got)
+	}
+}
+
+// A fresh removal supersedes an incomplete one over exactly what it has not
+// proved gone, so a block it already removed is never attempted again.
+func TestRemainingSubsetExcludesWhatARemovalProvedGone(t *testing.T) {
+	plan, err := nestedPlan(t).Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	states := map[string]BlockState{"host-node": BlockDone, "provider-metal": BlockFailed}
+	remaining := RemainingSubset(plan, states)
+	if slices.Contains(ids(remaining.Blocks), "host-node") || len(remaining.Blocks) != 7 {
+		t.Fatalf("remaining = %v", ids(remaining.Blocks))
 	}
 }

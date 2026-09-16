@@ -181,11 +181,13 @@ overwriting durable evidence.
 | Durable state | Allowed lifecycle transition |
 | --- | --- |
 | no operation, or completed destroy | start a fresh apply |
-| apply running or failed | continue that exact apply |
+| apply running | continue that exact apply |
+| apply failed | continue that exact apply, or start a fresh destroy of the blocks it started |
 | apply paused | continue that exact apply under any stage selection, or start a fresh destroy of the blocks it completed |
 | apply unknown | resolve the exact unknown block; start no effect or retry |
 | apply done | start a fresh destroy |
-| destroy running or failed | continue that exact destroy |
+| destroy running | continue that exact destroy |
+| destroy failed | continue that exact destroy, or start a fresh destroy of what it has not removed |
 | destroy unknown | resolve the exact unknown block; start no effect or retry |
 
 Changed desired state never turns continuation into reconciliation. A
@@ -387,10 +389,29 @@ invokes capability ports under the
 [Go/Ansible boundary](architecture.md#go-and-ansible-responsibility-boundary).
 
 Destroy is planned from the completed apply snapshot and ownership evidence,
-not newly edited input. A paused apply owns exactly the blocks it completed, so
-its removal covers those blocks and nothing it never started. Destroy removes
-dependents before dependencies and retains evidence until positive removal or
-positive absence is durable. It accepts no stage selection.
+not newly edited input. An operation owns every block it started: a paused
+apply owns the blocks it completed, and a failed apply owns those plus the
+block that failed, because an effect permitted to begin is proved absent only
+by its own inverse. A removal covers exactly that set and nothing the operation
+never started.
+
+Destroy removes dependents before dependencies, so a removal inverts the
+apply's dependency graph and not merely its order: every edge turns around and
+a block waits on its own dependents, because what it provided stays in use
+until they are gone. Narrowing a removal to the owned set drops the edges to
+blocks outside that set. Both results are ordered by the one canonical rule
+every plan obeys, so a frozen removal is rebuilt from its own record exactly as
+it was written.
+
+A fresh removal may supersede an incomplete operation that holds no unproved
+effect: a paused apply, a failed apply, or a failed destroy, which is removed
+over what it has not yet proved gone. This is the only road out of a repaired
+adapter, because a continuation is frozen to the automation its operation
+registered under while a fresh operation runs under the current one. An
+unknown block admits no removal; only its resolution may follow it.
+
+Destroy retains evidence until positive removal or positive absence is durable.
+It accepts no stage selection.
 
 ## Bootstrap completion and GitOps readiness
 

@@ -104,14 +104,45 @@ func NewPlan(verb Verb, definitions []BlockDefinition) (Plan, error) {
 	return Plan{Verb: verb, Blocks: blocks}, nil
 }
 
-// Inverse plans removal from a completed apply: dependents are removed before
-// the dependencies they needed, so the order is exactly reversed.
-func (p Plan) Inverse() Plan {
-	blocks := make([]Block, 0, len(p.Blocks))
-	for index := len(p.Blocks) - 1; index >= 0; index-- {
-		blocks = append(blocks, cloneBlock(p.Blocks[index]))
+// Inverse plans removal from an apply: every edge turns around, so a block
+// waits on its own dependents because what it provided stays in use until they
+// are gone. Reversing the order alone would not do it, because the executor
+// starts blocks whose dependencies are done and would take a provider first.
+// The result is built through NewPlan so a removal is ordered by the one
+// canonical rule every plan obeys and can be rebuilt from its own record.
+func (p Plan) Inverse() (Plan, error) {
+	dependents := map[string][]string{}
+	for _, block := range p.Blocks {
+		for _, dependency := range block.Dependencies {
+			dependents[dependency] = append(dependents[dependency], block.ID)
+		}
 	}
-	return Plan{Verb: Destroy, Blocks: blocks}
+	definitions := make([]BlockDefinition, 0, len(p.Blocks))
+	for _, block := range p.Blocks {
+		definition := clone(block.BlockDefinition)
+		definition.Dependencies = dependents[block.ID]
+		definitions = append(definitions, definition)
+	}
+	return NewPlan(Destroy, definitions)
+}
+
+// Retain narrows a plan to the blocks named and drops every edge to a block it
+// does not keep, because a block outside the set is not this plan's to wait
+// for. What remains is ordered by the same canonical rule, so a narrowed
+// removal is still a plan this executable can rebuild from its frozen record.
+func (p Plan) Retain(ids []string) (Plan, error) {
+	definitions := make([]BlockDefinition, 0, len(p.Blocks))
+	for _, block := range p.Blocks {
+		if !slices.Contains(ids, block.ID) {
+			continue
+		}
+		definition := clone(block.BlockDefinition)
+		definition.Dependencies = slices.DeleteFunc(definition.Dependencies, func(id string) bool {
+			return !slices.Contains(ids, id)
+		})
+		definitions = append(definitions, definition)
+	}
+	return NewPlan(p.Verb, definitions)
 }
 
 func (p Plan) Block(id string) (Block, bool) {

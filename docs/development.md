@@ -160,11 +160,15 @@ The embedded collection participates in the dependency-bundle identity, so a
 build that changes `ansible/` changes the bundle a context is bound to. Run
 `setup` again after such a build; `preflight controller`
 reports the incompatible retained bundle and `apply` refuses rather than
-executing automation the receipt does not cover.
+executing automation the receipt does not cover. An operation left incomplete
+by the previous build cannot be continued under the new one, because a
+continuation runs the automation it froze. A failed one is removed instead: a
+fresh `destroy` runs under the build in hand, which is the ordinary loop when
+the repair is to the role that failed.
 
-Adding the stage to a frozen block changes plan digests, so an operation
-registered by an earlier build cannot be continued or destroyed by this one.
-Destroy or purge any live context before switching builds.
+Changing a frozen block's Go request or plan shape changes its digests, so an
+operation registered by an earlier build can be neither continued nor removed
+by this one. Destroy or purge any live context before switching builds.
 
 `make ansible-check` covers the new collection content with the same pinned
 syntax, lint, sanity and unit gates as the controller entrypoints. Executed

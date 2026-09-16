@@ -121,7 +121,10 @@ func TestTheInversePreservesWhatEachBlockConsumes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	inverse := plan.Inverse()
+	inverse, err := plan.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(inverse.Blocks) != 2 {
 		t.Fatalf("inverse = %+v", inverse.Blocks)
 	}

@@ -152,7 +152,10 @@ func TestDestroyOperationRequiresItsSource(t *testing.T) {
 	ctx := context.Background()
 	store, _ := newStore(t)
 	plan := testPlan(t, "alpha")
-	inverse := plan.Inverse()
+	inverse, err := plan.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
 	operation := testOperation(t, plan)
 	operation.Verb = reconciliation.Destroy
 	digest, _ := inverse.Digest()

@@ -162,3 +162,18 @@ next `apply` observes the exact frozen request, resolves that block from live
 evidence and continues without repeating work it can prove is already done.
 Changing the input, the executable or the embedded automation while an
 operation is incomplete refuses instead, and names the recovery it needs.
+
+A block that fails for a nameable reason is different: the operation is
+`failed`, the next `apply` retries that block, and a `destroy` removes what the
+apply started instead. That removal is the road out of a repaired adapter. A
+continuation runs the automation its operation froze, so rebuilding the
+collection refuses one, while a fresh removal runs under the build in hand:
+
+```sh
+make build && sudo ./bin/bootwright setup   # publish the repaired automation
+./bin/bootwright destroy                    # names any authorization it needs
+./bin/bootwright apply --yes
+```
+
+The removal covers only the blocks that apply started, so it consumes
+`data-loss` only when the guest whose disks it deletes is among them.

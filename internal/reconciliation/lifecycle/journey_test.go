@@ -1067,8 +1067,120 @@ func TestDestroyFromAPausedApplyRemovesOnlyDoneBlocks(t *testing.T) {
 	if result.Receipt.State != string(reconciliation.OperationDone) || result.Receipt.Next != "none" {
 		t.Fatalf("receipt = %+v", result.Receipt)
 	}
-	if !slices.Equal(h.capability.destroys, []string{"provider-metal", "artifacts"}) {
+	if !slices.Equal(h.capability.destroys, []string{"artifacts", "provider-metal"}) {
 		t.Fatalf("destroyed blocks = %v", h.capability.destroys)
+	}
+}
+
+// A failed block was permitted to change its target, so the context owns it.
+// A removal covers every block the apply started and nothing it never did.
+func TestDestroyOverAFailedApplyRemovesEveryStartedBlock(t *testing.T) {
+	h := newPlannedHarness(t, nestedDefinitions())
+	h.capability.outcomes = []Result{
+		{Outcome: reconciliation.OutcomeChanged},
+		{Outcome: reconciliation.OutcomeChanged},
+		{Outcome: reconciliation.OutcomeFailed},
+	}
+	applied, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err == nil || applied.Receipt.State != string(reconciliation.OperationFailed) {
+		t.Fatalf("apply = %+v (%v)", applied.Receipt, err)
+	}
+	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil {
+		t.Fatalf("a failed apply refused its removal: %v", err)
+	}
+	if result.Receipt.State != string(reconciliation.OperationDone) || result.Receipt.Next != "none" {
+		t.Fatalf("receipt = %+v", result.Receipt)
+	}
+	if !slices.Equal(h.capability.destroys, []string{"artifacts", "host-node", "provider-metal"}) {
+		t.Fatalf("destroyed blocks = %v, applied = %v", h.capability.destroys, h.capability.applies)
+	}
+	pristine, _ := reconciliation.PristineEvidence().Bytes()
+	if string(h.workspace.evidence) != string(pristine) {
+		t.Fatalf("evidence = %q", h.workspace.evidence)
+	}
+}
+
+// Repairing the adapter that failed an operation changes the automation its
+// continuation is frozen to. The removal is the road out of that, so the
+// refusal names it and the context returns to rest under the new executable.
+func TestRepairedAutomationLeavesAFailedApplyDestroyable(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("a failed block reported success")
+	}
+	h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
+	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	remediation := ""
+	for _, reported := range diagnostics.Of(err) {
+		if reported.Code == "lifecycle.state" {
+			remediation = reported.Remediation
+		}
+	}
+	if !strings.Contains(remediation, "destroy") {
+		t.Fatalf("the drift refusal does not name the road out: %q", remediation)
+	}
+	removed, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil {
+		t.Fatalf("a repaired executable could not remove what it owns: %v", err)
+	}
+	if removed.Receipt.State != string(reconciliation.OperationDone) {
+		t.Fatalf("removal receipt = %+v", removed.Receipt)
+	}
+	if !slices.Equal(h.capability.destroys, []string{"artifact-server-lab"}) {
+		t.Fatalf("destroyed blocks = %v", h.capability.destroys)
+	}
+	fresh, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil || fresh.Receipt.State != string(reconciliation.OperationDone) {
+		t.Fatalf("the context did not return to rest: %+v (%v)", fresh.Receipt, err)
+	}
+}
+
+// A removal can fail the same way, so a fresh one supersedes it over exactly
+// what it never proved gone, and the binding it can no longer reopen is
+// released with the apply's.
+func TestDestroyOverAFailedDestroyCoversOnlyWhatRemains(t *testing.T) {
+	h := newPlannedHarness(t, nestedDefinitions())
+	h.capability.secrets = []string{"lab-bmc-credentials"}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeChanged}, {Outcome: reconciliation.OutcomeFailed}}
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("a failed removal reported success")
+	}
+	h.capability.destroys = nil
+	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil {
+		t.Fatalf("a failed removal refused its replacement: %v", err)
+	}
+	if result.Receipt.State != string(reconciliation.OperationDone) || result.Receipt.Next != "none" {
+		t.Fatalf("receipt = %+v", result.Receipt)
+	}
+	want := []string{"hub-node", "provider-kubevirt", "host-virtualization", "host-cluster", "host-node", "provider-metal"}
+	if !slices.Equal(h.capability.destroys, want) {
+		t.Fatalf("destroyed blocks = %v", h.capability.destroys)
+	}
+	if !slices.Equal(h.binder.released, []string{"bind-2", "bind-1"}) {
+		t.Fatalf("released bindings = %v", h.binder.released)
+	}
+}
+
+// An unproved effect is the one incomplete state a removal may not supersede:
+// resolution is the only thing that may follow it.
+func TestDestroyOverAnUnknownOperationStillRefuses(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("an unknown outcome reported success")
+	}
+	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if code := firstCode(err); code != "lifecycle.state" {
+		t.Fatalf("refusal = %q", code)
+	}
+	if len(h.capability.destroys) != 0 {
+		t.Fatalf("an unknown block was destroyed: %v", h.capability.destroys)
 	}
 }
 

@@ -99,7 +99,9 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
 	if verb == reconciliation.Destroy {
-		plan = plan.Inverse()
+		if plan, err = plan.Inverse(); err != nil {
+			return reconciliation.Plan{}, capabilityBinding{}, err
+		}
 	}
 	return plan, binding, nil
 }

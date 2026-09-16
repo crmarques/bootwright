@@ -171,12 +171,44 @@ func TestInverseReversesOrderAndPreservesBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	inverse := plan.Inverse()
+	inverse, err := plan.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if inverse.Verb != Destroy || len(inverse.Blocks) != 2 || inverse.Blocks[0].ID != "bravo" || inverse.Blocks[1].ID != "alpha" {
 		t.Fatalf("inverse = %+v", inverse)
 	}
 	if inverse.Blocks[0].RequestDigest != plan.Blocks[1].RequestDigest {
 		t.Fatal("inverse changed a frozen request digest")
+	}
+}
+
+// Order alone does not remove dependents first: the executor starts the blocks
+// whose dependencies are done, so the edges have to turn around with it.
+func TestInverseTurnsEveryDependencyIntoItsDependent(t *testing.T) {
+	plan, err := NewPlan(Apply, []BlockDefinition{
+		definition("alpha"), definition("bravo", "alpha"), definition("charlie", "alpha"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inverse, err := plan.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	alpha, _ := inverse.Block("alpha")
+	if !slices.Equal(alpha.Dependencies, []string{"bravo", "charlie"}) {
+		t.Fatalf("alpha waits on %v", alpha.Dependencies)
+	}
+	bravo, _ := inverse.Block("bravo")
+	if len(bravo.Dependencies) != 0 {
+		t.Fatalf("bravo waits on %v", bravo.Dependencies)
+	}
+	if got := ids(Ready(inverse, map[string]BlockState{})); !slices.Equal(got, []string{"bravo", "charlie"}) {
+		t.Fatalf("a removal started %v before every dependent was gone", got)
+	}
+	if got := ids(inverse.Blocks); !slices.Equal(got, []string{"bravo", "charlie", "alpha"}) {
+		t.Fatalf("removal order = %v", got)
 	}
 }
 

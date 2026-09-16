@@ -142,11 +142,8 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 	if err != nil {
 		return transition{}, err
 	}
-	// A pause is a resumable boundary, not an interruption: the operation owns
-	// every block it completed, so a removal of those blocks is legal beside
-	// continuing it.
-	if operation.State == reconciliation.OperationPaused && operation.Verb == reconciliation.Apply && verb == reconciliation.Destroy {
-		return s.freshDestroy(ctx, view, operation, frozen, states)
+	if verb == reconciliation.Destroy && supersedable(operation) {
+		return s.supersede(ctx, view, store, operation, frozen, states)
 	}
 	if operation.State != reconciliation.OperationDone {
 		if operation.Verb != verb {
@@ -173,7 +170,7 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 		if verb == reconciliation.Apply {
 			return transition{}, failure("lifecycle.state", "this context already owns a completed apply", "destroy it before applying again")
 		}
-		return s.freshDestroy(ctx, view, operation, frozen, states)
+		return s.freshDestroy(ctx, view, operation.ID, operation.Bindings, reconciliation.OwnedSubset(frozen, states))
 	}
 	if verb == reconciliation.Destroy {
 		return transition{}, failure("lifecycle.state", "this context owns no applied state to destroy", "run apply first")
@@ -235,11 +232,44 @@ func (s Service) freshApply(ctx context.Context, view View, selection reconcilia
 	return transition{fresh: true, verb: reconciliation.Apply, plan: plan, binding: binding, selection: selection}, nil
 }
 
-// freshDestroy re-plans removal from the same frozen input the apply used and
-// proves it still describes exactly the effects that apply recorded. A paused
-// apply owns only its done blocks, so only those are removed.
-func (s Service) freshDestroy(ctx context.Context, view View, applied operationstore.Operation, appliedPlan reconciliation.Plan, states map[string]reconciliation.BlockState) (transition, error) {
-	owned := reconciliation.DoneSubset(appliedPlan, states)
+// supersedable reports whether a fresh removal may replace an incomplete
+// operation. A pause is a resumable boundary and a failure is a retry point;
+// neither holds an unproved effect, so what the context still owns is exactly
+// derivable from the frozen plan. A failed operation needs this road because
+// its continuation is frozen to the automation it registered under: repairing
+// the very adapter that failed it would otherwise leave no way out.
+func supersedable(operation operationstore.Operation) bool {
+	switch operation.State {
+	case reconciliation.OperationPaused:
+		return operation.Verb == reconciliation.Apply
+	case reconciliation.OperationFailed:
+		return true
+	}
+	return false
+}
+
+// supersede plans a fresh removal over what an incomplete operation still owns:
+// the blocks an apply started, or the blocks a removal has not yet proved gone.
+func (s Service) supersede(ctx context.Context, view View, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (transition, error) {
+	if operation.Verb == reconciliation.Apply {
+		return s.freshDestroy(ctx, view, operation.ID, operation.Bindings, reconciliation.OwnedSubset(frozen, states))
+	}
+	// A superseded removal is continued by nothing, so its own binding is
+	// released beside the apply's once the replacement completes.
+	release := slices.Clone(operation.Bindings)
+	if operation.Source != "" {
+		applied, err := store.ReadOperation(ctx, operation.Source)
+		if err != nil {
+			return transition{}, err
+		}
+		release = append(release, applied.Bindings...)
+	}
+	return s.freshDestroy(ctx, view, operation.Source, release, reconciliation.RemainingSubset(frozen, states))
+}
+
+// freshDestroy re-plans removal from the context's own frozen input and proves
+// it still describes exactly the effects the superseded operation left behind.
+func (s Service) freshDestroy(ctx context.Context, view View, source string, release []string, owned reconciliation.Plan) (transition, error) {
 	if len(owned.Blocks) == 0 {
 		return transition{}, failure("lifecycle.state", "this context owns no applied state to destroy", "run apply first")
 	}
@@ -247,23 +277,17 @@ func (s Service) freshDestroy(ctx context.Context, view View, applied operations
 	if err != nil {
 		return transition{}, err
 	}
-	plan = removalOf(plan, owned)
+	identities := make([]string, 0, len(owned.Blocks))
+	for _, block := range owned.Blocks {
+		identities = append(identities, block.ID)
+	}
+	if plan, err = plan.Retain(identities); err != nil {
+		return transition{}, err
+	}
 	if err := sameEffects(owned, plan); err != nil {
 		return transition{}, err
 	}
-	return transition{fresh: true, verb: reconciliation.Destroy, plan: plan, binding: binding, source: applied.ID, release: applied.Bindings}, nil
-}
-
-// removalOf narrows a freshly planned removal to the blocks an apply actually
-// completed, preserving the removal order the inverse already fixed.
-func removalOf(removal, owned reconciliation.Plan) reconciliation.Plan {
-	blocks := make([]reconciliation.Block, 0, len(owned.Blocks))
-	for _, block := range removal.Blocks {
-		if slices.ContainsFunc(owned.Blocks, func(candidate reconciliation.Block) bool { return candidate.ID == block.ID }) {
-			blocks = append(blocks, block)
-		}
-	}
-	return reconciliation.Plan{Verb: removal.Verb, Blocks: blocks}
+	return transition{fresh: true, verb: reconciliation.Destroy, plan: plan, binding: binding, source: source, release: release}, nil
 }
 
 // sameEffects proves a destroy removes exactly what its apply created.
@@ -573,7 +597,11 @@ func (s Service) verifyContinuation(ctx context.Context, tx Transaction, operati
 		return failure("lifecycle.state", "the frozen input no longer matches this operation", "restore the exact input revision this operation froze")
 	}
 	if operation.AutomationDigest != s.automation.CatalogDigest() {
-		return failure("lifecycle.state", "this executable's automation differs from the one this operation froze", "install the compatible executable and run bootwright setup")
+		remediation := "install the compatible executable and run bootwright setup"
+		if supersedable(operation) {
+			remediation = "destroy what this operation owns under this executable, or install the one it registered under"
+		}
+		return failure("lifecycle.state", "this executable's automation differs from the one this operation froze", remediation)
 	}
 	host, err := s.host.Identity(ctx)
 	if err != nil {
