@@ -440,12 +440,38 @@ requires its own contract and proof. Go owns ordering and lifecycle state and
 invokes capability ports under the
 [Go/Ansible boundary](architecture.md#go-and-ansible-responsibility-boundary).
 
-Destroy is planned from the completed apply snapshot and ownership evidence,
-not newly edited input. An operation owns every block it started: a paused
-apply owns the blocks it completed, and a failed apply owns those plus the
-block that failed, because an effect permitted to begin is proved absent only
-by its own inverse. A removal covers exactly that set and nothing the operation
-never started.
+Destroy is planned from the plan its apply froze, not from desired state and
+not from what current code would derive from it. Every block a removal carries
+keeps the identity, implementation, content digest and canonical request its
+apply wrote, so a removal describes exactly the effects that exist rather than
+the effects this executable would create today. An operation owns every block
+it started: a paused apply owns the blocks it completed, and a failed apply
+owns those plus the block that failed, because an effect permitted to begin is
+proved absent only by its own inverse. A removal covers exactly that set and
+nothing the operation never started.
+
+A frozen block records what creating it did; removing it is the other half of
+the same request. Each capability therefore reads its own frozen request and
+states what removing that block does: the words it is planned and reported in,
+the impacts it lists, and the authorization it consumes. Nothing else of the
+block may change, so planning a removal can never alter what is removed, and a
+removal acknowledges the consequences of removing rather than the consequences
+its apply acknowledged.
+
+Reading a frozen request is what makes a context removable by a later build. A
+capability reads the request version it writes and the version before it,
+upgrading the older one into the shape its adapter is given; the frozen digest
+continues to identify the bytes that were frozen. A request older than that,
+or one whose implementation this executable no longer provides, refuses before
+anything is registered and names the block, the version it holds and the
+executable identity its operation recorded, so the remedy is the command to
+run rather than the obstacle that stopped it.
+
+A fresh removal uses the secret material its apply bound, by reopening that
+operation's own binding rather than binding what the current declarations name.
+The material that created an effect is the material that proves it gone, and a
+declaration edited or rotated afterwards never silently changes which version a
+removal presents.
 
 Destroy removes dependents before dependencies, so a removal inverts the
 apply's dependency graph and not merely its order: every edge turns around and
