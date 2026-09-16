@@ -413,6 +413,15 @@ the substrate's power and identity operations through its modules rather than
 through fixed task files of its roles. Both belong to M1h and neither changes a
 frozen request shape.
 
+**Operator output and retained adapter logs.** The first real `lab-rhel` apply
+showed both gaps. A block occupied one row per presentation group, so eight
+blocks filled the screen with settled work and the step actually running was
+hard to find; every step now settles as exactly one row that names the sub-step
+in flight and how much of the block is complete. And an adapter run retained
+what it printed only when it ended without a complete result, while setup and
+the controller stage discarded it entirely, so a run that completed left no
+record of the tasks it performed. Every adapter run now retains its own output.
+
 **Implementation order.** Three coherent changes: the `media` commands with
 their store; the engine's requirements, consumed authorization,
 kind-and-implementation resolver and Reconciliation-owned Ansible runner,
@@ -431,8 +440,9 @@ operation;
 media store bounds, fault injection and cross-context freeze refusal; adapter
 protocol and module tests with fake HTTP and virsh runners; the collection gates
 over the new roles, playbooks and plugins; CLI goldens for the media commands
-and the authorization refusal; the example acceptance in
-`cmd/bootwright/lab_rhel_example_test.go`; and `make check`.
+and the authorization refusal; the progress-row goldens over a step with
+sub-steps and the retained-adapter-log suites for a completed run; the example
+acceptance in `cmd/bootwright/lab_rhel_example_test.go`; and `make check`.
 
 **Verification model.** M1d's model continues; real-system acceptance on a
 prepared libvirt host is operator-run, preceded by a by-hand qualification of
