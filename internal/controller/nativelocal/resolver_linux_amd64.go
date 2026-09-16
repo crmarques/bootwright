@@ -132,9 +132,8 @@ func (r *Resolver) Resolve(ctx context.Context, platform prerequisites.Platform,
 	defer os.RemoveAll(stage.root)
 	bounded, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	members := solverMetadata(platform)
 	for index := range repositories {
-		if err := r.stageRepository(bounded, stage.work, &repositories[index], members, egress); err != nil {
+		if err := r.stageRepository(bounded, stage.work, &repositories[index], egress); err != nil {
 			return prerequisites.NativeResolvedPlan{}, err
 		}
 	}
@@ -267,20 +266,7 @@ type repomd struct {
 	} `xml:"data"`
 }
 
-// solverMetadata names the repository members the provided solver actually
-// opens. DNF5 is configured to load filelists and no other optional metadata,
-// while DNF4 fills its sack from update and modular metadata as well. Every
-// other member the publisher advertises is never read, so acquiring it would
-// only cost the operator the time to download it.
-func solverMetadata(platform prerequisites.Platform) map[string]bool {
-	members := map[string]bool{"primary": true, "filelists": true}
-	if platform.OS == "rhel" {
-		members["updateinfo"], members["modules"] = true, true
-	}
-	return members
-}
-
-func (r *Resolver) stageRepository(ctx context.Context, work string, repo *repository, members map[string]bool, egress prerequisites.SetupEgress) error {
+func (r *Resolver) stageRepository(ctx context.Context, work string, repo *repository, egress prerequisites.SetupEgress) error {
 	data, _, err := r.metadata(ctx, http.MethodGet, repo.BaseURL+"/repodata/repomd.xml", 1<<20, egress)
 	if err != nil {
 		return err
@@ -298,7 +284,11 @@ func (r *Resolver) stageRepository(ctx context.Context, work string, repo *repos
 	}
 	selected := map[string]bool{}
 	for _, entry := range metadata.Data {
-		if !members[entry.Type] {
+		// The solver decides for itself which of these it opens, so every one it
+		// may ask for is staged. Narrowing the set to what a solver is
+		// configured to load is not observable from here, and a member it does
+		// open and cannot find fails the whole repository, not just that member.
+		if entry.Type != "primary" && entry.Type != "filelists" && entry.Type != "modules" && entry.Type != "group" && entry.Type != "group_gz" && entry.Type != "updateinfo" && entry.Type != "other" {
 			continue
 		}
 		relative := entry.Location.Href

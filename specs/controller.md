@@ -209,11 +209,12 @@ which names the restored host.
 Real setup first resolves dependencies in disposable unprivileged staging.
 This phase may download verified public bootstrap payloads, run wheel-only pip
 resolution and use the provided OS's DNF4/DNF5 foundation to inspect a private
-inventory snapshot and solve the exact native transaction. Only the repository
-members the provided solver opens are staged, and the inventory snapshot is
-taken once and reused by every later inspection of the same invocation while
-the installed database still has the identity it was copied from; the
-invocation that took it releases it. All metadata, caches, logs and resolver
+inventory snapshot and solve the exact native transaction. Every repository
+member the solver may open is staged, because which ones it opens is its own
+decision and one it cannot find fails the whole repository. The inventory
+snapshot is taken once and reused by every later inspection of the same
+invocation while the installed database still has the identity it was copied
+from; the invocation that took it releases it. All metadata, caches, logs and resolver
 outputs stay in bounded scratch storage. Scratch is
 private Bootwright-owned durable temporary storage, never the shared ambient
 temporary directory and never the verified context store, so an interrupted run

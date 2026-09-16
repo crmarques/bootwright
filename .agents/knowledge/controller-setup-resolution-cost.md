@@ -57,12 +57,17 @@ why each removed step was expensive, which is the reason those rules matter.
   `qualifiedFoundation`, `Rebase`, `retainedSource`),
   `internal/controller/prerequisites/resolution.go` (`carryForward`, `rebind`).
   Retirement of the replaced area is deferred to milestone candidate C24.
-- Staging acquires only the repository members the provided solver opens:
-  `primary` and `filelists` for DNF5, plus `updateinfo` and `modules` for DNF4,
-  whose sack fill reads them. The publisher's own `repomd.xml` is still staged
-  whole and still names the authenticated snapshot. Code:
-  `internal/controller/nativelocal/resolver_linux_amd64.go` (`solverMetadata`,
-  `stageRepository`).
+- Staging acquires every repository member the solver may open, and narrowing
+  that set by what a solver is configured to load does not work. Staging only
+  `primary` and `filelists` for DNF5, on the reasoning that
+  `optional_metadata_types` names everything else it loads, made `load_repos()`
+  fail the whole `updates` repository with `RepoDownloadError: Cannot download,
+  all mirrors were already tried without success`, because a member it does ask
+  for and cannot find fails the repository rather than that member. Measured on
+  Fedora 43, the staged set is about 104 MB and `filelists` alone is 72 MB of
+  it, so the upside was never large: dropping `other`, the only member proved
+  droppable, saves 8 MB. Code:
+  `internal/controller/nativelocal/resolver_linux_amd64.go` (`stageRepository`).
 - The inventory snapshot is taken once per invocation. `Resolver` retains the
   copy and reuses it while the live database still has the identity it was
   copied from, so a setup that proves presence three or four times copies the

@@ -7,10 +7,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -25,55 +23,9 @@ func rhelPlatform() prerequisites.Platform {
 	return prerequisites.Platform{OS: "rhel", Release: "9.8", Architecture: "amd64"}
 }
 
-// Staging is priced per member and publishers advertise far more than a
-// dependency solve reads, so the set is exactly what the provided solver opens.
-func TestSolverMetadataNamesOnlyWhatTheProvidedSolverLoads(t *testing.T) {
-	fedora := slices.Sorted(maps.Keys(solverMetadata(fedoraPlatform())))
-	if !slices.Equal(fedora, []string{"filelists", "primary"}) {
-		t.Fatalf("DNF5 is told to load filelists and no other optional metadata; staged %v", fedora)
-	}
-	rhel := slices.Sorted(maps.Keys(solverMetadata(rhelPlatform())))
-	if !slices.Equal(rhel, []string{"filelists", "modules", "primary", "updateinfo"}) {
-		t.Fatalf("DNF4 fills its sack from update and modular metadata as well; staged %v", rhel)
-	}
-}
-
-// A member the solver never opens is never acquired, however prominently the
-// publisher advertises it in the same manifest.
-func TestStagingSkipsAdvertisedMembersTheSolverNeverOpens(t *testing.T) {
-	content := []byte("qualified compressed repository metadata")
-	digest := sha256.Sum256(content)
-	checksum := hex.EncodeToString(digest[:])
-	member := func(kind, name string) string {
-		return fmt.Sprintf(`<data type="%s"><checksum type="sha256">%s</checksum><location href="repodata/%s"/><size>%d</size></data>`, kind, checksum, name, len(content))
-	}
-	manifest := "<repomd>" + member("primary", "primary.xml.zst") + member("filelists", "filelists.xml.zst") +
-		member("other", "other.xml.zst") + member("updateinfo", "updateinfo.xml.zst") + member("group_gz", "comps.xml.gz") + "</repomd>"
-	var requested []string
-	resolver := &Resolver{metadata: func(_ context.Context, _, endpoint string, _ int64, _ prerequisites.SetupEgress) ([]byte, int64, error) {
-		if strings.HasSuffix(endpoint, "repomd.xml") {
-			return []byte(manifest), int64(len(manifest)), nil
-		}
-		requested = append(requested, filepath.Base(endpoint))
-		return content, int64(len(content)), nil
-	}}
-	repo := repository{ID: "test", BaseURL: "https://publisher.example.test/os"}
-	if err := resolver.stageRepository(t.Context(), t.TempDir(), &repo, solverMetadata(fedoraPlatform()), prerequisites.SetupEgress{}); err != nil {
-		t.Fatal(err)
-	}
-	slices.Sort(requested)
-	if !slices.Equal(requested, []string{"filelists.xml.zst", "primary.xml.zst"}) {
-		t.Fatalf("acquired members the solver never opens: %v", requested)
-	}
-	staged, err := os.ReadDir(filepath.Join(repo.LocalPath, "repodata"))
-	if err != nil || len(staged) != 3 {
-		t.Fatalf("staged %d files beside the manifest: %v", len(staged), err)
-	}
-}
-
-// Both required members must still be present, so trimming the set can never
-// silently leave the solver without the metadata it does open.
-func TestStagingStillRequiresTheMembersTheSolverOpens(t *testing.T) {
+// A repository that does not advertise both members the plan depends on is
+// refused before any solve, rather than solved against partial metadata.
+func TestStagingRequiresTheMembersEveryPlanDependsOn(t *testing.T) {
 	content := []byte("qualified compressed repository metadata")
 	digest := sha256.Sum256(content)
 	checksum := hex.EncodeToString(digest[:])
@@ -85,7 +37,7 @@ func TestStagingStillRequiresTheMembersTheSolverOpens(t *testing.T) {
 		return content, int64(len(content)), nil
 	}}
 	repo := repository{ID: "test", BaseURL: "https://publisher.example.test/os"}
-	if err := resolver.stageRepository(t.Context(), t.TempDir(), &repo, solverMetadata(fedoraPlatform()), prerequisites.SetupEgress{}); err == nil {
+	if err := resolver.stageRepository(t.Context(), t.TempDir(), &repo, prerequisites.SetupEgress{}); err == nil {
 		t.Fatal("a repository without filelists was staged")
 	}
 }
