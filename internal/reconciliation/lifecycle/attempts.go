@@ -293,17 +293,34 @@ func terminalFailure(state reconciliation.OperationState) error {
 		"repeat the operation to continue it")
 }
 
+// nextAction names what an operation's own state calls for, which is nothing
+// once it completed. A finished apply admits a later destroy, but naming it
+// here would read as an instruction to tear down what just succeeded; the
+// verbs a context admits are what `plan` is for.
 func nextAction(verb reconciliation.Verb, state reconciliation.OperationState) string {
 	switch state {
 	case reconciliation.OperationDone:
-		if verb == reconciliation.Apply {
-			return "destroy"
-		}
 		return "none"
 	case reconciliation.OperationUnknown:
 		return "resolve"
 	}
 	return "continue-" + string(verb)
+}
+
+// nextCommand is the command an operator actually runs for a next action. The
+// action names a transition rather than a verb this executable offers: a
+// continuation is reached by repeating the operation, and a completed one asks
+// for nothing at all.
+func nextCommand(action string) string {
+	switch action {
+	case "none":
+		return ""
+	case "continue-apply":
+		return "bootwright apply"
+	case "continue-destroy":
+		return "bootwright destroy"
+	}
+	return "bootwright " + action
 }
 
 func blockResults(plan reconciliation.Plan, states map[string]reconciliation.BlockState) []BlockResult {

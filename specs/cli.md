@@ -443,6 +443,15 @@ owned by state reconciliation. A `paused` apply is a successful result: it
 exits zero and its next action is `continue-apply`. The receipt and `status --output json` derive from the
 same trustworthy state.
 
+`next` names what the operation's own state calls for, so a `done` operation of
+either verb reports `none`. A completed apply admits a later destroy, but
+naming it as the next action instructs an operator to undo what just succeeded;
+the verbs a context admits are what `plan` reports. `apply` and `destroy` appear
+only as the previewed verb of a pure plan. Where `status` offers a next step it
+offers a command this executable runs, so a continuation is offered as the
+operation repeated — `continue-apply` as `bootwright apply` — and `none` is
+offered as no step at all.
+
 ## Resource inspection and explicit access
 
 List and info commands derive their result from validated desired state,

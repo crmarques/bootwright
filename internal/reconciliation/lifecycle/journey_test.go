@@ -536,7 +536,7 @@ func TestFreshApplyRegistersExecutesAndProjectsEvidence(t *testing.T) {
 	if err != nil || result == nil {
 		t.Fatalf("apply = %+v (%v)", result, err)
 	}
-	if result.Receipt.State != "done" || result.Receipt.Next != "destroy" || !reconciliation.ValidOperationID(result.Receipt.Operation) {
+	if result.Receipt.State != "done" || result.Receipt.Next != "none" || !reconciliation.ValidOperationID(result.Receipt.Operation) {
 		t.Fatalf("receipt = %+v", result.Receipt)
 	}
 	if !slices.Equal(h.capability.applies, []string{"artifact-server-lab"}) {
@@ -776,7 +776,7 @@ func TestUnknownOutcomeIsResolvedFromLiveEvidence(t *testing.T) {
 		state  string
 		next   string
 	}{
-		"completed": {reconciliation.EffectCompleted, "done", "destroy"},
+		"completed": {reconciliation.EffectCompleted, "done", "none"},
 		"no effect": {reconciliation.EffectNoEffect, "failed", "continue-apply"},
 		"unknown":   {reconciliation.EffectUnknown, "unknown", "resolve"},
 	} {
@@ -896,8 +896,13 @@ func TestStatusReportsDurableStateWithoutProbing(t *testing.T) {
 		t.Fatal(err)
 	}
 	after, err := h.service.Status(context.Background(), StatusRequest{ContextName: "lab"})
-	if err != nil || after.Lifecycle == nil || after.Lifecycle.State != "done" || after.Lifecycle.Next != "destroy" {
+	if err != nil || after.Lifecycle == nil || after.Lifecycle.State != "done" || after.Lifecycle.Next != "none" {
 		t.Fatalf("status after apply = %+v (%v)", after, err)
+	}
+	// A finished context is offered no command, because every one it could be
+	// offered would undo what it just proved.
+	if len(after.NextSteps) != 0 {
+		t.Fatalf("a completed apply still offers steps = %v", after.NextSteps)
 	}
 	if len(after.Lifecycle.Blocks) != 1 || after.Lifecycle.Blocks[0].State != "done" {
 		t.Fatalf("status blocks = %+v", after.Lifecycle.Blocks)
@@ -1059,7 +1064,7 @@ func TestContinuationAcceptsAWiderStageSetAndCompletes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Receipt.State != string(reconciliation.OperationDone) || result.Receipt.Next != "destroy" {
+	if result.Receipt.State != string(reconciliation.OperationDone) || result.Receipt.Next != "none" {
 		t.Fatalf("receipt = %+v", result.Receipt)
 	}
 	if !slices.Equal(h.capability.applies, []string{

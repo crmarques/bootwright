@@ -53,3 +53,50 @@ func TestTheTransitionTableRetriesFailedAndStopsAtUnknown(t *testing.T) {
 		t.Fatalf("unknown attempt = %q (%v)", stuck, err)
 	}
 }
+
+// A completed operation calls for nothing. Every other value of this field is
+// a recovery instruction, so naming `destroy` after a successful apply read as
+// an instruction to tear down what had just been built.
+func TestACompletedOperationCallsForNothing(t *testing.T) {
+	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
+		if action := nextAction(verb, reconciliation.OperationDone); action != "none" {
+			t.Fatalf("a done %s asks for %q", verb, action)
+		}
+	}
+}
+
+// An incomplete operation still names its own exact continuation, and an
+// unknown one still names the resolution, because those are instructions an
+// operator must act on.
+func TestAnIncompleteOperationStillNamesItsContinuation(t *testing.T) {
+	for state, expected := range map[reconciliation.OperationState]string{
+		reconciliation.OperationFailed:  "continue-apply",
+		reconciliation.OperationRunning: "continue-apply",
+		reconciliation.OperationUnknown: "resolve",
+	} {
+		if action := nextAction(reconciliation.Apply, state); action != expected {
+			t.Fatalf("a %s apply asks for %q, want %q", state, action, expected)
+		}
+	}
+	if action := nextAction(reconciliation.Destroy, reconciliation.OperationFailed); action != "continue-destroy" {
+		t.Fatalf("a failed destroy asks for %q", action)
+	}
+}
+
+// A next action names a transition, not a command. Concatenating it onto
+// "bootwright " produced `bootwright none` for a finished context and
+// `bootwright continue-apply` for an interrupted one, neither of which an
+// operator can run.
+func TestANextStepIsACommandAnOperatorCanRun(t *testing.T) {
+	for action, expected := range map[string]string{
+		"none":             "",
+		"continue-apply":   "bootwright apply",
+		"continue-destroy": "bootwright destroy",
+		"apply":            "bootwright apply",
+		"destroy":          "bootwright destroy",
+	} {
+		if command := nextCommand(action); command != expected {
+			t.Fatalf("%q offers %q, want %q", action, command, expected)
+		}
+	}
+}
