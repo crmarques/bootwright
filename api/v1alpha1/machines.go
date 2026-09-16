@@ -38,7 +38,7 @@ func machineSchema() *Shape {
 		field("placement", record(field("site", name()))),
 		field("substrate", record(field("providerRef", ref(InfraProvider)), field("profileRef", nonempty()))),
 		field("hardware", record(field("nics", named(record(required("name", nonempty()), field("macAddress", lexical("mac"))))), field("boot", record(field("nicRef", nonempty()))), field("management", record(field("bmc", machineBMCSchema()))))),
-		required("os", record(required("provided", boolean()), field("installProfileRef", ref(MachineInstallProfile)), field("install", record(field("ntp", serverSelections(NTPServer)), field("rootDeviceHints", record(field("deviceName", lexical("device-path")), field("hctl", nonempty()), field("model", nonempty()), field("vendor", nonempty()), field("serialNumber", nonempty()), field("minSizeGigabytes", integer("0", "")), field("wwn", nonempty()), field("rotational", boolean()))))))),
+		required("os", record(required("provided", boolean()), field("installProfileRef", ref(MachineInstallProfile)), field("install", record(field("hostKeyRef", secret("sshKeyPair")), field("ntp", serverSelections(NTPServer)), field("rootDeviceHints", record(field("deviceName", lexical("device-path")), field("hctl", nonempty()), field("model", nonempty()), field("vendor", nonempty()), field("serialNumber", nonempty()), field("minSizeGigabytes", integer("0", "")), field("wwn", nonempty()), field("rotational", boolean()))))))),
 		field("proxy", proxySelection()),
 		field("network", network), field("access", access),
 	)
@@ -65,7 +65,7 @@ func machineProfileSchema(variant string) *Shape {
 }
 
 func machineProviderSchema() *Shape {
-	baremetal := record(field("boot", record(field("method", nonempty()))), field("defaults", record(field("bmc", record(field("credentialsRef", secret("usernamePassword")), field("tls", record(field("verify", boolean()))), field("virtualMedia", machineVirtualMediaSchema()))))))
+	baremetal := record(field("boot", record(defaulted("method", enumeration("redfishVirtualMedia"), StringValue("redfishVirtualMedia")))), field("defaults", record(field("bmc", record(field("credentialsRef", secret("usernamePassword")), field("tls", record(field("verify", boolean()))), field("virtualMedia", machineVirtualMediaSchema()))))))
 	libvirt := record(required("machineRef", ref(Machine)), required("uri", nonempty()), required("bmcEmulationDefaults", record(defaulted("enabled", boolean(), BoolValue(true)), defaulted("protocol", enumeration("redfish"), StringValue("redfish")), defaulted("emulator", enumeration("sushy-tools"), StringValue("sushy-tools")), defaulted("bindAddress", ip(), StringValue("0.0.0.0")), defaulted("port", port(), IntegerValue("8000")), required("auth", record(required("credentialsRef", secret("usernamePassword")))), defaulted("disableCertificateVerification", boolean(), BoolValue(false)))), defaulted("machineProfiles", machineProfileSchema("libvirt"), ListValue()))
 	vcenters := nonemptyArray(&Shape{Type: Sequence, Atomic: true, NameKey: "server", Element: record(required("server", lexical("host")), field("port", integer("0", "65535")), required("datacenters", nonemptyArray(set(nonempty()))), required("credentialsRef", secret("usernamePassword")), defaulted("disableCertificateVerification", boolean(), BoolValue(false)))})
 	topology := record(required("datacenter", nonempty()), required("computeCluster", nonempty()), required("datastore", nonempty()), required("networks", nonemptyArray(set(nonempty()))), field("folder", nonempty()), field("resourcePool", nonempty()))

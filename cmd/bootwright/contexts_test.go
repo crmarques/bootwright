@@ -462,7 +462,7 @@ func TestCompleteExampleContextRoundTrip(t *testing.T) {
 	var result struct {
 		Result struct{ EffectiveState []json.RawMessage }
 	}
-	if err := json.Unmarshal([]byte(rendered), &result); err != nil || len(result.Result.EffectiveState) != 100 || stderr != "" {
+	if err := json.Unmarshal([]byte(rendered), &result); err != nil || len(result.Result.EffectiveState) != 106 || stderr != "" {
 		t.Fatalf("complete effective state: count=%d stderr=%s err=%v", len(result.Result.EffectiveState), stderr, err)
 	}
 }

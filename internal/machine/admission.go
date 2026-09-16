@@ -319,6 +319,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	if s.Get("access", "rootLogin").Text() == "revoke" && (installed(o) || !successorLogin(o, c)) {
 		issues = appendIssues(issues, invariant("$.spec.access.rootLogin", "revoking root login requires a managed storage-cluster non-root successor login"))
 	}
+	issues = appendIssues(issues, validateHostKey(o, c)...)
 	issues = appendIssues(issues, substrate.ValidateBMCDefaults(s.Get("hardware", "management", "bmc"), "$.spec.hardware.management.bmc", false)...)
 	if bmc := s.Get("hardware", "management", "bmc"); bmc.Present() {
 		if !bmc.Has("credentialsRef") {
@@ -345,6 +346,28 @@ func validateManagedAttachmentContainment(address netip.Prefix, network api.Valu
 	return []api.Issue{invariant("$.spec.network.installAddressRef", "install address must lie inside the managed libvirt attachment's network")}
 }
 
+// validateHostKey keeps a delivered host key to the one lifecycle that
+// delivers it, and to one Machine. A host key identifies exactly one machine,
+// so two Machines sharing one would each satisfy the other's completion proof.
+func validateHostKey(o api.Object, c api.Catalog) []api.Issue {
+	reference := o.Spec().Get("os", "install", "hostKeyRef")
+	if !reference.Present() {
+		return nil
+	}
+	provider, found := Provider(o, c)
+	if !installed(o) || !found || substrate.Variant(provider) != "baremetal" {
+		return []api.Issue{invariant("$.spec.os.install.hostKeyRef",
+			"only a bare-metal Bootwright-installed Machine delivers its own SSH host key")}
+	}
+	for _, other := range c.OfKind(api.Machine) {
+		if other.Identity() != o.Identity() && other.Spec().Get("os", "install", "hostKeyRef").Equal(reference) {
+			return []api.Issue{invariant("$.spec.os.install.hostKeyRef",
+				"an SSH host key identifies one Machine and cannot be shared")}
+		}
+	}
+	return nil
+}
+
 func validateBaremetal(o api.Object) []api.Issue {
 	s := o.Spec()
 	issues := []api.Issue{}
@@ -364,6 +387,12 @@ func validateBaremetal(o api.Object) []api.Issue {
 		issues = appendIssues(issues, invariant("$.spec.hardware.management.bmc", "bare-metal installation requires a BMC"))
 	} else if !validBMC(bmc.Get("address").Text(), true) {
 		issues = appendIssues(issues, invariant("$.spec.hardware.management.bmc.address", "bare-metal BMC address must select one exact Redfish ComputerSystem"))
+	}
+	// A physical machine offers no channel to read back what it holds, so the
+	// key it will answer with is declared here and delivered by the
+	// installation rather than discovered afterwards.
+	if installed(o) && !s.Has("os", "install", "hostKeyRef") {
+		issues = appendIssues(issues, invariant("$.spec.os.install.hostKeyRef", "bare-metal installation requires the SSH host key it delivers"))
 	}
 	hints := s.Get("os", "install", "rootDeviceHints")
 	if !hints.Has("deviceName") && !hints.Has("wwn") {

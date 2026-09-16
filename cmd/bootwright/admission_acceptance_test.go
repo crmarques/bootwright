@@ -72,8 +72,8 @@ func requireObject(t *testing.T, catalog api.Catalog, kind api.Kind, name string
 
 func TestActualCLIValidatesCompleteExample(t *testing.T) {
 	sources := exampleSources(t)
-	if len(sources.Files) != 100 {
-		t.Fatalf("example discovery: got %d files, want 100", len(sources.Files))
+	if len(sources.Files) != 106 {
+		t.Fatalf("example discovery: got %d files, want 106", len(sources.Files))
 	}
 	var out, errOut bytes.Buffer
 	code := run(context.Background(), []string{"validate", "-f", sources.Roots[0], "--output", "json"}, &out, &errOut)
@@ -91,14 +91,14 @@ func TestActualCLIValidatesCompleteExample(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
 		t.Fatal(err, out.String())
 	}
-	if code != 0 || errOut.Len() != 0 || !result.OK || result.Result.Counts != (compilation.Counts{FilesSeen: 100, ObjectsDecoded: 100}) || len(result.Diagnostics) != 0 || len(result.Result.Advisories) != 0 {
+	if code != 0 || errOut.Len() != 0 || !result.OK || result.Result.Counts != (compilation.Counts{FilesSeen: 106, ObjectsDecoded: 106}) || len(result.Diagnostics) != 0 || len(result.Result.Advisories) != 0 {
 		t.Fatalf("actual CLI admission: code=%d out=%s err=%s", code, out.String(), errOut.String())
 	}
 	if len(result.Result.ExcludedResourceFiles)+len(result.Result.ExcludedContainerClusters)+len(result.Result.ExcludedStorageClusters) != 0 {
 		t.Fatal("unexpected example exclusions")
 	}
 	state, _ := compileAcceptance(t, sources)
-	if len(state.Effective().Objects()) != 100 {
+	if len(state.Effective().Objects()) != 106 {
 		t.Fatal("example objects lost")
 	}
 	installed := requireObject(t, state.Effective(), api.Machine, "storage-a-01")
@@ -130,7 +130,7 @@ func TestActualExampleSelectsTargetToolsFromItsClusters(t *testing.T) {
 func TestActualCompilerAdmitsAllKindsAndAdditionalVariants(t *testing.T) {
 	sources := expandedExampleSources(t)
 	state, report := compileAcceptance(t, sources)
-	if report.Counts != (compilation.Counts{FilesSeen: 101, ObjectsDecoded: 120}) {
+	if report.Counts != (compilation.Counts{FilesSeen: 107, ObjectsDecoded: 126}) {
 		t.Fatalf("expanded graph counts: %#v", report.Counts)
 	}
 	for _, kind := range api.Kinds() {

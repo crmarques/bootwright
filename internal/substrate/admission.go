@@ -37,6 +37,10 @@ func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 			bmc = NormalizeBMCDefaults(bmc)
 			arm = arm.WithPath(bmc, "defaults", "bmc")
 		}
+		// The boot method materializes whether or not the block was authored,
+		// so effective state always names the path a physical machine is
+		// booted by rather than leaving a consumer to assume one.
+		arm = arm.WithPath(arm.Get("boot").Default("method", api.StringValue(BootRedfishVirtualMedia)), "boot")
 	case "vsphere":
 		for _, side := range []string{"external", "internal"} {
 			values := arm.Get("nodeNetworking", side, "networkSubnetCidr")

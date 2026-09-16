@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: storage-b-02-host-key
+
+spec:
+  type: sshKeyPair
+
+  source:
+    generated:
+      keyType: ed25519
+      comment: storage-b-02-host-key

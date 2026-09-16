@@ -13,6 +13,11 @@ import (
 // contexts on one host never name the same network, domain, pool or unit.
 const Prefix = "bootwright"
 
+// BootRedfishVirtualMedia is the one boot path this contract performs on a
+// physical machine: its installer is presented to the machine's own management
+// controller as virtual media.
+const BootRedfishVirtualMedia = "redfishVirtualMedia"
+
 // ImagePrefix is libvirt's own image tree, so a disk this product creates
 // carries the labels the hypervisor expects.
 const ImagePrefix = "/var/lib/libvirt/images/bootwright"

@@ -218,3 +218,84 @@ func TestManagedLibvirtAttachmentContainsTheInstallAddress(t *testing.T) {
 		}
 	}
 }
+
+// installedFixture is the bare-metal fixture as a Bootwright-installed
+// Machine, which is the only lifecycle that delivers its own host key.
+func installedFixture() (api.Object, api.Catalog) {
+	machine, catalog := fixture()
+	spec := machine.Spec()
+	install := spec.Get("os", "install").With("hostKeyRef", api.StringValue("node-host-key"))
+	spec = spec.With("os", spec.Get("os").
+		With("installProfileRef", api.StringValue("rhel")).
+		With("install", install))
+	machine = machine.WithSpec(spec)
+	objects := []api.Object{machine, object(api.MachineInstallProfile, "rhel", m())}
+	for _, existing := range catalog.Objects() {
+		if existing.Identity() != machine.Identity() {
+			objects = append(objects, existing)
+		}
+	}
+	// Validation reads effective state, where the provider's BMC defaults and
+	// the sole attachment have already been inherited.
+	complete := api.NewCatalog(objects)
+	normalized, _ := Normalize(machine, complete)
+	objects[0] = normalized
+	return normalized, api.NewCatalog(objects)
+}
+
+// A physical machine offers no channel to read back what it holds, so the key
+// it will answer with is declared before the installation that delivers it.
+func TestBaremetalInstallationRequiresTheHostKeyItDelivers(t *testing.T) {
+	machine, catalog := installedFixture()
+	if issues := Validate(machine, catalog); len(issues) != 0 {
+		t.Fatalf("a declared host key was refused: %v", issues)
+	}
+	spec := machine.Spec()
+	spec = spec.With("os", spec.Get("os").With("install", spec.Get("os", "install").Without("hostKeyRef")))
+	issues := Validate(machine.WithSpec(spec), catalog)
+	if !mentions(issues, "$.spec.os.install.hostKeyRef") {
+		t.Fatalf("a bare-metal installation without its host key was accepted: %v", issues)
+	}
+}
+
+// The key belongs to the one lifecycle that delivers it. A machine nothing
+// installs, and one its substrate creates and proves another way, declare none.
+func TestOnlyABaremetalInstallationDeclaresAHostKey(t *testing.T) {
+	machine, catalog := installedFixture()
+	spec := machine.Spec()
+	provided := machine.WithSpec(spec.With("os", m("provided", true, "install", m("hostKeyRef", "node-host-key"))))
+	if !mentions(Validate(provided, catalog), "$.spec.os.install.hostKeyRef") {
+		t.Fatal("an OS-ready Machine was allowed to deliver a host key")
+	}
+	virtual := object(api.InfraProvider, "metal", m("libvirt", m("machineRef", "host", "uri", "qemu:///system",
+		"bmcEmulationDefaults", m("auth", m("credentialsRef", "bmc")))))
+	objects := []api.Object{machine, virtual}
+	for _, existing := range catalog.Objects() {
+		if existing.Kind() != api.InfraProvider && existing.Identity() != machine.Identity() {
+			objects = append(objects, existing)
+		}
+	}
+	if !mentions(Validate(machine, api.NewCatalog(objects)), "$.spec.os.install.hostKeyRef") {
+		t.Fatal("a Machine proved through its hypervisor was allowed to deliver a host key")
+	}
+}
+
+// A host key identifies exactly one machine, so two Machines sharing one would
+// each satisfy the other's completion proof.
+func TestAHostKeyIdentifiesOneMachine(t *testing.T) {
+	machine, catalog := installedFixture()
+	peer := object(api.Machine, "peer", machine.Spec())
+	objects := append(catalog.Objects(), peer)
+	if !mentions(Validate(machine, api.NewCatalog(objects)), "$.spec.os.install.hostKeyRef") {
+		t.Fatal("two Machines were allowed to share one host key")
+	}
+}
+
+func mentions(issues []api.Issue, field string) bool {
+	for _, issue := range issues {
+		if issue.Field == field {
+			return true
+		}
+	}
+	return false
+}

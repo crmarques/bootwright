@@ -6,7 +6,7 @@ metadata:
 spec:
   baremetal:
     boot:
-      method: external
+      method: redfishVirtualMedia
     defaults:
       bmc:
         credentialsRef: ocp-bmc-credentials

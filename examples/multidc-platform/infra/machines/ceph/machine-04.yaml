@@ -17,6 +17,7 @@ spec:
     provided: false
     installProfileRef: rhel-ceph-node
     install:
+      hostKeyRef: storage-b-01-host-key
       rootDeviceHints:
         deviceName: /dev/sda
 
