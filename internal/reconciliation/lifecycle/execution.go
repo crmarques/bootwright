@@ -406,6 +406,12 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 		return result, logFault(err)
 	}
 	defer func() { _ = log.Close(ctx) }()
+	// The location is named before the first effect, because its whole purpose
+	// is to be followed while the work runs.
+	result.LogLocation = store.LogDirectory(operation.ID)
+	if s.options.Progress != nil && result.LogLocation != "" {
+		s.options.Progress.ReportLogLocation(ctx, result.LogLocation)
+	}
 	states, err := store.BlockStates(ctx, operation.ID, plan)
 	if err != nil {
 		return result, err

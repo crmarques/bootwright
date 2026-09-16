@@ -140,6 +140,7 @@ type OperationStore interface {
 	OpenLog(context.Context, string) (*operationstore.Log, error)
 	OpenAdapterOutput(context.Context, string) *operationstore.AdapterOutput
 	LogPaths(context.Context, string, reconciliation.Plan) ([]string, error)
+	LogDirectory(string) string
 }
 
 // OperationStoreFactory opens the record set over one held area. It is a
@@ -156,6 +157,10 @@ type PlanPresenter interface {
 
 type ProgressReporter interface {
 	ReportProgress(context.Context, ProgressEvent)
+	// ReportLogLocation names where this operation is writing, before its first
+	// effect runs, so an operator can follow the work while it happens rather
+	// than read it afterwards.
+	ReportLogLocation(context.Context, string)
 }
 
 type Clock interface {

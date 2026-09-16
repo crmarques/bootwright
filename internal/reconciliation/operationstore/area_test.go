@@ -17,6 +17,7 @@ type memoryArea struct {
 	directories map[string]bool
 	fail        map[string]error
 	reads       int
+	location    string
 }
 
 func newArea() *memoryArea {
@@ -123,3 +124,5 @@ func (a *memoryArea) Append(ctx context.Context, target string, data []byte) err
 }
 
 func (a *memoryArea) Sync(ctx context.Context, target string) error { return a.check("sync", target) }
+
+func (a *memoryArea) Location() string { return a.location }

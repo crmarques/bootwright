@@ -50,6 +50,17 @@ func (l *Log) Path() string { return l.path }
 
 func OperationLogPath(id string) string { return path.Join(id, "logs", "operation.jsonl") }
 
+// LogDirectory names where one operation's logs are written on the host, so a
+// result can point an operator at work still in flight. It is empty when the
+// area reports no host location.
+func (s *Store) LogDirectory(id string) string {
+	location := s.area.Location()
+	if location == "" || id == "" {
+		return ""
+	}
+	return path.Join(location, id, "logs")
+}
+
 func AttemptLogPath(id, block string, attempt, resolution int) (string, error) {
 	name, err := reconciliation.FormatNumber(attempt)
 	if err != nil {

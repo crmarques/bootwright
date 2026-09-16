@@ -517,3 +517,26 @@ func TestDestroyedContextIsDeletable(t *testing.T) {
 		t.Fatalf("deleting a destroyed context failed: %#v", diagnostics.Of(err))
 	}
 }
+
+// The location a result prints has to be the directory the area actually
+// writes into, or an operator follows a path that never fills.
+func TestOperationAreaLocationIsWhereItWrites(t *testing.T) {
+	ctx := context.Background()
+	store, _ := lifecycleFixture(t)
+	var location string
+	err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		area := tx.Operations()
+		location = area.Location()
+		return area.Append(ctx, "op-one/logs/operation.jsonl", []byte("{}\n"))
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if location == "" || !filepath.IsAbs(location) {
+		t.Fatalf("location = %q, want an absolute path", location)
+	}
+	written := filepath.Join(location, "op-one", "logs", "operation.jsonl")
+	if data, err := os.ReadFile(written); err != nil || string(data) != "{}\n" {
+		t.Fatalf("the reported location does not hold what the area wrote: %q (%v)", written, err)
+	}
+}

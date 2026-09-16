@@ -147,8 +147,8 @@ When standard output is a terminal, the presenter rewrites the running row in
 place instead of appending: a carriage return and an erase-line sequence
 precede each replacement, the elapsed time and completion refresh every second,
 and the outcome overwrites the row, so each step settles as exactly one line.
-Only a step's own rows replace its line; another step, a heading, the result or
-a diagnostic first terminates it.
+Only a step's own rows replace its line; another step, a heading, a field such
+as the `Logs` reference, the result or a diagnostic first terminates it.
 
 A redrawn row occupies one physical line: it is bounded by the width the
 terminal reports when it is drawn, measured again for every row so a resize
@@ -365,7 +365,7 @@ unavailable command still follows the no-context-read
 [shared layout](#shared-human-layout): an optional headline, a `Plan` section
 whose steps are the frozen blocks in plan order, each naming its stage, a
 `Progress` section while effects run, a `Result` section of status rows, the
-`details: <path>` log reference when an operation log exists, and the receipt as
+`Logs` reference when an operation log exists, and the receipt as
 the final four lines. With a stage selection, each pending step also says
 whether this invocation would start it, that it is not selected, or which block
 it waits on, and a closing field reports how many blocks would start and how
@@ -544,11 +544,18 @@ evidence and follow
 Logs are troubleshooting material, never ownership evidence or a continuation
 cursor.
 
-Human output names a safe relative log path once as `details: <path>` after the
-relevant terminal summary. JSON `logs` lists created paths once: operation log
-first, then blocks in frozen plan order, effect attempts in numeric order, each
-attempt's retained adapter output directly after its own log, and their
-resolution attempts in numeric order.
+Human output names the operation's own log directory as a `Logs` field, giving
+its path on this host rather than one relative to the state root, because the
+point of naming it is that an operator can open it. It is named twice: once
+before the first effect runs, so the work can be followed while it happens, and
+once after the terminal summary, so it survives in the scrollback. Both name the
+same directory, which is where a run still in flight is writing; that directory
+and its files are private to the identity owning the state tree, so reading them
+is a privileged action. JSON `logs` keeps naming safe paths relative to the
+state root, and lists created paths once: operation log first, then blocks in
+frozen plan order, effect attempts in numeric order, each attempt's retained
+adapter output directly after its own log, and their resolution attempts in
+numeric order.
 
 ## Multi-machine presentation
 

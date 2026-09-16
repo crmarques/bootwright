@@ -25,4 +25,9 @@ type Area interface {
 	Replace(ctx context.Context, path string, data, expected []byte) error
 	Append(ctx context.Context, path string, data []byte) error
 	Sync(ctx context.Context, path string) error
+	// Location reports where this subtree is on the host, so a human result can
+	// name a log an operator is able to open while it is still being written.
+	// It is presentation material only: nothing resolves a path through it, and
+	// an implementation with no host location reports the empty string.
+	Location() string
 }

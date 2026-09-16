@@ -10,6 +10,10 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
+// logLocationLabel names the operation's own log directory. The same label is
+// used while the work runs and after it settles, because it is the same place.
+const logLocationLabel = "Logs"
+
 // LifecyclePlanPresenter writes the frozen plan before confirmation, so an
 // operator sees exactly what an operation would do before authorizing it.
 type LifecyclePlanPresenter struct{ out io.Writer }
@@ -77,6 +81,16 @@ func (p *LifecycleProgressPresenter) ReportProgress(ctx context.Context, event l
 		Position: event.Position, Total: event.Total, Nested: event.Group != "",
 		Completed: event.Completed, Declared: event.Declared,
 	})
+}
+
+// ReportLogLocation names where the operation writes, before its first effect.
+// It is a field of its own so it survives the progress rows a terminal redraws
+// over each other, and an operator can follow the work as it happens.
+func (p *LifecycleProgressPresenter) ReportLogLocation(ctx context.Context, location string) {
+	if p == nil || p.progress.out == nil || ctx.Err() != nil || location == "" {
+		return
+	}
+	p.progress.field(logLocationLabel, location)
 }
 
 func lifecycleHeadline(result lifecycle.PlanResult) string {
@@ -173,9 +187,9 @@ func writeLifecycleOperation(out io.Writer, result *lifecycle.OperationResult) e
 		}
 		text.rows(rows)
 	}
-	if len(result.Logs) != 0 {
+	if result.LogLocation != "" {
 		text.section("")
-		text.fields(field{Label: "Details", Value: escapeDisplayLine(result.Logs[0])})
+		text.fields(field{Label: logLocationLabel, Value: escapeDisplayLine(result.LogLocation)})
 	}
 	if err := text.writeTo(out); err != nil {
 		return err
@@ -242,8 +256,8 @@ func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMod
 		text.rows(rows)
 	}
 	var tail []field
-	if result.Lifecycle != nil && len(result.Lifecycle.Logs) != 0 {
-		tail = append(tail, field{Label: "Details", Value: escapeDisplayLine(result.Lifecycle.Logs[0])})
+	if result.LogLocation != "" {
+		tail = append(tail, field{Label: logLocationLabel, Value: escapeDisplayLine(result.LogLocation)})
 	}
 	if len(result.NextSteps) != 0 {
 		tail = append(tail, field{Label: "Next", Value: escapeDisplayLine(result.NextSteps[0])})

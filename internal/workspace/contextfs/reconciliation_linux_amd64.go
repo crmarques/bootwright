@@ -130,7 +130,7 @@ func (s *Store) ReadLifecycle(ctx context.Context, name string, callback func(li
 		inputs:     inputs,
 		controller: controllerView,
 		evidence:   evidence,
-		operations: &operationArea{store: s, context: dir, active: func() bool { return active }, readOnly: true},
+		operations: &operationArea{store: s, context: dir, name: record.Name, active: func() bool { return active }, readOnly: true},
 	}
 	return safeError(callback(view))
 }
@@ -174,7 +174,7 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 				inputs:     inputs,
 				controller: controllerView,
 				evidence:   evidence,
-				operations: &operationArea{store: s, context: dir, active: func() bool { return active }},
+				operations: &operationArea{store: s, context: dir, name: record.Name, active: func() bool { return active }},
 			},
 			base: t, stored: stored, context: dir,
 		}

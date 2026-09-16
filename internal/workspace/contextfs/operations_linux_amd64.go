@@ -73,8 +73,20 @@ func operationPath(target string, minimum int) ([]string, error) {
 type operationArea struct {
 	store    *Store
 	context  *directory
+	name     string
 	active   func() bool
 	readOnly bool
+}
+
+// Location names this context's operation subtree on the host. It is built for
+// a human to read, never opened through: every access still descends from the
+// held, verified handles above.
+func (a *operationArea) Location() string {
+	root, err := a.store.rootPath()
+	if err != nil || a.name == "" {
+		return ""
+	}
+	return filepath.Join(root, "contexts", a.name, "state", "operations")
 }
 
 func (a *operationArea) available(ctx context.Context, mutation bool) error {

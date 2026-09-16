@@ -76,9 +76,10 @@ func TestOperationResultLeadsWithItsOutcomeAndNamesItsLog(t *testing.T) {
 			var out bytes.Buffer
 			result := &lifecycle.OperationResult{
 				Context: lifecycle.ContextIdentity{Name: "lab"}, Verb: "apply",
-				Blocks:  []lifecycle.BlockResult{{ID: "artifact-server-lab", Description: "serve artifacts", State: state}},
-				Logs:    []string{"op-abc/logs/operation.jsonl"},
-				Receipt: lifecycle.Receipt{Operation: "op-abc", Verb: "apply", State: state, Next: "destroy"},
+				Blocks:      []lifecycle.BlockResult{{ID: "artifact-server-lab", Description: "serve artifacts", State: state}},
+				Logs:        []string{"op-abc/logs/operation.jsonl"},
+				LogLocation: "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs",
+				Receipt:     lifecycle.Receipt{Operation: "op-abc", Verb: "apply", State: state, Next: "destroy"},
 			}
 			if err := writeLifecycleOperation(&out, result); err != nil {
 				t.Fatal(err)
@@ -87,8 +88,8 @@ func TestOperationResultLeadsWithItsOutcomeAndNamesItsLog(t *testing.T) {
 			if !strings.HasPrefix(rendered, token+" Apply "+state) {
 				t.Fatalf("headline = %q, want prefix %q", rendered, token)
 			}
-			if !strings.Contains(rendered, "op-abc/logs/operation.jsonl") {
-				t.Fatal("the result did not name its private log")
+			if !strings.Contains(rendered, "Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n") {
+				t.Fatalf("the result did not name where its logs are: %q", rendered)
 			}
 			if !strings.HasSuffix(rendered, "next: destroy\n") {
 				t.Fatalf("result does not end with its receipt: %q", rendered)
@@ -263,8 +264,9 @@ func TestFailedOperationKeepsItsResultLogAndReceipt(t *testing.T) {
 					{ID: "artifact-server-lab", Description: "serve artifacts for lab-artifacts", State: "failed"},
 					{ID: "dns-lab", Description: "resolve names for lab-dns", State: "pending"},
 				},
-				Logs:    []string{"op-abc/logs/blocks/artifact-server-lab/attempt-000001.jsonl"},
-				Receipt: lifecycle.Receipt{Operation: "op-abc", Verb: path, State: "failed", Next: "continue-" + path},
+				Logs:        []string{"op-abc/logs/blocks/artifact-server-lab/attempt-000001.jsonl"},
+				LogLocation: "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs",
+				Receipt:     lifecycle.Receipt{Operation: "op-abc", Verb: path, State: "failed", Next: "continue-" + path},
 			}
 			failure := &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "lifecycle.state", Message: "the operation did not complete"}}}
 			record := &dispatchRecord{result: commandResult{lifecycleOperation: operation}, err: failure}
@@ -277,8 +279,8 @@ func TestFailedOperationKeepsItsResultLogAndReceipt(t *testing.T) {
 			if !strings.Contains(rendered, "serve artifacts for lab-artifacts") {
 				t.Fatalf("result rows missing: %q", rendered)
 			}
-			if !strings.Contains(rendered, "op-abc/logs/blocks/artifact-server-lab/attempt-000001.jsonl") {
-				t.Fatalf("the failure did not name its private log: %q", rendered)
+			if !strings.Contains(rendered, "Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n") {
+				t.Fatalf("the failure did not name where its logs are: %q", rendered)
 			}
 			if !strings.HasSuffix(rendered, "next: continue-"+path+"\n") {
 				t.Fatalf("result does not end with its receipt: %q", rendered)
@@ -312,15 +314,54 @@ func TestStatusNamesTheLogOfAnIncompleteOperation(t *testing.T) {
 			Blocks: []lifecycle.BlockResult{{ID: "artifact-server-lab", Description: "serve artifacts", State: "failed"}},
 			Logs:   []string{"op-abc/logs/blocks/artifact-server-lab/attempt-000001.jsonl"},
 		},
+		LogLocation: "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs",
 	}
 	var text bytes.Buffer
 	if err := writeLifecycleStatus(&text, result, false); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(text.String(), "op-abc/logs/blocks/artifact-server-lab/attempt-000001.jsonl") {
-		t.Fatalf("status did not name the operation log: %q", text.String())
+	if !strings.Contains(text.String(), "Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n") {
+		t.Fatalf("status did not name where the operation logs are: %q", text.String())
 	}
 	if !strings.Contains(text.String(), "bootwright apply") {
 		t.Fatalf("status dropped its next step: %q", text.String())
+	}
+}
+
+// The location is a line of its own, written before the first row and never
+// redrawn over, so an operator can copy it while the work is still running.
+func TestProgressNamesTheLogLocationBeforeItsFirstRow(t *testing.T) {
+	var out bytes.Buffer
+	presenter := NewLifecycleProgressPresenter(&out, nil)
+	ctx := context.Background()
+	presenter.ReportLogLocation(ctx, "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs")
+	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{
+		Block: "artifact-server-lab", Description: "serve artifacts on lab", Status: "running", Position: 1, Total: 1,
+	})
+	want := "\n  Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n" +
+		"\nProgress\n" +
+		"  [RUNNING]  [1/1] serve artifacts on lab\n"
+	if out.String() != want {
+		t.Fatalf("progress = %q, want %q", out.String(), want)
+	}
+}
+
+// A terminal rewrites running rows in place, so the location has to terminate
+// the open row rather than be erased by the next redraw.
+func TestTerminalLogLocationSurvivesTheRedrawnRow(t *testing.T) {
+	var out bytes.Buffer
+	presenter := NewLifecycleProgressPresenter(&out, func() int { return 120 })
+	ctx := context.Background()
+	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{
+		Block: "one", Description: "serve artifacts", Status: "running", Position: 1, Total: 2,
+	})
+	presenter.ReportLogLocation(ctx, "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs")
+	rendered := out.String()
+	location := "\n  Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n"
+	if !strings.HasSuffix(rendered, location) {
+		t.Fatalf("progress = %q, want it to end with %q", rendered, location)
+	}
+	if !strings.Contains(rendered, "[RUNNING]  [1/2] serve artifacts\n") {
+		t.Fatalf("the open row was not terminated before the location: %q", rendered)
 	}
 }

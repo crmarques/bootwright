@@ -181,6 +181,16 @@ func (p *progressPresenter) stopHeartbeat() {
 	}
 }
 
+// field writes one labeled line into the stream, terminating a row the
+// terminal is still rewriting first so it is never overwritten by a redraw.
+func (p *progressPresenter) field(label, value string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.closeLine()
+	io.WriteString(p.out, "\n"+displayIndent+escapeDisplayLine(label)+
+		strings.Repeat(" ", displayGap)+escapeDisplayLine(value)+"\n")
+}
+
 // openHeading prints a heading the first time it is needed. The blank line
 // separates it from the headline or plan that every progress stream follows.
 func (p *progressPresenter) openHeading(heading string) {

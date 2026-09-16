@@ -92,6 +92,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 		summary.Logs = []string{}
 	}
 	result.Lifecycle = summary
+	result.LogLocation = store.LogDirectory(operation.ID)
 	result.Secrets.Bound = len(operation.Bindings)
 	result.Shared = applyBlockStatus(result.Shared, plan, states)
 	result.NextSteps = append(result.NextSteps, "bootwright "+summary.Next)

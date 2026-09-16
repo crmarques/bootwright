@@ -118,6 +118,8 @@ func (a *memoryArea) Append(_ context.Context, target string, data []byte) error
 
 func (a *memoryArea) Sync(context.Context, string) error { return nil }
 
+func (a *memoryArea) Location() string { return "/var/lib/bootwright/contexts/lab/state/operations" }
+
 // testWorkspace is one context's durable state: its evidence, reservations and
 // operation records, with the same read and mutate boundaries the store has.
 type testWorkspace struct {
@@ -620,7 +622,11 @@ func TestApplyRefusesAnUnpreparedControllerHost(t *testing.T) {
 	}
 }
 
-type testProgress struct{ rows []string }
+type testProgress struct {
+	rows           []string
+	location       string
+	rowsAtLocation int
+}
 
 func (p *testProgress) ReportProgress(_ context.Context, event ProgressEvent) {
 	row := event.Description + ":" + event.Detail + ":" + event.Status
@@ -628,6 +634,11 @@ func (p *testProgress) ReportProgress(_ context.Context, event ProgressEvent) {
 		row += ":" + strconv.Itoa(event.Position) + "/" + strconv.Itoa(event.Total)
 	}
 	p.rows = append(p.rows, row)
+}
+
+func (p *testProgress) ReportLogLocation(_ context.Context, location string) {
+	p.location = location
+	p.rowsAtLocation = len(p.rows)
 }
 
 // Progress names each block by its description and each group by the frozen
@@ -1546,3 +1557,27 @@ func TestOnlyDeclaredGroupsAdvanceCompletion(t *testing.T) {
 type progressFunc func(context.Context, ProgressEvent)
 
 func (f progressFunc) ReportProgress(ctx context.Context, event ProgressEvent) { f(ctx, event) }
+
+func (progressFunc) ReportLogLocation(context.Context, string) {}
+
+// The log location is named before the first effect runs, because an operator
+// who reads it afterwards cannot follow the work it was written for.
+func TestLogLocationIsNamedBeforeTheFirstEffect(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	progress := &testProgress{rowsAtLocation: -1}
+	h.service.options.Progress = progress
+	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "/var/lib/bootwright/contexts/lab/state/operations/" + result.Receipt.Operation + "/logs"
+	if progress.location != want {
+		t.Fatalf("reported location = %q, want %q", progress.location, want)
+	}
+	if progress.rowsAtLocation != 0 {
+		t.Fatalf("the location followed %d progress rows, want none", progress.rowsAtLocation)
+	}
+	if result.LogLocation != want {
+		t.Fatalf("result location = %q, want %q", result.LogLocation, want)
+	}
+}

@@ -120,7 +120,11 @@ type OperationResult struct {
 	Steps   []PlanStep
 	Blocks  []BlockResult
 	Logs    []string
-	Receipt Receipt
+	// LogLocation is where this operation's logs are on the host, for an
+	// operator to open. It is human presentation only and is absent from every
+	// structured result, which keeps naming paths relative to the state root.
+	LogLocation string
+	Receipt     Receipt
 }
 
 // ProgressEvent is one row of an operation's progress. Description names the
@@ -188,4 +192,7 @@ type StatusResult struct {
 	Secrets         SecretSummary
 	NextSteps       []string
 	Lifecycle       *LifecycleSummary
+	// LogLocation is the host path of the reported operation's logs, presented
+	// to a human and absent from the structured result.
+	LogLocation string
 }
