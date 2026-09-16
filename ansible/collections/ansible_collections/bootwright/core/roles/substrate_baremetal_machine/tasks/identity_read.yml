@@ -1,0 +1,65 @@
+---
+# The identity operation for a machine with no out-of-band channel: connect to
+# it over SSH pinned to exactly the key this installation delivered. A machine
+# presenting any other key is not this installation, and one that does not
+# answer has not answered yet; neither is ever read as absence.
+#
+# Inputs are passed explicitly by the consuming playbook, never inherited from
+# a shared fact, and the answers are published under this role's own names.
+- name: Pin the delivered host key for this one connection
+  ansible.builtin.copy:
+    content: >-
+      {{ substrate_baremetal_machine_identity_address }} {{ substrate_baremetal_machine_identity_key }}
+    dest: '{{ substrate_baremetal_machine_identity_work }}/known_hosts'
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+  no_log: true
+
+- name: Read the install marker over that pinned connection
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/ssh
+      - -o
+      - 'UserKnownHostsFile={{ substrate_baremetal_machine_identity_work }}/known_hosts'
+      - -o
+      - StrictHostKeyChecking=yes
+      - -o
+      - IdentitiesOnly=yes
+      - -o
+      - PasswordAuthentication=no
+      - -o
+      - BatchMode=yes
+      - -o
+      - ConnectTimeout=10
+      - -i
+      - '{{ substrate_baremetal_machine_identity_file }}'
+      - >-
+        {{ substrate_baremetal_machine_identity_user }}@{{ substrate_baremetal_machine_identity_address }}
+      - /usr/bin/cat
+      - '{{ substrate_baremetal_machine_identity_marker_path }}'
+  register: substrate_baremetal_machine_marker_read
+  failed_when: false
+  changed_when: false
+  no_log: true
+
+- name: Publish what the connection answered
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_identity_answered: >-
+      {{ substrate_baremetal_machine_marker_read.rc == 0 }}
+    substrate_baremetal_machine_identity_marker: >-
+      {{ substrate_baremetal_machine_marker_read.stdout | default('') | trim
+         if substrate_baremetal_machine_marker_read.rc == 0 else '' }}
+    # A connection that succeeded proves the machine presented the delivered
+    # key, because nothing else was accepted.
+    substrate_baremetal_machine_identity_host_key: >-
+      {{ substrate_baremetal_machine_identity_key
+         if substrate_baremetal_machine_marker_read.rc == 0 else '' }}
+  changed_when: false
+
+- name: Remove the one-connection known-hosts file
+  ansible.builtin.file:
+    path: '{{ substrate_baremetal_machine_identity_work }}/known_hosts'
+    state: absent
+  changed_when: false

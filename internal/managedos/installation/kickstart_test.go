@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 func kickstartOf(t *testing.T, catalog api.Catalog) string {
@@ -208,5 +209,97 @@ func TestNetmasksRenderFromTheirPrefix(t *testing.T) {
 		if got := netmask(prefix); got != want {
 			t.Fatalf("/%d = %q, want %q", prefix, got, want)
 		}
+	}
+}
+
+func physicalInstallation() Installation {
+	return Installation{
+		Address: "198.51.100.11", Channel: substrate.ChannelDeliveredKey,
+		ExpectedMACs: []string{"52:54:00:9a:1b:01", "52:54:00:9a:1b:02"},
+		Hostname:     "metal-01.metal.example.test", Interface: "eno1",
+		InterfaceMAC: "52:54:00:9a:1b:01", Keyboard: "us", Language: "en_US.UTF-8",
+		MarkerPath: MarkerPath, HostKeyPath: HostKeyPath, PackageSource: "cdrom",
+		Physical: true, Prefix: 24, RootDevice: "/dev/sda", Timezone: "UTC", User: "bootwright",
+	}
+}
+
+// A physical installation proves it is running on the declared machine before
+// it touches storage, and the proof is a %pre that fails closed.
+func TestAPhysicalInstallationProvesItsTargetBeforeClearingAnyDisk(t *testing.T) {
+	rendered, err := RenderKickstart(physicalInstallation())
+	if err != nil {
+		t.Fatal(err)
+	}
+	proof := strings.Index(rendered, "%pre --erroronfail")
+	if proof < 0 {
+		t.Fatal("a physical installation renders no target proof")
+	}
+	for _, clause := range []string{"clearpart", "autopart", "ignoredisk"} {
+		if at := strings.Index(rendered, clause); at >= 0 && at < proof {
+			t.Fatalf("%s is rendered before the target proof", clause)
+		}
+	}
+	for _, address := range physicalInstallation().ExpectedMACs {
+		if !strings.Contains(rendered, "grep -Fqx '"+address+"'") {
+			t.Fatalf("the proof does not require %s", address)
+		}
+	}
+	if !strings.Contains(rendered, "lsblk -ndo TYPE") {
+		t.Fatal("the proof does not require the root device to be a whole disk")
+	}
+}
+
+// The machine is addressed by its hardware address, because the interface name
+// a booted installer assigns is not the name the declaration used.
+func TestAPhysicalInstallationAddressesItsInterfaceByHardwareAddress(t *testing.T) {
+	rendered, err := RenderKickstart(physicalInstallation())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rendered, "--device=52:54:00:9a:1b:01") {
+		t.Fatal("the network line does not address the interface by its hardware address")
+	}
+}
+
+// A delivered key is installed before any key is generated, fetched over a
+// verified connection, and the material is removed from the installer once it
+// is placed. Nothing about the guest agent is rendered for a machine that has
+// none.
+func TestADeliveredKeyIsInstalledBeforeAnyKeyIsGenerated(t *testing.T) {
+	rendered, err := RenderKickstart(physicalInstallation())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fetch := strings.Index(rendered, PrivateURLToken)
+	generate := strings.Index(rendered, "ssh-keygen -A")
+	if fetch < 0 || generate < 0 || fetch > generate {
+		t.Fatal("the delivered key is not installed before the host keys are generated")
+	}
+	if !strings.Contains(rendered, "--cacert") || strings.Contains(rendered, "--insecure") {
+		t.Fatal("the private fetch does not verify the server it fetches from")
+	}
+	// Nothing about a guest agent is rendered, and the key is not republished
+	// where an agent would have read it: the machine answers with it directly.
+	for _, absent := range []string{agentFilter, "qemu-guest-agent", HostKeyPath} {
+		if strings.Contains(rendered, absent) {
+			t.Fatalf("a machine with no guest agent renders %q", absent)
+		}
+	}
+}
+
+// A machine its substrate created renders none of the physical arms, so one
+// contract serves both without either leaking into the other.
+func TestAVirtualInstallationRendersNoPhysicalProof(t *testing.T) {
+	input := physicalInstallation()
+	input.Channel, input.Physical, input.ExpectedMACs, input.InterfaceMAC = substrate.ChannelGuestAgent, false, nil, ""
+	rendered, err := RenderKickstart(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(rendered, "%pre") || strings.Contains(rendered, PrivateURLToken) {
+		t.Fatal("a virtual installation renders a physical proof or a private fetch")
+	}
+	if !strings.Contains(rendered, "--device=eno1") {
+		t.Fatal("a virtual installation does not address its interface by name")
 	}
 }

@@ -110,12 +110,16 @@ type Request struct {
 	// Private is the subtree this block owns for material only the installing
 	// machine may read. The attempt mints the unguessable final segment, so
 	// this names the parent it owns and never the path itself.
-	Private   *Publication `json:"private,omitempty"`
-	Target    Target       `json:"target"`
-	Tree      *Publication `json:"tree,omitempty"`
-	TreeMedia *Media       `json:"treeMedia,omitempty"`
-	User      string       `json:"user"`
-	Version   string       `json:"version"`
+	Private *Publication `json:"private,omitempty"`
+	Target  Target       `json:"target"`
+	// TLSCertificateRef names the serving certificate the installing machine
+	// verifies the private fetch against. Only its public half is used, and it
+	// reaches the adapter at execution rather than in the plan.
+	TLSCertificateRef string       `json:"tlsCertificateRef,omitempty"`
+	Tree              *Publication `json:"tree,omitempty"`
+	TreeMedia         *Media       `json:"treeMedia,omitempty"`
+	User              string       `json:"user"`
+	Version           string       `json:"version"`
 }
 
 // Canonical encodes the request exactly as the plan digest and the adapter both
@@ -196,11 +200,14 @@ func (r Request) MediaNames() []string {
 	return slices.Compact(names)
 }
 
-// ReservationKeys are the shared media claims and the published subtree this
-// block owns. A media claim conflicts with nothing but deletion and
+// ReservationKeys are the published subtrees this block owns, the private one
+// included, so a second context never publishes into them. A media claim conflicts with nothing but deletion and
 // replacement of what it names.
 func (r Request) ReservationKeys() []string {
 	keys := []string{"path:" + r.Image.Path}
+	if r.Private != nil {
+		keys = append(keys, "path:"+r.Private.Path)
+	}
 	if r.Tree != nil {
 		keys = append(keys, "path:"+r.Tree.Path)
 	}
@@ -214,6 +221,9 @@ func (r Request) SecretReferences() []string {
 	references := append(r.Placement.SecretReferences(), r.Target.Controller.CredentialsRef, r.FleetKeyRef)
 	if r.Target.HostKeyRef != "" {
 		references = append(references, r.Target.HostKeyRef)
+	}
+	if r.TLSCertificateRef != "" {
+		references = append(references, r.TLSCertificateRef)
 	}
 	out := make([]string, 0, len(references))
 	for _, reference := range references {

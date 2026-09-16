@@ -18,14 +18,43 @@ managedos_install_anaconda_staged_tree: >-
 managedos_install_anaconda_required_media: >-
   {{ [managedos_install_anaconda_boot_media] + ([managedos_install_anaconda_tree_media]
      if bootwright_os_install_request.treeMedia is defined else []) }}
-# A guest that already holds exactly the marker this operation froze is
+# A machine that already holds exactly the marker this operation froze is
 # installed: the attempt boots nothing and reports the same evidence.
 managedos_install_anaconda_installed: >-
-  {{ managedos_install_anaconda_existing.answered | default(false)
-     and managedos_install_anaconda_existing.content | default('') | trim
-         == bootwright_os_install_material.marker }}
+  {{ managedos_install_anaconda_answered | default(false)
+     and managedos_install_anaconda_marker | default('') == bootwright_os_install_material.marker }}
 # A hosted tree is extracted and published only when the profile uses one and
 # this installation has not published it yet.
 managedos_install_anaconda_publish_tree: >-
   {{ bootwright_os_install_request.tree is defined
      and not managedos_install_anaconda_before.observation.tree }}
+
+# The realized target every substrate-composed task file reads. Each substrate
+# proves its own target and reads its own identity channel; the installation
+# supplies the terms and never learns which substrate answered.
+managedos_install_anaconda_endpoint: '{{ bootwright_os_install_request.target.controller.endpoint }}'
+managedos_install_anaconda_verify: '{{ bootwright_os_install_request.target.controller.tlsVerify }}'
+managedos_install_anaconda_expected: >-
+  {{ bootwright_os_install_request.target.hardware.interfaces | default([]) | map(attribute='macAddress') | list }}
+# The subtree this block owns for material only the installing machine may read,
+# and the unguessable directory beneath it this attempt mints. The token is
+# generated here rather than frozen in the plan, so it appears in no request, no
+# evidence and no log.
+managedos_install_anaconda_private_root: >-
+  {{ bootwright_os_install_request.private.path | default('') }}
+managedos_install_anaconda_delivers_key: >-
+  {{ bootwright_os_install_request.private is defined }}
+managedos_install_anaconda_private_dir: >-
+  {{ managedos_install_anaconda_private_root }}/{{ managedos_install_anaconda_token.stdout | default('') | trim }}
+managedos_install_anaconda_private_url: >-
+  {{ (bootwright_os_install_request.private.url ~ '/' ~ (managedos_install_anaconda_token.stdout | default('') | trim))
+     if managedos_install_anaconda_delivers_key | bool else '' }}
+managedos_install_anaconda_certificate: >-
+  {{ lookup('ansible.builtin.file', bootwright_os_install_material.artifactCertificate)
+     if managedos_install_anaconda_delivers_key | bool else '' }}
+
+# A machine answers when its installer has written the disk and it has booted.
+# A physical server adds its own power-on self test to that, so the budget is
+# generous and bounded rather than open-ended.
+managedos_install_anaconda_identity_attempts: 120
+managedos_install_anaconda_identity_delay: 30

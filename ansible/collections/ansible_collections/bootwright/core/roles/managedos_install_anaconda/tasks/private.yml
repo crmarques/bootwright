@@ -1,0 +1,48 @@
+---
+# Material only the installing machine may read, published beneath an
+# unguessable directory this attempt minted. Every directory from the owned
+# root down is 0711 and every file 0600, so nothing is listable and the
+# unguessable segment is the only way to name what it contains.
+- name: Create the private subtree this block owns
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_private_root }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0711'
+
+- name: Create the unguessable directory this attempt publishes into
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_private_dir }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0711'
+  no_log: true
+
+- name: Publish the host key pair this installation delivers
+  ansible.builtin.copy:
+    src: '{{ item.source }}'
+    dest: '{{ managedos_install_anaconda_private_dir }}/{{ item.name }}'
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0600'
+  loop:
+    - name: identity
+      source: '{{ bootwright_os_install_material.hostIdentity }}'
+    - name: identity.pub
+      source: '{{ bootwright_os_install_material.hostIdentityPublic }}'
+  loop_control:
+    label: '{{ item.name }}'
+  no_log: true
+
+- name: Label the private subtree so the serving process can read it
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/chcon
+      - --recursive
+      - --reference
+      - '{{ bootwright_os_install_request.image.path | dirname | dirname }}'
+      - '{{ managedos_install_anaconda_private_root }}'
+  changed_when: true

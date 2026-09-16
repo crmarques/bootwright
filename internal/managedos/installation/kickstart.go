@@ -25,6 +25,15 @@ const (
 	identityRPCs = "guest-file-open,guest-file-close,guest-file-read"
 )
 
+// PrivateURLToken and CertificateToken are substituted at execution like the
+// two below. The private URL carries the unguessable segment the attempt mints,
+// so it is never frozen in the plan, and the certificate is the public half of
+// the artifact server's own, which the installer verifies the fetch against.
+const (
+	PrivateURLToken  = "@@BOOTWRIGHT_PRIVATE_URL@@"
+	CertificateToken = "@@BOOTWRIGHT_ARTIFACT_CERTIFICATE@@"
+)
+
 // MarkerToken and AuthorizedKeyToken are the two values the adapter substitutes
 // into the frozen Kickstart at render time. Both are derived at execution: the
 // marker names the request digest, which is the digest of the request that
@@ -113,6 +122,7 @@ func RenderKickstart(input Installation) (string, error) {
 		`sshkey --username=` + input.User + ` "` + AuthorizedKeyToken + `"`,
 		"",
 	}
+	lines = append(lines, targetProofLines(input)...)
 	lines = append(lines, storageLines(input)...)
 	lines = append(lines, "")
 	lines = append(lines, securityLines(input)...)
@@ -276,6 +286,9 @@ func postSection(input Installation) []string {
 // installed as sshd's own before any key is generated, so the machine presents
 // exactly the key that was frozen with the plan.
 func identityLines(input Installation) []string {
+	if input.Channel == substrate.ChannelDeliveredKey {
+		return deliveredKeyLines()
+	}
 	if input.Channel != substrate.ChannelGuestAgent {
 		return nil
 	}
@@ -284,6 +297,72 @@ func identityLines(input Installation) []string {
 		"install -m 0444 " + hostKeySource + " " + input.HostKeyPath,
 		"test -s " + input.HostKeyPath,
 	}, agentFilterLines()...)
+}
+
+// deliveredKeyLines install the key pair this installation was given as the
+// machine's own, before any key is generated, so `ssh-keygen -A` adds only the
+// types it did not receive and the machine presents exactly the key the plan
+// froze. The fetch verifies the server's certificate rather than disabling
+// verification, because the confidentiality of the path depends on it, and the
+// material is removed from the installer environment as soon as it is placed.
+func deliveredKeyLines() []string {
+	return []string{
+		"install -d -m 0755 /etc/ssh",
+		"cat > /tmp/bootwright-artifact-ca.pem <<'BOOTWRIGHT_ARTIFACT_CA_EOF'",
+		CertificateToken,
+		"BOOTWRIGHT_ARTIFACT_CA_EOF",
+		"curl --fail --silent --show-error --cacert /tmp/bootwright-artifact-ca.pem" +
+			" --output /etc/ssh/ssh_host_ed25519_key '" + PrivateURLToken + "/" + IdentityFile + "'",
+		"curl --fail --silent --show-error --cacert /tmp/bootwright-artifact-ca.pem" +
+			" --output /etc/ssh/ssh_host_ed25519_key.pub '" + PrivateURLToken + "/" + IdentityFile + ".pub'",
+		"chmod 0600 /etc/ssh/ssh_host_ed25519_key",
+		"chmod 0644 /etc/ssh/ssh_host_ed25519_key.pub",
+		"test -s /etc/ssh/ssh_host_ed25519_key",
+		"/usr/bin/ssh-keygen -A",
+		"/usr/bin/ssh-keygen -y -f /etc/ssh/ssh_host_ed25519_key > /dev/null",
+		"shred -u /tmp/bootwright-artifact-ca.pem 2>/dev/null || rm -f /tmp/bootwright-artifact-ca.pem",
+	}
+}
+
+// targetProofLines repeat the controller-side target proof on the machine that
+// is actually running the installer. The controller's proof closes before the
+// machine boots, and a machine can be re-cabled or re-addressed in between, so
+// this is the last point at which the wrong server can still be stopped. It
+// runs before any storage is touched and fails closed; no authorization
+// relaxes it, because `data-loss` acknowledges a loss rather than selecting
+// what to lose.
+func targetProofLines(input Installation) []string {
+	if !input.Physical || len(input.ExpectedMACs) == 0 {
+		return nil
+	}
+	lines := []string{
+		"%pre --erroronfail --interpreter=/bin/bash",
+		"set -euo pipefail",
+		`bootwright_observed=$(cat /sys/class/net/*/address | tr 'A-Z' 'a-z' | sort -u)`,
+	}
+	for _, address := range input.ExpectedMACs {
+		lines = append(lines,
+			`if ! printf '%s\n' "${bootwright_observed}" | grep -Fqx '`+address+`'; then`,
+			`echo 'Bootwright: this machine does not report `+address+
+				`, which its declaration requires; refusing before any disk is touched.' >&2`,
+			"exit 1",
+			"fi")
+	}
+	if input.RootDevice != "" {
+		lines = append(lines,
+			`bootwright_root=$(readlink -f -- '`+input.RootDevice+`' || true)`,
+			`if [ -z "${bootwright_root}" ] || [ ! -b "${bootwright_root}" ]; then`,
+			`echo 'Bootwright: the declared root device `+input.RootDevice+
+				` is not a block device here; refusing before any disk is touched.' >&2`,
+			"exit 1",
+			"fi",
+			`if [ "$(lsblk -ndo TYPE -- "${bootwright_root}")" != disk ]; then`,
+			`echo 'Bootwright: the declared root device `+input.RootDevice+
+				` is not a whole disk; refusing before any disk is touched.' >&2`,
+			"exit 1",
+			"fi")
+	}
+	return append(lines, "%end", "")
 }
 
 // agentFilterLines permit exactly the identity operation's reads and prove the

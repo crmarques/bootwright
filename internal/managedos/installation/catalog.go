@@ -25,6 +25,16 @@ const consumerPrefix = "os"
 // own content root.
 const servedRoot = "public"
 
+// privatePrefix is the subtree material only the installing machine may read
+// is published under. This block owns private/<object>/; the attempt mints the
+// unguessable segment beneath it, so no path here is ever guessable from the
+// plan, the evidence or any log.
+const privatePrefix = "private"
+
+// IdentityFile is the name the delivered host key pair is published under,
+// inside the attempt's own unguessable directory.
+const IdentityFile = "identity"
+
 // MarkerPath is where a completed installation leaves its proof, and
 // HostKeyPath is where it republishes the guest's own SSH host public key.
 // Both are read through the substrate's identity operation, never over the
@@ -55,7 +65,7 @@ func ContentDigest() string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		"bootwright.managedos.install-anaconda-v1",
 		Implementation, requestVersion, kickstartVersion,
-		consumerPrefix, servedRoot, MarkerPath, HostKeyPath,
+		consumerPrefix, privatePrefix, servedRoot, MarkerPath, HostKeyPath,
 		strings.Join(installTooling, ","),
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])

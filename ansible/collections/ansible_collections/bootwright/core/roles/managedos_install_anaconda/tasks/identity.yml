@@ -1,0 +1,43 @@
+---
+# The identity operation belongs to the substrate that realized the machine.
+# Both bindings are fixed role task files selected by the frozen request's own
+# substrate, so authored data can never choose which one runs, and every input
+# is passed explicitly rather than inherited from a shared fact.
+- name: Read the machine through its hypervisor's channel
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_libvirt_machine
+    tasks_from: identity_read.yml
+  vars:
+    substrate_libvirt_machine_identity_uri: '{{ bootwright_os_install_request.target.uri | default("") }}'
+    substrate_libvirt_machine_identity_domain: '{{ bootwright_os_install_request.target.domain | default("") }}'
+    substrate_libvirt_machine_identity_marker_path: '{{ bootwright_os_install_request.markerPath }}'
+    substrate_libvirt_machine_identity_host_key_path: '{{ bootwright_os_install_request.hostKeyPath }}'
+  when: bootwright_os_install_request.target.channel == 'guest-agent'
+
+- name: Read the machine over the key this installation delivered
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_baremetal_machine
+    tasks_from: identity_read.yml
+  vars:
+    substrate_baremetal_machine_identity_address: '{{ bootwright_os_install_request.address }}'
+    substrate_baremetal_machine_identity_user: '{{ bootwright_os_install_request.user }}'
+    substrate_baremetal_machine_identity_file: '{{ bootwright_os_install_material.fleetIdentity }}'
+    substrate_baremetal_machine_identity_key: '{{ bootwright_os_install_material.hostKey | default("") }}'
+    substrate_baremetal_machine_identity_marker_path: '{{ bootwright_os_install_request.markerPath }}'
+    substrate_baremetal_machine_identity_work: '{{ managedos_install_anaconda_work }}'
+  when: bootwright_os_install_request.target.channel == 'delivered-key'
+
+# Whichever channel answered, the installation reads one answer under its own
+# names and never learns which mechanism produced it.
+- name: Take the answer this machine's channel produced
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_answered: >-
+      {{ substrate_libvirt_machine_identity_answered
+         | default(substrate_baremetal_machine_identity_answered | default(false)) }}
+    managedos_install_anaconda_marker: >-
+      {{ substrate_libvirt_machine_identity_marker
+         | default(substrate_baremetal_machine_identity_marker | default('')) }}
+    managedos_install_anaconda_host_key: >-
+      {{ substrate_libvirt_machine_identity_host_key
+         | default(substrate_baremetal_machine_identity_host_key | default('')) }}
+  changed_when: false

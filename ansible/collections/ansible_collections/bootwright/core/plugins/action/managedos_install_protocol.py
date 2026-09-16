@@ -48,12 +48,14 @@ def presence(arguments, request_digest):
         "media": bounded(arguments.get("media"), 1024),
         "postcondition": False,
         "power": str(power),
+        "private": bool(observation.get("private")),
         "request": digest(request_digest),
         "tree": bool(observation.get("tree")),
     }
     evidence["postcondition"] = bool(
         evidence["marker"] and evidence["hostKey"] and evidence["address"]
         and not evidence["media"] and evidence["power"] == "On" and evidence["image"]
+        and not evidence["private"]
     )
     return evidence
 
@@ -65,7 +67,7 @@ def remaining(arguments):
     that `no_log` would otherwise censor along with the evidence.
     """
     observation = arguments.get("observation") or {}
-    return [name for name in ("image", "tree") if observation.get(name)]
+    return [name for name in ("image", "private", "tree") if observation.get(name)]
 
 
 def unproved(evidence):
@@ -73,6 +75,8 @@ def unproved(evidence):
     names = [name for name in ("marker", "hostKey", "address") if not evidence[name]]
     if evidence["media"]:
         names.append("media")
+    if evidence["private"]:
+        names.append("private material still published")
     if evidence["power"] != "On":
         names.append("power")
     if not evidence["image"]:
@@ -82,7 +86,7 @@ def unproved(evidence):
 
 def absence(arguments, request_digest):
     observation = arguments.get("observation") or {}
-    gone = not observation.get("image") and not observation.get("tree")
+    gone = not any(observation.get(name) for name in ("image", "private", "tree"))
     return {
         "absent": True,
         "address": "",
@@ -92,6 +96,7 @@ def absence(arguments, request_digest):
         "media": "",
         "postcondition": bool(gone),
         "power": "",
+        "private": False,
         "request": digest(request_digest),
         "tree": False,
     }

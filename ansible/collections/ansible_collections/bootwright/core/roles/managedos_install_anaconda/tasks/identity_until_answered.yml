@@ -1,0 +1,26 @@
+---
+# An installer takes minutes to write a disk and a physical machine takes
+# minutes more to complete its power-on self test, so completion is polled
+# rather than waited for once. A machine that has not answered yet is not a
+# machine that answered wrongly: the read itself distinguishes them.
+- name: Read the installation the machine now holds
+  ansible.builtin.include_tasks: identity.yml
+
+- name: Wait for the installed machine to answer with its marker
+  ansible.builtin.include_tasks: identity_retry.yml
+  loop: '{{ range(0, managedos_install_anaconda_identity_attempts | int) | list }}'
+  loop_control:
+    label: 'attempt {{ item + 1 }}'
+  when: not (managedos_install_anaconda_answered | default(false))
+        or managedos_install_anaconda_marker | default('') | length == 0
+
+- name: Refuse an installation the machine never proved
+  ansible.builtin.assert:
+    that:
+      - managedos_install_anaconda_answered | default(false)
+      - managedos_install_anaconda_marker | default('') | length > 0
+    fail_msg: >-
+      the machine never answered with an install marker through its own
+      identity channel, so this installation is unproved
+    quiet: true
+  no_log: true

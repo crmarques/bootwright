@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v2'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v3'
       - bootwright_os_install_request.image.path.startswith('/var/lib/bootwright-services/')
       - bootwright_os_install_request.markerPath == '/etc/bootwright/install-marker.json'
       - bootwright_os_install_request.hostKeyPath == '/etc/bootwright/host-key.pub'
@@ -124,17 +124,38 @@
     status: running
   no_log: true
 
+# The unguessable segment is minted here, by the attempt, so it exists in no
+# frozen request and reaches no evidence, progress line or log.
+- name: Mint the unguessable directory this attempt publishes private material in
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/openssl
+      - rand
+      - -hex
+      - '32'
+  register: managedos_install_anaconda_token
+  when: managedos_install_anaconda_delivers_key | bool
+  changed_when: false
+  no_log: true
+
+- name: Publish the host key only this machine may read
+  ansible.builtin.include_tasks: private.yml
+  when: managedos_install_anaconda_delivers_key | bool
+
 - name: Render the frozen kickstart with the values this attempt derived
   ansible.builtin.copy:
     content: >-
       {{ bootwright_os_install_request.kickstart
          | replace('@@BOOTWRIGHT_MARKER@@', bootwright_os_install_material.marker)
-         | replace('@@BOOTWRIGHT_AUTHORIZED_KEY@@', bootwright_os_install_material.authorizedKey) }}
+         | replace('@@BOOTWRIGHT_AUTHORIZED_KEY@@', bootwright_os_install_material.authorizedKey)
+         | replace('@@BOOTWRIGHT_PRIVATE_URL@@', managedos_install_anaconda_private_url)
+         | replace('@@BOOTWRIGHT_ARTIFACT_CERTIFICATE@@', managedos_install_anaconda_certificate) }}
     dest: '{{ managedos_install_anaconda_work }}/ks.cfg'
     owner: root
     group: root
     mode: '0600'
   changed_when: true
+  no_log: true
 
 - name: Create the published image directory
   ansible.builtin.file:
@@ -190,44 +211,20 @@
     status: running
   no_log: true
 
-- name: Read what the guest already holds, so a replay boots nothing
-  bootwright.core.guest_agent_read:
-    uri: '{{ bootwright_os_install_request.uri }}'
-    domain: '{{ bootwright_os_install_request.domain }}'
-    path: '{{ bootwright_os_install_request.markerPath }}'
-  register: managedos_install_anaconda_existing
+- name: Read what the machine already holds, so a replay boots nothing
+  ansible.builtin.include_tasks: identity.yml
 
-- name: Refuse a guest that answers with another installation
+- name: Refuse a machine that answers with another installation
   ansible.builtin.assert:
     that:
-      - not managedos_install_anaconda_existing.answered
-        or managedos_install_anaconda_existing.content | trim | length == 0
-        or managedos_install_anaconda_existing.content | trim == bootwright_os_install_material.marker
-    fail_msg: the guest holds another installation, and there is no reinstall path
+      - not (managedos_install_anaconda_answered | default(false))
+        or managedos_install_anaconda_marker | default('') | length == 0
+        or managedos_install_anaconda_marker == bootwright_os_install_material.marker
+    fail_msg: the machine holds another installation, and there is no reinstall path
     quiet: true
   no_log: true
 
-- name: Read the power state that decides whether this machine may be installed
-  bootwright.core.redfish_boot:
-    endpoint: '{{ bootwright_os_install_request.controller.endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
-    password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
-    operation: read
-  register: managedos_install_anaconda_state
-  no_log: true
-
-- name: Refuse a running machine that proves no installation
-  ansible.builtin.assert:
-    that:
-      - managedos_install_anaconda_installed | bool
-        or managedos_install_anaconda_state.power != 'On'
-    fail_msg: >-
-      the machine is running and proves no installation, so a fresh one requires
-      its realization to be destroyed and applied again
-    quiet: true
-  no_log: true
-
-- name: Install the operating system when the guest holds nothing yet
+- name: Install the operating system when the machine holds nothing yet
   ansible.builtin.include_tasks: boot.yml
   when: not (managedos_install_anaconda_installed | bool)
 
@@ -245,31 +242,15 @@
     status: running
   no_log: true
 
-- name: Read the install marker the completed installation left
-  bootwright.core.guest_agent_read:
-    uri: '{{ bootwright_os_install_request.uri }}'
-    domain: '{{ bootwright_os_install_request.domain }}'
-    path: '{{ bootwright_os_install_request.markerPath }}'
-  register: managedos_install_anaconda_marker
-  retries: 120
-  delay: 30
-  until: managedos_install_anaconda_marker.answered and managedos_install_anaconda_marker.content | trim | length > 0
-
-- name: Capture the guest's own host key without trusting the network
-  bootwright.core.guest_agent_read:
-    uri: '{{ bootwright_os_install_request.uri }}'
-    domain: '{{ bootwright_os_install_request.domain }}'
-    path: '{{ bootwright_os_install_request.hostKeyPath }}'
-  register: managedos_install_anaconda_host_key
-  retries: 20
-  delay: 15
-  until: managedos_install_anaconda_host_key.answered and managedos_install_anaconda_host_key.content | trim | length > 0
+- name: Read the installation the machine now holds, through its own channel
+  ansible.builtin.include_tasks: identity_until_answered.yml
 
 - name: Prove the media is ejected and the installed system is running
   bootwright.core.redfish_boot:
-    endpoint: '{{ bootwright_os_install_request.controller.endpoint }}'
+    endpoint: '{{ managedos_install_anaconda_endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
+    verify: '{{ managedos_install_anaconda_verify }}'
     operation: eject
   register: managedos_install_anaconda_ejected
   no_log: true
@@ -289,6 +270,14 @@
     request: '{{ bootwright_os_install_request }}'
   register: managedos_install_anaconda_after
 
+# Material that only needed to exist for one boot does not outlive it.
+- name: Withdraw the private material now that the machine has it
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_private_root }}'
+    state: absent
+  when: managedos_install_anaconda_delivers_key | bool
+  changed_when: managedos_install_anaconda_delivers_key | bool
+
 - name: Remove the work directory and the rendered kickstart with it
   ansible.builtin.file:
     path: '{{ managedos_install_anaconda_work }}'
@@ -302,8 +291,8 @@
       {{ 'unchanged' if managedos_install_anaconda_installed | bool else 'changed' }}
     digest: '{{ bootwright_os_install_digest }}'
     observation: '{{ managedos_install_anaconda_after.observation }}'
-    marker: '{{ managedos_install_anaconda_marker.content | trim }}'
-    hostKey: '{{ managedos_install_anaconda_host_key.content | trim }}'
+    marker: '{{ managedos_install_anaconda_marker }}'
+    hostKey: '{{ managedos_install_anaconda_host_key }}'
     address: '{{ bootwright_os_install_request.address }}'
     media: '{{ managedos_install_anaconda_ejected.media }}'
     power: '{{ managedos_install_anaconda_ejected.power }}'

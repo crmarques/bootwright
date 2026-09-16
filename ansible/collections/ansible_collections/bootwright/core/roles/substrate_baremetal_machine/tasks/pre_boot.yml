@@ -1,0 +1,35 @@
+---
+# Prove the exact target immediately before destructive media is inserted. The
+# controller-side proof this repeats closed when the block that claimed the
+# machine completed, and a machine can be re-cabled or re-addressed since, so
+# the identity and the complete hardware inventory are read again here.
+- name: Read the machine this installation is about to overwrite
+  bootwright.core.redfish_system_inspect:
+    endpoint: '{{ substrate_baremetal_machine_target_endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_target_user) }}'
+    password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_target_password) }}'
+    verify: '{{ substrate_baremetal_machine_target_verify }}'
+  register: substrate_baremetal_machine_target
+  no_log: true
+
+- name: Refuse a machine that is not the one this Machine declares
+  ansible.builtin.assert:
+    that:
+      - substrate_baremetal_machine_target.observation.failures | length == 0
+      - substrate_baremetal_machine_target_expected | difference(substrate_baremetal_machine_target.observation.addresses) | length == 0
+      - substrate_baremetal_machine_target.observation.uuid | length > 0
+        or substrate_baremetal_machine_target.observation.serial | length > 0
+    fail_msg: >-
+      the machine answering at this controller does not report every hardware
+      address its declaration requires, or its inventory could not be read in
+      full, so it must not be erased
+    quiet: true
+
+- name: Refuse a machine that is running
+  ansible.builtin.assert:
+    that:
+      - substrate_baremetal_machine_target.observation.power == 'Off'
+    fail_msg: >-
+      this machine is running, and an installation erases its disk; stop it
+      explicitly before installing over it
+    quiet: true

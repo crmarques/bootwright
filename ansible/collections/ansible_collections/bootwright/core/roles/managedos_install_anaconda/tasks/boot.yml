@@ -2,44 +2,76 @@
 # The machine is booted through its own management controller over Redfish,
 # never through the hypervisor, so this path is the same one a physical server
 # takes. A request is not evidence: every step polls its own outcome.
+# The proof runs here rather than at planning time, because a plan proves
+# intent and only an observation taken before the effect proves the target.
+# Both bindings are fixed role task files selected by the frozen request's own
+# substrate, so authored data can never choose which one runs.
+- name: Prove the exact target through the substrate that realized it
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_libvirt_machine
+    tasks_from: pre_boot.yml
+  vars:
+    substrate_libvirt_machine_target_endpoint: '{{ managedos_install_anaconda_endpoint }}'
+    substrate_libvirt_machine_target_verify: '{{ managedos_install_anaconda_verify }}'
+    substrate_libvirt_machine_target_user: '{{ bootwright_os_install_material.controllerUser }}'
+    substrate_libvirt_machine_target_password: '{{ bootwright_os_install_material.controllerPassword }}'
+  when: bootwright_os_install_request.target.substrate == 'libvirt'
+
+- name: Prove the exact physical target before anything it holds is erased
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_baremetal_machine
+    tasks_from: pre_boot.yml
+  vars:
+    substrate_baremetal_machine_target_endpoint: '{{ managedos_install_anaconda_endpoint }}'
+    substrate_baremetal_machine_target_verify: '{{ managedos_install_anaconda_verify }}'
+    substrate_baremetal_machine_target_expected: '{{ managedos_install_anaconda_expected }}'
+    substrate_baremetal_machine_target_user: '{{ bootwright_os_install_material.controllerUser }}'
+    substrate_baremetal_machine_target_password: '{{ bootwright_os_install_material.controllerPassword }}'
+  when: bootwright_os_install_request.target.substrate == 'baremetal'
+
 - name: Prove the machine is powered off before inserting anything
   bootwright.core.redfish_boot:
-    endpoint: '{{ bootwright_os_install_request.controller.endpoint }}'
+    endpoint: '{{ managedos_install_anaconda_endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
+    verify: '{{ managedos_install_anaconda_verify }}'
     operation: power-off
   no_log: true
 
 - name: Insert the published installer image as virtual media
   bootwright.core.redfish_boot:
-    endpoint: '{{ bootwright_os_install_request.controller.endpoint }}'
+    endpoint: '{{ managedos_install_anaconda_endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
+    verify: '{{ managedos_install_anaconda_verify }}'
     operation: insert
     image: '{{ bootwright_os_install_request.image.url }}'
   no_log: true
 
 - name: Set a one-time boot from that media
   bootwright.core.redfish_boot:
-    endpoint: '{{ bootwright_os_install_request.controller.endpoint }}'
+    endpoint: '{{ managedos_install_anaconda_endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
+    verify: '{{ managedos_install_anaconda_verify }}'
     operation: boot
   no_log: true
 
 - name: Power the machine on and poll it to running
   bootwright.core.redfish_boot:
-    endpoint: '{{ bootwright_os_install_request.controller.endpoint }}'
+    endpoint: '{{ managedos_install_anaconda_endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
+    verify: '{{ managedos_install_anaconda_verify }}'
     operation: power-on
   no_log: true
 
 - name: Wait for the installer to power the machine off when it is done
   bootwright.core.redfish_boot:
-    endpoint: '{{ bootwright_os_install_request.controller.endpoint }}'
+    endpoint: '{{ managedos_install_anaconda_endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
+    verify: '{{ managedos_install_anaconda_verify }}'
     operation: read
   register: managedos_install_anaconda_installer
   retries: 180
@@ -49,25 +81,28 @@
 
 - name: Eject the installer image now that the installation is written
   bootwright.core.redfish_boot:
-    endpoint: '{{ bootwright_os_install_request.controller.endpoint }}'
+    endpoint: '{{ managedos_install_anaconda_endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
+    verify: '{{ managedos_install_anaconda_verify }}'
     operation: eject
   no_log: true
 
 - name: Select the installed disk as the boot device
   bootwright.core.redfish_boot:
-    endpoint: '{{ bootwright_os_install_request.controller.endpoint }}'
+    endpoint: '{{ managedos_install_anaconda_endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
+    verify: '{{ managedos_install_anaconda_verify }}'
     operation: boot
     target: Hdd
   no_log: true
 
 - name: Power the installed system on and poll it to running
   bootwright.core.redfish_boot:
-    endpoint: '{{ bootwright_os_install_request.controller.endpoint }}'
+    endpoint: '{{ managedos_install_anaconda_endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
+    verify: '{{ managedos_install_anaconda_verify }}'
     operation: power-on
   no_log: true

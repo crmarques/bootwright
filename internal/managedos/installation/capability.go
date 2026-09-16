@@ -275,6 +275,29 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		}
 		values["authorizedKey"] = key
 	}
+	// A machine proved by a delivered key is read over a connection pinned to
+	// exactly that key, so the public half reaches every operation, not only
+	// the one that installs it.
+	if request.Target.HostKeyRef != "" {
+		key, err := publicHalf(execution, request.Target.HostKeyRef, "SSH host key")
+		if err != nil {
+			return lifecycle.RunResult{}, err
+		}
+		values["hostKey"] = key
+	}
+	materials := []lifecycle.MaterialFile{
+		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: request.Target.Controller.CredentialsRef, Variable: "controllerUser"},
+		{Name: "bmc-password", Part: secrets.PasswordPart, Secret: request.Target.Controller.CredentialsRef, Variable: "controllerPassword"},
+		{Name: "fleet-id", Part: secrets.PrivateKeyPart, Secret: request.FleetKeyRef, Variable: "fleetIdentity"},
+	}
+	// The private publication carries the key pair itself and the certificate
+	// the installing machine verifies the fetch against.
+	if request.Private != nil {
+		materials = append(materials,
+			lifecycle.MaterialFile{Name: "host-key", Part: secrets.PrivateKeyPart, Secret: request.Target.HostKeyRef, Variable: "hostIdentity"},
+			lifecycle.MaterialFile{Name: "host-key.pub", Part: secrets.PublicKeyPart, Secret: request.Target.HostKeyRef, Variable: "hostIdentityPublic"},
+			lifecycle.MaterialFile{Name: "artifact-ca", Part: secrets.CertificatePart, Secret: request.TLSCertificateRef, Variable: "artifactCertificate"})
+	}
 	return c.runner.Run(ctx, lifecycle.RunRequest{
 		Implementation: Implementation,
 		Operation:      operation,
@@ -282,11 +305,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		Digest:         execution.Block.RequestDigest,
 		Canonical:      canonical,
 		Placement:      request.Placement,
-		Materials: append([]lifecycle.MaterialFile{
-			{Name: "bmc-user", Part: secrets.UsernamePart, Secret: request.Target.Controller.CredentialsRef, Variable: "controllerUser"},
-			{Name: "bmc-password", Part: secrets.PasswordPart, Secret: request.Target.Controller.CredentialsRef, Variable: "controllerPassword"},
-			{Name: "fleet-id", Part: secrets.PrivateKeyPart, Secret: request.FleetKeyRef, Variable: "fleetIdentity"},
-		}, lifecycle.Materials(request.Placement)...),
+		Materials:      append(materials, lifecycle.Materials(request.Placement)...),
 		MaterialValues: values,
 		Sudo:           request.Placement.SudoPasswordRef,
 		Launch:         execution.Launch,
@@ -302,13 +321,20 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 // authorizedKey reads the public half of the bound fleet key. Only that half
 // ever reaches the Kickstart, the image, the tree, the evidence or the logs.
 func authorizedKey(execution lifecycle.Execution, request Request) (string, error) {
-	material, ok := execution.Material[request.FleetKeyRef]
+	return publicHalf(execution, request.FleetKeyRef, "fleet access key")
+}
+
+// publicHalf reads the public half of one bound key pair. A private half never
+// leaves its binding as a value: where one is needed it is written to an
+// operation-scoped file the adapter removes.
+func publicHalf(execution lifecycle.Execution, reference, subject string) (string, error) {
+	material, ok := execution.Material[reference]
 	if !ok {
-		return "", refusal("secret.store", "the bound fleet access key is not available to this attempt", "repeat the operation so its Secret bindings are reopened")
+		return "", refusal("secret.store", "the bound "+subject+" is not available to this attempt", "repeat the operation so its Secret bindings are reopened")
 	}
 	value, ok := material.Part(secrets.PublicKeyPart)
 	if !ok || len(value) == 0 {
-		return "", refusal("secret.part", "the bound fleet access key carries no public half", "repeat the operation so its Secret bindings are reopened")
+		return "", refusal("secret.part", "the bound "+subject+" carries no public half", "repeat the operation so its Secret bindings are reopened")
 	}
 	return strings.TrimRight(string(value), "\n"), nil
 }

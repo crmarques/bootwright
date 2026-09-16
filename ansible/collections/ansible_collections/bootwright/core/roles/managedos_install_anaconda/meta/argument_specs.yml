@@ -12,12 +12,6 @@ argument_specs:
           bootMedia:
             type: dict
             required: true
-          controller:
-            type: dict
-            required: true
-          domain:
-            type: str
-            required: true
           fleetKeyRef:
             type: str
             required: true
@@ -42,22 +36,28 @@ argument_specs:
           placement:
             type: dict
             required: true
+          private:
+            type: dict
+            required: false
+          target:
+            type: dict
+            required: true
+          tlsCertificateRef:
+            type: str
+            required: false
           tree:
             type: dict
             required: false
           treeMedia:
             type: dict
             required: false
-          uri:
-            type: str
-            required: true
           user:
             type: str
             required: true
           version:
             type: str
             required: true
-            choices: [os-install-anaconda-v2]
+            choices: [os-install-anaconda-v3]
       bootwright_os_install_material:
         type: dict
         required: true

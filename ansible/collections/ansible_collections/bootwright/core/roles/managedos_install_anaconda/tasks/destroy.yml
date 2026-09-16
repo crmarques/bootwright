@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v2'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v3'
       - bootwright_os_install_request.image.path.startswith('/var/lib/bootwright-services/')
       - bootwright_os_install_digest is match('[0-9a-f]{64}')
     quiet: true
@@ -38,6 +38,13 @@
   when: bootwright_os_install_request.tree is defined
   register: managedos_install_anaconda_tree_removed
 
+- name: Remove the private subtree this block owns
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_private_root }}'
+    state: absent
+  when: managedos_install_anaconda_delivers_key | bool
+  register: managedos_install_anaconda_private_removed
+
 - name: Report published content removal completion
   bootwright.core.managedos_install_protocol:
     phase: group
@@ -70,7 +77,8 @@
     outcome: >-
       {{ 'changed'
          if (managedos_install_anaconda_image_removed is changed
-             or managedos_install_anaconda_tree_removed is changed)
+             or managedos_install_anaconda_tree_removed is changed
+             or managedos_install_anaconda_private_removed is changed)
          else 'unchanged' }}
     digest: '{{ bootwright_os_install_digest }}'
     observation: '{{ managedos_install_anaconda_after.observation }}'

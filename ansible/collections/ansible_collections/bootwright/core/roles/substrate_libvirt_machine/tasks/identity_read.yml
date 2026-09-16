@@ -1,0 +1,29 @@
+---
+# The identity operation for a machine with a hypervisor channel: a bounded
+# guest file read out of band, so nothing about the network is trusted.
+#
+# Inputs are passed explicitly by the consuming playbook, never inherited from
+# a shared fact, and the answers are published under this role's own names.
+- name: Read the install marker through the guest agent
+  bootwright.core.guest_agent_read:
+    uri: '{{ substrate_libvirt_machine_identity_uri }}'
+    domain: '{{ substrate_libvirt_machine_identity_domain }}'
+    path: '{{ substrate_libvirt_machine_identity_marker_path }}'
+  register: substrate_libvirt_machine_marker_read
+
+- name: Read the guest's own host key through the same channel
+  bootwright.core.guest_agent_read:
+    uri: '{{ substrate_libvirt_machine_identity_uri }}'
+    domain: '{{ substrate_libvirt_machine_identity_domain }}'
+    path: '{{ substrate_libvirt_machine_identity_host_key_path }}'
+  register: substrate_libvirt_machine_key_read
+  when: substrate_libvirt_machine_marker_read.answered
+
+- name: Publish what the channel answered
+  ansible.builtin.set_fact:
+    substrate_libvirt_machine_identity_answered: '{{ substrate_libvirt_machine_marker_read.answered }}'
+    substrate_libvirt_machine_identity_marker: >-
+      {{ substrate_libvirt_machine_marker_read.content | default('') | trim }}
+    substrate_libvirt_machine_identity_host_key: >-
+      {{ substrate_libvirt_machine_key_read.content | default('') | trim }}
+  changed_when: false

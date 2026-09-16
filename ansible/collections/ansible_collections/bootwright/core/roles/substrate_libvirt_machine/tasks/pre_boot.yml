@@ -1,0 +1,35 @@
+---
+# Prove the exact target immediately before destructive media is inserted.
+#
+# A machine this substrate created is reached through the controller that
+# realization started, and that controller serves exactly this one domain, so a
+# controller answering at all is the identity proof. What remains to establish
+# is that the machine is not running: an installer booting beside a running
+# guest would write to disks that guest is using.
+- name: Read the machine this installation is about to overwrite
+  bootwright.core.redfish_boot:
+    endpoint: '{{ substrate_libvirt_machine_target_endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_target_user) }}'
+    password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_target_password) }}'
+    verify: '{{ substrate_libvirt_machine_target_verify }}'
+    operation: read
+  register: substrate_libvirt_machine_target
+  no_log: true
+
+- name: Refuse a machine whose controller does not answer
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_machine_target.power | length > 0
+    fail_msg: >-
+      this machine's management controller did not answer, so the machine an
+      installation would overwrite is unknown
+    quiet: true
+
+- name: Refuse a machine that is running
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_machine_target.power == 'Off'
+    fail_msg: >-
+      this machine is running, and an installation erases its disk; stop it
+      explicitly before installing over it
+    quiet: true

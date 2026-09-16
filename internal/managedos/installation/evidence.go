@@ -19,8 +19,12 @@ type Evidence struct {
 	Media         string `json:"media"`
 	Postcondition bool   `json:"postcondition"`
 	Power         string `json:"power"`
-	Request       string `json:"request"`
-	Tree          bool   `json:"tree"`
+	// Private is material only the installing machine may read. A completed
+	// installation has already withdrawn it, so evidence still reporting it is
+	// unfinished work rather than a settled state.
+	Private bool   `json:"private"`
+	Request string `json:"request"`
+	Tree    bool   `json:"tree"`
 }
 
 // ValidatePresence accepts evidence only when it proves the guest holds exactly
@@ -46,6 +50,9 @@ func ValidatePresence(data []byte, request Request, digest, marker string) error
 	if evidence.Media != "" {
 		return refusal("lifecycle.state", "the installation left its virtual media inserted", "")
 	}
+	if evidence.Private {
+		return refusal("lifecycle.state", "the installation left material only its machine may read published", "")
+	}
 	if evidence.Power != "On" {
 		return refusal("lifecycle.state", "the installed machine is not running", "")
 	}
@@ -66,7 +73,7 @@ func ValidateAbsence(data []byte, digest string) error {
 	if !evidence.Postcondition || !evidence.Absent {
 		return refusal("lifecycle.state", "the installation adapter did not prove removal", "")
 	}
-	if evidence.Image || evidence.Tree {
+	if evidence.Image || evidence.Private || evidence.Tree {
 		return refusal("lifecycle.state", "the installation removal evidence still reports published content", "")
 	}
 	return nil
@@ -80,7 +87,7 @@ func ValidateNoEffect(data []byte, digest string) error {
 	if err != nil {
 		return err
 	}
-	if evidence.Marker != "" || evidence.Image || evidence.Tree {
+	if evidence.Marker != "" || evidence.Image || evidence.Private || evidence.Tree {
 		return refusal("lifecycle.state", "the machine or the served root still carries this installation", "")
 	}
 	if evidence.Power != "Off" {
@@ -111,7 +118,7 @@ func ValidatePartial(data []byte, digest, marker string) error {
 		if evidence.Power != "Off" {
 			return refusal("lifecycle.state", "the machine is not powered off, so its installation is unproved", "")
 		}
-		if !evidence.Image && !evidence.Tree {
+		if !evidence.Image && !evidence.Private && !evidence.Tree {
 			return refusal("lifecycle.state", "the installation evidence reports nothing this operation published", "")
 		}
 	}

@@ -147,6 +147,20 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	if request.FleetKeyRef == "" {
 		return Request{}, Requirements{}, refusal("api.required", "the Environment declares no fleet access key", "set spec.remoteMachinesAccessKey.keyRef")
 	}
+	// A machine proved by a key this installation delivers needs that key, and
+	// the key cannot travel in publicly served content.
+	if target.Channel == substrate.ChannelDeliveredKey {
+		private, certificate, err := privateFor(catalog, anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"),
+			contextName, name, machine.Identity())
+		if err != nil {
+			return Request{}, Requirements{}, err
+		}
+		if target.HostKeyRef == "" {
+			return Request{}, Requirements{}, refusal("api.required", "the Machine declares no SSH host key for its installation to deliver",
+				"set spec.os.install.hostKeyRef on "+machine.Identity())
+		}
+		request.Private, request.TLSCertificateRef = &private, certificate
+	}
 	source := anaconda.Get("packageSource")
 	if source.Has("hostedTree") {
 		tree, err := treeFor(catalog, source.Get("hostedTree"), contextName, profile, &needs)
@@ -245,6 +259,35 @@ func publicationFor(catalog api.Catalog, selection api.Value, contextName, objec
 		Path: root + "/" + servedRoot + "/" + consumerPrefix + "/" + object + "/" + leaf,
 		URL:  base + "/" + consumerPrefix + "/" + object + "/" + leaf,
 	}, nil
+}
+
+// privateFor derives the subtree this block owns for material only the
+// installing machine may read, and the URL beneath which the attempt publishes
+// it. The unguessable final segment is not here: it is minted by the attempt,
+// so the plan, the evidence and every log name only the parent.
+func privateFor(catalog api.Catalog, selection api.Value, contextName, object, identity string) (Publication, string, error) {
+	server, ok := catalog.Find(api.ArtifactServer, selection.Get("serverRef").Text())
+	if !ok {
+		return Publication{}, "", refusal("api.reference", "the selected artifact server is not in the selected graph", "declare it or correct artifactServerEndpoint.serverRef on "+identity)
+	}
+	base, err := endpointURL(catalog, server, selection.Get("endpointRef").Text(), identity)
+	if err != nil {
+		return Publication{}, "", err
+	}
+	if !strings.HasPrefix(base, "https://") {
+		return Publication{}, "", refusal("lifecycle.state", "material only one machine may read is served only over a verified connection",
+			"select an https endpoint for redfishVirtualMedia on "+identity)
+	}
+	certificate := server.Spec().Get("tls", "secretRef").Text()
+	if certificate == "" {
+		return Publication{}, "", refusal("api.required", "the selected artifact server declares no serving certificate to verify",
+			"set spec.tls.secretRef on "+server.Identity())
+	}
+	root := contentRoot(contextName, server.Name())
+	return Publication{
+		Path: root + "/" + servedRoot + "/" + privatePrefix + "/" + object,
+		URL:  base + "/" + privatePrefix + "/" + object,
+	}, certificate, nil
 }
 
 // contentRoot repeats the artifact server's own owned layout, because a
