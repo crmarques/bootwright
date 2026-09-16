@@ -298,7 +298,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		Material:       execution.Material,
 		Log:            execution.Log,
 		Progress:       execution.Progress,
-		Diagnostics:    execution.Diagnostics,
+		Output:         execution.Output,
 	})
 }
 

@@ -138,7 +138,7 @@ type OperationStore interface {
 	StartResolution(context.Context, string, string, int) (int, error)
 	CompleteResolution(context.Context, string, string, int, int, reconciliation.EffectState, reconciliation.BlockState, json.RawMessage) error
 	OpenLog(context.Context, string) (*operationstore.Log, error)
-	WriteAdapterOutput(context.Context, string, []byte) error
+	OpenAdapterOutput(context.Context, string) *operationstore.AdapterOutput
 	LogPaths(context.Context, string, reconciliation.Plan) ([]string, error)
 }
 
@@ -212,11 +212,18 @@ type Execution struct {
 	ReleaseFoundation func() error
 	Log               func(context.Context, operationstore.LogRecord) error
 	Progress          func(context.Context, string, string)
-	// Diagnostics retains what the adapter printed before it completed its
-	// qualified handoff, for an operator to read when no structured event
-	// explains the failure. An adapter calls it at most once, and never with
-	// output produced after the handoff.
-	Diagnostics func(context.Context, []byte) error
+	// Output retains what the adapter prints on its own standard output and
+	// error, for an operator to read when no structured event explains what a
+	// run did. An adapter hands it the process's streams and writes nothing
+	// itself; whoever opened it owns closing it.
+	Output RunOutput
+}
+
+// RunOutput receives an adapter process's own standard output and error as it
+// is produced. The shape is declared here rather than imported, because this
+// domain depends on no I/O package for one field an adapter fills.
+type RunOutput interface {
+	Write([]byte) (int, error)
 }
 
 type Result struct {

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path"
+	"strconv"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -145,6 +146,23 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 	// Completion is counted in proved groups, not in elapsed time: the adapter
 	// reports each group once it settles and the frozen block declares them all.
 	settled := map[string]struct{}{}
+	target, err := operationstore.AdapterOutputPath(log.Path())
+	if err != nil {
+		return Result{Outcome: reconciliation.OutcomeFailed}, err
+	}
+	// Retention is not a precondition of the run: what the adapter prints is
+	// recorded beside this attempt whatever it proves, and never changes it.
+	output := store.OpenAdapterOutput(ctx, target)
+	defer func() {
+		_ = output.Close(ctx)
+		if bytes, truncated := output.Retained(); bytes > 0 {
+			detail := path.Base(target) + ", " + strconv.Itoa(bytes) + " bytes"
+			if truncated {
+				detail += ", truncated"
+			}
+			_ = log.Append(ctx, operationstore.LogRecord{Event: "adapter-output", Block: block.ID, Detail: detail})
+		}
+	}()
 	err = s.guard.WithPython(ctx, area, receipt.Definition.Execution, func(launch prerequisites.PythonLaunch, release func() error) error {
 		execution := Execution{
 			Operation: operation.ID, Attempt: attempt, Resolution: resolution, Block: block, Launch: launch, Bundle: location, Area: area,
@@ -166,16 +184,7 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 			Log: func(inner context.Context, record operationstore.LogRecord) error {
 				return log.Append(inner, record)
 			},
-			Diagnostics: func(inner context.Context, data []byte) error {
-				target, err := operationstore.AdapterOutputPath(log.Path())
-				if err != nil {
-					return err
-				}
-				if err := store.WriteAdapterOutput(inner, target, data); err != nil {
-					return err
-				}
-				return log.Append(inner, operationstore.LogRecord{Event: "adapter-output", Block: block.ID, Detail: path.Base(target)})
-			},
+			Output: output,
 			Progress: func(inner context.Context, group, status string) {
 				if status != "running" {
 					settled[group] = struct{}{}

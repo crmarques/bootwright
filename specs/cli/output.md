@@ -521,16 +521,19 @@ equivalent are forbidden. Truncation and dropped-event counts are explicit.
 
 An `attempt-NNNNNN.output` beside an attempt log retains what that adapter
 process printed on its own standard output and error, raw and unparsed. It
-exists whenever that run ends without a complete result, because the structured
-events alone need not say why: a run can fail before its qualified execution
-handoff, or after it with no failing group. Keeping material out of a retained
-run is the adapter's own obligation, discharged where the material is used:
-every task that reads bound material marks itself `no_log`, so the adapter's
-output never carries it. The file is bounded, truncated to its limit without a
-marker, and written once. It is troubleshooting material only: nothing reads it
-back, it is never product output, ownership evidence or a continuation cursor,
-and its attempt log records that it exists by name. Retaining it never changes
-the outcome the operation records.
+exists for every run that printed anything, not only for one that ended without
+a complete result: the structured events say which groups settled, never what
+the adapter did inside them, so a run that succeeded is as worth reading as one
+that failed. Keeping material out of a retained run is the adapter's own
+obligation, discharged where the material is used: every task that reads bound
+material marks itself `no_log`, so the adapter's output never carries it. The
+file is appended to as the run produces it, so a run that wedges is readable
+before it ends, and is bounded and truncated at its limit without an inline
+marker. It is troubleshooting material only: nothing reads it back, it is never
+product output, ownership evidence or a continuation cursor, and its attempt log
+records the file by name with the bytes it holds and whether the bound cut it
+short. Neither retaining it nor failing to ever changes the outcome the
+operation records.
 
 The operation log and required attempt log exist before the corresponding
 effect or resolution observation. A create, append, flush, or finalize failure

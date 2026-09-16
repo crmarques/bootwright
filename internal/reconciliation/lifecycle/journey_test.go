@@ -277,6 +277,9 @@ func (c *testCapability) Apply(ctx context.Context, execution Execution) (Result
 		execution.Progress(ctx, "pull-image", "running")
 		execution.Progress(ctx, "pull-image", "ok")
 	}
+	if execution.Output != nil {
+		_, _ = execution.Output.Write([]byte("TASK [acquire the image]\nok: [controller]\n"))
+	}
 	if c.applyErr != nil {
 		return Result{Outcome: reconciliation.OutcomeFailed}, c.applyErr
 	}
@@ -1474,5 +1477,38 @@ func TestObservationCannotAuthorizeAHostEffect(t *testing.T) {
 	}
 	if err := observation.Prepare(context.Background(), prerequisites.NativePreparation{}); err == nil {
 		t.Fatal("an observation published a before-state")
+	}
+}
+
+// A run that completes retains what its adapter printed, exactly as a failed
+// one does, and its attempt log names the file and what it holds. Nothing about
+// that retention reaches the outcome the operation records.
+func TestASucceededAttemptRetainsWhatItsAdapterPrinted(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Receipt.State != string(reconciliation.OperationDone) {
+		t.Fatalf("apply state = %q", result.Receipt.State)
+	}
+	var output, attempt string
+	for name := range h.workspace.area.files {
+		if strings.HasSuffix(name, "attempt-000001.output") {
+			output = name
+		}
+		if strings.HasSuffix(name, "attempt-000001.jsonl") {
+			attempt = name
+		}
+	}
+	if output == "" {
+		t.Fatalf("a completed run retained no adapter output: %v", slices.Sorted(maps.Keys(h.workspace.area.files)))
+	}
+	if !strings.Contains(string(h.workspace.area.files[output]), "TASK [acquire the image]") {
+		t.Fatalf("retained output = %q", h.workspace.area.files[output])
+	}
+	record := string(h.workspace.area.files[attempt])
+	if !strings.Contains(record, `"event":"adapter-output"`) || !strings.Contains(record, "attempt-000001.output, 42 bytes") {
+		t.Fatalf("the attempt log did not record the retained output: %q", record)
 	}
 }

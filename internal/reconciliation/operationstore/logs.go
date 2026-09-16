@@ -6,6 +6,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -13,10 +14,14 @@ import (
 
 const (
 	MaxLogBytes = 8 << 20
-	// MaxAdapterOutputBytes bounds the adapter's own output retained after a
-	// handoff that never completed. It is troubleshooting material only.
-	MaxAdapterOutputBytes = 64 << 10
-	maxLogDetail          = 512
+	// MaxAdapterOutputBytes bounds one run's retained output. It stays below
+	// the area's own per-file limit, so the bound is this store's decision to
+	// truncate rather than a write the area refuses.
+	MaxAdapterOutputBytes = 4 << 20
+	// adapterOutputFlush bounds what a running adapter's output holds in
+	// memory, so a run that wedges is readable before it ends.
+	adapterOutputFlush = 8 << 10
+	maxLogDetail       = 512
 )
 
 // LogRecord is the only shape a private operation log accepts. Every field is
@@ -61,6 +66,91 @@ func AttemptLogPath(id, block string, attempt, resolution int) (string, error) {
 	return path.Join(id, "logs", "blocks", block, file+".jsonl"), nil
 }
 
+// AdapterOutput retains what one adapter process printed on its own standard
+// output and error, raw and unparsed. It is troubleshooting material only:
+// nothing reads it back, and neither a full buffer nor a failed write ever
+// changes the outcome the operation records. The adapter marks every task that
+// touches bound material no_log, so its own output carries none; that masking,
+// not a cutoff here, is what keeps material out of a retained run.
+type AdapterOutput struct {
+	// ctx is held because io.Writer has none and the writes arrive on the
+	// adapter process's own goroutine. Close takes the live one instead.
+	ctx       context.Context
+	area      Area
+	path      string
+	mutex     sync.Mutex
+	pending   []byte
+	written   int
+	truncated bool
+	closed    bool
+}
+
+// OpenAdapterOutput prepares the retained output beside an already open attempt
+// log, whose own directory it shares. It cannot fail, because retention is not
+// a precondition of the effect it records.
+func (s *Store) OpenAdapterOutput(ctx context.Context, target string) *AdapterOutput {
+	return &AdapterOutput{ctx: ctx, area: s.area, path: target}
+}
+
+func (o *AdapterOutput) Write(value []byte) (int, error) {
+	size := len(value)
+	if o == nil {
+		return size, nil
+	}
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	if o.closed {
+		return size, nil
+	}
+	if room := MaxAdapterOutputBytes - o.written - len(o.pending); room < size {
+		o.truncated = true
+		value = value[:max(room, 0)]
+	}
+	o.pending = append(o.pending, value...)
+	if len(o.pending) >= adapterOutputFlush {
+		_ = o.flush(o.ctx)
+	}
+	return size, nil
+}
+
+// Close publishes whatever the run left buffered under the caller's own live
+// context, because the one the run held may already be canceled.
+func (o *AdapterOutput) Close(ctx context.Context) error {
+	if o == nil {
+		return nil
+	}
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	if o.closed {
+		return nil
+	}
+	o.closed = true
+	return o.flush(ctx)
+}
+
+// Retained reports the bytes this run published and whether its bound cut the
+// output short, so the attempt log can record exactly what is on disk.
+func (o *AdapterOutput) Retained() (int, bool) {
+	if o == nil {
+		return 0, false
+	}
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	return o.written, o.truncated
+}
+
+func (o *AdapterOutput) flush(ctx context.Context) error {
+	if len(o.pending) == 0 {
+		return nil
+	}
+	if err := o.area.Append(ctx, o.path, o.pending); err != nil {
+		return err
+	}
+	o.written += len(o.pending)
+	o.pending = o.pending[:0]
+	return nil
+}
+
 // AdapterOutputPath names the retained output beside the attempt log it
 // belongs to, so one attempt's evidence stays together.
 func AdapterOutputPath(logPath string) (string, error) {
@@ -69,21 +159,6 @@ func AdapterOutputPath(logPath string) (string, error) {
 		return "", recordError("an adapter output path requires its attempt log")
 	}
 	return trimmed + ".output", nil
-}
-
-// WriteAdapterOutput retains what an adapter printed before it completed its
-// qualified handoff. The bytes are raw and unparsed: they are never product
-// output, ownership evidence or a continuation cursor, and nothing reads them
-// back. Output produced after the handoff is never retained, because task
-// output may carry material the adapter marked sensitive.
-func (s *Store) WriteAdapterOutput(ctx context.Context, target string, data []byte) error {
-	if len(data) == 0 {
-		return nil
-	}
-	if len(data) > MaxAdapterOutputBytes {
-		data = data[:MaxAdapterOutputBytes]
-	}
-	return s.area.WriteExclusive(ctx, target, data)
 }
 
 // OpenLog establishes the logging boundary before its effect or observation

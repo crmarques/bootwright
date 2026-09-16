@@ -157,3 +157,60 @@ func TestAdapterOutputIsRetainedBesideItsAttemptLog(t *testing.T) {
 		t.Fatal("a path that is not an attempt log produced an output path")
 	}
 }
+
+// A run's output reaches disk while it runs, so a wedged adapter is readable
+// before it ends, and stops at the bound without failing the run it records.
+func TestAdapterOutputStreamsWhileItRunsAndBoundsWhatItKeeps(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	target := "op-" + strings.Repeat("ab", 16) + "/logs/blocks/one/attempt-000001.output"
+	output := store.OpenAdapterOutput(ctx, target)
+	if n, err := output.Write([]byte(strings.Repeat("x", adapterOutputFlush))); n != adapterOutputFlush || err != nil {
+		t.Fatalf("write = %d (%v)", n, err)
+	}
+	if len(area.files[target]) != adapterOutputFlush {
+		t.Fatalf("a full buffer was not published: %d bytes", len(area.files[target]))
+	}
+	if n, err := output.Write([]byte("tail")); n != 4 || err != nil {
+		t.Fatalf("write = %d (%v)", n, err)
+	}
+	if err := output.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if bytes, truncated := output.Retained(); bytes != adapterOutputFlush+4 || truncated {
+		t.Fatalf("retained = %d bytes, truncated %v", bytes, truncated)
+	}
+	if !strings.HasSuffix(string(area.files[target]), "tail") {
+		t.Fatal("closing the output dropped its tail")
+	}
+}
+
+// The bound is this store's own truncation, and neither it nor a failed write
+// ever reports an error to the adapter it is recording.
+func TestAdapterOutputTruncatesAndNeverFailsItsRun(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	target := "op-" + strings.Repeat("ab", 16) + "/logs/blocks/one/attempt-000001.output"
+	output := store.OpenAdapterOutput(ctx, target)
+	area.fail["append "+target] = errors.New("no space")
+	if n, err := output.Write([]byte(strings.Repeat("x", adapterOutputFlush))); n != adapterOutputFlush || err != nil {
+		t.Fatalf("a failed retention reported a short write: %d (%v)", n, err)
+	}
+	delete(area.fail, "append "+target)
+	if n, err := output.Write([]byte(strings.Repeat("y", MaxAdapterOutputBytes))); n != MaxAdapterOutputBytes || err != nil {
+		t.Fatalf("write past the bound = %d (%v)", n, err)
+	}
+	if err := output.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	bytes, truncated := output.Retained()
+	if bytes != MaxAdapterOutputBytes || !truncated {
+		t.Fatalf("retained = %d bytes, truncated %v", bytes, truncated)
+	}
+	if len(area.files[target]) != MaxAdapterOutputBytes {
+		t.Fatalf("published %d bytes, want the bound", len(area.files[target]))
+	}
+	if n, err := output.Write([]byte("after close")); n != 11 || err != nil {
+		t.Fatalf("a closed output reported a short write: %d (%v)", n, err)
+	}
+}

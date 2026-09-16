@@ -381,7 +381,7 @@ func invocation(execution lifecycle.Execution, implementation, variable, operati
 		Material:       execution.Material,
 		Log:            execution.Log,
 		Progress:       execution.Progress,
-		Diagnostics:    execution.Diagnostics,
+		Output:         execution.Output,
 	}
 }
 

@@ -43,7 +43,10 @@ func applicationValues() packageSymbols {
 		"internal/reconciliation/lifecycle": {
 			"RunRequest": true, "RunResult": true, "MaterialFile": true, "Placement": true,
 		},
-		"internal/reconciliation/operationstore": {"Log": true},
+		// The two private records an operation opens and hands to the work it
+		// is recording. Each is an owned handle over the area it was opened
+		// from, not a replaceable service.
+		"internal/reconciliation/operationstore": {"Log": true, "AdapterOutput": true},
 	}
 }
 

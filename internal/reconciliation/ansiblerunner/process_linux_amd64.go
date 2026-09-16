@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"sync"
 	"syscall"
 	"time"
 
@@ -162,20 +161,21 @@ func (r Runner) execute(ctx context.Context, job, scratch, playbook string, requ
 	defer childInput.Close()
 	defer input.Close()
 	command.ExtraFiles = []*os.File{childOutput, childInput}
-	capture := &runCapture{limit: operationstore.MaxAdapterOutputBytes}
-	command.Stdout, command.Stderr = capture, capture
+	// The adapter's own streams are retained as they are produced, so a run
+	// that completes is as readable afterwards as one that failed.
+	command.Stdout, command.Stderr = request.Output, request.Output
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := command.Start(); err != nil {
 		return lifecycle.RunResult{}, failure("lifecycle.state", "the qualified adapter process could not start", setupRemediation)
 	}
 	childOutput.Close()
 	childInput.Close()
-	return r.consume(ctx, command, output, input, grace, request, capture)
+	return r.consume(ctx, command, output, input, grace, request)
 }
 
 // consume drives the protocol. No adapter effect is ever authorized to outlive
 // cancellation, so cancellation always terminates the owned process group.
-func (r Runner) consume(ctx context.Context, command *exec.Cmd, output, input *os.File, grace time.Duration, request lifecycle.RunRequest, capture *runCapture) (lifecycle.RunResult, error) {
+func (r Runner) consume(ctx context.Context, command *exec.Cmd, output, input *os.File, grace time.Duration, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
 	waited := make(chan error, 1)
 	go func() { waited <- command.Wait() }()
 	messages := make(chan protocolMessage, 8)
@@ -272,47 +272,9 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, output, input *o
 		if operationErr == nil {
 			operationErr = failure("lifecycle.unknown", "the adapter operation has no complete result", outputRemediation)
 		}
-		retainAdapterOutput(ctx, request, capture)
 		return lifecycle.RunResult{}, operationErr
 	}
 	return result, nil
-}
-
-// runCapture keeps a bounded prefix of what the adapter printed on its own
-// standard output and error. The adapter marks every task that touches bound
-// material no_log, so its own output carries none: that masking, not a cutoff
-// in this process, is what keeps material out of a retained run.
-type runCapture struct {
-	mutex sync.Mutex
-	data  []byte
-	limit int
-}
-
-func (c *runCapture) Write(value []byte) (int, error) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	if len(c.data) < c.limit {
-		c.data = append(c.data, value[:min(len(value), c.limit-len(c.data))]...)
-	}
-	return len(value), nil
-}
-
-func (c *runCapture) retained() []byte {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	return slices.Clone(c.data)
-}
-
-// retainAdapterOutput publishes what the adapter printed for a run that did
-// not produce a complete result. Retention is best effort: it never changes the
-// outcome the operation records.
-func retainAdapterOutput(ctx context.Context, request lifecycle.RunRequest, capture *runCapture) {
-	if request.Diagnostics == nil || capture == nil {
-		return
-	}
-	if retained := capture.retained(); len(retained) != 0 {
-		_ = request.Diagnostics(ctx, retained)
-	}
 }
 
 // entrypoint pins the private interpreter's import roots before any Ansible
