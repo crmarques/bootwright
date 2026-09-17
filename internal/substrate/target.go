@@ -85,15 +85,6 @@ type Interface struct {
 	MACAddress string
 }
 
-// Hardware is what a physical machine must prove about itself. It is empty for
-// a machine the substrate creates, whose identity its own realization fixes.
-type Hardware struct {
-	Interfaces []Interface
-	// RootDevice is the whole disk an installation is permitted to erase,
-	// exactly as the Machine selects it.
-	RootDevice string
-}
-
 // Target is everything a consumer of a realized Machine needs, derived once
 // from the substrate its provider declares. It answers which controller boots
 // the machine, which channel proves what it holds, whether it is operator-owned
@@ -112,7 +103,16 @@ type Target struct {
 	Physical   bool
 	Controller Controller
 	Identity   Identity
-	Hardware   Hardware
+	// Interfaces are the NICs this machine presents, in declared order, by the
+	// name and hardware address it reports. A physical machine declares them
+	// and must prove them; a machine its substrate creates presents the
+	// addresses that realization derived. A consumer that has to name this
+	// machine's hardware to an installer reads them here rather than learning
+	// how each substrate assigns one.
+	Interfaces []Interface
+	// RootDevice is the whole disk an installation is permitted to erase,
+	// exactly as the Machine selects it.
+	RootDevice string
 	// PlacementMachine is the Machine whose host reaches the controller.
 	PlacementMachine api.Object
 }
@@ -222,6 +222,16 @@ func virtualTarget(catalog api.Catalog, provider, machine api.Object, contextNam
 		URI:     provider.Spec().Get("libvirt", "uri").Text(),
 		Domain:  DomainName(contextName, machine.Name()),
 	}
+	names, err := EthernetInterfaces(catalog, machine)
+	if err != nil {
+		return Target{}, err
+	}
+	for _, name := range names {
+		target.Interfaces = append(target.Interfaces, Interface{
+			Name: name, MACAddress: InterfaceMAC(contextName, machine.Name(), name),
+		})
+	}
+	target.RootDevice = rootDevice(machine)
 	target.PlacementMachine = host
 	return target, nil
 }
@@ -249,12 +259,16 @@ func physicalTarget(catalog api.Catalog, provider, machine api.Object, controlle
 	target.Identity = Identity{
 		Channel: ChannelDeliveredKey, HostKeyRef: machine.Spec().Get("os", "install", "hostKeyRef").Text(),
 	}
-	target.Hardware = Hardware{
-		Interfaces: interfaces,
-		RootDevice: machine.Spec().Get("os", "install", "rootDeviceHints", "deviceName").Text(),
-	}
+	target.Interfaces = interfaces
+	target.RootDevice = rootDevice(machine)
 	target.PlacementMachine = host
 	return target, nil
+}
+
+// rootDevice is the disk the Machine selects for its installation, empty when
+// it selects none. Only a physical Machine is required to name one.
+func rootDevice(machine api.Object) string {
+	return machine.Spec().Get("os", "install", "rootDeviceHints", "deviceName").Text()
 }
 
 func virtualMediaTrust(tls api.Value) VirtualMedia {

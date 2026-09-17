@@ -368,9 +368,13 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 		return Target{}, refusal("lifecycle.state", "importing a certificate into a management controller is not implemented",
 			"select disable-verification or established virtual-media trust on "+machine.Identity())
 	}
-	if len(derived.Hardware.Interfaces) != 0 {
-		hardware := Hardware{RootDevice: derived.Hardware.RootDevice}
-		for _, declared := range derived.Hardware.Interfaces {
+	// Only a physical machine proves itself by hardware address. A machine its
+	// substrate created is addressed by the interface name that realization
+	// fixed, so its derived interfaces are deliberately left out of what the
+	// installation freezes.
+	if derived.Physical {
+		hardware := Hardware{RootDevice: derived.RootDevice}
+		for _, declared := range derived.Interfaces {
 			hardware.Interfaces = append(hardware.Interfaces, Interface{MACAddress: declared.MACAddress, Name: declared.Name})
 		}
 		target.Hardware = &hardware

@@ -49,12 +49,15 @@ func catalog() api.Catalog {
 	provider := object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system",
 		"bmcEmulationDefaults", m("bindAddress", "192.0.2.10", "port", api.IntegerValue("8000"),
 			"auth", m("credentialsRef", "bmc")))))
+	guests := object(api.NetworkConfig, "guests", m("nmstate", m("interfaces",
+		list(m("name", "enp1s0", "type", "ethernet")))))
 	guest := object(api.Machine, "guest", m("substrate", m("providerRef", "lab"),
-		"os", m("provided", false, "installProfileRef", "rhel"), "network", addresses("192.0.2.20/24")))
+		"os", m("provided", false, "installProfileRef", "rhel"),
+		"network", addresses("192.0.2.20/24").With("configRef", api.StringValue("guests"))))
 	physical := object(api.Machine, "metal", m("os", m("provided", true), "network", addresses("192.0.2.30/24"),
 		"hardware", m("management", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1",
 			"credentialsRef", "metal-bmc")))))
-	return api.NewCatalog([]api.Object{environment, controller, host, provider, guest, physical})
+	return api.NewCatalog([]api.Object{environment, controller, host, provider, guests, guest, physical})
 }
 
 func realized() map[string]machine.OwnershipState {

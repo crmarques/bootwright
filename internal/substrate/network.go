@@ -30,6 +30,32 @@ func NetworkTemplate(catalog api.Catalog, machine api.Object) (api.Value, error)
 	return spec.Get("nmstate"), nil
 }
 
+// EthernetInterfaces reads the physical interfaces of the network
+// configuration a Machine selects, in its declared order. It is the one reader
+// of that list, so the interfaces a substrate realizes and the interfaces a
+// consumer names are always the same set in the same order.
+func EthernetInterfaces(catalog api.Catalog, machine api.Object) ([]string, error) {
+	template, err := NetworkTemplate(catalog, machine)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, item := range template.Get("interfaces").Items() {
+		if item.Get("type").Text() != "ethernet" {
+			continue
+		}
+		name := item.Get("name").Text()
+		if name == "" {
+			return nil, refusal("api.value", "the Machine's network template declares an unnamed interface", "correct the NMState interfaces of "+machine.Identity())
+		}
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return nil, refusal("api.value", "the Machine's network template declares no ethernet interface", "declare one on "+machine.Identity())
+	}
+	return names, nil
+}
+
 // DefaultGateway reads the next hop of the default route the template declares,
 // which is the gateway a static installation configures. A template without one
 // installs without a default route rather than inventing one.

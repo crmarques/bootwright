@@ -233,7 +233,7 @@ func interfacesFor(catalog api.Catalog, provider, machine api.Object, contextNam
 	if attachment.Get("libvirt", "management").Text() == "managed" {
 		defined = substrate.NetworkName(contextName, reference)
 	}
-	names, err := ethernetInterfaces(catalog, machine)
+	names, err := substrate.EthernetInterfaces(catalog, machine)
 	if err != nil {
 		return nil, err
 	}
@@ -244,30 +244,6 @@ func interfacesFor(catalog api.Catalog, provider, machine api.Object, contextNam
 		})
 	}
 	return interfaces, nil
-}
-
-// ethernetInterfaces reads the effective physical interfaces from the network
-// configuration the Machine selects, in its declared order.
-func ethernetInterfaces(catalog api.Catalog, machine api.Object) ([]string, error) {
-	nmstate, err := substrate.NetworkTemplate(catalog, machine)
-	if err != nil {
-		return nil, err
-	}
-	var names []string
-	for _, item := range nmstate.Get("interfaces").Items() {
-		if item.Get("type").Text() != "ethernet" {
-			continue
-		}
-		name := item.Get("name").Text()
-		if name == "" {
-			return nil, refusal("api.value", "the Machine's network template declares an unnamed interface", "correct the NMState interfaces of "+machine.Identity())
-		}
-		names = append(names, name)
-	}
-	if len(names) == 0 {
-		return nil, refusal("api.value", "the Machine's network template declares no ethernet interface", "declare one on "+machine.Identity())
-	}
-	return names, nil
 }
 
 // placementFor selects the arm this provider's effects run through: the

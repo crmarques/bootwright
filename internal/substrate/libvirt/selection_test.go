@@ -161,6 +161,37 @@ func TestMachineRequestDerivesTheDomainDisksAndController(t *testing.T) {
 
 // Every Machine gets its own controller, allocated from the provider's base
 // port in the provider's own canonical order, so two guests never share one.
+// A consumer that has to name this Machine's hardware to an installer reads
+// the realized target, so what the domain presents and what that target
+// reports are one derivation rather than two that can drift apart.
+func TestTheDomainPresentsTheInterfacesTheRealizedTargetReports(t *testing.T) {
+	catalog := labCatalog()
+	requests, err := MachineRequests(catalog, "controller", testContext)
+	if err != nil || len(requests) != 1 {
+		t.Fatalf("requests = %d (%v)", len(requests), err)
+	}
+	machine, ok := catalog.Find(api.Machine, "rhel-01")
+	if !ok {
+		t.Fatal("fixture has no installed Machine")
+	}
+	target, err := substrate.TargetFor(catalog, machine, testContext, "controller")
+	if err != nil {
+		t.Fatalf("deriving the target: %v", err)
+	}
+	if len(target.Interfaces) != len(requests[0].Interfaces) {
+		t.Fatalf("target interfaces = %+v, domain interfaces = %+v", target.Interfaces, requests[0].Interfaces)
+	}
+	for index, presented := range requests[0].Interfaces {
+		reported := target.Interfaces[index]
+		if reported.Name != presented.Name || reported.MACAddress != presented.MACAddress {
+			t.Fatalf("interface %d: target %+v, domain %+v", index, reported, presented)
+		}
+	}
+	if target.RootDevice != "/dev/vda" {
+		t.Fatalf("root device = %q", target.RootDevice)
+	}
+}
+
 func TestEachMachineReceivesItsOwnControllerPort(t *testing.T) {
 	catalog := catalogOf(controller(), provider(), networkConfig(), guest("rhel-01"), guest("rhel-02"), guest("rhel-03"))
 	requests, err := MachineRequests(catalog, "controller", testContext)

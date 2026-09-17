@@ -91,7 +91,8 @@ func networkConfig() api.Object {
 func guest(name string, fields ...api.FieldValue) api.Object {
 	spec := api.MapValue(
 		field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), text("profileRef", "rhel"))),
-		field("os", api.MapValue(field("provided", api.BoolValue(false)), text("installProfileRef", "rhel-9-8"))),
+		field("os", api.MapValue(field("provided", api.BoolValue(false)), text("installProfileRef", "rhel-9-8"),
+			field("install", api.MapValue(field("rootDeviceHints", api.MapValue(text("deviceName", "/dev/vda"))))))),
 		field("network", api.MapValue(
 			text("configRef", "lab-guests"), text("attachmentRef", "lab-guests"), text("installAddressRef", "ip"),
 			field("addresses", api.ListValue(

@@ -17,7 +17,10 @@ func targetCatalog() api.Catalog {
 	libvirt := obj(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system",
 		"bmcEmulationDefaults", m("bindAddress", "192.0.2.1", "port", api.IntegerValue("8000"),
 			"auth", m("credentialsRef", "emulated-bmc")))))
+	guests := obj(api.NetworkConfig, "guests", m("nmstate", m("interfaces",
+		list(m("name", "enp1s0", "type", "ethernet")))))
 	guest := obj(api.Machine, "guest", m("substrate", m("providerRef", "lab"),
+		"network", m("configRef", "guests"),
 		"os", m("provided", false, "installProfileRef", "rhel")))
 	metal := obj(api.InfraProvider, "floor", m("baremetal", m("defaults", m("bmc", m("credentialsRef", "shared")))))
 	server := obj(api.Machine, "server", m("substrate", m("providerRef", "floor"),
@@ -30,7 +33,7 @@ func targetCatalog() api.Catalog {
 	standalone := obj(api.Machine, "bastion", m("os", m("provided", true),
 		"hardware", m("management", m("bmc", m("address", "https://bastion-bmc.example.test/redfish/v1/Systems/self",
 			"credentialsRef", "bastion-bmc")))))
-	return api.NewCatalog([]api.Object{environment, controller, host, libvirt, guest, metal, server, standalone})
+	return api.NewCatalog([]api.Object{environment, controller, host, libvirt, guests, guest, metal, server, standalone})
 }
 
 func targetOf(t *testing.T, name string) Target {
@@ -70,8 +73,11 @@ func TestAVirtualMachineIsReachedThroughItsEmulatedController(t *testing.T) {
 	if target.PlacementMachine.Name() != "host" {
 		t.Fatalf("placement = %q", target.PlacementMachine.Name())
 	}
-	if len(target.Hardware.Interfaces) != 0 {
-		t.Fatal("a machine its substrate creates proves no hardware of its own")
+	if len(target.Interfaces) != 1 || target.Interfaces[0].Name != "enp1s0" {
+		t.Fatalf("interfaces = %+v", target.Interfaces)
+	}
+	if target.Interfaces[0].MACAddress != InterfaceMAC("lab", "guest", "enp1s0") {
+		t.Fatalf("address = %q", target.Interfaces[0].MACAddress)
 	}
 }
 
@@ -95,8 +101,8 @@ func TestAPhysicalMachineIsReachedAtTheControllerItAuthors(t *testing.T) {
 	if target.Identity.Domain != "" || target.Identity.URI != "" {
 		t.Fatal("a machine with no hypervisor names none")
 	}
-	if target.Hardware.RootDevice != "/dev/sda" {
-		t.Fatalf("root device = %q", target.Hardware.RootDevice)
+	if target.RootDevice != "/dev/sda" {
+		t.Fatalf("root device = %q", target.RootDevice)
 	}
 	if target.PlacementMachine.Name() != "controller" {
 		t.Fatalf("placement = %q", target.PlacementMachine.Name())
@@ -106,7 +112,7 @@ func TestAPhysicalMachineIsReachedAtTheControllerItAuthors(t *testing.T) {
 // Every declared address is compared in one spelling, so hardware reporting a
 // different case still proves the machine.
 func TestDeclaredHardwareAddressesAreComparableInOneSpelling(t *testing.T) {
-	interfaces := targetOf(t, "server").Hardware.Interfaces
+	interfaces := targetOf(t, "server").Interfaces
 	if len(interfaces) != 2 {
 		t.Fatalf("interfaces = %+v", interfaces)
 	}

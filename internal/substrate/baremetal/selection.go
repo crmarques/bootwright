@@ -43,8 +43,8 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	if err != nil {
 		return Request{}, err
 	}
-	hardware := make([]Interface, 0, len(target.Hardware.Interfaces))
-	for _, declared := range target.Hardware.Interfaces {
+	hardware := make([]Interface, 0, len(target.Interfaces))
+	for _, declared := range target.Interfaces {
 		hardware = append(hardware, Interface{MACAddress: declared.MACAddress, Name: declared.Name})
 	}
 	slices.SortFunc(hardware, func(x, y Interface) int { return strings.Compare(x.MACAddress, y.MACAddress) })
