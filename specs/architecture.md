@@ -836,6 +836,35 @@ Playbook stdout is not a product API. Go consumes the structured adapter result
 and presents product output under [cli.md](cli.md); external streams and
 sensitive detail follow [security.md](security.md).
 
+#### The adapter result protocol
+
+Every lifecycle adapter reports on one channel the runner owns and the adapter
+inherits: a write descriptor for its records and a read descriptor for the
+runner's acknowledgement. Neither is a file the automation names, and nothing
+the adapter prints on its own output is part of this protocol. One record is
+one canonical JSON object on one line, bounded so a malformed or oversized
+record refuses rather than being parsed.
+
+The phases are fixed. `loaded` is published once, before any effect, and waits
+for the runner's acknowledgement, so an adapter that was started without
+authorization performs nothing. `group` reports one declared presentation group
+entering or leaving a run, and only a group the frozen block declares may
+advance completion. `completed` carries the bounded evidence, and the outcome
+it proves, exactly once. The controller stage adds `prepared`, which publishes
+the before-state a host-wide effect is permitted to change, and is the only
+phase outside this set.
+
+A completion publishes evidence proving no postcondition only when the run is a
+read-only observation, because the engine resolves a part-way effect from that
+evidence while a mutation must reach its postcondition or fail. A refusal names
+the fields and objects still unproved, never their values, so the message stays
+safe where the evidence itself is censored.
+
+The protocol, its phases and that rule are one shared implementation. What the
+evidence contains, and what proves it, belong to each capability. Go decides
+what an outcome and its evidence mean; a plugin neither schedules work nor
+authorizes it.
+
 ## Implementations and version variation
 
 [Secrets](secrets.md#implementation-selection) owns its immutable implementation
