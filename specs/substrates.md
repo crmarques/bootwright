@@ -34,7 +34,8 @@ Which arm realizes a Machine is settled once, from the substrate its provider
 declares, and every consumer of a realized Machine reads that one answer
 rather than deriving its own. A consumer therefore never learns which
 substrates exist: it receives the Machine's management controller, its identity
-channel and the block that realizes it, and a substrate added later reaches
+channel, the interfaces the machine presents with the hardware addresses they
+report, and the block that realizes it, and a substrate added later reaches
 every consumer without changing one of them.
 
 The libvirt provider host is the Machine `spec.libvirt.machineRef` names. It
@@ -130,12 +131,19 @@ a root disk of `diskGiB` and one disk per `dataDisks[]` entry as `qcow2` images
 beneath `/var/lib/libvirt/images/bootwright/<context>/<machine>/`, one
 interface per effective attachment with a deterministic locally administered
 MAC, an emulated TPM 2.0 when the profile declares `tpm`, a serial console, and
-ownership metadata naming the context and Machine. An interface attaches to the
+ownership metadata naming the context and Machine. Each interface carries the
+same derived address the realized target reports, so a consumer that must
+declare this Machine's hardware to an installer names exactly what the domain
+presents. An interface attaches to the
 libvirt network a managed attachment defines, and to the bridge alone for an
 external one, so the hypervisor holds the dependency on a network this context
 owns and refuses to start a Machine whose network is down rather than starting
 it unreachable. The domain is defined without autostart and left powered off;
-booting it is [managed OS](managed-os.md) work. A same-name domain without this
+booting it is the work of whichever consumer installs it. Its boot order is the
+root disk first and optical media second: an empty disk falls through to
+inserted installer media, and once an installer has written that disk the
+machine boots it again without anything having to change the domain between the
+two boots. A same-name domain without this
 context's metadata is foreign and refuses; an owned domain whose root disk size
 differs from the profile refuses rather than resizing.
 
@@ -268,6 +276,18 @@ insert and eject virtual media, set a one-time boot device, power on, power
 off. A power request is not evidence; every operation polls the resource to
 its expected state within a bounded window and reports unknown when it does
 not arrive.
+
+Booting a machine from inserted media is one operation rather than a fixed
+sequence every consumer repeats, because how a boot is selected is the
+substrate's own answer. A physical controller consumes a one-time override and
+forgets it, so the operation sets one and the machine returns to its disk by
+itself. An emulated controller has no one-time override: selecting a device
+rewrites the domain's persistent boot order, which then survives the reboot an
+installer performs and boots the installer again, so the operation selects
+nothing and relies on the [boot order](#machine-realization) the domain already
+declares. A consumer therefore inserts media and asks the substrate to boot the
+machine, and neither learns which of the two it is talking to nor carries a
+rule that is true of only one.
 
 Day-2 power commands consume exactly these operations. `machine start`,
 `machine stop` and `machine restart` freeze one request naming the Machine's

@@ -200,10 +200,16 @@ Published material is removed as soon as the work that needed it completes,
 and its absence is part of that block's completion evidence, because material
 that existed for one boot must not outlive it. An observation that finds a
 private tree whose work has completed treats it as unfinished work to converge,
-and the inverse removes it. This contract carries no operator-authored secret:
-its one consumer is the host key a
-[physical installation](managed-os.md#physical-installation) delivers, and any
-further use is specified before it is built.
+and the inverse removes it, except where the consumer states that its content
+is needed for as long as its own block is retained.
+
+Two consumers use it. A [physical installation](managed-os.md#physical-installation)
+delivers the host key its machine will present, which is material Bootwright
+generated and which does not outlive the boot that installs it. A
+[container cluster](container-clusters.md#boot-media) publishes its agent boot
+image, which embeds the operator's own pull secret in its ignition and is
+retained while the cluster's media block is, because a node may be booted from
+it again. Any further use is specified before it is built.
 
 ## Managed network services
 
@@ -235,7 +241,7 @@ graph, never from authored daemon syntax:
 | Kind | Derived from the graph | Authored |
 | --- | --- | --- |
 | `Proxy` | The client set below, as the only addresses it serves. Caching and authentication are disabled. | `bindAddress`, `port` |
-| `DNSServer` | One address record per retained Machine, from its effective `fqdn` contact and its declared IP addresses. | `bindAddress`, `port`, `forwarders[]` |
+| `DNSServer` | One address record per retained Machine, from its effective `fqdn` contact and its declared IP addresses, and the records each selected container cluster answers at. | `bindAddress`, `port`, `forwarders[]` |
 | `NTPServer` | The client set below, as the only addresses it answers. | `bindAddress`, `port`, `upstreamSources[]` |
 
 The client set is loopback, every selected `NetworkConfig.spec.machineNetwork`
@@ -244,10 +250,19 @@ deduplicated. A managed proxy or time service is therefore never planned open
 to the world.
 
 A `DNSServer` with no authored forwarder answers only its own records rather
-than reaching an ambient upstream. `additionalIngressHosts` is frozen in the
-request and produces no record until a cluster capability supplies the ingress
-address it would answer with. A managed `NTPServer` serves time without
+than reaching an ambient upstream. A managed `NTPServer` serves time without
 disciplining its host's clock, so it coexists with the host's own time service.
+
+A selected `ContainerCluster` contributes the three names its own installation
+polls and its consumers reach it at, each answering the address its endpoint
+resolved: its API name, its internal API name, and its applications name, which
+answers for every name beneath it because that is what an ingress wildcard
+means. Each authored `additionalIngressHosts` entry answers the same ingress
+address, which is what that field was reserved for. A cluster whose endpoint
+resolved no address contributes no record for that endpoint rather than a
+record pointing nowhere. The names follow
+[the container-cluster zone](api/environment.md#domains), so the resolver a
+Machine uses and the installer that polls the cluster agree by construction.
 
 **Readiness.** Completion requires a positive answer on every address the
 service serves: the declared bind address, or every declared endpoint address

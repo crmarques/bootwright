@@ -268,6 +268,80 @@ same collision is unchanged, because a sealed bundle is retired by nothing
 (C24) and an operation continued rather than superseded still runs the
 automation it froze.
 
+### M4a — single-node OpenShift through the agent installer
+
+**Owners:** Container cluster and Substrate, with Infrastructure services
+(private consumer publication and the names a cluster answers at), Controller
+(the installer the stage publishes), Secrets (the material an installation
+consumes and the access it captures) and State reconciliation (the `clusters`
+stage and the authorization an installation consumes); using Machine.
+**Requires:** M1h. **Definition:** Specified. **Delivery:** not started.
+**Delivered on explicit request**, outside the milestone sequence: it is the
+agent-installer half of M4 bounded to one cluster topology, and it neither
+requires nor delivers M2a's standalone `render installer`, C12's operator-run
+ISO builder or C9.
+
+Install one single-node OpenShift cluster on a Machine the libvirt substrate
+realizes, booting the agent image through that Machine's own emulated Redfish
+controller, so the bare-metal cluster path is rehearsed end to end without
+hardware. The `clusters` stage gains its first capability. The named consumer
+is `examples/lab-sno`, which carries the same managed service set as
+`examples/lab-rhel` and installs no operating system of its own.
+
+**The general seam.** Nothing here is specific to one substrate or one
+topology. The installer inputs are
+[projected from effective state](container-clusters.md#installer-inputs) and the
+nodes are booted through
+[the boot operation their own substrate publishes](substrates.md#identity-and-power-operations),
+so a physical cluster, a multi-node cluster and a later substrate arm are each
+a case of the same two blocks rather than a second installation path. What a
+physical node adds is the authorization its erasure consumes and the one-time
+boot override its controller honours; what a multi-node cluster adds is more
+nodes to boot and a platform with virtual addresses.
+
+**Supported shape.** [Selection and refusal](container-clusters.md#selection-and-refusal)
+owns it: an OpenShift release declared by version, the `agent` method,
+`connected` mode, nodes on a realized substrate. OKD, disconnected mode, FIPS,
+disk encryption, serving certificates and registry policy refuse before
+registration, as does a release pinned by image alone, which names no version
+for the installer the controller stage would have to match.
+
+**Capabilities.** [Boot media](container-clusters.md#boot-media) proves the
+exact installer executable against the declared release, builds the agent image
+from frozen inputs in one owned work area, and publishes it through
+[private consumer publication](infrastructure-services.md#private-consumer-publication),
+because the image carries the pull secret in its own ignition.
+[Installation](container-clusters.md#installation) proves the controller
+resolves the cluster's names, boots each node through its substrate, waits
+through the installer's own give-ups under one wall-clock budget,
+[captures](secrets.md#captured-material) the administrator access into context
+custody, and releases the media only once the installation has completed.
+
+Exit evidence: the `containercluster` projection suite (install-config and
+agent-config goldens for a single-node libvirt cluster, a multi-node libvirt
+cluster and a multi-node physical cluster, the derived platform and rendezvous
+address, and the refusals above); the capability suite for both blocks (the
+installer-version refusal, private publication removed by the inverse, the
+resumable and terminal wait classifications, completion proved against the
+cluster's own identity, replay without a rebuild, an inverse that retains the
+cluster, quiescence); the substrate boot-operation tests for both arms; the
+managed resolver's cluster records; the captured-material custody suite; the
+`examples/lab-sno` acceptance; and `make check`.
+
+**Verification model.** M1d's model continues: every in-tree gate is unitary
+and host-independent. The cluster install itself is rehearsed by hand on a
+libvirt host, and acceptance against physical hardware is operator-run and is
+not a gate of this delivery.
+
+Constraints left behind: `render installer` stays unavailable, so the projected
+inputs are produced only by an operation (M2a); the cluster's captured access is
+revealed by no command until `cluster kubeconfig` is promoted, so the first
+delivery leaves it readable only through the context store; the controller's own
+resolver is proved rather than configured, so an operator supplies the route to
+the managed zone; disconnected installation waits for a managed `Registry` (C2);
+and a node whose cluster is destroyed is left as its Machine block leaves it, so
+a physical cluster keeps running after its context is removed (C9).
+
 ## Completed milestones
 
 ### M1a — complete CLI skeleton
@@ -691,10 +765,10 @@ implementation. Each must qualify exact releases and close its own contracts.
 
 | Milestone | Owner and outcome | Requires | Definition and exit evidence |
 | --- | --- | --- | --- |
-| M2a — OpenShift/OKD native files | Container cluster and Native artifacts: generate standalone `install-config.yaml` and `agent-config.yaml`. | M1e | Map identity, roles, networks, VIPs, hosts, interfaces, root hints and rendezvous. **N1:** validate NMState/installer schema parity. **N2:** validate/bind pull-secret and public SSH key (M1c). **N3:** define typed manifest, canonical bytes, destinations and overwrite rules (M1b). Prove API sufficiency, sensitive publication/cleanup, non-disclosure and release-specific native goldens. A FIPS slice also qualifies the matching installer and artifact parity. |
+| M2a — OpenShift/OKD native files | Container cluster and Native artifacts: make the [installer inputs](container-clusters.md#installer-inputs) an operator-run standalone artifact through `render installer`, with the secret placeholders and optional sensitive render that command owns. The projection itself is **delivered by M4a**, which freezes it in a plan instead of writing it to a chosen directory. | M1e, M4a | Map identity, roles, networks, VIPs, hosts, interfaces, root hints and rendezvous. **N1:** validate NMState/installer schema parity. **N2:** validate/bind pull-secret and public SSH key (M1c). **N3:** define typed manifest, canonical bytes, destinations and overwrite rules (M1b). Prove API sufficiency, sensitive publication/cleanup, non-disclosure and release-specific native goldens. A FIPS slice also qualifies the matching installer and artifact parity. |
 | M2b — Ceph native files | Storage and Native artifacts: render typed storage intent into one release-specific declarative file set. | M1e, N3 | Qualify release schemas and reject unprovable fields; revise the API deliberately if needed. **N5:** define each storage secret consumer's validation, immutable binding and sensitive publication (M1c, N3), or prove outputs secret-free. Native goldens and negative disclosure tests. |
 | M3 — Ceph-pool script | Storage and Native artifacts: generate one deterministic native-CLI pool script. | M1e | **N4:** define the script manifest, bytes, fixed command structure, destination and generation journey (M1b). Prove argument encoding, replay semantics, diagnostics, sensitive classification, publication and goldens. No authored shell fragments, inline secrets or execution. |
-| M4 — OCP bare-metal lifecycle | State reconciliation, Substrate and Container cluster: extend full-context apply and destroy to OCP effects. | M1e, M2a | **L2:** extend pure plans, impacts, dependencies and digests. **L5:** add consumer-owned OCP remote ports. **L4:** extend durable execution, readiness and removal, preserving the M1e inverse and safely refusing incompatible state. **L6:** qualify exact implementations with contract, crash/lease, identity/ownership, replay, cancellation and real-system tests. Destroy a completed M1e snapshot before a fresh expanded apply. |
+| M4 — OCP bare-metal lifecycle | State reconciliation, Substrate and Container cluster: the cluster-facing remainder of OCP effects, beyond the one topology **M4a delivers** — a multi-node cluster with its virtual addresses, physical nodes, disconnected installation and the day-2 surface a completed cluster exposes. | M1e, M4a | **L2:** extend pure plans, impacts, dependencies and digests. **L5:** add consumer-owned OCP remote ports. **L4:** extend durable execution, readiness and removal, preserving the M1e inverse and safely refusing incompatible state. **L6:** qualify exact implementations with contract, crash/lease, identity/ownership, replay, cancellation and real-system tests. Destroy a completed M1e snapshot before a fresh expanded apply. |
 | M5 — managed RHEL on bare metal | Managed OS and Substrate: the secret-bearing profile arms and the cluster-facing remainder of physical installation, using typed image, profile, entitlement, Secret and Machine intent. The Anaconda path itself is **delivered by M5a**, which also delivers the private publication those arms need. The install arms alone — a bonded or VLAN installation interface, FIPS, registration and disk encryption — depend on M5a and on nothing else here, so they are separable as a bounded out-of-sequence slice when a consumer needs them; the cluster-facing remainder is what requires M4 and C9. | M5a, M4, C9 | Extend L2/L4/L5; apply L6. Prove renderer/executor parity, ownership, replay, secret custody over the private path, a bonded or VLAN installation interface, and real-hardware acceptance. |
 | M6 — managed Ceph bare metal | Storage, Managed OS, Substrate and State reconciliation: provision one Ceph cluster slice. | M2b and required M5 OS-readiness slice | Extend L2/L4/L5; apply L6 to each implementation. Prove storage identity, ownership, destructive authorization, replay, secret custody and real-system acceptance. |
 
@@ -720,7 +794,7 @@ fill its concrete version, journey and evidence gaps when requested.
 | C9 | Bare-metal safety: physical offline disk erase and managed-machine destroy. **Blocked.** | Exact disk identity is unproved during the controller-to-installer interval; needs new safety evidence that closes or explicitly bounds it. M5a narrowed that interval with an in-installer identity check but did not close it, and deliberately kept removal retaining: a physical removal releases its claim and erases nothing. | Separate safety contract, immutable target proof at erase, failure injection and real-hardware qualification. |
 | C10 | Add-ons, Workspace and CLI: custom-catalog acquisition, immutable publication, selection and removal, including the storage location and record format of `add-ons add` registrations and the meaning of the [`add-ons/_store` selection exception](api/environment.md#resource-and-cluster-selection). **Needs definition.** | No source/trust/storage/selection contract; requires M1b and C4. The three `add-ons` commands stay unavailable until promoted. | Closed schemas and formats, fixed bounds, authenticity, atomic/crash-safe storage, deterministic selection, retention through destroy and security/acceptance tests. |
 | C11 | Add-ons: one declarative custom-package lifecycle. | No package/target/driver selected; requires C4, C10 and a supported cluster. | Exact identities, qualified driver, host-contract suite, code-content refusal and apply/readiness/replay/destroy acceptance. |
-| C12 | Container cluster and Native artifacts: one local bootable installer ISO from M2a inputs and declared server endpoints. **Needs definition.** | No builder journey; requires M1e and M2a. No remote publication. | Exact builder/dependencies, bounded inputs, sensitive classification, typed manifest/digest, atomic publication, metadata goldens, negative effect tests and boot evidence. |
+| C12 | Container cluster and Native artifacts: one local bootable installer ISO an operator builds and keeps, outside any operation. **Needs definition.** | No builder journey; requires M1e and M2a. The image a cluster installs from is **delivered by M4a** as an owned lifecycle effect, published privately and removed by its inverse; what remains here is a disposable artifact with no operation, no ownership and no remote publication. | Exact builder/dependencies, bounded inputs, sensitive classification, typed manifest/digest, atomic publication, metadata goldens, negative effect tests and boot evidence. |
 | C13 | Release engineering: one source/binary distribution with licensing and notices. **Needs definition.** | Buildability does not define redistribution; requires M1a and one release channel. | Project license, direct/transitive license review, exact release toolchain/platform/shell matrix, non-skipping completion tests, reproducible archives, notices, dependency inventory, checksums, provenance, SBOM and clean-room packaging verification. |
 | C14 | Workspace and Secrets: explicit complete-store restore with logical identity preservation. **Needs definition.** | Copy restoration changes physical identities and may roll back seal reservations; storage simplification provides upgrades and safe refusal, not a backup/restore command. Requires M1b/M1c and a selected restore journey. | Coherent snapshot validation, authorized inode rebinding, fresh key before writes after rollback, interruption/retry and wrong-store refusal tests; preserve lifecycle recovery evidence. |
 | C15 | Secrets: replace per-ID reservations with bounded lifetime allocation. **Needs definition.** | Current opaque random version/binding IDs retain historical reservation files; a new allocation scheme must preserve issued-ID non-reuse across crashes and restore. Requires M1c and C14 restore semantics. | Bounded allocator state, reservation-before-use, counter/namespace exhaustion, migration of existing bindings and failed attempts, non-reuse and crash tests. |

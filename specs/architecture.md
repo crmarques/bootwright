@@ -358,7 +358,9 @@ installation and day-2 power both read that one answer, and neither imports a
 substrate package nor grows a branch when an arm is added. Managed-OS
 installation belongs to
 `managedos/installation`, the media store to `managedos/media` over the
-`managedos/medialocal` adapter, and the one Ansible runner every lifecycle
+`managedos/medialocal` adapter, container-cluster installation to one package
+per installation method, `containercluster/agentinstall` beside the
+`containercluster/installation` render service, and the one Ansible runner every lifecycle
 capability crosses to `reconciliation/ansiblerunner`, whose request, placement
 and material values `reconciliation/lifecycle` owns; each is created with its
 first authorized behavior.

@@ -137,6 +137,29 @@ automatically import/generate/delete. Final context deletion permanently removes
 the verified keyring only after positive disposal proof. Human-name reuse
 allocates a fresh identity and never exposes prior material. Protected contexts cannot be deleted or abandoned.
 
+## Captured material
+
+A completed installation can produce credentials nobody declared: a native
+installer generates them, and the context that ran it is the only place they
+exist. Captured material is that case, and only that case. It is stored in the
+same custody as declared material, under a reserved name the capturing
+capability owns, so it is encrypted at rest under the context's own keyring and
+covered by the same disposal proof at deletion.
+
+A capture is always the completion of an operation's own effect, never an
+operator action: `secret set` refuses a reserved name, `generate` never creates
+one, and nothing outside the capturing capability may write one. The capability
+names the material it captures, hands over whole parts, and removes every other
+copy it produced as part of the same completion. Capturing is idempotent: the
+same material captured again is the same version, and material that differs
+replaces it only while the operation that owns it is still converging.
+
+Captured material is released when the operation that captured it is removed,
+by the same block's inverse, so a destroyed context retains no credential for a
+cluster that is gone. `list` reports a captured entry by name and type without
+its value, `check` validates it as it does any other, and revealing one follows
+the ordinary [explicit reveal boundary](cli.md#resource-inspection-and-explicit-access).
+
 ## Local keyring v3
 
 The `secrets/` subtree is initialized during context creation, independently

@@ -19,6 +19,7 @@ A specified capability is not necessarily implemented or authorized.
 | Managed shared-service placement, host claims, readiness and inverse | [Infrastructure services](infrastructure-services.md) |
 | Provider host realization, machine realization, emulated BMCs and identity operations | [Substrates](substrates.md) |
 | Installer media custody and managed operating-system installation | [Managed OS](managed-os.md) |
+| Container cluster installation, its boot media and the access it captures | [Container clusters](container-clusters.md) |
 | Trust, secrets, filesystem, process, network and supply-chain boundaries | [Security](security.md) |
 | Declarative add-on packages and driver contract | [Add-ons](add-ons.md) |
 

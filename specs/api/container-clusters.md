@@ -2,8 +2,10 @@
 
 `ContainerCluster` owns OpenShift/OKD install intent: references, endpoint and
 artifact selections, security and network defaults. Native installer files are
-derived outputs. [The compiler boundary](../api.md#compiler-boundary) applies;
-`platform.external` remains inert until validated by a release-specific consumer.
+derived outputs, and [container clusters](../container-clusters.md) owns what
+installing one does. [The compiler boundary](../api.md#compiler-boundary)
+applies; `platform.external` remains inert until validated by a
+release-specific consumer.
 
 ## Shape
 
