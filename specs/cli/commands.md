@@ -50,7 +50,7 @@ process or network access. “Mutate” permits only the named, planned effects.
 | `bootwright context use` | required `--name <name>` | selected-current-context summary | local current-context update |
 | `bootwright context list` | none | contexts in canonical name order | read local state |
 | `bootwright context current` | `--short` false | current context details, or only its name with `--short` | read local state |
-| `bootwright context delete` | required `--name <name>` and `--purge`; `--yes` false | permanent local deletion summary | guarded removal under the [context rules](../cli.md#context-and-setup-behavior); never resource mutation |
+| `bootwright context delete` | required `--name <name>` and `--purge`; `--allow-orphans` and `--yes` false | permanent local deletion summary, reporting any objects it abandoned | guarded removal under the [context rules](../cli.md#context-and-setup-behavior); never resource mutation |
 | `bootwright add-ons list` | `--output text\|json` default `text` | built-in catalog and machine-local registrations | read embedded and local catalog state |
 | `bootwright add-ons add` | required `--name <name>[:<version>]`; `--version <version>` default catalog default; `--yes` false | registered immutable catalog release | local add-on registration |
 | `bootwright add-ons delete` | required `--name <name>[:<version>]`; `--yes` false | removed matching registration | local add-on registration deletion |
@@ -251,7 +251,12 @@ non-interactive, JSON output is selected, or a safe answer cannot be read.
 `context delete` requires `--purge` to resolve to `true`; omission or
 `--purge=false` fails without changing state. The flag acknowledges deletion of
 proven-disposable local context data, while `--yes` independently controls its
-ordinary confirmation. Protected or unknown state refuses deletion.
+ordinary confirmation. A context that still owns realized objects refuses
+deletion and names `bootwright destroy`. `--allow-orphans` acknowledges those
+objects and deletes anyway, abandoning them; it replaces neither `--purge` nor
+the confirmation, and unreadable lifecycle evidence refuses under it. A
+deletion that abandons objects warns once on standard error and reports the
+abandonment in its result.
 
 `--stage` accepts only `controller`, `infra-components`, `substrates`,
 `machines`, `clusters`, and `add-ons`, and only on `plan` and `apply`. Whitespace around

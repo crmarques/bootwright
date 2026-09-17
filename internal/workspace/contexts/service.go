@@ -441,6 +441,18 @@ func (s Service) Current(ctx context.Context, _ CurrentRequest) (*CurrentResult,
 	return &CurrentResult{Context: summary(record, selected)}, ctx.Err()
 }
 
+func deleteAction(orphans bool) string {
+	if orphans {
+		return "delete with orphaned objects"
+	}
+	return "delete"
+}
+
+func orphanRefusal(name string) error {
+	return UnsafeDeleteWithRemediation("context still owns realized objects; deletion would orphan them",
+		"remove them with bootwright destroy --context "+name+", or abandon them with --allow-orphans")
+}
+
 func (s Service) Delete(ctx context.Context, request DeleteRequest) (*DeleteResult, error) {
 	if err := s.ready(ctx); err != nil {
 		return nil, err
@@ -463,22 +475,26 @@ func (s Service) Delete(ctx context.Context, request DeleteRequest) (*DeleteResu
 			return StateError("named context does not exist")
 		}
 		record := reg.Contexts[index]
+		orphans := false
 		if record.Mode == Ready {
 			disposition, err := s.disposition(ctx, tx, record.Name)
 			if err != nil {
 				return err
 			}
 			if !disposition.Dispose {
-				return UnsafeDelete("context has protected lifecycle state; complete its lifecycle before deletion")
+				if !request.AllowOrphans {
+					return orphanRefusal(record.Name)
+				}
+				orphans = true
 			}
 		}
-		if err := s.confirm(ctx, request.SkipConfirmation, "delete", request.Name); err != nil {
+		if err := s.confirm(ctx, request.SkipConfirmation, deleteAction(orphans), request.Name); err != nil {
 			return err
 		}
 		if err := tx.Delete(ctx, record); err != nil {
 			return err
 		}
-		result = &DeleteResult{Name: record.Name, Outcome: "deleted"}
+		result = &DeleteResult{Name: record.Name, Outcome: "deleted", OrphansAbandoned: orphans}
 		if selected.Name == record.Name {
 			if err := s.options.Selection.Clear(ctx, selected); err != nil {
 				return StateError("context was deleted, but its current selection could not be cleared")

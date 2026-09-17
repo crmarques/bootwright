@@ -27,6 +27,7 @@ type CurrentRequest struct{ Short bool }
 type DeleteRequest struct {
 	Name             string
 	Purge            bool
+	AllowOrphans     bool
 	SkipConfirmation bool
 }
 
@@ -52,7 +53,8 @@ type ListResult struct{ Contexts []Summary }
 type CurrentResult struct{ Context Summary }
 
 type DeleteResult struct {
-	Name           string
-	Outcome        string
-	CurrentCleared bool
+	Name             string
+	Outcome          string
+	CurrentCleared   bool
+	OrphansAbandoned bool
 }

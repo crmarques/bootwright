@@ -509,8 +509,17 @@ silently become current writable state. See the bounded restore outcome in
 The [Reconciliation guard](state-reconciliation.md#context-mutation-evidence)
 owns positive disposal proof. Under the root lock and context lease, refuse
 live resources, incomplete operations, retained ownership, unknown/corrupt
-evidence, or any required recovery material. There is no abandonment bypass,
-recovery-only mode, archival or remote resource effect.
+evidence, or any required recovery material. A default refusal reports what the
+context still owns and directs the operator to `destroy` before deletion.
+
+Only the explicit orphan acknowledgement defined by that guard waives the
+disposal verdict, and only over recognized evidence; unreadable evidence and a
+live lease refuse under it exactly as they do without it. An acknowledged
+deletion abandons the objects rather than removing them: it is otherwise the
+same permanent local deletion, it needs `--purge` and ordinary confirmation
+like any other, its confirmation names the abandonment, its result reports it,
+and it has no remote resource effect. There is no recovery-only mode or
+archival.
 
 After proof and ordinary confirmation, durably mark the exact context deleting
 before removing any file. Remove only verified objects through bounded held

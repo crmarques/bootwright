@@ -89,13 +89,23 @@ func writeContextCurrent(out io.Writer, result *contexts.CurrentResult, short bo
 	return writeContextSummary(out, result.Context)
 }
 
-func writeContextDelete(out io.Writer, result *contexts.DeleteResult) error {
+func writeContextDelete(out, errOut io.Writer, result *contexts.DeleteResult) error {
+	if result.OrphansAbandoned {
+		warning := diagnostic{Severity: "warning", Code: "context.unsafe-delete", Message: "the objects this context owned were abandoned and are no longer managed"}
+		if err := writeHumanDiagnostics(errOut, displayDiagnostics([]diagnostic{warning})); err != nil {
+			return err
+		}
+	}
 	var text display
 	text.headline("OK", "Context deleted")
 	text.section("")
-	text.fields(
-		field{Label: "Name", Value: result.Name},
-		field{Label: "Current cleared", Value: strconv.FormatBool(result.CurrentCleared)},
-	)
+	fields := []field{
+		{Label: "Name", Value: result.Name},
+		{Label: "Current cleared", Value: strconv.FormatBool(result.CurrentCleared)},
+	}
+	if result.OrphansAbandoned {
+		fields = append(fields, field{Label: "Orphans abandoned", Value: "true"})
+	}
+	text.fields(fields...)
 	return text.writeTo(out)
 }

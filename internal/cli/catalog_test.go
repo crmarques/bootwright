@@ -12,7 +12,7 @@ import (
 
 func TestPublicCatalog(t *testing.T) {
 	expected := map[string]string{
-		"context init": "file input-dir name", "context update": "file input-dir name yes", "context use": "name", "context list": "", "context current": "short", "context delete": "name purge yes",
+		"context init": "file input-dir name", "context update": "file input-dir name yes", "context use": "name", "context list": "", "context current": "short", "context delete": "allow-orphans name purge yes",
 		"add-ons list": "output", "add-ons add": "name version yes", "add-ons delete": "name yes",
 		"secret set": "certificate-file name password-file password-stdin private-key-file public-key-file username value-file value-stdin yes", "secret generate": "name renew", "secret check": "output", "secret list": "output", "secret show": "name part", "secret delete": "name yes",
 		"secret encryption init": "", "secret encryption status": "output", "secret encryption rotate": "yes",

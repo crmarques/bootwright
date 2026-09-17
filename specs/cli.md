@@ -271,8 +271,10 @@ state, and refuses when it would invalidate exact continuation.
 `context delete --purge` permanently removes the exact disposable context,
 including secrets and imported revisions. Require positive proof that no live
 resource, incomplete operation, ownership or necessary recovery state depends
-on it. Protected or unknown evidence refuses; there is no abandonment flag or
-archive. Pending local creation/deletion and explicit retry follow
+on it. Protected evidence refuses and names `destroy`; `--allow-orphans`
+acknowledges exactly what that refusal protects and deletes anyway, abandoning
+those objects. Unreadable evidence refuses either way, and there is no archive.
+Pending local creation/deletion and explicit retry follow
 [Contexts](contexts.md#storage-locking-and-publication).
 
 Media, secret, add-on, and context writes use verified roots, safe

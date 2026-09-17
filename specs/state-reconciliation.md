@@ -78,8 +78,18 @@ fails closed. A live lease refuses every context mutation.
 The guard allows update only without pending, failed or unknown operations;
 recreation/final deletion requires `none` operation and `none` ownership.
 Protected contexts remain named and selectable for status, exact continuation
-and destroy. Deletion never bypasses unknown or protected evidence. There is
-no recovery-only archival or abandonment flag.
+and destroy. Recreation never bypasses protected evidence.
+
+Deletion refuses protected evidence by default and names `destroy` as the way
+to release it. An explicit orphan acknowledgement waives that one verdict over
+recognized evidence, and nothing else: the objects the evidence still
+attributes to the context are abandoned in place, so they survive unmanaged and
+unreferenced, and no further command can discover, continue or remove them
+through Bootwright. Missing, corrupt or unsupported evidence and a live lease
+still refuse under the acknowledgement, because an unreadable record names
+nothing an operator can acknowledge. The acknowledgement replaces no other
+deletion safeguard, performs no remote effect, and there is no recovery-only
+archival mode.
 
 The [Workspace context contract](contexts.md) defines publication and permanent
 local deletion under this guard. The staged apply restriction above adds a

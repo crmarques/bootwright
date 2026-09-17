@@ -63,6 +63,7 @@ type repository struct {
 	cancelAt       string
 	cancel         context.CancelFunc
 	emptyCallback  bool
+	confirmed      string
 }
 
 func newRepository(t *testing.T) *repository {
@@ -263,9 +264,10 @@ func (c confirmer) Confirm(ctx context.Context, action, name string) error {
 	if !c.r.locked || !c.r.leased || !slices.Contains(c.r.calls, "guard") {
 		c.r.t.Fatal("confirmation preceded locked mutation safeguards")
 	}
-	if name == "" || action != "update" && action != "delete" {
+	if name == "" || action != "update" && action != "delete" && action != "delete with orphaned objects" {
 		c.r.t.Fatal("unexpected confirmation request", action, name)
 	}
+	c.r.confirmed = action
 	return c.r.step(ctx, "confirm")
 }
 
@@ -313,6 +315,16 @@ func existingRepository(t *testing.T) *repository {
 	r.configurations["example"] = contexts.DefaultConfiguration("example").Canonical()
 	r.revisions = 1
 	return r
+}
+
+func requireRemediation(t *testing.T, err error, fragment string) {
+	t.Helper()
+	for _, diagnostic := range diagnostics.Of(err) {
+		if strings.Contains(diagnostic.Remediation, fragment) {
+			return
+		}
+	}
+	t.Fatalf("wanted remediation naming %q, got %#v", fragment, diagnostics.Of(err))
 }
 
 func requireCode(t *testing.T, err error, code string) {
@@ -936,5 +948,77 @@ func TestCurrentInputAcquisitionCarriesSelectedName(t *testing.T) {
 	r.selection = contexts.Selection{}
 	if _, err := inputs.ReadInputs(context.Background(), ""); err == nil || calls != 2 {
 		t.Fatal("missing selection reached repository", err, calls)
+	}
+}
+
+func TestOrphanAcknowledgementIsRequiredToDeleteAContextThatStillOwnsObjects(t *testing.T) {
+	for _, operation := range []string{"pending", "failed", "unknown", "applied"} {
+		t.Run(operation, func(t *testing.T) {
+			r := existingRepository(t)
+			r.evidence["example"] = []byte(`{"version":1,"operation":"` + operation + `","ownership":"retained"}`)
+			s := service(t, r, sourceFixture("/synthetic/input"))
+			refused, err := s.Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, SkipConfirmation: true})
+			if refused != nil || err == nil || slices.Contains(r.calls, "delete") || slices.Contains(r.calls, "commit") {
+				t.Fatal("owned objects were deleted without acknowledgement", err, r.calls)
+			}
+			requireCode(t, err, "context.unsafe-delete")
+			requireRemediation(t, err, "bootwright destroy --context example")
+			requireRemediation(t, err, "--allow-orphans")
+			got, err := s.Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, AllowOrphans: true, SkipConfirmation: true})
+			if err != nil || got == nil || got.Name != "example" || !got.OrphansAbandoned || len(r.registry.Contexts) != 0 {
+				t.Fatalf("acknowledged deletion: %#v %v %#v", got, err, r.registry.Contexts)
+			}
+		})
+	}
+}
+
+func TestOrphanAcknowledgementNeverBypassesUnreadableEvidenceOrALiveLease(t *testing.T) {
+	for _, failure := range []string{"missing", "corrupt", "unsupported", "lease"} {
+		t.Run(failure, func(t *testing.T) {
+			r := existingRepository(t)
+			switch failure {
+			case "missing":
+				delete(r.evidence, "example")
+			case "corrupt":
+				r.evidence["example"] = []byte("{")
+			case "unsupported":
+				r.evidence["example"] = []byte(`{"version":1,"operation":"future","ownership":"none"}`)
+			case "lease":
+				r.failure = "lease"
+			}
+			before := cloneRegistry(r.registry)
+			got, err := service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, AllowOrphans: true, SkipConfirmation: true})
+			if got != nil || err == nil || !reflect.DeepEqual(r.registry, before) || slices.Contains(r.calls, "confirm") || slices.Contains(r.calls, "delete") || slices.Contains(r.calls, "commit") {
+				t.Fatal("acknowledgement bypassed a missing safety proof", err, r.calls)
+			}
+			requireCode(t, err, "context.state")
+		})
+	}
+}
+
+func TestOrphanAcknowledgementClaimsNothingAndReplacesNoOtherSafeguard(t *testing.T) {
+	r := existingRepository(t)
+	got, err := service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, AllowOrphans: true, SkipConfirmation: true})
+	if err != nil || got == nil || got.OrphansAbandoned {
+		t.Fatalf("a disposable context was reported abandoned: %#v %v", got, err)
+	}
+	r = existingRepository(t)
+	r.evidence["example"] = []byte(`{"version":1,"operation":"applied","ownership":"retained"}`)
+	if got, err := service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", AllowOrphans: true, SkipConfirmation: true}); got != nil || err == nil || len(r.calls) != 0 {
+		t.Fatal("acknowledgement replaced --purge", err, r.calls)
+	}
+}
+
+func TestOrdinaryConfirmationNamesTheObjectsADeletionAbandons(t *testing.T) {
+	r := existingRepository(t)
+	r.evidence["example"] = []byte(`{"version":1,"operation":"applied","ownership":"retained"}`)
+	got, err := service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, AllowOrphans: true})
+	if err != nil || got == nil || !got.OrphansAbandoned || r.confirmed != "delete with orphaned objects" {
+		t.Fatalf("confirmation did not name the abandonment: %#v %v %q", got, err, r.confirmed)
+	}
+	r = existingRepository(t)
+	got, err = service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, AllowOrphans: true})
+	if err != nil || got == nil || got.OrphansAbandoned || r.confirmed != "delete" {
+		t.Fatalf("a disposable context was confirmed as an abandonment: %#v %v %q", got, err, r.confirmed)
 	}
 }

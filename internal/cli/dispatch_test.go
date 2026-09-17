@@ -44,7 +44,7 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"context use", contexts.UseRequest{Name: "demo"}},
 		{"context list", contexts.ListRequest{}},
 		{"context current", contexts.CurrentRequest{Short: true}},
-		{"context delete", contexts.DeleteRequest{Name: "demo", Purge: true, SkipConfirmation: true}},
+		{"context delete", contexts.DeleteRequest{Name: "demo", Purge: true, AllowOrphans: true, SkipConfirmation: true}},
 		{"add-ons list", addoncatalog.ListRequest{}},
 		{"add-ons add", addoncatalog.AddRequest{Name: "demo", Version: "", SkipConfirmation: true}},
 		{"add-ons delete", addoncatalog.DeleteRequest{Name: "demo", Version: "", SkipConfirmation: true}},

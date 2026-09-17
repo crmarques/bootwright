@@ -168,6 +168,10 @@ func UnsafeDelete(message string) error {
 	return diagnostics.NewFailure("context.unsafe-delete", message, "")
 }
 
+func UnsafeDeleteWithRemediation(message, remediation string) error {
+	return diagnostics.NewFailureWithRemediation("context.unsafe-delete", message, "", remediation)
+}
+
 // Configuration is controller configuration, separate from Environment input.
 type Configuration struct {
 	Name        string

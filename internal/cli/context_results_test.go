@@ -249,3 +249,24 @@ func TestContextConfigurationAndInputFlagsAreIndependent(t *testing.T) {
 		}
 	}
 }
+
+func TestAbandonedOrphansAreReportedOnceOnStandardError(t *testing.T) {
+	var out, errOut bytes.Buffer
+	record := &dispatchRecord{result: commandResult{deletion: &contexts.DeleteResult{Name: "example", Outcome: "deleted", OrphansAbandoned: true}}}
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(),
+		[]string{"context", "delete", "--name", "example", "--purge", "--allow-orphans", "--yes"})
+	if code != 0 || strings.Count(errOut.String(), "[WARN] context.unsafe-delete") != 1 || strings.Contains(out.String(), "[WARN]") {
+		t.Fatal("abandonment warning", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(out.String(), "Orphans abandoned  true") {
+		t.Fatal("abandonment is absent from the deletion result", out.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	record = &dispatchRecord{result: commandResult{deletion: &contexts.DeleteResult{Name: "example", Outcome: "deleted"}}}
+	code = New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(),
+		[]string{"context", "delete", "--name", "example", "--purge", "--yes"})
+	if code != 0 || errOut.Len() != 0 || strings.Contains(out.String(), "Orphans abandoned") {
+		t.Fatal("an ordinary deletion reported abandonment", code, out.String(), errOut.String())
+	}
+}

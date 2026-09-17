@@ -14,7 +14,7 @@ func workspaceCommands() []commandSpec {
 		available(commandSpec{path: "context use", short: "Select the current context", flags: []flagSpec{nameFlag()}}),
 		available(commandSpec{path: "context list", short: "List contexts"}),
 		available(commandSpec{path: "context current", short: "Show the current context", flags: []flagSpec{boolFlag("short", "Print only the context name")}}),
-		available(commandSpec{path: "context delete", short: "Permanently delete a context and its local files", flags: []flagSpec{nameFlag(), boolFlag("purge", "Acknowledge permanent context data deletion"), confirmationFlag()}, long: "Permanently delete a context and its verified local files with --purge=true. --yes skips ordinary confirmation. Protected lifecycle state must be resolved before deletion."}),
+		available(commandSpec{path: "context delete", short: "Permanently delete a context and its local files", flags: []flagSpec{nameFlag(), boolFlag("purge", "Acknowledge permanent context data deletion"), boolFlag("allow-orphans", "Delete although the context still owns realized objects"), confirmationFlag()}, long: "Permanently delete a context and its verified local files with --purge=true. --yes skips ordinary confirmation. A context that still owns realized objects refuses deletion: remove them with bootwright destroy first, or abandon them with --allow-orphans. Unreadable lifecycle evidence refuses either way."}),
 	}
 }
 
@@ -57,6 +57,7 @@ func (s Services) invokeContexts(ctx context.Context, path string, values *reque
 		result.deletion, err = invokeResult(ctx, values, contexts.DeleteRequest{
 			Name:             values.text("name"),
 			Purge:            values.boolean("purge"),
+			AllowOrphans:     values.boolean("allow-orphans"),
 			SkipConfirmation: values.boolean("yes"),
 		}, s.Contexts.Delete)
 	default:
