@@ -158,3 +158,27 @@ func TestAForeignOperationEntryNamesWhatRefusedIt(t *testing.T) {
 		t.Fatalf("the refusal does not name what refused the entry: %q", reported[0].Message)
 	}
 }
+
+// Sync names a directory to make durable, and it resolves every component of
+// the path it is given as one. Handing it a record instead refuses the whole
+// operation, because the record's own name is opened as a directory. This is
+// what failed the first apply of a zeroed environment: the block that publishes
+// a before-state synced the record it had just replaced.
+func TestSyncingARecordPathIsRefusedAsANonDirectory(t *testing.T) {
+	ctx := context.Background()
+	store, _ := lifecycleFixture(t)
+	record := "op-example/blocks/controller-prerequisites/attempt-000001.json"
+	err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		if err := tx.Operations().WriteExclusive(ctx, record, []byte("{}\n")); err != nil {
+			return err
+		}
+		return tx.Operations().Sync(ctx, record)
+	})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "context.state" {
+		t.Fatalf("refusal = %#v", reported)
+	}
+	if !strings.Contains(reported[0].Message, "not a directory") {
+		t.Fatalf("the refusal does not name its cause: %q", reported[0].Message)
+	}
+}

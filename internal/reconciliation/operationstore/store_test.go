@@ -404,3 +404,35 @@ func TestPreparationIsPublishedOnceBeforeTheEffect(t *testing.T) {
 		t.Fatal("an observed attempt published a before-state")
 	}
 }
+
+// Publishing a before-state used to sync the record it had just replaced, and
+// because Sync resolves every component of its path as a directory the record's
+// own name refused the whole attempt. That failed the first apply of a zeroed
+// environment at controller-prerequisites, where the controller stage is the
+// one block that publishes a before-state. Replace already leaves the record
+// durable, so nothing may sync it afterwards.
+func TestPublishingABeforeStateNeverSyncsTheRecord(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	plan := testPlan(t, "alpha")
+	operation := testOperation(t, plan)
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Register(ctx, operation, plan); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err != nil {
+		t.Fatal(err)
+	}
+	area.syncs = nil
+	preparation := json.RawMessage(`{"inventorySHA256":"` + strings.Repeat("a", 64) + `"}`)
+	if err := store.RecordPreparation(ctx, operation.ID, "alpha", 1, preparation); err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range area.syncs {
+		if _, isRecord := area.files[target]; isRecord {
+			t.Fatalf("a record was named as the directory to sync: %q", target)
+		}
+	}
+}

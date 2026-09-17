@@ -18,6 +18,7 @@ type memoryArea struct {
 	fail        map[string]error
 	reads       int
 	appends     int
+	syncs       []string
 	location    string
 }
 
@@ -125,6 +126,17 @@ func (a *memoryArea) Append(ctx context.Context, target string, data []byte) err
 	return nil
 }
 
-func (a *memoryArea) Sync(ctx context.Context, target string) error { return a.check("sync", target) }
+// Sync refuses a record here exactly as contextfs does, so a caller that names
+// one fails in a test rather than on a host.
+func (a *memoryArea) Sync(ctx context.Context, target string) error {
+	if err := a.check("sync", target); err != nil {
+		return err
+	}
+	if _, isFile := a.files[target]; isFile {
+		return errors.New("not a directory")
+	}
+	a.syncs = append(a.syncs, target)
+	return nil
+}
 
 func (a *memoryArea) Location() string { return a.location }

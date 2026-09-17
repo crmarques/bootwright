@@ -388,10 +388,7 @@ func (s *Store) RecordPreparation(ctx context.Context, id, block string, number 
 	if err != nil {
 		return err
 	}
-	if err := s.area.Replace(ctx, target, encoded, data); err != nil {
-		return err
-	}
-	return s.area.Sync(ctx, target)
+	return s.area.Replace(ctx, target, encoded, data)
 }
 
 func (s *Store) CompleteAttempt(ctx context.Context, id, block string, number int, outcome reconciliation.Outcome, effect reconciliation.EffectState, state reconciliation.BlockState, evidence json.RawMessage) error {

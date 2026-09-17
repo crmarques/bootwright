@@ -24,6 +24,9 @@ type Area interface {
 	// exactly expected. A nil expectation requires the destination to be absent.
 	Replace(ctx context.Context, path string, data, expected []byte) error
 	Append(ctx context.Context, path string, data []byte) error
+	// Sync makes a directory durable and resolves every component of its path
+	// as one, so it names a directory and never a record. A record is already
+	// durable when WriteExclusive or Replace returns.
 	Sync(ctx context.Context, path string) error
 	// Location reports where this subtree is on the host, so a human result can
 	// name a log an operator is able to open while it is still being written.
