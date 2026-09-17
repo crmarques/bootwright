@@ -530,6 +530,12 @@ said so or proved nothing, `released` once a destroy completed, and
 `unmanaged` when no frozen plan names it. A declaration alone never reports
 ownership, and a Machine outside the evidence is never reported as absent.
 
+A removal reads the apply it takes back as well as its own plan. Each attempt
+covers only what is not yet proved gone, so a Machine an earlier attempt
+removed leaves the current plan without ceasing to be released: it reports
+`released` rather than falling back to `unmanaged`, and only a Machine no
+completed apply ever realized reports `unmanaged` after a removal.
+
 ### Machine SSH sessions
 
 `machine rsh` and `machine exec` open one SSH session on the exact Machine as

@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -160,5 +161,70 @@ func TestWithRuntimeRegistersNoOperation(t *testing.T) {
 	}
 	if result.Continuation || result.Receipt.Next != "apply" {
 		t.Fatalf("a bounded operation changed the next legal step: %+v", result.Receipt)
+	}
+}
+
+// A removal that completed keeps proving itself. Each superseding attempt plans
+// only what is not yet gone, so an object an earlier attempt removed leaves the
+// current plan, and without the apply this removal takes back it would read as
+// an object nothing ever realized.
+func TestOwnershipKeepsReportingWhatAnEarlierRemovalReleased(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab", "machine-rhel-01")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeChanged}, {Outcome: reconciliation.OutcomeFailed}}
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
+		t.Fatal("the seeded removal failure did not fire")
+	}
+	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if err != nil || result.Receipt.State != "done" {
+		t.Fatalf("superseding removal = %+v (%v)", result, err)
+	}
+	if len(result.Blocks) != 1 {
+		t.Fatalf("the superseding removal replanned %d blocks", len(result.Blocks))
+	}
+	owned, err := h.service.Ownership(context.Background(), testContextName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, identity := range []string{"ArtifactServer/artifact-server-lab", "ArtifactServer/machine-rhel-01"} {
+		state, found := owned[identity]
+		if !found {
+			t.Fatalf("%s lost the record of its removal: %+v", identity, owned)
+		}
+		if state.Verb != string(reconciliation.Destroy) || state.State != string(reconciliation.BlockDone) {
+			t.Fatalf("%s = %+v", identity, state)
+		}
+	}
+}
+
+// A removal already covered is not a removal already proved. The apply this
+// removal takes back names every object it owns, so the block states of the
+// removal itself must still decide what an operator has to act on.
+func TestOwnershipReportsARemovalBlockThatStillNeedsAnOperator(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab", "machine-rhel-01")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeChanged}, {Outcome: reconciliation.OutcomeFailed}}
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
+		t.Fatal("the seeded removal failure did not fire")
+	}
+	owned, err := h.service.Ownership(context.Background(), testContextName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	states := []string{}
+	for _, identity := range []string{"ArtifactServer/artifact-server-lab", "ArtifactServer/machine-rhel-01"} {
+		state, found := owned[identity]
+		if !found || state.Verb != string(reconciliation.Destroy) {
+			t.Fatalf("%s = %+v (%t)", identity, state, found)
+		}
+		states = append(states, state.State)
+	}
+	slices.Sort(states)
+	if !slices.Equal(states, []string{string(reconciliation.BlockDone), string(reconciliation.BlockFailed)}) {
+		t.Fatalf("removal states = %v", states)
 	}
 }

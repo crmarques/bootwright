@@ -42,9 +42,10 @@ type ObjectOwnership struct {
 }
 
 // Ownership reports what durable evidence proves about each object the current
-// operation's frozen plan names, keyed by the object's API identity. It
-// performs no probe and writes nothing. An object no plan names has no entry:
-// the absence of a record is not evidence that nothing was realized.
+// operation's frozen plan names, together with the objects its removal has
+// already taken back, keyed by the object's API identity. It performs no probe
+// and writes nothing. An object neither names has no entry: the absence of a
+// record is not evidence that nothing was realized.
 func (s Service) Ownership(ctx context.Context, contextName string) (map[string]ObjectOwnership, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
@@ -72,16 +73,15 @@ func (s Service) Ownership(ctx context.Context, contextName string) (map[string]
 		if err != nil {
 			return err
 		}
+		if err := recordReleased(ctx, store, operation, owned); err != nil {
+			return err
+		}
 		for _, block := range plan.Blocks {
 			state := states[block.ID]
 			if state == "" {
 				state = reconciliation.BlockPending
 			}
-			identity := block.Kind + "/" + block.Object
-			current, seen := owned[identity]
-			if !seen || settlement(string(state)) < settlement(current.State) {
-				owned[identity] = ObjectOwnership{Verb: string(operation.Verb), State: string(state)}
-			}
+			recordOwnership(owned, block, operation.Verb, state)
 		}
 		return nil
 	})
@@ -89,6 +89,45 @@ func (s Service) Ownership(ctx context.Context, contextName string) (map[string]
 		return nil, err
 	}
 	return owned, nil
+}
+
+// recordReleased reports the objects a removal already took back. A removal
+// covers what its apply owned and each superseding one covers what is not yet
+// proved gone, so an object the apply realized and this plan no longer names is
+// one an earlier attempt removed. Without it the only durable record that the
+// removal reached that object is lost the moment a later plan stops naming it,
+// and an object a destroy completed reads as one nothing ever realized.
+func recordReleased(ctx context.Context, store OperationStore, operation operationstore.Operation, owned map[string]ObjectOwnership) error {
+	if operation.Verb != reconciliation.Destroy || operation.Source == "" {
+		return nil
+	}
+	applied, err := store.ReadOperation(ctx, operation.Source)
+	if err != nil {
+		return err
+	}
+	plan, err := store.ReadPlan(ctx, applied.ID)
+	if err != nil {
+		return err
+	}
+	states, err := store.BlockStates(ctx, applied.ID, plan)
+	if err != nil {
+		return err
+	}
+	for _, block := range reconciliation.OwnedSubset(plan, states).Blocks {
+		recordOwnership(owned, block, operation.Verb, reconciliation.BlockDone)
+	}
+	return nil
+}
+
+// recordOwnership keeps the least settled state reported for one object, so a
+// removal that proved one of its blocks gone never reports the object settled
+// while another block of it still needs an operator.
+func recordOwnership(owned map[string]ObjectOwnership, block reconciliation.Block, verb reconciliation.Verb, state reconciliation.BlockState) {
+	identity := block.Kind + "/" + block.Object
+	current, seen := owned[identity]
+	if !seen || settlement(string(state)) < settlement(current.State) {
+		owned[identity] = ObjectOwnership{Verb: string(verb), State: string(state)}
+	}
 }
 
 // settlement ranks how completely a block's effect is settled. A lower rank is
