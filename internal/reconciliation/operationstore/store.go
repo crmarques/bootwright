@@ -235,6 +235,40 @@ func (s *Store) BlockStates(ctx context.Context, id string, plan reconciliation.
 	return states, nil
 }
 
+// Block reports what one block's durable record proves. A reader outside the
+// engine consumes it to reach the evidence an attempt published, so absence
+// stays the pending record readBlock already reports rather than a failure.
+func (s *Store) Block(ctx context.Context, id, block string) (BlockRecord, error) {
+	return s.readBlock(ctx, id, block)
+}
+
+// Attempt reads one durable attempt record, including the evidence a completed
+// one carries. It never reports a running attempt's absent evidence as content.
+func (s *Store) Attempt(ctx context.Context, id, block string, number int) (Attempt, error) {
+	name, err := reconciliation.FormatNumber(number)
+	if err != nil {
+		return Attempt{}, err
+	}
+	data, found, err := s.area.Read(ctx, path.Join(id, "blocks", block, "attempt-"+name+".json"), MaxAttemptBytes)
+	if err != nil {
+		return Attempt{}, err
+	}
+	if !found {
+		return Attempt{}, recordError("the lifecycle attempt record is missing")
+	}
+	var record Attempt
+	if err := decode(data, MaxAttemptBytes, &record); err != nil {
+		return Attempt{}, err
+	}
+	if err := validateAttempt(record); err != nil {
+		return Attempt{}, err
+	}
+	if record.Block != block || record.Number != number {
+		return Attempt{}, recordError("the lifecycle attempt record contradicts its location")
+	}
+	return record, nil
+}
+
 func (s *Store) readBlock(ctx context.Context, id, block string) (BlockRecord, error) {
 	target := s.blockPath(id, block)
 	data, found, err := s.area.Read(ctx, target, MaxAttemptBytes)

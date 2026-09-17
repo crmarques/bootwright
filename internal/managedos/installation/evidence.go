@@ -62,6 +62,26 @@ func ValidatePresence(data []byte, request Request, digest, marker string) error
 	return nil
 }
 
+// HostKeyEvidence reports the address an installation proved and the host key
+// the installed system presents there. A consumer outside the lifecycle reads
+// it to pin a session against a key this context already proved, so it decodes
+// without the request digest a running operation compares.
+func HostKeyEvidence(data []byte) (address, hostKey string, err error) {
+	if len(data) == 0 || len(data) > maxEvidenceBytes {
+		return "", "", refusal("lifecycle.state", "the installation evidence is not bounded", "")
+	}
+	var evidence Evidence
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&evidence); err != nil || decoder.More() {
+		return "", "", refusal("lifecycle.state", "the installation evidence could not be decoded", "")
+	}
+	if evidence.Absent || evidence.HostKey == "" || evidence.Address == "" {
+		return "", "", refusal("lifecycle.state", "the installation evidence proves no host key", "")
+	}
+	return evidence.Address, evidence.HostKey, nil
+}
+
 // ValidateAbsence accepts evidence only when it positively proves the published
 // content is gone. The installed system stays with the Machine's disks, so this
 // block never reports anything about the guest.

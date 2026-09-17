@@ -205,6 +205,8 @@ type OperationStore interface {
 	ReadPlan(context.Context, string) (reconciliation.Plan, error)
 	UpdateOperation(context.Context, operationstore.Operation) error
 	BlockStates(context.Context, string, reconciliation.Plan) (map[string]reconciliation.BlockState, error)
+	Block(context.Context, string, string) (operationstore.BlockRecord, error)
+	Attempt(context.Context, string, string, int) (operationstore.Attempt, error)
 	StartAttempt(context.Context, string, string) (int, error)
 	RecordPreparation(context.Context, string, string, int, json.RawMessage) error
 	CompleteAttempt(context.Context, string, string, int, reconciliation.Outcome, reconciliation.EffectState, reconciliation.BlockState, json.RawMessage) error

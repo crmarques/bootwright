@@ -266,7 +266,7 @@ func verifyContextLayout(ctx context.Context, dir *directory) error {
 			if name != "secrets" {
 				maximum := 1
 				if name == "state" {
-					maximum = 4
+					maximum = maxContextStateEntries
 				}
 				entries, listErr := directoryNames(child, maximum)
 				if listErr == nil {

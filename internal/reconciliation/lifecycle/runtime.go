@@ -118,6 +118,42 @@ func (s Service) retain(ctx context.Context, view RunView) (*operationstore.Adap
 	return s.options.Operations(area).OpenAdapterOutput(ctx, target), target, directory, nil
 }
 
+// MaterialRequest names the context whose Secret declarations one bounded
+// consumer needs opened, and nothing else: a consumer that runs no adapter
+// needs neither the approved bundle nor a run identity.
+type MaterialRequest struct {
+	ContextName string
+	Secrets     []string
+}
+
+// WithMaterial opens exactly the declared Secrets for the length of one call
+// and releases them as it returns. It takes no store lock, registers no
+// operation and publishes nothing, so an explicit access command reads a
+// coherent set of material without waiting on, or resembling, an operation.
+func (s Service) WithMaterial(ctx context.Context, request MaterialRequest, use func(context.Context, map[string]secrets.Material) error) error {
+	if err := s.available(ctx); err != nil {
+		return err
+	}
+	if use == nil {
+		return failure("lifecycle.state", "a bounded material request carries no consumer", "")
+	}
+	name, err := s.resolve(ctx, request.ContextName)
+	if err != nil {
+		return err
+	}
+	binding, material, err := s.lend(ctx, name, request.Secrets)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		clearMaterial(material)
+		if binding != "" {
+			_, _ = s.binder.Release(ctx, custody.BindingRequest{ContextName: name, BindingID: binding})
+		}
+	}()
+	return use(ctx, material)
+}
+
 // lend freezes exactly the Secret versions one bounded operation reads. The
 // binding is transient: it exists so the operation reads a coherent set, and
 // is released as soon as the call returns.
