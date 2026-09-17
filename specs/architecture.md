@@ -330,7 +330,7 @@ that implements a row updates the row and the stub fitness test together.
 | `machine list` (Machine) | `commands_machine.go` | `machine/inventory` | `desiredstate/compilation`, `reconciliation/lifecycle` evidence | I |
 | `machine rsh/exec` (Machine) | `commands_machine.go` | `machine/access` | `desiredstate/compilation`, `reconciliation/lifecycle` material and evidence, `trust` records over `workspace/contextfs`, over `machine/sshlocal` | I |
 | `machine start/stop/restart` (Machine) | `commands_machine.go` | `machine/power` | `desiredstate/compilation`, `reconciliation/lifecycle` runtime and evidence, over `reconciliation/ansiblerunner` | I |
-| `machine trust` (Trust) | `commands_trust.go` | `trust/enrollment` | — | S |
+| `machine trust` (Trust) | `commands_trust.go` | `trust/enrollment` | `desiredstate/compilation`, `trust` records over `workspace/contextfs`, over `machine/sshlocal` | I |
 | `media add/list/delete` (Managed OS) | `commands_managedos.go` | `managedos/media` | `managedos/medialocal`, `workspace/contextfs` | I |
 | `add-ons list/add/delete` (Add-ons) | `commands_addons.go` | `addons/catalog` | — | S |
 | `version`, `help`, `completion *` (CLI) | `commands_cli.go`, `runner.go` | — | — | I |
@@ -381,7 +381,8 @@ internal/cli ─LifecycleService────→ reconciliation/lifecycle.Service
 internal/cli ─MachineInventoryService→ machine/inventory.Service
 internal/cli ─MachineAccessService──→ machine/access.Service
 internal/cli ─MachinePowerService───→ machine/power.Service
-internal/cli ─twelve stub ports────→ <capability>.Service{} returning availability.ErrNotImplemented
+internal/cli ─MachineTrustService───→ trust/enrollment.Service
+internal/cli ─eleven stub ports───→ <capability>.Service{} returning availability.ErrNotImplemented
 
 machine/inventory.Service and machine/access.Service
    ─EffectiveState─→ desiredstate/compilation.Service
@@ -519,6 +520,10 @@ production binding; tests substitute fakes through the same interface.
 | `machine/access` | `HostKeyStore` | ReadHostKeys, ReplaceHostKeys | `workspace/contextfs.Store` |
 | `machine/access` | `Observer`, `Launcher` | Observe; Run, IdentityFile | `machine/sshlocal.Launcher` |
 | `machine/access` | `Confirmer` | ConfirmHostKey | `internal/cli.Confirmation` |
+| `trust/enrollment` | `EffectiveState` | RenderEffective | `desiredstate/compilation.Service` |
+| `trust/enrollment` | `HostKeyStore` | ReadHostKeys, ReplaceHostKeys | `workspace/contextfs.Store` |
+| `trust/enrollment` | `Observer` | Observe | `machine/sshlocal.Launcher` |
+| `trust/enrollment` | `Confirmer` | Confirm | `internal/cli.Confirmation` |
 | `machine/power` | `Runtime` | WithRuntime | `reconciliation/lifecycle.Service` |
 | `machine/power` | `Runner` | Run | `reconciliation/ansiblerunner.Runner` |
 | `machine/power` | `Reporter` | ReportLogLocation | `internal/cli.LifecycleProgressPresenter` |

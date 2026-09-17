@@ -47,7 +47,7 @@ type serviceDependencies struct {
 	Streams          machineaccess.Streams
 	Terminal         func() (bool, error)
 	Home             func() (string, error)
-	Trust            machineaccess.HostKeyStore
+	Trust            trustStore
 	SecretInput      material.InputReader
 	Resolver         secretstore.ImplementationResolver
 	SessionMaterial  secretstore.SessionMaterialSource
@@ -106,7 +106,8 @@ func assembleServices(deps serviceDependencies) cli.Services {
 		Confirmer: deps.Confirmer, Session: deps.SessionConfirmer, Reporter: deps.Reporter,
 		Selection: deps.Selection, Streams: deps.Streams, Terminal: deps.Terminal, Home: deps.Home,
 	})
-	services.MachineInventory, services.MachineAccess, services.MachinePower = machine.MachineInventory, machine.MachineAccess, machine.MachinePower
+	services.MachineInventory, services.MachineAccess = machine.MachineInventory, machine.MachineAccess
+	services.MachinePower, services.MachineTrust = machine.MachinePower, machine.MachineTrust
 	return services
 }
 

@@ -13,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/encryption"
+	"github.com/crmarques/bootwright/internal/trust/enrollment"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 	"github.com/spf13/pflag"
 )
@@ -40,6 +41,7 @@ type commandResult struct {
 
 	machines *inventory.ListResult
 	session  *machine.SessionResult
+	trust    *enrollment.Report
 	power    *power.Result
 
 	secretMutation     *custody.MutationResult
@@ -106,7 +108,7 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 	case "machine start", "machine stop", "machine restart":
 		return s.invokeMachinePower(ctx, path, &values, args)
 	case "machine trust":
-		return commandResult{}, s.invokeMachineTrust(ctx, path, &values, args)
+		return s.invokeMachineTrust(ctx, path, &values, args)
 	case "cluster oc", "cluster kubectl", "cluster kubeconfig":
 		return commandResult{}, s.invokeClusterAccess(ctx, path, &values, args)
 	default:

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -13,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/trust"
+	"github.com/crmarques/bootwright/internal/trust/enrollment"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -23,7 +25,7 @@ import (
 type machineDependencies struct {
 	State     inventory.EffectiveState
 	Lifecycle lifecycle.Service
-	Trust     machineaccess.HostKeyStore
+	Trust     trustStore
 	Confirmer power.Confirmer
 	Session   machineaccess.Confirmer
 	Reporter  power.Reporter
@@ -50,7 +52,17 @@ func wireMachine(deps machineDependencies) cli.Services {
 		}),
 		MachinePower: power.New(deps.State, evidence, deps.Lifecycle, ansiblerunner.New(),
 			deps.Confirmer, deps.Reporter, selection),
+		MachineTrust: enrollment.New(deps.State, deps.Trust, selection, enrollment.Options{
+			Observer: client, Confirmer: deps.Confirmer, Clock: time.Now,
+		}),
 	}
+}
+
+// trustStore is the one host-key area both a session and enrollment reach. The
+// two capabilities name the same contract, so composition binds one store.
+type trustStore interface {
+	machineaccess.HostKeyStore
+	enrollment.HostKeyStore
 }
 
 // machineOwnership presents reconciliation's durable evidence in the Machine

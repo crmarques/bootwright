@@ -47,7 +47,7 @@ func isolatedServices(t *testing.T) cli.Services {
 func testServices(t *testing.T, repository *contextfs.Store, root string) cli.Services {
 	t.Helper()
 	deps := testContextWiring(t, root)
-	deps.Repository, deps.Workspace = repository, repository
+	deps.Repository, deps.Workspace, deps.Trust = repository, repository, repository
 	deps.Lifecycle = lifecycleDependencies{
 		Workspace: repository,
 		Inputs:    contexts.Inputs{Repository: repository, Selection: deps.Selection},

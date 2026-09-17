@@ -13,7 +13,6 @@ import (
 	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
 	storagepreflight "github.com/crmarques/bootwright/internal/storage/preflight"
 	storagerendering "github.com/crmarques/bootwright/internal/storage/rendering"
-	"github.com/crmarques/bootwright/internal/trust/enrollment"
 )
 
 // wireStubs binds the recognized commands whose use case is unavailable. Each
@@ -32,7 +31,5 @@ func wireStubs() cli.Services {
 		StoragePreflight:      storagepreflight.Service{},
 		StorageArtifacts:      storagerendering.Service{},
 		Artifacts:             artifactrendering.Service{},
-
-		MachineTrust: enrollment.Service{},
 	}
 }

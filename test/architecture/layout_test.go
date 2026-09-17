@@ -23,7 +23,6 @@ func stubCapabilities() map[string]bool {
 		"internal/nativeartifacts/rendering":     true,
 		"internal/storage/preflight":             true,
 		"internal/storage/rendering":             true,
-		"internal/trust/enrollment":              true,
 	}
 }
 

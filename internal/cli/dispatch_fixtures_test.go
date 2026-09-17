@@ -286,8 +286,8 @@ func (s machinePowerSpy) Restart(ctx context.Context, request power.PowerRequest
 
 type machineTrustSpy struct{ record *dispatchRecord }
 
-func (s machineTrustSpy) Enroll(ctx context.Context, request enrollment.EnrollRequest) error {
-	return s.record.called(ctx, "machine trust", request)
+func (s machineTrustSpy) Enroll(ctx context.Context, request enrollment.EnrollRequest) (*enrollment.Report, error) {
+	return s.record.result.trust, s.record.called(ctx, "machine trust", request)
 }
 
 type clusterAccessSpy struct{ record *dispatchRecord }

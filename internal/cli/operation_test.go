@@ -21,7 +21,7 @@ func TestOperationBoundaryIsLazyForInformationalMalformedAndUnavailablePaths(t *
 		"context init --name example -f one -f two", "context delete --name example --purge=false",
 		"validate --output json --unknown", "render effective -f input", "render --output json",
 		"add-ons list", "preflight all", "preflight container-cluster",
-		"preflight storage-cluster", "preflight add-ons", "machine trust", "cluster list",
+		"preflight storage-cluster", "preflight add-ons", "cluster list",
 		"cluster kubeconfig --name example", "cluster oc --name example get pods",
 		"render --output-dir artifacts --sensitive", "render installer", "render storage",
 	} {
@@ -52,7 +52,8 @@ func TestOperationBoundaryOwnsContextAndCleanupForEveryImplementedPath(t *testin
 		[]string{"machine", "list"}, []string{"machine", "rsh", "--name", "example"},
 		[]string{"machine", "exec", "--name", "example", "uptime"},
 		[]string{"machine", "start", "--name", "example"}, []string{"machine", "stop", "--name", "example", "--yes"},
-		[]string{"machine", "restart", "--name", "example", "--yes"})
+		[]string{"machine", "restart", "--name", "example", "--yes"},
+		[]string{"machine", "trust", "--yes"})
 	for _, args := range invocations {
 		begins, finishes := 0, 0
 		parent := context.WithValue(context.Background(), dispatchContextKey{}, "parent")
