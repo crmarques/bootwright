@@ -307,11 +307,11 @@ and publishes nothing. Controller selection alone does not cause setup, install
 a container runtime or start services. Commands retain their specified
 unavailable result until the corresponding delivery is implemented.
 
-The local-access controller is not an SSH target. The existing SSH handoff and
-trust commands must not silently turn its selection into a local shell,
-privileged command or fabricated host-key operation. Their future supported
-journeys must define local-target applicability and actionable diagnostics;
-this schema change does not extend their execution authority.
+The local-access controller is not an SSH target. The SSH session and trust
+commands must not silently turn its selection into a local shell, privileged
+command or fabricated host-key operation: they refuse it with an actionable
+diagnostic naming direct execution on that host, and no schema change extends
+their execution authority.
 
 ## Validation, preflight, and rendering
 
@@ -507,15 +507,16 @@ log, history, cache, terminal title, or second stream. Callers are responsible
 for a restrictive destination if they redirect an explicit reveal. Help and
 completion never reveal.
 
-`machine rsh`, `machine exec`, `cluster rsh`, `cluster exec`,
-`cluster oc`, and `cluster kubectl` are explicit access
-handoffs, not desired-state automation or lifecycle blocks. Bootwright resolves
-one exact target and emits a bounded, deterministically escaped descriptor for
-independent operator execution. It does not launch a client, connect to the
-target, open an interactive stream, or treat later execution as operation
-evidence. The descriptor names the pinned client identity, exact target,
-minimal non-sensitive configuration, and requested argument vector as data,
-never shell text; sensitive argument values have no supported transport.
+`cluster rsh`, `cluster exec`, `cluster oc`, and `cluster kubectl` are explicit
+access handoffs, not desired-state automation or lifecycle blocks. Bootwright
+resolves one exact target and emits a bounded, deterministically escaped
+descriptor for independent operator execution. It does not launch a client,
+connect to the target, open an interactive stream, or treat later execution as
+operation evidence. The descriptor names the pinned client identity, exact
+target, minimal non-sensitive configuration, and requested argument vector as
+data, never shell text; sensitive argument values have no supported transport.
+[`machine rsh` and `machine exec`](#machine-ssh-sessions) instead open the
+session themselves.
 
 `machine exec` and `cluster exec` preserve the command values as an argument
 vector, never shell text. `rsh` accepts no command tail. `oc` and `kubectl`
@@ -529,15 +530,65 @@ said so or proved nothing, `released` once a destroy completed, and
 `unmanaged` when no frozen plan names it. A declaration alone never reports
 ownership, and a Machine outside the evidence is never reported as absent.
 
-A Machine handoff names the pinned client, the target address and port, the
-account, and an explicitly borrowed identity file. When the Machine's own
-authentication is confidential material this context holds, the descriptor
-names neither a value nor a path: standard output carries the descriptor and
-standard error carries one warning naming the `secret show` export the operator
-performs themselves and the `--ssh-id-file` that offers it back. A borrowed
-account reaches a Bootwright-installed Machine only with
-`--ssh-user-for-provisioned`; without it the request fails
-`access.unavailable` and resolves no descriptor.
+### Machine SSH sessions
+
+`machine rsh` and `machine exec` open one SSH session on the exact Machine as
+the identity that Machine's desired state authorizes, using one pinned SSH
+client. They register no lifecycle operation, freeze no plan and change no
+ownership, continuation or desired state.
+
+The login account and the credential that opens it are one resolved value;
+no path resolves one without the other. A Bootwright-installed Machine
+resolves the `bootwright` account with the fleet
+[`remoteMachinesAccessKey`](api/environment.md#remote-machine-access-and-install-defaults);
+every other Machine resolves `access.ssh.user` with its declared `auth` arm.
+A `privateKeyRef` arm opens the named `Secret` for the session alone, a
+`passwordRef` arm lets the client prompt on the terminal and names the
+`secret show` that reveals the password, and an `operatorIdentity` arm offers
+the default identities of the account the client runs as. Confidential
+material is never written to a named path, an argument, the environment or any
+durable state, and the operator is never asked to export it.
+
+`--ssh-user` reaches any account on any Machine. A value naming an identity
+this context holds a credential for resolves to that credential; a value
+naming an account carried by more than one owner with different credentials
+fails `access.unavailable` rather than putting one owner's key on the wire
+under another account's name; any other value offers no stored credential.
+`--ssh-id-file` is offered ahead of the declared credential, which remains the
+fallback; a leading `~` resolves from the invoking account database, and the
+file must satisfy the private-file rules in [security](security.md). Neither
+flag alters desired state or the managed identity Bootwright installs, and
+neither `--ssh-user-for-provisioned` nor `--ssh-ask-sudo-password` is consumed.
+
+The host key is proved before any credential is offered, from exactly one
+source in this order: the Machine's `access.ssh.knownHostsRef` `Secret`; for a
+Bootwright-installed Machine, the host key its
+[installation evidence](substrates.md#identity-and-power-operations) proves,
+which requires that this context currently owns that installation; the
+[context trust store](contexts.md#storage-locking-and-publication); and
+finally, on an interactive terminal alone, one observation of the endpoint
+confirmed against its displayed fingerprint and recorded as context trust.
+Without a terminal an unproved key fails `trust.identity` and names
+`machine trust`. Recording requires that explicit confirmation, so an
+observation by itself trusts nothing. The session pins exactly the proved key
+and its algorithm, so a Machine presenting another key fails to connect; a
+changed key is never recorded by a session, and is superseded only by
+`machine trust --replace`.
+
+The session is the operator's. Standard input, output and error belong to the
+client for its whole duration, its exit status is the result, and Bootwright
+writes only diagnostics and the host-key confirmation, on standard error,
+before the connection opens. `machine exec` runs the exact argument vector and
+reports the remote command's exit status; `machine rsh` accepts no command
+tail. The client reads no ambient SSH configuration, inherits no agent,
+receives only terminal-identifying environment values, and is given the
+session's material as open descriptors rather than named files.
+
+Resolution follows explicit access: an unknown or excluded name fails
+`access.target`, a Machine reached locally fails `access.unavailable` naming
+direct execution on that host, and a Machine declaring no resolvable SSH
+access fails `access.unavailable`. Each is exit `1` with empty standard output,
+no connection attempt and no trust record.
 
 ### Cluster node selection
 

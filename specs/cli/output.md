@@ -18,6 +18,7 @@ output.
 | Explicit sensitive result | exact requested bytes, with no added LF | diagnostics only on failure | `0` or `1` |
 | Completion script | exact script with its required final LF | empty | `0` |
 | Access handoff | one bounded, escaped descriptor followed by one LF | ordered diagnostics only | `0` or `1` |
+| [SSH session](../cli.md#machine-ssh-sessions) | the remote process's own bytes | Bootwright diagnostics and the host-key confirmation before the connection, then the remote process's own bytes | the SSH client's exit status |
 | Interrupt-driven cancellation | as required by the selected structured mode | as required by that mode | `130` |
 
 An operating-system interrupt reports `runtime.interrupted` and exits `130` for
@@ -56,6 +57,8 @@ Warnings never change exit status. Lifecycle progress counts durable `DONE`
 blocks against the frozen total and continues to display completed blocks so the
 resume boundary is explicit. Human wording may evolve, but status meaning,
 group membership, order, safe target identity, and next action remain stable.
+An [SSH session](../cli.md#machine-ssh-sessions) presents no status token of its
+own: what its streams carry is the remote process's.
 
 ### Shared human layout
 

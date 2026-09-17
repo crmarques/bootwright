@@ -218,7 +218,7 @@ where a behavior lives:
 | --- | --- |
 | `internal/<context>` | Pure domain values, invariants and the kind admission rules (`Normalize`, `Validate`, `ValidateAuthored`, `ValidatePartial`) that the compiler composes, plus shared values such as `machine.SSHOptions` and `secrets.Material`. No ports and no I/O. |
 | `internal/<context>/<capability>` | One application service package per command family. `service.go` declares `Service`, its constructor and one exported method per command; `requests.go` declares the request and result types the CLI consumes; `contracts.go` declares every interface the package consumes, and no other file declares an exported interface; remaining files hold private use-case logic. |
-| `internal/<context>/<implementation>` | A driven adapter named by what it binds: `contextfs`, `selectionfs`, `inputfs`, `yamlstream`, `encoding`, `localkeyring`, `material`, `hostlinux`, `bundlelocal`, `ansiblelocal`, `nativelocal`, `privilege`, `ansiblerunner`, `medialocal`. It implements another package's contract and never calls another adapter. |
+| `internal/<context>/<implementation>` | A driven adapter named by what it binds: `contextfs`, `selectionfs`, `inputfs`, `yamlstream`, `encoding`, `localkeyring`, `material`, `hostlinux`, `bundlelocal`, `ansiblelocal`, `nativelocal`, `privilege`, `ansiblerunner`, `medialocal`, `sshlocal`. It implements another package's contract and never calls another adapter. |
 | `internal/diagnostics` | The diagnostic and typed-failure vocabulary every layer emits; it imports nothing first-party. |
 | `internal/availability` | The single unavailable-capability sentinel. |
 
@@ -328,7 +328,7 @@ that implements a row updates the row and the stub fitness test together.
 | `cluster rsh/exec` (Environment) | `commands_environment.go` | `environment/access` | — | S |
 | `cluster oc/kubectl/kubeconfig` (Container cluster) | `commands_containercluster.go` | `containercluster/access` | — | S |
 | `machine list` (Machine) | `commands_machine.go` | `machine/inventory` | `desiredstate/compilation`, `reconciliation/lifecycle` evidence | I |
-| `machine rsh/exec` (Machine) | `commands_machine.go` | `machine/access` | `desiredstate/compilation` | I |
+| `machine rsh/exec` (Machine) | `commands_machine.go` | `machine/access` | `desiredstate/compilation`, `reconciliation/lifecycle` material and evidence, `trust` records over `workspace/contextfs`, over `machine/sshlocal` | I |
 | `machine start/stop/restart` (Machine) | `commands_machine.go` | `machine/power` | `desiredstate/compilation`, `reconciliation/lifecycle` runtime and evidence, over `reconciliation/ansiblerunner` | I |
 | `machine trust` (Trust) | `commands_trust.go` | `trust/enrollment` | — | S |
 | `media add/list/delete` (Managed OS) | `commands_managedos.go` | `managedos/media` | `managedos/medialocal`, `workspace/contextfs` | I |
@@ -342,9 +342,13 @@ The kind admission rules that the compiler composes live at the context roots
 `environment/preflight`, its two inspection methods to `environment/inspection`,
 and its two access methods to `environment/access`; platform rules remain with
 their owning contexts. Machine inspection belongs to
-`machine/inventory`, explicit Machine access to `machine/access` and day-2
-power to `machine/power`, which reads the Machine domain's own ownership
-vocabulary rather than the engine that published it. Substrate realization with
+`machine/inventory`, explicit Machine access to `machine/access` over the
+`machine/sshlocal` adapter, which is the one pinned SSH client both a session
+and a host-key observation cross, and day-2 power to `machine/power`, which
+reads the Machine domain's own ownership vocabulary rather than the engine that
+published it. The host-key record format and the `known_hosts` grammar both a
+session and `machine trust` resolve belong to the `trust` context root, beside
+the `trust/enrollment` capability that maintains them. Substrate realization with
 its identity and power operations belongs to one package per substrate arm,
 `substrate/libvirt` and `substrate/baremetal`, while the pure derivation that
 answers which arm realizes a Machine, and with which management controller and
@@ -383,6 +387,12 @@ machine/inventory.Service and machine/access.Service
    ─EffectiveState─→ desiredstate/compilation.Service
    ─Ownership──────→ reconciliation/lifecycle.Service, through composition's own evidence adapter
    ─fn CurrentSelection→ workspace/selectionfs.Store, through the invoking account
+machine/access.Service
+   ─MaterialLender─→ reconciliation/lifecycle.Service, which binds the session's Secrets alone
+   ─Evidence───────→ reconciliation/lifecycle.Service and managedos/installation, through composition's own host-key adapter
+   ─HostKeyStore───→ workspace/contextfs.Store, for the context trust records
+   ─Observer, Launcher→ machine/sshlocal.Launcher, the one pinned SSH client
+   ─Confirmer──────→ internal/cli.Confirmation, for the first-use host-key decision
 machine/power.Service
    ─EffectiveState, Ownership, fn CurrentSelection→ as above
    ─Runtime────────→ reconciliation/lifecycle.Service, which lends the approved bundle and binds its Secrets
@@ -503,7 +513,12 @@ production binding; tests substitute fakes through the same interface.
 | `reconciliation/lifecycle` | `LifecycleTransaction` | Context, Inputs, Controller, Operations, Evidence, PublishEvidence, Bind, Reserve, Release, ClientArea, SealClientArea, RetainDependencies | `contextfs` lifecycle transaction |
 | `reconciliation/lifecycle` | `OperationStore` | Index, Register, ReadOperation, ReadPlan, BlockState, PublishBlock, PublishAttempt, RecordPreparation, OpenLog, Complete | `reconciliation/operationstore.Store` |
 | `machine/inventory`, `machine/access`, `machine/power` | `EffectiveState` | RenderEffective | `desiredstate/compilation.Service` |
-| `machine/inventory`, `machine/power` | `Ownership` | Ownership | composition adapter over `reconciliation/lifecycle.Service` |
+| `machine/inventory`, `machine/access`, `machine/power` | `Ownership` | Ownership | composition adapter over `reconciliation/lifecycle.Service` |
+| `machine/access` | `MaterialLender` | WithMaterial | `reconciliation/lifecycle.Service` |
+| `machine/access` | `Evidence` | HostKey | composition adapter over `reconciliation/lifecycle.Service` and `managedos/installation` |
+| `machine/access` | `HostKeyStore` | ReadHostKeys, ReplaceHostKeys | `workspace/contextfs.Store` |
+| `machine/access` | `Observer`, `Launcher` | Observe; Run, IdentityFile | `machine/sshlocal.Launcher` |
+| `machine/access` | `Confirmer` | ConfirmHostKey | `internal/cli.Confirmation` |
 | `machine/power` | `Runtime` | WithRuntime | `reconciliation/lifecycle.Service` |
 | `machine/power` | `Runner` | Run | `reconciliation/ansiblerunner.Runner` |
 | `machine/power` | `Reporter` | ReportLogLocation | `internal/cli.LifecycleProgressPresenter` |
@@ -647,9 +662,9 @@ executable.
 Environment preflight consumes domain-owned prerequisite capabilities.
 Inspection combines validated input and permitted local evidence. Environment
 access selects the declared cluster and node before delegating platform access
-decisions. Machine owns SSH descriptor construction; Container cluster owns
-`oc`, `kubectl`, and kubeconfig behavior. These calls preserve the descriptor
-and export boundaries defined by
+decisions. Machine owns SSH session resolution and its host-key proof;
+Container cluster owns `oc`, `kubectl`, and kubeconfig behavior. These calls
+preserve the descriptor, session and export boundaries defined by
 [the access contract](cli.md#resource-inspection-and-explicit-access).
 
 ### Lifecycle ports

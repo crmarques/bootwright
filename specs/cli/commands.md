@@ -14,10 +14,10 @@ its syntax and context-independent safety checks still apply.
 | Flag | Type and default | Contract |
 | --- | --- | --- |
 | `--context <name>` | context name; current context | Select the named context for a context-backed command. `preflight controller` consumes only an explicit nonempty value and omission selects its host baseline, ignoring current selection; `setup` selects no context and consumes no value. A non-empty value conflicts with context-free `render --input-dir`. |
-| `--ssh-id-file <path>` | path; none | Offer this private key first for an SSH operation. A leading `~` resolves from the invoking account database, not an untrusted `HOME`; the opened file must satisfy the private-file rules in [security](../security.md). |
-| `--ssh-user <name>` | POSIX user name; none | Use one explicitly borrowed account for eligible OS-ready machines. It does not alter desired state or the managed identity Bootwright installs. |
-| `--ssh-ask-sudo-password[=<bool>]` | Boolean; `false` | Prompt once for the borrowed account's sudo password, hold it only in bounded memory for this invocation, and never place it in arguments, environment, state, output, or logs. It conflicts with JSON output and non-interactive execution. |
-| `--ssh-user-for-provisioned[=<bool>]` | Boolean; `false` | Extend `--ssh-user` to Bootwright-provisioned machines. It requires `--ssh-user`; the same frozen account must pass the managed-OS ownership probe. |
+| `--ssh-id-file <path>` | path; none | Offer this private key first for an SSH operation; a declared credential remains the fallback. A leading `~` resolves from the invoking account database, not an untrusted `HOME`; the opened file must satisfy the private-file rules in [security](../security.md). |
+| `--ssh-user <name>` | POSIX user name; none | Use one explicitly borrowed account for eligible OS-ready machines. On [`machine rsh` and `machine exec`](../cli.md#machine-ssh-sessions) it reaches any account: a value naming an identity this context holds resolves to that identity's credential, and any other value offers no stored credential. It does not alter desired state or the managed identity Bootwright installs. |
+| `--ssh-ask-sudo-password[=<bool>]` | Boolean; `false` | Prompt once for the borrowed account's sudo password, hold it only in bounded memory for this invocation, and never place it in arguments, environment, state, output, or logs. It conflicts with JSON output and non-interactive execution, and is not consumed by `machine rsh` or `machine exec`. |
+| `--ssh-user-for-provisioned[=<bool>]` | Boolean; `false` | Extend `--ssh-user` to Bootwright-provisioned machines. It requires `--ssh-user`; the same frozen account must pass the managed-OS ownership probe. It is not consumed by `machine rsh` or `machine exec`, which reach a provisioned Machine's accounts through `--ssh-user` alone. |
 
 Every command also accepts `-h` and `--help`. Help performs no desired-state
 discovery, state lookup, secret access, privilege escalation, process launch,
@@ -99,9 +99,9 @@ explicit `--context` changes nothing they do.
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
 | `bootwright machine list` | `--clusters <list>` default all; `--silent` false; `--output text\|json` default `text` | Machines and ownership-backed state, or sorted names with `--silent` | read local state |
-| `bootwright machine rsh` | required `--name <machine>` | bounded handoff for an interactive SSH session to the exact Machine | read target and access metadata only |
-| `bootwright machine exec` | required `--name <machine>` and `<command>...` | bounded handoff for the exact remote command argument vector | read target and access metadata only |
-| `bootwright machine trust` | `--machines <list>` default all; `--replace <list>` default none; `--dry-run` false; `--yes` false; `--output text\|json` default `text` | exact host-key trust plan and result | bounded SSH identity observation; local trust-store write unless dry-run |
+| `bootwright machine rsh` | required `--name <machine>` | an interactive SSH session on the exact Machine as its resolved identity; the client's exit status is the result | read state, open the session's credential for its duration, read or record host trust, run one pinned SSH client |
+| `bootwright machine exec` | required `--name <machine>` and `<command>...` | the exact argument vector runs on the Machine; the remote command's exit status is the result | same |
+| `bootwright machine trust` | `--machines <list>` default all; `--replace <list>` default none; `--dry-run` false; `--yes` false; `--output text\|json` default `text` | exact host-key trust plan, and the recorded result unless dry-run | bounded SSH host-key observation of the selected Machines; context trust-store write unless dry-run |
 | `bootwright machine start` | required `--name <machine>`; `--output text\|json` default `text` | the power state the Machine's management controller proved once the operation settled | bounded power operation through that controller |
 | `bootwright machine stop` | required `--name <machine>`; `--force` false; `--yes` false; `--output text\|json` default `text` | same, after the operating system is asked to shut down | same |
 | `bootwright machine restart` | required `--name <machine>`; `--force` false; `--yes` false; `--output text\|json` default `text` | same, after a proved stop and a proved start | same |
@@ -138,12 +138,17 @@ access failure, not a change in applicability.
 
 ### Access help
 
-The short description and detailed help for `machine rsh`, `machine exec`,
-`cluster rsh`, `cluster exec`, `cluster oc`, and `cluster kubectl` state that
-success prints an access descriptor for independent operator execution and does
-not launch a client or connect. Cluster command help includes its applicable
-target kinds and variants from the table above. `cluster kubeconfig` help states
-that success exports raw sensitive bytes to standard output.
+The short description and detailed help for `cluster rsh`, `cluster exec`,
+`cluster oc`, and `cluster kubectl` state that success prints an access
+descriptor for independent operator execution and does not launch a client or
+connect. Cluster command help includes its applicable target kinds and variants
+from the table above. `cluster kubeconfig` help states that success exports raw
+sensitive bytes to standard output.
+
+The short description and detailed help for `machine rsh` and `machine exec`
+state that the session runs on the Machine as its resolved identity, that an
+unproved host key is confirmed interactively or refused, and that the exit
+status is the client's.
 
 Help and completion use the static catalog; they never load a selected cluster
 to hide or enable commands. Target-aware discovery belongs to `cluster info`.

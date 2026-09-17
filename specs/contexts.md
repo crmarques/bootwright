@@ -342,6 +342,7 @@ Controller subtree exists only after confirmed setup:
       reservation.json
       mutation.json
       operations/
+      trust/hosts.json
     secrets/
       store.json
       identities/
@@ -360,6 +361,7 @@ Controller subtree exists only after confirmed setup:
 | `state/reservation.json` | Durable name-ownership evidence for interrupted creation and guarded deletion. |
 | `state/mutation.json` | Lifecycle ownership and operation evidence; missing or unknown evidence prevents destructive cleanup. |
 | `state/operations/` | [Reconciliation-owned operation records and logs](state-reconciliation.md#operation-records). Workspace supplies the held area and its publication primitives; it never interprets their content. |
+| `state/trust/hosts.json` | The context-managed SSH host-key trust an [SSH session](cli.md#machine-ssh-sessions) proves a Machine against when it declares no `knownHostsRef` and Bootwright did not install it: one public-key record per Machine, and one key per address. Written only by `machine trust` and by an explicitly confirmed first use, published atomically against its exact prior content, and removed with the context. It holds no confidential material. |
 | `secrets/` | Context-bound encrypted custody with its own independently versioned [storage contract](secrets.md#local-keyring-v3). |
 
 Every directory is owned by `root:root` with mode `0700`; every file is owned

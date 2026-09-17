@@ -396,7 +396,7 @@ installer-provisioned machine, omission means no Bootwright login.
 | `auth.privateKeyRef` | string | union | — | `sshKeyPair` `Secret`. |
 | `auth.passwordRef` | string | union | — | `usernamePassword` `Secret`; requires authored `user`. |
 | `sudoPasswordRef` | string | no | — | `usernamePassword` `Secret` for escalation. |
-| `knownHostsRef` | string | no | context-managed trust | `opaque` `Secret` containing one exact OpenSSH `known_hosts` entry. |
+| `knownHostsRef` | string | no | [context-managed trust](../contexts.md#storage-locking-and-publication) | `opaque` `Secret` containing one exact OpenSSH `known_hosts` entry. |
 
 Exactly one SSH `auth` arm is present. `access.rootLogin` is `keep` by default
 or `revoke`. `revoke` requires authored SSH access and a non-root replacement
@@ -414,7 +414,9 @@ and key is therefore bound before observation.
 A Bootwright-installed machine authors no `access` or `rootLogin`.
 Normalization derives SSH user `bootwright`, the fleet
 `Environment.spec.remoteMachinesAccessKey.keyRef`, the normal address default,
-and `rootLogin: keep`.
+and `rootLogin: keep`. Its host key is the one its
+[installation evidence](../substrates.md#identity-and-power-operations)
+delivered or captured, so it consults no trust store.
 
 ## MachineImage
 

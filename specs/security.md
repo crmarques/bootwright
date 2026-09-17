@@ -178,6 +178,31 @@ descriptor, or a restrictive operation file. Every task, result, and diff that
 could carry one uses `no_log` and no-diff behavior and must not persist it in
 inventory, facts, caches, evidence, logs, or adapter results.
 
+### Direct SSH sessions
+
+An [explicit SSH session](cli.md#machine-ssh-sessions) runs one pinned client
+whose identity is verified before launch, never a client resolved through an
+ambient path. Its server identity is proved first, from the one authorized
+source the session resolved, and pinned to that exact key and algorithm, so an
+unproved or substituted key ends the session before a credential is offered.
+The client decides no trust and records none: a first-use record requires an
+explicit interactive confirmation of the displayed fingerprint, and a changed
+key is superseded only by an explicit re-trust. A host-key observation offers
+no credential, proves nothing by itself, and is never the source of a record.
+
+Session material — the private key, the pinned host key and the client
+configuration — is passed as open descriptors the client inherits, never as
+named paths, arguments or environment values, and is released when the session
+ends. The configuration is Bootwright's own: it carries only allowlisted
+cryptographic directives from the host crypto-policy backend where that exists,
+so site and FIPS policy is retained, and it admits no identity, certificate,
+agent, command, forwarding or host rule from system or personal configuration.
+The client receives only terminal-identifying environment values, so a
+caller-selected askpass helper, agent, loader or crypto-provider override
+cannot cross the process boundary. The session is a waited child whose streams
+and exit status are the operator's; it publishes no operation, ownership,
+evidence or retained output.
+
 ## Cryptography and supply chain
 
 Use maintained standard cryptographic libraries and constructions; do not

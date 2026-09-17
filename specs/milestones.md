@@ -133,8 +133,10 @@ sequence, so it adds no exit gate of its own.
 
 `machine list` reports every selected Machine with the state its context's
 durable evidence proves, filtered by cluster membership alone. `machine rsh`
-and `machine exec` resolve one bounded SSH handoff, naming a Secret-backed
-identity as an export the operator performs rather than materializing it.
+and `machine exec` open one SSH session as the identity the Machine's desired
+state authorizes, over a host key proved before any credential is offered; the
+[session slice](#machine-ssh-sessions-and-host-trust) below owns that contract
+and replaced the printed descriptor this milestone first delivered.
 `machine start`, `machine stop` and `machine restart` converge one Machine to a
 power state through its own management controller, over the one Ansible
 boundary, registering no operation and publishing no ownership.
@@ -151,10 +153,41 @@ the adapter runs, so a refused run leaves something to read.
 
 Constraints left behind: a power operation holds the context's shared lock for
 its whole run, so it waits on a running lifecycle mutation and delays one that
-starts while it runs; it reports no progress beyond naming where it is writing,
-so a graceful stop polling a guest to off prints nothing more until it settles;
-and `machine trust` remains unavailable, because the context-managed trust store
-it maintains is undefined (C27).
+starts while it runs; and it reports no progress beyond naming where it is
+writing, so a graceful stop polling a guest to off prints nothing more until it
+settles.
+
+### Machine SSH sessions and host trust
+
+**Owners:** Machine, with Trust (the host-key record format and the
+`known_hosts` grammar), State reconciliation (the material one session binds
+and the installation evidence it proves a key against) and Workspace (the
+context trust area). **Requires:** the Machine commands above, M1c and M1e.
+**Delivered on explicit request**, outside the milestone sequence, so it adds
+no exit gate of its own.
+
+`machine rsh` and `machine exec` open the session rather than printing a
+descriptor, under [the session contract](cli.md#machine-ssh-sessions): one
+resolved identity, a host key proved from exactly one authorized source before
+any credential is offered, session material passed as inherited descriptors,
+and the client's exit status as the result. `machine trust` maintains the
+[context trust store](contexts.md#storage-locking-and-publication) those
+sessions read, so C27 is delivered here.
+
+Guarded by `internal/trust` record and grammar tests, the
+`internal/workspace/contextfs` trust-area tests, `internal/machine/access`
+resolution and trust-precedence tests, `internal/machine/sshlocal` argument,
+policy and descriptor-passing tests, `internal/trust/enrollment` plan tests,
+the `internal/cli` session and trust presentation tests, and the
+`internal/reconciliation/lifecycle` evidence and material tests.
+
+Constraints left behind: the session's client runs with the elevated
+invocation's privileges, so an `auth.operatorIdentity` Machine is reached with
+the controller root account's own identity files and no agent — an operator
+offers their own key with `--ssh-id-file`; a `passwordRef` Machine has the
+client prompt rather than answering for it; and proving an installed Machine's
+key reads durable evidence under the context's shared lock, so a session to one
+waits on a running lifecycle mutation exactly as a power operation does (C7).
 
 ### Sequential idempotence and the removal gate
 
@@ -701,7 +734,7 @@ fill its concrete version, journey and evidence gaps when requested.
 | C24 | Controller setup and Workspace: retirement of a superseded execution bundle. **Needs definition.** | An automation-only revision no longer re-resolves or re-acquires anything: that resolution is [carried forward](controller.md#supported-host-and-dependency-selection) from the bundle the host already holds. It still names a new bundle area, and [no uninstall or garbage collection](controller.md#supported-host-and-dependency-selection) retires the area it replaced. Retained resolutions and bundle areas are bounded at sixteen, so the sixteenth distinct automation revision on one host refuses every later setup with no operator recovery. Whether the automation projection becomes its own layer over a shared foundation, or retirement stays an explicit operator journey, changes the sealed-bundle and attribution contracts. Requires M1d and M1e. | Closed layer identities and their attribution; proof that a foundation is reused only when its resolved closure is unchanged and that sealed-bundle immutability survives an automation-only revision; authorized retirement that refuses a bundle any retained receipt or frozen lifecycle still needs; bounded reacquisition; and crash/replay tests over a partially retired area and over the exhausted retention limit. |
 | C25 | State reconciliation and Controller setup: the remainder of the upgrade journey — scoped removal, and the bundle half of the same collision. **Needs definition.** | Planning a removal from the plan its apply froze is **delivered** by [removal under the build in hand](#removal-under-the-build-in-hand), so a moved content digest, a request shape one version old and an edited declaration no longer strand a context. Two parts remain. `destroy` admits no stage or block scope, so a recovery removes every block the context owns rather than the one whose digest moved. And a sealed bundle is retired by nothing (C24), so an operation that must be *continued* rather than superseded still runs the automation it froze and still refuses a host whose bundle has moved on; only a fresh verb runs under the build in hand. Requires M1d and M1e. | The authorization and journey of a scoped removal, and proof that a scope never leaves a dependent behind; how a continuation names the bundle identity its frozen operation needs so the refusal states the remedy; and crash and replay tests over both.
 | C26 | Controller setup and Workspace: a durable home for what local `setup` prints. **Needs definition.** | Setup allocates [no lifecycle identity and no operation log](cli/output.md#private-operation-logs), so the Ansible that installs the container runtime and publishes the execution bundle discards its own output, and a failure it does not diagnose leaves nothing to read. The controller stage has no such gap, because it is a lifecycle block whose attempt already owns a retained output file, and neither does a bounded run, which retains its own under [`state/runs/<run-id>`](cli/output.md#bounded-run-output). Setup is what is left: it selects no context, so it has no context state to keep a run beside. Whether it gains a bounded log tree beside its [private recovery receipt](controller.md#publication-and-interrupted-setup), reuses the receipt itself, or keeps discarding changes what a context-free local command is permitted to leave behind. Requires M1d. | Closed path grammar, ownership and retention bound beneath the root-owned controller area; exclusive creation that follows no link and overwrites no unrelated content; proof that a retention fault never changes a setup outcome or its receipt; the `Logs` reference in the human result; and negative tests over a full, unwritable and pre-existing destination. |
-| C27 | Trust and Workspace: the context-managed host-key trust `machine trust` maintains. **Needs definition.** | The [Machine access schema](api/machines.md#addresses-and-access) defaults `knownHostsRef` to context-managed trust, but no contract says where that trust is stored, how an observed key enters it, or how `--replace` supersedes one; the installed-machine path instead captures a guest's host key into its own [installation evidence](substrates.md#identity-and-power-operations). Whether the store is a context area of its own, an entry of the existing secret custody, or a projection of installation evidence changes both the Secrets and Workspace contracts, and the observation itself needs an adapter, because a key is read from a remote endpoint. Requires M1c and M1e. The command stays unavailable until promoted. | Closed storage layout and record format; bounded observation of exactly the authorized endpoint; proof that an unknown key is never accepted without `machine trust` and that a changed key refuses without `--replace`; dry-run purity; and the JSON confirmation rule the [catalog](cli/commands.md) already fixes. |
+| C27 | Trust and Workspace: the context-managed host-key trust `machine trust` maintains. **Specified; promoted into [Machine SSH sessions and host trust](#machine-ssh-sessions-and-host-trust).** | The three open questions are closed there: the store is a context area of its own, `state/trust/hosts.json`, holding public keys alone; an observed key enters it only through `machine trust` or an explicitly confirmed interactive first use; and `--replace` is the one path that supersedes a recorded key. An installed Machine keeps proving its key against its own [installation evidence](substrates.md#identity-and-power-operations) and consults no store. Requires M1c and M1e. | Closed storage layout and record format; bounded observation of exactly the authorized endpoint; proof that an unknown key is never accepted without `machine trust` and that a changed key refuses without `--replace`; dry-run purity; and the JSON confirmation rule the [catalog](cli/commands.md) already fixes. |
 
 When a cluster inspection or access slice under C6 is promoted, its exit evidence
 must exercise the [cluster discovery](cli/output.md#cluster-discovery) and
