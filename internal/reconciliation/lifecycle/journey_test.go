@@ -693,6 +693,9 @@ func (p *testProgress) ReportProgress(_ context.Context, event ProgressEvent) {
 	if event.Total != 0 {
 		row += ":" + strconv.Itoa(event.Position) + "/" + strconv.Itoa(event.Total)
 	}
+	if event.Phase != EffectPhase {
+		row = event.Phase + ":" + row
+	}
 	p.rows = append(p.rows, row)
 }
 
@@ -1043,6 +1046,78 @@ func TestAPartlyRemovedBlockIsConvergedByRepeatingTheRemoval(t *testing.T) {
 	converged, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
 	if err != nil || converged.Receipt.State != "done" {
 		t.Fatalf("removal convergence = %+v (%v)", converged.Receipt, err)
+	}
+}
+
+// The gate runs while no operation exists, so it is none of the plan's
+// effects: it reports one check step and makes every block it probes a
+// sub-step of it. Reported as an effect row per block, it printed the whole
+// removal once before the log location and again after it, so an operator read
+// every step twice and the second reading was the only real one.
+func TestTheQuiescenceGateReportsOneCheckAheadOfEveryEffect(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab", "machine-rhel-01")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	progress := &testProgress{rowsAtLocation: -1}
+	h.service.options.Progress = progress
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	gate := []string{
+		"check:prove nothing this removal takes back is still in use:ArtifactServer/artifact-server-lab:running",
+		"check:prove nothing this removal takes back is still in use:ArtifactServer/machine-rhel-01:running",
+		"check:prove nothing this removal takes back is still in use::ok",
+	}
+	if len(progress.rows) < len(gate) || !slices.Equal(progress.rows[:len(gate)], gate) {
+		t.Fatalf("the gate reported %q, want %q", progress.rows, gate)
+	}
+	if progress.rowsAtLocation != len(gate) {
+		t.Fatalf("the log location followed %d rows, want the %d the gate reported", progress.rowsAtLocation, len(gate))
+	}
+	for _, row := range progress.rows[len(gate):] {
+		if strings.HasPrefix(row, CheckPhase+":") {
+			t.Fatalf("a check reported after the log location: %q", row)
+		}
+	}
+}
+
+// A check closes with what it proved, exactly as a step does: the refusal is
+// why the removal stopped, and a probe that never answered leaves the gate
+// with no outcome to claim.
+func TestTheQuiescenceGateClosesWithWhatItProved(t *testing.T) {
+	for name, tc := range map[string]struct {
+		arrange func(*harness)
+		want    string
+	}{
+		"live": {
+			arrange: func(h *harness) {
+				h.capability.quiescence = map[string]Quiescence{
+					"machine-rhel-01": {State: Live, Reason: "its domain is running"},
+				}
+			},
+			want: "check:prove nothing this removal takes back is still in use::failed",
+		},
+		"faulted": {
+			arrange: func(h *harness) { h.capability.quiescentErr = errors.New("the probe could not run") },
+			want:    "check:prove nothing this removal takes back is still in use::unknown",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t, "artifact-server-lab", "machine-rhel-01")
+			if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+				t.Fatal(err)
+			}
+			progress := &testProgress{}
+			h.service.options.Progress = progress
+			tc.arrange(h)
+			if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+				t.Fatal("the gate admitted the removal")
+			}
+			if len(progress.rows) == 0 || progress.rows[len(progress.rows)-1] != tc.want {
+				t.Fatalf("the gate closed with %q, want %q", progress.rows, tc.want)
+			}
+		})
 	}
 }
 

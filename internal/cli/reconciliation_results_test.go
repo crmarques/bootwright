@@ -409,6 +409,68 @@ func TestProgressNamesTheLogLocationBeforeItsFirstRow(t *testing.T) {
 	}
 }
 
+// What a removal proves before it registers is not an effect of its plan, so
+// it settles under its own heading as one row however many blocks it probes.
+// Reported as effects it produced a second row per block, ahead of the log
+// location, and an operator read every step of the removal twice.
+func TestQuiescenceChecksSettleAsOneRowBeforeTheEffects(t *testing.T) {
+	var out bytes.Buffer
+	presenter := NewLifecycleProgressPresenter(&out, nil)
+	ctx := context.Background()
+	check := func(group, detail, status string, completed int) lifecycle.ProgressEvent {
+		return lifecycle.ProgressEvent{
+			Phase: lifecycle.CheckPhase, Block: "quiescence",
+			Description: "prove nothing this removal takes back is still in use",
+			Group:       group, Detail: detail, Status: status,
+			Completed: completed, Declared: 2,
+		}
+	}
+	presenter.ReportProgress(ctx, check("machine-rhel-01", "Machine/rhel-01", "running", 0))
+	presenter.ReportProgress(ctx, check("artifact-server-lab", "ArtifactServer/lab", "running", 1))
+	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{
+		Phase: lifecycle.CheckPhase, Block: "quiescence",
+		Description: "prove nothing this removal takes back is still in use", Status: "ok",
+	})
+	presenter.ReportLogLocation(ctx, "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs")
+	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{
+		Block: "machine-rhel-01", Description: "remove the virtual machine rhel-01", Status: "done", Position: 1, Total: 2,
+	})
+	want := "\nChecks\n" +
+		"  [RUNNING]  prove nothing this removal takes back is still in use: Machine/rhel-01 - 0%\n" +
+		"  [RUNNING]  prove nothing this removal takes back is still in use: ArtifactServer/lab - 50%\n" +
+		"  [OK]       prove nothing this removal takes back is still in use\n" +
+		"\n  Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n" +
+		"\nProgress\n" +
+		"  [DONE]     [1/2] remove the virtual machine rhel-01\n"
+	if out.String() != want {
+		t.Fatalf("progress = %q, want %q", out.String(), want)
+	}
+}
+
+// On a terminal the whole gate occupies the one line its rows redraw, so the
+// heading that follows it is the only thing that terminates it.
+func TestTerminalQuiescenceChecksOccupyOneLine(t *testing.T) {
+	var out bytes.Buffer
+	presenter := NewLifecycleProgressPresenter(&out, func() int { return 120 })
+	ctx := context.Background()
+	for _, detail := range []string{"Machine/rhel-01", "ArtifactServer/lab"} {
+		presenter.ReportProgress(ctx, lifecycle.ProgressEvent{
+			Phase: lifecycle.CheckPhase, Block: "quiescence", Description: "prove nothing is in use",
+			Group: detail, Detail: detail, Status: "running", Declared: 2,
+		})
+	}
+	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{
+		Phase: lifecycle.CheckPhase, Block: "quiescence", Description: "prove nothing is in use", Status: "ok",
+	})
+	rows, _ := strings.CutPrefix(out.String(), "\nChecks\n")
+	if lines := strings.Count(rows, "\n"); lines != 1 {
+		t.Fatalf("the gate wrote %d lines under its heading, want one: %q", lines, out.String())
+	}
+	if !strings.HasSuffix(out.String(), "  [OK]       prove nothing is in use\n") {
+		t.Fatalf("the gate did not settle as its own row: %q", out.String())
+	}
+}
+
 // A terminal rewrites running rows in place, so the location has to terminate
 // the open row rather than be erased by the next redraw.
 func TestTerminalLogLocationSurvivesTheRedrawnRow(t *testing.T) {

@@ -77,10 +77,22 @@ func (p *LifecycleProgressPresenter) ReportProgress(ctx context.Context, event l
 		detail = event.Group
 	}
 	p.progress.report(ctx, progressEvent{
-		Heading: "Progress", Label: label, Detail: detail, Status: event.Status,
+		Heading: lifecyclePhaseHeading(event.Phase), Label: label, Detail: detail, Status: event.Status,
 		Position: event.Position, Total: event.Total, Nested: event.Group != "",
 		Completed: event.Completed, Declared: event.Declared,
 	})
+}
+
+// lifecyclePhaseHeading separates what an operation proves before it registers
+// from what it then does. A check settles under its own heading while no
+// operation and no log exist, so Progress opens on the first effect and holds
+// effects alone: one row per block, all of them after the Logs field that says
+// where to follow them.
+func lifecyclePhaseHeading(phase string) string {
+	if phase == lifecycle.CheckPhase {
+		return "Checks"
+	}
+	return "Progress"
 }
 
 // ReportLogLocation names where the operation writes, before its first effect.

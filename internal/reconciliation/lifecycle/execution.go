@@ -598,6 +598,14 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 	return final, withCause(cause, terminal)
 }
 
+// The gate is one step, and the blocks it probes are that step's sub-steps, so
+// a removal of any size settles the whole proof as one row and the rows that
+// follow are the plan's effects alone.
+const (
+	quiescenceCheck            = "quiescence"
+	quiescenceCheckDescription = "prove nothing this removal takes back is still in use"
+)
+
 // proveQuiescent observes every block a removal would take back and refuses
 // while any of it is still in use. Every block is probed rather than the first
 // live one alone, so an operator is told everything to stop instead of
@@ -621,10 +629,9 @@ func (s Service) proveQuiescent(ctx context.Context, tx Transaction, plan reconc
 					"this executable does not offer the implementation this block froze",
 					"install the executable that registered this operation")
 			}
-			s.report(ctx, ProgressEvent{
-				Block: block.ID, Description: block.Description,
-				Detail: "proving nothing it owns is still in use", Status: "running",
-				Position: index + 1, Total: len(plan.Blocks),
+			s.reportCheck(ctx, ProgressEvent{
+				Group: block.ID, Detail: block.Kind + "/" + block.Object, Status: "running",
+				Completed: index, Declared: len(plan.Blocks),
 			})
 			state, err := capability.Quiescent(ctx, Probe{
 				Block: block, Launch: launch, Bundle: location, Area: area, Material: material,
@@ -643,16 +650,27 @@ func (s Service) proveQuiescent(ctx context.Context, tx Transaction, plan reconc
 		return nil
 	})
 	if err != nil {
+		// A probe that never answered leaves the gate nothing to claim.
+		s.reportCheck(ctx, ProgressEvent{Status: "unknown"})
 		return err
 	}
 	if len(live) == 0 {
+		s.reportCheck(ctx, ProgressEvent{Status: "ok"})
 		return nil
 	}
+	s.reportCheck(ctx, ProgressEvent{Status: "failed"})
 	remediation := "stop what is running, then repeat the removal"
 	if len(stops) != 0 {
 		remediation = "stop it with " + strings.Join(stops, ", then ")
 	}
 	return failure("lifecycle.live", "this removal would take back state that is still in use: "+strings.Join(live, ", "), remediation)
+}
+
+// reportCheck streams one row of the gate. It runs before the operation
+// exists, so it belongs to no block and counts against no frozen total.
+func (s Service) reportCheck(ctx context.Context, event ProgressEvent) {
+	event.Phase, event.Block, event.Description = CheckPhase, quiescenceCheck, quiescenceCheckDescription
+	s.report(ctx, event)
 }
 
 // withCause keeps the block's own diagnostics beside the terminal state. The

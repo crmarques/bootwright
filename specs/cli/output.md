@@ -122,6 +122,15 @@ Four rules govern the stream:
    plan; every command reports confirmed effects under `Progress`. The first
    row opens its heading, and a section the stream already showed is not
    repeated by the result that follows.
+
+   `Progress` holds effects alone. A proof a command performs before it may
+   have any effect, such as
+   [quiescence before a removal](../state-reconciliation.md#quiescence-before-removal),
+   settles under `Checks` first, so the rows under `Progress` are one per step
+   of the work that was authorized and every one of them follows the `Logs`
+   field naming where to read it. A check reports under rules 2 to 4 like any
+   other step: what it probes is its sub-step, so the whole of one check
+   settles as one row however many targets it has to observe.
 2. **Silence bound.** While a step runs and ten seconds pass without a new
    row, the presenter repeats the current row with `still running` and the
    time since the step started. The CLI presenter owns the timer; domain and
@@ -370,9 +379,10 @@ unavailable command still follows the no-context-read
 `plan`, `apply` and `destroy` are text only. Their human result composes the
 [shared layout](#shared-human-layout): an optional headline, a `Plan` section
 whose steps are the frozen blocks in plan order, each naming its stage and
-carrying its own impacts as indented lines, a `Progress` section while effects
-run, a `Result` section of status rows, the `Logs` reference when an operation
-log exists, and the receipt as the final four lines. With a stage selection,
+carrying its own impacts as indented lines, a `Checks` section for what the
+operation proves before it registers, a `Progress` section while effects run, a
+`Result` section of status rows, the `Logs` reference when an operation log
+exists, and the receipt as the final four lines. With a stage selection,
 each pending step also says whether this invocation would start it, that it is
 not selected, or which block it waits on, and a closing field reports how many
 blocks would start and how many are deferred. A block row leads with its status
@@ -562,15 +572,17 @@ cursor.
 Human output names the operation's own log directory as a `Logs` field, giving
 its path on this host rather than one relative to the state root, because the
 point of naming it is that an operator can open it. It is named twice: once
-before the first effect runs, so the work can be followed while it happens, and
-once after the terminal summary, so it survives in the scrollback. Both name the
-same directory, which is where a run still in flight is writing; that directory
-and its files are private to the identity owning the state tree, so reading them
-is a privileged action. JSON `logs` keeps naming safe paths relative to the
-state root, and lists created paths once: operation log first, then blocks in
-frozen plan order, effect attempts in numeric order, each attempt's retained
-adapter output directly after its own log, and their resolution attempts in
-numeric order.
+before the first effect runs and so before every row under `Progress`, so the
+work can be followed while it happens, and once after the terminal summary, so
+it survives in the scrollback. A check that precedes registration precedes the
+field as well, because the directory belongs to an operation that does not
+exist until the check admits it. Both name the same directory, which is where a
+run still in flight is writing; that directory and its files are private to the
+identity owning the state tree, so reading them is a privileged action. JSON
+`logs` keeps naming safe paths relative to the state root, and lists created
+paths once: operation log first, then blocks in frozen plan order, effect
+attempts in numeric order, each attempt's retained adapter output directly
+after its own log, and their resolution attempts in numeric order.
 
 ### Bounded run output
 

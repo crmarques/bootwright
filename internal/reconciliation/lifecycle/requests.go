@@ -131,9 +131,22 @@ type OperationResult struct {
 	Receipt Receipt
 }
 
-// ProgressEvent is one row of an operation's progress. Description names the
-// block; Detail names the group or observation in flight within it.
+// Progress phases, in the order an operation runs them. A check proves a
+// precondition while no operation exists yet, so it has no log to follow and
+// no frozen block to count against; an effect is the work the registered plan
+// authorized. The zero value is an effect, because that is what a block
+// reports.
+const (
+	EffectPhase = ""
+	CheckPhase  = "check"
+)
+
+// ProgressEvent is one row of an operation's progress. Block identifies the
+// step the row belongs to and Description names it: a frozen block during
+// EffectPhase, the check itself during CheckPhase. Detail names the group or
+// observation in flight within it.
 type ProgressEvent struct {
+	Phase       string
 	Block       string
 	Group       string
 	Description string
@@ -143,6 +156,7 @@ type ProgressEvent struct {
 	Total       int
 	// Completed of Declared are the block's presentation groups that have
 	// reported a terminal outcome, out of the groups its frozen plan declares.
+	// A check counts the blocks it has probed out of the blocks it must probe.
 	Completed int
 	Declared  int
 }

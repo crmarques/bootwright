@@ -39,9 +39,19 @@ detail, the `(position/total)` counter and the `still running` note.
   than the row: a lifecycle subject is as wide as before and still needs the
   bound above. The position moved to the front of the subject, where eliding
   the text after it cannot take the counter with it.
+- The presenter holds one current step, and only that step's own rows may
+  overwrite its line, so every change of step label costs a line. A phase that
+  iterates over targets therefore has to report them as sub-steps of one step,
+  or it prints one settled line per target. Observed on 2026-09-17: the
+  [quiescence gate](../../specs/state-reconciliation.md#quiescence-before-removal)
+  reported a row per block under `Progress`, so an eight-block destroy printed
+  every step twice, once as a probe before the `Logs` field and once as the
+  effect after it. It is one check step now, under `Checks`.
 
 Evidence: `TestTerminalProgressFitsEveryRowInTheTerminalWidth` drives a row
 wider than its window and fails on any drawn line that reaches the width,
 `TestAppendedProgressRowsAreNeverElided` holds the pipe form whole, and
 `TestTerminalColumnsFollowTheWindowSize` resizes a pseudo-terminal through the
-same reader.
+same reader. `TestTerminalQuiescenceChecksOccupyOneLine` and
+`TestQuiescenceChecksSettleAsOneRowBeforeTheEffects` hold the gate to one row
+in both forms.

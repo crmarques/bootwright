@@ -562,6 +562,11 @@ rather than forcing, which covers a Machine started while the removal ran. A
 continuation is not gated again: its operation is already registered and each
 of its effects still revalidates.
 
+The gate is one [check](cli/output.md#long-running-progress), not a preview of
+the removal: it settles as a single row whose sub-step is the block being
+probed, ahead of the log directory and every effect row, so an operator reads
+each step of the removal once and reads it as the effect it is.
+
 A Machine whose state cannot be read is live. An environment that cannot prove
 its Machines are idle is never assumed to be.
 
