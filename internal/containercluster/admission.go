@@ -203,7 +203,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		if provided := bound.Spec().Get("os", "provided"); provided.Present() && provided.Bool() {
 			issues = add(issues, reference(path, "container installation requires a Machine whose OS is not provided"))
 		}
-		if provider, ok := machine.Provider(bound, c); ok && substrate.Variant(provider) == "baremetal" {
+		if provider, ok := machine.Provider(bound, c); ok && substrate.RealizesPhysicalNICs(provider) {
 			baremetal = true
 		}
 		_, configured := machine.NetworkConfig(bound, c)

@@ -73,7 +73,7 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 		s = s.With("network", network)
 	}
 	if bmc := s.Get("hardware", "management", "bmc"); bmc.Present() {
-		if found && substrate.Variant(provider) == "baremetal" {
+		if found && substrate.RealizesPhysicalNICs(provider) {
 			defaults := provider.Spec().Get("baremetal", "defaults", "bmc")
 			if bmc.Has("virtualMedia") {
 				defaults = defaults.Without("virtualMedia")
@@ -226,10 +226,10 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	variant := substrate.Variant(provider)
 	if found && variant != "" {
 		profileRef := s.Get("substrate", "profileRef")
-		if variant == "baremetal" && profileRef.Present() {
+		if variant == substrate.ArmBaremetal && profileRef.Present() {
 			issues = appendIssues(issues, invariant("$.spec.substrate.profileRef", "bare-metal Machines forbid a virtual machine profile"))
 		}
-		if variant != "baremetal" {
+		if variant != substrate.ArmBaremetal {
 			if provided.Present() && !provided.Bool() && !profileRef.Present() {
 				issues = appendIssues(issues, invariant("$.spec.substrate.profileRef", "virtual installation requires a provider-local machine profile"))
 			}
@@ -239,7 +239,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 				}
 			}
 		}
-		if variant == "baremetal" && provided.Present() && !provided.Bool() {
+		if variant == substrate.ArmBaremetal && provided.Present() && !provided.Bool() {
 			issues = appendIssues(issues, validateBaremetal(o)...)
 		}
 	}
@@ -298,7 +298,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 					break
 				}
 			}
-			if found && variant == "libvirt" {
+			if found && variant == substrate.ArmLibvirt {
 				issues = appendIssues(issues, validateManagedAttachmentContainment(prefix, network, provider)...)
 			}
 		}
@@ -355,7 +355,7 @@ func validateHostKey(o api.Object, c api.Catalog) []api.Issue {
 		return nil
 	}
 	provider, found := Provider(o, c)
-	if !installed(o) || !found || substrate.Variant(provider) != "baremetal" {
+	if !installed(o) || !found || !substrate.RealizesPhysicalNICs(provider) {
 		return []api.Issue{invariant("$.spec.os.install.hostKeyRef",
 			"only a bare-metal Bootwright-installed Machine delivers its own SSH host key")}
 	}
@@ -414,7 +414,7 @@ func validateHardware(o api.Object, c api.Catalog, variant string) []api.Issue {
 			issues = appendIssues(issues, invariant(path, "canonical hardware MACs must be unique"))
 		}
 		seen[mac] = true
-		if variant == "vsphere" && (mac < "00:50:56:00:00:00" || mac > "00:50:56:3f:ff:ff") {
+		if variant == substrate.ArmVSphere && (mac < "00:50:56:00:00:00" || mac > "00:50:56:3f:ff:ff") {
 			issues = appendIssues(issues, invariant(path, "vSphere MAC must be in the manual assignment range"))
 		}
 		for _, other := range c.OfKind(api.Machine) {
@@ -457,7 +457,7 @@ func validateAttachments(o, provider api.Object, native api.Value) []api.Issue {
 	}
 	check(network.Get("attachmentRef"), "$.spec.network.attachmentRef")
 	if network.Has("interfaceAttachments") {
-		if variant != "kubevirt" {
+		if variant != substrate.ArmKubeVirt {
 			issues = appendIssues(issues, invariant("$.spec.network.interfaceAttachments", "per-interface attachments require KubeVirt"))
 		}
 		seen := map[string]bool{}

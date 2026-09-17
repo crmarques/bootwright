@@ -19,9 +19,19 @@ const (
 	ArmKubeVirt  = "kubevirt"
 )
 
+// Arms lists every arm an InfraProvider may declare, in the order admission
+// reads them. Declaring more than one selects none.
+func Arms() []string { return []string{ArmBaremetal, ArmLibvirt, ArmVSphere, ArmKubeVirt} }
+
 // Realized lists the arms this executable can realize, in canonical order.
 // Every other arm refuses before an operation registers.
 func Realized() []string { return []string{ArmBaremetal, ArmLibvirt} }
+
+// RealizesPhysicalNICs reports whether a provider's machines are operator-owned
+// hardware whose interfaces exist before Bootwright realizes anything. A
+// consumer asks this rather than naming an arm, so adding one changes this
+// answer alone.
+func RealizesPhysicalNICs(provider api.Object) bool { return Variant(provider) == ArmBaremetal }
 
 // The identity channels a substrate offers to prove what a machine holds.
 // Which one a Machine uses is fixed by its substrate and frozen with the

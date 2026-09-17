@@ -336,7 +336,7 @@ func resolveBindings(o api.Object, c api.Catalog, native api.Value) (api.Value, 
 	interfaces := native.Get("interfaces").Items()
 	bindings := o.Spec().Get("network", "interfaceBinding")
 	provider, found := Provider(o, c)
-	required := found && substrate.Variant(provider) == "baremetal" && o.Spec().Get("os", "provided").Present() && !o.Spec().Get("os", "provided").Bool()
+	required := found && substrate.RealizesPhysicalNICs(provider) && o.Spec().Get("os", "provided").Present() && !o.Spec().Get("os", "provided").Bool()
 	if !bindings.Present() && required {
 		values := []api.Value{}
 		for _, iface := range interfaces {

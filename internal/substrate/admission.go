@@ -12,7 +12,7 @@ import (
 
 func Variant(o api.Object) string {
 	selected := ""
-	for _, name := range []string{"baremetal", "libvirt", "vsphere", "kubevirt"} {
+	for _, name := range Arms() {
 		if o.Spec().Has(name) {
 			if selected != "" {
 				return ""

@@ -214,13 +214,13 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		}
 		variant := substrate.Variant(provider)
 		profile, profileOK := localProfile(provider.Spec().Get(variant, "machineProfiles"), machine.Spec().Get("substrate", "profileRef").Text())
-		if s.Has("installer", "templateClone") && (variant != "vsphere" || profileOK && !profile.Has("template")) {
+		if s.Has("installer", "templateClone") && (variant != substrate.ArmVSphere || profileOK && !profile.Has("template")) {
 			issues = add(issues, issue("$.spec.installer.templateClone", "template clone consumers require a vSphere profile with a template"))
 		}
-		if anaconda.Present() && variant == "baremetal" && !anaconda.Has("redfishVirtualMedia", "artifactServerEndpoint") {
+		if anaconda.Present() && variant == substrate.ArmBaremetal && !anaconda.Has("redfishVirtualMedia", "artifactServerEndpoint") {
 			issues = add(issues, issue("$.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint", "bare-metal installation requires a complete managed artifact endpoint"))
 		}
-		if custom.Has("security", "diskEncryption") && variant != "baremetal" && profileOK && !profile.Has("tpm") {
+		if custom.Has("security", "diskEncryption") && variant != substrate.ArmBaremetal && profileOK && !profile.Has("tpm") {
 			issues = add(issues, issue("$.spec.customizations.security.diskEncryption", "virtual disk encryption requires TPM support in every consuming provider profile"))
 		}
 		if custom.Get("hostname", "source").Text() == "machineName" && clusterBound(machine, c) {
