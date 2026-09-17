@@ -364,7 +364,8 @@ per installation method, `containercluster/agentinstall` beside the
 capability crosses to `reconciliation/ansiblerunner`, whose request and material
 values `reconciliation/lifecycle` owns while the Machine context root owns the
 placement and address every run resolves; each is created with its first
-authorized behavior.
+authorized behavior. Composition binds that runner's entrypoints, so a
+capability names no playbook and adding one changes wiring alone.
 
 ### Domain communication graph
 
@@ -509,13 +510,13 @@ production binding; tests substitute fakes through the same interface.
 | `internal/cli` | `MachineInventoryService` | List | `machine/inventory.Service` |
 | `internal/cli` | `MachineAccessService` | Rsh, Exec | `machine/access.Service` |
 | `internal/cli` | `MachinePowerService` | Start, Stop, Restart | `machine/power.Service` |
-| `internal/cli` | twelve stub ports, one per `S` row of the map | one method per command | `<capability>.Service{}` |
+| `internal/cli` | eleven stub ports, one per `S` row of the map | one method per command | `<capability>.Service{}` |
 | `reconciliation/lifecycle` | `Inputs` | ReadInputs | `workspace/contexts.Inputs` |
 | `reconciliation/lifecycle` | `Compiler` | Compile | `desiredstate/compilation.Compiler` |
 | `reconciliation/lifecycle` | `SecretBinder` | Bind, Reopen, Release | `secrets/custody.Service` |
 | `reconciliation/lifecycle` | `Workspace` | ReadLifecycle, RunLifecycle, MutateLifecycle | `workspace/contextfs.Store` |
-| `reconciliation/lifecycle` | `LifecycleTransaction` | Context, Inputs, Controller, Operations, Evidence, PublishEvidence, Bind, Reserve, Release, ClientArea, SealClientArea, RetainDependencies | `contextfs` lifecycle transaction |
-| `reconciliation/lifecycle` | `OperationStore` | Index, Register, ReadOperation, ReadPlan, BlockState, PublishBlock, PublishAttempt, RecordPreparation, OpenLog, Complete | `reconciliation/operationstore.Store` |
+| `reconciliation/lifecycle` | `Transaction` | View, PublishEvidence, Bind, Reserve, ReleaseReservations, ClientArea, SealClientArea, RetainDependencies | `contextfs` lifecycle transaction |
+| `reconciliation/lifecycle` | `OperationStore` | Index, Register, ReadOperation, ReadPlan, UpdateOperation, BlockStates, Block, Attempt, StartAttempt, RecordPreparation, CompleteAttempt, LastAttempt, StartResolution, CompleteResolution, OpenLog, OpenAdapterOutput, LogPaths, LogDirectory | `reconciliation/operationstore.Store` |
 | `machine/inventory`, `machine/access`, `machine/power` | `EffectiveState` | RenderEffective | `desiredstate/compilation.Service` |
 | `machine/inventory`, `machine/access`, `machine/power` | `Ownership` | Ownership | composition adapter over `reconciliation/lifecycle.Service` |
 | `machine/access` | `MaterialLender` | WithMaterial | `reconciliation/lifecycle.Service` |
@@ -533,10 +534,10 @@ production binding; tests substitute fakes through the same interface.
 | `reconciliation/lifecycle` | `HostIdentity` | Identity | `controller/hostlinux.Inspector` |
 | `reconciliation/lifecycle` | `AutomationIdentity` | CatalogDigest | composition value over `controller/bundlelocal` and the embedded collection |
 | `reconciliation/lifecycle` | `ExecutionGuard` | WithPython | `controller/bundlelocal.ExecutionGuard` |
-| `reconciliation/lifecycle` | `CapabilityResolver`, `Capability` | Bindings, Resolve; Plan, Apply, Observe, Quiescent, Destroy | immutable ordered composition set over `controller/clients.Capability`, `infrastructureservices/artifactserver.Capability`, `infrastructureservices/managedservice.Capability`, `substrate/libvirt.HostCapability`, `substrate/libvirt.MachineCapability`, `substrate/baremetal.MachineCapability` and `managedos/installation.Capability` |
-| `reconciliation/lifecycle` | `Confirmer`, `PlanPresenter`, `ProgressReporter` | Confirm; PresentLifecyclePlan; ReportProgress | `internal/cli` |
+| `reconciliation/lifecycle` | `CapabilityResolver`, `Capability` | Bindings, Resolve; Plan, Removal, Apply, Observe, Quiescent, Destroy | immutable ordered composition set over `controller/clients.Capability`, `infrastructureservices/artifactserver.Capability`, `infrastructureservices/managedservice.Capability`, `substrate/libvirt.HostCapability`, `substrate/libvirt.MachineCapability`, `substrate/baremetal.MachineCapability` and `managedos/installation.Capability` |
+| `reconciliation/lifecycle` | `Confirmer`, `PlanPresenter`, `ProgressReporter` | Confirm; PresentLifecyclePlan; ReportProgress, ReportLogLocation | `internal/cli` |
 | `reconciliation/lifecycle` | `Clock`, `Entropy` | Now; Read | composition |
-| `reconciliation/operationstore` | `Area` | Read, Entries, EnsureDirectory, WriteExclusive, Replace, Append, Sync | `contextfs` operation area |
+| `reconciliation/operationstore` | `Area` | Read, Entries, EnsureDirectory, WriteExclusive, Replace, Append, Sync, Location | `contextfs` operation area |
 | `infrastructureservices/artifactserver`, `infrastructureservices/managedservice` | `Runner` | Run | `reconciliation/ansiblerunner.Runner` |
 | `workspace/contexts` | `Repository` (embeds `InputRepository`) | ReadInputs, CheckInputDirectory, View, Transact | `workspace/contextfs.Store` |
 | `workspace/contexts` | `Transaction` | Registry, Reserve, Configuration, InitializeSecrets, Publish, MutationState, Delete, Commit | `contextfs` transaction |
@@ -575,13 +576,13 @@ production binding; tests substitute fakes through the same interface.
 | `controller/clients` | `NativeResolver`, `NativeInspector` | Resolve; Check | `controller/nativelocal.Resolver` |
 | `controller/clients` | `Installer` | Clients | `controller/ansiblelocal.Installer` |
 | `controller/prerequisites` | `Storage` | ReadController, MutateController | `workspace/contextfs.Store` |
-| `controller/prerequisites` | `StorageTransaction` | Snapshot, Publish, Bundle | `contextfs` controller transaction |
+| `controller/prerequisites` | `StorageTransaction` | Snapshot, Publish, Bundle, RetireBundles | `contextfs` controller transaction |
 | `controller/prerequisites` | `BundleArea` | Read, Write, EnsureDirectory, Entries, Verify, Location | `contextfs` bundle area |
 | `controller/prerequisites` | `Compiler` | Compile | `desiredstate/compilation.Compiler` |
 | `controller/prerequisites` | `HostInspector` | Platform, Identity, Runtime | `controller/hostlinux.Inspector` |
 | `controller/prerequisites` | `DependencyCatalog` | Select, ValidateEgress | `controller/bundlelocal.Catalog` |
-| `controller/prerequisites` | `BundleManager` | Inspect, Prepare | `controller/bundlelocal.Manager` |
-| `controller/prerequisites` | `TargetToolCatalog` | Select, Resolve | `controller/bundlelocal.ToolCatalog` |
+| `controller/prerequisites` | `BundleManager` | Inspect, Prepare, Rebase | `controller/bundlelocal.Manager` |
+| `controller/prerequisites` | `TargetToolCatalog` | Select, Resolve, Present | `controller/bundlelocal.ToolCatalog` |
 | `controller/prerequisites` | `BootstrapResolver` | Resolve | `controller/bundlelocal.BootstrapCatalog` |
 | `controller/prerequisites` | `RuntimeInstaller` | Prepare, Recover | `controller/ansiblelocal.Installer` |
 | `controller/prerequisites` | `PythonExecutionGuard` | WithPython | `controller/bundlelocal.ExecutionGuard` |
