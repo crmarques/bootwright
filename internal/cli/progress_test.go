@@ -219,9 +219,11 @@ func TestTerminalProgressRewritesTheRunningRowInPlace(t *testing.T) {
 	}
 }
 
-// A new step or heading never overwrites another step's row, and a settled
-// sub-step leaves its step's line to the next refresh.
-func TestTerminalProgressClosesALineBeforeAnotherStepOrHeading(t *testing.T) {
+// A step that starts while another is still running takes a line of its own,
+// so the block grows rather than one step overwriting another's row. A heading
+// owns its block: the steps under the previous one keep the rows they last
+// wrote and the new heading starts a block carrying none of them.
+func TestTerminalProgressGivesEveryRunningStepItsOwnLine(t *testing.T) {
 	presenter, clock, out := newTestTerminalProgress(120)
 	ctx := context.Background()
 	presenter.report(ctx, progressEvent{Heading: "Checks", Label: "Installed host", Detail: "verifying local identity", Status: "running"})
@@ -230,13 +232,54 @@ func TestTerminalProgressClosesALineBeforeAnotherStepOrHeading(t *testing.T) {
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Detail: "acquire the pinned server image", Status: "ok", Position: 1, Total: 1, Nested: true})
 	clock.advance(time.Second)
 	want := "\nChecks\n" +
-		"  [RUNNING]  Installed host: verifying local identity\n" +
+		"  [RUNNING]  Installed host: verifying local identity" +
+		eraseLine + "  [RUNNING]  Installed host: verifying local identity\n" +
 		"  [RUNNING]  Execution bundle: verifying the retained bundle\n" +
 		"\nProgress\n" +
 		"  [RUNNING]  [1/1] Serve artifacts" +
 		eraseLine + "  [RUNNING]  [1/1] Serve artifacts  still running, 1s"
 	if out.String() != want {
 		t.Fatalf("progress = %q, want %q", out.String(), want)
+	}
+}
+
+// Blocks running at the same time each keep one line, and a step that settles
+// writes its outcome above the block and gives its line back, so the block
+// always holds exactly the steps that are still running.
+func TestTerminalProgressSettlesOneStepOutOfABlockOfThem(t *testing.T) {
+	presenter, clock, out := newTestTerminalProgress(120)
+	ctx := context.Background()
+	for _, step := range []struct {
+		label    string
+		position int
+	}{{"Serve artifacts", 1}, {"Resolve names", 2}, {"Realize rhel-01", 3}} {
+		presenter.report(ctx, progressEvent{Heading: "Progress", Label: step.label, Status: "running", Position: step.position, Total: 3})
+	}
+	clock.advance(time.Second)
+	// The middle step settles; its outcome scrolls above the two that remain.
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Resolve names", Status: "done", Position: 2, Total: 3})
+	rendered := out.String()
+	if !strings.Contains(rendered, "[DONE]     [2/3] Resolve names  1s\n") {
+		t.Fatalf("the settled step wrote no outcome row: %q", rendered)
+	}
+	// Three lines were drawn, so the redraw reaches the first of them.
+	if !strings.Contains(rendered, "\x1b[2A") {
+		t.Fatalf("a block of three lines was never redrawn as one: %q", rendered)
+	}
+	// Everything after the outcome row is the block that remains.
+	outcome := "[DONE]     [2/3] Resolve names  1s\n"
+	tail := rendered[strings.LastIndex(rendered, outcome)+len(outcome):]
+	if strings.Contains(tail, "Resolve names") {
+		t.Fatalf("a settled step kept its line in the block: %q", tail)
+	}
+	for _, running := range []string{"[1/3] Serve artifacts", "[3/3] Realize rhel-01"} {
+		if !strings.Contains(tail, running) {
+			t.Fatalf("the block lost a step that is still running: %q", tail)
+		}
+	}
+	presenter.finish()
+	if !strings.HasSuffix(out.String(), "\n") {
+		t.Fatal("the block was left open")
 	}
 }
 
@@ -286,5 +329,30 @@ func TestProgressEscapesUntrustedText(t *testing.T) {
 	rendered := out.String()
 	if strings.ContainsAny(rendered, "\x1b\r") || !strings.Contains(rendered, "serve\\u001b[31m: pull\\r\\nimage") {
 		t.Fatalf("progress = %q", rendered)
+	}
+}
+
+// Where rows are appended rather than redrawn — a pipe, a file and the
+// privilege supervisor's relay — steps running at the same time interleave in
+// the order they report, and each keeps its own silence bound.
+func TestAppendedProgressInterleavesConcurrentStepsAndBeatsEachOne(t *testing.T) {
+	presenter, clock, out := newTestProgress()
+	ctx := context.Background()
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Status: "running", Position: 1, Total: 2})
+	clock.advance(4 * time.Second)
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Resolve names", Status: "running", Position: 2, Total: 2})
+	// Ten seconds after its own last row, each step repeats it once.
+	clock.advance(progressHeartbeat)
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Status: "done", Position: 1, Total: 2})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Resolve names", Status: "done", Position: 2, Total: 2})
+	want := "\nProgress\n" +
+		"  [RUNNING]  [1/2] Serve artifacts\n" +
+		"  [RUNNING]  [2/2] Resolve names\n" +
+		"  [RUNNING]  [1/2] Serve artifacts  still running, 10s\n" +
+		"  [RUNNING]  [2/2] Resolve names  still running, 10s\n" +
+		"  [DONE]     [1/2] Serve artifacts  14s\n" +
+		"  [DONE]     [2/2] Resolve names  10s\n"
+	if out.String() != want {
+		t.Fatalf("progress = %q, want %q", out.String(), want)
 	}
 }

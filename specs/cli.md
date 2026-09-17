@@ -3,8 +3,10 @@
 `bootwright` exposes the [desired-state API](api.md) to operators and automation.
 Equivalent logical input produces the same ordered output regardless of TTY,
 locale, map iteration or discovery order. Prompts, explicit sensitive exports,
-watch displays, and the elapsed times and terminal redraw of
-[progress rows](cli/output.md#long-running-progress) are the named exceptions.
+watch displays, and the elapsed times, terminal redraw and interleaving of
+concurrent steps' [progress rows](cli/output.md#long-running-progress) are the
+named exceptions. Progress is presentation: the plan, the result rows and the
+receipt that follow it are ordered by the frozen plan whatever ran together.
 
 Read this page with the [command and flag catalog](cli/commands.md) and
 [output contract](cli/output.md). Together they define the CLI. Unlisted

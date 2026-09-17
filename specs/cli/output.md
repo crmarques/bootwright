@@ -132,10 +132,16 @@ Four rules govern the stream:
    other step: what it probes is its sub-step, so the whole of one check
    settles as one row however many targets it has to observe.
 2. **Silence bound.** While a step runs and ten seconds pass without a new
-   row, the presenter repeats the current row with `still running` and the
-   time since the step started. The CLI presenter owns the timer; domain and
-   adapter code emit events and never read a clock to present them.
-3. **One row per step.** A step may report sub-steps as its detail: the source
+   row of its own, the presenter repeats that step's row with `still running`
+   and the time since the step started. The bound is per step, so a step that
+   has gone quiet is repeated whatever the steps beside it are doing. The CLI
+   presenter owns the timer; domain and adapter code emit events and never read
+   a clock to present them.
+3. **One line per step.** Steps run at the same time when the plan admits it,
+   and each holds one line of its own from its first row until its outcome:
+   no step ever overwrites another's row, and rows of different steps
+   interleave in the order the steps report them. A step may report sub-steps
+   as its detail: the source
    being acquired, the native transaction, the target tool, or the
    presentation group in flight. A sub-step never settles as a row of its own,
    because a screen of settled sub-steps buries the step that is actually
@@ -157,21 +163,33 @@ step whose outcome is no longer observable. Heartbeat notes and elapsed times
 are the only timing-dependent bytes in human output; contract tests drive the
 presenter through an injected clock.
 
-When standard output is a terminal, the presenter rewrites the running row in
-place instead of appending: a carriage return and an erase-line sequence
-precede each replacement, the elapsed time and completion refresh every second,
-and the outcome overwrites the row, so each step settles as exactly one line.
-Only a step's own rows replace its line; another step, a heading, a field such
-as the `Logs` reference, the result or a diagnostic first terminates it.
+When standard output is a terminal, the presenter rewrites the running steps in
+place instead of appending. The steps now running occupy a block of consecutive
+lines, one each, in the order they started. A carriage return and an erase-line
+sequence precede each replacement; reaching the first line of a block of more
+than one moves the cursor up by the lines already drawn, which is the only
+cursor movement used. The elapsed time and completion refresh every second. A
+step's outcome is written above the block and its line is given back, so the
+block always holds exactly the steps that are still running and a settled step
+scrolls away as ordinary text.
+
+A heading owns its block. The steps under a heading are redrawn together, and a
+new heading, a field such as the `Logs` reference, the result or a diagnostic
+first terminates the block: its rows stay on screen as text, and nothing
+redraws a line it no longer owns. A step still running when its block is
+terminated keeps the last row it wrote, because that row is what it proved.
 
 A redrawn row occupies one physical line: it is bounded by the width the
 terminal reports when it is drawn, measured again for every row so a resize
 takes effect, and the classic eighty columns stand in for a terminal that
-reports no size. A row that does not fit keeps its status token and its
+reports no size. This is what makes a block's height exactly one line per step,
+so the cursor moves up by as many lines as were drawn. A row that does not fit
+keeps its status token and its
 trailing note, because the elapsed time is what an operator watches, and marks
 the text elided from the end of its subject with `...`. The appended form above
 is never elided; it is what a pipe, a file and the privilege supervisor's
-non-interactive relay receive. No other color or cursor control is used.
+non-interactive relay receive. No color is used, and no cursor control beyond
+the carriage return, the erase-line sequence and the upward move named above.
 
 ### Context identity
 

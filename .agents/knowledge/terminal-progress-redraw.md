@@ -55,3 +55,34 @@ wider than its window and fails on any drawn line that reaches the width,
 same reader. `TestTerminalQuiescenceChecksOccupyOneLine` and
 `TestQuiescenceChecksSettleAsOneRowBeforeTheEffects` hold the gate to one row
 in both forms.
+
+## A block of running steps, not a single row (2026-09-17)
+
+Blocks of one operation now run concurrently, so the presenter draws one line
+per running step instead of one row in total. What that costs to get right:
+
+- **The block's height must be exact.** The redraw returns to the first line
+  with `\x1b[<n-1>A`, where `n` is the number of lines it last drew. That is
+  only correct because every row is already bounded to the terminal width by
+  `fitTerminalRow`: one wrapped row makes the physical height larger than `n`
+  and the cursor lands in the middle of the block, smearing it. The width bound
+  and the cursor-up are one mechanism, not two features.
+- **Erase downward, then return.** `\x1b[2K` does not move the cursor, so the
+  erase walks down with `\n` between lines and then moves back up by the same
+  count. For a one-line block this is byte-identical to the old
+  `\r\x1b[2K` prefix, which is what keeps `setup` output unchanged.
+- **A heading owns its block.** `closeLine` now also drops the steps, because a
+  block that survived a heading change was redrawn under the new heading and
+  printed the previous heading's rows a second time. The visible symptom is
+  duplicated check rows under `Progress`.
+- **The trailing note belongs to the step, not to the draw.** An event-driven
+  row carries no note and a heartbeat row carries `still running, <elapsed>`.
+  Storing it on the step keeps that distinction when one step's event redraws a
+  block that another step's heartbeat had annotated.
+- **Never arm a timer for a cancelled step.** The heartbeat skips a step whose
+  context is done without updating its last-row time, so including it in the
+  "earliest due" calculation schedules a wake-up in the past, which fires
+  immediately, skips again and re-arms — a spin that allocates a row per
+  iteration. Under the manual test clock this is an unbounded loop inside one
+  `advance` call and the test process is killed. `arm` counts only steps that
+  can still report.
