@@ -13,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/availability"
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
+	"github.com/crmarques/bootwright/internal/machine"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 )
 
@@ -248,5 +249,28 @@ func TestOutputFailureHasNoFallback(t *testing.T) {
 	}
 	if code := New(Config{Out: io.Discard, ErrOut: rejectingWriter{short: true}}).Run(context.Background(), []string{"missing"}); code != 1 {
 		t.Errorf("stderr failure code %d", code)
+	}
+}
+
+// A session's streams and exit status belong to the remote process. Bootwright
+// adds no status line of its own and returns exactly what the client reported.
+func TestASessionReportsTheClientsExitStatusAndPrintsNothing(t *testing.T) {
+	for _, invocation := range []string{"machine rsh --name demo", "machine exec --name demo pwd"} {
+		t.Run(invocation, func(t *testing.T) {
+			for _, want := range []int{0, 1, 7, 130, 255} {
+				var out, errOut bytes.Buffer
+				record := &dispatchRecord{result: commandResult{
+					session: &machine.SessionResult{Context: "lab", Machine: "demo", Address: "192.0.2.10", ExitCode: want},
+				}}
+				code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).
+					Run(context.Background(), strings.Fields(invocation))
+				if code != want {
+					t.Fatalf("exit = %d, want %d", code, want)
+				}
+				if out.Len() != 0 || errOut.Len() != 0 {
+					t.Fatalf("out = %q err = %q", out.String(), errOut.String())
+				}
+			}
+		})
 	}
 }

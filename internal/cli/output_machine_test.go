@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/power"
 )
@@ -74,45 +73,6 @@ func TestMachineListRefusesToPresentAnIncompleteRow(t *testing.T) {
 	}
 	if validMachineList(&inventory.ListResult{Context: "lab", Machines: []inventory.MachineRow{{Name: "guest"}}}) {
 		t.Fatal("a row with no state was presented")
-	}
-}
-
-// One bounded line, quoted so the operator runs exactly the vector this command
-// resolved, and nothing else on standard output.
-func TestAccessDescriptorIsOneQuotedLine(t *testing.T) {
-	var out, errOut bytes.Buffer
-	descriptor := &machineaccess.Descriptor{
-		Client: "/usr/bin/ssh", Machine: "guest",
-		Arguments: []string{"-l", "bootwright", "192.0.2.20", "systemctl status 'sshd'"},
-	}
-	if err := writeDescriptor(&out, &errOut, "machine exec", descriptor); err != nil {
-		t.Fatal(err)
-	}
-	want := "/usr/bin/ssh -l bootwright 192.0.2.20 'systemctl status '\\''sshd'\\'''\n"
-	if out.String() != want {
-		t.Fatalf("descriptor = %q, want %q", out.String(), want)
-	}
-	if errOut.Len() != 0 {
-		t.Fatalf("stderr = %q", errOut.String())
-	}
-}
-
-// The advisory names the export the operator performs themselves. It is a
-// warning beside the descriptor, never part of the line they run.
-func TestAccessAdvisoryStaysOffTheDescriptorLine(t *testing.T) {
-	var out, errOut bytes.Buffer
-	descriptor := &machineaccess.Descriptor{
-		Client: "/usr/bin/ssh", Arguments: []string{"192.0.2.20"},
-		Advisory: "this Machine authenticates with the fleet Secret",
-	}
-	if err := writeDescriptor(&out, &errOut, "machine rsh", descriptor); err != nil {
-		t.Fatal(err)
-	}
-	if out.String() != "/usr/bin/ssh 192.0.2.20\n" {
-		t.Fatalf("descriptor = %q", out.String())
-	}
-	if !strings.HasPrefix(errOut.String(), "[WARN] access.unavailable:") {
-		t.Fatalf("advisory = %q", errOut.String())
 	}
 }
 

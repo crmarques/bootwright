@@ -44,6 +44,7 @@ func packageRoles() map[string]packageRole {
 		"internal/controller/nativelocal":        adapterRole,
 		"internal/reconciliation/ansiblerunner":  adapterRole,
 		"internal/managedos/medialocal":          adapterRole,
+		"internal/machine/sshlocal":              adapterRole,
 		"internal/secrets/secretstore":           applicationRole,
 		"internal/secrets/localkeyring":          adapterRole,
 		"internal/secrets/material":              adapterRole,
@@ -191,11 +192,16 @@ func TestAdmissionEffectBoundary(t *testing.T) {
 		controllerNative := source.owner == "internal/controller/nativelocal"
 		controllerEffects := controllerBundle || controllerPackages || controllerNative
 		lifecycleRunner := source.owner == "internal/reconciliation/ansiblerunner"
+		// The SSH session adapter runs the one pinned client as a child and
+		// hands it the operator's streams and its material descriptors.
+		sshSession := source.owner == "internal/machine/sshlocal"
+		// Machine access names those streams to hand them on; it opens nothing.
+		sessionStreams := source.owner == "internal/machine/access"
 		// Media acquisition is the one adapter that opens an operator-named file
 		// or one authorized endpoint; it runs no process and holds no state.
 		mediaSource := source.owner == "internal/managedos/medialocal"
 		configuration := source.owner == "internal/workspace/contexts"
-		localProcess := selection || invocation || controllerEffects || lifecycleRunner
+		localProcess := selection || invocation || controllerEffects || lifecycleRunner || sshSession
 		codec := source.owner == "internal/desiredstate/yamlstream" || source.owner == "internal/desiredstate/encoding"
 		for _, imported := range source.imports {
 			name := imported.path
@@ -203,7 +209,7 @@ func TestAdmissionEffectBoundary(t *testing.T) {
 			if forbidden {
 				t.Errorf("%s imports unauthorized effect capability %s", source.path, name)
 			}
-			if !isCLI && (strings.Contains(name, "/internal/cli") || strings.HasPrefix(name, "github.com/spf13/") || name == "io" && !input && !codec && !storage && !guard && !secretMaterial && !secretStore && !configuration && !localProcess && !controllerHost) {
+			if !isCLI && (strings.Contains(name, "/internal/cli") || strings.HasPrefix(name, "github.com/spf13/") || name == "io" && !input && !codec && !storage && !guard && !secretMaterial && !secretStore && !configuration && !localProcess && !controllerHost && !sessionStreams) {
 				t.Errorf("%s depends on presentation or unrestricted I/O %s", source.path, name)
 			}
 			ast.Inspect(source.syntax, func(node ast.Node) bool {

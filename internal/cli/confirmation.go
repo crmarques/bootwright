@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -23,6 +24,34 @@ var _ contexts.Confirmer = (*Confirmation)(nil)
 // NewConfirmation performs no input, output or terminal detection.
 func NewConfirmation(read func(context.Context, []byte) (int, error), out io.Writer, isTerminal func() (bool, error)) *Confirmation {
 	return &Confirmation{read: read, out: out, isTerminal: isTerminal}
+}
+
+// ConfirmHostKey asks the operator to accept one server identity that nothing
+// has proved yet. It shows the fingerprint they compare out of band, and a
+// declined or unanswerable prompt records nothing at all.
+func (c *Confirmation) ConfirmHostKey(ctx context.Context, name, address, keyType, fingerprint string) error {
+	refuse := func(reason string) error {
+		return diagnostics.NewFailureWithRemediation("trust.identity",
+			"host key confirmation "+reason, "",
+			"record it with bootwright machine trust --machines "+name)
+	}
+	if c == nil || c.read == nil || c.out == nil || c.isTerminal == nil {
+		return refuse("is not configured")
+	}
+	if ctx.Err() != nil {
+		return refuse("was canceled")
+	}
+	interactive, err := c.isTerminal()
+	if err != nil || !interactive {
+		return refuse("requires interactive input")
+	}
+	prompt := fmt.Sprintf("Trust %s %s for Machine %s at %s? [y/N] ",
+		escapeDisplayLine(keyType), escapeDisplayLine(fingerprint),
+		escapeDisplayLine(name), escapeDisplayLine(address))
+	if err := c.ask(ctx, prompt); err != nil {
+		return refuse(strings.TrimPrefix(err.Error(), "confirmation "))
+	}
+	return nil
 }
 
 func (c *Confirmation) Confirm(ctx context.Context, action, name string) error {
@@ -61,30 +90,38 @@ func (c *Confirmation) Confirm(ctx context.Context, action, name string) error {
 	case machineVerb:
 		prompt = fmt.Sprintf("Confirm %s of machine %s? [y/N] ", escapeDisplayLine(machine), escapeDisplayLine(name))
 	}
-	if n, err := io.WriteString(c.out, prompt); err != nil || n != len(prompt) {
-		return failure("prompt could not be written")
+	if err := c.ask(ctx, prompt); err != nil {
+		return failure(strings.TrimPrefix(err.Error(), "confirmation "))
 	}
-	// Read one byte at a time to avoid consuming input after the answer. The
-	// 64-byte ceiling includes the LF terminating the single answer.
+	return nil
+}
+
+// ask writes one prompt and reads a single answer. It reads one byte at a time
+// to avoid consuming input after the answer, and its 64-byte ceiling includes
+// the LF that terminates it.
+func (c *Confirmation) ask(ctx context.Context, prompt string) error {
+	if n, err := io.WriteString(c.out, prompt); err != nil || n != len(prompt) {
+		return errors.New("confirmation prompt could not be written")
+	}
 	var answer [64]byte
 	for i := range answer {
 		if ctx.Err() != nil {
-			return failure("was canceled")
+			return errors.New("confirmation was canceled")
 		}
 		n, err := c.read(ctx, answer[i:i+1])
 		if ctx.Err() != nil {
-			return failure("was canceled")
+			return errors.New("confirmation was canceled")
 		}
 		if err != nil || n != 1 {
-			return failure("answer could not be read")
+			return errors.New("confirmation answer could not be read")
 		}
 		if answer[i] == '\n' {
 			value := strings.ToLower(strings.TrimSpace(string(answer[:i])))
 			if value == "y" || value == "yes" {
 				return nil
 			}
-			return failure("was declined")
+			return errors.New("confirmation was declined")
 		}
 	}
-	return failure("answer exceeds the 64-byte limit")
+	return errors.New("confirmation answer exceeds the 64-byte limit")
 }

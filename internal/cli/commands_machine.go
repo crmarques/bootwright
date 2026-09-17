@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 
+	"github.com/crmarques/bootwright/internal/machine"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/power"
@@ -13,8 +14,8 @@ import (
 func machineCommands() []commandSpec {
 	return []commandSpec{
 		available(commandSpec{path: "machine list", short: "List machines and ownership-backed state", flags: []flagSpec{clustersFlag(), boolFlag("silent", "Print only sorted machine names"), outputFlag()}}),
-		available(accessCommand(commandSpec{path: "machine rsh", short: "Print an SSH access descriptor; do not launch a client or connect", flags: []flagSpec{nameFlag()}}, "")),
-		available(accessCommand(commandSpec{path: "machine exec", short: "Print a command access descriptor; do not launch a client or connect", flags: []flagSpec{nameFlag()}, payload: true}, "")),
+		available(sessionCommand(commandSpec{path: "machine rsh", short: "Open an SSH session on a machine as its resolved identity", flags: []flagSpec{nameFlag()}})),
+		available(sessionCommand(commandSpec{path: "machine exec", short: "Run a command on a machine over SSH and return its exit status", flags: []flagSpec{nameFlag()}, payload: true})),
 		available(powerCommand("machine start", "Power one machine on through its management controller", false)),
 		available(powerCommand("machine stop", "Shut one machine down through its management controller", true)),
 		available(powerCommand("machine restart", "Restart one machine through its management controller", true)),
@@ -39,8 +40,8 @@ type MachineInventoryService interface {
 }
 
 type MachineAccessService interface {
-	Rsh(context.Context, machineaccess.RshRequest) (*machineaccess.Descriptor, error)
-	Exec(context.Context, machineaccess.ExecRequest) (*machineaccess.Descriptor, error)
+	Rsh(context.Context, machineaccess.RshRequest) (*machine.SessionResult, error)
+	Exec(context.Context, machineaccess.ExecRequest) (*machine.SessionResult, error)
 }
 
 type MachinePowerService interface {
@@ -77,7 +78,7 @@ func (s Services) invokeMachineAccess(ctx context.Context, path string, values *
 			Name:        values.text("name"),
 			SSH:         values.ssh(),
 		}, s.MachineAccess.Rsh)
-		return commandResult{descriptor: result}, err
+		return commandResult{session: result}, err
 	case "machine exec":
 		result, err := invokeResult(ctx, values, machineaccess.ExecRequest{
 			ContextName: values.text("context"),
@@ -85,7 +86,7 @@ func (s Services) invokeMachineAccess(ctx context.Context, path string, values *
 			SSH:         values.ssh(),
 			Command:     slices.Clone(args),
 		}, s.MachineAccess.Exec)
-		return commandResult{descriptor: result}, err
+		return commandResult{session: result}, err
 	default:
 		return commandResult{}, errors.New("command has no application dispatch")
 	}

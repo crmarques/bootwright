@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strings"
 
-	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/power"
 )
@@ -96,45 +95,6 @@ func displayMachineList(result *inventory.ListResult) machineListPresentation {
 		})
 	}
 	return machineListPresentation{Context: escapeDisplayLine(result.Context), Machines: rows}
-}
-
-func validDescriptor(descriptor *machineaccess.Descriptor) bool {
-	return descriptor != nil && descriptor.Client != "" && len(descriptor.Arguments) != 0
-}
-
-// writeDescriptor emits exactly one handoff line for independent operator
-// execution. Values are quoted so the line an operator runs carries the exact
-// argument vector this command resolved, and nothing else is printed with it.
-func writeDescriptor(out, errOut io.Writer, command string, descriptor *machineaccess.Descriptor) error {
-	words := make([]string, 0, len(descriptor.Arguments)+1)
-	for _, value := range append([]string{descriptor.Client}, descriptor.Arguments...) {
-		words = append(words, shellWord(value))
-	}
-	if _, err := io.WriteString(out, strings.Join(words, " ")+"\n"); err != nil {
-		return err
-	}
-	if descriptor.Advisory == "" {
-		return nil
-	}
-	return writeDiagnostics(out, errOut, command, []diagnostic{{
-		Severity: "warning", Code: "access.unavailable", Message: descriptor.Advisory,
-	}}, 0, false)
-}
-
-// shellWord quotes one argument for a POSIX shell. Values that need no quoting
-// are left exactly as they are, so a readable descriptor stays readable.
-func shellWord(value string) string {
-	if value != "" && !strings.ContainsFunc(value, func(r rune) bool { return !shellSafe(r) }) {
-		return value
-	}
-	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
-}
-
-func shellSafe(r rune) bool {
-	if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
-		return true
-	}
-	return strings.ContainsRune("-_=+:,./@%", r)
 }
 
 func validMachinePower(result *power.Result) bool {

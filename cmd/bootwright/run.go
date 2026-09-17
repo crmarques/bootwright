@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller/privilege"
 	"github.com/crmarques/bootwright/internal/desiredstate/encoding"
+	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -65,7 +66,13 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 				childError = file
 			}
 		}
-		supervisor := privilege.NewSupervisor(privilege.SudoOptions{Executable: executable, Sudo: sudo, Executor: privilege.ProcessExecutor{}, Delay: privilege.Timer{}, NonInteractive: noninteractive, Input: os.Stdin, Output: childOutput, Error: childError})
+		// The elevated child runs the operator's SSH sessions, and a session
+		// without a terminal type is one whose remote shell cannot draw itself.
+		terminalType := ""
+		if !noninteractive {
+			terminalType = os.Getenv("TERM")
+		}
+		supervisor := privilege.NewSupervisor(privilege.SudoOptions{Executable: executable, Sudo: sudo, Executor: privilege.ProcessExecutor{}, Delay: privilege.Timer{}, NonInteractive: noninteractive, Terminal: terminalType, Input: os.Stdin, Output: childOutput, Error: childError})
 		code, err := supervisor.Run(operation, args)
 		errOut.Close()
 		if err != nil {
@@ -93,6 +100,9 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 	lifecycleProgress := cli.NewLifecycleProgressPresenter(stdout, columns)
 	process := processDependencies{
 		Confirmer:          confirmer,
+		SessionConfirmer:   confirmer,
+		Streams:            machineaccess.Streams{In: os.Stdin, Out: os.Stdout, Err: os.Stderr},
+		Terminal:           stdinTerminal,
 		SecretInput:        secretInputFunc(readStdin),
 		Progress:           controllerPresenter,
 		Presenter:          controllerPresenter,

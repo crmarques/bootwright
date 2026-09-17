@@ -549,11 +549,12 @@ the default identities of the account the client runs as. Confidential
 material is never written to a named path, an argument, the environment or any
 durable state, and the operator is never asked to export it.
 
-`--ssh-user` reaches any account on any Machine. A value naming an identity
-this context holds a credential for resolves to that credential; a value
-naming an account carried by more than one owner with different credentials
-fails `access.unavailable` rather than putting one owner's key on the wire
-under another account's name; any other value offers no stored credential.
+`--ssh-user` reaches any account on any Machine, including one Bootwright
+installed. Naming the account the Machine already declares resolves to that
+account's own credential. Naming any other account offers it none, because a
+credential opens exactly the account it was authored for; such an invocation
+must supply `--ssh-id-file`, and without one it fails `access.unavailable`
+rather than putting one account's key on the wire under another's name.
 `--ssh-id-file` is offered ahead of the declared credential, which remains the
 fallback; a leading `~` resolves from the invoking account database, and the
 file must satisfy the private-file rules in [security](security.md). Neither

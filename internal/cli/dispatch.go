@@ -6,7 +6,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
-	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/media"
@@ -38,9 +38,9 @@ type commandResult struct {
 	mediaMutation *media.MutationResult
 	mediaList     *media.ListResult
 
-	machines   *inventory.ListResult
-	descriptor *machineaccess.Descriptor
-	power      *power.Result
+	machines *inventory.ListResult
+	session  *machine.SessionResult
+	power    *power.Result
 
 	secretMutation     *custody.MutationResult
 	secretCheck        *custody.CheckResult

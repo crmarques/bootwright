@@ -53,6 +53,17 @@ func (a invokingAccount) Clear(ctx context.Context, selection contexts.Selection
 	return store.Clear(ctx, selection)
 }
 
+// home resolves the invoking account's home directory from the account
+// database. A session calls it only when an offered key path needs expanding,
+// so an invocation that offers none acquires no account capability.
+func (a invokingAccount) home() (string, error) {
+	account, err := a.resolver.Resolve(context.Background())
+	if err != nil {
+		return "", contexts.StateError("invoking account cannot be verified")
+	}
+	return account.Home, nil
+}
+
 func (a invokingAccount) FileIdentity(ctx context.Context) (material.FileIdentity, error) {
 	account, err := a.resolver.Resolve(ctx)
 	if err != nil {

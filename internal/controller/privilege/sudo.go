@@ -39,8 +39,12 @@ type SudoOptions struct {
 	Executor         Executor
 	Delay            Delay
 	NonInteractive   bool
-	Input            io.Reader
-	Output, Error    io.Writer
+	// Terminal is the terminal type an interactive invocation carries. The
+	// elevated child runs the operator's own interactive programs, so it needs
+	// the terminal identity the caller had; every other ambient value stays out.
+	Terminal      string
+	Input         io.Reader
+	Output, Error io.Writer
 }
 
 type Supervisor struct{ options SudoOptions }
@@ -65,6 +69,9 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 		options.Error = synchronizedWriter{lock: &outputLock, writer: options.Error}
 	}
 	environment := []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C"}
+	if options.Terminal != "" && safeTerminalName(options.Terminal) {
+		environment = append(environment, "TERM="+options.Terminal)
+	}
 	var policy limitedOutput
 	probe, cancelProbe := context.WithTimeout(ctx, 2*time.Second)
 	code, probeErr := options.Executor.Run(probe, Command{Executable: options.Sudo, Arguments: []string{"-n", "-u", "#0", "-ll"}, Environment: append([]string(nil), environment...), Output: &policy, Error: io.Discard})
@@ -111,6 +118,21 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 // A plain -ll report is not an effective-policy API. Only an explicit matching
 // value without bound or backend ambiguity is usable. Unknown policy receives
 // the documented best-effort cadence, while sudo remains the authority.
+// safeTerminalName admits only what a terminal type may contain, so an
+// attacker-chosen environment value cannot become anything else on the way to
+// the elevated child.
+func safeTerminalName(value string) bool {
+	if len(value) > 64 {
+		return false
+	}
+	for _, r := range value {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' || r == '.' || r == '+') {
+			return false
+		}
+	}
+	return value != ""
+}
+
 func refreshInterval(report []byte) time.Duration {
 	const unknown = 30 * time.Second
 	text := string(report)

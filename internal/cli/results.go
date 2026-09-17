@@ -102,10 +102,6 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		if validMachineList(result.machines) {
 			return true, writeMachineList(out, path, result.machines, boolValue(command.Flags(), "silent"), selectedJSON(command))
 		}
-	case "machine rsh", "machine exec":
-		if validDescriptor(result.descriptor) {
-			return true, writeDescriptor(out, errOut, path, result.descriptor)
-		}
 	case "machine start", "machine stop", "machine restart":
 		if validMachinePower(result.power) {
 			return true, writeMachinePower(out, path, result.power, selectedJSON(command))

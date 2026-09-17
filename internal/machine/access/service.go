@@ -2,38 +2,66 @@ package access
 
 import (
 	"context"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
+
+// Options names everything a session needs beyond the graph it resolves in.
+// A nil capability is not a silent fallback: the resolution that needs it
+// refuses rather than reaching the Machine with less proof than it requires.
+type Options struct {
+	Lender    MaterialLender
+	Ownership Ownership
+	Evidence  Evidence
+	Trust     HostKeyStore
+	Observer  Observer
+	Confirmer Confirmer
+	Launcher  Launcher
+	Streams   Streams
+	// Terminal reports whether the operator can answer a host-key
+	// confirmation. Without one there is no first use.
+	Terminal func() (bool, error)
+	Clock    func() time.Time
+}
 
 type Service struct {
 	state     EffectiveState
 	selection machine.CurrentSelection
+	options   Options
 }
 
-func New(state EffectiveState, selection machine.CurrentSelection) Service {
-	return Service{state: state, selection: selection}
+func New(state EffectiveState, selection machine.CurrentSelection, options Options) Service {
+	return Service{state: state, selection: selection, options: options}
 }
 
-// Rsh resolves one interactive session descriptor. It accepts no command tail
-// and never launches a client, connects, or treats a later execution as
-// evidence of anything.
-func (s Service) Rsh(ctx context.Context, request RshRequest) (*Descriptor, error) {
-	return s.describe(ctx, request.ContextName, request.Name, request.SSH, nil)
+// Rsh opens one interactive session. It accepts no command tail: an
+// interactive shell and a single command are different requests, and running
+// one as the other would silently change what the operator asked for.
+func (s Service) Rsh(ctx context.Context, request RshRequest) (*machine.SessionResult, error) {
+	return s.open(ctx, request.ContextName, request.Name, request.SSH, nil)
 }
 
-// Exec resolves the descriptor for one exact remote command argument vector.
-func (s Service) Exec(ctx context.Context, request ExecRequest) (*Descriptor, error) {
-	return s.describe(ctx, request.ContextName, request.Name, request.SSH, request.Command)
+// Exec runs one exact argument vector on the Machine and reports the status
+// that command exited with.
+func (s Service) Exec(ctx context.Context, request ExecRequest) (*machine.SessionResult, error) {
+	if len(request.Command) == 0 {
+		return nil, failure("cli.usage", "a non-empty command argument vector is required",
+			"supply the command to run, after -- if it begins with a flag")
+	}
+	return s.open(ctx, request.ContextName, request.Name, request.SSH, request.Command)
 }
 
-func (s Service) describe(ctx context.Context, contextName, name string, options machine.SSHOptions, command []string) (*Descriptor, error) {
+func (s Service) open(ctx context.Context, contextName, name string, options machine.SSHOptions,
+	words []string) (*machine.SessionResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if s.state == nil {
+	if s.state == nil || s.options.Launcher == nil || s.options.Lender == nil {
 		return nil, availability.ErrNotImplemented
 	}
 	selected, err := machine.SelectedContext(ctx, s.selection, contextName)
@@ -44,17 +72,74 @@ func (s Service) describe(ctx context.Context, contextName, name string, options
 	if err != nil {
 		return nil, err
 	}
-	descriptor, err := describe(effective.Effective, selected, name, options)
+	resolved, err := resolveTarget(effective.Effective, name)
 	if err != nil {
 		return nil, err
 	}
-	if command != nil {
-		if descriptor, err = descriptor.withCommand(command); err != nil {
-			return nil, err
-		}
-	}
-	if err := descriptor.encodable(); err != nil {
+	identity, privateKeyRef, err := resolveIdentity(resolved, options, s.options.Launcher)
+	if err != nil {
 		return nil, err
 	}
-	return descriptor, nil
+	requested, err := command(words)
+	if err != nil {
+		return nil, err
+	}
+	session := machine.Session{
+		Machine: resolved.name, Address: resolved.address, Port: resolved.port,
+		Identity: identity, Command: requested,
+	}
+	result := &machine.SessionResult{Context: selected, Machine: resolved.name, Address: resolved.address}
+	request := lifecycle.MaterialRequest{ContextName: selected, Secrets: references(resolved, privateKeyRef)}
+	err = s.options.Lender.WithMaterial(ctx, request, func(inner context.Context, material map[string]secrets.Material) error {
+		if privateKeyRef != "" {
+			key, err := privateKey(privateKeyRef, material)
+			if err != nil {
+				return err
+			}
+			defer clear(key)
+			session.PrivateKey = key
+		}
+		host, err := s.hostKey(inner, selected, resolved, material)
+		if err != nil {
+			return err
+		}
+		session.HostKey = host
+		s.advise(resolved)
+		code, err := s.options.Launcher.Run(inner, session, s.options.Streams.In, s.options.Streams.Out, s.options.Streams.Err)
+		if err != nil {
+			return err
+		}
+		result.ExitCode = code
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// advise names the reveal an operator performs themselves before the client
+// asks for it. It is written to the operator's own error stream, before the
+// connection, so it can never be mistaken for the session's output.
+func (s Service) advise(selected target) {
+	notice := passwordAdvisory(selected)
+	if notice == "" || s.options.Streams.Err == nil {
+		return
+	}
+	_, _ = s.options.Streams.Err.Write([]byte("[WARN] access.credential: " + notice + "\n"))
+}
+
+func (s Service) interactive() (bool, error) {
+	if s.options.Terminal == nil {
+		return false, nil
+	}
+	return s.options.Terminal()
+}
+
+func (s Service) now() string {
+	clock := s.options.Clock
+	if clock == nil {
+		clock = time.Now
+	}
+	return clock().UTC().Format(time.RFC3339)
 }

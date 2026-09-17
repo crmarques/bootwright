@@ -242,6 +242,12 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 		}
 		return 1
 	}
+	// A session's streams and exit status are the remote process's own. There
+	// is no result to present and no status to add: the operator has already
+	// seen everything the session produced.
+	if err == nil && result.session != nil {
+		return result.session.ExitCode
+	}
 	if err == nil {
 		handled, presentErr := r.writeResult(ctx, command, path, result)
 		var failure *resultFailure

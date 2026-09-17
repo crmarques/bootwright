@@ -173,6 +173,21 @@ func preflightFlags() []flagSpec {
 	return []flagSpec{clustersFlag(), dryRunFlag(), outputFlag(), trustFlag(), verboseFlag()}
 }
 
+// sessionCommand describes one command that opens an SSH session. Its help
+// states what the operator is actually getting: a live session as an identity
+// they did not choose, over a host key they may be asked to confirm, whose
+// exit status is the client's rather than a Bootwright result.
+func sessionCommand(spec commandSpec) commandSpec {
+	spec.long = spec.short + ". The session runs as the identity the Machine's desired state authorizes," +
+		" over a host key proved before any credential is offered; an unproved key is confirmed" +
+		" interactively or refused. The exit status is the client's."
+	if spec.payload {
+		spec.long += " Use -- before a flag-shaped first payload value to preserve it as data." +
+			" Recognized Bootwright flags remain active in the command tail until --."
+	}
+	return spec
+}
+
 func accessCommand(spec commandSpec, applicability string) commandSpec {
 	spec.long = spec.short + ". Success prints a bounded access descriptor for independent operator execution."
 	if spec.payload {

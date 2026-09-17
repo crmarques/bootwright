@@ -13,6 +13,7 @@ import (
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
 	"github.com/crmarques/bootwright/internal/environment/inspection"
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
+	"github.com/crmarques/bootwright/internal/machine"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/power"
@@ -261,12 +262,12 @@ func (s machineInventorySpy) List(ctx context.Context, request inventory.ListReq
 
 type machineAccessSpy struct{ record *dispatchRecord }
 
-func (s machineAccessSpy) Rsh(ctx context.Context, request machineaccess.RshRequest) (*machineaccess.Descriptor, error) {
-	return nil, s.record.called(ctx, "machine rsh", request)
+func (s machineAccessSpy) Rsh(ctx context.Context, request machineaccess.RshRequest) (*machine.SessionResult, error) {
+	return s.record.result.session, s.record.called(ctx, "machine rsh", request)
 }
 
-func (s machineAccessSpy) Exec(ctx context.Context, request machineaccess.ExecRequest) (*machineaccess.Descriptor, error) {
-	return nil, s.record.called(ctx, "machine exec", request)
+func (s machineAccessSpy) Exec(ctx context.Context, request machineaccess.ExecRequest) (*machine.SessionResult, error) {
+	return s.record.result.session, s.record.called(ctx, "machine exec", request)
 }
 
 type machinePowerSpy struct{ record *dispatchRecord }

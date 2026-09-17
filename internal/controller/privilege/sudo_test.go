@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -196,5 +197,51 @@ func TestSupervisorCanceledBeforeAnyProcess(t *testing.T) {
 	_, err := NewSupervisor(SudoOptions{Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: executor, Delay: Timer{}}).Run(ctx, nil)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
+	}
+}
+
+// The elevated child runs the operator's own SSH sessions, so it needs the
+// terminal identity the caller had. Nothing else ambient crosses with it.
+func TestSupervisorForwardsOnlyASafeTerminalIdentity(t *testing.T) {
+	for _, test := range []struct {
+		name, terminal string
+		want           bool
+	}{
+		{"ordinary type", "xterm-256color", true},
+		{"unset", "", false},
+		{"injected assignment", "xterm\nLD_PRELOAD=/evil.so", false},
+		{"injected separator", "xterm=1 2", false},
+		{"unbounded", strings.Repeat("x", 65), false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var child Command
+			executor := executorFunc(func(_ context.Context, c Command) (int, error) {
+				if reflect.DeepEqual(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) {
+					return 1, nil
+				}
+				child = c
+				return 0, nil
+			})
+			delay := delayFunc(func(ctx context.Context, _ time.Duration) error {
+				<-ctx.Done()
+				return ctx.Err()
+			})
+			options := SudoOptions{
+				Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo",
+				Executor: executor, Delay: delay, Terminal: test.terminal,
+			}
+			if _, err := NewSupervisor(options).Run(context.Background(), []string{"machine", "rsh"}); err != nil {
+				t.Fatal(err)
+			}
+			forwarded := slices.Contains(child.Environment, "TERM="+test.terminal)
+			if forwarded != test.want {
+				t.Fatalf("environment = %v", child.Environment)
+			}
+			for _, entry := range child.Environment {
+				if strings.Count(entry, "=") > 0 && strings.ContainsAny(entry, "\n\r") {
+					t.Fatalf("environment carries a separator: %q", entry)
+				}
+			}
+		})
 	}
 }

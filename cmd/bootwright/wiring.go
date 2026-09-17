@@ -8,6 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/hostlinux"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/controller/privilege"
+	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/material"
@@ -22,6 +23,9 @@ import (
 // capability.
 type processDependencies struct {
 	Confirmer          contexts.Confirmer
+	SessionConfirmer   machineaccess.Confirmer
+	Streams            machineaccess.Streams
+	Terminal           func() (bool, error)
 	SecretInput        material.InputReader
 	Progress           prerequisites.ProgressReporter
 	Presenter          prerequisites.PlanPresenter
@@ -34,18 +38,23 @@ type processDependencies struct {
 // services consume. Each field is a consumer-owned contract, so a test binds
 // the same graph through its own implementations.
 type serviceDependencies struct {
-	Repository      contexts.Repository
-	Workspace       secretstore.Workspace
-	Selection       contexts.SelectionStore
-	Operator        material.Operator
-	Confirmer       contexts.Confirmer
-	SecretInput     material.InputReader
-	Resolver        secretstore.ImplementationResolver
-	SessionMaterial secretstore.SessionMaterialSource
-	Controller      controllerDependencies
-	Lifecycle       lifecycleDependencies
-	Media           mediaDependencies
-	Reporter        power.Reporter
+	Repository       contexts.Repository
+	Workspace        secretstore.Workspace
+	Selection        contexts.SelectionStore
+	Operator         material.Operator
+	Confirmer        contexts.Confirmer
+	SessionConfirmer machineaccess.Confirmer
+	Streams          machineaccess.Streams
+	Terminal         func() (bool, error)
+	Home             func() (string, error)
+	Trust            machineaccess.HostKeyStore
+	SecretInput      material.InputReader
+	Resolver         secretstore.ImplementationResolver
+	SessionMaterial  secretstore.SessionMaterialSource
+	Controller       controllerDependencies
+	Lifecycle        lifecycleDependencies
+	Media            mediaDependencies
+	Reporter         power.Reporter
 }
 
 // wireServices also returns the release for every local resource the assembled
@@ -55,15 +64,20 @@ func wireServices(process processDependencies) (cli.Services, func()) {
 	account := invokingAccount{resolver: privilege.Resolver{}}
 	controller, release := localControllerDependencies(repository, process)
 	services := assembleServices(serviceDependencies{
-		Repository:  repository,
-		Workspace:   repository,
-		Selection:   account,
-		Operator:    account,
-		Confirmer:   process.Confirmer,
-		SecretInput: process.SecretInput,
-		Reporter:    process.LifecycleProgress,
-		Controller:  controller,
-		Media:       localMediaDependencies(repository, process.Confirmer),
+		Repository:       repository,
+		Workspace:        repository,
+		Trust:            repository,
+		SessionConfirmer: process.SessionConfirmer,
+		Streams:          process.Streams,
+		Terminal:         process.Terminal,
+		Home:             account.home,
+		Selection:        account,
+		Operator:         account,
+		Confirmer:        process.Confirmer,
+		SecretInput:      process.SecretInput,
+		Reporter:         process.LifecycleProgress,
+		Controller:       controller,
+		Media:            localMediaDependencies(repository, process.Confirmer),
 		Lifecycle: lifecycleDependencies{
 			Workspace: repository, Inputs: contexts.Inputs{Repository: repository, Selection: account},
 			Host: hostlinux.New(), Guard: bundlelocal.ExecutionGuard{}, Selection: account,
@@ -88,8 +102,9 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	reconciler := wireLifecycle(deps.Lifecycle, deps.Controller, compiler, secrets.binder)
 	services.Lifecycle = reconciler
 	machine := wireMachine(machineDependencies{
-		State: services.DesiredState, Lifecycle: reconciler, Confirmer: deps.Confirmer,
-		Reporter: deps.Reporter, Selection: deps.Selection,
+		State: services.DesiredState, Lifecycle: reconciler, Trust: deps.Trust,
+		Confirmer: deps.Confirmer, Session: deps.SessionConfirmer, Reporter: deps.Reporter,
+		Selection: deps.Selection, Streams: deps.Streams, Terminal: deps.Terminal, Home: deps.Home,
 	})
 	services.MachineInventory, services.MachineAccess, services.MachinePower = machine.MachineInventory, machine.MachineAccess, machine.MachinePower
 	return services
