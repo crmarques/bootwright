@@ -98,10 +98,12 @@ It must not suppress required hooks and then claim a usable runtime. Existing
 operator SELinux policy remains operator-owned. The native package manager
 performs required labeling and policy hooks; setup does not toggle enforcement
 or replace local policy. The native transaction verifies the identities and
-installed nonconfiguration files of what it installs; readiness afterwards
-confirms only that each selected root package is installed by name, whatever
-release the host carries. Workload access under that policy is verified by its
-flow consumer.
+installed nonconfiguration files of what it installs. A path the package
+declares but does not install, such as a runtime directory its own daemon
+creates, is owned by the host and is never read as a dependency defect.
+Readiness afterwards confirms only that each selected root package is installed
+by name, whatever release the host carries. Workload access under that policy is
+verified by its flow consumer.
 A list of package names alone is not a complete plan.
 
 Each native selection has its own content identity, including the host platform

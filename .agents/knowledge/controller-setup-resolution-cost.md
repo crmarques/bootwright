@@ -40,6 +40,25 @@ why each removed step was expensive, which is the reason those rules matter.
   `internal/controller/nativelocal/resolver_linux_amd64.go` (`Check`,
   `decodePresence`), `ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/native_resolution.py`
   (`present`).
+- The `inspect` operation's own `rpm --verify` must exclude every entry a
+  package declares but does not install. Observed on 2026-09-17: the first apply
+  on a controller that already carried the whole closure failed at
+  `controller-prerequisites` with `controller.setup: Ansible did not complete
+  the authorized dependency operation`, and the next apply resolved the same
+  block as completed. The frozen transaction held no actions, so nothing was
+  installed and the transaction task was skipped; the completion phase then
+  refused with `native postcondition` because `rootsReady` was false.
+  `libvirt-daemon-driver-qemu` declares `/run/libvirt/qemu/swtpm` as a `%ghost`
+  owned by `qemu:qemu`, and libvirt's own daemon creates that runtime directory
+  as `qemu:tss`, so `rpm --verify` reported `......G..  g` for a package with
+  nothing wrong with it. Verification now passes `--noghost` beside the
+  `--noconfig` it already had. The retry succeeded only because `Observe` proves
+  the block through `present`, which asks `rpm -q` by name and verifies no file,
+  so the stricter apply gate and the weaker observation disagreed. Code:
+  `ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/native_resolution.py`
+  (`inspect`),
+  `ansible/collections/ansible_collections/bootwright/core/plugins/action/controller_protocol.py`
+  (`completed`).
 - An automation revision still names a new bundle area, because `Digest()`
   hashes every embedded file into `BootstrapDefinition.AutomationDigest`, which
   enters the bootstrap digest and through it `CatalogDigest`. It no longer costs
@@ -84,6 +103,8 @@ why each removed step was expensive, which is the reason those rules matter.
   test in `internal/controller/bundlelocal` (`TestSealedBundleReadinessIsPresenceOnly`),
   the presence evidence test in `internal/controller/nativelocal`, and the
   helper unit test `test_present_reports_roots_by_name_without_verifying_files`.
+  For the entries verification excludes:
+  `test_inspect_verifies_installed_files_and_excludes_runtime_entries`.
   For carrying a resolution forward:
   `TestSupersededAutomationCarriesTheRetainedResolutionForward` and
   `TestCarryForwardRefusesWithoutTheRetainedBundleItReadsFrom` in

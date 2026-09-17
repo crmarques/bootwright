@@ -162,3 +162,47 @@ class NativeResolution(unittest.TestCase):
             self.assertEqual(command[2], "/snapshot/usr/lib/sysimage/rpm")
         with self.assertRaises(ValueError):
             native.installed_identity(b"other\t(none)\t1\t1\tx86_64\n", "podman")
+
+    def test_inspect_verifies_installed_files_and_excludes_runtime_entries(self):
+        root = package("libvirt-daemon-driver-qemu", "11.6.0", "3.fc43")
+        installed = native.identity(root)
+        content = {
+            "format": native.FORMAT,
+            "packages": [dict(installed, source={"id": "root-source"})],
+        }
+        plan = dict(content, digest=native.digest(content))
+        request = {
+            "platform": {"os": "fedora", "release": "43", "architecture": "amd64"},
+            "snapshot": "/snapshot",
+            "plan": plan,
+        }
+        commands = []
+
+        def verify(returncode):
+            def run(command, **_):
+                commands.append(command)
+                return SimpleNamespace(returncode=returncode)
+
+            return run
+
+        def inspect(returncode):
+            with patch.object(native, "setup_dnf5", lambda *_, **__: None):
+                with patch.object(native, "inventory5", lambda _: [installed]):
+                    with patch.object(native.subprocess, "run", verify(returncode)):
+                        return native.inspect(request, "/scratch")
+
+        result = inspect(0)
+        self.assertTrue(result["rootsReady"])
+        self.assertEqual(result["inventory"], [installed])
+        # A %config file is operator-owned and a %ghost entry runtime-owned, so
+        # neither withholds a root whose installed files are intact.
+        self.assertEqual(len(commands), 1)
+        self.assertEqual(commands[0][0], "/usr/bin/rpm")
+        self.assertEqual(commands[0][2], "/snapshot/usr/lib/sysimage/rpm")
+        for option in ("--verify", "--noconfig", "--noghost", "--noscripts"):
+            self.assertIn(option, commands[0])
+        self.assertEqual(
+            commands[0][-1], "libvirt-daemon-driver-qemu-0:11.6.0-3.fc43.x86_64"
+        )
+        # An installed file that does not verify still withholds the root.
+        self.assertFalse(inspect(1)["rootsReady"])

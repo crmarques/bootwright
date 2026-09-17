@@ -733,6 +733,10 @@ def inspect(request, scratch):
                 nevra = "{name}-{epoch}:{version}-{release}.{architecture}".format(
                     **value
                 )
+                # Only installed files prove a root. A %config file is
+                # operator-owned and a %ghost entry is runtime-owned, so a
+                # daemon that creates its own runtime directory is not a
+                # dependency defect.
                 # Standalone supplied-platform probe; no remote module execution.
                 # pylint: disable-next=ansible-bad-function
                 result = subprocess.run(
@@ -742,6 +746,7 @@ def inspect(request, scratch):
                         str(Path(root) / db_path(request["platform"]).lstrip("/")),
                         "--verify",
                         "--noconfig",
+                        "--noghost",
                         "--noscripts",
                         "--",
                         nevra,
