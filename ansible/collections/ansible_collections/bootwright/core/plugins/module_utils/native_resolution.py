@@ -728,49 +728,50 @@ def inspect(request, scratch):
             for package in plan["packages"]
         ]
         ready = all(canonical(value) in observed for value in expected)
-        if ready:
-            for value in expected:
-                nevra = "{name}-{epoch}:{version}-{release}.{architecture}".format(
-                    **value
-                )
-                # Only installed files prove a root. A %config file is
-                # operator-owned and a %ghost entry is runtime-owned, so a
-                # daemon that creates its own runtime directory is not a
-                # dependency defect.
-                # Standalone supplied-platform probe; no remote module execution.
-                # pylint: disable-next=ansible-bad-function
-                result = subprocess.run(
-                    [
-                        "/usr/bin/rpm",
-                        "--dbpath",
-                        str(Path(root) / db_path(request["platform"]).lstrip("/")),
-                        "--verify",
-                        "--noconfig",
-                        "--noghost",
-                        "--noscripts",
-                        "--",
-                        nevra,
-                    ],
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    check=False,
-                    timeout=30,
-                    env={
-                        "PATH": "/usr/sbin:/usr/bin",
-                        "LANG": "C",
-                        "LC_ALL": "C",
-                        "HOME": str(Path(scratch) / "home"),
-                    },
-                )
-                if result.returncode != 0:
-                    ready = False
-                    break
     return {
         "inventory": values,
         "inventorySHA256": inventory_digest(values),
         "rootsReady": ready,
     }
+
+
+def verified_files(platform, root, identities, scratch):
+    """Prove the files one transaction installed, and nothing the host owns.
+
+    A %config file is operator-owned and a %ghost entry is runtime-owned, so a
+    daemon that creates its own runtime directory is not a dependency defect.
+    """
+    for value in identities:
+        nevra = "{name}-{epoch}:{version}-{release}.{architecture}".format(**value)
+        # Standalone supplied-platform probe; no remote module execution.
+        # pylint: disable-next=ansible-bad-function
+        result = subprocess.run(
+            [
+                "/usr/bin/rpm",
+                "--dbpath",
+                str(Path(root) / db_path(platform).lstrip("/")),
+                "--verify",
+                "--noconfig",
+                "--noghost",
+                "--noscripts",
+                "--",
+                nevra,
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=30,
+            env={
+                "PATH": "/usr/sbin:/usr/bin",
+                "LANG": "C",
+                "LC_ALL": "C",
+                "HOME": str(Path(scratch) / "home"),
+            },
+        )
+        if result.returncode != 0:
+            return False
+    return True
 
 
 def main():

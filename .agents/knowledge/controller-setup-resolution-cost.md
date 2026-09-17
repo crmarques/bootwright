@@ -40,25 +40,37 @@ why each removed step was expensive, which is the reason those rules matter.
   `internal/controller/nativelocal/resolver_linux_amd64.go` (`Check`,
   `decodePresence`), `ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/native_resolution.py`
   (`present`).
-- The `inspect` operation's own `rpm --verify` must exclude every entry a
-  package declares but does not install. Observed on 2026-09-17: the first apply
-  on a controller that already carried the whole closure failed at
+- File verification belongs to the transaction, over exactly what it installed;
+  readiness beside it is presence. Observed on 2026-09-17: the first apply on a
+  controller that already carried the whole closure failed at
   `controller-prerequisites` with `controller.setup: Ansible did not complete
   the authorized dependency operation`, and the next apply resolved the same
   block as completed. The frozen transaction held no actions, so nothing was
-  installed and the transaction task was skipped; the completion phase then
-  refused with `native postcondition` because `rootsReady` was false.
-  `libvirt-daemon-driver-qemu` declares `/run/libvirt/qemu/swtpm` as a `%ghost`
-  owned by `qemu:qemu`, and libvirt's own daemon creates that runtime directory
-  as `qemu:tss`, so `rpm --verify` reported `......G..  g` for a package with
-  nothing wrong with it. Verification now passes `--noghost` beside the
-  `--noconfig` it already had. The retry succeeded only because `Observe` proves
-  the block through `present`, which asks `rpm -q` by name and verifies no file,
-  so the stricter apply gate and the weaker observation disagreed. Code:
+  installed and the transaction task was skipped; the completion phase still
+  refused with `native postcondition`, because `inspect` ran `rpm --verify` over
+  the whole frozen closure on every run and reported `......G..  g` for
+  `libvirt-daemon-driver-qemu` — which declares `/run/libvirt/qemu/swtpm` as a
+  `%ghost` owned by `qemu:qemu` while libvirt's own daemon creates that runtime
+  directory as `qemu:tss`. Excluding `%ghost` entries with `--noghost` removed
+  that instance; it did not remove the class, because any verify divergence over
+  any closure package reproduced the same symptom. `inspect` now reports
+  `rootsReady` from presence at the frozen identities alone, and the integrity
+  proof moved to `verified_files`, called once by the native transaction over
+  its own action targets. Code:
   `ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/native_resolution.py`
-  (`inspect`),
+  (`inspect`, `verified_files`),
+  `ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/native_apply.py`
+  (`apply`),
   `ansible/collections/ansible_collections/bootwright/core/plugins/action/controller_protocol.py`
   (`completed`).
+- What made that defect expensive to see is worth stating on its own: the block
+  had two definitions of satisfied. `Apply` reached the adapter only when a root
+  was missing — every later apply took the `settled` fast path, whose condition
+  is exactly `Observe`'s — so the strict completion gate ran on the first apply
+  and never again. A gate no repeat run can reach cannot be trusted to hold, and
+  it fails where it is least expected: on a host that already has everything.
+  Presence is now the one bar all three share. Code:
+  `internal/controller/clients/capability.go` (`Apply`, `settled`, `Observe`).
 - An automation revision still names a new bundle area, because `Digest()`
   hashes every embedded file into `BootstrapDefinition.AutomationDigest`, which
   enters the bootstrap digest and through it `CatalogDigest`. It no longer costs
@@ -103,8 +115,10 @@ why each removed step was expensive, which is the reason those rules matter.
   test in `internal/controller/bundlelocal` (`TestSealedBundleReadinessIsPresenceOnly`),
   the presence evidence test in `internal/controller/nativelocal`, and the
   helper unit test `test_present_reports_roots_by_name_without_verifying_files`.
-  For the entries verification excludes:
-  `test_inspect_verifies_installed_files_and_excludes_runtime_entries`.
+  For readiness by presence and the integrity proof beside it:
+  `test_inspect_reports_readiness_by_presence_without_verifying_files`,
+  `test_verified_files_covers_installed_files_and_no_host_owned_path` and
+  `test_integrity_is_proved_over_exactly_what_the_transaction_installed`.
   For carrying a resolution forward:
   `TestSupersededAutomationCarriesTheRetainedResolutionForward` and
   `TestCarryForwardRefusesWithoutTheRetainedBundleItReadsFrom` in

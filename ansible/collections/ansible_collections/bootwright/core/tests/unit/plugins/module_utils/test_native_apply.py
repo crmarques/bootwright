@@ -83,7 +83,7 @@ class NativeApply(unittest.TestCase):
             with self.assertRaises(OSError):
                 native_apply.verified_payloads(plan, payloads, directory)
 
-    def exercise(self, before="a" * 64, after="b" * 64, roots=True):
+    def exercise(self, before="a" * 64, after="b" * 64, roots=True, files=True):
         plan = self.plan()
         request = dict(
             operation="apply",
@@ -106,6 +106,12 @@ class NativeApply(unittest.TestCase):
                 dict(inventorySHA256=after, rootsReady=roots),
             ]
         )
+        self.verified = []
+
+        def verify(platform, root, identities, scratch):
+            self.verified.append(identities)
+            return files
+
         helper = SimpleNamespace(
             validate_plan=lambda value: None,
             solve5=lambda *args, **kwargs: (copy.deepcopy(plan), base, "transaction"),
@@ -116,6 +122,8 @@ class NativeApply(unittest.TestCase):
             validate_plan=helper.validate_plan,
             solve5=helper.solve5,
             inspect=helper.inspect,
+            snapshot_database=lambda *args: "/snapshot",
+            verified_files=verify,
         ), patch.object(os, "geteuid", return_value=0), patch.object(
             native_apply, "run5"
         ) as run, patch.object(
@@ -134,11 +142,20 @@ class NativeApply(unittest.TestCase):
         self.assertIsInstance(error, ValueError)
 
     def test_post_drift_and_failed_root_proof_do_not_claim_completion(self):
-        for arguments in (dict(after="d" * 64), dict(roots=False)):
+        for arguments in (dict(after="d" * 64), dict(roots=False), dict(files=False)):
             result, calls, error = self.exercise(**arguments)
             self.assertIsNone(result)
             self.assertEqual(calls, 1)
             self.assertIsInstance(error, ValueError)
+
+    def test_integrity_is_proved_over_exactly_what_the_transaction_installed(self):
+        result, calls, error = self.exercise()
+        self.assertIsNone(error)
+        self.assertIsNotNone(result)
+        self.assertEqual(calls, 1)
+        # Not the whole closure: the identities this transaction's own actions
+        # put on disk, read back once beside the inventory.
+        self.assertEqual(self.verified, [[self.plan()["actions"][0]["after"]]])
 
     def test_exact_transaction_returns_only_bounded_completion(self):
         result, calls, error = self.exercise()

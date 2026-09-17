@@ -163,7 +163,7 @@ class NativeResolution(unittest.TestCase):
         with self.assertRaises(ValueError):
             native.installed_identity(b"other\t(none)\t1\t1\tx86_64\n", "podman")
 
-    def test_inspect_verifies_installed_files_and_excludes_runtime_entries(self):
+    def test_inspect_reports_readiness_by_presence_without_verifying_files(self):
         root = package("libvirt-daemon-driver-qemu", "11.6.0", "3.fc43")
         installed = native.identity(root)
         content = {
@@ -178,6 +178,31 @@ class NativeResolution(unittest.TestCase):
         }
         commands = []
 
+        def run(command, **_):
+            commands.append(command)
+            return SimpleNamespace(returncode=0)
+
+        def inspect(inventory):
+            with patch.object(native, "setup_dnf5", lambda *_, **__: None):
+                with patch.object(native, "inventory5", lambda _: inventory):
+                    with patch.object(native.subprocess, "run", run):
+                        return native.inspect(request, "/scratch")
+
+        result = inspect([installed])
+        self.assertTrue(result["rootsReady"])
+        self.assertEqual(result["inventory"], [installed])
+        # Readiness after a transaction is presence: the closure is never read
+        # back and probed twice for one effect.
+        self.assertEqual(commands, [])
+        # A closure package the host does not carry is still not ready.
+        other = native.identity(package("libvirt-daemon-driver-qemu", "11.7.0"))
+        self.assertFalse(inspect([other])["rootsReady"])
+
+    def test_verified_files_covers_installed_files_and_no_host_owned_path(self):
+        installed = native.identity(package("swtpm", "0.10.2", "1.fc43"))
+        platform = {"os": "fedora", "release": "43", "architecture": "amd64"}
+        commands = []
+
         def verify(returncode):
             def run(command, **_):
                 commands.append(command)
@@ -185,24 +210,24 @@ class NativeResolution(unittest.TestCase):
 
             return run
 
-        def inspect(returncode):
-            with patch.object(native, "setup_dnf5", lambda *_, **__: None):
-                with patch.object(native, "inventory5", lambda _: [installed]):
-                    with patch.object(native.subprocess, "run", verify(returncode)):
-                        return native.inspect(request, "/scratch")
-
-        result = inspect(0)
-        self.assertTrue(result["rootsReady"])
-        self.assertEqual(result["inventory"], [installed])
-        # A %config file is operator-owned and a %ghost entry runtime-owned, so
-        # neither withholds a root whose installed files are intact.
+        with patch.object(native.subprocess, "run", verify(0)):
+            self.assertTrue(
+                native.verified_files(platform, "/snapshot", [installed], "/scratch")
+            )
         self.assertEqual(len(commands), 1)
         self.assertEqual(commands[0][0], "/usr/bin/rpm")
         self.assertEqual(commands[0][2], "/snapshot/usr/lib/sysimage/rpm")
+        # A %config file is operator-owned and a %ghost entry runtime-owned, so
+        # neither is read as a defect in what the transaction installed.
         for option in ("--verify", "--noconfig", "--noghost", "--noscripts"):
             self.assertIn(option, commands[0])
-        self.assertEqual(
-            commands[0][-1], "libvirt-daemon-driver-qemu-0:11.6.0-3.fc43.x86_64"
-        )
-        # An installed file that does not verify still withholds the root.
-        self.assertFalse(inspect(1)["rootsReady"])
+        self.assertEqual(commands[0][-1], "swtpm-0:0.10.2-1.fc43.x86_64")
+        with patch.object(native.subprocess, "run", verify(1)):
+            self.assertFalse(
+                native.verified_files(platform, "/snapshot", [installed], "/scratch")
+            )
+        # Nothing installed is nothing to prove.
+        with patch.object(native.subprocess, "run", verify(1)):
+            self.assertTrue(
+                native.verified_files(platform, "/snapshot", [], "/scratch")
+            )

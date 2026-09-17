@@ -166,10 +166,18 @@ def apply(request, scratch):
             run5(transaction)
         else:
             run4(base)
-        after = native.inspect(request, scratch)
+        # One snapshot serves both proofs, so the closure is read back once.
+        # Integrity is this transaction's own postcondition and covers exactly
+        # the identities it installed; readiness after it is presence alone.
+        snapshot = native.snapshot_database(request["platform"], scratch)
+        after = native.inspect(dict(request, snapshot=snapshot), scratch)
+        installed = [action["after"] for action in plan["actions"]]
         if (
             after["inventorySHA256"] != plan["afterSHA256"]
             or after["rootsReady"] is not True
+            or not native.verified_files(
+                request["platform"], snapshot, installed, scratch
+            )
         ):
             raise ValueError("native transaction postcondition")
         return {
