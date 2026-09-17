@@ -322,3 +322,88 @@ func encode(t *testing.T, evidence Evidence) []byte {
 	}
 	return data
 }
+
+// A container cluster is reached at three names its own installer polls and
+// its consumers use, plus one per declared node. The applications name is a
+// subtree, because every route answers beneath it.
+func TestClusterRecordsNameEveryEndpointAndNode(t *testing.T) {
+	records := ClusterRecords(clusterCatalog())
+	want := []Record{
+		{Addresses: []string{"198.51.100.21"}, Name: "api-int.sno.clusters.example.test"},
+		{Addresses: []string{"198.51.100.21"}, Name: "api.sno.clusters.example.test"},
+		{Addresses: []string{"198.51.100.21"}, Name: "apps.sno.clusters.example.test", Subtree: true},
+		{Addresses: []string{"198.51.100.21"}, Name: "master-0.sno.clusters.example.test"},
+	}
+	if len(records) != len(want) {
+		t.Fatalf("records = %+v", records)
+	}
+	for index, record := range records {
+		if record.Name != want[index].Name || record.Subtree != want[index].Subtree ||
+			!slices.Equal(record.Addresses, want[index].Addresses) {
+			t.Fatalf("record %d = %+v, want %+v", index, record, want[index])
+		}
+	}
+}
+
+// An endpoint the graph never resolved answers nowhere, so it contributes no
+// record rather than one pointing at an empty address.
+func TestAnUnresolvedEndpointContributesNoRecord(t *testing.T) {
+	catalog := api.NewCatalog([]api.Object{
+		clusterEnvironment(),
+		api.NewObject(api.ContainerCluster, "sno", api.Value{}, api.MapValue(
+			field("install", api.MapValue(field("endpoints", api.MapValue(
+				field("api", api.MapValue(text("address", "198.51.100.21"))),
+			)))),
+		)),
+	})
+	records := ClusterRecords(catalog)
+	if len(records) != 1 || records[0].Name != "api.sno.clusters.example.test" {
+		t.Fatalf("records = %+v", records)
+	}
+}
+
+// A graph with no container cluster answers exactly what it did before, so a
+// resolver serving Machines alone is unchanged.
+func TestAGraphWithoutAClusterContributesNoClusterRecord(t *testing.T) {
+	if records := ClusterRecords(catalogOf(clusterEnvironment(), controller())); len(records) != 0 {
+		t.Fatalf("records = %+v", records)
+	}
+}
+
+func clusterEnvironment() api.Object {
+	return api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue(
+		field("domains", api.MapValue(text("base", "example.test"), text("containerClusters", "clusters.example.test"))),
+		field("controller", api.MapValue(text("machineRef", "controller"))),
+	))
+}
+
+func clusterCatalog() api.Catalog {
+	network := api.NewObject(api.NetworkConfig, "guests", api.Value{}, api.MapValue(
+		field("machineNetwork", api.ListValue(api.MapValue(text("cidr", "198.51.100.0/24")))),
+		field("nmstate", api.MapValue(field("interfaces", api.ListValue(
+			api.MapValue(text("name", "enp1s0"), text("type", "ethernet"), text("state", "up")),
+		)))),
+	))
+	node := api.NewObject(api.Machine, "sno-01", api.Value{}, api.MapValue(
+		field("capabilities", api.ListValue(api.StringValue("openshift-node"))),
+		field("os", api.MapValue(field("provided", api.BoolValue(false)))),
+		field("network", api.MapValue(
+			text("configRef", "guests"), text("installAddressRef", "ip"),
+			field("addresses", api.ListValue(
+				api.MapValue(text("name", "ip"), text("address", "198.51.100.21/24"), text("interface", "enp1s0")),
+			)),
+		)),
+	))
+	cluster := api.NewObject(api.ContainerCluster, "sno", api.Value{}, api.MapValue(
+		field("install", api.MapValue(field("endpoints", api.MapValue(
+			field("api", api.MapValue(text("address", "198.51.100.21"))),
+			field("api-int", api.MapValue(text("address", "198.51.100.21"))),
+			field("ingress", api.MapValue(text("address", "198.51.100.21"))),
+		)))),
+		field("nodes", api.ListValue(api.MapValue(
+			text("name", "master-0"), text("role", "master"), text("machineRef", "sno-01"),
+			text("fqdn", "master-0.sno.clusters.example.test"),
+		))),
+	))
+	return api.NewCatalog([]api.Object{clusterEnvironment(), controller(), network, node, cluster})
+}

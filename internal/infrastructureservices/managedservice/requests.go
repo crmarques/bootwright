@@ -5,15 +5,19 @@ import (
 	"encoding/json"
 	"slices"
 
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 // Record is one name this service answers with, and the addresses it answers.
+// A subtree record answers for every name beneath it as well, which is what an
+// ingress wildcard means; every other record answers its exact name alone.
 type Record struct {
 	Addresses []string `json:"addresses"`
 	Name      string   `json:"name"`
+	Subtree   bool     `json:"subtree,omitempty"`
 }
 
 // Request is the complete frozen intent for one managed network service. Its
@@ -150,6 +154,71 @@ func MachineRecords(catalog api.Catalog) []Record {
 		slices.Sort(addresses)
 		records = append(records, Record{Addresses: addresses, Name: name})
 	}
+	return sortRecords(records)
+}
+
+// ClusterRecords names every container cluster the graph selects: the two API
+// names its own installer polls and its consumers reach it at, the
+// applications name every route answers beneath, and each declared node. A
+// cluster is named under the container-cluster zone, so the resolver a Machine
+// uses and the installer that polls the cluster agree by construction. An
+// endpoint that resolved no address contributes no record rather than one
+// pointing nowhere.
+func ClusterRecords(catalog api.Catalog) []Record {
+	zone := containerClusterZone(catalog)
+	if zone == "" {
+		return nil
+	}
+	var records []Record
+	for _, cluster := range catalog.OfKind(api.ContainerCluster) {
+		suffix := "." + cluster.Name() + "." + zone
+		endpoints := cluster.Spec().Get("install", "endpoints")
+		for _, slot := range []string{"api", "api-int"} {
+			if address := hostAddress(endpoints.Get(slot, "address").Text()); address != "" {
+				records = append(records, Record{Addresses: []string{address}, Name: slot + suffix})
+			}
+		}
+		if address := hostAddress(endpoints.Get("ingress", "address").Text()); address != "" {
+			records = append(records, Record{Addresses: []string{address}, Name: "apps" + suffix, Subtree: true})
+		}
+		for _, node := range cluster.Spec().Get("nodes").Items() {
+			name := node.Get("fqdn").Text()
+			address := nodeAddress(catalog, node.Get("machineRef").Text())
+			if name == "" || address == "" {
+				continue
+			}
+			records = append(records, Record{Addresses: []string{address}, Name: name})
+		}
+	}
+	return sortRecords(records)
+}
+
+// nodeAddress is the address a cluster node answers at, which is the same
+// installation address its own installer configures.
+func nodeAddress(catalog api.Catalog, reference string) string {
+	bound, found := catalog.Find(api.Machine, reference)
+	if !found {
+		return ""
+	}
+	selected, issues := machine.InstallAddress(bound, catalog)
+	if len(issues) != 0 {
+		return ""
+	}
+	return hostAddress(selected.Get("address").Text())
+}
+
+// containerClusterZone is the zone container clusters are named under.
+// Effective state materializes it, so this reads one field rather than
+// repeating the Environment's own defaulting.
+func containerClusterZone(catalog api.Catalog) string {
+	environments := catalog.OfKind(api.Environment)
+	if len(environments) != 1 {
+		return ""
+	}
+	return environments[0].Spec().Get("domains", "containerClusters").Text()
+}
+
+func sortRecords(records []Record) []Record {
 	slices.SortFunc(records, func(x, y Record) int {
 		switch {
 		case x.Name < y.Name:

@@ -257,10 +257,11 @@ A selected `ContainerCluster` contributes the three names its own installation
 polls and its consumers reach it at, each answering the address its endpoint
 resolved: its API name, its internal API name, and its applications name, which
 answers for every name beneath it because that is what an ingress wildcard
-means. Each authored `additionalIngressHosts` entry answers the same ingress
-address, which is what that field was reserved for. A cluster whose endpoint
-resolved no address contributes no record for that endpoint rather than a
-record pointing nowhere. The names follow
+means. Each declared node answers at the same installation address its own
+installer configures. A cluster whose endpoint resolved no address contributes
+no record for that endpoint rather than a record pointing nowhere, and
+`additionalIngressHosts` remains frozen in the request without producing one,
+because nothing yet says which cluster's ingress an authored name belongs to. The names follow
 [the container-cluster zone](api/environment.md#domains), so the resolver a
 Machine uses and the installer that polls the cluster agree by construction.
 
