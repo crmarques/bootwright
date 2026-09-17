@@ -312,6 +312,9 @@ func controllerScopeText(text *display, report *prerequisites.Report) {
 		}
 	}
 	scope = append(scope, field{Label: "Platform", Value: report.Platform.OS + " " + report.Platform.Release + "/" + report.Platform.Architecture})
+	if report.Route != "" {
+		scope = append(scope, field{Label: "Route", Value: report.Route})
+	}
 	text.section("")
 	text.fields(scope...)
 }

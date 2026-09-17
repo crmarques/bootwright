@@ -21,7 +21,10 @@ privilege, and change nothing about any context.
 `media add --name <filename.iso>` acquires exactly one source. `--from-file`
 copies a regular file through a verified handle; `--from-url` performs one
 bounded download with TLS verified, redirects disabled, no `userinfo`, and a
-size ceiling, and requires `--sha256`. The digest is computed while the bytes
+size ceiling, and requires `--sha256`. The store is host-wide and precedes
+every context, so that download takes the
+[context-free acquisition route](controller.md#the-context-free-acquisition-route)
+and is direct when the invoking environment names none. The digest is computed while the bytes
 stream, compared with `--sha256` when supplied, and recorded with the image's
 name, size, credential-free origin and time of publication in one canonical
 record beside the image. Publication is atomic and exclusive; replacing an

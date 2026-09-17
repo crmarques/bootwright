@@ -116,6 +116,11 @@ become unreviewed native arguments. Invocation uses no shell, a fixed safe
 working directory, a minimal allowlisted environment, and only required file
 descriptors. Ambient `PATH`, user configuration, proxy variables, inventory,
 plugins, roles, caches, SSH options, and privilege settings are not authority.
+A child process therefore receives no proxy variable of its own; where a
+command has an acquisition route, that route reaches the child as request data.
+The one environment value a privileged re-execution may carry is the
+[context-free route](controller.md#the-context-free-acquisition-route) the
+invoking process already admitted, forwarded under its own fixed names.
 
 The adapter bounds runtime, input, output, process count, and inherited
 resources. Cancellation terminates and reaps the whole owned process tree.
@@ -153,8 +158,14 @@ Network access requires an application-authorized typed request with validated
 scheme, endpoint, port, target identity, and bounded request and response
 sizes. URLs containing `userinfo` are invalid. Redirects are disabled
 unless the port contract allows them; every permitted hop is revalidated for
-scheme, destination, credentials, and private-address policy. Ambient proxy
-and credential discovery are forbidden.
+scheme, destination, credentials, and private-address policy. Credential
+discovery is forbidden, and so is proxy discovery from configuration files,
+user profiles or tool defaults. A route is always an explicit admitted value:
+either the selected Machine's declared proxy choice, or, for the
+[commands that acquire before any context exists](controller.md#the-context-free-acquisition-route),
+the named variables the invoking environment set. That route is admitted
+against the declared endpoint and bypass grammar before it is used, carries no
+credential, and selects transport alone.
 
 TLS certificate and name verification and SSH host identity verification fail
 closed. An insecure exception must be explicit, endpoint-scoped, visible in

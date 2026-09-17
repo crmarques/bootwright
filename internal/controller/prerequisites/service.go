@@ -14,6 +14,10 @@ import (
 )
 
 type Options struct {
+	// AmbientRoute is the acquisition route the invoking environment selected.
+	// It applies to context-free work alone; a selected context always uses its
+	// own controller Machine's proxy choice.
+	AmbientRoute    controller.Route
 	Confirmer       Confirmer
 	Presenter       PlanPresenter
 	Progress        ProgressReporter
@@ -277,7 +281,7 @@ type inspectionResolution struct {
 // check as it settles; the repeated inspections that bind a resolution and
 // guard the transaction pass no phase, so every check is shown exactly once.
 func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, phase string, frozen ...inspectionResolution) (inspection, error) {
-	current := inspection{view: view, selection: controller.Baseline(), bundle: BundleInspection{Recoverable: true}, toolsResolved: true}
+	current := inspection{view: view, selection: controller.Baseline().WithAmbientRoute(s.options.AmbientRoute), bundle: BundleInspection{Recoverable: true}, toolsResolved: true}
 	if len(frozen) != 0 && frozen[0].Retained != "" {
 		current.carried, current.retainedDigest = true, frozen[0].Retained
 	}
@@ -337,7 +341,7 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, pha
 	if err := s.catalog.ValidateEgress(current.route()); err != nil {
 		return current, err
 	}
-	current.report = Report{ContextName: view.Context.Name, Machine: current.selection.MachineName(), Platform: platform, DryRun: dryRun, Outcome: "planned", Checks: []Check{}, Actions: []string{}}
+	current.report = Report{ContextName: view.Context.Name, Machine: current.selection.MachineName(), Platform: platform, DryRun: dryRun, Outcome: "planned", Route: current.selection.Route().Summary(), Checks: []Check{}, Actions: []string{}}
 	if s.options.Bootstrap != nil && !current.toolsResolved {
 		current.report.Dependencies = dependencyIntent(current.selection)
 	}

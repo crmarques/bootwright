@@ -232,6 +232,7 @@ type testBundle struct {
 	automation    string
 	rebaseErr     error
 	retainedSeeds []bool
+	egress        SetupEgress
 }
 
 func (b *testBundle) Inspect(context.Context, BundleArea, Definition, bool) (BundleInspection, error) {
@@ -256,8 +257,9 @@ func (b *testBundle) Rebase(_ context.Context, area BundleArea, retained Bootstr
 	return CanonicalBootstrap(value)
 }
 
-func (b *testBundle) Prepare(ctx context.Context, _ BundleArea, retained BundleArea, _ Definition, _ SetupEgress, _ func(ProgressEvent)) (BundleInspection, error) {
+func (b *testBundle) Prepare(ctx context.Context, _ BundleArea, retained BundleArea, _ Definition, egress SetupEgress, _ func(ProgressEvent)) (BundleInspection, error) {
 	b.prepares++
+	b.egress = egress
 	b.retainedSeeds = append(b.retainedSeeds, retained != nil)
 	b.owner.events = append(b.owner.events, "prepare")
 	if b.owner.store.state.Receipt.Actions[0].Phase != "intent" {
@@ -793,5 +795,143 @@ func TestAFailedRetirementIsReported(t *testing.T) {
 	}
 	if result == nil || len(result.RetiredBundles) != 0 {
 		t.Fatalf("result = %#v", result)
+	}
+}
+
+func testRoute(t *testing.T, pairs ...string) controller.Route {
+	t.Helper()
+	values := map[string]string{}
+	for index := 0; index+1 < len(pairs); index += 2 {
+		values[pairs[index]] = pairs[index+1]
+	}
+	route, err := controller.RouteFromEnvironment(func(name string) (string, bool) {
+		value, present := values[name]
+		return value, present
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return route
+}
+
+func ambientFixture(t *testing.T, pairs ...string) *fixture {
+	t.Helper()
+	f := newFixture(t)
+	f.service = New(&f.store, &f.compiler, &f.host, &f.catalog, &f.bundle, nil, Options{Confirmer: f, Presenter: f, AmbientRoute: testRoute(t, pairs...)})
+	return f
+}
+
+// Setup prepares what every context shares, so the only place its proxy choice
+// can come from is the environment that invoked it.
+func TestContextFreeSetupAcquiresOverTheAmbientRoute(t *testing.T) {
+	f := ambientFixture(t, "HTTPS_PROXY", "http://proxy.example:3128", "NO_PROXY", ".internal.example")
+	report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+	if err != nil || report.Outcome != "changed" {
+		t.Fatalf("report=%#v err=%v", report, err)
+	}
+	if report.Route != "http://proxy.example:3128 (HTTPS_PROXY), 1 bypass entry" {
+		t.Fatalf("route = %q", report.Route)
+	}
+	egress := f.store.state.Receipt.Egress
+	if egress.HTTPSProxy != "http://proxy.example:3128" || egress.HTTPProxy != "" {
+		t.Fatalf("receipt egress = %#v", egress)
+	}
+	if len(egress.NoProxy) != 1 || egress.NoProxy[0] != ".internal.example" {
+		t.Fatalf("receipt bypass = %#v", egress.NoProxy)
+	}
+	if f.bundle.egress.HTTPSProxy != "http://proxy.example:3128" {
+		t.Fatalf("acquisition egress = %#v", f.bundle.egress)
+	}
+}
+
+func TestAnUnsetEnvironmentKeepsDirectContextFreeAcquisition(t *testing.T) {
+	f := ambientFixture(t)
+	report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+	if err != nil || report.Route != "direct" {
+		t.Fatalf("route = %q err = %v", report.Route, err)
+	}
+	if f.store.state.Receipt.Egress.HTTPSProxy != "" || len(f.store.state.Receipt.Egress.NoProxy) != 0 {
+		t.Fatalf("a direct setup recorded a proxy: %#v", f.store.state.Receipt.Egress)
+	}
+}
+
+// A context names its own controller Machine, and that Machine's proxy choice
+// is the whole route. An environment variable must never reach past it.
+func TestASelectedContextIgnoresTheAmbientRoute(t *testing.T) {
+	f := ambientFixture(t, "HTTPS_PROXY", "http://proxy.example:3128")
+	f.store.scope = SetupContext{Name: "example", Revision: "rev-" + strings.Repeat("2", 32)}
+	if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	digest, err := f.host.identity.PrivateDigest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.store.state.Bindings = []ControllerBinding{{Context: "example", Machine: "controller", HostDigest: digest}}
+	report, err := f.service.Check(context.Background(), CheckRequest{ContextName: "example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Route != "direct" {
+		t.Fatalf("a context took the invoking environment's route: %q", report.Route)
+	}
+}
+
+func TestAnAmbientRouteNeverOverridesASelectedControllerMachine(t *testing.T) {
+	route, err := controller.RouteFromEnvironment(func(name string) (string, bool) {
+		if name == "HTTPS_PROXY" {
+			return "http://proxy.example:3128", true
+		}
+		return "", false
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseline := controller.Baseline().WithAmbientRoute(route)
+	if baseline.Route().HTTPSProxy() != "http://proxy.example:3128" {
+		t.Fatal("the context-free baseline refused an ambient route")
+	}
+	selected := api.NewCatalog([]api.Object{
+		api.NewObject(api.Environment, "example", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "controller", "machineRef")),
+		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").With("capabilities", api.StringList("container-runtime")).WithPath(api.MapValue(), "proxy", "direct")),
+	})
+	chosen, err := controller.Select(selected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overridden := chosen.WithAmbientRoute(route); !overridden.Route().Direct() || overridden.Route().HTTPSProxy() != "" {
+		t.Fatal("an ambient route overrode a controller Machine's own proxy choice")
+	}
+}
+
+// The receipt binds the route its plan was approved with, so an interrupted
+// setup cannot be finished over a different one by changing the environment.
+func TestAnInterruptedSetupRefusesAChangedAmbientRoute(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		resumed []string
+		code    string
+	}{
+		{"same route resumes", []string{"HTTPS_PROXY", "http://proxy.example:3128"}, ""},
+		{"changed endpoint refuses", []string{"HTTPS_PROXY", "http://other.example:3128"}, "controller.unknown"},
+		{"withdrawn proxy refuses", nil, "controller.unknown"},
+		{"added bypass refuses", []string{"HTTPS_PROXY", "http://proxy.example:3128", "NO_PROXY", ".internal.example"}, "controller.unknown"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f := ambientFixture(t, "HTTPS_PROXY", "http://proxy.example:3128")
+			f.bundle.err = errors.New("failed")
+			if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err == nil {
+				t.Fatal("the interrupted setup reported success")
+			}
+			if !f.store.state.Receipt.Incomplete() {
+				t.Fatal("the interrupted setup left no receipt to protect")
+			}
+			f.bundle.err = nil
+			f.service = New(&f.store, &f.compiler, &f.host, &f.catalog, &f.bundle, nil, Options{Confirmer: f, Presenter: f, AmbientRoute: testRoute(t, test.resumed...)})
+			_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+			if code(err) != test.code {
+				t.Fatalf("resumed under %v: %v", test.resumed, err)
+			}
+		})
 	}
 }

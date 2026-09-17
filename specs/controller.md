@@ -196,14 +196,17 @@ never readable, published into, or counted as retained.
 ## Selection and command journeys
 
 `setup` selects no context. It ignores the invoking user's current selection,
-resolves no desired state, consumes no explicit `--context` value, and selects
-the host dependencies with direct download routing. This allows preparation
-before context creation or Environment import, and makes one prepared host
-serve every context created on it. No current directory, user profile or
-ambient proxy selects inputs. Version intent for the host dependencies comes
+resolves no desired state, and consumes no explicit `--context` value. This
+allows preparation before context creation or Environment import, and makes one
+prepared host serve every context created on it. No current directory or user
+profile selects inputs. Version intent for the host dependencies comes
 from the compiled default alone, because no Environment can move it; the
 [Environment version policy](api/environment.md#dependency-versions) declares
 only the versions a controller stage installs.
+
+Its acquisition route is the one exception, because no Environment exists to
+carry one: setup takes the [invoking environment's route](#the-context-free-acquisition-route),
+and direct access when that environment names none.
 
 `preflight controller` uses a named context **only when `--context` is explicit
 and nonempty**. An explicitly empty value is omission. Nonempty names follow
@@ -370,14 +373,64 @@ Never fall back to direct access or read Secret material to probe an
 unsupported route. Authenticated/private-trust setup acquisition needs its
 own Secrets consumer and recovery definition before promotion.
 
+### The context-free acquisition route
+
+A command that acquires before any context exists has no Environment to select
+a route from, so it reads one from the environment that invoked it. Exactly
+three commands do: `setup`, `preflight controller` without `--context`, and
+`media add --from-url`. Every context-backed command, including
+`apply --stage controller`, `preflight controller --context <name>` and every
+lifecycle block, continues to take its Machine's normalized proxy choice alone,
+so one context never acquires over two routes.
+
+The route is read from `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`, in either
+case. An unset environment is direct access. The two spellings of one name set
+to different nonempty values refuse rather than resolve, because either choice
+discards an explicit operator value. `ALL_PROXY` and every other variable are
+ignored, and no proxy configuration file, user profile or package-manager
+setting is consulted.
+
+Every approved source is HTTPS, so `HTTPS_PROXY` alone selects the route and
+`HTTP_PROXY` without it refuses rather than acquiring directly. The endpoint
+follows the same grammar as a declared external Proxy: an absolute HTTP or
+HTTPS URL, bounded and ASCII, with no `userinfo`, path, query or fragment. A
+credential-bearing endpoint refuses, so this route never carries a secret and
+needs no Secret consumer.
+
+`NO_PROXY` is a comma-separated list of the same bypass entries a declared
+[proxy choice](api/infrastructure-services.md#proxy-choice) carries: a host
+name, a domain suffix with or without a leading dot, an IP address, a CIDR
+block, a `host:port` pair, or `*` for every destination. Entries are trimmed,
+deduplicated and bounded by what a receipt may carry, matching consults no
+resolver, and a bypass list without a selected proxy is nothing. An unqualified
+value refuses before any privilege escalation, acquisition or local effect, and
+names the variable to correct.
+
+The route selects transport only. It never moves a source identity, digest,
+version or the approved closure, and it reconfigures nothing on the host. It is
+recorded in the setup receipt exactly as a declared route is, so an interrupted
+setup resumed over a different route refuses rather than completing a plan that
+was approved for another one.
+
+Local privilege is where this route is qualified. The unprivileged invocation
+reads and admits it before `sudo` can prompt, then forwards exactly the
+canonical variables to the elevated child, which `env_reset` would otherwise
+drop. A sudoers rule that permits neither `SETENV` nor `ALL` refuses that
+forwarding; running as root reads the environment directly. Child processes
+still receive no proxy variable of their own: the route reaches the download
+client, package resolution and automation as request data, exactly as a
+declared route does.
+
 Reject a bootstrap dependency on a proxy or other service whose readiness
 requires this setup or a subsequent apply. Admission of a reference is not
 readiness evidence. Proxy routing applies only to setup's child processes and
 download client; it does not reconfigure the provided OS. TLS verification,
 trusted publisher metadata, digest checks, bounded redirects and acquisition
 limits follow [Security](security.md). Package/source URLs contain no
-credentials; ambient proxy, Python, Ansible, package-manager and executable-path
-configuration cannot alter the approved closure.
+credentials; Python, Ansible, package-manager and executable-path
+configuration cannot alter the approved closure, and neither can the
+[context-free route](#the-context-free-acquisition-route), which selects
+transport alone.
 
 Controller consumes typed local inspection, acquisition, package-transaction
 and bundle-publication ports. Requests carry exact target evidence, dependency
@@ -494,7 +547,8 @@ defined work.
 
 Both commands retain their existing text-only CLI surface. Order checks and
 actions by catalog dependency order, then stable prerequisite identity. Show
-the baseline or explicit context scope, required/observed versions, planned
+the baseline or explicit context scope, the resolved acquisition route with
+what selected it, required/observed versions, planned
 changes, readiness and next safe command. Both commands stream
 [long-running progress](cli/output.md#long-running-progress): the scope, then
 one `Checks` row per host check as it is verified. Real setup adds one

@@ -374,3 +374,28 @@ func TestControllerResolutionFailureReportsOutcomeOnly(t *testing.T) {
 		t.Fatalf("code=%d out=%q err=%q", code, out.String(), errOut.String())
 	}
 }
+
+// The scope says how this host reaches its publishers, so an operator sees the
+// route their environment selected before they approve a plan that uses it.
+func TestControllerScopeNamesTheAcquisitionRoute(t *testing.T) {
+	ctx := context.Background()
+	for _, test := range []struct {
+		route string
+		want  string
+	}{
+		{"direct", "  Scope     baseline\n  Platform  fedora 43/amd64\n  Route     direct\n"},
+		{"http://proxy.example:3128 (HTTPS_PROXY), 2 bypass entries", "  Scope     baseline\n  Platform  fedora 43/amd64\n  Route     http://proxy.example:3128 (HTTPS_PROXY), 2 bypass entries\n"},
+		{"", "  Scope     baseline\n  Platform  fedora 43/amd64\n"},
+	} {
+		var out bytes.Buffer
+		presenter := NewControllerPresenter(&out, nil)
+		report := controllerReport("ready", false)
+		report.Route = test.route
+		if err := presenter.PresentControllerScope(ctx, prerequisites.ReadinessPhase, *report); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out.String(), test.want) {
+			t.Fatalf("result = %q, want %q", out.String(), test.want)
+		}
+	}
+}

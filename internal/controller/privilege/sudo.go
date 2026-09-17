@@ -6,10 +6,13 @@ import (
 	"io"
 	"math"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/crmarques/bootwright/internal/controller"
 )
 
 // Command is one bounded invocation of an already selected executable.
@@ -42,7 +45,12 @@ type SudoOptions struct {
 	// Terminal is the terminal type an interactive invocation carries. The
 	// elevated child runs the operator's own interactive programs, so it needs
 	// the terminal identity the caller had; every other ambient value stays out.
-	Terminal      string
+	Terminal string
+	// Assignments are the exact acquisition-route variables the elevated child
+	// needs, which env_reset would otherwise drop. Sudo parses NAME=value only
+	// before the option terminator; after it, the assignment becomes the
+	// command sudo tries to execute.
+	Assignments   []string
 	Input         io.Reader
 	Output, Error io.Writer
 }
@@ -87,6 +95,12 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 	if options.NonInteractive {
 		childArgs = append(childArgs, "-n")
 	}
+	for _, assignment := range options.Assignments {
+		if !safeAssignment(assignment) {
+			return 1, errors.New("acquisition route assignment is outside its allowed vocabulary")
+		}
+		childArgs = append(childArgs, assignment)
+	}
 	childArgs = append(childArgs, "--", options.Executable)
 	childArgs = append(childArgs, args...)
 	refreshCtx, stopRefresh := context.WithCancel(ctx)
@@ -118,6 +132,21 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 // A plain -ll report is not an effective-policy API. Only an explicit matching
 // value without bound or backend ambiguity is usable. Unknown policy receives
 // the documented best-effort cadence, while sudo remains the authority.
+// safeAssignment admits only the fixed acquisition-route names, so no authored
+// value can introduce another variable into the elevated child.
+func safeAssignment(value string) bool {
+	name, assigned, found := strings.Cut(value, "=")
+	if !found || len(value) > 4352 || !slices.Contains(controller.ProxyEnvironmentNames, name) {
+		return false
+	}
+	for _, c := range assigned {
+		if c <= 32 || c >= 127 {
+			return false
+		}
+	}
+	return true
+}
+
 // safeTerminalName admits only what a terminal type may contain, so an
 // attacker-chosen environment value cannot become anything else on the way to
 // the elevated child.

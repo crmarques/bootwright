@@ -8,11 +8,10 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/netip"
 	"net/url"
-	"strings"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
@@ -164,102 +163,17 @@ func approvedOrigin(value *url.URL) bool {
 	return false
 }
 
-// Proxy selection is request-local and never reads HTTP_PROXY, HTTPS_PROXY,
-// ALL_PROXY or NO_PROXY. DNS is not consulted to evaluate bypass entries.
+// Proxy selection is request-local: the route reaches this transport as request
+// data, and the process environment is never consulted here.
 func explicitProxy(egress prerequisites.SetupEgress) (func(*http.Request) (*url.URL, error), error) {
-	var selected *url.URL
-	if egress.HTTPSProxy != "" {
-		var err error
-		selected, err = url.Parse(egress.HTTPSProxy)
-		if err != nil || selected.Hostname() == "" || selected.User != nil || selected.Fragment != "" || selected.RawQuery != "" ||
-			selected.Opaque != "" || selected.Path != "" && selected.Path != "/" || selected.Scheme != "http" && selected.Scheme != "https" {
-			return nil, bundleFailure("explicit HTTPS acquisition proxy is invalid")
-		}
-	} else if egress.HTTPProxy != "" {
+	selector, err := controller.NewProxySelector(egress.HTTPProxy, egress.HTTPSProxy, egress.NoProxy)
+	switch {
+	case errors.Is(err, controller.ErrProxyBypass):
+		return nil, bundleFailure("proxy bypass entry is outside the qualified host, IP or CIDR grammar")
+	case errors.Is(err, controller.ErrProxyScheme):
 		return nil, bundleFailure("HTTPS dependency acquisition requires an explicit HTTPS proxy endpoint")
+	case err != nil:
+		return nil, bundleFailure("explicit HTTPS acquisition proxy is invalid")
 	}
-	bypasses := make([]bypassRule, len(egress.NoProxy))
-	for index, value := range egress.NoProxy {
-		rule, ok := parseBypass(value)
-		if !ok {
-			return nil, bundleFailure("proxy bypass entry is outside the qualified host, IP or CIDR grammar")
-		}
-		bypasses[index] = rule
-	}
-	return func(request *http.Request) (*url.URL, error) {
-		for _, rule := range bypasses {
-			if rule.matches(request.URL) {
-				return nil, nil
-			}
-		}
-		return selected, nil
-	}, nil
-}
-
-type bypassRule struct {
-	all        bool
-	host       string
-	port       string
-	subdomains bool
-	prefix     netip.Prefix
-}
-
-func parseBypass(value string) (bypassRule, bool) {
-	if value == "*" {
-		return bypassRule{all: true}, true
-	}
-	if prefix, err := netip.ParsePrefix(value); err == nil {
-		return bypassRule{prefix: prefix.Masked()}, true
-	}
-	if address, err := netip.ParseAddr(value); err == nil {
-		return bypassRule{host: address.String()}, true
-	}
-	rule := bypassRule{}
-	if strings.Contains(value, ":") {
-		var err error
-		value, rule.port, err = net.SplitHostPort(value)
-		if err != nil || rule.port == "" {
-			return bypassRule{}, false
-		}
-		for _, c := range rule.port {
-			if c < '0' || c > '9' {
-				return bypassRule{}, false
-			}
-		}
-	}
-	value = strings.ToLower(value)
-	if strings.HasPrefix(value, "*.") {
-		value = strings.TrimPrefix(value, "*")
-	}
-	rule.subdomains = strings.HasPrefix(value, ".")
-	value = strings.TrimPrefix(value, ".")
-	if value == "" || strings.HasSuffix(value, ".") || strings.ContainsAny(value, "/\\@?#\x00\r\n\t ") {
-		return bypassRule{}, false
-	}
-	for _, c := range value {
-		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '.' || c == '-' || c == ':') {
-			return bypassRule{}, false
-		}
-	}
-	rule.host = value
-	return rule, true
-}
-
-func (r bypassRule) matches(target *url.URL) bool {
-	if r.all {
-		return true
-	}
-	host := strings.ToLower(target.Hostname())
-	port := target.Port()
-	if port == "" {
-		port = "443"
-	}
-	if r.port != "" && r.port != port {
-		return false
-	}
-	if r.prefix.IsValid() {
-		address, err := netip.ParseAddr(host)
-		return err == nil && r.prefix.Contains(address)
-	}
-	return !r.subdomains && host == r.host || strings.HasSuffix(host, "."+r.host)
+	return func(request *http.Request) (*url.URL, error) { return selector(request.URL), nil }, nil
 }

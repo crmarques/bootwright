@@ -491,6 +491,8 @@ controller/clients.Capability
 
 reconciliation/contextguard.Guard implements workspace/contexts.ContextMutationGuard and consumes no port
 cmd/bootwright/run.go ─→ controller/privilege for the invoking account, sudo supervision and executable pinning, before any service exists
+                      ─→ controller.RouteFromEnvironment for the context-free acquisition route, admitted before sudo and supplied to
+                         controller/prerequisites and managedos/medialocal as a value; no other package reads the process environment for one
 ```
 
 ### Interface catalog

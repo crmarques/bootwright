@@ -36,6 +36,7 @@ func (s Selection) Versions() DependencyVersions { return s.versions }
 type Route struct {
 	direct     bool
 	proxyName  string
+	origin     string
 	httpProxy  string
 	httpsProxy string
 	noProxy    []string
@@ -51,6 +52,17 @@ func (r Route) NoProxy() []string  { return slices.Clone(r.noProxy) }
 // reads the invoking user's current context or ambient configuration.
 func Baseline() Selection {
 	return Selection{containerRuntime: true, route: Route{direct: true}, versions: DefaultDependencyVersions()}
+}
+
+// WithAmbientRoute substitutes the acquisition route of a selection no context
+// made. A selection that named a controller Machine keeps that Machine's proxy
+// choice, so one context can never acquire over two different routes.
+func (s Selection) WithAmbientRoute(route Route) Selection {
+	if s.machineName != "" || !route.Configured() {
+		return s
+	}
+	s.route = route
+	return s
 }
 
 // Select consumes an admitted, normalized effective catalog. Only the selected

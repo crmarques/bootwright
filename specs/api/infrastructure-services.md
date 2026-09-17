@@ -159,7 +159,11 @@ former `none` selector are invalid.
 An external Proxy forbids `endpointRef`. A managed Proxy requires an explicit
 endpoint or exactly one declared endpoint, in which case normalization
 materializes its name. Applicable consumers with no authored or inherited
-choice normalize to `direct: {}`. Ambient proxy variables never select a route.
+choice normalize to `direct: {}`. No environment variable selects, overrides or
+supplements a declared choice; the only route read from the invoking
+environment is the
+[context-free one](../controller.md#the-context-free-acquisition-route), which
+no desired state can name.
 A choice overrides the complete inherited choice, including bypass entries;
 defaults never combine two proxy selections. Unavailable proxies never cause
 fallback to direct access.

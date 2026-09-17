@@ -22,6 +22,13 @@ its syntax and context-independent safety checks still apply.
 Every command also accepts `-h` and `--help`. Help performs no desired-state
 discovery, state lookup, secret access, privilege escalation, process launch,
 network access, or write after the command path and flag syntax are resolved.
+
+No command takes a proxy flag. `setup`, `preflight controller` without a
+context, and `media add --from-url` acquire before any Environment exists, so
+they read the
+[context-free acquisition route](../controller.md#the-context-free-acquisition-route)
+from the invoking environment; an invocation that is not admitted reads
+nothing. Every other command uses its Machine's declared proxy choice.
 After surrounding whitespace is trimmed, an SSH user matches
 `^[a-z_][a-z0-9_-]{0,31}$` exactly.
 
@@ -63,7 +70,7 @@ process or network access. “Mutate” permits only the named, planned effects.
 | `bootwright secret encryption init` | none | configured implementation and active key | idempotent initialization using Context configuration |
 | `bootwright secret encryption status` | `--output text\|json` default `text` | keyring and encrypted-store status | read confidential metadata |
 | `bootwright secret encryption rotate` | `--yes` false | new active key identity and re-encryption summary | atomic local key rotation and re-encryption |
-| `bootwright media add` | required `--name <filename.iso>` and exactly one of `--from-file <path>` or `--from-url <http-or-https-url>`; `--sha256 <digest>`; `--yes` false | stored media identity, size, and verified digest | local copy or bounded download and atomic publication |
+| `bootwright media add` | required `--name <filename.iso>` and exactly one of `--from-file <path>` or `--from-url <http-or-https-url>`; `--sha256 <digest>`; `--yes` false | stored media identity, size, and verified digest | local copy or bounded download over the [context-free route](../controller.md#the-context-free-acquisition-route) and atomic publication |
 | `bootwright media list` | `--checksums` false; `--output text\|json` default `text` | media names, sizes, and optional computed digests | read local media; `--checksums` reads each image in full |
 | `bootwright media delete` | required `--name <filename.iso>`; `--yes` false | deleted media identity | local media deletion when not frozen by an operation |
 
@@ -78,7 +85,7 @@ explicit `--context` changes nothing they do.
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
 | `bootwright preflight controller` | none | [host readiness, and a selected context own prerequisites and binding](../controller.md#selection-and-command-journeys) | bounded local observation; no state publication |
-| `bootwright preflight controller` | none | [baseline or explicit-context controller readiness](../controller.md#selection-and-command-journeys) | bounded local observation; no state publication |
+| `bootwright preflight controller` | none | [baseline or explicit-context controller readiness](../controller.md#selection-and-command-journeys), including the acquisition route it resolved | bounded local observation; no state publication |
 | `bootwright preflight infra` | `--clusters <list>` default all; `--dry-run` false; `--output text\|json` default `text`; `--trust-on-first-use=<bool>` default `true`; `-v, --verbose` false | infrastructure readiness checks | observe unless `--dry-run`, which is local-only |
 | `bootwright preflight clusters` | same flags as `preflight infra` | all selected cluster readiness checks | observe unless `--dry-run` |
 | `bootwright preflight container-cluster` | same flags as `preflight infra`, with ContainerCluster-only selection | container-cluster readiness checks | observe unless `--dry-run` |
@@ -105,7 +112,7 @@ explicit `--context` changes nothing they do.
 | `bootwright machine start` | required `--name <machine>`; `--output text\|json` default `text` | the power state the Machine's management controller proved once the operation settled | bounded power operation through that controller |
 | `bootwright machine stop` | required `--name <machine>`; `--force` false; `--yes` false; `--output text\|json` default `text` | same, after the operating system is asked to shut down | same |
 | `bootwright machine restart` | required `--name <machine>`; `--force` false; `--yes` false; `--output text\|json` default `text` | same, after a proved stop and a proved start | same |
-| `bootwright setup` | `--dry-run` false; `--yes` false; `--purge-old-bundles` false | [context-independent controller prerequisite plan or completed setup](../controller.md#selection-and-command-journeys), and with `--purge-old-bundles` the [superseded bundles it retired](../controller.md#supported-host-and-dependency-selection) | bounded dependency acquisition and local installation; no context selection or binding; dry-run only previews; retirement removes only superseded execution bundles and only after the setup completes |
+| `bootwright setup` | `--dry-run` false; `--yes` false; `--purge-old-bundles` false | [context-independent controller prerequisite plan or completed setup](../controller.md#selection-and-command-journeys), and with `--purge-old-bundles` the [superseded bundles it retired](../controller.md#supported-host-and-dependency-selection) | bounded dependency acquisition over the [context-free route](../controller.md#the-context-free-acquisition-route) and local installation; no context selection or binding; dry-run only previews; retirement removes only superseded execution bundles and only after the setup completes |
 | `bootwright cluster list` | `--output text\|json` default `text` | container and storage cluster names and kinds in canonical order | read local state |
 | `bootwright cluster info` | `--name <cluster>` default all unless `--secrets`; `--secrets` false; `--output text\|json` default `text` | cluster kinds, endpoints, access-command applicability and availability, artifact availability, and optional explicit sensitive values | read local state and optional confidential material |
 | `bootwright cluster rsh` | required `--name <cluster>`; `--node <node>` default first node in canonical name order | bounded handoff for an interactive SSH session to the resolved cluster node | read target and access metadata only |

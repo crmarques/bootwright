@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/crmarques/bootwright/internal/cli"
+	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/bundlelocal"
 	"github.com/crmarques/bootwright/internal/controller/hostlinux"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -32,6 +33,10 @@ type processDependencies struct {
 	LifecycleProgress  lifecycle.ProgressReporter
 	LifecyclePresenter lifecycle.PlanPresenter
 	Executable         lifecycle.Executable
+	// AmbientRoute is the acquisition route the invoking environment selected
+	// for a context-free command. Its zero value selects nothing, so every
+	// other entry point keeps the compiled direct baseline.
+	AmbientRoute controller.Route
 }
 
 // serviceDependencies names every replaceable implementation the application
@@ -55,6 +60,9 @@ type serviceDependencies struct {
 	Lifecycle        lifecycleDependencies
 	Media            mediaDependencies
 	Reporter         power.Reporter
+	// AmbientRoute is the acquisition route the invoking environment selected
+	// for a context-free command, and is nothing for every other entry point.
+	AmbientRoute controller.Route
 }
 
 // wireServices also returns the release for every local resource the assembled
@@ -62,7 +70,7 @@ type serviceDependencies struct {
 func wireServices(process processDependencies) (cli.Services, func()) {
 	repository := contextfs.New(contextfs.Options{})
 	account := invokingAccount{resolver: privilege.Resolver{}}
-	controller, release := localControllerDependencies(repository, process)
+	controllerPorts, release := localControllerDependencies(repository, process)
 	services := assembleServices(serviceDependencies{
 		Repository:       repository,
 		Workspace:        repository,
@@ -76,8 +84,9 @@ func wireServices(process processDependencies) (cli.Services, func()) {
 		Confirmer:        process.Confirmer,
 		SecretInput:      process.SecretInput,
 		Reporter:         process.LifecycleProgress,
-		Controller:       controller,
-		Media:            localMediaDependencies(repository, process.Confirmer),
+		Controller:       controllerPorts,
+		AmbientRoute:     process.AmbientRoute,
+		Media:            localMediaDependencies(repository, process.Confirmer, process.AmbientRoute),
 		Lifecycle: lifecycleDependencies{
 			Workspace: repository, Inputs: contexts.Inputs{Repository: repository, Selection: account},
 			Host: hostlinux.New(), Guard: bundlelocal.ExecutionGuard{}, Selection: account,
@@ -97,7 +106,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	services.Contexts = wireContexts(deps, compiler, secrets.hooks)
 	services.Secrets, services.Encryption = secrets.custody, secrets.encryption
 	services.DesiredState = wireDesiredState(deps, compiler)
-	services.Controller = wireController(deps.Controller, compiler, deps.Confirmer)
+	services.Controller = wireController(deps.Controller, compiler, deps.Confirmer, deps.AmbientRoute)
 	services.Media = wireMedia(deps.Media)
 	reconciler := wireLifecycle(deps.Lifecycle, deps.Controller, compiler, secrets.binder)
 	services.Lifecycle = reconciler

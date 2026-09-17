@@ -22,10 +22,11 @@ const (
 )
 
 // Acquirer opens exactly one authorized media source. A download verifies TLS,
-// refuses every redirect and reads no ambient proxy or credential.
+// refuses every redirect and carries no credential. The route is supplied by
+// the caller; this adapter reads no proxy variable of its own.
 type Acquirer struct{ client *http.Client }
 
-func New() Acquirer {
+func New(proxy func(*http.Request) (*url.URL, error)) Acquirer {
 	return Acquirer{client: &http.Client{
 		// A media URL names exactly the bytes to import. Following a redirect
 		// would import bytes from an endpoint the operator never authorized.
@@ -34,7 +35,7 @@ func New() Acquirer {
 		},
 		Timeout: transferTimeout,
 		Transport: &http.Transport{
-			Proxy:                 nil,
+			Proxy:                 proxy,
 			DialContext:           (&net.Dialer{Timeout: dialTimeout}).DialContext,
 			TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
 			TLSHandshakeTimeout:   dialTimeout,

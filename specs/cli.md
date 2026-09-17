@@ -283,7 +283,9 @@ Media, secret, add-on, and context writes use verified roots, safe
 single path segments, exclusive creation, restrictive permissions, bounded
 input, and atomic publication. A confirmation cannot authorize overwriting an
 unrelated path. Network media import follows the endpoint and supply-chain
-rules in [security](security.md). Like `setup`, the `media` commands select no
+rules in [security](security.md), over the
+[context-free acquisition route](controller.md#the-context-free-acquisition-route).
+Like `setup`, the `media` commands select no
 context: they manage the host-wide [media store](managed-os.md#media-store),
 and an explicit `--context` changes nothing they do.
 
@@ -300,7 +302,11 @@ never verifies the invoking host.
 [Controller journeys](controller.md#selection-and-command-journeys), including
 preparation before context creation or Environment import. `setup` selects no
 context: it prepares what every context on the host shares, reads no
-Environment, and an explicit `--context` changes nothing it does. The
+Environment, and an explicit `--context` changes nothing it does. Because no
+Environment can name a route for work that precedes it, `setup`,
+`preflight controller` without a context, and `media add --from-url` take the
+[context-free acquisition route](controller.md#the-context-free-acquisition-route)
+from the invoking environment. No other command reads it. The
 prerequisites one context adds are installed by the
 [controller stage](state-reconciliation.md#stages-and-the-pause-boundary) of
 its own apply, which is also where the context claims its controller host.

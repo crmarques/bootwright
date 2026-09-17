@@ -40,8 +40,11 @@ func (c Check) Summary() string {
 }
 
 type Report struct {
-	ContextName   string
-	Machine       string
+	ContextName string
+	Machine     string
+	// Route names the acquisition route this scope resolved and where it came
+	// from, so a report says how the host reaches its publishers.
+	Route         string
 	Platform      Platform
 	DryRun        bool
 	Outcome       string

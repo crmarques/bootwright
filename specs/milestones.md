@@ -347,6 +347,41 @@ nothing uninstalls them (C16); and an automation-only revision still republishes
 a whole bundle rather than layering over a shared foundation, which is what
 remains of C24.
 
+### The context-free acquisition route
+
+**Owner:** Controller setup, with CLI (the invocation that admits it), Managed
+OS (the media import that shares it) and Security (the one environment value a
+privileged re-execution carries). **Delivered on explicit request**, outside the
+milestone sequence, so it adds no exit gate of its own.
+
+`setup`, `preflight controller` without a context, and `media add --from-url`
+acquire before any Environment exists, so they read their route from the
+invoking environment rather than acquiring directly. The contract is
+[the context-free acquisition route](controller.md#the-context-free-acquisition-route):
+`HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` in either case, one grammar shared
+with a declared external Proxy, credential-free by refusal, transport only, and
+recorded in the receipt like any other route. Everything a context drives keeps
+its Machine's proxy choice, which the selection type now enforces structurally:
+substituting an ambient route onto a selection that named a controller Machine
+returns that selection unchanged.
+
+Guarded by `internal/controller` (the environment grammar, both spellings, the
+conflict refusal, the HTTPS-only rule, bypass parsing and matching, bounds, and
+that no route is read without an explicit lookup), `internal/cli` (exactly which
+invocations consume it, and the route line in the scope block),
+`internal/controller/privilege` (assignments forwarded only under the fixed
+names and only before the option terminator), `internal/controller/prerequisites`
+(context-free setup acquires over it, a selected context ignores it, and an
+interrupted setup refuses a changed one) and `internal/managedos/medialocal`
+(an import takes the supplied route and fails closed without a usable one).
+
+Constraints left behind: sudo forwards the route on its command line, so a
+sudoers rule granting neither `ALL` nor `SETENV` refuses it and the operator
+must run as root instead; an authenticated or TLS-inspecting proxy is still
+unsupported everywhere, so this route carries no credential and needs no Secret
+consumer; and `ALL_PROXY` is ignored rather than refused, because no SOCKS route
+is qualified.
+
 ### Removal under the build in hand
 
 **Owner:** State reconciliation, with every lifecycle capability (each reads

@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/crmarques/bootwright/internal/cli"
+	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/ansiblelocal"
 	"github.com/crmarques/bootwright/internal/controller/bundlelocal"
 	"github.com/crmarques/bootwright/internal/controller/clients"
@@ -50,8 +51,9 @@ func localControllerDependencies(storage prerequisites.Storage, process processD
 	}, native.Close
 }
 
-func wireController(deps controllerDependencies, compiler prerequisites.Compiler, confirmer prerequisites.Confirmer) cli.ControllerService {
+func wireController(deps controllerDependencies, compiler prerequisites.Compiler, confirmer prerequisites.Confirmer, route controller.Route) cli.ControllerService {
 	return prerequisites.New(deps.Storage, compiler, deps.Host, deps.Catalog, deps.Bundle, deps.Runtime, prerequisites.Options{
+		AmbientRoute:    route,
 		Confirmer:       confirmer,
 		Presenter:       deps.Presenter,
 		Progress:        deps.Progress,

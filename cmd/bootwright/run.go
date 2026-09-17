@@ -10,8 +10,10 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/cli"
+	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/privilege"
 	"github.com/crmarques/bootwright/internal/desiredstate/encoding"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -24,6 +26,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	classification := cli.ClassifyInvocation(args)
+	route, refused := ambientRoute(classification, stdout, stderr)
+	if refused != 0 {
+		return refused
+	}
 	if classification.RequiresRoot {
 		account, err := (privilege.Resolver{}).Resolve(ctx)
 		if err != nil {
@@ -66,13 +72,8 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 				childError = file
 			}
 		}
-		// The elevated child runs the operator's SSH sessions, and a session
-		// without a terminal type is one whose remote shell cannot draw itself.
-		terminalType := ""
-		if !noninteractive {
-			terminalType = os.Getenv("TERM")
-		}
-		supervisor := privilege.NewSupervisor(privilege.SudoOptions{Executable: executable, Sudo: sudo, Executor: privilege.ProcessExecutor{}, Delay: privilege.Timer{}, NonInteractive: noninteractive, Terminal: terminalType, Input: os.Stdin, Output: childOutput, Error: childError})
+		terminalType := invokingTerminalType(noninteractive)
+		supervisor := privilege.NewSupervisor(privilege.SudoOptions{Executable: executable, Sudo: sudo, Executor: privilege.ProcessExecutor{}, Delay: privilege.Timer{}, NonInteractive: noninteractive, Terminal: terminalType, Assignments: routeAssignments(route), Input: os.Stdin, Output: childOutput, Error: childError})
 		code, err := supervisor.Run(operation, args)
 		errOut.Close()
 		if err != nil {
@@ -109,6 +110,7 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 		LifecycleProgress:  lifecycleProgress,
 		LifecyclePresenter: cli.NewLifecyclePlanPresenter(stdout),
 		Executable:         lifecycle.Executable{Version: version, Commit: commit},
+		AmbientRoute:       route,
 	}
 	hooks := invocationHooks{begin: beginSignalOperation, finish: func() {
 		controllerPresenter.Finish()
@@ -247,4 +249,44 @@ func runServices(ctx context.Context, args []string, stdout, stderr io.Writer, s
 		EncodeEffectiveYAML: encoding.YAML,
 		EncodeEffectiveJSON: encoding.JSON,
 	}).Run(ctx, args)
+}
+
+// routeAssignments names the variables the elevated child must see. Nothing is
+// forwarded for direct access, so an ordinary setup crosses sudo unchanged.
+func routeAssignments(route controller.Route) []string {
+	if !route.Configured() || route.Direct() {
+		return nil
+	}
+	assignments := []string{"HTTPS_PROXY=" + route.HTTPSProxy()}
+	if bypass := route.NoProxy(); len(bypass) != 0 {
+		assignments = append(assignments, "NO_PROXY="+strings.Join(bypass, ","))
+	}
+	return assignments
+}
+
+// ambientRoute qualifies the operator's proxy variables before sudo can prompt,
+// so an unusable value costs nothing but a diagnostic. A nonzero result is the
+// exit status of a refusal that has already been reported.
+func ambientRoute(classification cli.InvocationClass, stdout, stderr io.Writer) (controller.Route, int) {
+	if !classification.AmbientRoute {
+		return controller.Route{}, 0
+	}
+	route, err := controller.RouteFromEnvironment(os.LookupEnv)
+	if err == nil {
+		return route, 0
+	}
+	if reported := diagnostics.Of(err); len(reported) == 1 {
+		return controller.Route{}, classification.Diagnostic(stdout, stderr, reported[0], 1)
+	}
+	return controller.Route{}, classification.Failure(stdout, stderr, "controller.unsupported", "the acquisition route is not qualified", 1)
+}
+
+// invokingTerminalType forwards the caller's terminal identity, because the
+// elevated child runs the operator's SSH sessions and a session without one is
+// a remote shell that cannot draw itself.
+func invokingTerminalType(noninteractive bool) string {
+	if noninteractive {
+		return ""
+	}
+	return os.Getenv("TERM")
 }

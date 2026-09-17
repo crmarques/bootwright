@@ -79,9 +79,26 @@ Ansible installs the selected host packages and target CLIs. The private
 Python/Ansible bootstrap is materialized by Go so the playbooks can run.
 Setup resolves latest stable dependencies by default, and only when no retained
 resolution serves the selected intent; Environment `spec.dependencyVersions`
-overrides individual roots, including Python and Ansible. Public resolver
-downloads and maintained pip/DNF resolution use disposable unprivileged staging
-before the installation plan is confirmed. A ready controller and every retry use
+overrides individual roots, including Python and Ansible.
+
+On a proxied network, export `HTTPS_PROXY` and, when internal hosts must be
+reached directly, `NO_PROXY` before running `bootwright setup`,
+`bootwright preflight controller` or `bootwright media add --from-url`. Those
+three commands run before any Environment exists, so the invoking environment
+is where their route comes from; everything a context drives uses that
+context's declared Proxy instead, and exporting a variable does not change it.
+Lowercase spellings work; setting both spellings of one name to different
+values refuses. `HTTP_PROXY` alone refuses too, because every dependency source
+is HTTPS. `ALL_PROXY` is ignored. The endpoint must carry no credentials.
+`sudo` clears the environment, so an unprivileged invocation forwards the
+variables to its elevated child on the sudo command line; a sudoers rule that
+grants neither `ALL` nor `SETENV` refuses that, and running as root avoids it.
+`bootwright setup --dry-run` prints the resolved route under `Route` in its
+scope block, which is the cheapest way to confirm the variables took effect.
+
+Public resolver downloads and maintained pip/DNF resolution use disposable
+unprivileged staging before the installation plan is confirmed. A ready
+controller and every retry use
 the frozen result without contacting a publisher. Development checks retain
 their separate pinned tool versions for reproducible verification.
 The [Ansible check tool lock and setup](../scripts/tools/ansible-check.md)

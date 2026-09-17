@@ -245,3 +245,89 @@ func TestSupervisorForwardsOnlyASafeTerminalIdentity(t *testing.T) {
 		})
 	}
 }
+
+// Sudo parses NAME=value as an environment assignment only while it precedes
+// the option terminator. After it, the assignment becomes the command sudo
+// tries to execute, so position is a correctness property, not a style one.
+func TestSupervisorPlacesRouteAssignmentsBeforeTheOptionTerminator(t *testing.T) {
+	var child Command
+	executor := executorFunc(func(_ context.Context, c Command) (int, error) {
+		if reflect.DeepEqual(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) {
+			return 1, nil
+		}
+		child = c
+		return 0, nil
+	})
+	delay := delayFunc(func(ctx context.Context, _ time.Duration) error {
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	options := SudoOptions{
+		Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: executor, Delay: delay,
+		Assignments: []string{"HTTPS_PROXY=http://proxy.example:3128", "NO_PROXY=.internal.example,10.0.0.0/8"},
+	}
+	if _, err := NewSupervisor(options).Run(context.Background(), []string{"setup"}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"-u", "#0", "HTTPS_PROXY=http://proxy.example:3128", "NO_PROXY=.internal.example,10.0.0.0/8", "--", "/opt/bootwright", "setup"}
+	if !reflect.DeepEqual(child.Arguments, want) {
+		t.Fatalf("arguments = %v", child.Arguments)
+	}
+	for _, entry := range child.Environment {
+		if strings.Contains(entry, "PROXY") {
+			t.Fatalf("the route also entered the minimal environment: %q", entry)
+		}
+	}
+}
+
+func TestSupervisorRefusesAnAssignmentOutsideTheRouteVocabulary(t *testing.T) {
+	for _, assignment := range []string{
+		"LD_PRELOAD=/evil.so",
+		"https_proxy=http://proxy.example:3128",
+		"HTTPS_PROXY",
+		"HTTPS_PROXY=http://proxy.example:3128\nLD_PRELOAD=/evil.so",
+		"NO_PROXY=" + strings.Repeat("a", 4353),
+		"PATH=/evil",
+	} {
+		executor := executorFunc(func(_ context.Context, c Command) (int, error) {
+			if reflect.DeepEqual(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) {
+				return 1, nil
+			}
+			t.Fatal("an unqualified assignment reached a child process")
+			return 0, nil
+		})
+		delay := delayFunc(func(ctx context.Context, _ time.Duration) error {
+			<-ctx.Done()
+			return ctx.Err()
+		})
+		options := SudoOptions{
+			Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: executor, Delay: delay,
+			Assignments: []string{assignment},
+		}
+		if _, err := NewSupervisor(options).Run(context.Background(), []string{"setup"}); err == nil {
+			t.Fatalf("accepted %q", assignment)
+		}
+	}
+}
+
+func TestSupervisorLeavesADirectInvocationUnchanged(t *testing.T) {
+	var child Command
+	executor := executorFunc(func(_ context.Context, c Command) (int, error) {
+		if reflect.DeepEqual(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) {
+			return 1, nil
+		}
+		child = c
+		return 0, nil
+	})
+	delay := delayFunc(func(ctx context.Context, _ time.Duration) error {
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	options := SudoOptions{Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: executor, Delay: delay}
+	if _, err := NewSupervisor(options).Run(context.Background(), []string{"setup"}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(child.Arguments, []string{"-u", "#0", "--", "/opt/bootwright", "setup"}) {
+		t.Fatalf("arguments = %v", child.Arguments)
+	}
+}

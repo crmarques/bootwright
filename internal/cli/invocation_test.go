@@ -53,3 +53,36 @@ func TestPrivilegeFailurePreservesJSONEnvelope(t *testing.T) {
 		t.Fatalf("envelope %+v stderr %q", result, errOut.String())
 	}
 }
+
+// Only the commands that acquire before a context exists may read the invoking
+// environment for a route. Everything context-backed takes its Machine's
+// proxy choice, so admitting one here would give one host two routes.
+func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) {
+	for _, test := range []struct {
+		args    []string
+		ambient bool
+	}{
+		{[]string{"setup"}, true},
+		{[]string{"setup", "--dry-run"}, true},
+		{[]string{"setup", "--yes"}, true},
+		{[]string{"preflight", "controller"}, true},
+		{[]string{"preflight", "controller", "--context", "lab"}, true},
+		{[]string{"media", "add", "--name", "image.iso", "--from-url", "https://images.example/image.iso", "--sha256", "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"}, true},
+		{[]string{"media", "add", "--name", "image.iso", "--from-file", "/images/image.iso"}, true},
+		{[]string{"media", "add", "--name", "image.iso", "--from-url", "https://images.example/image.iso"}, false},
+		{[]string{"media", "list"}, false},
+		{[]string{"media", "delete", "--name", "image.iso"}, false},
+		{[]string{"apply"}, false},
+		{[]string{"plan"}, false},
+		{[]string{"destroy"}, false},
+		{[]string{"validate"}, false},
+		{[]string{"context", "list"}, false},
+		{[]string{"add-ons", "add", "--name", "example"}, false},
+		{[]string{"setup", "--help"}, false},
+		{[]string{"help"}, false},
+	} {
+		if classified := ClassifyInvocation(test.args); classified.AmbientRoute != test.ambient {
+			t.Fatalf("%v ambient route = %v", test.args, classified.AmbientRoute)
+		}
+	}
+}
