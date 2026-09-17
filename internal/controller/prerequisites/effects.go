@@ -62,13 +62,11 @@ type NativeRequirements struct {
 	ContainerRuntime bool `json:"containerRuntime"`
 	// Hypervisor is the closure a libvirt provider hosted on this Machine runs:
 	// the daemon with its drivers, the emulator and the TPM helper, beside the
-	// client LibvirtClient selects. It is omitted when unset, so a record
-	// written before it existed still encodes to the bytes it was persisted as.
-	Hypervisor bool `json:"hypervisor,omitempty"`
+	// client LibvirtClient selects.
+	Hypervisor bool `json:"hypervisor"`
 	// InstallerMedia is the tooling an Anaconda installation published through
-	// an artifact server on this Machine builds its image with, omitted when
-	// unset for the same reason.
-	InstallerMedia bool `json:"installerMedia,omitempty"`
+	// an artifact server on this Machine builds its image with.
+	InstallerMedia bool `json:"installerMedia"`
 	LibvirtClient  bool `json:"libvirtClient"`
 }
 

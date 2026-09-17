@@ -468,17 +468,17 @@ block may change, so planning a removal can never alter what is removed, and a
 removal acknowledges the consequences of removing rather than the consequences
 its apply acknowledged.
 
-Reading a frozen request is what makes a context removable by a later build. A
-capability reads the request version it writes and the version before it,
-upgrading the older one into the shape its adapter is given; the frozen digest
-continues to identify the bytes that were frozen. Any change to what a request
-encodes is a new version, including adding or renaming one field, because the
-bytes a version froze are proved canonical against the shape that wrote them:
-a shape that changed without its version refuses its own frozen bytes. A request older than that,
-or one whose implementation this executable no longer provides, refuses before
-anything is registered and names the block, the version it holds and the
-executable identity its operation recorded, so the remedy is the command to
-run rather than the obstacle that stopped it.
+Reading a frozen request is what makes a context removable without re-deriving
+it. A capability reads exactly the request version it writes; the frozen digest
+identifies the bytes that were frozen. Any change to what a request encodes is
+a new version, including adding or renaming one field, because the bytes a
+version froze are proved canonical against the shape that wrote them: a shape
+that changed without its version refuses its own frozen bytes. No conversion
+exists. A request of any other version, or one whose implementation this
+executable no longer provides, refuses before anything is registered and names
+the block, the version it holds and the executable identity its operation
+recorded, so the remedy is the command to run rather than the obstacle that
+stopped it.
 
 A fresh removal uses the secret material its apply bound, by reopening that
 operation's own binding rather than binding what the current declarations name.

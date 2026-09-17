@@ -16,12 +16,6 @@ const Kind = "Machine"
 
 const requestVersion = "os-install-anaconda-v3"
 
-// priorRequestVersion is the version this capability reads but no longer
-// writes, so a context applied under it is removable by this build. It froze a
-// libvirt guest as a domain and a hypervisor URI, before the target its
-// substrate derives replaced both.
-const priorRequestVersion = "os-install-anaconda-v2"
-
 // consumerPrefix is the subtree this capability owns beneath a managed artifact
 // server's served root. The server owns the root; this block owns exactly
 // os/<object>/ and removes it in its own inverse.

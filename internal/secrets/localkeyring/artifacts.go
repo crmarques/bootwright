@@ -13,31 +13,15 @@ func inspectArtifacts(ctx context.Context, area secretstore.Area, selector secre
 }
 
 func obsoleteArtifacts(ctx context.Context, area secretstore.Area, selector secretstore.Selector, index indexRecord) ([]string, error) {
-	legacyPaths := []string{}
-	legacy := map[string]bool{}
-	if index.Legacy {
-		var err error
-		legacyPaths, err = legacyUpgradeArtifacts(ctx, area)
-		if err != nil {
-			return nil, err
-		}
-		for _, path := range legacyPaths {
-			legacy[path] = true
-		}
-	}
-
 	root, err := area.Entries(ctx, "")
 	if err != nil {
 		return nil, areaFailure(ctx, "store.corrupt", "secret artifacts cannot be enumerated safely", err)
 	}
 	directories := map[string]bool{"identities": false, "keys": false, "parts": false}
-	obsolete := legacyPaths
+	obsolete := []string{}
 	count := len(root)
 	metadataSeen := false
 	for _, entry := range root {
-		if legacy[entry.Name] {
-			continue
-		}
 		if entry.Directory {
 			if _, exists := directories[entry.Name]; !exists || directories[entry.Name] {
 				return nil, secretstore.Failure("store.corrupt", "secret store contains an unsupported directory")
@@ -83,9 +67,6 @@ func obsoleteArtifacts(ctx context.Context, area secretstore.Area, selector secr
 		count += len(entries)
 		for _, entry := range entries {
 			path := directory + "/" + entry.Name
-			if legacy[path] {
-				continue
-			}
 			valid := validPending(entry.Name)
 			if directory == "keys" {
 				valid = valid || strings.HasSuffix(entry.Name, ".key") && validID(strings.TrimSuffix(entry.Name, ".key"), "key-") || strings.HasSuffix(entry.Name, ".usage.json") && validID(strings.TrimSuffix(entry.Name, ".usage.json"), "key-")

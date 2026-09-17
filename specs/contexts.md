@@ -487,13 +487,12 @@ never adopted. Any other entry refuses with the same complete-store guidance,
 whether or not the registry holds contexts. Bounds never authorize evidence
 deletion to make room.
 
-## Upgrade and restore boundary
+## Format and restore boundary
 
-The [explicit Secrets upgrade](secrets.md#local-keyring-v3) preserves logical
-secret identities. There is no registry upgrade: a store written by an earlier
-format is refused, not converted. Unsupported past and future formats refuse
-before effects. Format changes must state their supported source versions,
-exact commit point, retry behavior and retained recovery evidence.
+No stored format is converted. A registry, [secret store](secrets.md#local-keyring-v3),
+controller record or frozen request written in any other format is refused, not
+upgraded, and unsupported past and future formats refuse before effects. A
+format change states the refusal its predecessor now meets.
 
 Device/inode bindings deliberately reject ordinary directory-copy restoration.
 Read-only commands never rebind them. There is no general copy-restore or

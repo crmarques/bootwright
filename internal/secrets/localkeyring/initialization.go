@@ -31,12 +31,6 @@ func (i *Implementation) initialize(ctx context.Context, selected secretstore.Co
 		}
 		return s, nil
 	}
-	if _, exists, err := area.ReadMutable(ctx, legacySelectorPath, selectorMaximum); err != nil {
-		return nil, err
-	} else if exists {
-		return i.upgrade(ctx, selected, area)
-	}
-
 	markerData, markerExists, err := area.ReadMutable(ctx, initializationPath, selectorMaximum)
 	if err != nil {
 		return nil, areaFailure(ctx, "store.corrupt", "secret initialization record cannot be read safely", err)

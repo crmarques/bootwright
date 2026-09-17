@@ -59,7 +59,6 @@ type indexRecord struct {
 	Versions      []storedVersion       `json:"versions"`
 	Current       []secretstore.Current `json:"current"`
 	Bindings      []secretstore.Binding `json:"bindings"`
-	Legacy        bool                  `json:"legacy,omitempty"`
 }
 
 type storedKey struct {
@@ -69,7 +68,7 @@ type storedKey struct {
 
 type storedVersion struct {
 	ID          string                     `json:"id"`
-	Sequence    int                        `json:"sequence,omitempty"`
+	Sequence    int                        `json:"sequence"`
 	Declaration secrets.VersionDeclaration `json:"declaration"`
 	Parts       []storedPart               `json:"parts"`
 }

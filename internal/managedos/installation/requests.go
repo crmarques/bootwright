@@ -6,7 +6,6 @@ import (
 	"slices"
 
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // Identity names the block, context and Machine one request belongs to.
@@ -147,130 +146,31 @@ func canonicalRequest(value any) ([]byte, error) {
 	return data, nil
 }
 
-// DecodeRequest reads a frozen installation request. It reads the version this
-// build writes and the one before it, upgrading the older shape so a context
-// applied under it is removable here; the frozen digest continues to identify
-// the bytes that were frozen, not the shape they are read into.
-func DecodeRequest(data []byte) (Request, error) {
-	version, err := frozenVersion(data)
-	if err != nil {
-		return Request{}, err
-	}
-	switch version {
-	case requestVersion:
-		return decodeFrozen[Request](data)
-	case priorRequestVersion:
-		prior, err := decodeFrozen[requestV2](data)
-		if err != nil {
-			return Request{}, err
-		}
-		return prior.upgrade(), nil
-	}
-	return Request{}, refusal("lifecycle.state",
-		"the frozen installation request has an unsupported version: "+version, "")
-}
-
-// frozenVersion reads only the version a frozen request declares, so the shape
-// it is decoded into is chosen by what wrote it.
-func frozenVersion(data []byte) (string, error) {
-	var declared struct {
-		Version string `json:"version"`
-	}
-	if err := json.Unmarshal(data, &declared); err != nil || declared.Version == "" {
-		return "", refusal("lifecycle.state", "the frozen installation request declares no version", "")
-	}
-	return declared.Version, nil
-}
-
-// decodeFrozen reads one exact frozen shape and proves the bytes are the
+// DecodeRequest reads one exact frozen shape and proves the bytes are the
 // canonical encoding of it, so nothing that reads differently can carry the
 // digest of what was frozen.
-func decodeFrozen[T any](data []byte) (T, error) {
-	var request T
-	var empty T
+func DecodeRequest(data []byte) (Request, error) {
+	var request Request
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
-		return empty, refusal("lifecycle.state", "the frozen installation request is malformed", "")
+		return Request{}, refusal("lifecycle.state", "the frozen installation request is malformed", "")
 	}
 	if decoder.More() {
-		return empty, refusal("lifecycle.state", "the frozen installation request contains trailing data", "")
+		return Request{}, refusal("lifecycle.state", "the frozen installation request contains trailing data", "")
+	}
+	if request.Version != requestVersion {
+		return Request{}, refusal("lifecycle.state",
+			"the frozen installation request has an unsupported version: "+request.Version, "")
 	}
 	canonical, err := canonicalRequest(request)
 	if err != nil {
-		return empty, err
+		return Request{}, err
 	}
 	if !bytes.Equal(canonical, data) {
-		return empty, refusal("lifecycle.state", "the frozen installation request is not canonical", "")
+		return Request{}, refusal("lifecycle.state", "the frozen installation request is not canonical", "")
 	}
 	return request, nil
-}
-
-// controllerV2 is the management controller as the prior version froze it,
-// before a declared transport and virtual-media trust joined it.
-type controllerV2 struct {
-	CredentialsRef string `json:"credentialsRef"`
-	Endpoint       string `json:"endpoint"`
-}
-
-// requestV2 is the installation request as os-install-anaconda-v2 froze it: a
-// libvirt guest named by its domain and reached through its hypervisor URI,
-// before the one target every substrate derives replaced those fields. Its
-// field order is the order that version encoded, because the bytes it froze are
-// checked against it.
-type requestV2 struct {
-	Address     string              `json:"address"`
-	BootMedia   Media               `json:"bootMedia"`
-	Controller  controllerV2        `json:"controller"`
-	Domain      string              `json:"domain"`
-	FleetKeyRef string              `json:"fleetKeyRef"`
-	HostKeyPath string              `json:"hostKeyPath"`
-	Hostname    string              `json:"hostname"`
-	Identity    Identity            `json:"identity"`
-	Image       Publication         `json:"image"`
-	Kickstart   string              `json:"kickstart"`
-	MarkerPath  string              `json:"markerPath"`
-	Placement   lifecycle.Placement `json:"placement"`
-	Tree        *Publication        `json:"tree,omitempty"`
-	TreeMedia   *Media              `json:"treeMedia,omitempty"`
-	URI         string              `json:"uri"`
-	User        string              `json:"user"`
-	Version     string              `json:"version"`
-}
-
-// upgrade reads the prior shape as the target this build derives. Only libvirt
-// ever froze it, and only through an emulated controller: the endpoint serves
-// plain HTTP and fetches media without verifying the artifact server, which is
-// exactly what the libvirt arm derives today.
-func (r requestV2) upgrade() Request {
-	return Request{
-		Address:     r.Address,
-		BootMedia:   r.BootMedia,
-		FleetKeyRef: r.FleetKeyRef,
-		HostKeyPath: r.HostKeyPath,
-		Hostname:    r.Hostname,
-		Identity:    r.Identity,
-		Image:       r.Image,
-		Kickstart:   r.Kickstart,
-		MarkerPath:  r.MarkerPath,
-		Placement:   r.Placement,
-		Target: Target{
-			Channel: substrate.ChannelGuestAgent,
-			Controller: Controller{
-				CredentialsRef: r.Controller.CredentialsRef,
-				Endpoint:       r.Controller.Endpoint,
-				TLSVerify:      true,
-				VirtualMedia:   VirtualMedia{Trust: substrate.TrustEstablished},
-			},
-			Domain:    r.Domain,
-			Substrate: substrate.ArmLibvirt,
-			URI:       r.URI,
-		},
-		Tree:      r.Tree,
-		TreeMedia: r.TreeMedia,
-		User:      r.User,
-		Version:   requestVersion,
-	}
 }
 
 // Marker is the proof a completed installation leaves on the guest. Go builds

@@ -381,7 +381,6 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 		}
 		part.BlobID, part.KeyID, part.Generation = blobID, publication.id, generation
 	}
-	next.Legacy = false
 	next.Selector = secretstore.Selector{SelectorVersion: formatVersion, Context: s.context.Name, Backend: s.selector.Backend, Generation: generation}
 	indexSize, err := canonicalEncodedSize(*next, indexMaximum)
 	if err != nil {

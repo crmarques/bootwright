@@ -19,8 +19,8 @@ that implementation through a transaction-scoped Workspace area before ready
 publication, without requiring Environment input or generating Secret values.
 
 `secret encryption init` consumes that configuration and is idempotent; it has
-no `--type` override. It also completes interrupted cleanup and explicitly
-upgrades supported local-keyring v1 state. Changing the initialized type refuses. Subsequent commands
+no `--type` override. It also completes interrupted cleanup. Changing the
+initialized type refuses. Subsequent commands
 resolve exact persisted references; absent, ambiguous or incompatible
 implementations never fall back. Rotation does not migrate implementations.
 Encryption initialization/status/rotation require context identity and
@@ -141,15 +141,15 @@ allocates a fresh identity and never exposes prior material. Protected contexts 
 
 The `secrets/` subtree is initialized during context creation, independently
 of the enclosing registry format. Empty or absent means uninitialized.
-Nonempty state without `store.json` requires explicit initialization recovery
-or the supported upgrade; inspection never repairs it. Unknown formats refuse.
+Nonempty state without `store.json` requires explicit initialization recovery;
+inspection never repairs it. Unknown and earlier formats refuse, and no
+conversion exists.
 
 The normal layout has one atomically replaced `store.json`, immutable
 `parts/<blob-id>.enc`, immutable 32-byte `keys/<key-id>.key`, independently
 updated `keys/<key-id>.usage.json`, and `identities/<id>.json` reservations.
-`init.json` exists only while initialization or its cleanup is incomplete;
-`upgrade.json` serves the same role for version-1 conversion. No permanent
-initialization-key dependency exists. Dirs are 0700/files 0600 beneath held
+`init.json` exists only while initialization or its cleanup is incomplete. No
+permanent initialization-key dependency exists. Dirs are 0700/files 0600 beneath held
 verified handles; refuse unsafe ownership/modes, links, hardlinks, special
 files, traversal, mount crossings and substitutions.
 
@@ -160,7 +160,7 @@ files, traversal, mount crossings and substitutions.
 | `keys/*.key` | Required local decryption keys. Remove a retired key once retained material no longer references it. |
 | `keys/*.usage.json` | Durable seal reservations, including failed attempts; committing usage separately prevents retries from forgetting encryption already performed. |
 | `identities/*.json` | Historical version/binding ID reservations. Retain them after logical deletion to prevent ID reuse. |
-| `init.json`, `upgrade.json` | Temporary authenticated recovery evidence; remove after successful publication and cleanup. |
+| `init.json` | Temporary authenticated recovery evidence; remove after successful publication and cleanup. |
 
 The shared canonical `store.json` envelope contains `version` (3), `context`,
 `backend`, `generation`, then backend-owned `payload`. The context member is
@@ -170,13 +170,12 @@ selects the exact backend and binds metadata to the expected context. Resolve
 only catalog implementations; backend selection cannot authorize acquisition
 or effects beyond the current command. Unsupported IDs refuse before session
 acquisition. The encrypted metadata contains `activeKey`, `keys`, `versions`,
-`current` and `bindings`; a true `legacy` flag is present only when the
-published upgrade authorizes removal of remaining version-1 artifacts.
+`current` and `bindings`.
 
 Each key record stores `id` and committed `seals`; presentation derives its
-active/retired state. Each immutable version stores `id`, a `sequence`, a
-declaration summary (`name`, `type`, `source`, `fingerprint`), and parts
-(`part`, `blobId`, `keyId`, `generation`, `size`).
+active/retired state. Each immutable version stores `id`, a `sequence` of at
+least one, a declaration summary (`name`, `type`, `source`, `fingerprint`), and
+parts (`part`, `blobId`, `keyId`, `generation`, `size`).
 
 `sequence` is the version's ordinal within its own secret, counting from one.
 A new version takes one more than the highest ordinal that secret has ever
@@ -240,30 +239,14 @@ toward the physical limit. Logical material/version/binding limits also apply.
 Secret IDs use 128 random bits with 16 exclusive collision attempts. Limit
 failure never authorizes removal of referenced material or identity evidence.
 
-Only `secret encryption init` upgrades a complete authenticated local-keyring
-v1 store. Authenticate its selector, encrypted index, declaration fingerprints,
-parts, key usage and initialization evidence before conversion. Preserve
-current/bound logical IDs, mappings, bindings and historical identity
-reservations. Write an attributable upgrade intent before new artifacts;
-reencrypt retained material with a fresh key and durably reserve its seals.
-The single new `store.json` commit selects v3. Before that commit, leave all
-version-1 files unchanged and permit only exact attributable retry. After it,
-remove verified obsolete version-1 artifacts using the normal cleanup boundary.
-An interrupted cleanup must not depend on a retired version-1 key. Never import
-changed source files or regenerate logical material during upgrade.
-
-Before a retry allocates another key, authenticate the original selection and
-upgrade intent, establish their durability, and collect only attributed
-unpublished conversion artifacts. Revalidate both guards and context identity
-at every removal. A new attempt replaces the cleaned attempt's intent rather
-than accumulating a lifetime history. Preflight the conversion's peak encoded
-bytes and entries before new publication effects; a source without enough
-headroom refuses while retaining its complete version-1 state.
+There is no conversion from an earlier keyring format. A `secrets/` subtree
+that is nonempty and holds no `store.json` this build can authenticate refuses
+before any session is acquired, and the remedy is a new context.
 
 Threat exclusions remain root, the same OS identity, process memory and theft
 of the full store with its keys. Keys share the local filesystem custody
 boundary with ciphertext. Lost keys need a complete external backup; ordinary
-copy restoration follows the [restore boundary](contexts.md#upgrade-and-restore-boundary).
+copy restoration follows the [restore boundary](contexts.md#format-and-restore-boundary).
 There are no recovery slots, secure erase, automatic expiry, remote KMS,
 import/export or FIPS claims.
 

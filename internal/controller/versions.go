@@ -18,10 +18,8 @@ type DependencyVersions struct {
 	// InstallerMedia is the intent of the image-building tooling. It is not
 	// declarable: the tooling reads media the operator already imported, and
 	// no consumer has asked to pin it. The hypervisor closure has no intent of
-	// its own either, because it runs the release its client speaks. It is
-	// omitted when unset so a record written before it existed still encodes
-	// to the bytes it was persisted as.
-	InstallerMedia string `json:"installerMedia,omitempty"`
+	// its own either, because it runs the release its client speaks.
+	InstallerMedia string `json:"installerMedia"`
 	Helm           string `json:"helm"`
 	Govc           string `json:"govc"`
 	Virtctl        string `json:"virtctl"`

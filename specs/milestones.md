@@ -273,30 +273,27 @@ or derivation moved no longer refuses every context that applied under the old
 one. Each capability reads its own frozen request to state what removing that
 block does, so a removal is planned in the words of the removal it performs and
 consumes the authorization removing needs, while the block's identity, request
-and digests stay exactly as they were frozen. Every capability reads the
-request version it writes and the version before it, and a fresh removal
-reopens the binding its apply froze instead of binding what current
-declarations name, so neither a shape change nor an edited declaration strands
-a context. What cannot be read refuses before registration, naming the block,
-its request version and the executable identity the operation recorded;
-`status` reports that identity too, so the remedy is available before the
-refusal is met.
+and digests stay exactly as they were frozen. Every capability reads exactly the
+request version it writes, and a fresh removal reopens the binding its apply
+froze instead of binding what current declarations name, so an edited
+declaration does not strand a context. What cannot be read refuses before
+registration, naming the block, its request version and the executable identity
+the operation recorded; `status` reports that identity too, so the remedy is
+available before the refusal is met.
 
 Guarded by the `internal/reconciliation/lifecycle` journey suite (a removal
-across a moved content digest, across a superseded failed apply, and across a
-request version the capability upgrades; a refusal that names an unreadable
-version and registers nothing; a refusal that names an implementation this
-executable no longer provides; a removal that reopens its apply's binding
-rather than binding current declarations), the per-capability removal and
-one-version-back decoder tests, and the CLI status goldens.
+across a moved content digest and across a superseded failed apply; a refusal
+that names an unreadable version and registers nothing; a refusal that names an
+implementation this executable no longer provides; a removal that reopens its
+apply's binding rather than binding current declarations), the per-capability
+removal and version-refusal decoder tests, and the CLI status goldens.
 
-Constraints left behind: exactly one version back is readable, so a context two
-shape changes old still refuses, and a capability that drops a version must say
-so in its own release note; `destroy` still admits no stage or block scope, so
-the removal covers every block the context owns; and the bundle half of the
-same collision is unchanged, because a sealed bundle is retired by nothing
-(C24) and an operation continued rather than superseded still runs the
-automation it froze.
+Constraints left behind: a request of any other version refuses, so a context
+whose shape has moved is removed by the executable its operation records;
+`destroy` still admits no stage or block scope, so the removal covers every
+block the context owns; and the bundle half of the same collision is unchanged,
+because a sealed bundle is retired by nothing (C24) and an operation continued
+rather than superseded still runs the automation it froze.
 
 ### M4a — single-node OpenShift through the agent installer
 

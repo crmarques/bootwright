@@ -112,15 +112,10 @@ func validateNativeShape(value NativeResolvedPlan) error {
 			return nativePlanFailure()
 		}
 	}
-	for _, version := range []string{value.Requests.Podman, value.Requests.OpenSSH, value.Requests.NMState, value.Requests.Libvirt} {
+	for _, version := range []string{value.Requests.Podman, value.Requests.OpenSSH, value.Requests.NMState, value.Requests.Libvirt, value.Requests.InstallerMedia} {
 		if !api.ValidLexical("package-version", version) {
 			return nativePlanFailure()
 		}
-	}
-	// A plan resolved before this intent existed carries none, so it is read
-	// only when the requirement that installs against it was selected.
-	if value.Requirements.InstallerMedia && !api.ValidLexical("package-version", value.Requests.InstallerMedia) {
-		return nativePlanFailure()
 	}
 	requests := map[string]string{"openssh": value.Requests.OpenSSH, "nmstate": value.Requests.NMState}
 	if value.Requirements.ContainerRuntime {

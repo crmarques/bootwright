@@ -112,7 +112,6 @@ func (i *Implementation) open(ctx context.Context, selected secretstore.Context,
 		return nil, secretstore.Failure("store.corrupt", "decrypted secret metadata is invalid")
 	}
 	index.FormatVersion, index.Algorithm, index.Selector = formatVersion, algorithm, selector
-	assignLegacySequences(&index)
 	if validateIndex(index, selector) != nil || index.ActiveKey != wrapped.KeyID {
 		return nil, secretstore.Failure("store.corrupt", "decrypted secret metadata is inconsistent")
 	}
@@ -361,26 +360,6 @@ func entryNames(ctx context.Context, area secretstore.Area, directory string) (m
 	return result, nil
 }
 
-// assignLegacySequences numbers versions stored before ordinals existed. Their
-// creation order was never recorded, so the stable identifier order is used;
-// the result is deterministic and every later version carries its own ordinal.
-// Filling only zero values keeps this idempotent.
-func assignLegacySequences(index *indexRecord) {
-	pending := map[string][]int{}
-	for position, version := range index.Versions {
-		if version.Sequence == 0 {
-			pending[version.Declaration.Name] = append(pending[version.Declaration.Name], position)
-		}
-	}
-	for name, positions := range pending {
-		sequence := nextSequence(*index, name)
-		for _, position := range positions {
-			index.Versions[position].Sequence = sequence
-			sequence++
-		}
-	}
-}
-
 func validateIndex(index indexRecord, selector secretstore.Selector) error {
 	if index.FormatVersion != formatVersion || index.Algorithm != algorithm || index.Selector != selector || !validID(index.ActiveKey, "key-") || index.Keys == nil || index.Versions == nil || index.Current == nil || index.Bindings == nil || len(index.Keys) == 0 || len(index.Versions) > secrets.MaxVersions || len(index.Bindings) > maxBindings {
 		return errors.New("invalid index header")
@@ -406,7 +385,7 @@ func validateIndex(index indexRecord, selector secretstore.Selector) error {
 	total := 0
 	previous = ""
 	for _, version := range index.Versions {
-		if !validID(version.ID, "ver-") || version.ID <= previous || !validateVersionDeclaration(version.Declaration) || version.Parts == nil || len(version.Parts) != len(version.Declaration.Parts()) {
+		if !validID(version.ID, "ver-") || version.ID <= previous || version.Sequence < 1 || !validateVersionDeclaration(version.Declaration) || version.Parts == nil || len(version.Parts) != len(version.Declaration.Parts()) {
 			return errors.New("invalid secret version")
 		}
 		expectedParts := version.Declaration.Parts()

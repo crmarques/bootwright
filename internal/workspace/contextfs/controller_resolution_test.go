@@ -136,16 +136,11 @@ func TestControllerResolvedDefinitionEncodingRemainsBoundedAndCanonical(t *testi
 	}
 }
 
-// A controller record written before a field existed still decodes, because a
-// persisted record is proved canonical byte for byte and a field that is absent
-// must encode to absent. Adding one without that is what refuses every later
-// setup on a host that already holds a record.
-func TestAControllerRecordWrittenBeforeANewFieldStillDecodes(t *testing.T) {
-	// The version intent an earlier build resolved against: every field it
-	// knew, and none this build added since.
-	earlier := controller.DefaultDependencyVersions()
-	earlier.InstallerMedia = ""
-	definition := syntheticResolutionWith(t, earlier)
+// A persisted record is proved canonical byte for byte, so every field this
+// build declares is encoded and a record that omits one is refused rather than
+// defaulted. No other shape is readable.
+func TestAControllerRecordEncodesEveryDeclaredField(t *testing.T) {
+	definition := syntheticResolutionWith(t, controller.DefaultDependencyVersions())
 	value := syntheticControllerState(t, p.SetupContext{})
 	value.Receipt.Definition = &definition
 	value.Receipt.CatalogDigest = definition.CatalogDigest
@@ -159,12 +154,12 @@ func TestAControllerRecordWrittenBeforeANewFieldStillDecodes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, added := range []string{`"installerMedia"`, `"hypervisor"`} {
-		if bytes.Contains(encoded, []byte(added)) {
-			t.Fatalf("a field this build added is encoded into an earlier record: %s", added)
+	for _, declared := range []string{`"installerMedia"`, `"hypervisor"`} {
+		if !bytes.Contains(encoded, []byte(declared)) {
+			t.Fatalf("a declared field is absent from the record: %s", declared)
 		}
 	}
 	if _, _, err := decodeControllerRecord(encoded); err != nil {
-		t.Fatalf("a record an earlier build wrote was refused: %v", err)
+		t.Fatalf("this build's own record was refused: %v", err)
 	}
 }

@@ -29,7 +29,7 @@ func FuzzLocalStoreRecords(f *testing.F) {
 			return
 		}
 		var target any
-		switch kind % 9 {
+		switch kind % 6 {
 		case 0:
 			target = new(secretstore.Selector)
 		case 1:
@@ -42,12 +42,6 @@ func FuzzLocalStoreRecords(f *testing.F) {
 			target = new(initializationRecord)
 		case 5:
 			target = new(metadataEnvelope)
-		case 6:
-			target = new(upgradeRecord)
-		case 7:
-			target = new(legacySelector)
-		case 8:
-			target = new(legacyIndex)
 		}
 		if decodeCanonical(data, indexMaximum, 1<<20, target) == nil {
 			encoded, err := encodeCanonical(target, indexMaximum)
@@ -58,7 +52,7 @@ func FuzzLocalStoreRecords(f *testing.F) {
 				_ = validateIndex(*index, index.Selector)
 			}
 		}
-		if kind%9 == 2 {
+		if kind%6 == 2 {
 			plaintext, _ := openEnvelope(data, make([]byte, 32), []byte("synthetic-authentication-domain"), "part", "key-fixture", "blob-fixture", partMaximum)
 			clear(plaintext)
 		}
@@ -76,7 +70,7 @@ func FuzzCanonicalStoreSizePreflight(f *testing.F) {
 			[]string{first, second},
 			envelope{Purpose: first, Ciphertext: second},
 			secrets.Declaration{Origin: first, Generation: secrets.Generation{DNSNames: []string{first, second}}},
-			indexRecord{ActiveKey: first, Legacy: budget%2 == 0, Keys: []storedKey{{ID: second}}},
+			indexRecord{ActiveKey: first, Keys: []storedKey{{ID: second}}},
 		} {
 			encoded, err := json.Marshal(value)
 			if err != nil {

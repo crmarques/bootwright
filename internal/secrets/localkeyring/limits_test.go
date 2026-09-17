@@ -168,6 +168,7 @@ func TestMaximumLogicalIndexRoundTrips(t *testing.T) {
 		declaration.Fingerprint = declarationFingerprint(declaration)
 		index.Versions = append(index.Versions, storedVersion{
 			ID:          versionID,
+			Sequence:    1,
 			Declaration: declaration.Summary(),
 			Parts: []storedPart{{
 				Part:       secrets.ValuePart,
@@ -225,6 +226,7 @@ func TestPublishRejectsOversizedProjectedEnvelopeBeforeEffects(t *testing.T) {
 		Keys:          []storedKey{{ID: keyID}},
 		Versions: []storedVersion{{
 			ID:          versionID,
+			Sequence:    1,
 			Declaration: declaration.Summary(),
 			Parts: []storedPart{
 				{Part: secrets.CertificatePart, Size: 1},
