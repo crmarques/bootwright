@@ -422,8 +422,14 @@ of its own differences are convergible and names them beside its replay rules.
 A lost response, dead executor, cancellation, required-log failure, or
 contradictory observation moves the attempt effect state, block, and operation
 to durable `unknown` unless positive evidence already proves completion or no
-effect. Resolving `unknown` is a read-only, capability-owned observation
-against the frozen request and exact target identity. Before any resolution
+effect. Once an attempt's outcome is decided, the records that state it are
+written under a boundary the cancellation does not reach, because an
+interruption that recorded nothing would leave durable state claiming its
+effect is still running, and a running effect is the one state no later
+operation may continue past, resolve, remove, or delete. Cancellation stops
+the next attempt from starting; it never suppresses the record of the attempt
+that already ran. Resolving `unknown` is a read-only, capability-owned
+observation against the frozen request and exact target identity. Before any resolution
 observation—including local process, network, or remote probing—Bootwright must
 restore the required operation logging boundary, durably allocate the next
 resolution number for the exact unknown effect attempt, and securely create its

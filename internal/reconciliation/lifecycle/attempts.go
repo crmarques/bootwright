@@ -18,6 +18,14 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
+// recordingContext is the boundary an outcome is recorded under. Every
+// operation-store write refuses a cancelled context, so an interrupt that
+// recorded nothing would leave durable state claiming an effect is still
+// running, which is the one state no later operation may resolve, remove or
+// delete past. What the attempt proved is written whether or not the
+// invocation that performed it was interrupted.
+func recordingContext(ctx context.Context) context.Context { return context.WithoutCancel(ctx) }
+
 // attempt runs one block: it allocates and records the attempt before the
 // first side effect, executes it inside the controller's private runtime, then
 // records the durable outcome its evidence justifies.
@@ -36,11 +44,12 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	if err != nil {
 		return reconciliation.BlockPending, err
 	}
+	recording := recordingContext(ctx)
 	log, err := store.OpenLog(ctx, logPath)
 	if err != nil {
 		return reconciliation.BlockUnknown, logFault(err)
 	}
-	defer func() { _ = log.Close(ctx) }()
+	defer func() { _ = log.Close(recording) }()
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: "running", Position: position, Total: total})
 	result, runErr := s.invoke(ctx, tx, store, approved, operation, block, material, log, number, 0, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		if operation.Verb == reconciliation.Destroy {
@@ -59,8 +68,8 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	if err != nil {
 		return reconciliation.BlockUnknown, err
 	}
-	_ = log.Append(ctx, operationstore.LogRecord{Event: "outcome", Block: block.ID, Detail: string(outcome)})
-	if err := store.CompleteAttempt(ctx, operation.ID, block.ID, number, outcome, effect, state, result.Evidence); err != nil {
+	_ = log.Append(recording, operationstore.LogRecord{Event: "outcome", Block: block.ID, Detail: string(outcome)})
+	if err := store.CompleteAttempt(recording, operation.ID, block.ID, number, outcome, effect, state, result.Evidence); err != nil {
 		return reconciliation.BlockUnknown, err
 	}
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: string(state), Position: position, Total: total})
@@ -88,11 +97,12 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	if err != nil {
 		return reconciliation.BlockUnknown, err
 	}
+	recording := recordingContext(ctx)
 	log, err := store.OpenLog(ctx, logPath)
 	if err != nil {
 		return reconciliation.BlockUnknown, logFault(err)
 	}
-	defer func() { _ = log.Close(ctx) }()
+	defer func() { _ = log.Close(recording) }()
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Detail: "resolving the unknown outcome from live evidence", Status: "running", Position: position, Total: total})
 	var observation Observation
 	_, runErr := s.invoke(ctx, tx, store, approved, operation, block, material, log, attemptNumber, number, position, total, func(inner context.Context, execution Execution) (Result, error) {
@@ -109,10 +119,10 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 		return reconciliation.BlockUnknown, err
 	}
 	for _, reported := range diagnostics.Of(runErr) {
-		_ = log.Append(ctx, operationstore.LogRecord{Event: "observation-failed", Block: block.ID, Detail: reported.Code + ": " + reported.Message})
+		_ = log.Append(recording, operationstore.LogRecord{Event: "observation-failed", Block: block.ID, Detail: reported.Code + ": " + reported.Message})
 	}
-	_ = log.Append(ctx, operationstore.LogRecord{Event: "resolution", Block: block.ID, Detail: string(resolvedEffect)})
-	if err := store.CompleteResolution(ctx, operation.ID, block.ID, attemptNumber, number, resolvedEffect, state, observation.Evidence); err != nil {
+	_ = log.Append(recording, operationstore.LogRecord{Event: "resolution", Block: block.ID, Detail: string(resolvedEffect)})
+	if err := store.CompleteResolution(recording, operation.ID, block.ID, attemptNumber, number, resolvedEffect, state, observation.Evidence); err != nil {
 		return reconciliation.BlockUnknown, err
 	}
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: string(state), Position: position, Total: total})

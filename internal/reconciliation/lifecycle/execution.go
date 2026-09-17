@@ -573,7 +573,7 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 		return result, err
 	}
 	boundary, cause := s.converge(ctx, tx, store, approved, operation, plan, states, material, decided.selection)
-	final, terminal := s.finish(ctx, tx, store, operation, plan, states, boundary, result)
+	final, terminal := s.finish(recordingContext(ctx), tx, store, operation, plan, states, boundary, result)
 	return final, withCause(cause, terminal)
 }
 

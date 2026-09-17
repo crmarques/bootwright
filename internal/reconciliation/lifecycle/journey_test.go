@@ -37,6 +37,8 @@ const (
 // memoryArea models the Workspace-held operation area contract. The real area
 // serializes concurrent blocks through the filesystem, so this one holds a
 // mutex: without it the race detector reports the fake rather than the engine.
+// It refuses a cancelled context exactly as the real one does, so a test can
+// prove which records an interrupted invocation still writes.
 type memoryArea struct {
 	mutex sync.Mutex
 	files map[string][]byte
@@ -68,7 +70,10 @@ func (a *memoryArea) clone() *memoryArea {
 	return copied
 }
 
-func (a *memoryArea) Read(_ context.Context, target string, _ int) ([]byte, bool, error) {
+func (a *memoryArea) Read(ctx context.Context, target string, _ int) ([]byte, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 	if err := a.fail["read "+target]; err != nil {
@@ -78,7 +83,10 @@ func (a *memoryArea) Read(_ context.Context, target string, _ int) ([]byte, bool
 	return slices.Clone(data), ok, nil
 }
 
-func (a *memoryArea) Entries(_ context.Context, target string) ([]operationstore.Entry, error) {
+func (a *memoryArea) Entries(ctx context.Context, target string) ([]operationstore.Entry, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 	prefix := target
@@ -102,9 +110,12 @@ func (a *memoryArea) Entries(_ context.Context, target string) ([]operationstore
 	return entries, nil
 }
 
-func (a *memoryArea) EnsureDirectory(context.Context, string) error { return nil }
+func (a *memoryArea) EnsureDirectory(ctx context.Context, _ string) error { return ctx.Err() }
 
-func (a *memoryArea) WriteExclusive(_ context.Context, target string, data []byte) error {
+func (a *memoryArea) WriteExclusive(ctx context.Context, target string, data []byte) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 	if err := a.fail["write "+target]; err != nil {
@@ -117,7 +128,10 @@ func (a *memoryArea) WriteExclusive(_ context.Context, target string, data []byt
 	return nil
 }
 
-func (a *memoryArea) Replace(_ context.Context, target string, data, expected []byte) error {
+func (a *memoryArea) Replace(ctx context.Context, target string, data, expected []byte) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 	if err := a.fail["replace "+target]; err != nil {
@@ -135,7 +149,10 @@ func (a *memoryArea) Replace(_ context.Context, target string, data, expected []
 	return nil
 }
 
-func (a *memoryArea) Append(_ context.Context, target string, data []byte) error {
+func (a *memoryArea) Append(ctx context.Context, target string, data []byte) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 	if err := a.fail["append "+target]; err != nil {
@@ -145,7 +162,7 @@ func (a *memoryArea) Append(_ context.Context, target string, data []byte) error
 	return nil
 }
 
-func (a *memoryArea) Sync(context.Context, string) error { return nil }
+func (a *memoryArea) Sync(ctx context.Context, _ string) error { return ctx.Err() }
 
 func (a *memoryArea) Location() string { return "/var/lib/bootwright/contexts/lab/state/operations" }
 
@@ -311,8 +328,10 @@ type testCapability struct {
 	consumes     map[string][]string
 	// hold runs at the start of an attempt and released at its end, so a test
 	// can keep blocks in flight and observe exactly which of them overlap.
-	hold     func(string)
-	released func(string)
+	// observeHold is the same moment of an observation.
+	hold        func(string)
+	released    func(string)
+	observeHold func(string)
 	// outcomeFor and errorFor answer per block. Blocks running together finish
 	// in no fixed order, so a queue of scripted outcomes would be handed out by
 	// a race rather than by the test.
@@ -433,6 +452,12 @@ func (c *testCapability) Observe(_ context.Context, execution Execution) (Observ
 	c.record(&c.observes, execution.Block.ID)
 	c.record(&c.calls, "observe:"+execution.Block.ID)
 	c.recordExecution(execution)
+	c.mutex.Lock()
+	hold := c.observeHold
+	c.mutex.Unlock()
+	if hold != nil {
+		hold(execution.Block.ID)
+	}
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	if c.observeErr != nil {
@@ -1476,15 +1501,138 @@ func TestEmptyCurrentSelectionRefuses(t *testing.T) {
 	}
 }
 
-func TestCancellationLeavesTheOperationUnknown(t *testing.T) {
+func TestCancellationBeforeAnyEffectRegistersNothing(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
 	ctx, cancel := context.WithCancel(context.Background())
-	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
 	cancel()
 	result, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	if err == nil {
 		t.Fatalf("a canceled apply reported success: %+v", result)
 	}
+	if len(h.capability.applies) != 0 || len(h.workspace.area.files) != 0 {
+		t.Fatalf("a canceled apply reached a host: applies=%v files=%d", h.capability.applies, len(h.workspace.area.files))
+	}
+}
+
+// An interrupt arrives while a block is in flight, which is the only moment it
+// can strand an effect. The records that say so are written under a boundary
+// the interrupt does not reach, because a durable `running` block is the one
+// state no later operation may resolve, remove or delete past.
+func TestAnInterruptedBlockIsRecordedUnknown(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	ctx, cancel := context.WithCancel(context.Background())
+	h.capability.hold = func(string) { cancel() }
+	h.capability.errorFor = map[string]error{"artifact-server-lab": context.Canceled}
+	result, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err == nil {
+		t.Fatalf("an interrupted apply reported success: %+v", result)
+	}
+	if result == nil || result.Receipt.State != "unknown" || result.Receipt.Next != "resolve" {
+		t.Fatalf("receipt = %+v", result)
+	}
+	status, err := h.service.Status(context.Background(), StatusRequest{ContextName: "lab"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Lifecycle == nil || status.Lifecycle.State != "unknown" || status.Lifecycle.Next != "resolve" {
+		t.Fatalf("durable operation = %+v", status.Lifecycle)
+	}
+	if len(status.Lifecycle.Blocks) != 1 || status.Lifecycle.Blocks[0].State != "unknown" {
+		t.Fatalf("durable block = %+v", status.Lifecycle.Blocks)
+	}
+	unknown, err := reconciliation.EvidenceFor(reconciliation.Apply, reconciliation.OperationUnknown)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err := unknown.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(h.workspace.evidence, expected) {
+		t.Fatalf("evidence = %q, want %q", h.workspace.evidence, expected)
+	}
+	h.capability.hold, h.capability.errorFor = nil, nil
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+	resolved, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil || resolved.Receipt.State != "done" {
+		t.Fatalf("resolution = %+v (%v)", resolved, err)
+	}
+	if !slices.Equal(h.capability.observes, []string{"artifact-server-lab"}) {
+		t.Fatalf("observations = %v", h.capability.observes)
+	}
+}
+
+// Two blocks in flight both lose their outcome to one interrupt, so both are
+// recorded rather than only the one whose goroutine noticed first.
+func TestEveryInterruptedBlockIsRecordedUnknown(t *testing.T) {
+	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), definition("bravo")})
+	h.service.options.Concurrency = 2
+	ctx, cancel := context.WithCancel(context.Background())
+	var started sync.WaitGroup
+	started.Add(2)
+	h.capability.hold = func(string) {
+		started.Done()
+		started.Wait()
+		cancel()
+	}
+	h.capability.errorFor = map[string]error{"alpha": context.Canceled, "bravo": context.Canceled}
+	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("an interrupted apply reported success")
+	}
+	status, err := h.service.Status(context.Background(), StatusRequest{ContextName: "lab"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Lifecycle == nil || status.Lifecycle.State != "unknown" {
+		t.Fatalf("durable operation = %+v", status.Lifecycle)
+	}
+	for _, block := range status.Lifecycle.Blocks {
+		if block.State != "unknown" {
+			t.Fatalf("durable blocks = %+v", status.Lifecycle.Blocks)
+		}
+	}
+}
+
+// An observation interrupted part way leaves the block unknown, which is what
+// it already was; what must not survive is a resolution record still claiming
+// to be running, because the next resolution is allocated against it.
+func TestAnInterruptedResolutionIsRecordedUnknown(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.capability.outcomeFor = map[string]Result{"artifact-server-lab": {Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("an unknown outcome reported success")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	h.capability.observeHold = func(string) { cancel() }
+	h.capability.observeErr = context.Canceled
+	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("an interrupted resolution reported success")
+	}
+	record := string(h.workspace.area.files[resolutionRecord(h, "artifact-server-lab")])
+	if !strings.Contains(record, `"phase":"observed"`) || !strings.Contains(record, `"effect":"unknown"`) {
+		t.Fatalf("resolution record = %q", record)
+	}
+}
+
+// resolutionRecord names the durable resolution record of a block's attempt,
+// which is where an interrupted observation is recorded. The attempt's log
+// sits under the same block name, so the record is identified by its own
+// subtree and extension rather than by the first match.
+func resolutionRecord(h *harness, block string) string {
+	var found []string
+	for name := range h.workspace.area.files {
+		if strings.Contains(name, "/logs/") || !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		if strings.Contains(name, "/blocks/"+block+"/attempt-") && strings.Contains(name, "-resolution-") {
+			found = append(found, name)
+		}
+	}
+	slices.Sort(found)
+	if len(found) == 0 {
+		return ""
+	}
+	return found[0]
 }
 
 func TestBlocksExecuteInFrozenOrderAndSkipDoneWork(t *testing.T) {
