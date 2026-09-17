@@ -46,6 +46,15 @@ related code, specs, tests, and skill edits. Reuse it throughout the task rather
 than creating branches for phases or follow-up fixes. Start from the inspected
 destination; never implement directly on that branch.
 
+Confirm this before the first edit: the tree you are about to change is that
+task worktree, not the destination checkout. Delivery removes the worktree it
+used, so a session that has just delivered holds no worktree and the next task
+begins by creating one. Each of these is such a task: an urgent fix, a one-line
+correction, a regression this session introduced, and a follow-up the user asks
+for after a delivery. None of them is an exemption. Urgency is the weakest
+reason of all, because an unverified edit made directly on the destination is
+the one that cannot be reviewed, set aside, or abandoned if it turns out wrong.
+
 Parallel workers may share the task worktree when their assigned files and
 mutable resources are disjoint. The coordinator alone stages, commits, rebases,
 merges, or changes branches there. Give a worker a separate temporary worktree
