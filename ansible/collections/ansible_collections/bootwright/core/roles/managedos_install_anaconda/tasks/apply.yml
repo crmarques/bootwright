@@ -231,7 +231,7 @@
     quiet: true
   no_log: true
 
-- name: Install the operating system when the machine holds nothing yet
+- name: Boot the machine from its own installer image
   ansible.builtin.include_tasks: boot.yml
   when: not (managedos_install_anaconda_installed | bool)
 
@@ -242,15 +242,47 @@
     status: ok
   no_log: true
 
+- name: Report the installation the machine is writing
+  bootwright.core.managedos_install_protocol:
+    phase: group
+    group: await-installation
+    status: running
+  no_log: true
+
+- name: Wait for the installer to write the disk and boot what it installed
+  ansible.builtin.include_tasks: await.yml
+  when: not (managedos_install_anaconda_installed | bool)
+
+- name: Report installation completion
+  bootwright.core.managedos_install_protocol:
+    phase: group
+    group: await-installation
+    status: ok
+  no_log: true
+
+- name: Report the wait for the installed machine to answer
+  bootwright.core.managedos_install_protocol:
+    phase: group
+    group: await-machine
+    status: running
+  no_log: true
+
+- name: Read the installation the machine now holds, through its own channel
+  ansible.builtin.include_tasks: identity_until_answered.yml
+
+- name: Report that the installed machine answered
+  bootwright.core.managedos_install_protocol:
+    phase: group
+    group: await-machine
+    status: ok
+  no_log: true
+
 - name: Report installation verification
   bootwright.core.managedos_install_protocol:
     phase: group
     group: verify-installation
     status: running
   no_log: true
-
-- name: Read the installation the machine now holds, through its own channel
-  ansible.builtin.include_tasks: identity_until_answered.yml
 
 - name: Prove the media is ejected and the installed system is running
   bootwright.core.redfish_boot:
@@ -300,6 +332,7 @@
     observation: '{{ managedos_install_anaconda_after.observation }}'
     marker: '{{ managedos_install_anaconda_marker }}'
     hostKey: '{{ managedos_install_anaconda_host_key }}'
+    reachable: '{{ managedos_install_anaconda_reachable.rc | default(1) == 0 }}'
     address: '{{ bootwright_os_install_request.address }}'
     media: '{{ managedos_install_anaconda_ejected.media }}'
     power: '{{ managedos_install_anaconda_ejected.power }}'

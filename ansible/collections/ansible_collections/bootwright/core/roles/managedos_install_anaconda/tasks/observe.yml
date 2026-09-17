@@ -29,6 +29,17 @@
 - name: Read the machine through its own identity channel
   ansible.builtin.include_tasks: identity.yml
 
+# An observation resolves a completed apply, so it has to prove what the apply
+# proves. Reading the marker and the host key says the disk was written; only
+# this says the machine the plan promised is actually usable. It takes the
+# answer that is already true rather than waiting for one.
+- name: Try the fleet account the same way an apply proves it
+  ansible.builtin.include_tasks: reachable.yml
+  vars:
+    managedos_install_anaconda_reachable_retries: 1
+    managedos_install_anaconda_reachable_pause: 1
+  when: managedos_install_anaconda_host_key | default('') | trim | length > 0
+
 - name: Read the power state and media its controller reports
   bootwright.core.redfish_boot:
     endpoint: '{{ managedos_install_anaconda_endpoint }}'
@@ -49,6 +60,7 @@
     observation: '{{ managedos_install_anaconda_observed.observation }}'
     marker: '{{ managedos_install_anaconda_marker | default("") }}'
     hostKey: '{{ managedos_install_anaconda_host_key | default("") }}'
+    reachable: '{{ managedos_install_anaconda_reachable.rc | default(1) == 0 }}'
     address: '{{ bootwright_os_install_request.address }}'
     media: '{{ managedos_install_anaconda_controller.media | default("") }}'
     power: '{{ managedos_install_anaconda_controller.power | default("") }}'

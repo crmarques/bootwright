@@ -158,7 +158,9 @@ func groups(verb reconciliation.Verb, request Request) []reconciliation.Group {
 		{"publish-tree", "publish the package tree the installer fetches"},
 		{"build-image", "build the machine's own installer image"},
 		{"boot-installer", "insert the image and boot the machine from it"},
-		{"verify-installation", "prove the installation completed and eject the media"},
+		{"await-installation", "wait for the installer to write the disk and power the machine off"},
+		{"await-machine", "wait for the installed machine to boot and answer through its own channel"},
+		{"verify-installation", "prove the installed machine answers on the key it reported"},
 	}
 	if verb == reconciliation.Destroy {
 		steps = [][2]string{

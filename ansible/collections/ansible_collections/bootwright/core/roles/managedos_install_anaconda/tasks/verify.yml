@@ -1,44 +1,22 @@
 ---
-# The installed machine is contacted on exactly the key it reported through the
-# guest agent, never on a first-use answer from the network.
-- name: Publish the guest's own host key for this one connection
-  ansible.builtin.copy:
-    content: '{{ bootwright_os_install_request.address }} {{ managedos_install_anaconda_host_key.content | trim }}'
-    dest: '{{ managedos_install_anaconda_work }}/known_hosts'
-    owner: root
-    group: root
-    mode: '0600'
-  changed_when: false
+- name: Wait for the fleet account to answer on the key the machine reported
+  ansible.builtin.include_tasks: reachable.yml
+  vars:
+    managedos_install_anaconda_reachable_retries: '{{ managedos_install_anaconda_reachable_attempts | int }}'
+    managedos_install_anaconda_reachable_pause: '{{ managedos_install_anaconda_reachable_delay | int }}'
 
-- name: Prove the fleet account answers on that exact key
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/ssh
-      - -o
-      - 'UserKnownHostsFile={{ managedos_install_anaconda_work }}/known_hosts'
-      - -o
-      - StrictHostKeyChecking=yes
-      - -o
-      - IdentitiesOnly=yes
-      - -o
-      - PasswordAuthentication=no
-      - -o
-      - BatchMode=yes
-      - -o
-      - ConnectTimeout=10
-      - -i
-      - '{{ bootwright_os_install_material.fleetIdentity }}'
-      - '{{ bootwright_os_install_request.user }}@{{ bootwright_os_install_request.address }}'
-      - /usr/bin/true
-  register: managedos_install_anaconda_reachable
-  retries: 30
-  delay: 10
-  until: managedos_install_anaconda_reachable.rc == 0
-  changed_when: false
-  no_log: true
-
-- name: Remove the one-connection known-hosts file
-  ansible.builtin.file:
-    path: '{{ managedos_install_anaconda_work }}/known_hosts'
-    state: absent
-  changed_when: false
+# The attempt itself is censored, because its command line names the fleet
+# identity and its output is the machine's own. The refusal is not: an exit
+# status, an address and a budget name what failed without disclosing any of
+# them, and without those an exhausted wait reports nothing to act on.
+- name: Refuse an installation whose fleet account never answered
+  ansible.builtin.fail:
+    msg: >-
+      {{ bootwright_os_install_request.user }}@{{ bootwright_os_install_request.address }}
+      did not answer on the host key the machine reported, after
+      {{ managedos_install_anaconda_reachable_attempts }} attempts over
+      {{ (managedos_install_anaconda_reachable_attempts | int)
+         * (managedos_install_anaconda_reachable_delay | int) }} seconds; the last
+      ssh exit status was
+      {{ managedos_install_anaconda_reachable.rc | default('none') }}
+  when: managedos_install_anaconda_reachable.rc | default(1) != 0

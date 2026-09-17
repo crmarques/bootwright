@@ -65,7 +65,7 @@ func execution(t *testing.T, digest string) (lifecycle.Execution, Request) {
 func completeEvidence(request Request, digest, marker string) json.RawMessage {
 	data, _ := json.Marshal(Evidence{
 		Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: marker,
-		Postcondition: true, Power: "On", Request: digest, Tree: request.Tree != nil,
+		Postcondition: true, Power: "On", Reachable: true, Request: digest, Tree: request.Tree != nil,
 	})
 	return data
 }

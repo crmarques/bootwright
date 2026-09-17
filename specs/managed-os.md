@@ -139,9 +139,14 @@ marker it returns matching the frozen marker byte for byte, the machine's SSH
 host public key established through that same channel, an SSH connection to the
 selected install address accepting that exact key and the fleet identity for the
 `bootwright` account, the virtual media ejected, and the Machine reported
-powered on. The evidence records the marker digest, the host public key and the
-address; a later consumer that connects to the Machine binds that key, never a
-first-use answer from the network.
+powered on. The evidence records the marker digest, the host public key, the
+address and whether that connection was accepted; a later consumer that
+connects to the Machine binds that key, never a first-use answer from the
+network. An observation proves completion the same way, because it is what
+resolves an interrupted apply: an observation that proves the marker and the
+host key without proving the connection reports a partial installation, never a
+complete one. A Machine that holds the marker and has not accepted the
+connection yet is converging rather than failed.
 
 **Replay.** A Machine whose guest already answers with the frozen marker
 reports `completed` with the same evidence and boots nothing. The only

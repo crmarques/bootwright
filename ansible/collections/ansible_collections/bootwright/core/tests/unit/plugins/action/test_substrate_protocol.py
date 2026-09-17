@@ -172,6 +172,7 @@ def install_arguments(**overrides):
         "address": "198.51.100.11",
         "media": "",
         "power": "On",
+        "reachable": True,
     }
     arguments.update(overrides)
     return arguments
@@ -186,6 +187,10 @@ def test_an_installation_postcondition_needs_every_proof():
         {"media": "http://s/install.iso"},
         {"power": "Off"},
         {"observation": {"image": False, "tree": True}},
+        # An installed machine nobody can log in to is not a finished
+        # installation, and the observation that resolves an interrupted apply
+        # proves it the same way the apply does.
+        {"reachable": False},
     ):
         assert not managedos_install_protocol.presence(install_arguments(**overrides), DIGEST)["postcondition"]
 

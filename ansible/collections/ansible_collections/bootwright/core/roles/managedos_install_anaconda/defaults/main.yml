@@ -60,3 +60,8 @@ managedos_install_anaconda_certificate: >-
 # generous and bounded rather than open-ended.
 managedos_install_anaconda_identity_attempts: 120
 managedos_install_anaconda_identity_delay: 30
+
+# The fleet account answers once the installed system has finished starting
+# sshd, which is after the machine already answers on its identity channel.
+managedos_install_anaconda_reachable_attempts: 30
+managedos_install_anaconda_reachable_delay: 10

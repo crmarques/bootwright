@@ -49,13 +49,14 @@ def presence(arguments, request_digest):
         "postcondition": False,
         "power": str(power),
         "private": bool(observation.get("private")),
+        "reachable": bool(arguments.get("reachable")),
         "request": digest(request_digest),
         "tree": bool(observation.get("tree")),
     }
     evidence["postcondition"] = bool(
         evidence["marker"] and evidence["hostKey"] and evidence["address"]
         and not evidence["media"] and evidence["power"] == "On" and evidence["image"]
-        and not evidence["private"]
+        and not evidence["private"] and evidence["reachable"]
     )
     return evidence
 
@@ -81,6 +82,8 @@ def unproved(evidence):
         names.append("power")
     if not evidence["image"]:
         names.append("image")
+    if not evidence["reachable"]:
+        names.append("reachable")
     return names
 
 
@@ -97,6 +100,7 @@ def absence(arguments, request_digest):
         "postcondition": bool(gone),
         "power": "",
         "private": False,
+        "reachable": False,
         "request": digest(request_digest),
         "tree": False,
     }

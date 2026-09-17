@@ -1,0 +1,53 @@
+---
+# The installed machine is contacted on exactly the key it reported through its
+# own identity channel, never on a first-use answer from the network. The key
+# is the string that channel published, not a file read: dereferencing it as
+# one made this proof unrunnable, and only the observation path, which never
+# runs it, could complete an installation.
+#
+# The caller owns the budget. An apply waits for sshd to finish starting; an
+# observation takes the answer that is already true, because it may not wait.
+- name: Publish the guest's own host key for this one connection
+  ansible.builtin.copy:
+    content: '{{ bootwright_os_install_request.address }} {{ managedos_install_anaconda_host_key | trim }}'
+    dest: '{{ managedos_install_anaconda_work }}/known_hosts'
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+
+- name: Try the fleet account on that exact key
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/ssh
+      - -o
+      - 'UserKnownHostsFile={{ managedos_install_anaconda_work }}/known_hosts'
+      - -o
+      - StrictHostKeyChecking=yes
+      - -o
+      - IdentitiesOnly=yes
+      - -o
+      - PasswordAuthentication=no
+      - -o
+      - BatchMode=yes
+      - -o
+      - ConnectTimeout=10
+      - -i
+      - '{{ bootwright_os_install_material.fleetIdentity }}'
+      - '{{ bootwright_os_install_request.user }}@{{ bootwright_os_install_request.address }}'
+      - /usr/bin/true
+  register: managedos_install_anaconda_reachable
+  retries: '{{ managedos_install_anaconda_reachable_retries | int }}'
+  delay: '{{ managedos_install_anaconda_reachable_pause | int }}'
+  until: managedos_install_anaconda_reachable.rc | default(1) == 0
+         or (managedos_install_anaconda_reachable.attempts | default(1) | int)
+            > (managedos_install_anaconda_reachable_retries | int)
+  failed_when: false
+  changed_when: false
+  no_log: true
+
+- name: Remove the one-connection known-hosts file
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_work }}/known_hosts'
+    state: absent
+  changed_when: false

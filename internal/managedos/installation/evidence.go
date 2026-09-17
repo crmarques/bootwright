@@ -22,9 +22,14 @@ type Evidence struct {
 	// Private is material only the installing machine may read. A completed
 	// installation has already withdrawn it, so evidence still reporting it is
 	// unfinished work rather than a settled state.
-	Private bool   `json:"private"`
-	Request string `json:"request"`
-	Tree    bool   `json:"tree"`
+	Private bool `json:"private"`
+	// Reachable is the fleet account answering on the host key the machine
+	// reported. An installation whose machine cannot be logged in to is not a
+	// finished installation, and an observation proves it the same way an apply
+	// does, so one rule governs both paths.
+	Reachable bool   `json:"reachable"`
+	Request   string `json:"request"`
+	Tree      bool   `json:"tree"`
 }
 
 // ValidatePresence accepts evidence only when it proves the guest holds exactly
@@ -46,6 +51,9 @@ func ValidatePresence(data []byte, request Request, digest, marker string) error
 	}
 	if evidence.HostKey == "" {
 		return refusal("lifecycle.state", "the installation captured no guest host key", "")
+	}
+	if !evidence.Reachable {
+		return refusal("lifecycle.state", "the installed machine did not answer as its fleet account", "")
 	}
 	if evidence.Media != "" {
 		return refusal("lifecycle.state", "the installation left its virtual media inserted", "")

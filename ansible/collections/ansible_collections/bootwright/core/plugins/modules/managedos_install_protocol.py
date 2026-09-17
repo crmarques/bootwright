@@ -56,6 +56,12 @@ options:
     description: The power state the management controller reported.
     type: str
     required: false
+  reachable:
+    description:
+      - Whether the fleet account answered on the host key the machine
+        reported. An observation proves this the same way an apply does.
+    type: bool
+    required: false
   removed:
     description: Whether the completion proves removal rather than presence.
     type: bool

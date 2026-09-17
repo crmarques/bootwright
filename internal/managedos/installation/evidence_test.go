@@ -121,3 +121,35 @@ func TestEvidenceIsBoundedAndStrictlyShaped(t *testing.T) {
 		t.Fatal("unbounded evidence was accepted")
 	}
 }
+
+// An installation whose machine cannot be logged in to is not finished. Both
+// the apply and the observation that resolves it run this one rule, so a
+// continuation cannot settle on weaker evidence than the apply demanded: the
+// observation path proved the marker and the host key and never once proved
+// the machine was usable, and that is what let an interrupted apply report a
+// completed installation it had not verified.
+func TestCompletionRequiresTheFleetAccountToAnswer(t *testing.T) {
+	request := Request{Address: "198.51.100.11"}
+	complete := Evidence{
+		Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: "{}",
+		Postcondition: true, Power: "On", Reachable: true, Request: "digest",
+	}
+	if err := ValidatePresence(encode(t, complete), request, "digest", "{}"); err != nil {
+		t.Fatalf("a reachable installation was refused: %v", err)
+	}
+	unreachable := complete
+	unreachable.Reachable = false
+	if err := ValidatePresence(encode(t, unreachable), request, "digest", "{}"); err == nil {
+		t.Fatal("an installation whose machine never answered was accepted as complete")
+	}
+}
+
+// A machine that holds the marker but has not answered yet is part way through
+// rather than failed, so the verb retries instead of refusing: sshd finishes
+// starting after the identity channel already answers.
+func TestAMachineThatHoldsTheMarkerWithoutAnsweringIsPartial(t *testing.T) {
+	evidence := Evidence{Marker: "{}", Power: "On", Reachable: false, Request: "digest"}
+	if err := ValidatePartial(encode(t, evidence), "digest", "{}"); err != nil {
+		t.Fatalf("an installed machine that has not answered yet was refused: %v", err)
+	}
+}
