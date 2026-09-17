@@ -172,6 +172,11 @@ func validateInvocation(command *cobra.Command, path string) string {
 		if boolValue(flags, "silent") && selectedJSON(command) {
 			return "--silent conflicts with JSON output"
 		}
+		// A silent invocation carries names alone, so a reading it could never
+		// print would contact every management controller for nothing.
+		if boolValue(flags, "silent") && boolValue(flags, "power") {
+			return "--silent conflicts with --power"
+		}
 	case "machine stop", "machine restart":
 		if selectedJSON(command) && !boolValue(flags, "yes") {
 			return "JSON power changes require --yes"

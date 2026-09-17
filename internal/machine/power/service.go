@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"maps"
 	"slices"
 	"strings"
 
@@ -47,6 +48,87 @@ func (s Service) Stop(ctx context.Context, request PowerRequest) (*Result, error
 func (s Service) Restart(ctx context.Context, request PowerRequest) (*Result, error) {
 	request.Verb = Restart
 	return s.converge(ctx, request)
+}
+
+// Read reports what each named Machine's own management controller answers
+// about its power right now. It registers no operation and changes nothing: a
+// reading is a live observation, so it is never evidence of ownership and
+// never outlives the invocation that asked for it. A Machine this context
+// resolves no reachable controller for is absent from the result rather than
+// reported in a state nothing proved.
+func (s Service) Read(ctx context.Context, contextName string, names []string) (map[string]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if s.state == nil || s.ownership == nil || s.runtime == nil || s.runner == nil {
+		return nil, availability.ErrNotImplemented
+	}
+	name, err := machine.SelectedContext(ctx, s.selection, contextName)
+	if err != nil {
+		return nil, err
+	}
+	effective, err := s.state.RenderEffective(ctx, compilation.EffectiveRequest{ContextName: name})
+	if err != nil {
+		return nil, err
+	}
+	owned, err := s.ownership.Ownership(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	surveys, err := readSurveysFor(effective.Effective, name, names, owned)
+	if err != nil {
+		return nil, err
+	}
+	readings := map[string]string{}
+	if len(surveys) == 0 {
+		return readings, nil
+	}
+	var references []string
+	for _, survey := range surveys {
+		for _, reference := range readReferences(survey) {
+			if !slices.Contains(references, reference) {
+				references = append(references, reference)
+			}
+		}
+	}
+	err = s.runtime.WithRuntime(ctx, lifecycle.RuntimeRequest{ContextName: name, Secrets: references}, func(inner context.Context, runtime lifecycle.Runtime) error {
+		if s.reporter != nil {
+			s.reporter.ReportLogLocation(inner, runtime.LogLocation)
+		}
+		for _, survey := range surveys {
+			answered, err := s.observe(inner, runtime, survey)
+			if err != nil {
+				return err
+			}
+			maps.Copy(readings, answered)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return readings, nil
+}
+
+// observe runs one bounded reading against every controller a single host
+// reaches, inside the runtime the whole survey shares.
+func (s Service) observe(ctx context.Context, runtime lifecycle.Runtime, frozen ReadSurvey) (map[string]string, error) {
+	canonical, err := frozen.Canonical()
+	if err != nil {
+		return nil, err
+	}
+	digest, err := reconciliation.RequestDigest(reconciliation.BlockDefinition{
+		Kind: "Machine", Object: frozen.Placement.Machine, Implementation: ReadImplementation,
+		ContentDigest: ReadContentDigest(), Request: canonical,
+	})
+	if err != nil {
+		return nil, err
+	}
+	run, err := s.runner.Run(ctx, readInvocation(runtime, frozen, canonical, digest))
+	if err != nil {
+		return nil, err
+	}
+	return validateReading(run.Evidence, frozen, digest)
 }
 
 // converge drives one Machine to the power state its verb names. The operation
@@ -137,6 +219,24 @@ func (s Service) execute(ctx context.Context, name string, frozen Request) (*Res
 		return nil, err
 	}
 	return result, nil
+}
+
+func readInvocation(runtime lifecycle.Runtime, frozen ReadSurvey, canonical []byte, digest string) lifecycle.RunRequest {
+	return lifecycle.RunRequest{
+		Implementation: ReadImplementation,
+		Operation:      ReadOperation,
+		Variable:       ReadVariable,
+		Digest:         digest,
+		Canonical:      canonical,
+		Placement:      frozen.Placement,
+		Materials:      append(readMaterials(frozen), lifecycle.Materials(frozen.Placement)...),
+		Sudo:           frozen.Placement.SudoPasswordRef,
+		Launch:         runtime.Launch,
+		Bundle:         runtime.Bundle,
+		Area:           runtime.Area,
+		Material:       runtime.Material,
+		Output:         runtime.Output,
+	}
 }
 
 func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, digest string) lifecycle.RunRequest {

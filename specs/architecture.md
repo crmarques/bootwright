@@ -327,7 +327,7 @@ that implements a row updates the row and the stub fitness test together.
 | `cluster list/info` (Environment) | `commands_environment.go` | `environment/inspection` | — | S |
 | `cluster rsh/exec` (Environment) | `commands_environment.go` | `environment/access` | — | S |
 | `cluster oc/kubectl/kubeconfig` (Container cluster) | `commands_containercluster.go` | `containercluster/access` | — | S |
-| `machine list` (Machine) | `commands_machine.go` | `machine/inventory` | `desiredstate/compilation`, `reconciliation/lifecycle` evidence | I |
+| `machine list` (Machine) | `commands_machine.go` | `machine/inventory` | `desiredstate/compilation`, `reconciliation/lifecycle` evidence, `machine/power` for a requested reading | I |
 | `machine rsh/exec` (Machine) | `commands_machine.go` | `machine/access` | `desiredstate/compilation`, `reconciliation/lifecycle` material and evidence, `trust` records over `workspace/contextfs`, over `machine/sshlocal` | I |
 | `machine start/stop/restart` (Machine) | `commands_machine.go` | `machine/power` | `desiredstate/compilation`, `reconciliation/lifecycle` runtime and evidence, over `reconciliation/ansiblerunner` | I |
 | `machine trust` (Trust) | `commands_trust.go` | `trust/enrollment` | `desiredstate/compilation`, `trust` records over `workspace/contextfs`, over `machine/sshlocal` | I |
@@ -346,7 +346,9 @@ their owning contexts. Machine inspection belongs to
 `machine/sshlocal` adapter, which is the one pinned SSH client both a session
 and a host-key observation cross, and day-2 power to `machine/power`, which
 reads the Machine domain's own ownership vocabulary rather than the engine that
-published it. The host-key record format and the `known_hosts` grammar both a
+published it. That package owns reading a power state as well as driving one,
+so an inspection asking for a live reading crosses exactly the boundary a power
+verb crosses and no second path to a management controller exists. The host-key record format and the `known_hosts` grammar both a
 session and `machine trust` resolve belong to the `trust` context root, beside
 the `trust/enrollment` capability that maintains them. Substrate realization with
 its identity and power operations belongs to one package per substrate arm,
@@ -392,6 +394,8 @@ machine/inventory.Service and machine/access.Service
    ─EffectiveState─→ desiredstate/compilation.Service
    ─Ownership──────→ reconciliation/lifecycle.Service, through composition's own evidence adapter
    ─fn CurrentSelection→ workspace/selectionfs.Store, through the invoking account
+machine/inventory.Service
+   ─PowerReader────→ machine/power.Service, for the one answer local state cannot hold
 machine/access.Service
    ─MaterialLender─→ reconciliation/lifecycle.Service, which binds the session's Secrets alone
    ─Evidence───────→ reconciliation/lifecycle.Service and managedos/installation, through composition's own host-key adapter
@@ -521,6 +525,7 @@ production binding; tests substitute fakes through the same interface.
 | `reconciliation/lifecycle` | `OperationStore` | Index, Register, ReadOperation, ReadPlan, UpdateOperation, BlockStates, Block, Attempt, StartAttempt, RecordPreparation, CompleteAttempt, LastAttempt, StartResolution, CompleteResolution, OpenLog, OpenAdapterOutput, LogPaths, LogDirectory | `reconciliation/operationstore.Store` |
 | `machine/inventory`, `machine/access`, `machine/power` | `EffectiveState` | RenderEffective | `desiredstate/compilation.Service` |
 | `machine/inventory`, `machine/access`, `machine/power` | `Ownership` | Ownership | composition adapter over `reconciliation/lifecycle.Service` |
+| `machine/inventory` | `PowerReader` | Read | `machine/power.Service` |
 | `machine/access` | `MaterialLender` | WithMaterial | `reconciliation/lifecycle.Service` |
 | `machine/access` | `Evidence` | HostKey | composition adapter over `reconciliation/lifecycle.Service` and `managedos/installation` |
 | `machine/access` | `HostKeyStore` | ReadHostKeys, ReplaceHostKeys | `workspace/contextfs.Store` |

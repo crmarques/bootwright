@@ -36,22 +36,24 @@ type machineDependencies struct {
 }
 
 // wireMachine binds Machine inspection, explicit access and power. Inspection
-// reads state alone; a session runs the one pinned SSH client after proving
+// reads local state and asks the power capability alone when an invocation
+// wants a live reading; a session runs the one pinned SSH client after proving
 // the host key its context already holds; power crosses the one Ansible
 // boundary every managed-component effect crosses.
 func wireMachine(deps machineDependencies) cli.Services {
 	selection := currentSelection(deps.Selection)
 	evidence := machineOwnership{reconciler: deps.Lifecycle}
 	client := sshlocal.New(deps.Home)
+	powered := power.New(deps.State, evidence, deps.Lifecycle, ansiblerunner.New(operationPlaybook()),
+		deps.Confirmer, deps.Reporter, selection)
 	return cli.Services{
-		MachineInventory: inventory.New(deps.State, evidence, selection),
+		MachineInventory: inventory.New(deps.State, evidence, powered, selection),
 		MachineAccess: machineaccess.New(deps.State, selection, machineaccess.Options{
 			Lender: deps.Lifecycle, Ownership: evidence, Evidence: machineHostKeys{reconciler: deps.Lifecycle},
 			Trust: deps.Trust, Observer: client, Confirmer: deps.Session, Launcher: client,
 			Streams: deps.Streams, Terminal: deps.Terminal,
 		}),
-		MachinePower: power.New(deps.State, evidence, deps.Lifecycle, ansiblerunner.New(operationPlaybook()),
-			deps.Confirmer, deps.Reporter, selection),
+		MachinePower: powered,
 		MachineTrust: enrollment.New(deps.State, deps.Trust, selection, enrollment.Options{
 			Observer: client, Confirmer: deps.Confirmer, Clock: time.Now,
 		}),

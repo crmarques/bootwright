@@ -1,0 +1,13 @@
+---
+- name: Read the power state of every machine one host reaches a controller for
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute the machine power reading capability
+      ansible.builtin.import_role:
+        name: bootwright.core.machine_power_read_redfish
+        tasks_from: read.yml

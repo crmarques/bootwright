@@ -6,22 +6,25 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/power"
 )
 
 type machineListPresentation struct {
-	Context  string                   `json:"context"`
-	Machines []machineRowPresentation `json:"machines"`
+	Context   string                   `json:"context"`
+	Machines  []machineRowPresentation `json:"machines"`
+	PowerRead bool                     `json:"powerRead"`
 }
 
 type machineRowPresentation struct {
-	Name     string   `json:"name"`
-	Address  string   `json:"address"`
-	OS       string   `json:"os"`
-	Provider string   `json:"provider"`
-	Clusters []string `json:"clusters"`
-	State    string   `json:"state"`
+	Name      string   `json:"name"`
+	Address   string   `json:"address"`
+	OS        string   `json:"os"`
+	Provider  string   `json:"provider"`
+	Clusters  []string `json:"clusters"`
+	Lifecycle string   `json:"lifecycle"`
+	Power     string   `json:"power"`
 }
 
 type machinePowerPresentation struct {
@@ -33,11 +36,20 @@ type machinePowerPresentation struct {
 	Changed  bool   `json:"changed"`
 }
 
+// A row is presentable when it names the Machine and where this context's own
+// operations left it. A power reading is the controller's answer, so an empty
+// one is a Machine no controller answered for and never a defective row.
 func validMachineList(result *inventory.ListResult) bool {
 	if result == nil || result.Context == "" {
 		return false
 	}
-	return !slices.ContainsFunc(result.Machines, func(row inventory.MachineRow) bool { return row.Name == "" || row.State == "" })
+	return !slices.ContainsFunc(result.Machines, func(row inventory.MachineRow) bool {
+		return row.Name == "" || row.Lifecycle == "" || !presentablePower(row.Power) || row.Power != "" && !result.PowerRead
+	})
+}
+
+func presentablePower(reading string) bool {
+	return reading == "" || slices.Contains([]string{machine.PowerOn, machine.PowerOff, machine.PowerUnknown}, reading)
 }
 
 func writeMachineList(out io.Writer, command string, result *inventory.ListResult, silent, jsonMode bool) error {
@@ -65,14 +77,24 @@ func writeMachineList(out io.Writer, command string, result *inventory.ListResul
 		text.headline("OK", "No machines are selected")
 		return text.writeTo(out)
 	}
+	// The power column appears only where a reading was taken, so the table
+	// never shows a column of absences for the answer nobody asked for.
+	headings := []string{"NAME", "ADDRESS", "OS", "PROVIDER", "CLUSTERS", "LIFECYCLE"}
+	if result.PowerRead {
+		headings = append(headings, "POWER")
+	}
 	rows := make([][]string, 0, len(result.Machines))
 	for _, row := range result.Machines {
-		rows = append(rows, []string{
+		cells := []string{
 			escapeDisplayLine(row.Name), displayValue(row.Address), escapeDisplayLine(row.OS),
-			displayValue(row.Provider), displayValue(strings.Join(row.Clusters, ",")), escapeDisplayLine(row.State),
-		})
+			displayValue(row.Provider), displayValue(strings.Join(row.Clusters, ",")), escapeDisplayLine(row.Lifecycle),
+		}
+		if result.PowerRead {
+			cells = append(cells, displayValue(row.Power))
+		}
+		rows = append(rows, cells)
 	}
-	text.table([]string{"NAME", "ADDRESS", "OS", "PROVIDER", "CLUSTERS", "STATE"}, rows)
+	text.table(headings, rows)
 	return text.writeTo(out)
 }
 
@@ -91,17 +113,20 @@ func displayMachineList(result *inventory.ListResult) machineListPresentation {
 		rows = append(rows, machineRowPresentation{
 			Name: escapeDisplayLine(row.Name), Address: escapeDisplayLine(row.Address),
 			OS: escapeDisplayLine(row.OS), Provider: escapeDisplayLine(row.Provider),
-			Clusters: displayNames(row.Clusters), State: escapeDisplayLine(row.State),
+			Clusters: displayNames(row.Clusters), Lifecycle: escapeDisplayLine(row.Lifecycle),
+			Power: escapeDisplayLine(row.Power),
 		})
 	}
-	return machineListPresentation{Context: escapeDisplayLine(result.Context), Machines: rows}
+	return machineListPresentation{
+		Context: escapeDisplayLine(result.Context), Machines: rows, PowerRead: result.PowerRead,
+	}
 }
 
 func validMachinePower(result *power.Result) bool {
 	if result == nil || result.Machine == "" || result.Verb == "" {
 		return false
 	}
-	return result.Power == power.StateOn || result.Power == power.StateOff
+	return result.Power == machine.PowerOn || result.Power == machine.PowerOff
 }
 
 func writeMachinePower(out io.Writer, command string, result *power.Result, jsonMode bool) error {

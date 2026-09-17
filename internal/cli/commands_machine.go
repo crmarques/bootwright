@@ -13,7 +13,16 @@ import (
 
 func machineCommands() []commandSpec {
 	return []commandSpec{
-		available(commandSpec{path: "machine list", short: "List machines and ownership-backed state", flags: []flagSpec{clustersFlag(), boolFlag("silent", "Print only sorted machine names"), outputFlag()}}),
+		available(commandSpec{
+			path: "machine list", short: "List machines and the lifecycle position each has reached",
+			long: "List machines and the lifecycle position each has reached, as this context's own durable " +
+				"evidence proves it. Add --power to also read each machine's power state from its management " +
+				"controller, which is the only part of this command that contacts a host.",
+			flags: []flagSpec{
+				clustersFlag(), boolFlag("power", "Read each machine's power state from its management controller"),
+				boolFlag("silent", "Print only sorted machine names"), outputFlag(),
+			},
+		}),
 		available(sessionCommand(commandSpec{path: "machine rsh", short: "Open an SSH session on a machine as its resolved identity", flags: []flagSpec{nameFlag()}})),
 		available(sessionCommand(commandSpec{path: "machine exec", short: "Run a command on a machine over SSH and return its exit status", flags: []flagSpec{nameFlag()}, payload: true})),
 		available(powerCommand("machine start", "Power one machine on through its management controller", false)),
@@ -60,6 +69,7 @@ func (s Services) invokeMachineInventory(ctx context.Context, path string, value
 			ContextName: values.text("context"),
 			Clusters:    values.names("clusters"),
 			Silent:      values.boolean("silent"),
+			Power:       values.boolean("power"),
 		}, s.MachineInventory.List)
 		return commandResult{machines: result}, err
 	default:

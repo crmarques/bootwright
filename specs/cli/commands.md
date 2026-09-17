@@ -105,7 +105,7 @@ explicit `--context` changes nothing they do.
 
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
-| `bootwright machine list` | `--clusters <list>` default all; `--silent` false; `--output text\|json` default `text` | Machines and ownership-backed state, or sorted names with `--silent` | read local state |
+| `bootwright machine list` | `--clusters <list>` default all; `--power` false; `--silent` false; `--output text\|json` default `text` | Machines with the evidence-backed lifecycle position each reached, their controller-reported power with `--power`, or sorted names with `--silent` | read local state; with `--power`, read each machine's power through its management controller |
 | `bootwright machine rsh` | required `--name <machine>` | an interactive SSH session on the exact Machine as its resolved identity; the client's exit status is the result | read state, open the session's credential for its duration, read or record host trust, run one pinned SSH client |
 | `bootwright machine exec` | required `--name <machine>` and `<command>...` | the exact argument vector runs on the Machine; the remote command's exit status is the result | same |
 | `bootwright machine trust` | `--machines <list>` default all; `--replace <list>` default none; `--dry-run` false; `--yes` false; `--output text\|json` default `text` | exact host-key trust plan, and the recorded result unless dry-run | bounded SSH host-key observation of the selected Machines; context trust-store write unless dry-run |
@@ -306,9 +306,11 @@ and requires `--output-dir`. A non-empty `--context` or
 `--sensitive=true` conflicts with `--input-dir`.
 
 `machine list --silent=true` emits only sorted names as text and conflicts
-with a resolved `--output json`. The conflict is `cli.usage` with exit `2`
-and the normal JSON failure envelope; `--silent=false` permits JSON output.
-This relationship uses final scalar values and follows explicit-help precedence.
+with a resolved `--output json` and with `--power`, because a reading it could
+never print would contact every management controller for nothing. Each
+conflict is `cli.usage` with exit `2` and the normal JSON failure envelope;
+`--silent=false` permits both. These relationships use final scalar values and
+follow explicit-help precedence.
 
 `machine start`, `machine stop` and `machine restart` each resolve one exact
 Machine and converge it to the power state their name means, through

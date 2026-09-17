@@ -7,7 +7,7 @@ const Implementation = "machine-power-redfish-v1"
 
 // Operation is the fixed adapter entrypoint every power verb crosses. The
 // verb travels inside the frozen request, so one bounded entrypoint answers
-// for reading, starting, stopping and restarting a Machine.
+// for starting, stopping and restarting a Machine.
 const Operation = "power"
 
 // Variable prefixes the frozen request, its digest and its material paths in
@@ -22,10 +22,15 @@ const (
 	Restart = "restart"
 )
 
-// The reported power state of a Machine. Unknown is what a controller that
-// never answered the poll leaves behind.
+// ReadImplementation is the automation identity a power reading runs through.
+// Driving power and reading it are separate implementations, so automation
+// that changes a Machine can never answer an inspection that only observes.
+const ReadImplementation = "machine-power-read-v1"
+
+// ReadOperation is the bounded adapter entrypoint a reading crosses, and
+// ReadVariable prefixes its frozen survey, digest and material paths in the
+// adapter's own variable space.
 const (
-	StateOn      = "on"
-	StateOff     = "off"
-	StateUnknown = "unknown"
+	ReadOperation = "read"
+	ReadVariable  = "bootwright_machine_power_read"
 )

@@ -104,22 +104,27 @@ func TestClusterSelectionFiltersPresentationOnly(t *testing.T) {
 	}
 }
 
-// Ownership is what an operation proved. A Machine no frozen plan names is
-// unmanaged, and a removal owns what it has not finished removing.
-func TestStateFollowsTheEvidenceRatherThanTheDeclaration(t *testing.T) {
+// A lifecycle position is what an operation proved. A Machine no frozen plan
+// names has had nothing applied to it, and a verb that has not completed names
+// itself in progress rather than the position it was heading for: a Machine
+// halfway through a removal still owns what is not yet removed, so it must not
+// read as one nothing has touched or as one that is fully applied.
+func TestLifecycleFollowsTheEvidenceRatherThanTheDeclaration(t *testing.T) {
 	for _, test := range []struct {
 		name     string
 		evidence machine.OwnershipState
 		want     string
 	}{
-		{"no evidence", machine.OwnershipState{}, StateUnmanaged},
-		{"applied", machine.OwnershipState{Verb: "apply", State: "done"}, StateOwned},
-		{"applying", machine.OwnershipState{Verb: "apply", State: "pending"}, StatePending},
-		{"failed", machine.OwnershipState{Verb: "apply", State: "failed"}, StateFailed},
-		{"unproved", machine.OwnershipState{Verb: "apply", State: "unknown"}, StateUnknown},
-		{"interrupted", machine.OwnershipState{Verb: "apply", State: "running"}, StateUnknown},
-		{"removed", machine.OwnershipState{Verb: "destroy", State: "done"}, StateReleased},
-		{"removal pending", machine.OwnershipState{Verb: "destroy", State: "pending"}, StateOwned},
+		{"no evidence", machine.OwnershipState{}, LifecycleNotApplied},
+		{"applied", machine.OwnershipState{Verb: "apply", State: "done"}, LifecycleApplied},
+		{"apply pending", machine.OwnershipState{Verb: "apply", State: "pending"}, LifecycleApplying},
+		{"apply running", machine.OwnershipState{Verb: "apply", State: "running"}, LifecycleApplying},
+		{"failed", machine.OwnershipState{Verb: "apply", State: "failed"}, LifecycleFailed},
+		{"unproved", machine.OwnershipState{Verb: "apply", State: "unknown"}, LifecycleUnknown},
+		{"removed", machine.OwnershipState{Verb: "destroy", State: "done"}, LifecycleDestroyed},
+		{"removal pending", machine.OwnershipState{Verb: "destroy", State: "pending"}, LifecycleDestroying},
+		{"removal running", machine.OwnershipState{Verb: "destroy", State: "running"}, LifecycleDestroying},
+		{"removal unproved", machine.OwnershipState{Verb: "destroy", State: "unknown"}, LifecycleUnknown},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			owned := map[string]machine.OwnershipState{"Machine/guest": test.evidence}
@@ -127,11 +132,14 @@ func TestStateFollowsTheEvidenceRatherThanTheDeclaration(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if rows[0].State != test.want {
-				t.Fatalf("state = %q, want %q", rows[0].State, test.want)
+			if rows[0].Lifecycle != test.want {
+				t.Fatalf("lifecycle = %q, want %q", rows[0].Lifecycle, test.want)
 			}
-			if rows[1].State != StateUnmanaged {
-				t.Fatalf("a Machine outside the evidence reported %q", rows[1].State)
+			if rows[1].Lifecycle != LifecycleNotApplied {
+				t.Fatalf("a Machine outside the evidence reported %q", rows[1].Lifecycle)
+			}
+			if rows[0].Power != "" || rows[1].Power != "" {
+				t.Fatal("a row derived from local state alone carried a power reading")
 			}
 		})
 	}

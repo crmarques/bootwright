@@ -66,19 +66,26 @@ type Result struct {
 // Canonical encodes the request exactly as the adapter consumes it, refusing
 // anything a later reader could interpret differently.
 func (r Request) Canonical() ([]byte, error) {
-	data, err := json.Marshal(r)
+	return canonicalBytes(r, "power request")
+}
+
+// canonicalBytes encodes one frozen intent and proves the bytes survive a
+// decode and re-encode unchanged, so what the adapter reads is what the digest
+// covers.
+func canonicalBytes(value any, subject string) ([]byte, error) {
+	data, err := json.Marshal(value)
 	if err != nil {
-		return nil, failure("lifecycle.state", "the power request cannot be encoded", "")
+		return nil, failure("lifecycle.state", "the "+subject+" cannot be encoded", "")
 	}
 	var probe map[string]any
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
 	if err := decoder.Decode(&probe); err != nil {
-		return nil, failure("lifecycle.state", "the power request cannot be decoded", "")
+		return nil, failure("lifecycle.state", "the "+subject+" cannot be decoded", "")
 	}
 	reencoded, err := json.Marshal(probe)
 	if err != nil || !bytes.Equal(data, reencoded) {
-		return nil, failure("lifecycle.state", "the power request is not canonical", "")
+		return nil, failure("lifecycle.state", "the "+subject+" is not canonical", "")
 	}
 	return data, nil
 }

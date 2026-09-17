@@ -81,7 +81,7 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"render", artifactrendering.RenderRequest{ContextName: "example", InputPath: "inputs", OutputDirectory: "artifacts", Clusters: []string{"first", "second"}, Sensitive: true}},
 		{"render installer", installation.RenderInstallerRequest{ContextName: "example", Clusters: []string{"first", "second"}, Sensitive: true}},
 		{"render storage", storagerendering.RenderArtifactsRequest{ContextName: "example", Clusters: []string{"first", "second"}}},
-		{"machine list", inventory.ListRequest{ContextName: "example", Clusters: []string{"first", "second"}, Silent: true}},
+		{"machine list", inventory.ListRequest{ContextName: "example", Clusters: []string{"first", "second"}, Silent: true, Power: true}},
 		{"machine rsh", machineaccess.RshRequest{ContextName: "example", Name: "demo", SSH: ssh}},
 		{"machine exec", machineaccess.ExecRequest{ContextName: "example", Name: "demo", SSH: ssh, Command: []string{"get", "--help", ""}}},
 		{"machine trust", enrollment.EnrollRequest{ContextName: "example", Machines: []string{"node-a", "node-b"}, Replace: []string{"node-b"}, DryRun: true, SkipConfirmation: true}},

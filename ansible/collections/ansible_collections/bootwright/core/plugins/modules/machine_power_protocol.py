@@ -52,6 +52,14 @@ options:
     description: Whether the reported state differs from the state before it.
     type: bool
     required: false
+  readings:
+    description:
+      - The registered per-machine controller reads a bounded reading publishes,
+        in the order its survey named them. Supplying it publishes reading
+        evidence in place of the evidence one power verb returns.
+    type: list
+    elements: dict
+    required: false
 author:
   - Bootwright contributors (@crmarques)
 """

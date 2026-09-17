@@ -249,7 +249,7 @@ Successful result objects have stable top-level fields:
 | `render effective` | `counts`, `effectiveState` |
 | `render installer` | `clusters` |
 | `render storage` | `clusters` |
-| `machine list` | `context`, `machines` |
+| `machine list` | `context`, `machines`, `powerRead` |
 | `machine trust` | `context`, `dryRun`, `hosts` |
 | `machine start`, `machine stop`, `machine restart` | `context`, `machine`, `verb`, `power`, `previous`, `changed` |
 | `cluster list` | `context`, `clusters` |

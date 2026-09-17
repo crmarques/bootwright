@@ -17,6 +17,7 @@ PHASES = ("loaded", "group", "completed")
 GROUP_STATUSES = ("running", "ok", "failed", "skipped")
 OUTCOMES = ("changed", "unchanged")
 REPORTED = {"On": "on", "Off": "off", "": ""}
+READINGS = {"On": "on", "Off": "off"}
 VERBS = {"start": "on", "stop": "off", "restart": "on"}
 HEX = set("0123456789abcdef")
 
@@ -53,6 +54,44 @@ def evidence_for(arguments):
     return evidence
 
 
+def observed(result):
+    """One controller's answer, or unknown when it did not give one.
+
+    A controller that refused, timed out or answered with something this build
+    cannot name leaves its own machine unknown, so one silent controller never
+    denies the answers every other controller in the same run already gave.
+
+    The reported state is what decides that. A reading suppresses its own task
+    failure to keep polling the rest, and ansible-core rewrites `failed` to
+    false when it does, so a refusal arrives here as a result carrying no
+    usable state rather than as a flagged failure. The flags are still read,
+    because a result that does carry one is not an answer either.
+    """
+    if not isinstance(result, dict):
+        raise ValueError("reading")
+    if result.get("failed") or result.get("unreachable"):
+        return "unknown"
+    return READINGS.get(result.get("power"), "unknown")
+
+
+def reading_evidence_for(arguments):
+    """Turn one loop of controller reads into evidence, in survey order."""
+    readings = arguments.get("readings")
+    if not isinstance(readings, list) or not readings:
+        raise ValueError("readings")
+    machines = []
+    for result in readings:
+        power = observed(result)
+        target = result.get("item")
+        if not isinstance(target, dict):
+            raise ValueError("reading target")
+        machine = str(target.get("object") or "")
+        if not machine:
+            raise ValueError("machine")
+        machines.append({"machine": machine, "power": power})
+    return {"machines": machines, "request": digest(arguments.get("digest"))}
+
+
 class ActionModule(ActionBase):
     TRANSFERS_FILES = False
     _requires_connection = False
@@ -76,6 +115,9 @@ class ActionModule(ActionBase):
             outcome = arguments.get("outcome")
             if outcome not in OUTCOMES:
                 raise ValueError("outcome")
+            if "readings" in arguments:
+                emit({"phase": "completed", "outcome": outcome, "evidence": reading_evidence_for(arguments)})
+                return {"changed": False}
             evidence = evidence_for(arguments)
             if not evidence["postcondition"]:
                 return {

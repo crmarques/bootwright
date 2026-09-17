@@ -1,0 +1,48 @@
+argument_specs:
+  read:
+    short_description: Read the power state of every machine one host reaches a controller for.
+    options:
+      bootwright_machine_power_read_request:
+        type: dict
+        required: true
+        options:
+          context:
+            type: str
+            required: true
+          placement:
+            type: dict
+            required: true
+          targets:
+            type: list
+            required: true
+            elements: dict
+            options:
+              controller:
+                type: dict
+                required: true
+                options:
+                  credentialsRef:
+                    type: str
+                    required: true
+                  endpoint:
+                    type: str
+                    required: true
+                  tlsVerify:
+                    type: bool
+                    required: true
+              object:
+                type: str
+                required: true
+              passwordVariable:
+                type: str
+                required: true
+              userVariable:
+                type: str
+                required: true
+          version:
+            type: str
+            required: true
+            choices: [machine-power-read-v1]
+      bootwright_machine_power_read_material:
+        type: dict
+        required: true

@@ -42,8 +42,9 @@ func TestBoundPlaybooksCoverExactlyTheOfferedCapabilities(t *testing.T) {
 		delete(implementations, offered.Implementation)
 	}
 	for implementation := range implementations {
-		// Day-2 power is bound without a lifecycle capability of its own.
-		if implementation == "machine-power-redfish-v1" {
+		// Day-2 power and the reading an inspection takes are bound without a
+		// lifecycle capability of their own.
+		if implementation == "machine-power-redfish-v1" || implementation == "machine-power-read-v1" {
 			continue
 		}
 		t.Errorf("%s is bound but no capability resolves it", implementation)

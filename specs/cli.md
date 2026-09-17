@@ -540,18 +540,43 @@ vector, never shell text. `rsh` accepts no command tail. `oc` and `kubectl`
 preserve the payload argument vector but never inherit ambient kubeconfig,
 plugins, credentials, proxy settings, cache, or executable lookup.
 
-`machine list` reports each selected Machine with the state its context's
-durable evidence proves: `owned` when an apply proved its realization,
-`pending` while an operation has not, `failed` or `unknown` when an attempt
-said so or proved nothing, `released` once a destroy completed, and
-`unmanaged` when no frozen plan names it. A declaration alone never reports
-ownership, and a Machine outside the evidence is never reported as absent.
+`machine list` reports two independent things about each selected Machine and
+never conflates them. Its lifecycle position is how far this context's own
+operations have carried the Machine, which durable evidence proves locally. Its
+power is what the Machine's own management controller reports right now, which
+only that controller can answer.
+
+The lifecycle position names the verb that last acted on the Machine and
+whether that verb completed: `applied` once an apply proved its realization,
+`applying` while an apply has not, `destroyed` once a destroy completed,
+`destroying` while a destroy has not, `failed` when an attempt said so,
+`unknown` when an attempt proved nothing, and `not-applied` when no frozen plan
+names the Machine at all. A declaration alone never reports ownership, and a
+Machine outside the evidence is never reported as absent.
 
 A removal reads the apply it takes back as well as its own plan. Each attempt
 covers only what is not yet proved gone, so a Machine an earlier attempt
-removed leaves the current plan without ceasing to be released: it reports
-`released` rather than falling back to `unmanaged`, and only a Machine no
-completed apply ever realized reports `unmanaged` after a removal.
+removed leaves the current plan without ceasing to be removed: it reports
+`destroyed` rather than falling back to `not-applied`, and only a Machine no
+completed apply ever realized reports `not-applied` after a removal. A Machine
+whose removal has not completed still owns what it has not removed, so it
+reports `destroying` rather than either settled position.
+
+`--power` additionally reads each selected Machine's power state from
+[its own management controller](substrates.md#identity-and-power-operations),
+reporting `on`, `off`, or `unknown` when the controller gave no usable answer.
+It is the only part of this command that contacts a host: without it the
+command compiles local state alone and opens nothing. The reading registers no
+operation, publishes no evidence and changes nothing, so it neither claims nor
+releases ownership and never becomes durable. One bounded run answers for every
+Machine reachable through the same host, and one controller that does not
+answer leaves its own Machine `unknown` rather than denying the readings that
+run already has. A Machine this context resolves no reachable management
+controller for — one declaring no controller, or one whose emulated controller
+this context does not currently own — reports no reading at all, which is
+distinct from `unknown`. The result states separately whether controllers were
+asked, so a reading nobody requested is never mistaken for one that came back
+without an answer.
 
 ### Machine SSH sessions
 
@@ -671,3 +696,11 @@ read. Stopping asks the operating
 system to shut down and polls it to off; `--force` cuts the power instead, and
 is a separate request rather than a fallback. Restarting proves the stop before
 it starts, so an interrupted restart is never reported as settled.
+
+[`machine list --power`](#resource-inspection-and-explicit-access) reads the
+same controllers over the same boundary and under the same lock, and follows
+the same reachability rules, but drives nothing: it asks each controller what
+state it is in and reports the answer. Because it observes rather than
+converges, an unreachable controller leaves its own Machine `unknown` instead
+of refusing, and a Machine no controller resolves for is omitted from the
+reading instead of failing `access.unavailable`.

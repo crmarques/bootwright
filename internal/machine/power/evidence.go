@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"slices"
+
+	"github.com/crmarques/bootwright/internal/machine"
 )
 
 const maxEvidenceBytes = 8 << 10
@@ -39,7 +41,7 @@ func validate(data []byte, request Request, digest string) (Evidence, error) {
 		return Evidence{}, failure("lifecycle.unknown", "the management controller did not prove the power state this operation asked for",
 			"read the machine's power state again once its controller answers")
 	}
-	if !slices.Contains([]string{StateOn, StateOff}, evidence.Power) {
+	if !slices.Contains([]string{machine.PowerOn, machine.PowerOff}, evidence.Power) {
 		return Evidence{}, failure("lifecycle.unknown", "the management controller reported no usable power state",
 			"read the machine's power state again once its controller answers")
 	}
@@ -54,9 +56,9 @@ func validate(data []byte, request Request, digest string) (Evidence, error) {
 // an interrupted restart is never reported as settled.
 func expected(verb string) string {
 	if verb == Stop {
-		return StateOff
+		return machine.PowerOff
 	}
-	return StateOn
+	return machine.PowerOn
 }
 
 func decode(data []byte) (Evidence, error) {
@@ -71,6 +73,70 @@ func decode(data []byte) (Evidence, error) {
 	}
 	if decoder.More() {
 		return Evidence{}, failure("lifecycle.state", "the power adapter returned trailing evidence", "")
+	}
+	return evidence, nil
+}
+
+// Reading is one Machine's power exactly as its controller answered. A
+// controller that did not answer leaves an unknown reading rather than an
+// empty value, so an absent answer is never read as a state.
+type Reading struct {
+	Machine string `json:"machine"`
+	Power   string `json:"power"`
+}
+
+// ReadEvidence is the only result shape the reading adapter may return. It
+// carries one entry per Machine the survey asked about, and nothing about what
+// this context owns: a reading observes a controller, it proves no ownership.
+type ReadEvidence struct {
+	Machines []Reading `json:"machines"`
+	Request  string    `json:"request"`
+}
+
+// validateReading accepts evidence only when it answers the exact frozen
+// survey: the run named this survey, and it answered once for every Machine
+// the survey asked about and for nothing else.
+func validateReading(data []byte, survey ReadSurvey, digest string) (map[string]string, error) {
+	evidence, err := decodeReading(data)
+	if err != nil {
+		return nil, err
+	}
+	if evidence.Request != digest {
+		return nil, failure("lifecycle.state", "the power reading names another survey", "")
+	}
+	readings := make(map[string]string, len(survey.Targets))
+	for _, reading := range evidence.Machines {
+		if !slices.Contains([]string{machine.PowerOn, machine.PowerOff, machine.PowerUnknown}, reading.Power) {
+			return nil, failure("lifecycle.state", "the power reading reports a state this command cannot name", "")
+		}
+		if _, repeated := readings[reading.Machine]; repeated {
+			return nil, failure("lifecycle.state", "the power reading answers for one Machine twice", "")
+		}
+		readings[reading.Machine] = reading.Power
+	}
+	for _, target := range survey.Targets {
+		if _, answered := readings[target.Object]; !answered {
+			return nil, failure("lifecycle.state", "the power reading does not answer for every Machine it was asked about", "")
+		}
+	}
+	if len(readings) != len(survey.Targets) {
+		return nil, failure("lifecycle.state", "the power reading answers for a Machine it was not asked about", "")
+	}
+	return readings, nil
+}
+
+func decodeReading(data []byte) (ReadEvidence, error) {
+	if len(data) == 0 || len(data) > maxReadingBytes {
+		return ReadEvidence{}, failure("lifecycle.state", "the power reading adapter returned no bounded evidence", "")
+	}
+	var evidence ReadEvidence
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&evidence); err != nil {
+		return ReadEvidence{}, failure("lifecycle.state", "the power reading adapter returned malformed evidence", "")
+	}
+	if decoder.More() {
+		return ReadEvidence{}, failure("lifecycle.state", "the power reading adapter returned trailing evidence", "")
 	}
 	return evidence, nil
 }

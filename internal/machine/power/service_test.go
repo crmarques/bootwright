@@ -94,7 +94,7 @@ func TestAStopCrossesTheAdapterWithItsFrozenRequestAndBoundCredential(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Power != StateOff || result.Machine != "guest" || result.Verb != Stop {
+	if result.Power != machine.PowerOff || result.Machine != "guest" || result.Verb != Stop {
 		t.Fatalf("result = %+v", result)
 	}
 	if runner.seen.Implementation != Implementation || runner.seen.Operation != Operation {
@@ -157,13 +157,13 @@ func TestOnlyAnInterruptingVerbAsksForConfirmation(t *testing.T) {
 		invoke func(Service) (*Result, error)
 		asks   bool
 	}{
-		{"start", StateOn, func(s Service) (*Result, error) {
+		{"start", machine.PowerOn, func(s Service) (*Result, error) {
 			return s.Start(context.Background(), PowerRequest{ContextName: "lab", Name: "guest"})
 		}, false},
-		{"stop", StateOff, func(s Service) (*Result, error) {
+		{"stop", machine.PowerOff, func(s Service) (*Result, error) {
 			return s.Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest"})
 		}, true},
-		{"restart", StateOn, func(s Service) (*Result, error) {
+		{"restart", machine.PowerOn, func(s Service) (*Result, error) {
 			return s.Restart(context.Background(), PowerRequest{ContextName: "lab", Name: "guest"})
 		}, true},
 	} {
@@ -207,7 +207,7 @@ func TestAStateTheControllerNeverReachedIsNeverReportedAsSettled(t *testing.T) {
 
 func TestEvidenceIsAcceptedOnlyForTheExactFrozenRequest(t *testing.T) {
 	request := Request{Identity: Identity{Object: "guest"}, Verb: Start}
-	valid := Evidence{Machine: "guest", Postcondition: true, Power: StateOn, Request: "digest"}
+	valid := Evidence{Machine: "guest", Postcondition: true, Power: machine.PowerOn, Request: "digest"}
 	if _, err := validate(encode(t, valid), request, "digest"); err != nil {
 		t.Fatal(err)
 	}
@@ -217,10 +217,10 @@ func TestEvidenceIsAcceptedOnlyForTheExactFrozenRequest(t *testing.T) {
 		digest   string
 	}{
 		{"another request", valid, "other"},
-		{"another machine", Evidence{Machine: "host", Postcondition: true, Power: StateOn, Request: "digest"}, "digest"},
-		{"no postcondition", Evidence{Machine: "guest", Power: StateOn, Request: "digest"}, "digest"},
+		{"another machine", Evidence{Machine: "host", Postcondition: true, Power: machine.PowerOn, Request: "digest"}, "digest"},
+		{"no postcondition", Evidence{Machine: "guest", Power: machine.PowerOn, Request: "digest"}, "digest"},
 		{"no reported state", Evidence{Machine: "guest", Postcondition: true, Request: "digest"}, "digest"},
-		{"the wrong state", Evidence{Machine: "guest", Postcondition: true, Power: StateOff, Request: "digest"}, "digest"},
+		{"the wrong state", Evidence{Machine: "guest", Postcondition: true, Power: machine.PowerOff, Request: "digest"}, "digest"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if _, err := validate(encode(t, test.evidence), request, test.digest); err == nil {

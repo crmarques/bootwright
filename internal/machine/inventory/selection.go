@@ -8,20 +8,24 @@ import (
 	"github.com/crmarques/bootwright/internal/machine"
 )
 
-// The state a Machine is reported in. Ownership is what an operation proved,
-// so a Machine no frozen plan names is unmanaged rather than absent.
+// How far through this context's lifecycle a Machine has been carried. Each
+// value names the verb that last acted on it and whether that verb completed,
+// because an operator asking about a Machine is asking exactly that: has
+// anything been applied, is something running, and did a removal finish. It is
+// not the Machine's power, which only its management controller answers.
 const (
-	StateUnmanaged = "unmanaged"
-	StateOwned     = "owned"
-	StatePending   = "pending"
-	StateReleased  = "released"
-	StateFailed    = "failed"
-	StateUnknown   = "unknown"
+	LifecycleNotApplied = "not-applied"
+	LifecycleApplying   = "applying"
+	LifecycleApplied    = "applied"
+	LifecycleDestroying = "destroying"
+	LifecycleDestroyed  = "destroyed"
+	LifecycleFailed     = "failed"
+	LifecycleUnknown    = "unknown"
 )
 
 // Rows derives one row per selected Machine in canonical name order. A cluster
 // selection filters presentation alone: it never changes the graph, the
-// evidence, or what a Machine's state means.
+// evidence, or what a Machine's lifecycle position means.
 func Rows(catalog api.Catalog, clusters []string, owned map[string]machine.OwnershipState) ([]MachineRow, error) {
 	selection, filtered := normalize(clusters)
 	memberships := machine.Memberships(catalog)
@@ -48,7 +52,7 @@ func Names(rows []MachineRow) []string {
 
 func row(object api.Object, members []string, evidence machine.OwnershipState) MachineRow {
 	current := MachineRow{
-		Name: object.Name(), OS: "provided", State: state(evidence),
+		Name: object.Name(), OS: "provided", Lifecycle: lifecycle(evidence),
 		Provider: object.Spec().Get("substrate", "providerRef").Text(),
 		Clusters: slices.Clone(members),
 	}
@@ -64,28 +68,29 @@ func row(object api.Object, members []string, evidence machine.OwnershipState) M
 	return current
 }
 
-// state translates what the frozen verb and its blocks proved into what an
-// operator owns now. A removal that completed released the Machine; one that
-// has not completed still owns the effects it has not removed.
-func state(evidence machine.OwnershipState) string {
+// lifecycle translates the frozen verb and the least settled state its blocks
+// reached into the position an operator reads. A verb that has not completed
+// names itself in progress, because a Machine halfway through a removal still
+// owns what is not yet removed and must not read as one nothing has touched.
+func lifecycle(evidence machine.OwnershipState) string {
+	destroying := evidence.Verb == machine.VerbDestroy
 	switch evidence.State {
 	case "":
-		return StateUnmanaged
-	case machine.BlockUnknown, machine.BlockRunning:
-		return StateUnknown
+		return LifecycleNotApplied
+	case machine.BlockUnknown:
+		return LifecycleUnknown
 	case machine.BlockFailed:
-		return StateFailed
+		return LifecycleFailed
 	case machine.BlockDone:
-		if evidence.Verb == machine.VerbDestroy {
-			return StateReleased
+		if destroying {
+			return LifecycleDestroyed
 		}
-		return StateOwned
+		return LifecycleApplied
 	}
-	// A removal that has not completed still owns what it has not removed.
-	if evidence.Verb == machine.VerbDestroy {
-		return StateOwned
+	if destroying {
+		return LifecycleDestroying
 	}
-	return StatePending
+	return LifecycleApplying
 }
 
 // normalize applies the list rules a cluster selector follows: an omitted

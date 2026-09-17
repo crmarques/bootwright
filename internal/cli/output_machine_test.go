@@ -11,8 +11,8 @@ import (
 
 func machineList() *inventory.ListResult {
 	return &inventory.ListResult{Context: "lab", Machines: []inventory.MachineRow{
-		{Name: "guest", Address: "192.0.2.20", OS: "installed", Provider: "lab", Clusters: []string{}, State: "owned"},
-		{Name: "node", OS: "provided", Clusters: []string{"ocp"}, State: "unmanaged"},
+		{Name: "guest", Address: "192.0.2.20", OS: "installed", Provider: "lab", Clusters: []string{}, Lifecycle: "applied"},
+		{Name: "node", OS: "provided", Clusters: []string{"ocp"}, Lifecycle: "not-applied"},
 	}}
 }
 
@@ -25,11 +25,33 @@ func TestMachineListPresentsEveryRowAndItsAbsentValues(t *testing.T) {
 	if len(lines) != 3 || !strings.HasPrefix(lines[0], "NAME") {
 		t.Fatalf("table = %q", out.String())
 	}
-	if !strings.Contains(lines[1], "guest") || !strings.Contains(lines[1], "192.0.2.20") || !strings.Contains(lines[1], "owned") {
+	if !strings.Contains(lines[0], "LIFECYCLE") || strings.Contains(lines[0], "POWER") {
+		t.Fatalf("a listing that read no controller showed a power column: %q", lines[0])
+	}
+	if !strings.Contains(lines[1], "guest") || !strings.Contains(lines[1], "192.0.2.20") || !strings.Contains(lines[1], "applied") {
 		t.Fatalf("row = %q", lines[1])
 	}
 	if !strings.Contains(lines[2], "-") || !strings.Contains(lines[2], "ocp") {
 		t.Fatalf("a Machine with no contact did not read as absent: %q", lines[2])
+	}
+}
+
+// The power column belongs to the invocation that asked for a reading: it
+// names what each controller answered, and reads as absent for a Machine this
+// context reaches no controller for.
+func TestMachineListShowsPowerOnlyWhereAReadingWasTaken(t *testing.T) {
+	result := machineList()
+	result.PowerRead, result.Machines[0].Power = true, "on"
+	var out bytes.Buffer
+	if err := writeMachineList(&out, "machine list", result, false, false); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
+	if !strings.HasSuffix(lines[0], "POWER") {
+		t.Fatalf("headings = %q", lines[0])
+	}
+	if !strings.HasSuffix(lines[1], "on") || !strings.HasSuffix(lines[2], "-") {
+		t.Fatalf("rows = %q, %q", lines[1], lines[2])
 	}
 }
 
@@ -59,11 +81,25 @@ func TestMachineListJSONCarriesItsContextAndRows(t *testing.T) {
 	}
 	want := `{"schemaVersion":"v1alpha1","command":"machine list","ok":true,"exitCode":0,` +
 		`"result":{"context":"lab","machines":[` +
-		`{"name":"guest","address":"192.0.2.20","os":"installed","provider":"lab","clusters":[],"state":"owned"},` +
-		`{"name":"node","address":"","os":"provided","provider":"","clusters":["ocp"],"state":"unmanaged"}` +
-		`]},"diagnostics":[],"logs":[]}` + "\n"
+		`{"name":"guest","address":"192.0.2.20","os":"installed","provider":"lab","clusters":[],"lifecycle":"applied","power":""},` +
+		`{"name":"node","address":"","os":"provided","provider":"","clusters":["ocp"],"lifecycle":"not-applied","power":""}` +
+		`],"powerRead":false},"diagnostics":[],"logs":[]}` + "\n"
 	if out.String() != want {
 		t.Fatalf("JSON = %q, want %q", out.String(), want)
+	}
+}
+
+// A consumer tells a reading nobody asked for from one that came back with no
+// answer through the result, because both leave the row's power empty.
+func TestMachineListJSONSaysWhetherControllersWereAsked(t *testing.T) {
+	result := machineList()
+	result.PowerRead, result.Machines[0].Power = true, "off"
+	var out bytes.Buffer
+	if err := writeMachineList(&out, "machine list", result, false, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"lifecycle":"applied","power":"off"`) || !strings.Contains(out.String(), `"powerRead":true`) {
+		t.Fatalf("JSON = %q", out.String())
 	}
 }
 
@@ -72,7 +108,15 @@ func TestMachineListRefusesToPresentAnIncompleteRow(t *testing.T) {
 		t.Fatal("an empty result was presented")
 	}
 	if validMachineList(&inventory.ListResult{Context: "lab", Machines: []inventory.MachineRow{{Name: "guest"}}}) {
-		t.Fatal("a row with no state was presented")
+		t.Fatal("a row with no lifecycle position was presented")
+	}
+	unreadable := []inventory.MachineRow{{Name: "guest", Lifecycle: "applied", Power: "paused"}}
+	if validMachineList(&inventory.ListResult{Context: "lab", Machines: unreadable, PowerRead: true}) {
+		t.Fatal("a power state this command cannot name was presented")
+	}
+	unasked := []inventory.MachineRow{{Name: "guest", Lifecycle: "applied", Power: "on"}}
+	if validMachineList(&inventory.ListResult{Context: "lab", Machines: unasked}) {
+		t.Fatal("a reading was presented although no controller was asked")
 	}
 }
 

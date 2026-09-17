@@ -27,6 +27,7 @@ func TestFlagRelationshipsAndFormats(t *testing.T) {
 		{"machine trust --output json", false}, {"machine trust --output json --dry-run", true}, {"machine trust --output json --yes", true}, {"machine trust --machines one,two --replace two", true}, {"machine trust --machines one --replace two", false},
 		{"cluster info --secrets", false}, {"cluster info --name demo --secrets", true}, {"cluster info --secrets=false", true},
 		{"preflight infra --clusters=", true}, {"preflight infra --clusters=,", false}, {"render storage --clusters=,", false}, {"machine list --clusters=,", true}, {"machine trust --machines=, --replace=,", true},
+		{"machine list --power", true}, {"machine list --power --output json", true}, {"machine list --power --silent", false}, {"machine list --power --silent=false", true},
 		{"version --context=", true}, {"version --context=bad.name", false}, {"version --ssh-user=account", true}, {"version --ssh-user=Account", false}, {"version --ssh-user-for-provisioned", false}, {"version --ssh-user=account --ssh-user-for-provisioned", true}, {"status --ssh-ask-sudo-password --output=json", false}, {"status --ssh-ask-sudo-password=false --output=json", true},
 		{"context use --name= --name=demo", false}, {"context use --name=INVALID --name=demo", true}, {"status --output=invalid --output=text", true}, {"status --output= --output=text", false}, {"status --watch-interval=invalid --watch-interval=5s", true}, {"version --ssh-user= --ssh-user=account", false}, {"version --context= --context=demo", true},
 	}

@@ -11,16 +11,19 @@ import (
 type Service struct {
 	state     EffectiveState
 	ownership Ownership
+	power     PowerReader
 	selection machine.CurrentSelection
 }
 
-func New(state EffectiveState, ownership Ownership, selection machine.CurrentSelection) Service {
-	return Service{state: state, ownership: ownership, selection: selection}
+func New(state EffectiveState, ownership Ownership, power PowerReader, selection machine.CurrentSelection) Service {
+	return Service{state: state, ownership: ownership, power: power, selection: selection}
 }
 
-// List reports every selected Machine with the state its context's durable
-// evidence proves. It compiles the immutable input, contacts no host and
-// writes nothing, so a name locates an entry without claiming it exists.
+// List reports every selected Machine with the lifecycle position its context's
+// durable evidence proves. It compiles the immutable input and writes nothing,
+// so a name locates an entry without claiming it exists. It contacts no host
+// unless the invocation asked for a power reading, which is the one answer
+// local state cannot hold.
 func (s Service) List(ctx context.Context, request ListRequest) (*ListResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -44,5 +47,18 @@ func (s Service) List(ctx context.Context, request ListRequest) (*ListResult, er
 	if err != nil {
 		return nil, err
 	}
-	return &ListResult{Context: name, Machines: rows}, nil
+	if !request.Power {
+		return &ListResult{Context: name, Machines: rows}, nil
+	}
+	if s.power == nil {
+		return nil, availability.ErrNotImplemented
+	}
+	readings, err := s.power.Read(ctx, name, Names(rows))
+	if err != nil {
+		return nil, err
+	}
+	for index, row := range rows {
+		rows[index].Power = readings[row.Name]
+	}
+	return &ListResult{Context: name, Machines: rows, PowerRead: true}, nil
 }

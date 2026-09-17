@@ -1,0 +1,54 @@
+---
+# A reading observes every machine this host reaches a management controller
+# for and changes nothing, so it is safe to repeat. One controller that does
+# not answer leaves its own machine unknown rather than denying the reading
+# every other controller already gave.
+- name: Validate the frozen reading survey
+  ansible.builtin.assert:
+    that:
+      - bootwright_machine_power_read_request.version == 'machine-power-read-v1'
+      - bootwright_machine_power_read_request.targets | length > 0
+      - bootwright_machine_power_read_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.machine_power_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Report the power states being read
+  bootwright.core.machine_power_protocol:
+    phase: group
+    group: read-state
+    status: running
+  no_log: true
+
+- name: Read the state each management controller reports
+  bootwright.core.redfish_boot:
+    endpoint: '{{ item.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_read_material[item.userVariable]) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_read_material[item.passwordVariable]) }}'
+    verify: '{{ item.controller.tlsVerify }}'
+    operation: read
+  loop: '{{ bootwright_machine_power_read_request.targets }}'
+  loop_control:
+    label: '{{ item.object }}'
+  register: machine_power_read_redfish_readings
+  failed_when: false
+  no_log: true
+
+- name: Publish the states that were read
+  bootwright.core.machine_power_protocol:
+    phase: group
+    group: read-state
+    status: ok
+  no_log: true
+
+- name: Publish bounded reading evidence
+  bootwright.core.machine_power_protocol:
+    phase: completed
+    outcome: unchanged
+    digest: '{{ bootwright_machine_power_read_digest }}'
+    readings: '{{ machine_power_read_redfish_readings.results }}'
+  no_log: true

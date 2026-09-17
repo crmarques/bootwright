@@ -101,6 +101,7 @@ func operationPlaybook() map[string]string {
 		baremetal.Implementation + "/observe":           "substrate/baremetal_machine_observe.yml",
 		baremetal.Implementation + "/destroy":           "substrate/baremetal_machine_destroy.yml",
 		power.Implementation + "/power":                 "machine/power.yml",
+		power.ReadImplementation + "/read":              "machine/power_read.yml",
 		agentinstall.InstallImplementation + "/apply":   "containercluster/install_apply.yml",
 		agentinstall.InstallImplementation + "/observe": "containercluster/install_observe.yml",
 		agentinstall.InstallImplementation + "/destroy": "containercluster/install_destroy.yml",
