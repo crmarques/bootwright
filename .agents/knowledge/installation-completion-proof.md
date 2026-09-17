@@ -49,6 +49,34 @@ a single-attempt budget. A machine holding the marker that has not answered yet
 validates as **partial**, so the verb converges instead of refusing — sshd
 finishes starting after the identity channel already answers.
 
+## A fourth defect: the poll that never returned early
+
+Every installation took **exactly** the identity budget — `identity_attempts:
+120` x `identity_delay: 30` = 3600s — and then succeeded. One real run measured
+`1h10m7s` for the block: ~10 minutes of installing and a flat hour of polling a
+machine that had answered in the first minute. The assert after the loop passed,
+so the facts were right the whole time.
+
+`identity_until_answered.yml` polled with `include_tasks` + `loop` + `when`:
+
+```yaml
+- ansible.builtin.include_tasks: identity_retry.yml
+  loop: '{{ range(0, ..._identity_attempts | int) | list }}'
+  when: not (..._answered | default(false)) or ..._marker | default('') | length == 0
+```
+
+**A dynamic include expands its loop before the first iteration runs**, so a
+fact one iteration publishes cannot gate the next. The `when` was evaluated
+against the state from before the loop and never changed its mind: every item
+ran, every time. The symptom reads exactly like a hang, which is what made it
+expensive — it was interrupted twice before anyone let it finish.
+
+The wait now belongs to the read task itself (`retries`/`delay`/`until` on the
+marker read in each substrate's `identity_read.yml`), where Ansible's own retry
+loop returns on the first success. The caller owns the budget: it defaults to
+`0`, one attempt, so a pre-boot read and an observation take the answer already
+true, and only `identity_until_answered.yml` passes the full budget.
+
 ## The rules
 
 - A presentation group's description names what the step does while it holds
@@ -57,6 +85,9 @@ finishes starting after the identity channel already answers.
 - An observation that resolves a verb proves what the verb proves. Sharing the
   validator is not enough — the observation has to gather every fact the
   validator reads, or the rule silently passes.
+- A poll belongs in `retries`/`until` on the task that does the reading. A loop
+  around a dynamic include cannot short-circuit, so it silently costs its whole
+  budget on every run and is indistinguishable from a hang.
 - A censored task still owes a reason. The probe keeps `no_log`, because its
   command line names the fleet identity; the refusal beside it names the
   account, the address, the budget and the ssh exit status, none of which is

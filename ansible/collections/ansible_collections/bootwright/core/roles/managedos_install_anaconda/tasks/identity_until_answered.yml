@@ -3,24 +3,26 @@
 # minutes more to complete its power-on self test, so completion is polled
 # rather than waited for once. A machine that has not answered yet is not a
 # machine that answered wrongly: the read itself distinguishes them.
-- name: Read the installation the machine now holds
-  ansible.builtin.include_tasks: identity.yml
-
+#
+# The wait belongs to the read, not to a loop around it. A looped dynamic
+# include expands every item before the first one runs, so a fact one iteration
+# publishes cannot gate the next: such a loop ran its whole budget on every
+# installation and returned only once it was exhausted.
 - name: Wait for the installed machine to answer with its marker
-  ansible.builtin.include_tasks: identity_retry.yml
-  loop: '{{ range(0, managedos_install_anaconda_identity_attempts | int) | list }}'
-  loop_control:
-    label: 'attempt {{ item + 1 }}'
-  when: not (managedos_install_anaconda_answered | default(false))
-        or managedos_install_anaconda_marker | default('') | length == 0
+  ansible.builtin.include_tasks: identity.yml
+  vars:
+    managedos_install_anaconda_identity_retries: '{{ managedos_install_anaconda_identity_attempts | int }}'
 
 - name: Refuse an installation the machine never proved
   ansible.builtin.assert:
     that:
       - managedos_install_anaconda_answered | default(false)
-      - managedos_install_anaconda_marker | default('') | length > 0
+      - managedos_install_anaconda_marker | default('') | string | trim | length > 0
     fail_msg: >-
       the machine never answered with an install marker through its own
-      identity channel, so this installation is unproved
+      identity channel within
+      {{ managedos_install_anaconda_identity_attempts }} attempts over
+      {{ (managedos_install_anaconda_identity_attempts | int)
+         * (managedos_install_anaconda_identity_delay | int) }} seconds, so this
+      installation is unproved
     quiet: true
-  no_log: true

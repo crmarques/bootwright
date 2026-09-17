@@ -40,6 +40,12 @@
       - /usr/bin/cat
       - '{{ substrate_baremetal_machine_identity_marker_path }}'
   register: substrate_baremetal_machine_marker_read
+  retries: '{{ substrate_baremetal_machine_identity_retries | int }}'
+  delay: '{{ substrate_baremetal_machine_identity_delay | int }}'
+  until: ((substrate_baremetal_machine_marker_read.rc | default(1)) == 0
+          and ((substrate_baremetal_machine_marker_read.stdout | default('') | string | trim | length) > 0))
+         or ((substrate_baremetal_machine_marker_read.attempts | default(1) | int)
+             > (substrate_baremetal_machine_identity_retries | int))
   failed_when: false
   changed_when: false
   no_log: true

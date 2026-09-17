@@ -6,3 +6,9 @@
 # names. The proof compares the complete reported inventory against these.
 substrate_baremetal_machine_expected: >-
   {{ bootwright_substrate_physical_request.hardware | map(attribute='macAddress') | list }}
+
+# How long an identity read waits for a machine that has not answered yet.
+# Zero is one attempt: only an installation waiting for a machine it just
+# booted sets a budget.
+substrate_baremetal_machine_identity_retries: 0
+substrate_baremetal_machine_identity_delay: 0

@@ -14,3 +14,9 @@ substrate_libvirt_machine_state: >-
 # frozen size. Their count is what makes an apply changed rather than a replay.
 substrate_libvirt_machine_missing_disks: >-
   {{ substrate_libvirt_machine_before.observation.disks | rejectattr('present') | list }}
+
+# How long an identity read waits for a machine that has not answered yet.
+# Zero is one attempt: only an installation waiting for a machine it just
+# booted sets a budget.
+substrate_libvirt_machine_identity_retries: 0
+substrate_libvirt_machine_identity_delay: 0

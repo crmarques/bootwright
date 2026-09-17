@@ -4,12 +4,24 @@
 #
 # Inputs are passed explicitly by the consuming playbook, never inherited from
 # a shared fact, and the answers are published under this role's own names.
+# The caller owns the budget: a pre-boot read and an observation take the answer
+# that is already true, while an installation waits for one. The wait lives here
+# rather than in a looped include, because a dynamic include expands its loop up
+# front and a fact set by one iteration cannot gate the next, so such a loop
+# always runs every attempt and never returns early.
 - name: Read the install marker through the guest agent
   bootwright.core.guest_agent_read:
     uri: '{{ substrate_libvirt_machine_identity_uri }}'
     domain: '{{ substrate_libvirt_machine_identity_domain }}'
     path: '{{ substrate_libvirt_machine_identity_marker_path }}'
   register: substrate_libvirt_machine_marker_read
+  retries: '{{ substrate_libvirt_machine_identity_retries | int }}'
+  delay: '{{ substrate_libvirt_machine_identity_delay | int }}'
+  until: ((substrate_libvirt_machine_marker_read.answered | default(false))
+          and ((substrate_libvirt_machine_marker_read.content | default('') | string | trim | length) > 0))
+         or ((substrate_libvirt_machine_marker_read.attempts | default(1) | int)
+             > (substrate_libvirt_machine_identity_retries | int))
+  failed_when: false
 
 - name: Read the guest's own host key through the same channel
   bootwright.core.guest_agent_read:
