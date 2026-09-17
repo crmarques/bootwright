@@ -52,6 +52,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			Requires:       requires(requirements[index]),
 			Impacts:        impacts(input.Verb, request),
 			Groups:         groups(input.Verb, request),
+			Exclusive:      request.ExclusiveKeys(),
 			Kind:           Kind,
 			Object:         request.Identity.Object,
 			Implementation: Implementation,

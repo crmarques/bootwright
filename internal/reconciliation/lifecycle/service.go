@@ -17,14 +17,18 @@ type CurrentSelection func(context.Context) (string, error)
 type Executable struct{ Version, Commit string }
 
 type Options struct {
-	Confirmer  Confirmer
-	Presenter  PlanPresenter
-	Progress   ProgressReporter
-	Clock      Clock
-	Entropy    reconciliation.Entropy
-	Selection  CurrentSelection
-	Executable Executable
-	Operations OperationStoreFactory
+	Confirmer Confirmer
+	Presenter PlanPresenter
+	Progress  ProgressReporter
+	Clock     Clock
+	Entropy   reconciliation.Entropy
+	Selection CurrentSelection
+	// Concurrency bounds how many of an operation's blocks run at once. It is
+	// how much this host is asked to do at the same time, never what the plan
+	// permits, so it is not frozen with the plan. Zero takes the default.
+	Concurrency int
+	Executable  Executable
+	Operations  OperationStoreFactory
 }
 
 type Service struct {

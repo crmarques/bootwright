@@ -189,6 +189,46 @@ client prompt rather than answering for it; and proving an installed Machine's
 key reads durable evidence under the context's shared lock, so a session to one
 waits on a running lifecycle mutation exactly as a power operation does (C7).
 
+### Concurrent block execution
+
+**Owner:** State reconciliation, with Managed OS (the first block that names a
+resource it will not share) and CLI. **Delivered on explicit request**, outside
+the milestone sequence, so it adds no exit gate of its own. It delivers the
+execution half of C7, which keeps only the lease-only mutation boundary.
+
+An operation
+[starts every startable block up to a bound](state-reconciliation.md#stages-and-the-pause-boundary)
+instead of one at a time, so the blocks its graph never ordered against each
+other run together: after the controller stage, one Environment's managed
+services and its provider host go out at once, and every Machine and its
+installation follows its own chain. The plan is now frozen
+[wave by wave](state-reconciliation.md#plan-and-execution), so the numbered list
+an operator confirms is the order the work is started in, and a definition may
+name [host resources it will not share](state-reconciliation.md#plan-and-execution),
+which the first installation of a shared package tree uses. Every safety rule
+is unchanged: an unproved effect is still observed before anything else, a
+failed block is still retried alone and once, a failure and a cancellation both
+admit nothing further and wait for what is in flight, and the bound is the
+executable's own rather than anything the plan or desired state names.
+
+Guarded by the `internal/reconciliation/lifecycle` scheduler suite (blocks
+running together within the bound and never past it, a dependent that waits
+while its siblings run, two blocks naming one resource that never overlap, a
+failure that keeps every block in flight and names each failed block in plan
+order, an interrupt that starts nothing more, concurrent observations that
+admit nothing beside them, a retry that runs alone, and a stage boundary that
+still pauses), the `reconciliation` plan suite (wave order, no block before its
+dependency, and frozen exclusive sets through inverse and narrowing), the
+`operationstore` concurrent-record test, the `managedos/installation` shared
+tree cases, and the whole Go suite under the race detector.
+
+Constraints left behind: the operation still holds the exclusive root lock for
+its whole duration, so a concurrent reader waits (C7); the removal's quiescence
+probes still run one block at a time, because they settle as a single check
+row; and the bound is one number for every kind of block, so a host that cannot
+carry several image builds at once is served by narrowing the bound rather than
+by a per-resource limit.
+
 ### Sequential idempotence and the removal gate
 
 **Owner:** State reconciliation, with every lifecycle capability (each defines
@@ -526,7 +566,7 @@ acceptance in `cmd/bootwright/lab_artifacts_example_test.go`.
 Constraints left for later work: content publication into a served root is C20;
 ISO construction is C12; neither may append to a frozen plan. SSH placement has
 no cross-context conflict coordination, so two contexts targeting one SSH host
-remain the operator's responsibility. Bounded parallel execution remains C7.
+remain the operator's responsibility.
 Executed service effects, the service adapter's process and cancellation
 boundary, and SSH placement against a real host are operator-run.
 
@@ -828,7 +868,7 @@ fill its concrete version, journey and evidence gaps when requested.
 | C4 | Add-ons: one built-in package and binding lifecycle. | No exact package/target/release selected; requires a supported cluster. | [Package/driver contract](add-ons.md), compatibility, trust/secrets, readiness, ordering/replay/destroy and acceptance. |
 | C5 | Managed OS: one additional image/profile/entitlement variant. | No concrete consumer; requires M5. | Intent gap, deliberate API revision, renderer/executor parity and qualification. |
 | C6 | UX: one additional view of available evidence or explicit access, or a dashboard/completion extension. | No journey selected; requires the underlying capability. | Complete human/machine journey, diagnostics, safety and end-to-end tests. |
-| C7 | State reconciliation: bounded parallel block execution, and the lease-only mutation boundary it needs. | Sequential execution must be qualified first; requires L4. A lifecycle operation holds the exclusive root lock for its whole duration, so a concurrent read waits; narrowing that to the context lease alone, which would let `status --watch` observe a running operation, belongs here. | Ordering/exclusion, deterministic scheduling, cancellation, persistence, partial-failure and replay tests, plus concurrent-reader evidence for the narrowed lock. |
+| C7 | State reconciliation: the lease-only mutation boundary. | Bounded parallel block execution is **delivered** out of sequence; what remains is the lock it does not need but a reader does. A lifecycle operation holds the exclusive root lock for its whole duration, so a concurrent read waits; narrowing that to the context lease alone, which would let `status --watch` observe a running operation, belongs here. | Concurrent-reader evidence for the narrowed lock, and proof that an operation's own blocks still see one coherent record set. |
 | C8 | Custom automation: one typed, invertible executable playbook journey. **Needs definition.** | Reserved schema cannot prove effects/ownership/non-exfiltration; requires M1e, L2/L4/L5 and a named journey. | Same-change API replacement, immutable source/dependencies, exact targets, bounded secrets, authorization, continuation, failure injection and isolated-runner qualification. |
 | C9 | Bare-metal safety: physical offline disk erase and managed-machine destroy. **Blocked.** | Exact disk identity is unproved during the controller-to-installer interval; needs new safety evidence that closes or explicitly bounds it. M5a narrowed that interval with an in-installer identity check but did not close it, and deliberately kept removal retaining: a physical removal releases its claim and erases nothing. | Separate safety contract, immutable target proof at erase, failure injection and real-hardware qualification. |
 | C10 | Add-ons, Workspace and CLI: custom-catalog acquisition, immutable publication, selection and removal, including the storage location and record format of `add-ons add` registrations and the meaning of the [`add-ons/_store` selection exception](api/environment.md#resource-and-cluster-selection). **Needs definition.** | No source/trust/storage/selection contract; requires M1b and C4. The three `add-ons` commands stay unavailable until promoted. | Closed schemas and formats, fixed bounds, authenticity, atomic/crash-safe storage, deterministic selection, retention through destroy and security/acceptance tests. |

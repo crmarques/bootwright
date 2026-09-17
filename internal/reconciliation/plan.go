@@ -15,6 +15,7 @@ const (
 	MaxGroups       = 32
 	MaxMachines     = 512
 	MaxImpacts      = 64
+	MaxExclusive    = 8
 	MaxRequestBytes = 64 << 10
 	maxDescription  = 200
 	maxIdentifier   = 63
@@ -53,8 +54,13 @@ type BlockDefinition struct {
 	Stage       Stage  `json:"stage"`
 	// Requires resolves into Dependencies before the plan freezes, so a frozen
 	// block carries only the block identities it waits for.
-	Requires       []ObjectRef     `json:"-"`
-	Dependencies   []string        `json:"dependencies"`
+	Requires     []ObjectRef `json:"-"`
+	Dependencies []string    `json:"dependencies"`
+	// Exclusive names host resources this block does not share while it runs.
+	// Two blocks that name one key never run at the same time, even when the
+	// graph would allow it, because the graph orders what one block needs from
+	// another and not what two of them would write to at once.
+	Exclusive      []string        `json:"exclusive,omitempty"`
 	Impacts        []string        `json:"impacts"`
 	Consumes       []string        `json:"consumes"`
 	Groups         []Group         `json:"groups"`
@@ -217,6 +223,11 @@ func resolveRequirements(definitions []BlockDefinition) ([]BlockDefinition, erro
 	return resolved, nil
 }
 
+// order writes the plan wave by wave: every block sits after each block it
+// waits for, and blocks that wait for nothing more than each other's depth sit
+// together in identity order. The result reads as the schedule rather than as
+// one arbitrary sequential walk of the same graph, and the numbered plan an
+// operator confirms is the order the work is actually started in.
 func order(definitions []BlockDefinition) ([]BlockDefinition, error) {
 	known := make(map[string]BlockDefinition, len(definitions))
 	for _, definition := range definitions {
@@ -228,8 +239,31 @@ func order(definitions []BlockDefinition) ([]BlockDefinition, error) {
 		}
 		known[definition.ID] = definition
 	}
-	remaining := make(map[string]int, len(definitions))
-	dependents := make(map[string][]string, len(definitions))
+	wave, err := waves(known)
+	if err != nil {
+		return nil, err
+	}
+	ordered := make([]BlockDefinition, 0, len(definitions))
+	for _, definition := range definitions {
+		ordered = append(ordered, known[definition.ID])
+	}
+	slices.SortFunc(ordered, func(x, y BlockDefinition) int {
+		if depth := wave[x.ID] - wave[y.ID]; depth != 0 {
+			return depth
+		}
+		return strings.Compare(x.ID, y.ID)
+	})
+	return ordered, nil
+}
+
+// waves measures how deep each block sits in the graph: a block that waits for
+// nothing is in the first wave, and every other block is one wave past the
+// deepest block it waits for. A plan whose dependencies cannot all be measured
+// contains a cycle.
+func waves(known map[string]BlockDefinition) (map[string]int, error) {
+	remaining := make(map[string]int, len(known))
+	dependents := make(map[string][]string, len(known))
+	depth := make(map[string]int, len(known))
 	var ready []string
 	for id, definition := range known {
 		for _, dependency := range definition.Dependencies {
@@ -243,26 +277,55 @@ func order(definitions []BlockDefinition) ([]BlockDefinition, error) {
 			ready = append(ready, id)
 		}
 	}
-	slices.Sort(ready)
-	ordered := make([]BlockDefinition, 0, len(definitions))
+	measured := 0
 	for len(ready) != 0 {
 		id := ready[0]
 		ready = ready[1:]
-		ordered = append(ordered, known[id])
-		released := dependents[id]
-		slices.Sort(released)
-		for _, dependent := range released {
+		measured++
+		for _, dependent := range dependents[id] {
+			depth[dependent] = max(depth[dependent], depth[id]+1)
 			remaining[dependent]--
 			if remaining[dependent] == 0 {
 				ready = append(ready, dependent)
 			}
 		}
-		slices.Sort(ready)
 	}
-	if len(ordered) != len(definitions) {
+	if measured != len(known) {
 		return nil, planError("lifecycle plan dependencies form a cycle")
 	}
-	return ordered, nil
+	return depth, nil
+}
+
+// Schedule is what a frozen plan's shape says about running it: the wave each
+// block can start in, how many waves there are, and how many blocks share the
+// widest one. A wave is the earliest round a block can start, never a barrier:
+// a later wave overlaps an earlier one as soon as its own dependencies settle.
+type Schedule struct {
+	Waves  map[string]int
+	Count  int
+	Widest int
+}
+
+// ScheduleOf measures a frozen plan. A plan this executable produced is
+// already ordered by wave, so the answer restates its own shape rather than
+// deriving a different one.
+func ScheduleOf(plan Plan) Schedule {
+	known := make(map[string]BlockDefinition, len(plan.Blocks))
+	for _, block := range plan.Blocks {
+		known[block.ID] = block.BlockDefinition
+	}
+	depth, err := waves(known)
+	if err != nil {
+		return Schedule{Waves: map[string]int{}}
+	}
+	population := map[int]int{}
+	schedule := Schedule{Waves: depth}
+	for _, wave := range depth {
+		population[wave]++
+		schedule.Count = max(schedule.Count, wave+1)
+		schedule.Widest = max(schedule.Widest, population[wave])
+	}
+	return schedule
 }
 
 func validateDefinition(definition BlockDefinition) error {
@@ -283,6 +346,14 @@ func validateDefinition(definition BlockDefinition) error {
 	}
 	if len(definition.Dependencies) > MaxBlocks || len(definition.Impacts) > MaxImpacts || len(definition.Groups) > MaxGroups {
 		return planError("lifecycle block exceeds its collection limits")
+	}
+	if len(definition.Exclusive) > MaxExclusive || !uniqueSorted(definition.Exclusive) {
+		return planError("lifecycle block exclusive resources must be bounded, unique and ordered")
+	}
+	for _, key := range definition.Exclusive {
+		if !safeDescription(key) {
+			return planError("lifecycle block exclusive resources must be safe single-line text")
+		}
 	}
 	if slices.Contains(definition.Dependencies, definition.ID) {
 		return planError("lifecycle block cannot depend on itself")
@@ -389,6 +460,7 @@ func uniqueSorted(values []string) bool {
 func clone(definition BlockDefinition) BlockDefinition {
 	definition.Requires = nil
 	definition.Dependencies = slices.Clone(definition.Dependencies)
+	definition.Exclusive = slices.Clone(definition.Exclusive)
 	definition.Impacts = slices.Clone(definition.Impacts)
 	definition.Consumes = slices.Clone(definition.Consumes)
 	definition.Groups = slices.Clone(definition.Groups)

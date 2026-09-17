@@ -572,34 +572,7 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 	if err != nil {
 		return result, err
 	}
-	boundary := false
-	var cause error
-	for {
-		if err := ctx.Err(); err != nil {
-			break
-		}
-		block, index, ok := candidate(plan, states, decided.selection)
-		if !ok {
-			boundary = pendingRemains(plan, states)
-			break
-		}
-		var outcome reconciliation.BlockState
-		if unproved(states[block.ID]) {
-			// The resolution's durable transition is authoritative even when it
-			// reports a refusal, so the operation state matches what was recorded.
-			outcome, err = s.resolveUnknown(ctx, tx, store, approved, operation, block, material, index+1, len(plan.Blocks))
-			if outcome == "" {
-				outcome = reconciliation.BlockUnknown
-			}
-		} else {
-			outcome, err = s.attempt(ctx, tx, store, approved, operation, block, material, index+1, len(plan.Blocks))
-		}
-		states[block.ID] = outcome
-		if err != nil || outcome != reconciliation.BlockDone {
-			cause = err
-			break
-		}
-	}
+	boundary, cause := s.converge(ctx, tx, store, approved, operation, plan, states, material, decided.selection)
 	final, terminal := s.finish(ctx, tx, store, operation, plan, states, boundary, result)
 	return final, withCause(cause, terminal)
 }
@@ -695,33 +668,6 @@ func withCause(cause, terminal error) error {
 // reported unknown, and one whose executor died before it reported anything.
 func unproved(state reconciliation.BlockState) bool {
 	return state == reconciliation.BlockUnknown || state == reconciliation.BlockRunning
-}
-
-// candidate selects the one block this invocation may work on next. An
-// unproved effect is resolved before anything else, a failed block is the only
-// retry and halts progress until it succeeds, and otherwise the first startable
-// pending block in frozen order runs.
-func candidate(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.StageSelection) (reconciliation.Block, int, bool) {
-	for index, block := range plan.Blocks {
-		if unproved(states[block.ID]) {
-			return block, index, true
-		}
-	}
-	for index, block := range plan.Blocks {
-		if states[block.ID] == reconciliation.BlockFailed {
-			return block, index, true
-		}
-	}
-	startable := reconciliation.Startable(plan, states, selection)
-	if len(startable) == 0 {
-		return reconciliation.Block{}, 0, false
-	}
-	for index, block := range plan.Blocks {
-		if block.ID == startable[0].ID {
-			return block, index, true
-		}
-	}
-	return reconciliation.Block{}, 0, false
 }
 
 func pendingRemains(plan reconciliation.Plan, states map[string]reconciliation.BlockState) bool {

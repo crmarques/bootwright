@@ -237,9 +237,26 @@ pending registry before its first platform side effect. Lifecycle commands
 remain unavailable until that secret-continuity boundary exists.
 
 A plan is a dependency DAG of stable blocks. Each block has an ID, description,
-stage, dependencies, impacts, and execution kind. Operations are `running`,
-`paused`, `failed`, `unknown`, or `done`; blocks are `pending`, `running`,
-`failed`, `unknown`, or `done`.
+stage, dependencies, the host resources it will not share, impacts, and
+execution kind. Operations are `running`, `paused`, `failed`, `unknown`, or
+`done`; blocks are `pending`, `running`, `failed`, `unknown`, or `done`.
+
+A plan is written wave by wave. A block's *wave* is one past the deepest block
+it waits for, and a block that waits for nothing is in the first wave. Blocks
+are frozen in wave order and, within one wave, in identity order, so the
+numbered plan an operator confirms is the order the work is started in rather
+than one arbitrary sequential walk of the same graph. A wave is never a
+barrier: a block starts as soon as its own dependencies are done, so a later
+wave overlaps an earlier one. Equal definitions in any input order still
+produce an identical plan and an identical digest.
+
+A definition may name host resources its block *will not share* while it runs.
+Two blocks that name one resource never run at the same time, however
+independent the graph says they are, because the graph orders what one block
+needs from another and not what two of them would write to at once. The set is
+bounded, unique, ordered and frozen with the plan, and a removal keeps exactly
+the set its apply froze, because what must not run together to create
+something is what must not run together to remove it.
 
 A block's description and impacts state what the planned verb does, never what
 the opposite verb would do. A destroy block describes the removal it performs
@@ -304,20 +321,31 @@ its own transaction has to take over. No other block receives them.
 A stage selection is the set of stages an invocation may start; an omitted
 selection admits every stage. A block is *ready* when it is `pending` and every
 dependency is `done`, and *startable* when it is ready and its stage is
-selected. Execution runs startable blocks in frozen plan order, re-evaluating
-after each one.
+selected. Execution starts every startable block, in frozen plan order, up to a
+bound, and re-evaluates as each one settles. A block is admitted only while no
+block already running holds a resource it will not share.
+
+The bound is how much one host is asked to do at the same time, not what the
+plan permits, so it belongs to the executable and is never frozen with the
+plan, never named by desired state, and never a public flag: what may run
+together is the graph's answer and does not change between invocations. A
+continuation of an operation frozen by another build therefore runs under this
+build's bound, which changes no effect, no order and no evidence.
 
 An operation is `paused` when execution stops because no block is startable,
-no block is failed or unknown, and pending blocks remain. A pause is a
+nothing is still running, no block is failed or unknown, and pending blocks
+remain. A pause is a
 successful, resumable stop, not an interruption: it needs no recovery, it
 allocates no new identity, and the next `apply` continues the same operation
 under whatever selection it is given. Cancellation is never a pause.
 
 Selection never weakens a safety rule. An unproved effect is resolved before
 anything else whatever stages are selected, because resolution is a read-only
-observation. A failed block remains the only retry candidate and halts
-progress; when its stage is not selected the operation refuses `lifecycle.stage`
-before any effect. A selection that admits no startable block also refuses
+observation; several unproved effects may be observed together, and nothing
+starts, retries or is removed beside them. A failed block remains the only
+retry candidate and runs alone, because what follows it depends on it
+succeeding; when its stage is not selected the operation refuses
+`lifecycle.stage` before any effect. A selection that admits no startable block also refuses
 `lifecycle.stage` before registration, naming a stage that would unblock work.
 Objects whose kind no capability in the executable can realize refuse before
 registration regardless of the selection, because a frozen plan requires a
@@ -444,11 +472,20 @@ treated as operation evidence, or used to weaken the resolution rules above.
 
 ### Continuation and removal
 
-Continuation skips done blocks and may retry only the first failed block under
-its frozen capability contract. Execution starts sequentially; concurrency
-requires its own contract and proof. Go owns ordering and lifecycle state and
+Continuation skips done blocks and retries a failed block under its frozen
+capability contract, one block at a time and once per invocation: an invocation
+never retries a block it failed itself, because the condition that failed it
+has not been shown to have changed. Go owns ordering and lifecycle state and
 invokes capability ports under the
 [Go/Ansible boundary](architecture.md#go-and-ansible-responsibility-boundary).
+
+A failure admits no further work, and the blocks already running are waited
+for rather than abandoned: each records the outcome it proved, and stopping one
+mid-effect would turn a provable outcome into an unproved one. The result names
+every block that did not complete, in frozen plan order, because blocks run
+together and which of them failed first is a race rather than a fact about the
+environment. Cancellation is the same: it admits nothing further and waits for
+what is in flight, and it is never a pause.
 
 Destroy is planned from the plan its apply froze, not from desired state and
 not from what current code would derive from it. Every block a removal carries

@@ -184,6 +184,35 @@ func TestTwoInstallationsShareOneMediaClaim(t *testing.T) {
 	if claims != 1 {
 		t.Fatalf("two installations produced %d media claims", claims)
 	}
+	// The package tree is published per install profile, so both installations
+	// publish the same one. Each names it as a resource it will not share, so
+	// the two never extract and rename over that path at the same time.
+	for _, definition := range plan.Definitions {
+		if len(definition.Exclusive) != 1 || !strings.HasPrefix(definition.Exclusive[0], "path:") {
+			t.Fatalf("%s exclusive = %v", definition.ID, definition.Exclusive)
+		}
+	}
+	if plan.Definitions[0].Exclusive[0] != plan.Definitions[1].Exclusive[0] {
+		t.Fatalf("two installations of one profile named different trees: %v and %v",
+			plan.Definitions[0].Exclusive, plan.Definitions[1].Exclusive)
+	}
+}
+
+// An installation that publishes no package tree shares nothing, so it never
+// waits for another Machine's installation.
+func TestAnInstallationWithoutATreeNamesNoExclusiveResource(t *testing.T) {
+	plan, err := New(nil).Plan(context.Background(), planInput(reconciliation.Apply))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := DecodeRequest(plan.Definitions[0].Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Tree = nil
+	if keys := request.ExclusiveKeys(); keys != nil {
+		t.Fatalf("exclusive = %v", keys)
+	}
 }
 
 // Only the public half of the fleet key ever leaves the binding, and it reaches

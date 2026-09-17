@@ -291,6 +291,10 @@ type testCapability struct {
 	applies      []string
 	destroys     []string
 	observes     []string
+	// calls is every attempt and observation in the order the engine made
+	// them, so a test can prove what ran before what without reading two
+	// lists that each know only their own half.
+	calls        []string
 	outcomes     []Result
 	observations []Observation
 	planErr      error
@@ -305,6 +309,15 @@ type testCapability struct {
 	removals     []string
 	removalErr   error
 	consumes     map[string][]string
+	// hold runs at the start of an attempt and released at its end, so a test
+	// can keep blocks in flight and observe exactly which of them overlap.
+	hold     func(string)
+	released func(string)
+	// outcomeFor and errorFor answer per block. Blocks running together finish
+	// in no fixed order, so a queue of scripted outcomes would be handed out by
+	// a race rather than by the test.
+	outcomeFor map[string]Result
+	errorFor   map[string]error
 }
 
 // record appends what one call saw under the fixture's own lock, so blocks
@@ -374,9 +387,23 @@ func (c *testCapability) next(outcomes *[]Result) Result {
 func (c *testCapability) Apply(ctx context.Context, execution Execution) (Result, error) {
 	c.mutex.Lock()
 	c.applies = append(c.applies, execution.Block.ID)
+	c.calls = append(c.calls, "apply:"+execution.Block.ID)
 	c.material = append(c.material, execution.Material)
 	c.executions = append(c.executions, execution)
+	hold, released, scripted, failure := c.hold, c.released, c.outcomeFor[execution.Block.ID], c.errorFor[execution.Block.ID]
 	c.mutex.Unlock()
+	if hold != nil {
+		hold(execution.Block.ID)
+	}
+	if released != nil {
+		defer released(execution.Block.ID)
+	}
+	if scripted.Outcome != "" || failure != nil {
+		if failure != nil {
+			return Result{Outcome: reconciliation.OutcomeFailed}, failure
+		}
+		return scripted, nil
+	}
 	if execution.Progress != nil {
 		execution.Progress(ctx, "pull-image", "running")
 		execution.Progress(ctx, "pull-image", "ok")
@@ -404,6 +431,7 @@ func (c *testCapability) Destroy(_ context.Context, execution Execution) (Result
 
 func (c *testCapability) Observe(_ context.Context, execution Execution) (Observation, error) {
 	c.record(&c.observes, execution.Block.ID)
+	c.record(&c.calls, "observe:"+execution.Block.ID)
 	c.recordExecution(execution)
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -500,11 +528,25 @@ type testAutomation struct{ digest string }
 
 func (a testAutomation) CatalogDigest() string { return a.digest }
 
-type testGuard struct{ calls int }
+// testGuard stands in for the private execution boundary. Blocks running at
+// the same time each enter it, exactly as they do the real one, so what it
+// counts is guarded.
+type testGuard struct {
+	mutex sync.Mutex
+	calls int
+}
 
 func (g *testGuard) WithPython(ctx context.Context, area prerequisites.BundleArea, _ prerequisites.ExecutionRequirement, use func(prerequisites.PythonLaunch, func() error) error) error {
+	g.mutex.Lock()
 	g.calls++
+	g.mutex.Unlock()
 	return use(prerequisites.PythonLaunch{Loader: "/loader"}, func() error { return nil })
+}
+
+func (g *testGuard) entered() int {
+	g.mutex.Lock()
+	defer g.mutex.Unlock()
+	return g.calls
 }
 
 type testBundle struct{}
@@ -643,9 +685,13 @@ func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinitio
 				h.entropy[0]++
 				return len(buffer), nil
 			},
-			Selection:  func(context.Context) (string, error) { return testContextName, nil },
-			Executable: Executable{Version: "devel", Commit: "abcdef1"},
-			Operations: func(area operationstore.Area) OperationStore { return operationstore.New(area, clock.Now) },
+			// One block at a time, so a journey asserting an exact order reads
+			// one schedule rather than a race. The scheduler's own suite raises
+			// the bound and asserts what running blocks together proves.
+			Concurrency: 1,
+			Selection:   func(context.Context) (string, error) { return testContextName, nil },
+			Executable:  Executable{Version: "devel", Commit: "abcdef1"},
+			Operations:  func(area operationstore.Area) OperationStore { return operationstore.New(area, clock.Now) },
 		})
 	return h
 }

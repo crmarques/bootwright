@@ -230,3 +230,115 @@ func TestPlanValuesAreCopiedAtTheBoundary(t *testing.T) {
 		t.Fatal("Block returns an alias of the frozen plan")
 	}
 }
+
+// The plan is written wave by wave, so the numbered list an operator confirms
+// is the order the work is started in. A block that waits for nothing sits
+// with every other block that waits for nothing, however deep its own
+// dependents go, and one arbitrary sequential walk of the graph no longer
+// decides where it is printed.
+func TestPlanOrderGroupsBlocksByTheWaveTheyCanStartIn(t *testing.T) {
+	plan, err := NewPlan(Apply, []BlockDefinition{
+		definition("alpha"),
+		definition("bravo", "alpha"),
+		definition("zulu"),
+		definition("charlie", "bravo"),
+		definition("yankee", "zulu"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, block := range plan.Blocks {
+		got = append(got, block.ID)
+	}
+	want := []string{"alpha", "zulu", "bravo", "yankee", "charlie"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("plan order = %v, want %v", got, want)
+	}
+	schedule := ScheduleOf(plan)
+	if schedule.Count != 3 || schedule.Widest != 2 {
+		t.Fatalf("schedule = %d waves, widest %d", schedule.Count, schedule.Widest)
+	}
+	if schedule.Waves["alpha"] != 0 || schedule.Waves["bravo"] != 1 || schedule.Waves["charlie"] != 2 {
+		t.Fatalf("waves = %v", schedule.Waves)
+	}
+	// A block sits one wave past the deepest block it waits for, never past
+	// the first, so a long chain never overlaps what follows it.
+	deep, err := NewPlan(Apply, []BlockDefinition{
+		definition("alpha"),
+		definition("bravo", "alpha"),
+		definition("charlie", "alpha", "bravo"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wave := ScheduleOf(deep).Waves["charlie"]; wave != 2 {
+		t.Fatalf("deepest dependency wave = %d, want 2", wave)
+	}
+}
+
+// Every block sits after each block it waits for, whatever else the order
+// groups together, because the order is what continuation and removal replay.
+func TestPlanOrderNeverPrecedesADependency(t *testing.T) {
+	plan, err := NewPlan(Apply, []BlockDefinition{
+		definition("alpha"), definition("bravo", "alpha"), definition("charlie", "bravo"),
+		definition("delta"), definition("echo", "delta", "charlie"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]int{}
+	for index, block := range plan.Blocks {
+		for _, dependency := range block.Dependencies {
+			position, ordered := seen[dependency]
+			if !ordered || position >= index {
+				t.Fatalf("%s precedes its dependency %s", block.ID, dependency)
+			}
+		}
+		seen[block.ID] = index
+	}
+}
+
+// A block may name host resources it does not share while it runs. The plan
+// freezes them with everything else it froze, so what a removal must not run
+// beside is the same set its apply declared.
+func TestExclusiveResourcesAreFrozenAndBounded(t *testing.T) {
+	block := definition("alpha")
+	block.Exclusive = []string{"path:/srv/tree"}
+	plan, err := NewPlan(Apply, []BlockDefinition{block, definition("bravo")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(plan.Blocks[0].Exclusive, []string{"path:/srv/tree"}) {
+		t.Fatalf("exclusive = %v", plan.Blocks[0].Exclusive)
+	}
+	inverse, err := plan.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, removed := range inverse.Blocks {
+		if removed.ID != "alpha" {
+			continue
+		}
+		if !slices.Equal(removed.Exclusive, []string{"path:/srv/tree"}) {
+			t.Fatalf("a removal dropped what its apply would not share: %v", removed.Exclusive)
+		}
+	}
+	unordered := definition("charlie")
+	unordered.Exclusive = []string{"path:/srv/b", "path:/srv/a"}
+	if _, err := NewPlan(Apply, []BlockDefinition{unordered}); err == nil {
+		t.Fatal("an unordered exclusive set was frozen")
+	}
+	repeated := definition("delta")
+	repeated.Exclusive = []string{"path:/srv/a", "path:/srv/a"}
+	if _, err := NewPlan(Apply, []BlockDefinition{repeated}); err == nil {
+		t.Fatal("a repeated exclusive resource was frozen")
+	}
+	oversized := definition("echo")
+	for index := range MaxExclusive + 1 {
+		oversized.Exclusive = append(oversized.Exclusive, "path:/srv/"+string(rune('a'+index)))
+	}
+	if _, err := NewPlan(Apply, []BlockDefinition{oversized}); err == nil {
+		t.Fatal("an unbounded exclusive set was frozen")
+	}
+}
