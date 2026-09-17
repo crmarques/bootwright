@@ -20,7 +20,12 @@ const (
 	Kind           = string(api.Environment)
 	Implementation = "controller-prerequisites"
 	BlockID        = "controller-prerequisites"
-	Version        = "controller-clients-v1"
+	Version        = "controller-clients-v2"
+	// PriorVersion is the version this stage reads but no longer writes, so a
+	// context whose controller stage ran under it is removable by this build.
+	// It named the libvirt client alone, before the hypervisor closure and the
+	// installer-media tooling joined the requirements it selects.
+	PriorVersion = "controller-clients-v1"
 )
 
 // ToolRequest is one declared client requirement, frozen in the plan before
@@ -38,12 +43,39 @@ type ToolRequest struct {
 // Exact releases are not frozen here, because a version intent of latest is
 // resolved by the attempt that installs it and retained from then on.
 type Request struct {
+	Egress prerequisites.SetupEgress `json:"egress"`
+	// Hypervisor and InstallerMedia are the closures this Machine's own role in
+	// the graph selects: the runtime a libvirt provider hosted here needs, and
+	// the tooling an Anaconda installation published here builds with.
+	Hypervisor     bool          `json:"hypervisor"`
+	InstallerMedia bool          `json:"installerMedia"`
+	Libvirt        string        `json:"libvirt"`
+	LibvirtClient  bool          `json:"libvirtClient"`
+	Machine        string        `json:"machine"`
+	Tools          []ToolRequest `json:"tools"`
+	Version        string        `json:"version"`
+}
+
+// requestV1 is the controller stage request as controller-clients-v1 froze it,
+// before this Machine's own hypervisor and installer-media closures joined it.
+// Its field order is the order that version encoded.
+type requestV1 struct {
 	Egress        prerequisites.SetupEgress `json:"egress"`
 	Libvirt       string                    `json:"libvirt"`
 	LibvirtClient bool                      `json:"libvirtClient"`
 	Machine       string                    `json:"machine"`
 	Tools         []ToolRequest             `json:"tools"`
 	Version       string                    `json:"version"`
+}
+
+// upgrade reads the prior shape as this one. Neither closure existed when it
+// was frozen, so neither was installed, and a removal that retains every client
+// takes back nothing either way.
+func (r requestV1) upgrade() Request {
+	return Request{
+		Egress: r.Egress, Libvirt: r.Libvirt, LibvirtClient: r.LibvirtClient,
+		Machine: r.Machine, Tools: r.Tools, Version: Version,
+	}
 }
 
 func NewRequest(selection controller.Selection, requests []controller.ToolRequest) Request {
@@ -53,19 +85,31 @@ func NewRequest(selection controller.Selection, requests []controller.ToolReques
 		bypass = []string{}
 	}
 	request := Request{
-		Egress:        prerequisites.SetupEgress{HTTPProxy: route.HTTPProxy(), HTTPSProxy: route.HTTPSProxy(), NoProxy: bypass},
-		LibvirtClient: selection.LibvirtClient(),
-		Machine:       selection.MachineName(),
-		Tools:         []ToolRequest{},
-		Version:       Version,
+		Egress:         prerequisites.SetupEgress{HTTPProxy: route.HTTPProxy(), HTTPSProxy: route.HTTPSProxy(), NoProxy: bypass},
+		Hypervisor:     selection.Hypervisor(),
+		InstallerMedia: selection.InstallerMedia(),
+		LibvirtClient:  selection.LibvirtClient(),
+		Machine:        selection.MachineName(),
+		Tools:          []ToolRequest{},
+		Version:        Version,
 	}
-	if request.LibvirtClient {
+	// The client and the hypervisor share one libvirt intent, so either
+	// selecting it freezes the same release for both.
+	if request.LibvirtClient || request.Hypervisor {
 		request.Libvirt = selection.Versions().Libvirt
 	}
 	for _, tool := range requests {
 		request.Tools = append(request.Tools, ToolRequest{Compatibility: tool.Compatibility, Kind: tool.Kind, Mirror: tool.Mirror, Version: tool.Version})
 	}
 	return request
+}
+
+// installsNative reports whether this request selects any native closure. Every
+// gate reads it rather than the client alone, so a context that selects only a
+// hypervisor or the installer-media tooling is resolved, installed and proved
+// exactly as one that selects a client.
+func (r Request) installsNative() bool {
+	return r.LibvirtClient || r.Hypervisor || r.InstallerMedia
 }
 
 // ToolRequests restores the catalog's own request shape from the frozen block.
@@ -107,7 +151,28 @@ func (r Request) Canonical() ([]byte, error) {
 	return data, nil
 }
 
+// DecodeRequest reads the version this build writes and the one before it, so a
+// context whose controller stage ran under the older shape is removable here.
 func DecodeRequest(data []byte) (Request, error) {
+	var declared struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(data, &declared); err != nil || declared.Version == "" {
+		return Request{}, refuse("lifecycle.state", "the frozen controller prerequisites request declares no version", "")
+	}
+	if declared.Version == PriorVersion {
+		var prior requestV1
+		decoder := json.NewDecoder(bytes.NewReader(data))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&prior); err != nil || decoder.More() {
+			return Request{}, refuse("lifecycle.state", "the frozen controller prerequisites request is malformed", "")
+		}
+		reencoded, err := json.Marshal(prior)
+		if err != nil || !bytes.Equal(reencoded, data) {
+			return Request{}, refuse("lifecycle.state", "the frozen controller prerequisites request is not canonical", "")
+		}
+		return prior.upgrade(), nil
+	}
 	var request Request
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
@@ -115,7 +180,9 @@ func DecodeRequest(data []byte) (Request, error) {
 		return Request{}, refuse("lifecycle.state", "the frozen controller prerequisites request is malformed", "")
 	}
 	if request.Version != Version {
-		return Request{}, refuse("lifecycle.state", "the frozen controller prerequisites request has an unsupported version", "install the executable that registered this operation")
+		return Request{}, refuse("lifecycle.state",
+			"the frozen controller prerequisites request has an unsupported version: "+declared.Version,
+			"install the executable that registered this operation")
 	}
 	canonical, err := request.Canonical()
 	if err != nil {

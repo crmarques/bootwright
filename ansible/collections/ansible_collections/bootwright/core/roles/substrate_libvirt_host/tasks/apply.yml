@@ -41,6 +41,18 @@
     - not substrate_libvirt_host_before.observation.hypervisor
   changed_when: not substrate_libvirt_host_before.observation.hypervisor
 
+# On the controller the closure is a context prerequisite the controller stage
+# installs, so this block proves it and installs nothing. Failing here names the
+# command that supplies it rather than letting the daemon fail obscurely.
+- name: Prove the hypervisor closure a controller-hosted provider was given
+  ansible.builtin.fail:
+    msg: >-
+      the hypervisor closure is not installed on this controller; run
+      bootwright apply --stage controller before realizing this provider host
+  when:
+    - not bootwright_substrate_host_request.provisioned
+    - not substrate_libvirt_host_before.observation.hypervisor
+
 - name: Enable and start each libvirt driver daemon this provider depends on
   ansible.builtin.command:
     argv:

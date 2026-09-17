@@ -46,7 +46,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	if err != nil {
 		return empty, err
 	}
-	if len(requests) == 0 && !selection.LibvirtClient() {
+	if len(requests) == 0 && !selection.LibvirtClient() && !selection.Hypervisor() && !selection.InstallerMedia() {
 		return empty, nil
 	}
 	if selection.MachineName() != input.Controller {
@@ -94,6 +94,12 @@ func impacts(verb reconciliation.Verb, request Request) []string {
 	if request.LibvirtClient {
 		impacts = append(impacts, "install-native-client libvirt "+request.Libvirt)
 	}
+	if request.Hypervisor {
+		impacts = append(impacts, "install-native-closure hypervisor "+request.Libvirt)
+	}
+	if request.InstallerMedia {
+		impacts = append(impacts, "install-native-closure installer-media latest")
+	}
 	slices.Sort(impacts)
 	return slices.Compact(impacts)
 }
@@ -112,6 +118,21 @@ func groups(verb reconciliation.Verb, machine string) []reconciliation.Group {
 		out = append(out, reconciliation.Group{ID: step[0], Description: step[1], Machines: []string{machine}})
 	}
 	return out
+}
+
+// Removal reads a frozen controller-stage block as its own removal. The clients
+// it installed are shared host state a context never uninstalls, so removing it
+// takes back nothing and consumes nothing.
+func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
+	request, err := DecodeRequest(block.Request)
+	if err != nil {
+		return lifecycle.Removal{}, err
+	}
+	return lifecycle.Removal{
+		Description: description(reconciliation.Destroy, block.Object, request.Machine),
+		Impacts:     impacts(reconciliation.Destroy, request),
+		Groups:      groups(reconciliation.Destroy, request.Machine),
+	}, nil
 }
 
 // Destroy removes nothing. Clients are shared host dependencies that outlive
@@ -158,7 +179,7 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 	if err != nil {
 		return unknown, err
 	}
-	present := complete && (!request.LibvirtClient || installed)
+	present := complete && (!request.installsNative() || installed)
 	if present {
 		if present, err = c.published(ctx, execution, tools); err != nil {
 			return unknown, err
@@ -177,21 +198,6 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 // Apply installs exactly what is missing. A host that already carries the
 // selected closure is proved from retained identities alone, so a repeated
 // apply contacts no publisher and reads no repository metadata.
-// Removal reads a frozen controller-stage block as its own removal. The clients
-// it installed are shared host state a context never uninstalls, so removing it
-// takes back nothing and consumes nothing.
-func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
-	request, err := DecodeRequest(block.Request)
-	if err != nil {
-		return lifecycle.Removal{}, err
-	}
-	return lifecycle.Removal{
-		Description: description(reconciliation.Destroy, block.Object, request.Machine),
-		Impacts:     impacts(reconciliation.Destroy, request),
-		Groups:      groups(reconciliation.Destroy, request.Machine),
-	}, nil
-}
-
 func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
 	failed := lifecycle.Result{Outcome: reconciliation.OutcomeFailed}
 	if err := ctx.Err(); err != nil {
@@ -221,7 +227,7 @@ func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (l
 	if err != nil {
 		return failed, err
 	}
-	if complete && (!request.LibvirtClient || installed) {
+	if complete && (!request.installsNative() || installed) {
 		present, err := c.published(ctx, execution, tools)
 		if err != nil {
 			return failed, err
@@ -239,7 +245,7 @@ func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (l
 	// solved from, so a missing root is solved again rather than replayed, and
 	// roots already installed need no transaction at all.
 	var transaction *prerequisites.Definition
-	if request.LibvirtClient && !installed {
+	if request.installsNative() && !installed {
 		value, err := c.resolveNative(ctx, setup, request)
 		if err != nil {
 			return failed, err
@@ -308,7 +314,7 @@ func (c Capability) publish(ctx context.Context, execution lifecycle.Execution, 
 	if err != nil {
 		return unknown, err
 	}
-	if request.LibvirtClient && !installed {
+	if request.installsNative() && !installed {
 		return unknown, refuse("controller.unknown", "the selected native clients are not installed after their transaction", "repeat the operation to resolve it from live evidence")
 	}
 	if !present {
@@ -381,7 +387,10 @@ func (c Capability) published(ctx context.Context, execution lifecycle.Execution
 // current inventory. A frozen transaction binds the exact before-inventory it
 // was solved from, so it is solved again whenever a root is missing.
 func (c Capability) resolveNative(ctx context.Context, setup prerequisites.Definition, request Request) (prerequisites.Definition, error) {
-	requirements := prerequisites.NativeRequirements{ContainerRuntime: true, LibvirtClient: true}
+	requirements := prerequisites.NativeRequirements{
+		ContainerRuntime: true, LibvirtClient: true,
+		Hypervisor: request.Hypervisor, InstallerMedia: request.InstallerMedia,
+	}
 	plan, err := c.native.Resolve(ctx, setup.Platform, requirements, request.Versions(), request.Egress)
 	if err != nil {
 		return prerequisites.Definition{}, err
@@ -392,13 +401,14 @@ func (c Capability) resolveNative(ctx context.Context, setup prerequisites.Defin
 // retainedNative recovers a native client resolution this host already froze.
 // Without one nothing installed those roots, so their absence is definite.
 func retainedNative(execution lifecycle.Execution, platform prerequisites.Platform, request Request) *prerequisites.Definition {
-	if !request.LibvirtClient {
+	if !request.installsNative() {
 		return nil
 	}
 	retained := execution.Setup.State.RetainedDefinitions
 	for index := len(retained) - 1; index >= 0; index-- {
 		value := retained[index]
-		if value.Native == nil || !value.NativeRequirements.LibvirtClient || value.Platform != platform {
+		if value.Native == nil || !value.NativeRequirements.LibvirtClient || value.Platform != platform ||
+			value.NativeRequirements.Hypervisor != request.Hypervisor || value.NativeRequirements.InstallerMedia != request.InstallerMedia {
 			continue
 		}
 		if value.Versions.Libvirt != request.Versions().Libvirt {

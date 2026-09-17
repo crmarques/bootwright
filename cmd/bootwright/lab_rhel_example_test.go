@@ -126,10 +126,16 @@ func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.
 	state, _ := compileAcceptance(t, sources)
 	effective := state.Effective()
 	// The provider host is the controller, so the libvirt client the substrate
-	// needs is selected by this graph rather than by the baseline setup.
+	// needs is selected by this graph rather than by the baseline setup. This
+	// controller also runs the provider's guests and publishes the installer
+	// image, so the hypervisor closure and the image-building tooling are its
+	// prerequisites too, and neither role installs them itself.
 	selection, err := controller.Select(effective)
 	if err != nil || selection.MachineName() != "controller" || !selection.ContainerRuntime() || !selection.LibvirtClient() || !selection.Route().Direct() {
 		t.Fatalf("controller selection: %#v err=%v", selection, err)
+	}
+	if !selection.Hypervisor() || !selection.InstallerMedia() {
+		t.Fatalf("the controller stage did not select what this controller runs: %#v", selection)
 	}
 	tools, err := controller.SelectTools(effective)
 	if err != nil || len(tools) != 0 {

@@ -17,6 +17,21 @@ func nativePlanFailure() error {
 	return errors.New("native dependency plan is invalid or inconsistent")
 }
 
+// nativeRootNames are the exact packages each requirement installs as roots.
+// It is the Go half of the solver's own table: a plan naming any other package
+// as a root, or missing one of these, is refused before a transaction exists.
+var nativeRootNames = map[string][]string{
+	"podman":          {"podman"},
+	"openssh":         {"openssh-clients"},
+	"nmstate":         {"nmstate"},
+	"libvirt":         {"libvirt-client"},
+	"installer-media": {"lorax", "xorriso"},
+	"hypervisor": {
+		"libvirt-daemon", "libvirt-daemon-driver-network", "libvirt-daemon-driver-qemu",
+		"libvirt-daemon-driver-storage-core", "qemu-img", "qemu-kvm", "swtpm", "swtpm-tools",
+	},
+}
+
 // CanonicalNativePlan copies, orders, validates and hashes a resolved manifest.
 func CanonicalNativePlan(value NativeResolvedPlan) (NativeResolvedPlan, error) {
 	data, err := json.Marshal(value)
@@ -25,7 +40,14 @@ func CanonicalNativePlan(value NativeResolvedPlan) (NativeResolvedPlan, error) {
 		return NativeResolvedPlan{}, nativePlanFailure()
 	}
 	value = copied
-	slices.SortFunc(value.Roots, func(a, b NativeRoot) int { return strings.Compare(a.Key, b.Key) })
+	// A requirement may name several roots, so the order within one key is part
+	// of the canonical form rather than left to the solver.
+	slices.SortFunc(value.Roots, func(a, b NativeRoot) int {
+		if ordered := strings.Compare(a.Key, b.Key); ordered != 0 {
+			return ordered
+		}
+		return strings.Compare(a.Package.Name, b.Package.Name)
+	})
 	slices.SortFunc(value.Repositories, func(a, b NativeRepository) int { return strings.Compare(a.ID, b.ID) })
 	slices.SortFunc(value.Packages, func(a, b NativePackage) int { return strings.Compare(a.Source.ID, b.Source.ID) })
 	slices.SortFunc(value.Actions, func(a, b NativeAction) int { return strings.Compare(a.SourceID, b.SourceID) })
@@ -79,7 +101,7 @@ func nativeDigest(value any, omitDigest bool) (string, error) {
 }
 
 func validateNativeShape(value NativeResolvedPlan) error {
-	if value.Format != "bootwright.native-plan-v1" || value.Platform.Architecture != "amd64" || value.Platform.OS != "fedora" && value.Platform.OS != "rhel" || !nativeText(value.Platform.Release, 32) || value.Solver != "dnf4" && value.Solver != "dnf5" || !nativeText(value.SolverVersion, 128) || !nativeSHA(value.BeforeSHA256) || !nativeSHA(value.AfterSHA256) || value.Roots == nil || value.Repositories == nil || value.Packages == nil || value.Actions == nil || len(value.Roots) > 4 || len(value.Repositories) > 8 || len(value.Packages) > 512 || len(value.Actions) > 512 {
+	if value.Format != "bootwright.native-plan-v1" || value.Platform.Architecture != "amd64" || value.Platform.OS != "fedora" && value.Platform.OS != "rhel" || !nativeText(value.Platform.Release, 32) || value.Solver != "dnf4" && value.Solver != "dnf5" || !nativeText(value.SolverVersion, 128) || !nativeSHA(value.BeforeSHA256) || !nativeSHA(value.AfterSHA256) || value.Roots == nil || value.Repositories == nil || value.Packages == nil || value.Actions == nil || len(value.Roots) > 16 || len(value.Repositories) > 8 || len(value.Packages) > 512 || len(value.Actions) > 512 {
 		return nativePlanFailure()
 	}
 	if value.Platform.OS == "fedora" && value.Solver != "dnf5" || value.Platform.OS == "rhel" && value.Solver != "dnf4" {
@@ -90,7 +112,7 @@ func validateNativeShape(value NativeResolvedPlan) error {
 			return nativePlanFailure()
 		}
 	}
-	for _, version := range []string{value.Requests.Podman, value.Requests.OpenSSH, value.Requests.NMState, value.Requests.Libvirt} {
+	for _, version := range []string{value.Requests.Podman, value.Requests.OpenSSH, value.Requests.NMState, value.Requests.Libvirt, value.Requests.InstallerMedia} {
 		if !api.ValidLexical("package-version", version) {
 			return nativePlanFailure()
 		}
@@ -102,10 +124,23 @@ func validateNativeShape(value NativeResolvedPlan) error {
 	if value.Requirements.LibvirtClient {
 		requests["libvirt"] = value.Requests.Libvirt
 	}
-	if len(value.Roots) != len(requests) {
+	// The hypervisor runs the release its client speaks, so it shares that
+	// intent rather than carrying one that could drift from it.
+	if value.Requirements.Hypervisor {
+		requests["hypervisor"] = value.Requests.Libvirt
+	}
+	if value.Requirements.InstallerMedia {
+		requests["installer-media"] = value.Requests.InstallerMedia
+	}
+	// A requirement may install more than one root package, so the plan is
+	// proved against exactly the packages its selected requirements name.
+	expected := 0
+	for key := range requests {
+		expected += len(nativeRootNames[key])
+	}
+	if len(value.Roots) != expected {
 		return nativePlanFailure()
 	}
-	names := map[string]string{"podman": "podman", "openssh": "openssh-clients", "nmstate": "nmstate", "libvirt": "libvirt-client"}
 	repositories := map[string]bool{}
 	for _, repo := range value.Repositories {
 		if !nativeText(repo.ID, 128) || repositories[repo.ID] || !nativeHTTPS(repo.BaseURL) || !nativeSHA(repo.MetadataSHA256) {
@@ -140,7 +175,7 @@ func validateNativeShape(value NativeResolvedPlan) error {
 	rootIdentities := map[string]NativeIdentity{}
 	for _, root := range value.Roots {
 		requested, ok := requests[root.Key]
-		if !ok || root.Requested != requested || !api.ValidLexical("package-version", requested) || root.Package.Name != names[root.Key] || !nativeRequestedVersion(root.Package, requested) || !validNativeIdentity(root.Package) || identities[root.Package] == "" || rootNames[root.Package.Name] != "" {
+		if !ok || root.Requested != requested || !api.ValidLexical("package-version", requested) || !slices.Contains(nativeRootNames[root.Key], root.Package.Name) || !nativeRequestedVersion(root.Package, requested) || !validNativeIdentity(root.Package) || identities[root.Package] == "" || rootNames[root.Package.Name] != "" {
 			return nativePlanFailure()
 		}
 		rootNames[root.Package.Name] = root.Requested

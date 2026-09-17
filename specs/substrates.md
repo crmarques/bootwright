@@ -63,7 +63,8 @@ emulated BMCs stage virtual media in.
 emulator, `qemu-img`, `swtpm` for emulated TPMs, and the libvirt client. On the
 controller it is a [context prerequisite](controller.md#the-controller-stage)
 selected by the provider's host reference, so the controller block installs it
-and this block proves presence only. On an SSH host this block installs it
+and this block proves presence only, refusing before it defines anything and
+naming the stage that supplies it. On an SSH host this block installs it
 through the host's native package manager, freezing the exact transaction in
 its attempt before authorizing it under the same before-state rules the
 controller stage has. The libvirt driver daemons this provider's own resources

@@ -22,17 +22,24 @@
     status: running
   no_log: true
 
-- name: Install the tooling that builds an installer image and extracts a tree
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/dnf
-      - --assumeyes
-      - --setopt=install_weak_deps=False
-      - install
-      - '{{ item }}'
-    creates: '{{ "/usr/bin/mkksiso" if item == "lorax" else "/usr/bin/xorriso" }}'
+# The tooling is a context prerequisite the controller stage installs on the
+# Machine this installation publishes through, so this block proves it and
+# installs nothing. Failing here names the command that supplies it.
+- name: Prove the tooling that builds an installer image and extracts a tree
+  ansible.builtin.stat:
+    path: '{{ item }}'
   loop: '{{ managedos_install_anaconda_tooling }}'
-  register: managedos_install_anaconda_tooling_installed
+  register: managedos_install_anaconda_tooling_present
+
+- name: Refuse an installation whose image-building tooling was never installed
+  ansible.builtin.fail:
+    msg: >-
+      {{ item.item }} is not installed on the Machine this installation
+      publishes through; run bootwright apply --stage controller before it
+  loop: '{{ managedos_install_anaconda_tooling_present.results }}'
+  loop_control:
+    label: '{{ item.item }}'
+  when: not item.stat.exists
 
 - name: Prove every store entry this installation names is present
   ansible.builtin.stat:

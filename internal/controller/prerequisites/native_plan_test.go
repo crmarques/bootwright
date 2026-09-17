@@ -112,3 +112,82 @@ func TestNativePlanPermitsOnlyExplicitRootDowngrade(t *testing.T) {
 		t.Fatal("erase accepted")
 	}
 }
+
+// A requirement may install more than one root package. The plan is proved
+// against exactly the packages its selected requirements name, so a missing
+// one, a surplus one and a package from an unselected requirement all refuse
+// before any transaction exists.
+func TestANativePlanIsProvedAgainstEveryPackageItsRequirementsName(t *testing.T) {
+	closure := func() NativeResolvedPlan {
+		plan := nativePlanFixture()
+		plan.Requirements.InstallerMedia = true
+		for _, name := range []string{"lorax", "xorriso"} {
+			identity := NativeIdentity{Name: name, Version: "1.2.3", Release: "4.fc43", Architecture: "x86_64"}
+			plan.Roots = append(plan.Roots, NativeRoot{Key: "installer-media", Requested: "latest", Package: identity})
+			plan.Packages = append(plan.Packages, NativePackage{
+				Name: identity.Name, Version: identity.Version, Release: identity.Release,
+				Architecture: identity.Architecture, Signer: strings.Repeat("c", 40),
+				Source: DependencySource{ID: name, URL: "https://publisher.example.test/os/" + name + ".rpm", SHA256: strings.Repeat("d", 64), Bytes: 64},
+			})
+		}
+		return plan
+	}
+	canonical, err := CanonicalNativePlan(closure())
+	if err != nil || ValidateNativePlan(canonical) != nil {
+		t.Fatalf("a complete two-package requirement was refused: %v", err)
+	}
+	for name, change := range map[string]func(*NativeResolvedPlan){
+		"one package missing": func(p *NativeResolvedPlan) {
+			p.Roots = p.Roots[:len(p.Roots)-1]
+		},
+		"a package the requirement does not name": func(p *NativeResolvedPlan) {
+			p.Roots[len(p.Roots)-1].Package.Name = "genisoimage"
+		},
+		"a requirement that was never selected": func(p *NativeResolvedPlan) {
+			p.Requirements.InstallerMedia = false
+		},
+		"a package claimed under another requirement": func(p *NativeResolvedPlan) {
+			p.Roots[len(p.Roots)-1].Key = "nmstate"
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			plan := closure()
+			change(&plan)
+			value, err := CanonicalNativePlan(plan)
+			if err == nil && ValidateNativePlan(value) == nil {
+				t.Fatal("an inconsistent root set was accepted")
+			}
+		})
+	}
+}
+
+// The hypervisor runs the release its client speaks, so both are proved against
+// the one libvirt intent rather than drifting apart.
+func TestTheHypervisorClosureSharesTheLibvirtVersionIntent(t *testing.T) {
+	plan := nativePlanFixture()
+	plan.Requirements.Hypervisor = true
+	plan.Requests.Libvirt = "11.5.0"
+	for _, name := range []string{
+		"libvirt-daemon", "libvirt-daemon-driver-network", "libvirt-daemon-driver-qemu",
+		"libvirt-daemon-driver-storage-core", "qemu-img", "qemu-kvm", "swtpm", "swtpm-tools",
+	} {
+		identity := NativeIdentity{Name: name, Version: "11.5.0", Release: "4.fc43", Architecture: "x86_64"}
+		plan.Roots = append(plan.Roots, NativeRoot{Key: "hypervisor", Requested: "11.5.0", Package: identity})
+		plan.Packages = append(plan.Packages, NativePackage{
+			Name: identity.Name, Version: identity.Version, Release: identity.Release,
+			Architecture: identity.Architecture, Signer: strings.Repeat("c", 40),
+			Source: DependencySource{ID: name, URL: "https://publisher.example.test/os/" + name + ".rpm", SHA256: strings.Repeat("d", 64), Bytes: 64},
+		})
+	}
+	canonical, err := CanonicalNativePlan(plan)
+	if err != nil || ValidateNativePlan(canonical) != nil {
+		t.Fatalf("the hypervisor closure was refused under its client's intent: %v", err)
+	}
+	// A closure resolved against a release the client never asked for is not
+	// the closure this plan selected.
+	drifted := canonical
+	drifted.Requests.Libvirt = "11.6.0"
+	if ValidateNativePlan(drifted) == nil {
+		t.Fatal("a hypervisor resolved against another release was accepted")
+	}
+}

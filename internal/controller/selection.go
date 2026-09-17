@@ -16,6 +16,8 @@ type Selection struct {
 	machineName      string
 	containerRuntime bool
 	libvirtClient    bool
+	hypervisor       bool
+	installerMedia   bool
 	route            Route
 	versions         DependencyVersions
 }
@@ -24,6 +26,8 @@ func (s Selection) EnvironmentName() string      { return s.environmentName }
 func (s Selection) MachineName() string          { return s.machineName }
 func (s Selection) ContainerRuntime() bool       { return s.containerRuntime }
 func (s Selection) LibvirtClient() bool          { return s.libvirtClient }
+func (s Selection) Hypervisor() bool             { return s.hypervisor }
+func (s Selection) InstallerMedia() bool         { return s.installerMedia }
 func (s Selection) Route() Route                 { return s.route }
 func (s Selection) Versions() DependencyVersions { return s.versions }
 
@@ -87,7 +91,49 @@ func Select(catalog api.Catalog) (Selection, error) {
 	if err != nil {
 		return Selection{}, err
 	}
-	return Selection{environmentName: environment.Name(), machineName: machine.Name(), containerRuntime: containerRuntime, libvirtClient: requiresLibvirtClient(catalog, machine), route: route, versions: versions}, nil
+	return Selection{
+		environmentName: environment.Name(), machineName: machine.Name(),
+		containerRuntime: containerRuntime, libvirtClient: requiresLibvirtClient(catalog, machine),
+		hypervisor: requiresHypervisor(catalog, machine), installerMedia: requiresInstallerMedia(catalog, machine),
+		route: route, versions: versions,
+	}, nil
+}
+
+// requiresHypervisor reports whether a libvirt provider runs its guests on this
+// Machine. The closure is the provider host's runtime, so only the Machine that
+// hosts one selects it; a provider reached over SSH installs its own.
+func requiresHypervisor(catalog api.Catalog, controllerMachine api.Object) bool {
+	for _, provider := range catalog.OfKind(api.InfraProvider) {
+		if !provider.Spec().Has("libvirt") {
+			continue
+		}
+		if provider.Spec().Get("libvirt", "machineRef").Text() == controllerMachine.Name() {
+			return true
+		}
+	}
+	return false
+}
+
+// requiresInstallerMedia reports whether an Anaconda installation builds its
+// image on this Machine. The tooling runs where the selected artifact server is
+// placed, because that is where the installation publishes what it builds.
+func requiresInstallerMedia(catalog api.Catalog, controllerMachine api.Object) bool {
+	for _, machine := range catalog.OfKind(api.Machine) {
+		provided := machine.Spec().Get("os", "provided")
+		if provided.Type() != api.Boolean || provided.Bool() {
+			continue
+		}
+		profile, found := catalog.Find(api.MachineInstallProfile, machine.Spec().Get("os", "installProfileRef").Text())
+		if !found || !profile.Spec().Has("installer", "anaconda") {
+			continue
+		}
+		endpoint := profile.Spec().Get("installer", "anaconda", "redfishVirtualMedia", "artifactServerEndpoint")
+		server, found := catalog.Find(api.ArtifactServer, endpoint.Get("serverRef").Text())
+		if found && server.Spec().Get("machineRef").Text() == controllerMachine.Name() {
+			return true
+		}
+	}
+	return false
 }
 
 func requiresLibvirtClient(catalog api.Catalog, controllerMachine api.Object) bool {

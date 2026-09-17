@@ -21,11 +21,36 @@ FORMAT = "bootwright.native-plan-v1"
 MAX_PACKAGES = 512
 MAX_INVENTORY = 32768
 MAX_DATABASE = 512 << 20
+# Each requirement names the packages it installs as roots, and the version
+# intent those roots share. A requirement may name more than one package: the
+# hypervisor closure is one decision an operator makes, not eight.
 ROOTS = {
+    "podman": ("podman",),
+    "openssh": ("openssh-clients",),
+    "nmstate": ("nmstate",),
+    "libvirt": ("libvirt-client",),
+    "hypervisor": (
+        "libvirt-daemon",
+        "libvirt-daemon-driver-network",
+        "libvirt-daemon-driver-qemu",
+        "libvirt-daemon-driver-storage-core",
+        "qemu-img",
+        "qemu-kvm",
+        "swtpm",
+        "swtpm-tools",
+    ),
+    "installer-media": ("lorax", "xorriso"),
+}
+
+# The hypervisor runs the same libvirt release its client speaks to, so they
+# share one version intent rather than drifting apart.
+ROOT_VERSIONS = {
     "podman": "podman",
-    "openssh": "openssh-clients",
+    "openssh": "openssh",
     "nmstate": "nmstate",
-    "libvirt": "libvirt-client",
+    "libvirt": "libvirt",
+    "hypervisor": "libvirt",
+    "installer-media": "installerMedia",
 }
 
 
@@ -157,7 +182,15 @@ def selected_roots(request):
         keys.append("podman")
     if request["requirements"]["libvirtClient"]:
         keys.append("libvirt")
-    return [(key, ROOTS[key], request["versions"][key]) for key in sorted(keys)]
+    if request["requirements"]["hypervisor"]:
+        keys.append("hypervisor")
+    if request["requirements"]["installerMedia"]:
+        keys.append("installer-media")
+    return [
+        (key, name, request["versions"][ROOT_VERSIONS[key]])
+        for key in sorted(keys)
+        for name in ROOTS[key]
+    ]
 
 
 def local_repositories(request):

@@ -34,7 +34,7 @@ func TestEnvironmentDependencyVersionsPreserveExplicitIntent(t *testing.T) {
 	}
 	// The context-independent versions stay at their compiled default, because
 	// no Environment can move them.
-	if got := selection.Versions(); got != (controller.DependencyVersions{Python: "latest", Ansible: "latest", Podman: "latest", OpenSSH: "latest", NMState: "latest", Libvirt: "latest", Helm: "4.3.0", Govc: "0.54.0", Virtctl: "1.9.0"}) {
+	if got := selection.Versions(); got != (controller.DependencyVersions{Python: "latest", Ansible: "latest", Podman: "latest", OpenSSH: "latest", NMState: "latest", Libvirt: "latest", InstallerMedia: "latest", Helm: "4.3.0", Govc: "0.54.0", Virtctl: "1.9.0"}) {
 		t.Fatalf("selection did not receive the complete normalized version intent: %#v", got)
 	}
 	if got := selection.Versions().Baseline(); got != controller.DefaultDependencyVersions().Baseline() {

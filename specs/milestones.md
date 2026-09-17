@@ -596,16 +596,21 @@ SSH, so both are qualified by an observed run rather than by contract. What that
 run contradicted is corrected and recorded in
 [development](../docs/development.md).
 
-**Deviation to close.** One part of this contract is not yet as specified. The
-hypervisor closure is installed by the provider host block on either placement
-arm, rather than by the controller stage on the controller, because the
-controller stage's native closure is versioned per root and the daemon,
-emulator and TPM helper have no declared version intent yet; the installer-media
-tooling is likewise installed by the installation block. It belongs to M1h and
-changes no frozen request shape. The second deviation is closed: managed OS now
+**Deviations closed.** Both parts of this contract that were not yet as
+specified now are. The hypervisor closure and the installer-media tooling are
+installed by the controller stage on the controller, which proves them by
+presence and refuses naming that stage when they are absent; a requirement may
+now name more than one root package, and the hypervisor shares the version
+intent of the libvirt client it runs beside rather than carrying one of its own.
+A provider host reached over SSH still installs its own closure. And managed OS
 composes each substrate's proof and identity read through the two fixed task
 files every substrate machine role exposes, which is the composition M5a's
 general seam required.
+
+**What remains.** Every in-tree gate this milestone names passes. Its delivery
+is the operator-run journey of `examples/lab-rhel` under the build in hand,
+which no run has yet covered since the removal gate, the settled verbs and the
+closures above changed what an apply and a removal do.
 
 **Operator output and retained adapter logs.** The first real `lab-rhel` apply
 showed both gaps. A block occupied one row per presentation group, so eight

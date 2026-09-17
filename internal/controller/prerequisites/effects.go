@@ -60,7 +60,14 @@ func (l PythonLaunch) InterpreterScript() string {
 // admitted controller capabilities and referenced infrastructure providers.
 type NativeRequirements struct {
 	ContainerRuntime bool `json:"containerRuntime"`
-	LibvirtClient    bool `json:"libvirtClient"`
+	// Hypervisor is the closure a libvirt provider hosted on this Machine runs:
+	// the daemon with its drivers, the emulator and the TPM helper, beside the
+	// client LibvirtClient selects.
+	Hypervisor bool `json:"hypervisor"`
+	// InstallerMedia is the tooling an Anaconda installation published through
+	// an artifact server on this Machine builds its image with.
+	InstallerMedia bool `json:"installerMedia"`
+	LibvirtClient  bool `json:"libvirtClient"`
 }
 
 // NativePackage records an exact publisher-signed RPM identity. The closed

@@ -620,3 +620,49 @@ func TestApplyInstallsNoNativeTransactionWhenTheRootsArePresent(t *testing.T) {
 		t.Fatalf("evidence = %s", result.Evidence)
 	}
 }
+
+// A controller stage that ran under the version before this one is removable
+// here: its frozen bytes read back as this shape, selecting neither closure,
+// because neither existed when it was frozen and so neither was installed.
+func TestAFrozenStageRequestOfThePriorVersionUpgradesIntoThisOne(t *testing.T) {
+	prior := requestV1{
+		Egress:        prerequisites.SetupEgress{NoProxy: []string{}},
+		Libvirt:       "latest",
+		LibvirtClient: true,
+		Machine:       "controller",
+		Tools:         []ToolRequest{},
+		Version:       PriorVersion,
+	}
+	data, err := json.Marshal(prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeRequest(data)
+	if err != nil {
+		t.Fatalf("the prior version was unreadable: %v", err)
+	}
+	if decoded.Version != Version {
+		t.Fatalf("version = %q", decoded.Version)
+	}
+	if !decoded.LibvirtClient || decoded.Hypervisor || decoded.InstallerMedia {
+		t.Fatalf("the upgrade invented a closure this stage never installed: %+v", decoded)
+	}
+	if decoded.Machine != "controller" || decoded.Libvirt != "latest" {
+		t.Fatalf("the upgrade changed what the stage installed: %+v", decoded)
+	}
+	if _, err := decoded.Canonical(); err != nil {
+		t.Fatalf("the upgraded request is not canonical: %v", err)
+	}
+}
+
+// A version this build never wrote and no longer reads refuses, and says which.
+func TestAFrozenStageRequestOlderThanOneVersionRefuses(t *testing.T) {
+	_, err := DecodeRequest([]byte(`{"version":"controller-clients-v0"}`))
+	if err == nil {
+		t.Fatal("an unreadable version was accepted")
+	}
+	reported := diagnostics.Of(err)
+	if len(reported) == 0 || !strings.Contains(reported[0].Message, "controller-clients-v0") {
+		t.Fatalf("the refusal did not name the version: %v", err)
+	}
+}

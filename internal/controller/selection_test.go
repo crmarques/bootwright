@@ -105,3 +105,67 @@ func TestMissingControllerProxyReferenceRefuses(t *testing.T) {
 		t.Fatal("unresolved proxy reference was accepted", diagnostics)
 	}
 }
+
+// The hypervisor closure is the provider host's own runtime, so only the
+// Machine a libvirt provider runs its guests on selects it. A provider reached
+// over SSH installs its own, and a controller that merely speaks to one gets
+// the client alone.
+func TestHypervisorClosureFollowsTheProvidersHostMachine(t *testing.T) {
+	for host, selected := range map[string]bool{"controller": true, "hypervisor-host": false} {
+		t.Run(host, func(t *testing.T) {
+			objects := append(selectionObjects(),
+				api.NewObject(api.InfraProvider, "lab", api.Value{}, api.MapValue().WithPath(api.StringValue(host), "libvirt", "machineRef")),
+				api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("lab"), "substrate", "providerRef")),
+			)
+			selection, err := controller.Select(api.NewCatalog(objects))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if selection.Hypervisor() != selected {
+				t.Fatalf("a provider hosted on %q selected the closure: %v", host, selection.Hypervisor())
+			}
+			// The client is selected either way: this controller speaks to the
+			// provider whether or not it runs the guests.
+			if !selection.LibvirtClient() {
+				t.Fatal("the libvirt client requirement was lost")
+			}
+		})
+	}
+	if controller.Baseline().Hypervisor() {
+		t.Fatal("context-free scope invented a hypervisor requirement")
+	}
+}
+
+// The image-building tooling runs where the installation publishes what it
+// builds, so the Machine the selected artifact server is placed on selects it.
+func TestInstallerMediaToolingFollowsTheArtifactServersMachine(t *testing.T) {
+	profile := api.NewObject(api.MachineInstallProfile, "rhel", api.Value{}, api.MapValue().
+		WithPath(api.StringValue("lab-artifacts"), "installer", "anaconda", "redfishVirtualMedia", "artifactServerEndpoint", "serverRef"))
+	installed := api.NewObject(api.Machine, "node", api.Value{}, api.MapValue().
+		WithPath(api.BoolValue(false), "os", "provided").WithPath(api.StringValue("rhel"), "os", "installProfileRef"))
+	for placement, selected := range map[string]bool{"controller": true, "second-host": false} {
+		t.Run(placement, func(t *testing.T) {
+			objects := append(selectionObjects(), profile, installed,
+				api.NewObject(api.ArtifactServer, "lab-artifacts", api.Value{}, api.MapValue().With("machineRef", api.StringValue(placement))))
+			selection, err := controller.Select(api.NewCatalog(objects))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if selection.InstallerMedia() != selected {
+				t.Fatalf("a server placed on %q selected the tooling: %v", placement, selection.InstallerMedia())
+			}
+		})
+	}
+	// A Machine whose operating system is already provided installs nothing, so
+	// it selects no tooling however its profile reads.
+	provided := installed.WithSpec(installed.Spec().WithPath(api.BoolValue(true), "os", "provided"))
+	objects := append(selectionObjects(), profile, provided,
+		api.NewObject(api.ArtifactServer, "lab-artifacts", api.Value{}, api.MapValue().With("machineRef", api.StringValue("controller"))))
+	selection, err := controller.Select(api.NewCatalog(objects))
+	if err != nil || selection.InstallerMedia() {
+		t.Fatalf("a provided Machine selected image-building tooling: %v (%v)", selection.InstallerMedia(), err)
+	}
+	if controller.Baseline().InstallerMedia() {
+		t.Fatal("context-free scope invented an installer-media requirement")
+	}
+}

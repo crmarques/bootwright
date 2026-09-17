@@ -15,13 +15,22 @@ type DependencyVersions struct {
 	OpenSSH string `json:"openssh"`
 	NMState string `json:"nmstate"`
 	Libvirt string `json:"libvirt"`
-	Helm    string `json:"helm"`
-	Govc    string `json:"govc"`
-	Virtctl string `json:"virtctl"`
+	// InstallerMedia is the intent of the image-building tooling. It is not
+	// declarable: the tooling reads media the operator already imported, and
+	// no consumer has asked to pin it. The hypervisor closure has no intent of
+	// its own either, because it runs the release its client speaks.
+	InstallerMedia string `json:"installerMedia"`
+	Helm           string `json:"helm"`
+	Govc           string `json:"govc"`
+	Virtctl        string `json:"virtctl"`
 }
 
 func DefaultDependencyVersions() DependencyVersions {
-	return DependencyVersions{"latest", "latest", "latest", "latest", "latest", "latest", "latest", "latest", "latest"}
+	return DependencyVersions{
+		Python: "latest", Ansible: "latest", Podman: "latest", OpenSSH: "latest",
+		NMState: "latest", Libvirt: "latest", InstallerMedia: "latest",
+		Helm: "latest", Govc: "latest", Virtctl: "latest",
+	}
 }
 
 // Baseline is the version intent of the context-independent prerequisites

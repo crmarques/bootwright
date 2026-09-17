@@ -63,13 +63,15 @@ func hostRequestFor(catalog api.Catalog, provider api.Object, controllerMachine,
 		return HostRequest{}, refusal("api.required", "the libvirt provider declares no connection URI", "set spec.libvirt.uri on "+provider.Identity())
 	}
 	return HostRequest{
-		Identity:    Identity{Block: HostBlockID(name), Context: contextName, Object: name},
-		Networks:    networks,
-		Packages:    HypervisorPackages(),
-		Placement:   placement,
-		PoolName:    substrate.PoolName(contextName, name),
-		PoolPath:    substrate.PoolPath(contextName, name),
-		Provisioned: true,
+		Identity:  Identity{Block: HostBlockID(name), Context: contextName, Object: name},
+		Networks:  networks,
+		Packages:  HypervisorPackages(),
+		Placement: placement,
+		PoolName:  substrate.PoolName(contextName, name),
+		PoolPath:  substrate.PoolPath(contextName, name),
+		// The controller stage installs the closure on the controller, so this
+		// block proves it there and installs it only on a host reached over SSH.
+		Provisioned: !placement.Local(),
 		Services:    ServiceUnits(),
 		URI:         uri,
 		Version:     hostRequestVersion,

@@ -3,9 +3,11 @@
 # state, and no value selects an executable, a role or a task file.
 managedos_install_anaconda_work: /var/tmp/bootwright-install
 managedos_install_anaconda_media: /var/lib/bootwright/media
+# The executables this block needs, proved by path. The controller stage
+# installs the packages that provide them.
 managedos_install_anaconda_tooling:
-  - lorax
-  - xorriso
+  - /usr/bin/mkksiso
+  - /usr/bin/xorriso
 managedos_install_anaconda_boot_media: >-
   {{ managedos_install_anaconda_media }}/{{ bootwright_os_install_request.bootMedia.name }}
 managedos_install_anaconda_tree_media: >-
