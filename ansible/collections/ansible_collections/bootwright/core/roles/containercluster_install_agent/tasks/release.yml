@@ -1,0 +1,23 @@
+---
+# The media stays inserted while the installation runs, because a live agent
+# image is still read after a node answers on the network. It is released only
+# once the installation has completed.
+- name: Eject the media this node installed from
+  bootwright.core.redfish_boot:
+    endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", containercluster_install_agent_user) }}'
+    password: '{{ lookup("ansible.builtin.file", containercluster_install_agent_password) }}'
+    verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+    operation: eject
+  no_log: true
+
+- name: Select the installed disk as the boot device
+  bootwright.core.redfish_boot:
+    endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", containercluster_install_agent_user) }}'
+    password: '{{ lookup("ansible.builtin.file", containercluster_install_agent_password) }}'
+    verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+    operation: boot
+    target: Hdd
+  no_log: true
+  when: containercluster_install_agent_node.physical | bool

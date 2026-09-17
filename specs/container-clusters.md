@@ -6,9 +6,8 @@ declared intent, and the evidence that it completed. The
 [substrates](substrates.md) own the Machines its nodes are bound to and the
 management controllers they are booted through;
 [infrastructure services](infrastructure-services.md#consumer-publication) own
-the served root its boot media is published beneath; [Secrets](secrets.md)
-owns the material it consumes and the credentials it captures; availability
-follows [milestones](milestones.md).
+the served root its boot media is published beneath; [Secrets](secrets.md) owns
+the material it consumes; availability follows [milestones](milestones.md).
 
 One installation contract covers every substrate, exactly as
 [managed-OS installation](managed-os.md#installation) does. It never asks which
@@ -172,52 +171,52 @@ host and what that state means. A give-up that proves a declared node never
 registered fails the block naming that node, because the cluster waits for
 exactly the nodes the install configuration declares.
 
-**Captured credentials.** A completed installation produces the cluster
-administrator kubeconfig and the initial administrator password. Both are
-[captured](secrets.md#captured-material) into this context's confidential
-custody as soon as the installation completes, and the copies the installer
-left in the work directory are removed. They are never written to evidence,
-progress output or a log, and the `cluster kubeconfig` command is what reveals
-one.
+**The access it produces.** A completed installation produces the cluster
+administrator kubeconfig and the initial administrator password, which the
+installer writes into the work area beside the state it already keeps there.
+That area is root-owned, `0700` and never served, and it already holds the
+material the installer was given, so the access lives there with it rather than
+somewhere more protected than its own inputs. It is never written to evidence,
+progress output or a log. Moving it into this context's confidential custody,
+and revealing it through `cluster kubeconfig`, is a separate contract this one
+does not claim.
 
 **Releasing the media.** Once the installation has completed, and only then,
 each node's virtual media is ejected and its controller is pointed at the
 installed disk, in node-name order.
 
-**Completion.** Completion requires the installer reporting installation
-complete, the captured credentials present in custody, the cluster answering
-with the cluster identity this operation's own installer metadata records, its
-cluster version reporting the declared release available, every declared node
-present as a node, and every node's media ejected. The evidence records the
-cluster identity, the release the cluster reports, the declared nodes it found
-and the hosts the installer registered; it records no credential.
+**Completion.** Completion requires the cluster answering with the identity
+this operation's own installer recorded, reporting the release it was installed
+for, holding every declared node, with no node's controller still presenting
+the media it booted from. The cluster is read through its own API with the
+client the controller stage published, so completion is what the cluster says
+about itself rather than what the installer said before it exited. The evidence
+records the identity, the release, the declared nodes still missing and the
+nodes still presenting media; it records no credential and no path.
 
-**Replay.** A cluster already answering with this operation's cluster identity
-and reporting the declared release available reports `completed` with the same
-evidence and boots nothing. The only differences it converges are credentials
-it captured but has not yet removed from the work directory, and media it did
-not finish ejecting. A cluster answering with another identity refuses: there
-is no reinstall path, and installing again requires this cluster's nodes to be
-destroyed and applied again.
+**Replay.** A cluster already answering with this operation's identity, at the
+declared release and holding every declared node, reports `completed` with the
+same evidence, boots nothing and waits for nothing. The only difference it
+converges is media it did not finish releasing. A cluster answering with
+another identity is not converged: there is no reinstall path, and installing
+again requires this cluster's nodes to be destroyed and applied again.
 
-**Inverse.** Destroy ejects each node's virtual media and releases the captured
-credentials from custody, and proves each absent. The work area and the
-published image leave with the media block's own inverse, which the plan orders
-after this one. The installed cluster leaves with its nodes' disks, so this block
+**Inverse.** Destroy ejects the media each node still presents and proves none
+is left. The work area and the published image leave with the media block's own
+inverse, which the plan orders after this one. The installed cluster leaves with its nodes' disks, so this block
 removes nothing from a node and consumes no authorization of its own on
 removal. A cluster whose nodes are physical therefore keeps running after its
 context is destroyed, exactly as a physically installed operating system does.
 
 **Unknown resolution.** Observation is read-only against the frozen request. A
-cluster answering with the frozen identity and the declared release, with its
-credentials captured and its media ejected, is positive completion. Every node
-powered off, no captured credential and no work directory is positive no
-effect. This operation's own unfinished work — a cluster that answers while a
-credential is still in the work directory, or media still inserted after a
-completed installation — is a positive partial realization the next attempt
-converges. Anything else stays unknown, including a cluster answering with
-another identity and a node powered on while nothing answers, because the first
-belongs to another installation and the second may be installing now.
+cluster answering with this operation's identity at the declared release, whole
+and with its media released, is positive completion. Nothing answering, no node
+running and no media inserted is positive no effect. That same cluster
+answering while the completion is not yet true is a positive partial
+realization the next attempt converges. Anything else stays unknown, including
+a cluster answering with another identity and a node running while nothing
+answers, because the first belongs to another installation and the second may
+be installing now.
 
 **Quiescence.** This block owns published boot media and controller-side state
 that a running cluster does not read, so it is quiescent whenever the

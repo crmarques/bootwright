@@ -10,7 +10,11 @@
   <vcpu placement="static">{{ bootwright_substrate_machine_request.vcpu }}</vcpu>
   <os>
     <type arch="x86_64" machine="q35">hvm</type>
+    {#- Disk first, optical media second: an empty disk falls through to media
+        a controller inserts, and a disk an installer has written takes
+        precedence at the next boot without anything changing the domain. -#}
     <boot dev="hd"/>
+    <boot dev="cdrom"/>
     <bootmenu enable="no"/>
   </os>
   <features>

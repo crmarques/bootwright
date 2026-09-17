@@ -1,5 +1,7 @@
 plugins/modules/artifact_server_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/artifact_server_protocol.py validate-modules:missing-gplv3-license
+plugins/modules/containercluster_install_inspect.py validate-modules:missing-gplv3-license
+plugins/modules/containercluster_install_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/containercluster_media_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/containercluster_media_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/controller_inventory.py validate-modules:missing-gplv3-license

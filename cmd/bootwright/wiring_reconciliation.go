@@ -103,6 +103,9 @@ func buildCapabilities(clock systemClock, controller controllerDependencies) cap
 	}, {
 		kind: agentinstall.Kind, implementation: agentinstall.MediaImplementation,
 		capability: agentinstall.NewMedia(runner),
+	}, {
+		kind: agentinstall.Kind, implementation: agentinstall.InstallImplementation,
+		capability: agentinstall.NewInstall(runner),
 	}}
 	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(), ntpserver.Definition()} {
 		resolver = append(resolver, boundCapability{

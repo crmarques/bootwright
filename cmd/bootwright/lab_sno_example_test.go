@@ -191,14 +191,20 @@ func TestLabSNOExamplePlansTheWholeGraph(t *testing.T) {
 	ordered := slices.Clone(blocks)
 	slices.Sort(ordered)
 	if !slices.Equal(ordered, []string{
-		"artifact-server-lab-artifacts", "cluster-media-sno", clients.BlockID, "dns-lab-dns",
-		"machine-sno-01", "ntp-lab-ntp", "proxy-lab-proxy", "substrate-host-lab-libvirt",
+		"artifact-server-lab-artifacts", "cluster-install-sno", "cluster-media-sno", clients.BlockID,
+		"dns-lab-dns", "machine-sno-01", "ntp-lab-ntp", "proxy-lab-proxy", "substrate-host-lab-libvirt",
 	}) {
 		t.Fatalf("blocks = %v", blocks)
 	}
+	// The plan's order is what makes it runnable: the image exists before a
+	// node boots from it, and every node is realized before it is booted.
 	for _, pair := range [][2]string{
 		{"substrate-host-lab-libvirt", "machine-sno-01"},
 		{"artifact-server-lab-artifacts", "cluster-media-sno"},
+		{"cluster-media-sno", "cluster-install-sno"},
+		{"machine-sno-01", "cluster-install-sno"},
+		{"dns-lab-dns", "cluster-install-sno"},
+		{"ntp-lab-ntp", "cluster-install-sno"},
 	} {
 		if slices.Index(blocks, pair[0]) > slices.Index(blocks, pair[1]) {
 			t.Fatalf("%s is ordered after %s: %v", pair[0], pair[1], blocks)

@@ -1,0 +1,29 @@
+---
+# Boot one operator-owned machine from media already inserted in its own
+# controller.
+#
+# A physical controller consumes a one-time override and forgets it, so this
+# arm sets one: the machine boots the inserted image once and returns to its
+# own disk by itself, without anything having to change the selection between
+# the two boots.
+#
+# Inputs are passed explicitly by the consuming role, never inherited from a
+# shared fact.
+- name: Select a one-time boot from the inserted media
+  bootwright.core.redfish_boot:
+    endpoint: '{{ substrate_baremetal_machine_boot_endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_boot_user) }}'
+    password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_boot_password) }}'
+    verify: '{{ substrate_baremetal_machine_boot_verify }}'
+    operation: boot
+    target: Cd
+  no_log: true
+
+- name: Power the machine on and poll it to running
+  bootwright.core.redfish_boot:
+    endpoint: '{{ substrate_baremetal_machine_boot_endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_boot_user) }}'
+    password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_boot_password) }}'
+    verify: '{{ substrate_baremetal_machine_boot_verify }}'
+    operation: power-on
+  no_log: true

@@ -1,0 +1,56 @@
+---
+# One installer wait, bounded by wall clock rather than by attempt count. The
+# installer gives up on its own compiled deadline while the cluster keeps
+# converging, so a give-up it can be resumed after is re-invoked until this
+# cluster's own budget is spent. The budget bounds when a new wait may start,
+# not when this task returns.
+- name: Set the deadline this wait may start another attempt before
+  ansible.builtin.set_fact:
+    containercluster_install_agent_deadline: >-
+      {{ (now(utc=true).timestamp() | int) + (containercluster_install_agent_budget | int) }}
+  changed_when: false
+
+- name: Wait for the installer to report this milestone
+  ansible.builtin.command:
+    argv:
+      - '{{ containercluster_install_agent_installer }}'
+      - agent
+      - wait-for
+      - '{{ containercluster_install_agent_milestone }}'
+      - --dir
+      - '{{ containercluster_install_agent_work }}'
+      - --log-level
+      - info
+  register: containercluster_install_agent_wait
+  until: >-
+    containercluster_install_agent_wait.rc == 0
+    or (containercluster_install_agent_wait.stderr | default('')
+        is search(containercluster_install_agent_host_error_pattern))
+    or not (containercluster_install_agent_wait.stderr | default('')
+            is search(containercluster_install_agent_resumable_pattern))
+    or (now(utc=true).timestamp() | int) >= (containercluster_install_agent_deadline | int)
+  retries: '{{ containercluster_install_agent_wait_retries }}'
+  delay: '{{ containercluster_install_agent_wait_delay }}'
+  changed_when: containercluster_install_agent_wait.rc == 0
+  failed_when: false
+
+# The classification leads the failure rather than trailing it, because a run
+# tree keeps only the beginning of a message. The host-error class is checked
+# first: the same output carries both it and the installer's own timeout, and
+# only one of them means the cluster stopped installing.
+- name: Report why this milestone was never reached
+  ansible.builtin.fail:
+    msg: >-
+      {{ containercluster_install_agent_host_error_hint
+         if (containercluster_install_agent_wait.stderr | default('')
+             is search(containercluster_install_agent_host_error_pattern))
+         else (containercluster_install_agent_stalled_hint
+               if (containercluster_install_agent_wait.stderr | default('')
+                   is search(containercluster_install_agent_stalled_pattern))
+               else (containercluster_install_agent_timeout_hint
+                     if (containercluster_install_agent_wait.stderr | default('')
+                         is search(containercluster_install_agent_timeout_pattern))
+                     else containercluster_install_agent_unclassified_hint)) }}
+      The installer did not reach {{ containercluster_install_agent_milestone }} for
+      {{ bootwright_cluster_install_request.identity.cluster }}.
+  when: containercluster_install_agent_wait.rc != 0

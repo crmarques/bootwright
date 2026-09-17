@@ -1,0 +1,174 @@
+---
+- name: Validate the frozen installation request
+  ansible.builtin.assert:
+    that:
+      - bootwright_cluster_install_request.version == 'cluster-install-agent-v1'
+      - bootwright_cluster_install_request.workRoot.startswith('/var/lib/bootwright-clusters/')
+      - bootwright_cluster_install_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.containercluster_install_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Report name resolution
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: verify-resolution
+    status: running
+  no_log: true
+
+- name: Prove this host resolves every name the cluster answers at
+  ansible.builtin.import_tasks: resolve.yml
+
+- name: Report name resolution completion
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: verify-resolution
+    status: ok
+  no_log: true
+
+- name: Observe what this installation already recorded
+  bootwright.core.containercluster_install_inspect:
+    request: '{{ bootwright_cluster_install_request }}'
+  register: containercluster_install_agent_before
+  no_log: true
+
+- name: Read the cluster and its nodes back
+  ansible.builtin.import_tasks: state.yml
+
+# Decided once, before any effect. Every later guard reads this fact rather
+# than the live state, which this attempt is about to change.
+- name: Decide whether this cluster is already installed
+  ansible.builtin.set_fact:
+    containercluster_install_agent_settled: >-
+      {{ (containercluster_install_agent_before.observation.identity | default('')) | length > 0
+         and containercluster_install_agent_state.cluster == containercluster_install_agent_before.observation.identity
+         and containercluster_install_agent_state.release == bootwright_cluster_install_request.release.version
+         and containercluster_install_agent_state.missing | length == 0 }}
+  changed_when: false
+
+- name: Report node boot
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: boot-machines
+    status: running
+  no_log: true
+
+- name: Boot each node from the image its cluster published
+  ansible.builtin.include_tasks: boot.yml
+  loop: '{{ bootwright_cluster_install_request.nodes }}'
+  loop_control:
+    loop_var: containercluster_install_agent_node
+    label: '{{ containercluster_install_agent_node.machine }}'
+    index_var: containercluster_install_agent_index
+  vars:
+    containercluster_install_agent_url: >-
+      {{ containercluster_install_agent_before.observation.url }}
+    containercluster_install_agent_user: >-
+      {{ bootwright_cluster_install_material['controllerUserNode' ~ containercluster_install_agent_index] }}
+    containercluster_install_agent_password: >-
+      {{ bootwright_cluster_install_material['controllerPasswordNode' ~ containercluster_install_agent_index] }}
+  when: not (containercluster_install_agent_settled | bool)
+
+- name: Report node boot completion
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: boot-machines
+    status: ok
+  no_log: true
+
+- name: Report the bootstrap wait
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: wait-bootstrap
+    status: running
+  no_log: true
+
+- name: Wait for the bootstrap control plane to hand over
+  ansible.builtin.include_tasks: wait.yml
+  vars:
+    containercluster_install_agent_milestone: bootstrap-complete
+    containercluster_install_agent_budget: >-
+      {{ bootwright_cluster_install_request.budgets.bootstrapSeconds }}
+  when: not (containercluster_install_agent_settled | bool)
+
+- name: Report the bootstrap wait completion
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: wait-bootstrap
+    status: ok
+  no_log: true
+
+- name: Report the installation wait
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: wait-install
+    status: running
+  no_log: true
+
+- name: Wait for the cluster to finish installing
+  ansible.builtin.include_tasks: wait.yml
+  vars:
+    containercluster_install_agent_milestone: install-complete
+    containercluster_install_agent_budget: >-
+      {{ bootwright_cluster_install_request.budgets.installSeconds }}
+  when: not (containercluster_install_agent_settled | bool)
+
+- name: Report the installation wait completion
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: wait-install
+    status: ok
+  no_log: true
+
+- name: Report media release
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: release-media
+    status: running
+  no_log: true
+
+- name: Release the media each node installed from
+  ansible.builtin.include_tasks: release.yml
+  loop: '{{ bootwright_cluster_install_request.nodes }}'
+  loop_control:
+    loop_var: containercluster_install_agent_node
+    label: '{{ containercluster_install_agent_node.machine }}'
+    index_var: containercluster_install_agent_index
+  vars:
+    containercluster_install_agent_user: >-
+      {{ bootwright_cluster_install_material['controllerUserNode' ~ containercluster_install_agent_index] }}
+    containercluster_install_agent_password: >-
+      {{ bootwright_cluster_install_material['controllerPasswordNode' ~ containercluster_install_agent_index] }}
+
+- name: Report media release completion
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: release-media
+    status: ok
+  no_log: true
+
+- name: Read the installed cluster and its nodes back
+  ansible.builtin.import_tasks: state.yml
+
+# The identity is read again here rather than reused: the installer records it
+# while it works, so an attempt that has just installed a cluster learns it now
+# and not before.
+- name: Read the identity this installation recorded
+  bootwright.core.containercluster_install_inspect:
+    request: '{{ bootwright_cluster_install_request }}'
+  register: containercluster_install_agent_after
+  no_log: true
+
+- name: Publish bounded installation completion evidence
+  bootwright.core.containercluster_install_protocol:
+    phase: completed
+    outcome: >-
+      {{ 'unchanged' if containercluster_install_agent_settled | bool else 'changed' }}
+    digest: '{{ bootwright_cluster_install_digest }}'
+    identity: '{{ containercluster_install_agent_after.observation.identity }}'
+    state: '{{ containercluster_install_agent_state }}'
+  no_log: true

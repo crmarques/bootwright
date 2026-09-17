@@ -1,0 +1,87 @@
+---
+- name: Validate the frozen installation request
+  ansible.builtin.assert:
+    that:
+      - bootwright_cluster_install_request.version == 'cluster-install-agent-v1'
+      - bootwright_cluster_install_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.containercluster_install_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Report media release
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: release-media
+    status: running
+  no_log: true
+
+- name: Observe what this installation recorded
+  bootwright.core.containercluster_install_inspect:
+    request: '{{ bootwright_cluster_install_request }}'
+  register: containercluster_install_agent_before
+  no_log: true
+
+- name: Read what each node still presents
+  ansible.builtin.import_tasks: state.yml
+
+# A removal that finds nothing inserted took nothing back, which is what an
+# already-removed block reports rather than a change it did not make.
+- name: Decide whether this removal has anything to take back
+  ansible.builtin.set_fact:
+    containercluster_install_agent_inserted: >-
+      {{ containercluster_install_agent_state.media | length > 0 }}
+  changed_when: false
+
+# The installed cluster leaves with its nodes' own disks. What this block
+# opened is the media each node presents, so that is what it takes back.
+- name: Eject the media every node still presents
+  ansible.builtin.include_tasks: release.yml
+  loop: '{{ bootwright_cluster_install_request.nodes }}'
+  loop_control:
+    loop_var: containercluster_install_agent_node
+    label: '{{ containercluster_install_agent_node.machine }}'
+    index_var: containercluster_install_agent_index
+  vars:
+    containercluster_install_agent_user: >-
+      {{ bootwright_cluster_install_material['controllerUserNode' ~ containercluster_install_agent_index] }}
+    containercluster_install_agent_password: >-
+      {{ bootwright_cluster_install_material['controllerPasswordNode' ~ containercluster_install_agent_index] }}
+
+- name: Report media release completion
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: release-media
+    status: ok
+  no_log: true
+
+- name: Report absence verification
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: verify-absence
+    status: running
+  no_log: true
+
+- name: Prove no node presents this cluster's media
+  ansible.builtin.import_tasks: state.yml
+
+- name: Report absence verification completion
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: verify-absence
+    status: ok
+  no_log: true
+
+- name: Publish bounded installation removal evidence
+  bootwright.core.containercluster_install_protocol:
+    phase: completed
+    outcome: >-
+      {{ 'changed' if containercluster_install_agent_inserted | bool else 'unchanged' }}
+    digest: '{{ bootwright_cluster_install_digest }}'
+    identity: '{{ containercluster_install_agent_before.observation.identity }}'
+    state: '{{ containercluster_install_agent_state }}'
+    removed: true
+  no_log: true

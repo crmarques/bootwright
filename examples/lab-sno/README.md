@@ -92,3 +92,24 @@ for the release the cluster declares. The release is the version pin: the agent
 image embeds the payload compiled into that executable, so a release bump needs
 that stage run again before the image is built, and the build refuses when the
 executable's version is not the declared one.
+
+The apply builds the image, boots the node from it, and then waits: a
+single-node cluster takes the better part of an hour on a laptop. The waits are
+observations, so interrupting the command stops nothing on the node, and
+repeating the apply resumes watching where it left off. Follow the progress in
+the log directory the operation names before its first effect.
+
+A completed apply settles when repeated. A destroy releases the media the node
+booted from and takes back the published image and the installer's work area;
+the cluster itself leaves with the node's disks, which the Machine block
+removes under `data-loss`:
+
+```sh
+sudo ./bin/bootwright apply --yes      # settles: nothing to do
+sudo ./bin/bootwright machine stop --name sno-01
+sudo ./bin/bootwright destroy --yes --authorize data-loss
+```
+
+The administrator access the installation produced stays in the installer's own
+root-owned work area beneath `/var/lib/bootwright-clusters/`, which the destroy
+removes with everything else. No command reveals it yet.

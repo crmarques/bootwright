@@ -259,8 +259,10 @@ part of what the installer reads is visible in a diff.
 `openshift-install` itself is not qualified by any in-tree gate. The release it
 builds for is proved at execution instead: the attempt reads the version the
 executable reports and refuses before building when it is not the declared one.
+What the installed cluster reports about itself is what proves the installation
+completed, read back through the client the same stage published.
 
 | Acceptance | How it is run |
 | --- | --- |
-| The journey in [`examples/lab-sno`](../examples/lab-sno/README.md) as far as the published boot image: `apply --stage controller`, then an apply that builds and publishes it, then a repeated apply that settles | by hand as root on a prepared libvirt host with a pull secret |
-| A destroy that takes back the published image and the installer's work area | by hand on that host |
+| The complete journey in [`examples/lab-sno`](../examples/lab-sno/README.md): `apply --stage controller`, an apply that builds the image and installs the cluster, a repeated apply that settles, and a destroy that releases the media and takes back the image | by hand as root on a prepared libvirt host with a pull secret |
+| A cluster installed on operator-owned hardware through its own controllers | by hand against qualified firmware |

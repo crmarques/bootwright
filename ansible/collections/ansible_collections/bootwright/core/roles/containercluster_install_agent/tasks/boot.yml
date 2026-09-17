@@ -1,0 +1,45 @@
+---
+# Insert the image its own cluster published and boot the machine through the
+# substrate that realized it. How a boot is selected is that substrate's
+# answer, so this composes its fixed task file and carries no rule that is
+# true of only one of them.
+- name: Refuse to boot a node whose cluster published no image
+  ansible.builtin.assert:
+    that:
+      - containercluster_install_agent_url | length > 0
+    fail_msg: >-
+      this cluster has published no boot image, so there is nothing for its
+      nodes to boot; repeat the apply so its media block publishes one
+    quiet: true
+
+- name: Insert the published image as virtual media
+  bootwright.core.redfish_boot:
+    endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", containercluster_install_agent_user) }}'
+    password: '{{ lookup("ansible.builtin.file", containercluster_install_agent_password) }}'
+    verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+    operation: insert
+    image: '{{ containercluster_install_agent_url }}'
+  no_log: true
+
+- name: Boot a machine this substrate created
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_libvirt_machine
+    tasks_from: boot_media.yml
+  vars:
+    substrate_libvirt_machine_boot_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+    substrate_libvirt_machine_boot_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+    substrate_libvirt_machine_boot_user: '{{ containercluster_install_agent_user }}'
+    substrate_libvirt_machine_boot_password: '{{ containercluster_install_agent_password }}'
+  when: containercluster_install_agent_node.substrate == 'libvirt'
+
+- name: Boot an operator-owned machine through its own controller
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_baremetal_machine
+    tasks_from: boot_media.yml
+  vars:
+    substrate_baremetal_machine_boot_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+    substrate_baremetal_machine_boot_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+    substrate_baremetal_machine_boot_user: '{{ containercluster_install_agent_user }}'
+    substrate_baremetal_machine_boot_password: '{{ containercluster_install_agent_password }}'
+  when: containercluster_install_agent_node.substrate == 'baremetal'

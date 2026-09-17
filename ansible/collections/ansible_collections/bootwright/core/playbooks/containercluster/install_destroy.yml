@@ -1,0 +1,13 @@
+---
+- name: Release one container cluster's boot media
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute the cluster installation destroy capability
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: destroy.yml

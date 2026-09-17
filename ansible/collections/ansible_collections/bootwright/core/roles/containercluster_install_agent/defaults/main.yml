@@ -1,0 +1,50 @@
+---
+# Derived from the frozen request only. Nothing here is authored by desired
+# state, and no value selects an executable, a role or a task file.
+containercluster_install_agent_work: '{{ bootwright_cluster_install_request.workRoot }}'
+containercluster_install_agent_kubeconfig: '{{ containercluster_install_agent_work }}/auth/kubeconfig'
+containercluster_install_agent_installer: '{{ bootwright_cluster_install_material.openshiftinstall }}'
+containercluster_install_agent_client: '{{ bootwright_cluster_install_material.oc }}'
+# A cluster already answering with the identity this operation's own installer
+# recorded, at the declared release and holding every declared node, is
+# installed. The decision is taken once, before anything is booted, and kept in
+# its own fact: reading the cluster again afterwards would report an
+# installation this attempt had just performed as one it found.
+
+# The installer gives up on its own compiled deadlines while the cluster keeps
+# converging. These are the give-ups it can be re-invoked after, and the one it
+# cannot: a host the assisted service moved into error has stopped installing,
+# so another window would watch a state that cannot change.
+containercluster_install_agent_stalled_pattern: >-
+  failed to progress after all hosts available|failed to prepare cluster installation
+containercluster_install_agent_timeout_pattern: bootstrap process timed out
+containercluster_install_agent_cluster_init_pattern: >-
+  failed to initialize the cluster|timed out waiting for the condition
+containercluster_install_agent_resumable_pattern: >-
+  {{ containercluster_install_agent_stalled_pattern }}|{{ containercluster_install_agent_timeout_pattern
+  }}|{{ containercluster_install_agent_cluster_init_pattern }}
+containercluster_install_agent_host_error_pattern: >-
+  has hosts in error|updated status from [a-z-]+ to error(?![-a-z])
+containercluster_install_agent_wait_delay: 30
+containercluster_install_agent_wait_retries: 40
+
+containercluster_install_agent_host_error_hint: >-
+  the assisted service moved a declared host into error and stopped installing
+  this cluster, so waiting again would watch a state that cannot change. A
+  cluster diverted into recovery is never pivoted out of bootstrap, so an
+  install left short of a declared node does not finish on its own. Repair the
+  host and repeat the apply, or destroy this context and apply again.
+containercluster_install_agent_stalled_hint: >-
+  the cluster reached ready but the rendezvous node never started installing.
+  It starts only once every declared node reports known, so a node that never
+  booted the image, whose declared hardware address is not the one it registers
+  with, or whose install disk was rejected holds the cluster there.
+containercluster_install_agent_timeout_hint: >-
+  the installer stopped watching on its own compiled deadline, which this
+  cluster's budget has now also spent. The cluster keeps converging across that
+  give-up, so the operator conditions reported here are its state at the last
+  give-up rather than proof of a failed install; repeat the apply to resume
+  watching where this attempt stopped.
+containercluster_install_agent_unclassified_hint: >-
+  this give-up is not one the installer can be resumed after, so the wait ran
+  once and stopped. Read the installer output before repeating the apply.

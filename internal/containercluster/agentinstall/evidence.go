@@ -112,3 +112,125 @@ func decodeMediaEvidence(data []byte, digest string) (MediaEvidence, error) {
 	}
 	return evidence, nil
 }
+
+// InstallEvidence is the only result shape the installation adapter may
+// return. It records what a later consumer needs — the cluster this operation
+// installed and the release it reports — and nothing secret.
+type InstallEvidence struct {
+	Absent bool `json:"absent"`
+	// Cluster is the identity the live cluster reports, and Identity the one
+	// this operation's own installer recorded. A cluster answering with
+	// another identity belongs to another installation.
+	Cluster  string `json:"cluster"`
+	Identity string `json:"identity"`
+	// Media names every node whose controller still presents boot media, and
+	// Missing every declared node the cluster does not hold. Both are node
+	// names, so a refusal can say which.
+	Media         []string `json:"media"`
+	Missing       []string `json:"missing"`
+	Postcondition bool     `json:"postcondition"`
+	// Powered names every node reported running, which is what tells a node
+	// that was never booted from one that may be installing now.
+	Powered []string `json:"powered"`
+	Release string   `json:"release"`
+	Request string   `json:"request"`
+}
+
+// ValidateInstallPresence accepts evidence only when it proves the cluster
+// this operation installed is the cluster answering, at the declared release,
+// holding every declared node, with no node still presenting boot media.
+func ValidateInstallPresence(data []byte, request InstallRequest, digest string) error {
+	evidence, err := decodeInstallEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if !evidence.Postcondition || evidence.Absent {
+		return refusal("lifecycle.state", "the installation adapter did not prove its postcondition", "")
+	}
+	if evidence.Identity == "" || evidence.Cluster != evidence.Identity {
+		return refusal("lifecycle.state", "the cluster answering is not the cluster this operation installed", "")
+	}
+	if evidence.Release != request.Release.Version {
+		return refusal("lifecycle.state", "the cluster reports another release than the one it was installed for", "")
+	}
+	if len(evidence.Missing) != 0 {
+		return refusal("lifecycle.state", "the cluster is short of a declared node", "")
+	}
+	if len(evidence.Media) != 0 {
+		return refusal("lifecycle.state", "a node still presents the media it installed from", "")
+	}
+	return nil
+}
+
+// ValidateInstallAbsence accepts evidence only when it positively proves no
+// node still presents this operation's boot media. The installed cluster
+// leaves with its nodes' own disks, so nothing here reports on the cluster.
+func ValidateInstallAbsence(data []byte, digest string) error {
+	evidence, err := decodeInstallEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if !evidence.Postcondition || !evidence.Absent {
+		return refusal("lifecycle.state", "the installation adapter did not prove removal", "")
+	}
+	if len(evidence.Media) != 0 {
+		return refusal("lifecycle.state", "the installation removal evidence still reports inserted media", "")
+	}
+	return nil
+}
+
+// ValidateInstallNoEffect accepts evidence only when it positively proves that
+// nothing was installed: no cluster answers, no node runs and no node holds
+// this operation's media.
+func ValidateInstallNoEffect(data []byte, digest string) error {
+	evidence, err := decodeInstallEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if evidence.Cluster != "" {
+		return refusal("lifecycle.state", "a cluster answers, so no effect is unproved", "")
+	}
+	if len(evidence.Powered) != 0 || len(evidence.Media) != 0 {
+		return refusal("lifecycle.state", "a node is running or still holds boot media", "")
+	}
+	return nil
+}
+
+// ValidateInstallPartial accepts evidence only when it positively proves this
+// installation is part way through: the cluster this operation installed
+// answers while something the completion requires is not yet true. A cluster
+// answering with another identity is another installation and is never
+// converged; a node powered on while nothing answers may be installing now, so
+// neither is partial.
+func ValidateInstallPartial(data []byte, digest string) error {
+	evidence, err := decodeInstallEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if evidence.Postcondition || evidence.Absent {
+		return refusal("lifecycle.state", "the installation evidence proves a settled state, not a partial one", "")
+	}
+	if evidence.Identity == "" || evidence.Cluster != evidence.Identity {
+		return refusal("lifecycle.state", "the cluster answering is not the cluster this operation installed", "")
+	}
+	return nil
+}
+
+func decodeInstallEvidence(data []byte, digest string) (InstallEvidence, error) {
+	if len(data) == 0 || len(data) > maxEvidenceBytes {
+		return InstallEvidence{}, refusal("lifecycle.state", "the installation adapter returned no bounded evidence", "")
+	}
+	var evidence InstallEvidence
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&evidence); err != nil {
+		return InstallEvidence{}, refusal("lifecycle.state", "the installation adapter returned malformed evidence", "")
+	}
+	if decoder.More() {
+		return InstallEvidence{}, refusal("lifecycle.state", "the installation adapter returned trailing evidence", "")
+	}
+	if evidence.Request != digest {
+		return InstallEvidence{}, refusal("lifecycle.state", "the installation evidence names another request", "")
+	}
+	return evidence, nil
+}

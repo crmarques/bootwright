@@ -1,0 +1,37 @@
+---
+# The installer polls the cluster API from this host, so every name the cluster
+# answers at is proved to resolve here before any node is booted. A name that
+# does not resolve fails the block with the answers it found, and nothing is
+# booted.
+- name: Resolve every name this cluster answers at
+  ansible.builtin.command:
+    argv:
+      - getent
+      - hosts
+      - '{{ item.name }}'
+  loop: '{{ bootwright_cluster_install_request.endpoints }}'
+  loop_control:
+    label: '{{ item.name }}'
+  register: containercluster_install_agent_resolution
+  changed_when: false
+  failed_when: false
+
+- name: Collect the names this host cannot resolve
+  ansible.builtin.set_fact:
+    containercluster_install_agent_unresolved: >-
+      {{ containercluster_install_agent_resolution.results
+         | rejectattr('rc', 'equalto', 0) | map(attribute='item.name') | list
+         + (containercluster_install_agent_resolution.results
+            | selectattr('rc', 'equalto', 0)
+            | rejectattr('stdout', 'search', '^[^ ]+')
+            | map(attribute='item.name') | list) }}
+  changed_when: false
+
+- name: Refuse to boot a cluster this host cannot reach by name
+  ansible.builtin.fail:
+    msg: >-
+      this host does not resolve {{ containercluster_install_agent_unresolved | join(', ') }},
+      and the installer polls the cluster from here; route the cluster's zone to
+      the resolver this graph declares, then repeat the apply. No node was
+      booted.
+  when: containercluster_install_agent_unresolved | length > 0

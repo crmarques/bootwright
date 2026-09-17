@@ -1,0 +1,52 @@
+argument_specs:
+  apply:
+    short_description: Boot one cluster's nodes and wait for it to install.
+    options: &request
+      bootwright_cluster_install_request:
+        type: dict
+        required: true
+        options:
+          budgets:
+            type: dict
+            required: true
+          endpoints:
+            type: list
+            elements: dict
+            required: true
+          identity:
+            type: dict
+            required: true
+          image:
+            type: dict
+            required: true
+          nodes:
+            type: list
+            elements: dict
+            required: true
+          placement:
+            type: dict
+            required: true
+          release:
+            type: dict
+            required: true
+          tool:
+            type: dict
+            required: true
+          version:
+            type: str
+            required: true
+            choices: [cluster-install-agent-v1]
+          workRoot:
+            type: str
+            required: true
+      bootwright_cluster_install_material:
+        type: dict
+        required: true
+
+  observe:
+    short_description: Observe one frozen cluster installation without changing it.
+    options: *request
+
+  destroy:
+    short_description: Release the boot media one cluster installed from.
+    options: *request

@@ -1,0 +1,32 @@
+---
+- name: Validate the frozen installation request
+  ansible.builtin.assert:
+    that:
+      - bootwright_cluster_install_request.version == 'cluster-install-agent-v1'
+      - bootwright_cluster_install_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.containercluster_install_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Observe what this installation recorded
+  bootwright.core.containercluster_install_inspect:
+    request: '{{ bootwright_cluster_install_request }}'
+  register: containercluster_install_agent_before
+  no_log: true
+
+- name: Read the cluster and its nodes back, without changing any of it
+  ansible.builtin.import_tasks: state.yml
+
+- name: Publish what the observation found
+  bootwright.core.containercluster_install_protocol:
+    phase: completed
+    outcome: unchanged
+    digest: '{{ bootwright_cluster_install_digest }}'
+    identity: '{{ containercluster_install_agent_before.observation.identity }}'
+    state: '{{ containercluster_install_agent_state }}'
+    observed: true
+  no_log: true

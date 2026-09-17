@@ -281,11 +281,12 @@ agent-installer half of M4 bounded to one cluster topology, and it neither
 requires nor delivers M2a's standalone `render installer`, C12's operator-run
 ISO builder or C9.
 
-[Boot media](container-clusters.md#boot-media) is delivered: the projection,
-the installer-version proof, the build and its private publication. The
-[installation](container-clusters.md#installation) that boots the nodes from
-that image and waits for the cluster is the remaining half, so an apply of a
-cluster today publishes its image and stops there.
+Every capability, adapter and test below is implemented and its exit evidence
+passes. What remains is the by-hand rehearsal this delivery's verification
+model requires, on a libvirt host with a pull secret, and the contract that
+moves the administrator access a completed installation produces out of the
+installer's own work area into context custody, which `cluster kubeconfig`
+would then reveal.
 
 Install one single-node OpenShift cluster on a Machine the libvirt substrate
 realizes, booting the agent image through that Machine's own emulated Redfish
@@ -318,10 +319,11 @@ from frozen inputs in one owned work area, and publishes it through
 [private consumer publication](infrastructure-services.md#private-consumer-publication),
 because the image carries the pull secret in its own ignition.
 [Installation](container-clusters.md#installation) proves the controller
-resolves the cluster's names, boots each node through its substrate, waits
-through the installer's own give-ups under one wall-clock budget,
-[captures](secrets.md#captured-material) the administrator access into context
-custody, and releases the media only once the installation has completed.
+resolves the cluster's names, boots each node through the
+[boot operation its own substrate publishes](substrates.md#identity-and-power-operations),
+waits through the installer's own give-ups under one wall-clock budget, proves
+the cluster it installed by reading that cluster back, and releases the media
+only once the installation has completed.
 
 Exit evidence: the `containercluster` projection suite (install-config and
 agent-config goldens for a single-node libvirt cluster, a multi-node libvirt
@@ -331,17 +333,19 @@ installer-version refusal, private publication removed by the inverse, the
 resumable and terminal wait classifications, completion proved against the
 cluster's own identity, replay without a rebuild, an inverse that retains the
 cluster, quiescence); the substrate boot-operation tests for both arms; the
-managed resolver's cluster records; the captured-material custody suite; the
-`examples/lab-sno` acceptance; and `make check`.
+managed resolver's cluster records; the `examples/lab-sno` acceptance; and
+`make check`.
 
 **Verification model.** M1d's model continues: every in-tree gate is unitary
 and host-independent. The cluster install itself is rehearsed by hand on a
 libvirt host, and acceptance against physical hardware is operator-run and is
 not a gate of this delivery.
 
-Constraints left behind: the image is built by the installer the controller
-stage published there, so a cluster whose artifact server is placed on another
-Machine refuses; `render installer` stays unavailable, so the projected
+Constraints left behind: the administrator access a completed installation
+produces stays in the installer's own root-owned work area, so no command
+reveals it and a destroy of the context takes it with the area; the image is
+built by the installer the controller stage published there, so a cluster whose
+artifact server is placed on another Machine refuses; `render installer` stays unavailable, so the projected
 inputs are produced only by an operation (M2a); the cluster's captured access is
 revealed by no command until `cluster kubeconfig` is promoted, so the first
 delivery leaves it readable only through the context store; the controller's own

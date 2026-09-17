@@ -232,7 +232,7 @@ func (c MediaCapability) run(ctx context.Context, execution lifecycle.Execution,
 	values := map[string]string{}
 	var materials []lifecycle.MaterialFile
 	if operation == "apply" {
-		installer, err := InstallerPath(ctx, execution.Setup, request.Tool)
+		installer, err := ToolPath(ctx, execution.Setup, request.Tool, installerTool)
 		if err != nil {
 			return lifecycle.RunResult{}, err
 		}
@@ -273,17 +273,18 @@ func (c MediaCapability) run(ctx context.Context, execution lifecycle.Execution,
 	})
 }
 
-// InstallerPath is the exact executable the controller stage published for one
+// ToolPath is the exact executable the controller stage published for one
 // declared release, located in the sealed client area that stage sealed. A
 // search path is never authority: an installer is the release pin, so the one
-// this block runs is the one this context's own graph selected.
-func InstallerPath(ctx context.Context, setup prerequisites.StorageView, tool Tool) (string, error) {
+// this block runs is the one this context's own graph selected, and the client
+// that reads the installed cluster back comes from the same closure.
+func ToolPath(ctx context.Context, setup prerequisites.StorageView, tool Tool, executable string) (string, error) {
 	if setup.OpenBundle == nil {
 		return "", refusal("controller.state", "the retained controller areas are unavailable",
 			"run bootwright setup, then apply --stage controller")
 	}
 	for _, definition := range setup.State.RetainedDefinitions {
-		member, found := publishedTool(definition.Tools, tool)
+		member, found := publishedTool(definition.Tools, tool, executable)
 		if !found {
 			continue
 		}
@@ -307,19 +308,20 @@ func InstallerPath(ctx context.Context, setup prerequisites.StorageView, tool To
 		return location.Path + "/" + member, nil
 	}
 	return "", refusal("controller.state",
-		"the "+tool.Kind+" of release "+tool.Version+" is not installed on this controller",
+		"the "+executable+" of release "+tool.Version+" is not installed on this controller",
 		"run bootwright apply --stage controller")
 }
 
 // publishedTool is the file one retained closure publishes for exactly this
-// client kind, compatibility and version.
-func publishedTool(tools []prerequisites.ToolDefinition, tool Tool) (string, bool) {
+// client kind, compatibility and version. A closure publishes more than one
+// executable, so the member is named rather than inferred from the kind.
+func publishedTool(tools []prerequisites.ToolDefinition, tool Tool, executable string) (string, bool) {
 	for _, definition := range tools {
 		if definition.Kind != tool.Kind || definition.Compatibility != tool.Compatibility || definition.Version != tool.Version {
 			continue
 		}
 		for _, file := range definition.Files {
-			if strings.HasSuffix(file.Path, "/"+tool.Kind) {
+			if strings.HasSuffix(file.Path, "/"+executable) {
 				return file.Path, true
 			}
 		}
