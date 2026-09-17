@@ -25,7 +25,6 @@ ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C.UTF-8"}
 # `shut off` means removing it interrupts nothing: a paused, suspended or
 # crashed domain still holds the memory and disks it was given.
 DOMAIN_STATES = ("running", "idle", "paused", "in shutdown", "shut off", "crashed", "pmsuspended")
-MAX_DOMAINS = 4096
 
 # OWNERSHIP is the metadata namespace a realized object carries. A same-named
 # object without it is foreign and is never changed or removed.
@@ -165,49 +164,6 @@ def domain_state(runner, uri, name):
     return state if state in DOMAIN_STATES else ""
 
 
-def running_domains(runner, uri):
-    """Name every domain the hypervisor currently runs, this context's or not."""
-    code, output = virsh(runner, uri, "list", "--name", "--state-running")
-    if code != 0:
-        return []
-    return [line.strip() for line in output.splitlines() if line.strip()][:MAX_DOMAINS]
-
-
-def domain_bridges(runner, uri, name):
-    """Name every bridge and libvirt network one domain attaches to.
-
-    A domain wired to a managed network names that network, and libvirt adds
-    the bridge it resolved to while the domain runs. Both are collected, so an
-    attachment stays observably in use whichever form its interface takes.
-    """
-    code, output = virsh(runner, uri, "dumpxml", name)
-    if code != 0:
-        return []
-    try:
-        root = ElementTree.fromstring(output)
-    except ElementTree.ParseError:
-        return []
-    attachments = []
-    for source in root.findall("./devices/interface/source"):
-        for attribute in ("bridge", "network"):
-            value = source.get(attribute)
-            if value:
-                attachments.append(value)
-    return attachments
-
-
-def busy_bridges(runner, uri):
-    """Every bridge and network a running domain is attached to.
-
-    A network carrying a running guest is in use whoever owns the guest, so
-    this reads the whole hypervisor rather than only this context's domains.
-    """
-    attachments = set()
-    for name in running_domains(runner, uri):
-        attachments.update(domain_bridges(runner, uri, name))
-    return attachments
-
-
 def disk_size_gib(runner, path):
     """Report a disk's virtual size in whole GiB, or zero when it is absent."""
     if not os.path.isfile(path):
@@ -232,10 +188,8 @@ def observe_host(runner, request):
     """Bounded read-only observation of everything the host block owns."""
     networks = []
     answers = uri_answers(runner, request["uri"])
-    busy = busy_bridges(runner, request["uri"]) if answers else set()
     for network in request.get("networks") or []:
         entry = {"name": network["name"], "managed": bool(network["managed"]), "bridge": bridge_present(network["bridge"])}
-        entry["busy"] = network["bridge"] in busy or network["name"] in busy
         if entry["managed"] and answers:
             state = network_state(runner, request["uri"], network["name"])
             entry["state"], entry["owned"], entry["uuid"] = state["state"], state["owned"], state["uuid"]

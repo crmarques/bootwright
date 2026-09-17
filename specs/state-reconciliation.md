@@ -536,34 +536,41 @@ environment ready themselves.
 
 ### Quiescence before removal
 
-Bootwright removes and replaces only what is out of use. Each capability
-defines, for every asset it realizes, one *quiescent* predicate observed from
-the host itself: never a value echoed back from its own request, never a record
-of what Bootwright intended, and never a state a live system also reports for
-something that is gone.
+Bootwright removes and replaces only what is out of use, and the one thing it
+proves is that the **Machines** are down. A Machine is what runs an operating
+system and an operator's work; everything else a context owns serves those
+Machines, so a context whose Machines are all stopped has nothing left running
+to interrupt. A capability that realizes Machines defines their *quiescent*
+predicate and observes it on the host itself: never a value echoed back from
+its own request, never a record of what Bootwright intended, and never a state
+a live system also reports for something that is gone. Every other capability
+derives its answer from the Machines the same removal already probes, and
+observes nothing of its own. Bootwright does not ask whether a managed service,
+a published artifact or a provider network is being used, by this context or by
+anything else.
 
-A fresh removal observes every asset it would take back **before it registers**,
+A fresh removal probes every block it would take back **before it registers**,
 and refuses `lifecycle.live` with no operation, no reservation and no effect
-when any of them is in use, naming each one and the command that stops it. The
-check cannot be per-effect alone, because a removal takes dependents before
-dependencies: it would delete the quiescent leaves and then stop at the running
-machine, leaving a context that can only continue a removal it should never
-have started. Every block is probed rather than the first live one alone, so an
-operator learns everything to stop at once. Each inverse then revalidates its
-own target immediately before its effect and fails its block rather than
-forcing, which covers an asset started while the removal ran. A continuation is
-not gated again: its operation is already registered and each of its effects
-still revalidates.
+when any Machine is still running, naming each one and the command that stops
+it. The check cannot be per-effect alone, because a removal takes dependents
+before dependencies: it would delete the quiescent leaves and then stop at the
+running machine, leaving a context that can only continue a removal it should
+never have started. Every block is asked rather than the first live one alone,
+so an operator learns every Machine to stop at once. The Machine inverse then
+revalidates its own target immediately before its effect and fails its block
+rather than forcing, which covers a Machine started while the removal ran. A
+continuation is not gated again: its operation is already registered and each
+of its effects still revalidates.
 
-An asset whose state cannot be read is live. An environment that cannot prove
-it is idle is never assumed to be.
+A Machine whose state cannot be read is live. An environment that cannot prove
+its Machines are idle is never assumed to be.
 
-Stopping is never a side effect of removal. An inverse never powers a target
+Stopping is never a side effect of removal. An inverse never powers a Machine
 off, and the operator stops it explicitly — through
 [the Machine power commands](cli/commands.md#command-and-flag-catalog) or their
-own means — so a removal never destroys work that was still running. An asset
+own means — so a removal never destroys work that was still running. A Machine
 that exists before Bootwright touches it, such as operator-owned bare metal,
-must be quiescent before it is changed for the same reason.
+must be down before it is changed for the same reason.
 
 This composes with authorization rather than replacing it: `data-loss`
 acknowledges that removal destroys data, and quiescence proves that nothing is

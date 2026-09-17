@@ -1,11 +1,11 @@
 """A removal proves its target is idle; it never makes it idle.
 
 Cutting the power to a running machine to delete it takes the memory and disks
-out from under whatever was using them. The engine proves every owned asset is
-stopped before it registers a removal, and these roles hold the same line at
-the moment of the effect, against a machine started in between. Losing either
-guard is invisible to lint and to a syntax check, and shows up only as a guest
-killed by a removal that should have refused.
+out from under whatever was using them. The engine proves every Machine a
+removal would take back is stopped before it registers, and this role holds the
+same line at the moment of the effect, against a machine started in between.
+Losing either guard is invisible to lint and to a syntax check, and shows up
+only as a guest killed by a removal that should have refused.
 """
 
 from __future__ import annotations
@@ -48,13 +48,3 @@ def test_a_machine_removal_refuses_a_domain_that_is_not_shut_off():
         for condition in task["ansible.builtin.assert"].get("that") or []
     )
     assert "shut off" in conditions
-
-
-def test_a_provider_host_removal_refuses_a_network_carrying_a_guest():
-    conditions = " ".join(
-        str(condition)
-        for task in tasks("substrate_libvirt_host", "destroy.yml")
-        if isinstance(task.get("ansible.builtin.assert"), dict)
-        for condition in task["ansible.builtin.assert"].get("that") or []
-    )
-    assert "not item.busy" in conditions

@@ -157,10 +157,10 @@ terminates the owned process tree. An attempt whose effect was already
 authorized becomes unknown unless positive evidence already proves its outcome.
 
 **Quiescence.** A managed service is quiescent whenever the
-[removal gate](state-reconciliation.md#quiescence-before-removal) asks, because
-what consumes it is the Machines and installations of its own context and the
-same removal probes every one of them. Refusing on its own listener would
-instead refuse a removal whose consumers are already gone.
+[removal gate](state-reconciliation.md#quiescence-before-removal) asks. The
+gate proves the Machines are down and derives everything else from them, so a
+service is never observed for use of its own: refusing on its own listener
+would refuse a removal whose Machines are already stopped.
 
 ### Consumer publication
 

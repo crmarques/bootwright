@@ -214,20 +214,20 @@ apply and destroy that touch no record, a changed input that refuses, a partial
 resolution converged by a retry and removable by a destroy, a refusal that
 registers nothing and releases its binding, every block probed, an unprovable
 probe treated as live, a superseding removal gated and a continuation not),
-the `reconciliation` resolution table tests, the per-capability partial and
-quiescence classifiers, the collection's `test_removal_never_forces.py`,
+the `reconciliation` resolution table tests, the per-capability partial
+classifiers, the Machine quiescence classifier and the derived answers beside
+it, the collection's `test_removal_never_forces.py`,
 `test_substrate_libvirt.py` and protocol suites, and the CLI settled-result
 goldens.
 
-Constraints left behind: the gate runs one observation per owned block before
-every fresh removal, which is real time on a large context and is not reported
-as progress beyond a row per block; those probe runs retain no adapter output,
-because the gate runs before any operation is registered and so has no attempt
-for its output to sit beside; component quiescence is derived
-from the Machines that consume a service rather than probed on the service
-itself, so a consumer outside the context is not seen; and an asset whose state
-cannot be read is reported live, which refuses a removal on a host whose
-hypervisor is down until it answers again.
+Constraints left behind: the gate observes the Machines alone and derives every
+other block from them, so nothing proves that a service, a published artifact
+or a provider network is out of use, and a consumer outside the context is
+never seen; those Machine probes retain no adapter output, because the gate
+runs before any operation is registered and so has no attempt for its output to
+sit beside, and they report no progress beyond a row per block; and a Machine
+whose state cannot be read is reported live, which refuses a removal on a host
+whose hypervisor is down until it answers again.
 
 ### Retiring a superseded execution bundle
 

@@ -146,7 +146,7 @@ input settles without an effect, and editing the input first refuses with
 The inverse removes exactly what the apply created, and the destroy that
 deletes the guest's disks consumes the `data-loss` authorization:
 
-A removal proves everything it would take back is out of use before it
+A removal proves every Machine it would take back is down before it
 registers, so a destroy while the guest is still running refuses
 `lifecycle.live` and names the command that stops it. Nothing is removed and no
 operation is created, so stopping the guest and repeating the command is the

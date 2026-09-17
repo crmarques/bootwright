@@ -94,9 +94,10 @@ beneath `/var/lib/libvirt/images/bootwright/<context>/<provider>/vmedia`,
 active and set to autostart, is the only location the provider's emulated BMCs
 may fetch media into.
 
-A managed network is quiescent only while no running domain is attached to its
-bridge, whoever owns that domain, so a removal never pulls a network out from
-under a guest that is using it.
+The networks and pool this block owns are used by the Machines of its own
+context, so its quiescence is derived from theirs under the
+[removal gate](state-reconciliation.md#quiescence-before-removal) rather than
+observed on the host.
 
 **Reservations.** `bridge:<name>` for every managed attachment, because a
 bridge name is host-global; `libvirt-network:<name>` for every managed network;

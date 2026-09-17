@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
@@ -282,31 +281,16 @@ func TestMachineQuiescenceAdmitsOnlyAShutOffDomain(t *testing.T) {
 	}
 }
 
-// A network carrying a running guest is in use whoever owns that guest, so the
-// provider host refuses while any of its bridges is busy.
-func TestHostQuiescenceRefusesABridgeCarryingAGuest(t *testing.T) {
-	requests, _ := HostRequests(labCatalog(), "controller", testContext)
-	canonical, err := requests[0].Canonical()
-	if err != nil {
-		t.Fatal(err)
-	}
-	probe := lifecycle.Probe{Block: reconciliation.Block{
-		BlockDefinition: reconciliation.BlockDefinition{ID: "substrate-host-lab", Request: canonical},
-		RequestDigest:   "digest",
-	}}
-	idle := HostEvidence{Request: "digest", Networks: []NetworkEvidence{{Name: "lab-network", Managed: true}}}
-	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, idle)}}
-	state, err := NewHost(runner).Quiescent(context.Background(), probe)
+// A provider host is quiescent whichever way its networks are being used: what
+// a removal has to prove idle is the Machines, and the same removal probes
+// every one of them.
+func TestHostQuiescenceIsDerivedFromItsMachines(t *testing.T) {
+	runner := &fakeRunner{err: errors.New("the host must not be reached")}
+	state, err := NewHost(runner).Quiescent(context.Background(), lifecycle.Probe{})
 	if err != nil || state.State != lifecycle.Quiescent {
-		t.Fatalf("an idle provider host = %+v (%v)", state, err)
+		t.Fatalf("provider host quiescence = %+v (%v)", state, err)
 	}
-	busy := HostEvidence{Request: "digest", Networks: []NetworkEvidence{{Name: "lab-network", Managed: true, Busy: true}}}
-	runner = &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, busy)}}
-	state, err = NewHost(runner).Quiescent(context.Background(), probe)
-	if err != nil || state.State != lifecycle.Live {
-		t.Fatalf("a busy provider host = %+v (%v)", state, err)
-	}
-	if !strings.Contains(state.Reason, "lab-network") {
-		t.Fatalf("the refusal did not name the network in use: %q", state.Reason)
+	if len(runner.requests) != 0 {
+		t.Fatalf("a derived quiescence ran %d adapter invocations", len(runner.requests))
 	}
 }

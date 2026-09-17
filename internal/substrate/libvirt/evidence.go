@@ -33,10 +33,7 @@ type ServiceEvidence struct {
 }
 
 type NetworkEvidence struct {
-	Bridge bool `json:"bridge"`
-	// Busy reports that a running domain is attached to this network's bridge,
-	// whoever owns that domain. A network carrying a guest is in use.
-	Busy    bool   `json:"busy"`
+	Bridge  bool   `json:"bridge"`
 	Managed bool   `json:"managed"`
 	Name    string `json:"name"`
 	Owned   bool   `json:"owned"`

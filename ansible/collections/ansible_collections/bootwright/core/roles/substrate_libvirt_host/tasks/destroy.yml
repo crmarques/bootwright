@@ -36,20 +36,6 @@
     label: '{{ item.name }}'
   when: item.managed
 
-# A network carrying a running guest is in use whoever owns that guest, so
-# removing it would cut the guest off. The engine proves the same thing before
-# it registers; this is the guard against a guest started in between.
-- name: Refuse to remove a network a running guest is attached to
-  ansible.builtin.assert:
-    that:
-      - not item.busy
-    fail_msg: a running guest is attached to this network; stop it and repeat the removal
-    quiet: true
-  loop: '{{ substrate_libvirt_host_before.observation.networks }}'
-  loop_control:
-    label: '{{ item.name }}'
-  when: item.managed
-
 - name: Destroy each owned network
   ansible.builtin.command:
     argv:
