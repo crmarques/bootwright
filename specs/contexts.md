@@ -109,7 +109,12 @@ The private Controller record version is `2`. Its fields are `version`, `host`,
 `receipt`, `bindings`, `retainedSources`, optional `retainedDefinitions`,
 `bundles` and optional `reservations`, encoded as compact JSON
 in schema order followed by LF. Unknown fields, duplicate keys, noncanonical
-records and versions refuse. The host contains the confidential
+records and versions refuse. A record is proved canonical by re-encoding what
+was read and comparing it byte for byte, so a field added to any value this
+record contains must encode to nothing when it is unset: otherwise every host
+that already holds a record refuses the next setup, and the version this
+record carries cannot be moved to admit the field without refusing that host
+outright. The host contains the confidential
 [`linux-installed-v1` tuple](controller.md#host-identity-and-shared-prerequisites).
 The receipt fixes its ID, catalog digest, plan digest, context name/revision/
 Machine, explicit egress, source closure, full resolved dependency definition,

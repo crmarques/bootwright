@@ -15,8 +15,12 @@ import (
 
 func syntheticResolution(t *testing.T) p.Definition {
 	t.Helper()
+	return syntheticResolutionWith(t, controller.DefaultDependencyVersions())
+}
+
+func syntheticResolutionWith(t *testing.T, versions controller.DependencyVersions) p.Definition {
+	t.Helper()
 	platform := p.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}
-	versions := controller.DefaultDependencyVersions()
 	source := func(id, url string) p.DependencySource {
 		return p.DependencySource{ID: id, URL: url, SHA256: strings.Repeat("a", 64), Bytes: 64}
 	}
@@ -129,5 +133,38 @@ func TestControllerResolvedDefinitionEncodingRemainsBoundedAndCanonical(t *testi
 	}
 	if _, err := encodeRecord(controllerRecord(value, nil), len(encoded)-1); err == nil {
 		t.Fatal("encoding exceeded exact size bound")
+	}
+}
+
+// A controller record written before a field existed still decodes, because a
+// persisted record is proved canonical byte for byte and a field that is absent
+// must encode to absent. Adding one without that is what refuses every later
+// setup on a host that already holds a record.
+func TestAControllerRecordWrittenBeforeANewFieldStillDecodes(t *testing.T) {
+	// The version intent an earlier build resolved against: every field it
+	// knew, and none this build added since.
+	earlier := controller.DefaultDependencyVersions()
+	earlier.InstallerMedia = ""
+	definition := syntheticResolutionWith(t, earlier)
+	value := syntheticControllerState(t, p.SetupContext{})
+	value.Receipt.Definition = &definition
+	value.Receipt.CatalogDigest = definition.CatalogDigest
+	value.Receipt.Sources = slices.Clone(definition.Sources)
+	value.Receipt.PlanDigest, _ = p.SetupPlanDigest(value.Host, value.Receipt)
+	value, err := retainControllerSources(p.HostState{}, value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := encodeRecord(controllerRecord(value, nil), maxControllerState)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, added := range []string{`"installerMedia"`, `"hypervisor"`} {
+		if bytes.Contains(encoded, []byte(added)) {
+			t.Fatalf("a field this build added is encoded into an earlier record: %s", added)
+		}
+	}
+	if _, _, err := decodeControllerRecord(encoded); err != nil {
+		t.Fatalf("a record an earlier build wrote was refused: %v", err)
 	}
 }
