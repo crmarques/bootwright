@@ -318,23 +318,10 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	return c.runner.Run(ctx, lifecycle.RunRequest{
-		Implementation: c.definition.Implementation,
-		Operation:      operation,
-		Variable:       c.definition.Variable,
-		Digest:         execution.Block.RequestDigest,
-		Canonical:      canonical,
-		Placement:      request.Placement,
-		Materials:      lifecycle.Materials(request.Placement),
-		Sudo:           request.Placement.SudoPasswordRef,
-		Launch:         execution.Launch,
-		Bundle:         execution.Bundle,
-		Area:           execution.Area,
-		Material:       execution.Material,
-		Log:            execution.Log,
-		Progress:       execution.Progress,
-		Output:         execution.Output,
-	})
+	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
+		Implementation: c.definition.Implementation, Operation: operation, Variable: c.definition.Variable,
+		Canonical: canonical, Placement: request.Placement,
+	}))
 }
 
 // Unsupported names every managed service of this kind the capability cannot

@@ -21,47 +21,12 @@ const (
 	maxMaterialBytes   = 1 << 20
 )
 
-// operationPlaybook binds one implementation identity and operation to its
-// fixed entrypoint, relative to the collection's playbook root. Implementation,
-// not kind, is the key, so two implementations of one kind never run each
-// other's automation. The mapping is closed: desired state never names a
-// playbook.
-var operationPlaybook = map[string]string{
-	"artifact-server-nginx-v1/apply":    "infrastructureservices/artifact_server_apply.yml",
-	"artifact-server-nginx-v1/observe":  "infrastructureservices/artifact_server_observe.yml",
-	"artifact-server-nginx-v1/destroy":  "infrastructureservices/artifact_server_destroy.yml",
-	"proxy-squid-v1/apply":              "infrastructureservices/proxy_apply.yml",
-	"proxy-squid-v1/observe":            "infrastructureservices/proxy_observe.yml",
-	"proxy-squid-v1/destroy":            "infrastructureservices/proxy_destroy.yml",
-	"dns-server-dnsmasq-v1/apply":       "infrastructureservices/dns_server_apply.yml",
-	"dns-server-dnsmasq-v1/observe":     "infrastructureservices/dns_server_observe.yml",
-	"dns-server-dnsmasq-v1/destroy":     "infrastructureservices/dns_server_destroy.yml",
-	"ntp-server-chrony-v1/apply":        "infrastructureservices/ntp_server_apply.yml",
-	"ntp-server-chrony-v1/observe":      "infrastructureservices/ntp_server_observe.yml",
-	"ntp-server-chrony-v1/destroy":      "infrastructureservices/ntp_server_destroy.yml",
-	"substrate-host-libvirt-v1/apply":   "substrate/libvirt_host_apply.yml",
-	"substrate-host-libvirt-v1/observe": "substrate/libvirt_host_observe.yml",
-	"substrate-host-libvirt-v1/destroy": "substrate/libvirt_host_destroy.yml",
-	"machine-libvirt-v1/apply":          "substrate/libvirt_machine_apply.yml",
-	"machine-libvirt-v1/observe":        "substrate/libvirt_machine_observe.yml",
-	"machine-libvirt-v1/destroy":        "substrate/libvirt_machine_destroy.yml",
-	"machine-baremetal-v1/apply":        "substrate/baremetal_machine_apply.yml",
-	"machine-baremetal-v1/observe":      "substrate/baremetal_machine_observe.yml",
-	"machine-baremetal-v1/destroy":      "substrate/baremetal_machine_destroy.yml",
-	"machine-power-redfish-v1/power":    "machine/power.yml",
-	"cluster-install-agent-v1/apply":    "containercluster/install_apply.yml",
-	"cluster-install-agent-v1/observe":  "containercluster/install_observe.yml",
-	"cluster-install-agent-v1/destroy":  "containercluster/install_destroy.yml",
-	"cluster-media-agent-v1/apply":      "containercluster/media_apply.yml",
-	"cluster-media-agent-v1/observe":    "containercluster/media_observe.yml",
-	"cluster-media-agent-v1/destroy":    "containercluster/media_destroy.yml",
-	"os-install-anaconda-v1/apply":      "managedos/install_apply.yml",
-	"os-install-anaconda-v1/observe":    "managedos/install_observe.yml",
-	"os-install-anaconda-v1/destroy":    "managedos/install_destroy.yml",
-}
-
-func playbookFor(request lifecycle.RunRequest) (string, bool) {
-	playbook, ok := operationPlaybook[request.Implementation+"/"+request.Operation]
+// playbookFor answers the entrypoint composition bound to one implementation
+// identity and operation. Implementation, not kind, is the key, so two
+// implementations of one kind never run each other's automation. The mapping is
+// closed: desired state never names a playbook.
+func (r Runner) playbookFor(request lifecycle.RunRequest) (string, bool) {
+	playbook, ok := r.playbooks[request.Implementation+"/"+request.Operation]
 	return playbook, ok
 }
 

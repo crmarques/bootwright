@@ -2,7 +2,6 @@ package libvirt
 
 import (
 	"context"
-	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -326,7 +325,10 @@ func (c HostCapability) run(ctx context.Context, execution lifecycle.Execution, 
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	return c.runner.Run(ctx, invocation(execution, HostImplementation, hostVariable, operation, canonical, request.Placement, nil, nil))
+	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
+		Implementation: HostImplementation, Operation: operation, Variable: hostVariable,
+		Canonical: canonical, Placement: request.Placement,
+	}))
 }
 
 // Removal reads a frozen machine block as the removal of what it realized. The
@@ -425,31 +427,10 @@ func (c MachineCapability) run(ctx context.Context, execution lifecycle.Executio
 		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: request.Controller.CredentialsRef, Variable: "controllerUser"},
 		{Name: "bmc-password", Part: secrets.PasswordPart, Secret: request.Controller.CredentialsRef, Variable: "controllerPassword"},
 	}
-	return c.runner.Run(ctx, invocation(execution, MachineImplementation, machineVariable, operation, canonical, request.Placement, materials, nil))
-}
-
-// invocation is the one shape every substrate effect crosses the adapter
-// boundary in. Bound material reaches the adapter only as operation-scoped
-// files it removes.
-func invocation(execution lifecycle.Execution, implementation, variable, operation string, canonical []byte, placement machineref.Placement, materials []lifecycle.MaterialFile, values map[string]string) lifecycle.RunRequest {
-	return lifecycle.RunRequest{
-		Implementation: implementation,
-		Operation:      operation,
-		Variable:       variable,
-		Digest:         execution.Block.RequestDigest,
-		Canonical:      canonical,
-		Placement:      placement,
-		Materials:      append(slices.Clone(materials), lifecycle.Materials(placement)...),
-		MaterialValues: values,
-		Sudo:           placement.SudoPasswordRef,
-		Launch:         execution.Launch,
-		Bundle:         execution.Bundle,
-		Area:           execution.Area,
-		Material:       execution.Material,
-		Log:            execution.Log,
-		Progress:       execution.Progress,
-		Output:         execution.Output,
-	}
+	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
+		Implementation: MachineImplementation, Operation: operation, Variable: machineVariable,
+		Canonical: canonical, Placement: request.Placement, Materials: materials,
+	}))
 }
 
 func usableOutcome(result lifecycle.RunResult, subject string) (reconciliation.Outcome, error) {

@@ -316,24 +316,10 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 			lifecycle.MaterialFile{Name: "host-key.pub", Part: secrets.PublicKeyPart, Secret: request.Target.HostKeyRef, Variable: "hostIdentityPublic"},
 			lifecycle.MaterialFile{Name: "artifact-ca", Part: secrets.CertificatePart, Secret: request.TLSCertificateRef, Variable: "artifactCertificate"})
 	}
-	return c.runner.Run(ctx, lifecycle.RunRequest{
-		Implementation: Implementation,
-		Operation:      operation,
-		Variable:       variablePrefix,
-		Digest:         execution.Block.RequestDigest,
-		Canonical:      canonical,
-		Placement:      request.Placement,
-		Materials:      append(materials, lifecycle.Materials(request.Placement)...),
-		MaterialValues: values,
-		Sudo:           request.Placement.SudoPasswordRef,
-		Launch:         execution.Launch,
-		Bundle:         execution.Bundle,
-		Area:           execution.Area,
-		Material:       execution.Material,
-		Log:            execution.Log,
-		Progress:       execution.Progress,
-		Output:         execution.Output,
-	})
+	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
+		Implementation: Implementation, Operation: operation, Variable: variablePrefix,
+		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
+	}))
 }
 
 // authorizedKey reads the public half of the bound fleet key. Only that half

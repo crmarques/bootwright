@@ -14,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
+	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -81,10 +82,49 @@ func (r capabilityResolver) Resolve(kind, implementation string) (lifecycle.Capa
 	return nil, false
 }
 
+// operationPlaybook binds one implementation identity and operation to its
+// fixed entrypoint, relative to the collection's playbook root. Composition
+// owns the binding, so a capability names no automation of its own and desired
+// state never names a playbook.
+func operationPlaybook() map[string]string {
+	bindings := map[string]string{
+		artifactserver.Implementation + "/apply":        "infrastructureservices/artifact_server_apply.yml",
+		artifactserver.Implementation + "/observe":      "infrastructureservices/artifact_server_observe.yml",
+		artifactserver.Implementation + "/destroy":      "infrastructureservices/artifact_server_destroy.yml",
+		libvirt.HostImplementation + "/apply":           "substrate/libvirt_host_apply.yml",
+		libvirt.HostImplementation + "/observe":         "substrate/libvirt_host_observe.yml",
+		libvirt.HostImplementation + "/destroy":         "substrate/libvirt_host_destroy.yml",
+		libvirt.MachineImplementation + "/apply":        "substrate/libvirt_machine_apply.yml",
+		libvirt.MachineImplementation + "/observe":      "substrate/libvirt_machine_observe.yml",
+		libvirt.MachineImplementation + "/destroy":      "substrate/libvirt_machine_destroy.yml",
+		baremetal.Implementation + "/apply":             "substrate/baremetal_machine_apply.yml",
+		baremetal.Implementation + "/observe":           "substrate/baremetal_machine_observe.yml",
+		baremetal.Implementation + "/destroy":           "substrate/baremetal_machine_destroy.yml",
+		power.Implementation + "/power":                 "machine/power.yml",
+		agentinstall.InstallImplementation + "/apply":   "containercluster/install_apply.yml",
+		agentinstall.InstallImplementation + "/observe": "containercluster/install_observe.yml",
+		agentinstall.InstallImplementation + "/destroy": "containercluster/install_destroy.yml",
+		agentinstall.MediaImplementation + "/apply":     "containercluster/media_apply.yml",
+		agentinstall.MediaImplementation + "/observe":   "containercluster/media_observe.yml",
+		agentinstall.MediaImplementation + "/destroy":   "containercluster/media_destroy.yml",
+		installation.Implementation + "/apply":          "managedos/install_apply.yml",
+		installation.Implementation + "/observe":        "managedos/install_observe.yml",
+		installation.Implementation + "/destroy":        "managedos/install_destroy.yml",
+	}
+	for prefix, definition := range map[string]managedservice.Definition{
+		"proxy": proxy.Definition(), "dns_server": dnsserver.Definition(), "ntp_server": ntpserver.Definition(),
+	} {
+		for _, operation := range []string{"apply", "observe", "destroy"} {
+			bindings[definition.Implementation+"/"+operation] = "infrastructureservices/" + prefix + "_" + operation + ".yml"
+		}
+	}
+	return bindings
+}
+
 // buildCapabilities lists what this executable can realize, in the API's own
 // kind order, so a plan's block order never depends on wiring order.
 func buildCapabilities(clock systemClock, controller controllerDependencies) capabilityResolver {
-	runner := ansiblerunner.New()
+	runner := ansiblerunner.New(operationPlaybook())
 	resolver := capabilityResolver{{
 		kind: clients.Kind, implementation: clients.Implementation,
 		capability: clients.New(controller.Tools, controller.Native, controller.NativeInspector, controller.ClientInstaller),

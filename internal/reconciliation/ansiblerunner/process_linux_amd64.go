@@ -5,6 +5,7 @@ package ansiblerunner
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,16 +33,19 @@ type Runner struct {
 	scratchParent string
 	command       func(string, ...string) *exec.Cmd
 	drain         time.Duration
+	playbooks     map[string]string
 }
 
-func New() Runner {
+// New binds the entrypoints composition authorizes, keyed by implementation
+// identity and operation. A request naming anything else refuses.
+func New(playbooks map[string]string) Runner {
 	// Invocation state is small and must not survive a reboot; staging is
 	// larger and must not either, so both live outside the context store.
-	return Runner{jobParent: "/run", scratchParent: "/var/tmp", command: exec.Command}
+	return Runner{jobParent: "/run", scratchParent: "/var/tmp", command: exec.Command, playbooks: maps.Clone(playbooks)}
 }
 
 func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
-	playbook, ok := playbookFor(request)
+	playbook, ok := r.playbookFor(request)
 	if !ok {
 		return lifecycle.RunResult{}, failure("lifecycle.state", "the lifecycle adapter operation is not recognized", "")
 	}

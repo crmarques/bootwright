@@ -1,9 +1,8 @@
 package libvirt
 
 import (
-	"bytes"
-	"encoding/json"
 	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"slices"
 
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -103,75 +102,35 @@ type MachineRequest struct {
 	Version    string               `json:"version"`
 }
 
-func (r HostRequest) Canonical() ([]byte, error)    { return canonical(r, "provider host") }
-func (r MachineRequest) Canonical() ([]byte, error) { return canonical(r, "machine") }
+func (r HostRequest) Canonical() ([]byte, error) {
+	return reconciliation.Freeze(r, "provider host")
+}
+
+func (r MachineRequest) Canonical() ([]byte, error) {
+	return reconciliation.Freeze(r, "machine")
+}
 
 func DecodeHostRequest(data []byte) (HostRequest, error) {
-	var request HostRequest
-	if err := decode(data, &request, "provider host"); err != nil {
+	request, err := reconciliation.Thaw[HostRequest](data, "provider host")
+	if err != nil {
 		return HostRequest{}, err
 	}
 	if request.Version != hostRequestVersion {
 		return HostRequest{}, refusal("lifecycle.state",
 			"the frozen provider host request has an unsupported version: "+request.Version, "")
 	}
-	return request, verifyCanonical(data, request, "provider host")
+	return request, reconciliation.ProveCanonical(data, request, "provider host")
 }
 
 func DecodeMachineRequest(data []byte) (MachineRequest, error) {
-	var request MachineRequest
-	if err := decode(data, &request, "machine"); err != nil {
+	request, err := reconciliation.Thaw[MachineRequest](data, "machine")
+	if err != nil {
 		return MachineRequest{}, err
 	}
 	if request.Version != machineRequestVersion {
 		return MachineRequest{}, refusal("lifecycle.state", "the frozen machine request has an unsupported version", "")
 	}
-	return request, verifyCanonical(data, request, "machine")
-}
-
-// canonical encodes a request exactly as the plan digest and the adapter both
-// consume it, refusing anything a later reader could interpret differently.
-func canonical(value any, subject string) ([]byte, error) {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return nil, refusal("lifecycle.state", "the "+subject+" request cannot be encoded", "")
-	}
-	var probe map[string]any
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	if err := decoder.Decode(&probe); err != nil {
-		return nil, refusal("lifecycle.state", "the "+subject+" request cannot be decoded", "")
-	}
-	reencoded, err := json.Marshal(probe)
-	if err != nil || !bytes.Equal(data, reencoded) {
-		return nil, refusal("lifecycle.state", "the "+subject+" request is not canonically ordered", "")
-	}
-	return data, nil
-}
-
-func decode(data []byte, target any, subject string) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return refusal("lifecycle.state", "the frozen "+subject+" request is malformed", "")
-	}
-	if decoder.More() {
-		return refusal("lifecycle.state", "the frozen "+subject+" request contains trailing data", "")
-	}
-	return nil
-}
-
-type encodable interface{ Canonical() ([]byte, error) }
-
-func verifyCanonical(data []byte, request encodable, subject string) error {
-	reencoded, err := request.Canonical()
-	if err != nil {
-		return err
-	}
-	if !bytes.Equal(reencoded, data) {
-		return refusal("lifecycle.state", "the frozen "+subject+" request is not canonical", "")
-	}
-	return nil
+	return request, reconciliation.ProveCanonical(data, request, "machine")
 }
 
 // ReservationKeys are the exclusive host resources each request claims before

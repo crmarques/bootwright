@@ -271,24 +271,10 @@ func (c InstallCapability) run(ctx context.Context, execution lifecycle.Executio
 				Secret: node.Controller.CredentialsRef, Variable: "controllerPassword" + nodeVariable(index),
 			})
 	}
-	return c.runner.Run(ctx, lifecycle.RunRequest{
-		Implementation: InstallImplementation,
-		Operation:      operation,
-		Variable:       installVariablePrefix,
-		Digest:         execution.Block.RequestDigest,
-		Canonical:      canonical,
-		Placement:      request.Placement,
-		Materials:      materials,
-		MaterialValues: values,
-		Sudo:           request.Placement.SudoPasswordRef,
-		Launch:         execution.Launch,
-		Bundle:         execution.Bundle,
-		Area:           execution.Area,
-		Material:       execution.Material,
-		Log:            execution.Log,
-		Progress:       execution.Progress,
-		Output:         execution.Output,
-	})
+	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
+		Implementation: InstallImplementation, Operation: operation, Variable: installVariablePrefix,
+		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
+	}))
 }
 
 // nodeVariable names one node's material by its position in the frozen node

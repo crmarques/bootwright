@@ -50,7 +50,7 @@ func wireMachine(deps machineDependencies) cli.Services {
 			Trust: deps.Trust, Observer: client, Confirmer: deps.Session, Launcher: client,
 			Streams: deps.Streams, Terminal: deps.Terminal,
 		}),
-		MachinePower: power.New(deps.State, evidence, deps.Lifecycle, ansiblerunner.New(),
+		MachinePower: power.New(deps.State, evidence, deps.Lifecycle, ansiblerunner.New(operationPlaybook()),
 			deps.Confirmer, deps.Reporter, selection),
 		MachineTrust: enrollment.New(deps.State, deps.Trust, selection, enrollment.Options{
 			Observer: client, Confirmer: deps.Confirmer, Clock: time.Now,

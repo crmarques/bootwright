@@ -254,24 +254,10 @@ func (c MediaCapability) run(ctx context.Context, execution lifecycle.Execution,
 			})
 		}
 	}
-	return c.runner.Run(ctx, lifecycle.RunRequest{
-		Implementation: MediaImplementation,
-		Operation:      operation,
-		Variable:       mediaVariablePrefix,
-		Digest:         execution.Block.RequestDigest,
-		Canonical:      canonical,
-		Placement:      request.Placement,
-		Materials:      append(materials, lifecycle.Materials(request.Placement)...),
-		MaterialValues: values,
-		Sudo:           request.Placement.SudoPasswordRef,
-		Launch:         execution.Launch,
-		Bundle:         execution.Bundle,
-		Area:           execution.Area,
-		Material:       execution.Material,
-		Log:            execution.Log,
-		Progress:       execution.Progress,
-		Output:         execution.Output,
-	})
+	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
+		Implementation: MediaImplementation, Operation: operation, Variable: mediaVariablePrefix,
+		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
+	}))
 }
 
 // ToolPath is the exact executable the controller stage published for one

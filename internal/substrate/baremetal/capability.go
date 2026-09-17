@@ -204,23 +204,10 @@ func (c MachineCapability) run(ctx context.Context, execution lifecycle.Executio
 		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: request.Controller.CredentialsRef, Variable: "controllerUser"},
 		{Name: "bmc-password", Part: secrets.PasswordPart, Secret: request.Controller.CredentialsRef, Variable: "controllerPassword"},
 	}
-	return c.runner.Run(ctx, lifecycle.RunRequest{
-		Implementation: Implementation,
-		Operation:      operation,
-		Variable:       machineVariable,
-		Digest:         execution.Block.RequestDigest,
-		Canonical:      canonical,
-		Placement:      request.Placement,
-		Materials:      append(materials, lifecycle.Materials(request.Placement)...),
-		Sudo:           request.Placement.SudoPasswordRef,
-		Launch:         execution.Launch,
-		Bundle:         execution.Bundle,
-		Area:           execution.Area,
-		Material:       execution.Material,
-		Log:            execution.Log,
-		Progress:       execution.Progress,
-		Output:         execution.Output,
-	})
+	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
+		Implementation: Implementation, Operation: operation, Variable: machineVariable,
+		Canonical: canonical, Placement: request.Placement, Materials: materials,
+	}))
 }
 
 func recordObservationFailure(ctx context.Context, execution lifecycle.Execution, err error) {

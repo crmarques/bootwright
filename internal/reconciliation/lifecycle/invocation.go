@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"context"
 	"encoding/json"
+	"slices"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -51,6 +52,44 @@ type RunRequest struct {
 type RunResult struct {
 	Outcome  string
 	Evidence json.RawMessage
+}
+
+// Invocation is what a capability supplies to turn one authorized attempt into
+// one adapter run: the automation it selects, the frozen bytes it crosses with,
+// where that work runs, and the extra material and values its own automation
+// needs. Everything else the engine already owns.
+type Invocation struct {
+	Implementation string
+	Operation      string
+	Variable       string
+	Canonical      []byte
+	Placement      machineref.Placement
+	Materials      []MaterialFile
+	Values         map[string]string
+}
+
+// RunFor builds the adapter request one attempt authorizes. A capability never
+// assembles one itself, so none can widen what crosses the boundary or
+// substitute an identity the attempt did not freeze.
+func RunFor(execution Execution, invocation Invocation) RunRequest {
+	return RunRequest{
+		Implementation: invocation.Implementation,
+		Operation:      invocation.Operation,
+		Variable:       invocation.Variable,
+		Digest:         execution.Block.RequestDigest,
+		Canonical:      invocation.Canonical,
+		Placement:      invocation.Placement,
+		Materials:      append(slices.Clone(invocation.Materials), Materials(invocation.Placement)...),
+		MaterialValues: invocation.Values,
+		Sudo:           invocation.Placement.SudoPasswordRef,
+		Launch:         execution.Launch,
+		Bundle:         execution.Bundle,
+		Area:           execution.Area,
+		Material:       execution.Material,
+		Log:            execution.Log,
+		Progress:       execution.Progress,
+		Output:         execution.Output,
+	}
 }
 
 // Materials lists exactly which bound parts a placement needs on disk. A local

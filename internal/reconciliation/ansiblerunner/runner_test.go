@@ -53,14 +53,20 @@ func material() map[string]secrets.Material {
 // Keying on the implementation is what lets two implementations of one kind
 // carry different automation without either reaching the other's.
 func TestEveryImplementationAndOperationBindsOneFixedEntrypoint(t *testing.T) {
+	bound := map[string]string{}
 	for _, implementation := range []string{
 		"artifact-server-nginx-v1", "proxy-squid-v1", "dns-server-dnsmasq-v1", "ntp-server-chrony-v1",
 	} {
 		for _, operation := range []string{"apply", "observe", "destroy"} {
-			playbook, ok := playbookFor(lifecycle.RunRequest{Implementation: implementation, Operation: operation})
-			if !ok || !strings.HasSuffix(playbook, "_"+operation+".yml") || strings.HasPrefix(playbook, "/") {
-				t.Fatalf("%s/%s resolved to %q", implementation, operation, playbook)
-			}
+			bound[implementation+"/"+operation] = "infrastructureservices/" + implementation + "_" + operation + ".yml"
+		}
+	}
+	runner := New(bound)
+	for key, want := range bound {
+		implementation, operation, _ := strings.Cut(key, "/")
+		playbook, ok := runner.playbookFor(lifecycle.RunRequest{Implementation: implementation, Operation: operation})
+		if !ok || playbook != want || strings.HasPrefix(playbook, "/") {
+			t.Fatalf("%s resolved to %q", key, playbook)
 		}
 	}
 	for _, request := range []lifecycle.RunRequest{
@@ -69,7 +75,7 @@ func TestEveryImplementationAndOperationBindsOneFixedEntrypoint(t *testing.T) {
 		{Implementation: "ArtifactServer", Operation: "apply"},
 		{Implementation: "", Operation: ""},
 	} {
-		if _, ok := playbookFor(request); ok {
+		if _, ok := runner.playbookFor(request); ok {
 			t.Fatalf("%s/%s resolved to a playbook", request.Implementation, request.Operation)
 		}
 	}

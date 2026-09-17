@@ -1,9 +1,10 @@
 package installation
 
 import (
-	"bytes"
 	"encoding/json"
+
 	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"slices"
 )
 
@@ -123,53 +124,20 @@ type Request struct {
 
 // Canonical encodes the request exactly as the plan digest and the adapter both
 // consume it, refusing anything a later reader could interpret differently.
-func (r Request) Canonical() ([]byte, error) { return canonicalRequest(r) }
-
-// canonicalRequest is the encoding every version of this request obeys, so the
-// bytes a version froze are still checked by the rule that wrote them.
-func canonicalRequest(value any) ([]byte, error) {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return nil, refusal("lifecycle.state", "the installation request cannot be encoded", "")
-	}
-	var probe map[string]any
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	if err := decoder.Decode(&probe); err != nil {
-		return nil, refusal("lifecycle.state", "the installation request cannot be decoded", "")
-	}
-	reencoded, err := json.Marshal(probe)
-	if err != nil || !bytes.Equal(data, reencoded) {
-		return nil, refusal("lifecycle.state", "the installation request is not canonically ordered", "")
-	}
-	return data, nil
+func (r Request) Canonical() ([]byte, error) {
+	return reconciliation.Freeze(r, "installation")
 }
 
-// DecodeRequest reads one exact frozen shape and proves the bytes are the
-// canonical encoding of it, so nothing that reads differently can carry the
-// digest of what was frozen.
 func DecodeRequest(data []byte) (Request, error) {
-	var request Request
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
-		return Request{}, refusal("lifecycle.state", "the frozen installation request is malformed", "")
-	}
-	if decoder.More() {
-		return Request{}, refusal("lifecycle.state", "the frozen installation request contains trailing data", "")
+	request, err := reconciliation.Thaw[Request](data, "installation")
+	if err != nil {
+		return Request{}, err
 	}
 	if request.Version != requestVersion {
 		return Request{}, refusal("lifecycle.state",
 			"the frozen installation request has an unsupported version: "+request.Version, "")
 	}
-	canonical, err := canonicalRequest(request)
-	if err != nil {
-		return Request{}, err
-	}
-	if !bytes.Equal(canonical, data) {
-		return Request{}, refusal("lifecycle.state", "the frozen installation request is not canonical", "")
-	}
-	return request, nil
+	return request, reconciliation.ProveCanonical(data, request, "installation")
 }
 
 // Marker is the proof a completed installation leaves on the guest. Go builds

@@ -1,9 +1,8 @@
 package agentinstall
 
 import (
-	"bytes"
-	"encoding/json"
 	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"slices"
 )
 
@@ -130,79 +129,36 @@ func DefaultBudgets() Budgets {
 	return Budgets{BootSeconds: 900, BuildSeconds: 1800, BootstrapSeconds: 5400, InstallSeconds: 5400}
 }
 
-func (r MediaRequest) Canonical() ([]byte, error)   { return canonical(r, "cluster media") }
-func (r InstallRequest) Canonical() ([]byte, error) { return canonical(r, "cluster install") }
+func (r MediaRequest) Canonical() ([]byte, error) {
+	return reconciliation.Freeze(r, "cluster media")
+}
 
-// DecodeMediaRequest and DecodeInstallRequest read a frozen request. The
-// version a request declares chooses the shape it is read into, so the bytes a
-// version froze are still checked by the rule that wrote them.
+func (r InstallRequest) Canonical() ([]byte, error) {
+	return reconciliation.Freeze(r, "cluster install")
+}
+
 func DecodeMediaRequest(data []byte) (MediaRequest, error) {
-	var request MediaRequest
-	if err := decode(data, &request, "cluster media"); err != nil {
+	request, err := reconciliation.Thaw[MediaRequest](data, "cluster media")
+	if err != nil {
 		return MediaRequest{}, err
 	}
 	if request.Version != mediaRequestVersion {
 		return MediaRequest{}, refusal("lifecycle.state",
 			"the frozen cluster media request has an unsupported version: "+request.Version, "")
 	}
-	return request, verifyCanonical(data, request, "cluster media")
+	return request, reconciliation.ProveCanonical(data, request, "cluster media")
 }
 
 func DecodeInstallRequest(data []byte) (InstallRequest, error) {
-	var request InstallRequest
-	if err := decode(data, &request, "cluster install"); err != nil {
+	request, err := reconciliation.Thaw[InstallRequest](data, "cluster install")
+	if err != nil {
 		return InstallRequest{}, err
 	}
 	if request.Version != installRequestVersion {
 		return InstallRequest{}, refusal("lifecycle.state",
 			"the frozen cluster install request has an unsupported version: "+request.Version, "")
 	}
-	return request, verifyCanonical(data, request, "cluster install")
-}
-
-// canonical encodes a request exactly as the plan digest and the adapter both
-// consume it, refusing anything a later reader could interpret differently.
-func canonical(value any, subject string) ([]byte, error) {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return nil, refusal("lifecycle.state", "the "+subject+" request cannot be encoded", "")
-	}
-	var probe map[string]any
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	if err := decoder.Decode(&probe); err != nil {
-		return nil, refusal("lifecycle.state", "the "+subject+" request cannot be decoded", "")
-	}
-	reencoded, err := json.Marshal(probe)
-	if err != nil || !bytes.Equal(data, reencoded) {
-		return nil, refusal("lifecycle.state", "the "+subject+" request is not canonically ordered", "")
-	}
-	return data, nil
-}
-
-func decode(data []byte, target any, subject string) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return refusal("lifecycle.state", "the frozen "+subject+" request is malformed", "")
-	}
-	if decoder.More() {
-		return refusal("lifecycle.state", "the frozen "+subject+" request contains trailing data", "")
-	}
-	return nil
-}
-
-type encodable interface{ Canonical() ([]byte, error) }
-
-func verifyCanonical(data []byte, request encodable, subject string) error {
-	reencoded, err := request.Canonical()
-	if err != nil {
-		return err
-	}
-	if !bytes.Equal(reencoded, data) {
-		return refusal("lifecycle.state", "the frozen "+subject+" request is not canonical", "")
-	}
-	return nil
+	return request, reconciliation.ProveCanonical(data, request, "cluster install")
 }
 
 // ReservationKeys are the exclusive host resources the media block claims

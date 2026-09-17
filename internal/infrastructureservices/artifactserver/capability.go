@@ -256,30 +256,17 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	if fingerprint != "" {
 		values["fingerprint"] = fingerprint
 	}
-	return c.runner.Run(ctx, lifecycle.RunRequest{
-		Implementation: Implementation,
-		Operation:      operation,
-		Variable:       variablePrefix,
-		Digest:         execution.Block.RequestDigest,
-		Canonical:      canonical,
-		Placement:      request.Placement,
-		Materials:      materials(request),
-		MaterialValues: values,
-		Sudo:           request.Placement.SudoPasswordRef,
-		Launch:         execution.Launch,
-		Bundle:         execution.Bundle,
-		Area:           execution.Area,
-		Material:       execution.Material,
-		Log:            execution.Log,
-		Progress:       execution.Progress,
-		Output:         execution.Output,
-	})
+	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
+		Implementation: Implementation, Operation: operation, Variable: variablePrefix,
+		Canonical: canonical, Placement: request.Placement, Materials: materials(request), Values: values,
+	}))
 }
 
 const variablePrefix = "bootwright_artifact_server"
 
-// materials lists exactly which bound parts this invocation needs on disk.
-// Anything not listed here never leaves bounded memory.
+// materials lists this capability's own bound parts. The placement's identity
+// and host key are added by the attempt, so they are not repeated here.
+// Anything not listed never leaves bounded memory.
 func materials(request Request) []lifecycle.MaterialFile {
 	var files []lifecycle.MaterialFile
 	if request.TLS != nil {
@@ -288,7 +275,7 @@ func materials(request Request) []lifecycle.MaterialFile {
 			lifecycle.MaterialFile{Name: "tls.key", Part: secrets.PrivateKeyPart, Secret: request.TLS.Secret, Variable: "privateKey"},
 		)
 	}
-	return append(files, lifecycle.Materials(request.Placement)...)
+	return files
 }
 
 // Unsupported names every selected object this capability cannot realize, so
