@@ -67,6 +67,11 @@ func (s *State) Origin(identity string) (diagnostics.SourceLocation, bool) {
 	return origin, ok
 }
 
+// Compile advances one desired-state input through the phases the API contract
+// fixes: safe discovery and selection, strict decoding, authored validation,
+// graph closure, normalization, effective validation, and the completed
+// immutable model. No phase mutates what an earlier one produced, and a phase
+// that cannot continue ends the compilation with the diagnostics it collected.
 func (c Compiler) Compile(ctx context.Context, sources desiredstate.Sources) (*State, *Report, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
@@ -84,209 +89,33 @@ func (c Compiler) Compile(ctx context.Context, sources desiredstate.Sources) (*S
 		if len(failures) == 0 {
 			return nil, nil, err
 		}
-		for _, diagnostic := range parseDiagnostics {
-			ds.add(diagnostic)
-		}
-		for _, diagnostic := range failures {
+		for _, diagnostic := range append(parseDiagnostics, failures...) {
 			ds.add(diagnostic)
 		}
 		return compilationFailure(ctx, ds)
 	}
-	report := &Report{Counts: Counts{FilesSeen: len(sources.Files)}, ExcludedContainerClusters: []string{}, ExcludedStorageClusters: []string{}, ExcludedResourceFiles: []string{}, Advisories: []diagnostics.Diagnostic{}}
-	environment := selectingEnvironment(documents, parseDiagnostics, ds)
-	if environment == nil {
-		return compilationFailure(ctx, ds)
+	r := &run{
+		compiler: c, sources: sources, documents: documents, parsed: parseDiagnostics, ds: ds,
+		report: &Report{
+			Counts:                    Counts{FilesSeen: len(sources.Files)},
+			ExcludedContainerClusters: []string{}, ExcludedStorageClusters: []string{},
+			ExcludedResourceFiles: []string{}, Advisories: []diagnostics.Diagnostic{},
+		},
 	}
-	defaults := environment.object.Spec().Get("defaults")
-	validateShape(environment, defaults, &api.Shape{Type: api.Mapping, KindDefaults: true}, "$.spec.defaults", true, false, api.Catalog{}, ds)
-	for _, entry := range defaults.Fields() {
-		partial := api.NewObject(api.Kind(entry.Name), "", api.Value{}, entry.Value)
-		for _, rules := range c.rules {
-			if ds.stopped() {
-				return compilationFailure(ctx, ds)
-			}
-			if rules.ValidatePartial != nil {
-				for _, issue := range rules.ValidatePartial(partial, api.Catalog{}) {
-					issue.Field = "$.spec.defaults." + entry.Name + strings.TrimPrefix(issue.Field, "$.spec")
-					ds.issue(environment, issue)
-				}
-			}
-		}
-	}
-	environment.object = environment.object.WithSpec(inherit(environment.object.Spec(), defaults.Get(string(api.Environment)), api.Schema(api.Environment), "$.spec", true, environment, environment))
-	if !withinExpansionBudget([]*objectRecord{environment}, ds) {
-		return compilationFailure(ctx, ds)
-	}
-	selected, excluded := selectResources(sources, documents, environment, ds)
-	report.ExcludedResourceFiles = excluded
-	for _, d := range parseDiagnostics {
-		if d.Source == nil || selected[d.Source.Path] {
-			ds.add(d)
-		}
-	}
-	records := []*objectRecord{}
-	for _, document := range documents {
-		if ds.stopped() {
-			break
-		}
-		if !selected[document.Path] {
-			continue
-		}
-		var record *objectRecord
-		if document.Path == environment.path && document.Index == environment.document {
-			record = environment
-		} else {
-			record = decodeDocument(document, ds)
-		}
-		if record != nil {
-			records = append(records, record)
-			report.Counts.ObjectsDecoded++
-		}
-	}
-	if ds.stopped() {
-		return compilationFailure(ctx, ds)
-	}
-	// Inheritance preserves every explicit authored value. Check the resulting
-	// authored intent before any normalizer can erase or replace it.
-	inheritBudget := expansionBudget{}
-	for _, record := range records {
-		if record != environment {
-			record.object = record.object.WithSpec(inherit(record.object.Spec(), defaults.Get(string(record.object.Kind())), api.Schema(record.object.Kind()), "$.spec", true, record, environment))
-		}
-		if !inheritBudget.admit(record, ds) {
+	for _, phase := range []func() bool{
+		r.selectEnvironment, r.decodeSelected, r.inheritDefaults, r.validateAuthored,
+	} {
+		if !phase() {
 			return compilationFailure(ctx, ds)
 		}
 	}
-	if !withinExpansionBudget(records, ds) {
+	r.closeGraph()
+	if !r.normalize() {
 		return compilationFailure(ctx, ds)
 	}
-	intent := catalogOf(records)
-	intrinsicBudget := expansionBudget{}
-	for _, record := range records {
-		for _, rules := range c.rules {
-			if ds.stopped() {
-				return compilationFailure(ctx, ds)
-			}
-			if rules.ValidateAuthored != nil {
-				for _, issue := range rules.ValidateAuthored(record.object, intent) {
-					ds.issue(record, issue)
-				}
-			}
-		}
-		validateSourcePaths(record, sources, ds)
-		record.object = record.object.WithSpec(builtInDefaults(record.object.Spec(), api.Schema(record.object.Kind())))
-		if !intrinsicBudget.admit(record, ds) {
-			return compilationFailure(ctx, ds)
-		}
-	}
-	if ds.stopped() {
+	catalog := catalogOf(r.records)
+	if !r.validateEffective(catalog) {
 		return compilationFailure(ctx, ds)
-	}
-	if c.selectGraph != nil {
-		selection := c.selectGraph(catalogOf(records))
-		report.ExcludedContainerClusters = sortedNames(selection.ExcludedContainerClusters)
-		report.ExcludedStorageClusters = sortedNames(selection.ExcludedStorageClusters)
-		for _, problem := range selection.Problems {
-			for _, record := range records {
-				if record.object.Identity() == problem.Object.Identity() {
-					ds.issue(record, problem.Issue)
-				}
-			}
-		}
-		retained := map[string]bool{}
-		for _, o := range selection.Catalog.Objects() {
-			retained[o.Identity()] = true
-		}
-		filtered := records[:0]
-		for _, record := range records {
-			if retained[record.object.Identity()] {
-				filtered = append(filtered, record)
-			}
-		}
-		records = filtered
-	}
-	validateIdentities(records, ds)
-	// Normalize dependency providers before their consumers. Within a kind the
-	// result must not depend on source order or another peer's normalized state.
-	ordered := slices.Clone(records)
-	byIdentity := make(map[string]*objectRecord, len(records))
-	for _, record := range records {
-		identity := record.object.Identity()
-		if _, exists := byIdentity[identity]; exists {
-			byIdentity[identity] = nil
-		} else {
-			byIdentity[identity] = record
-		}
-	}
-	normalizationBudget := expansionBudget{}
-	for _, record := range records {
-		if !normalizationBudget.admit(record, ds) {
-			return compilationFailure(ctx, ds)
-		}
-	}
-	ranks := []api.Kind{api.Environment, api.Entitlement, api.Secret, api.NetworkConfig, api.MachineImage, api.MachineInstallProfile, api.InfraProvider, api.Machine, api.Proxy, api.DNSServer, api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer, api.ContainerCluster, api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageFilesystem, api.StorageObjectGateway, api.StorageNFSExport, api.StorageExport, api.ClusterAddon, api.ClusterAddonProfile, api.ClusterAddonBinding, api.CustomPlaybook}
-	slices.SortStableFunc(ordered, func(a, b *objectRecord) int {
-		return slices.Index(ranks, a.object.Kind()) - slices.Index(ranks, b.object.Kind())
-	})
-	for _, kind := range ranks {
-		catalog := catalogOf(records)
-		for _, record := range ordered {
-			if record.object.Kind() != kind {
-				continue
-			}
-			if ds.stopped() {
-				break
-			}
-			for _, rules := range c.rules {
-				if ds.stopped() {
-					return compilationFailure(ctx, ds)
-				}
-				if rules.Normalize != nil {
-					previous := expansionBudget{}
-					if !previous.admit(record, ds) {
-						return compilationFailure(ctx, ds)
-					}
-					before := record.object
-					object, issues := rules.Normalize(before, catalog)
-					previousSpec := record.object.Spec()
-					record.object = object
-					normalizationBudget.nodes -= previous.nodes
-					if !normalizationBudget.admit(record, ds) {
-						return compilationFailure(ctx, ds)
-					}
-					record.recordReordering(previousSpec, object.Spec(), api.Schema(object.Kind()))
-					if rules.NormalizationOrigins != nil {
-						record.recordOrigins(rules.NormalizationOrigins(before, object, catalog), byIdentity)
-					}
-					for _, issue := range issues {
-						ds.issue(record, issue)
-					}
-				}
-			}
-		}
-	}
-	if !withinExpansionBudget(records, ds) {
-		return compilationFailure(ctx, ds)
-	}
-	catalog := catalogOf(records)
-	for _, record := range records {
-		if ds.stopped() {
-			break
-		}
-		if !api.ValidLexical("name", record.object.Name()) {
-			ds.issue(record, api.Issue{Code: "api.value", Field: "$.metadata.name", Message: "object name must be a DNS label"})
-		}
-		validateShape(record, record.object.Spec(), api.Schema(record.object.Kind()), "$.spec", false, true, catalog, ds)
-		for _, rules := range c.rules {
-			if ds.stopped() {
-				return compilationFailure(ctx, ds)
-			}
-			if rules.Validate != nil {
-				for _, issue := range rules.Validate(record.object, catalog) {
-					ds.issue(record, issue)
-				}
-			}
-		}
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
@@ -294,21 +123,8 @@ func (c Compiler) Compile(ctx context.Context, sources desiredstate.Sources) (*S
 	if ds.hasErrors() {
 		return compilationFailure(ctx, ds)
 	}
-	for _, d := range ds.sorted() {
-		if d.Severity == "warning" {
-			report.Diagnostics = append(report.Diagnostics, d)
-			if d.Code == "api.deferred" {
-				report.Advisories = append(report.Advisories, d)
-			}
-		}
-	}
-	authored := []api.Object{}
-	origins := map[string]diagnostics.SourceLocation{}
-	for _, record := range records {
-		authored = append(authored, record.authored)
-		origins[record.object.Identity()] = diagnostics.SourceLocation{Path: record.path, Document: record.document}
-	}
-	return NewState(api.NewCatalog(authored), catalog, origins), report, nil
+	state, report := r.complete(catalog)
+	return state, report, nil
 }
 
 func compilationFailure(ctx context.Context, ds *diagnosticSink) (*State, *Report, error) {
