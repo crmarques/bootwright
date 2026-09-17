@@ -1,7 +1,7 @@
 # What a looped, hidden, failure-suppressing task leaves behind
 
 Observed 2026-09-17 with the pinned ansible-core while building the bounded
-power reading behind `machine list --power`, which polls many management
+power reading behind `machine list --power-status`, which polls many management
 controllers in one loop and must survive one of them not answering.
 [The CLI spec](../../specs/cli.md#resource-inspection-and-explicit-access) owns
 what a reading reports; this page records the two result-shape facts that

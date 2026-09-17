@@ -20,6 +20,7 @@ type machineListPresentation struct {
 type machineRowPresentation struct {
 	Name      string   `json:"name"`
 	Address   string   `json:"address"`
+	IPs       []string `json:"ips"`
 	OS        string   `json:"os"`
 	Provider  string   `json:"provider"`
 	Clusters  []string `json:"clusters"`
@@ -79,15 +80,16 @@ func writeMachineList(out io.Writer, command string, result *inventory.ListResul
 	}
 	// The power column appears only where a reading was taken, so the table
 	// never shows a column of absences for the answer nobody asked for.
-	headings := []string{"NAME", "ADDRESS", "OS", "PROVIDER", "CLUSTERS", "LIFECYCLE"}
+	headings := []string{"NAME", "ADDRESS", "IP", "OS", "PROVIDER", "CLUSTERS", "LIFECYCLE"}
 	if result.PowerRead {
 		headings = append(headings, "POWER")
 	}
 	rows := make([][]string, 0, len(result.Machines))
 	for _, row := range result.Machines {
 		cells := []string{
-			escapeDisplayLine(row.Name), displayValue(row.Address), escapeDisplayLine(row.OS),
-			displayValue(row.Provider), displayValue(strings.Join(row.Clusters, ",")), escapeDisplayLine(row.Lifecycle),
+			escapeDisplayLine(row.Name), displayValue(row.Address), displayValue(strings.Join(row.IPs, ",")),
+			escapeDisplayLine(row.OS), displayValue(row.Provider),
+			displayValue(strings.Join(row.Clusters, ",")), escapeDisplayLine(row.Lifecycle),
 		}
 		if result.PowerRead {
 			cells = append(cells, displayValue(row.Power))
@@ -112,7 +114,10 @@ func displayMachineList(result *inventory.ListResult) machineListPresentation {
 	for _, row := range result.Machines {
 		rows = append(rows, machineRowPresentation{
 			Name: escapeDisplayLine(row.Name), Address: escapeDisplayLine(row.Address),
-			OS: escapeDisplayLine(row.OS), Provider: escapeDisplayLine(row.Provider),
+			// Declared order, not sorted: the addresses read the way the
+			// Machine authors them, and the table shows the same sequence.
+			IPs: displayLines(row.IPs), OS: escapeDisplayLine(row.OS),
+			Provider: escapeDisplayLine(row.Provider),
 			Clusters: displayNames(row.Clusters), Lifecycle: escapeDisplayLine(row.Lifecycle),
 			Power: escapeDisplayLine(row.Power),
 		})

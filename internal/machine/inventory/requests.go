@@ -21,12 +21,15 @@ type ListResult struct {
 
 // MachineRow is one Machine as desired state declares it and durable evidence
 // proves it. Address is the effective SSH contact, empty when the Machine
-// declares none. Lifecycle is what this context's own operations carried the
+// declares none, and IPs is every IP it declares, which is a different fact:
+// the contact is often a DNS name, and a Machine may declare several IPs or
+// none at all. Lifecycle is what this context's own operations carried the
 // Machine through; Power is what its management controller answered, and stays
 // empty unless a reading was asked for and a controller was reachable.
 type MachineRow struct {
 	Name      string
 	Address   string
+	IPs       []string
 	OS        string
 	Provider  string
 	Clusters  []string

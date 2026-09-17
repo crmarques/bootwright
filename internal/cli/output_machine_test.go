@@ -11,8 +11,11 @@ import (
 
 func machineList() *inventory.ListResult {
 	return &inventory.ListResult{Context: "lab", Machines: []inventory.MachineRow{
-		{Name: "guest", Address: "192.0.2.20", OS: "installed", Provider: "lab", Clusters: []string{}, Lifecycle: "applied"},
-		{Name: "node", OS: "provided", Clusters: []string{"ocp"}, Lifecycle: "not-applied"},
+		{
+			Name: "guest", Address: "guest.lab.example.test", IPs: []string{"198.51.100.20", "192.0.2.20"},
+			OS: "installed", Provider: "lab", Clusters: []string{}, Lifecycle: "applied",
+		},
+		{Name: "node", OS: "provided", IPs: []string{}, Clusters: []string{"ocp"}, Lifecycle: "not-applied"},
 	}}
 }
 
@@ -28,11 +31,30 @@ func TestMachineListPresentsEveryRowAndItsAbsentValues(t *testing.T) {
 	if !strings.Contains(lines[0], "LIFECYCLE") || strings.Contains(lines[0], "POWER") {
 		t.Fatalf("a listing that read no controller showed a power column: %q", lines[0])
 	}
-	if !strings.Contains(lines[1], "guest") || !strings.Contains(lines[1], "192.0.2.20") || !strings.Contains(lines[1], "applied") {
+	if !strings.Contains(lines[1], "guest") || !strings.Contains(lines[1], "guest.lab.example.test") || !strings.Contains(lines[1], "applied") {
 		t.Fatalf("row = %q", lines[1])
 	}
 	if !strings.Contains(lines[2], "-") || !strings.Contains(lines[2], "ocp") {
 		t.Fatalf("a Machine with no contact did not read as absent: %q", lines[2])
+	}
+}
+
+// A Machine reached by name still shows every IP it declares, in the order it
+// declares them, because the contact and the addresses are different facts.
+func TestMachineListShowsEveryDeclaredIPBesideTheContact(t *testing.T) {
+	var out bytes.Buffer
+	if err := writeMachineList(&out, "machine list", machineList(), false, false); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
+	if !strings.Contains(lines[0], "ADDRESS") || !strings.Contains(lines[0], "IP") {
+		t.Fatalf("headings = %q", lines[0])
+	}
+	if !strings.Contains(lines[1], "198.51.100.20,192.0.2.20") {
+		t.Fatalf("declared addresses did not read in their declared order: %q", lines[1])
+	}
+	if strings.Contains(lines[2], "192.0.2") {
+		t.Fatalf("a Machine declaring no IP reported one: %q", lines[2])
 	}
 }
 
@@ -81,8 +103,10 @@ func TestMachineListJSONCarriesItsContextAndRows(t *testing.T) {
 	}
 	want := `{"schemaVersion":"v1alpha1","command":"machine list","ok":true,"exitCode":0,` +
 		`"result":{"context":"lab","machines":[` +
-		`{"name":"guest","address":"192.0.2.20","os":"installed","provider":"lab","clusters":[],"lifecycle":"applied","power":""},` +
-		`{"name":"node","address":"","os":"provided","provider":"","clusters":["ocp"],"lifecycle":"not-applied","power":""}` +
+		`{"name":"guest","address":"guest.lab.example.test","ips":["198.51.100.20","192.0.2.20"],` +
+		`"os":"installed","provider":"lab","clusters":[],"lifecycle":"applied","power":""},` +
+		`{"name":"node","address":"","ips":[],"os":"provided","provider":"","clusters":["ocp"],` +
+		`"lifecycle":"not-applied","power":""}` +
 		`],"powerRead":false},"diagnostics":[],"logs":[]}` + "\n"
 	if out.String() != want {
 		t.Fatalf("JSON = %q, want %q", out.String(), want)

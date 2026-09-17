@@ -91,10 +91,11 @@ func (s Service) Read(ctx context.Context, contextName string, names []string) (
 			}
 		}
 	}
+	// A reading names no retained output. An inspection that succeeds prints a
+	// table, and one that refuses reports its own diagnostic, so a path to an
+	// adapter log would be noise in the one case and the wrong answer in the
+	// other: nothing here is an operation an operator resumes or inspects.
 	err = s.runtime.WithRuntime(ctx, lifecycle.RuntimeRequest{ContextName: name, Secrets: references}, func(inner context.Context, runtime lifecycle.Runtime) error {
-		if s.reporter != nil {
-			s.reporter.ReportLogLocation(inner, runtime.LogLocation)
-		}
 		for _, survey := range surveys {
 			answered, err := s.observe(inner, runtime, survey)
 			if err != nil {

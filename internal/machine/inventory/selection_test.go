@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -39,7 +40,10 @@ func catalog() api.Catalog {
 	guest := object(api.Machine, "guest", m(
 		"substrate", m("providerRef", "lab"),
 		"os", m("provided", false, "installProfileRef", "rhel"),
-		"network", addresses("192.0.2.20/24"),
+		"network", m("addresses", list(
+			m("name", "ssh", "address", "192.0.2.20/24"),
+			m("name", "fqdn", "address", "guest.lab.example.test"),
+			m("name", "storage", "address", "198.51.100.20/24"))),
 		"access", m("ssh", m("addressRef", "ssh", "user", "bootwright", "auth", m("privateKeyRef", "fleet")))))
 	host := object(api.Machine, "host", m(
 		"os", m("provided", true),
@@ -66,8 +70,17 @@ func TestRowsReportEveryMachineInCanonicalOrderWithItsDeclaredContact(t *testing
 	if rows[0].Address != "192.0.2.20" || rows[0].Provider != "lab" {
 		t.Fatalf("contact = %+v", rows[0])
 	}
+	// The contact is one declaration; the IPs are every one this Machine
+	// declares, so a DNS name never reads as an address and a second network
+	// is never lost behind the one SSH happens to use.
+	if want := []string{"192.0.2.20", "198.51.100.20"}; !slices.Equal(rows[0].IPs, want) {
+		t.Fatalf("declared IPs = %v, want %v", rows[0].IPs, want)
+	}
 	if rows[2].Address != "" {
 		t.Fatalf("a Machine with no SSH access reported a contact: %q", rows[2].Address)
+	}
+	if !slices.Equal(rows[2].IPs, []string{"192.0.2.30"}) {
+		t.Fatalf("a Machine reached by no contact still declares its IP: %v", rows[2].IPs)
 	}
 	if len(rows[2].Clusters) != 1 || rows[2].Clusters[0] != "ocp" {
 		t.Fatalf("membership = %+v", rows[2].Clusters)

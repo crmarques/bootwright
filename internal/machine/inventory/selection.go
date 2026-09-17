@@ -53,6 +53,7 @@ func Names(rows []MachineRow) []string {
 func row(object api.Object, members []string, evidence machine.OwnershipState) MachineRow {
 	current := MachineRow{
 		Name: object.Name(), OS: "provided", Lifecycle: lifecycle(evidence),
+		IPs:      machine.IPAddresses(object),
 		Provider: object.Spec().Get("substrate", "providerRef").Text(),
 		Clusters: slices.Clone(members),
 	}

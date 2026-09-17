@@ -16,10 +16,10 @@ func machineCommands() []commandSpec {
 		available(commandSpec{
 			path: "machine list", short: "List machines and the lifecycle position each has reached",
 			long: "List machines and the lifecycle position each has reached, as this context's own durable " +
-				"evidence proves it. Add --power to also read each machine's power state from its management " +
+				"evidence proves it. Add --power-status to also read each machine's power state from its management " +
 				"controller, which is the only part of this command that contacts a host.",
 			flags: []flagSpec{
-				clustersFlag(), boolFlag("power", "Read each machine's power state from its management controller"),
+				clustersFlag(), boolFlag("power-status", "Read each machine's power state from its management controller"),
 				boolFlag("silent", "Print only sorted machine names"), outputFlag(),
 			},
 		}),
@@ -69,7 +69,7 @@ func (s Services) invokeMachineInventory(ctx context.Context, path string, value
 			ContextName: values.text("context"),
 			Clusters:    values.names("clusters"),
 			Silent:      values.boolean("silent"),
-			Power:       values.boolean("power"),
+			Power:       values.boolean("power-status"),
 		}, s.MachineInventory.List)
 		return commandResult{machines: result}, err
 	default:

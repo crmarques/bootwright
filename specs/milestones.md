@@ -157,38 +157,45 @@ starts while it runs; and it reports no progress beyond naming where it is
 writing, so a graceful stop polling a guest to off prints nothing more until it
 settles.
 
-### Machine lifecycle position and power reading
+### Machine lifecycle position, addresses and power reading
 
 **Owners:** Machine, with CLI (the listing's columns and its machine envelope).
 **Requires:** the Machine commands above. **Delivered on explicit request**,
 outside the milestone sequence, so it adds no exit gate of its own.
 
-`machine list` separates [the two things it reports](cli.md#resource-inspection-and-explicit-access):
-the lifecycle position this context's own evidence proves, named for the verb
-that last acted on the Machine and whether that verb completed, and the power
-each Machine's own management controller reports under `--power`. The lifecycle
-vocabulary replaces the ownership words the Machine commands first delivered:
-`owned`, `released`, `pending` and `unmanaged` are gone with no compatibility
-path, the `state` field of the `machine list` envelope is now `lifecycle`, and
-`power` and a result-level `powerRead` join it.
+`machine list` separates [what it reports](cli.md#resource-inspection-and-explicit-access)
+into facts that come from different places: the lifecycle position this
+context's own evidence proves, named for the verb that last acted on the
+Machine and whether that verb completed; every IP the Machine declares, beside
+the one contact its SSH access resolves; and the power each Machine's own
+management controller reports under `--power-status`.
+
+The lifecycle vocabulary replaces the ownership words the Machine commands
+first delivered: `owned`, `released`, `pending` and `unmanaged` are gone with
+no compatibility path, the `state` field of the `machine list` envelope is now
+`lifecycle`, and `ips`, `power` and a result-level `powerRead` join it.
 
 A reading is a second implementation of the Redfish power capability,
 `machine-power-read-v1` over the `machine_power_read_redfish` role, bound
 without a lifecycle capability of its own exactly as day-2 power is. It freezes
 one survey per placement host, so one bounded run answers for every Machine
-behind the same host, and it registers no operation and publishes no evidence.
+behind the same host, and it registers no operation, publishes no evidence and
+names no retained output: an inspection either answers or refuses, so there is
+nothing for an operator to resume or read afterwards.
 
-Guarded by `internal/machine/inventory` selection and service tests, the
-`internal/machine/power` reading survey and evidence tests, the `internal/cli`
-listing presentation tests, and the collection's own
-`test_machine_power_protocol.py` reading cases.
+Guarded by `internal/machine` address tests, `internal/machine/inventory`
+selection and service tests, the `internal/machine/power` reading survey and
+evidence tests, the `internal/cli` listing presentation tests, and the
+collection's own `test_machine_power_protocol.py` reading cases.
 
-Constraints left behind: `--power` opens the same bounded runtime a power verb
-opens, so it takes the context's shared lock and waits on a running lifecycle
-mutation (C7); a Machine whose management controller cannot be resolved is left
-out of the survey and reports no reading rather than a diagnostic, so a
-misconfigured controller reads there as one this context does not reach and is
-diagnosed by a power verb instead; and no reading has run against a real host.
+Constraints left behind: `--power-status` opens the same bounded runtime a
+power verb opens, so it takes the context's shared lock and waits on a running
+lifecycle mutation (C7); a Machine whose management controller cannot be
+resolved is left out of the survey and reports no reading rather than a
+diagnostic, so a misconfigured controller reads there as one this context does
+not reach and is diagnosed by a power verb instead; the reported addresses are
+the declared ones, so a Machine addressed by DHCP shows none; and no reading
+has run against a real host.
 
 ### Machine SSH sessions and host trust
 

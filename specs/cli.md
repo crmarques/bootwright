@@ -562,7 +562,15 @@ completed apply ever realized reports `not-applied` after a removal. A Machine
 whose removal has not completed still owns what it has not removed, so it
 reports `destroying` rather than either settled position.
 
-`--power` additionally reads each selected Machine's power state from
+A Machine's contact and its addresses are separate facts, and the listing
+reports both. The contact is the one address its SSH access resolves, which is
+commonly a DNS name; the addresses are every IP the Machine declares, each
+without its prefix, in the order declared and without repetition. A DNS contact
+is not an address, a Machine may declare several, and one whose addresses are
+assigned at runtime declares none and reports none: an inspection contacts no
+host, so it never reports an address desired state does not carry.
+
+`--power-status` additionally reads each selected Machine's power state from
 [its own management controller](substrates.md#identity-and-power-operations),
 reporting `on`, `off`, or `unknown` when the controller gave no usable answer.
 It is the only part of this command that contacts a host: without it the
@@ -577,6 +585,11 @@ this context does not currently own — reports no reading at all, which is
 distinct from `unknown`. The result states separately whether controllers were
 asked, so a reading nobody requested is never mistaken for one that came back
 without an answer.
+
+A reading names no retained output. It is an inspection, not an operation: it
+either succeeds into a listing or refuses with its own diagnostic, so there is
+nothing for an operator to resume or read afterwards and no log location is
+reported for it.
 
 ### Machine SSH sessions
 
@@ -697,10 +710,10 @@ system to shut down and polls it to off; `--force` cuts the power instead, and
 is a separate request rather than a fallback. Restarting proves the stop before
 it starts, so an interrupted restart is never reported as settled.
 
-[`machine list --power`](#resource-inspection-and-explicit-access) reads the
-same controllers over the same boundary and under the same lock, and follows
-the same reachability rules, but drives nothing: it asks each controller what
-state it is in and reports the answer. Because it observes rather than
-converges, an unreachable controller leaves its own Machine `unknown` instead
-of refusing, and a Machine no controller resolves for is omitted from the
-reading instead of failing `access.unavailable`.
+[`machine list --power-status`](#resource-inspection-and-explicit-access)
+reads the same controllers over the same boundary and under the same lock, and
+follows the same reachability rules, but drives nothing: it asks each
+controller what state it is in and reports the answer. Because it observes
+rather than converges, an unreachable controller leaves its own Machine
+`unknown` instead of refusing, and a Machine no controller resolves for is
+omitted from the reading instead of failing `access.unavailable`.
