@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/ansible"
+	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
 	"github.com/crmarques/bootwright/internal/controller/clients"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
@@ -99,6 +100,9 @@ func buildCapabilities(clock systemClock, controller controllerDependencies) cap
 	}, {
 		kind: libvirt.HostKind, implementation: libvirt.HostImplementation,
 		capability: libvirt.NewHost(runner),
+	}, {
+		kind: agentinstall.Kind, implementation: agentinstall.MediaImplementation,
+		capability: agentinstall.NewMedia(runner),
 	}}
 	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(), ntpserver.Definition()} {
 		resolver = append(resolver, boundCapability{

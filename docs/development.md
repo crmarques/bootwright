@@ -245,3 +245,22 @@ because it is what proves the physical contract without hardware:
 | --- | --- |
 | The rehearsal in [`examples/lab-baremetal`](../examples/lab-baremetal/README.md): one context realizes a guest and its emulated controller, a second claims that guest as a physical Machine and installs it | by hand as root on a prepared libvirt host |
 | Installation of a real server through its own controller | by hand against qualified firmware, after the client is driven by hand against that controller |
+
+## M4a single-node OpenShift through the agent installer
+
+The [M4a delivery](../specs/milestones.md#m4a--single-node-openshift-through-the-agent-installer)
+installs one OpenShift cluster on the Machines a substrate realizes, through the
+release's own `openshift-install`. Its in-tree gates are unitary: they build no
+image, contact no controller and run no installer. The installer input
+projection is guarded by byte goldens for a single-node libvirt cluster, a
+multi-node libvirt cluster and a multi-node physical cluster, so a change to any
+part of what the installer reads is visible in a diff.
+
+`openshift-install` itself is not qualified by any in-tree gate. The release it
+builds for is proved at execution instead: the attempt reads the version the
+executable reports and refuses before building when it is not the declared one.
+
+| Acceptance | How it is run |
+| --- | --- |
+| The journey in [`examples/lab-sno`](../examples/lab-sno/README.md) as far as the published boot image: `apply --stage controller`, then an apply that builds and publishes it, then a repeated apply that settles | by hand as root on a prepared libvirt host with a pull secret |
+| A destroy that takes back the published image and the installer's work area | by hand on that host |

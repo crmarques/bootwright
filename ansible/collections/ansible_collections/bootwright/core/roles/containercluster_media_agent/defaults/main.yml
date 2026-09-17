@@ -1,0 +1,20 @@
+---
+# Derived from the frozen request only. Nothing here is authored by desired
+# state, and no value selects an executable, a role or a task file.
+containercluster_media_agent_work: '{{ bootwright_cluster_media_request.workRoot }}'
+containercluster_media_agent_private: '{{ bootwright_cluster_media_request.image.path }}'
+# The receipt records what the published image was built from, so a replay
+# proves that building again would change nothing without reading the image.
+containercluster_media_agent_receipt: '{{ containercluster_media_agent_work }}/bootwright-media.json'
+containercluster_media_agent_installer: '{{ bootwright_cluster_media_material.installer }}'
+# The unguessable directory this attempt publishes in. The token is minted by
+# the attempt, so it names a path that exists in no request and no log.
+containercluster_media_agent_directory: >-
+  {{ containercluster_media_agent_private }}/{{ containercluster_media_agent_token.stdout | default('') | trim }}
+# The image is already this request's when the receipt names this exact digest
+# and the published image is still there.
+containercluster_media_agent_published: >-
+  {{ containercluster_media_agent_before.observation.image | default(false)
+     and containercluster_media_agent_before.observation.inputs | default('') == bootwright_cluster_media_digest
+     and containercluster_media_agent_before.observation.installer | default('')
+         == bootwright_cluster_media_request.release.version }}

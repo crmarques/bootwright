@@ -275,11 +275,17 @@ automation it froze.
 (the installer the stage publishes), Secrets (the material an installation
 consumes and the access it captures) and State reconciliation (the `clusters`
 stage and the authorization an installation consumes); using Machine.
-**Requires:** M1h. **Definition:** Specified. **Delivery:** not started.
+**Requires:** M1h. **Definition:** Specified. **Delivery:** in progress.
 **Delivered on explicit request**, outside the milestone sequence: it is the
 agent-installer half of M4 bounded to one cluster topology, and it neither
 requires nor delivers M2a's standalone `render installer`, C12's operator-run
 ISO builder or C9.
+
+[Boot media](container-clusters.md#boot-media) is delivered: the projection,
+the installer-version proof, the build and its private publication. The
+[installation](container-clusters.md#installation) that boots the nodes from
+that image and waits for the cluster is the remaining half, so an apply of a
+cluster today publishes its image and stops there.
 
 Install one single-node OpenShift cluster on a Machine the libvirt substrate
 realizes, booting the agent image through that Machine's own emulated Redfish
@@ -333,7 +339,9 @@ and host-independent. The cluster install itself is rehearsed by hand on a
 libvirt host, and acceptance against physical hardware is operator-run and is
 not a gate of this delivery.
 
-Constraints left behind: `render installer` stays unavailable, so the projected
+Constraints left behind: the image is built by the installer the controller
+stage published there, so a cluster whose artifact server is placed on another
+Machine refuses; `render installer` stays unavailable, so the projected
 inputs are produced only by an operation (M2a); the cluster's captured access is
 revealed by no command until `cluster kubeconfig` is promoted, so the first
 delivery leaves it readable only through the context store; the controller's own

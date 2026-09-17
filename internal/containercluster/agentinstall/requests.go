@@ -93,7 +93,6 @@ type MediaRequest struct {
 	PullSecretRef   string              `json:"pullSecretRef"`
 	Release         Release             `json:"release"`
 	SSHKeyRef       string              `json:"sshKeyRef"`
-	TLSCertificate  string              `json:"tlsCertificateRef"`
 	Tool            Tool                `json:"tool"`
 	TrustBundleRefs []string            `json:"trustBundleRefs,omitempty"`
 	Version         string              `json:"version"`
@@ -219,7 +218,7 @@ func (r MediaRequest) ReservationKeys() []string {
 // SecretReferences names every declaration this request's execution needs
 // bound, so the operation freezes them before it registers.
 func (r MediaRequest) SecretReferences() []string {
-	references := append(r.Placement.SecretReferences(), r.PullSecretRef, r.SSHKeyRef, r.TLSCertificate)
+	references := append(r.Placement.SecretReferences(), r.PullSecretRef, r.SSHKeyRef)
 	return sortedUnique(append(references, r.TrustBundleRefs...))
 }
 

@@ -1,0 +1,355 @@
+package agentinstall
+
+import (
+	"context"
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
+	"github.com/crmarques/bootwright/internal/secrets"
+)
+
+// MediaCapability builds and publishes the image one cluster's nodes boot. It
+// owns what completion, replay and absence mean for that image and nothing
+// else: the cluster it serves belongs to the installation block.
+type MediaCapability struct{ runner Runner }
+
+func NewMedia(runner Runner) MediaCapability { return MediaCapability{runner: runner} }
+
+const mediaVariablePrefix = "bootwright_cluster_media"
+
+// Plan derives one block per selected cluster. It reads no host, endpoint or
+// Secret material and performs no effect.
+func (c MediaCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
+	if err := ctx.Err(); err != nil {
+		return lifecycle.CapabilityPlan{}, err
+	}
+	if input.State == nil {
+		return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
+	}
+	requests, _, requirements, err := Requests(input.State.Effective(), input.Controller, input.Context.Name)
+	if err != nil {
+		return lifecycle.CapabilityPlan{}, err
+	}
+	plan := lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}
+	digest := MediaContentDigest()
+	for index, request := range requests {
+		canonical, err := request.Canonical()
+		if err != nil {
+			return lifecycle.CapabilityPlan{}, err
+		}
+		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{
+			ID:             request.Identity.Block,
+			Description:    mediaDescription(input.Verb, request),
+			Stage:          reconciliation.StageClusters,
+			Requires:       mediaRequires(requirements[index]),
+			Impacts:        mediaImpacts(input.Verb, request),
+			Groups:         mediaGroups(input.Verb, request),
+			Kind:           Kind,
+			Object:         request.Identity.Cluster,
+			Implementation: MediaImplementation,
+			ContentDigest:  digest,
+			Request:        canonical,
+		})
+		plan.Secrets = append(plan.Secrets, request.SecretReferences()...)
+		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
+			Context: input.Context.Name, Kind: "cluster-media",
+			Service: request.Identity.Cluster, Keys: request.ReservationKeys(),
+		})
+	}
+	slices.Sort(plan.Secrets)
+	plan.Secrets = slices.Compact(plan.Secrets)
+	return plan, nil
+}
+
+// mediaRequires names the API objects this block waits for, never their block
+// identities. The image is published into a managed artifact server, so that
+// server answers before anything is written beneath its root.
+func mediaRequires(needs Requirements) []reconciliation.ObjectRef {
+	references := make([]reconciliation.ObjectRef, 0, len(needs.ArtifactServers))
+	for _, name := range needs.ArtifactServers {
+		references = append(references, reconciliation.ObjectRef{Kind: "ArtifactServer", Object: name})
+	}
+	return references
+}
+
+func mediaDescription(verb reconciliation.Verb, request MediaRequest) string {
+	if verb == reconciliation.Destroy {
+		return "remove the boot media of " + request.Identity.Cluster
+	}
+	return "build the boot media of " + request.Identity.Cluster
+}
+
+func mediaImpacts(verb reconciliation.Verb, request MediaRequest) []string {
+	published, work := "publish-content ", "create-path "
+	if verb == reconciliation.Destroy {
+		published, work = "remove-content ", "remove-path "
+	}
+	impacts := []string{published + request.Image.Path, work + request.WorkRoot}
+	slices.Sort(impacts)
+	return slices.Compact(impacts)
+}
+
+func mediaGroups(verb reconciliation.Verb, request MediaRequest) []reconciliation.Group {
+	machines := []string{request.Placement.Machine}
+	steps := [][2]string{
+		{"build-image", "build the image this cluster's nodes boot"},
+		{"publish-image", "publish it where only those nodes can fetch it"},
+	}
+	if verb == reconciliation.Destroy {
+		steps = [][2]string{
+			{"remove-published", "remove the published image and the installer's work area"},
+			{"verify-absence", "verify every published file is gone"},
+		}
+	}
+	out := make([]reconciliation.Group, 0, len(steps))
+	for _, step := range steps {
+		out = append(out, reconciliation.Group{ID: step[0], Description: step[1], Machines: machines})
+	}
+	return out
+}
+
+// Removal reads a frozen media block as the removal of what it published. The
+// cluster that booted from the image keeps running, so removing this block
+// consumes nothing.
+func (c MediaCapability) Removal(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
+	request, err := DecodeMediaRequest(block.Request)
+	if err != nil {
+		return lifecycle.Removal{}, err
+	}
+	return lifecycle.Removal{
+		Description: mediaDescription(reconciliation.Destroy, request),
+		Impacts:     mediaImpacts(reconciliation.Destroy, request),
+		Groups:      mediaGroups(reconciliation.Destroy, request),
+	}, nil
+}
+
+func (c MediaCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
+	return c.mutate(ctx, execution, "apply")
+}
+
+func (c MediaCapability) Destroy(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
+	return c.mutate(ctx, execution, "destroy")
+}
+
+func (c MediaCapability) mutate(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.Result, error) {
+	unknown := lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}
+	request, err := c.prepare(ctx, execution)
+	if err != nil {
+		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+	}
+	result, err := c.run(ctx, execution, operation, request)
+	if err != nil {
+		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
+	}
+	var outcome reconciliation.Outcome
+	switch result.Outcome {
+	case "changed":
+		outcome = reconciliation.OutcomeChanged
+	case "unchanged":
+		outcome = reconciliation.OutcomeUnchanged
+	default:
+		return unknown, refusal("lifecycle.state", "the boot-media adapter reported no usable outcome", "")
+	}
+	digest := execution.Block.RequestDigest
+	if operation == "apply" {
+		err = ValidateMediaPresence(result.Evidence, request, digest)
+	} else {
+		err = ValidateMediaAbsence(result.Evidence, digest)
+	}
+	if err != nil {
+		return unknown, err
+	}
+	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
+}
+
+// Observe is read-only. A published image built from this exact request by the
+// declared release's installer is positive completion; nothing published at all
+// is positive no effect; anything of this block's own left behind is a positive
+// partial realization the next attempt converges by building again.
+func (c MediaCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
+	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
+	request, err := c.prepare(ctx, execution)
+	if err != nil {
+		return unknown, err
+	}
+	result, err := c.run(ctx, execution, "observe", request)
+	if err != nil {
+		recordObservationFailure(ctx, execution, err)
+		return unknown, nil
+	}
+	digest := execution.Block.RequestDigest
+	if ValidateMediaPresence(result.Evidence, request, digest) == nil {
+		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: result.Evidence}, nil
+	}
+	if ValidateMediaNoEffect(result.Evidence, digest) == nil {
+		return lifecycle.Observation{Effect: reconciliation.EffectNoEffect, Evidence: result.Evidence}, nil
+	}
+	if ValidateMediaPartial(result.Evidence, digest) == nil {
+		return lifecycle.Observation{Effect: reconciliation.EffectPartial, Evidence: result.Evidence}, nil
+	}
+	return lifecycle.Observation{Effect: reconciliation.EffectUnknown, Evidence: result.Evidence}, nil
+}
+
+// Quiescent is derived rather than probed. This block owns a published image
+// and the installer's own work area, which an installed cluster no longer
+// reads; a node still booting from it is one whose own block is probed in the
+// same removal.
+func (MediaCapability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiescence, error) {
+	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its nodes are probed in this removal"}, nil
+}
+
+// Unsupported names every selected cluster this capability cannot install, so
+// the operation refuses before registration.
+func (MediaCapability) Unsupported(state *compilation.State) []string {
+	if state == nil {
+		return nil
+	}
+	return Unsupported(state.Effective())
+}
+
+func (c MediaCapability) prepare(ctx context.Context, execution lifecycle.Execution) (MediaRequest, error) {
+	if err := ctx.Err(); err != nil {
+		return MediaRequest{}, err
+	}
+	if c.runner == nil {
+		return MediaRequest{}, refusal("lifecycle.state", "the boot-media adapter is not configured", "")
+	}
+	return DecodeMediaRequest(execution.Block.Request)
+}
+
+func (c MediaCapability) run(ctx context.Context, execution lifecycle.Execution, operation string, request MediaRequest) (lifecycle.RunResult, error) {
+	canonical, err := request.Canonical()
+	if err != nil {
+		return lifecycle.RunResult{}, err
+	}
+	values := map[string]string{}
+	var materials []lifecycle.MaterialFile
+	if operation == "apply" {
+		installer, err := InstallerPath(ctx, execution.Setup, request.Tool)
+		if err != nil {
+			return lifecycle.RunResult{}, err
+		}
+		key, err := publicHalf(execution, request.SSHKeyRef)
+		if err != nil {
+			return lifecycle.RunResult{}, err
+		}
+		values["installer"], values["sshKey"] = installer, key
+		materials = append(materials, lifecycle.MaterialFile{
+			Name: "pull-secret", Part: secrets.ValuePart, Secret: request.PullSecretRef, Variable: "pullSecret",
+		})
+		for index, reference := range request.TrustBundleRefs {
+			materials = append(materials, lifecycle.MaterialFile{
+				Name:     "trust-" + strconv.Itoa(index),
+				Part:     secrets.CertificatePart,
+				Secret:   reference,
+				Variable: "trustBundle" + strconv.Itoa(index),
+			})
+		}
+	}
+	return c.runner.Run(ctx, lifecycle.RunRequest{
+		Implementation: MediaImplementation,
+		Operation:      operation,
+		Variable:       mediaVariablePrefix,
+		Digest:         execution.Block.RequestDigest,
+		Canonical:      canonical,
+		Placement:      request.Placement,
+		Materials:      append(materials, lifecycle.Materials(request.Placement)...),
+		MaterialValues: values,
+		Sudo:           request.Placement.SudoPasswordRef,
+		Launch:         execution.Launch,
+		Bundle:         execution.Bundle,
+		Area:           execution.Area,
+		Material:       execution.Material,
+		Log:            execution.Log,
+		Progress:       execution.Progress,
+		Output:         execution.Output,
+	})
+}
+
+// InstallerPath is the exact executable the controller stage published for one
+// declared release, located in the sealed client area that stage sealed. A
+// search path is never authority: an installer is the release pin, so the one
+// this block runs is the one this context's own graph selected.
+func InstallerPath(ctx context.Context, setup prerequisites.StorageView, tool Tool) (string, error) {
+	if setup.OpenBundle == nil {
+		return "", refusal("controller.state", "the retained controller areas are unavailable",
+			"run bootwright setup, then apply --stage controller")
+	}
+	for _, definition := range setup.State.RetainedDefinitions {
+		member, found := publishedTool(definition.Tools, tool)
+		if !found {
+			continue
+		}
+		area, err := setup.OpenBundle(ctx, prerequisites.ToolsDigest(definition.Tools))
+		if err != nil || area == nil {
+			continue
+		}
+		entries, err := area.Entries(ctx)
+		if err != nil {
+			continue
+		}
+		if !slices.ContainsFunc(entries, func(entry prerequisites.BundleEntry) bool {
+			return entry.Path == member && !entry.Directory
+		}) {
+			continue
+		}
+		location, err := area.Location(ctx)
+		if err != nil {
+			continue
+		}
+		return location.Path + "/" + member, nil
+	}
+	return "", refusal("controller.state",
+		"the "+tool.Kind+" of release "+tool.Version+" is not installed on this controller",
+		"run bootwright apply --stage controller")
+}
+
+// publishedTool is the file one retained closure publishes for exactly this
+// client kind, compatibility and version.
+func publishedTool(tools []prerequisites.ToolDefinition, tool Tool) (string, bool) {
+	for _, definition := range tools {
+		if definition.Kind != tool.Kind || definition.Compatibility != tool.Compatibility || definition.Version != tool.Version {
+			continue
+		}
+		for _, file := range definition.Files {
+			if strings.HasSuffix(file.Path, "/"+tool.Kind) {
+				return file.Path, true
+			}
+		}
+	}
+	return "", false
+}
+
+// publicHalf reads the public half of one bound key pair. A private half never
+// leaves its binding as a value.
+func publicHalf(execution lifecycle.Execution, reference string) (string, error) {
+	material, ok := execution.Material[reference]
+	if !ok {
+		return "", refusal("secret.store", "the bound cluster administration key is not available to this attempt",
+			"repeat the operation so its Secret bindings are reopened")
+	}
+	value, ok := material.Part(secrets.PublicKeyPart)
+	if !ok || len(value) == 0 {
+		return "", refusal("secret.part", "the bound cluster administration key carries no public half",
+			"repeat the operation so its Secret bindings are reopened")
+	}
+	return strings.TrimRight(string(value), "\n"), nil
+}
+
+func recordObservationFailure(ctx context.Context, execution lifecycle.Execution, err error) {
+	if execution.Log == nil {
+		return
+	}
+	for _, reported := range diagnostics.Of(err) {
+		_ = execution.Log(ctx, operationstore.LogRecord{
+			Event: "observation-failed", Block: execution.Block.ID, Detail: reported.Code + ": " + reported.Message,
+		})
+	}
+}

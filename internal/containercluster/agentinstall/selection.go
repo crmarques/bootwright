@@ -78,8 +78,12 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) string {
 		if !found {
 			continue
 		}
-		if _, err := substrate.TargetFor(catalog, bound, cluster.Name(), controllerMachine); err != nil {
+		target, err := substrate.TargetFor(catalog, bound, cluster.Name(), controllerMachine)
+		if err != nil {
 			return "a declared node is on a substrate this executable does not realize"
+		}
+		if target.Controller.VirtualMedia.Trust == substrate.TrustImportCertificate {
+			return "importing a certificate into a management controller is not implemented"
 		}
 	}
 	return ""
@@ -137,13 +141,22 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 	if err != nil {
 		return empty(err)
 	}
-	published, certificate, err := artifactserver.PrivatePath(catalog, server, selection, contextName, consumerPrefix, name, cluster.Identity())
+	published, _, err := artifactserver.PrivatePath(catalog, server, selection, contextName, consumerPrefix, name, cluster.Identity())
 	if err != nil {
 		return empty(err)
 	}
 	placement, err := artifactserver.PlacementFor(catalog, server, controllerMachine)
 	if err != nil {
 		return empty(err)
+	}
+	// The image is built by the installer the controller stage published, which
+	// that stage installs on the controller alone. A server placed on another
+	// host would have its image built where no installer exists, so the
+	// placement is refused here rather than discovered at execution.
+	if !placement.Local() {
+		return empty(refusal("lifecycle.state",
+			"a cluster's boot image is built on the controller, so the server it is published through is placed there",
+			"place "+server.Identity()+" on the controller Machine"))
 	}
 	needs.ArtifactServers = append(needs.ArtifactServers, server.Name())
 	timeSources, err := timeAddresses(catalog, cluster, &needs)
@@ -181,7 +194,7 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 	mediaRequest := MediaRequest{
 		AgentConfig: agent, Identity: identity(MediaBlockID(name)), Image: image,
 		InstallConfig: install, Placement: placement, PullSecretRef: pullSecret,
-		Release: release, SSHKeyRef: sshKey, TLSCertificate: certificate, Tool: tool,
+		Release: release, SSHKeyRef: sshKey, Tool: tool,
 		TrustBundleRefs: cluster.Spec().Get("install", "additionalTrustBundleRefs").Strings(),
 		Version:         mediaRequestVersion, WorkRoot: WorkRoot(contextName, name),
 	}

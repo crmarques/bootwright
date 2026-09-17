@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"slices"
 	"testing"
@@ -10,10 +11,14 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/clients"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 const snoExampleFiles = 14
@@ -139,5 +144,64 @@ func TestLabSNOExampleDerivesItsInstallerInputs(t *testing.T) {
 	}
 	if _, err := installs[0].Canonical(); err != nil {
 		t.Fatalf("the install request is not canonical: %v", err)
+	}
+}
+
+// Every capability derives its blocks from the example alone, and the whole set
+// orders into one plan whose cluster work waits for the services it publishes
+// through.
+func TestLabSNOExamplePlansTheWholeGraph(t *testing.T) {
+	state, _ := compileAcceptance(t, snoExampleSources(t))
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t))
+	input := lifecycle.PlanInput{
+		Verb: reconciliation.Apply, State: state, Controller: "controller",
+		Context: lifecycle.ContextIdentity{Name: "lab-sno"},
+	}
+	if unsupported := lifecycle.Unrealizable(state.Effective(), claimedKinds(resolver)); len(unsupported) != 0 {
+		t.Fatalf("the example declares objects no capability claims: %v", unsupported)
+	}
+	var definitions []reconciliation.BlockDefinition
+	var claims []prerequisites.HostReservation
+	for _, binding := range resolver.Bindings() {
+		capability, ok := resolver.Resolve(binding.Kind, binding.Implementation)
+		if !ok {
+			t.Fatalf("%s/%s does not resolve", binding.Kind, binding.Implementation)
+		}
+		if reporter, ok := capability.(lifecycle.UnsupportedReporter); ok {
+			if unsupported := reporter.Unsupported(state); len(unsupported) != 0 {
+				t.Fatalf("a capability cannot realize %v", unsupported)
+			}
+		}
+		contribution, err := capability.Plan(context.Background(), input)
+		if err != nil {
+			t.Fatalf("%s plan: %v", binding.Kind, err)
+		}
+		definitions = append(definitions, contribution.Definitions...)
+		claims = append(claims, contribution.Reservations...)
+	}
+	requireCanonicalReservations(t, claims)
+	plan, err := reconciliation.NewPlan(reconciliation.Apply, definitions)
+	if err != nil {
+		t.Fatal("the example produced a block the plan model refuses:", err)
+	}
+	blocks := make([]string, 0, len(plan.Blocks))
+	for _, block := range plan.Blocks {
+		blocks = append(blocks, block.ID)
+	}
+	ordered := slices.Clone(blocks)
+	slices.Sort(ordered)
+	if !slices.Equal(ordered, []string{
+		"artifact-server-lab-artifacts", "cluster-media-sno", clients.BlockID, "dns-lab-dns",
+		"machine-sno-01", "ntp-lab-ntp", "proxy-lab-proxy", "substrate-host-lab-libvirt",
+	}) {
+		t.Fatalf("blocks = %v", blocks)
+	}
+	for _, pair := range [][2]string{
+		{"substrate-host-lab-libvirt", "machine-sno-01"},
+		{"artifact-server-lab-artifacts", "cluster-media-sno"},
+	} {
+		if slices.Index(blocks, pair[0]) > slices.Index(blocks, pair[1]) {
+			t.Fatalf("%s is ordered after %s: %v", pair[0], pair[1], blocks)
+		}
 	}
 }

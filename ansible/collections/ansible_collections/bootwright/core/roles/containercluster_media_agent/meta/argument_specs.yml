@@ -1,0 +1,57 @@
+argument_specs:
+  apply:
+    short_description: Build one cluster's agent boot image and publish it privately.
+    options: &request
+      bootwright_cluster_media_request:
+        type: dict
+        required: true
+        options:
+          agentConfig:
+            type: dict
+            required: true
+          identity:
+            type: dict
+            required: true
+          image:
+            type: dict
+            required: true
+          installConfig:
+            type: dict
+            required: true
+          placement:
+            type: dict
+            required: true
+          pullSecretRef:
+            type: str
+            required: true
+          release:
+            type: dict
+            required: true
+          sshKeyRef:
+            type: str
+            required: true
+          tool:
+            type: dict
+            required: true
+          trustBundleRefs:
+            type: list
+            elements: str
+            required: false
+          version:
+            type: str
+            required: true
+            choices: [cluster-media-agent-v1]
+          workRoot:
+            type: str
+            required: true
+      bootwright_cluster_media_material:
+        type: dict
+        required: true
+
+  observe:
+    short_description: Observe one frozen boot image without changing it.
+    options: *request
+
+  destroy:
+    short_description: Remove one cluster's published boot image and prove its absence.
+    options: *request

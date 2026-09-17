@@ -187,9 +187,6 @@ func TestTheBootImageIsPublishedPrivately(t *testing.T) {
 	if install.Image != media.Image {
 		t.Fatal("the install block reads another image than the one its media block published")
 	}
-	if media.TLSCertificate != "artifact-server-tls" {
-		t.Fatalf("certificate = %q", media.TLSCertificate)
-	}
 }
 
 // Every declaration this contract cannot install refuses before an operation

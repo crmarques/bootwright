@@ -1,0 +1,27 @@
+---
+- name: Validate the frozen boot-media request
+  ansible.builtin.assert:
+    that:
+      - bootwright_cluster_media_request.version == 'cluster-media-agent-v1'
+      - bootwright_cluster_media_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.containercluster_media_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Observe what this block published, without changing any of it
+  bootwright.core.containercluster_media_inspect:
+    request: '{{ bootwright_cluster_media_request }}'
+  register: containercluster_media_agent_observed
+
+- name: Publish what the observation found
+  bootwright.core.containercluster_media_protocol:
+    phase: completed
+    outcome: unchanged
+    digest: '{{ bootwright_cluster_media_digest }}'
+    observation: '{{ containercluster_media_agent_observed.observation }}'
+    observed: true
+  no_log: true

@@ -25,15 +25,16 @@ to the [`clusters` stage](state-reconciliation.md#stages-and-the-pause-boundary)
 
 **Supported shape.** An OpenShift cluster declaring an exact
 `distribution.release.version`, installed by the `agent` method in `connected`
-mode, whose nodes are all Machines on a realized substrate with
-`os.provided: false` and no install profile. A single-node cluster resolves its
-three endpoint slots from that node; a multi-node cluster resolves them from
-authored or load-balancer addresses. Every other declaration refuses before
-operation registration with one diagnostic naming the cluster: `okd`,
-`disconnected` mode, a release pinned by image alone, `security.fips`,
-`security.diskEncryption`, `install.servingCertificates`,
-`install.registries`, and a node on a substrate this executable does not
-realize. Node `labels` and `taints` are accepted and reach no installer input,
+mode through direct access, whose nodes are all Machines on a realized
+substrate with `os.provided: false` and no install profile. A single-node
+cluster resolves its three endpoint slots from that node; a multi-node cluster
+resolves them from authored or load-balancer addresses. Every other declaration
+refuses before operation registration with one diagnostic naming the cluster:
+`okd`, `disconnected` mode, a release pinned by image alone, an installation
+proxy, `security.fips`, `security.diskEncryption`,
+`install.servingCertificates`, `install.registries`, a node on a substrate this
+executable does not realize, and a node whose management controller would have
+to be taught a new certificate. Node `labels` and `taints` are accepted and reach no installer input,
 because they are post-installation placement intent rather than install
 configuration.
 
@@ -72,8 +73,15 @@ request and substituted into the input files by the attempt that writes them.
 
 The block `cluster-media-<cluster>` produces the cluster's agent boot image. It
 requires the managed `ArtifactServer` its `agent.redfishVirtualMedia` selection
-names, and every managed `DNSServer` and `NTPServer` its nodes and its own
-selections resolve to, because the installer resolves names while it runs.
+names, because that is where the image is published, and nothing else: the name
+and time services the cluster selects are baked into the image as data rather
+than reached while it is built.
+
+The image is built where the installer is, which is the controller: the
+[controller stage](controller.md#the-controller-stage) installs a context's
+clients there and nowhere else. A cluster whose selected artifact server is
+placed on another Machine therefore refuses before registration rather than
+building where no installer exists.
 
 **The installer binary is the release pin.** The agent image embeds the release
 payload compiled into the `openshift-install` the

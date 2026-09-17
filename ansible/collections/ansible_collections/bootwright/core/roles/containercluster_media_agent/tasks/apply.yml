@@ -1,0 +1,90 @@
+---
+- name: Validate the frozen boot-media request
+  ansible.builtin.assert:
+    that:
+      - bootwright_cluster_media_request.version == 'cluster-media-agent-v1'
+      - bootwright_cluster_media_request.image.path.startswith('/var/lib/bootwright-services/')
+      - bootwright_cluster_media_request.workRoot.startswith('/var/lib/bootwright-clusters/')
+      - bootwright_cluster_media_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.containercluster_media_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Report boot image construction
+  bootwright.core.containercluster_media_protocol:
+    phase: group
+    group: build-image
+    status: running
+  no_log: true
+
+# The image embeds the release payload compiled into this executable, and no
+# later step reports which release it used, so the version is proved before
+# anything is built rather than discovered afterwards.
+- name: Read the version of the installer the controller stage published
+  ansible.builtin.command:
+    argv:
+      - '{{ containercluster_media_agent_installer }}'
+      - version
+  register: containercluster_media_agent_version
+  changed_when: false
+
+- name: Refuse an installer that does not build the declared release
+  ansible.builtin.assert:
+    that:
+      - containercluster_media_agent_version.stdout_lines | default([]) | length > 0
+      - (containercluster_media_agent_version.stdout_lines[0].split() | last)
+        == bootwright_cluster_media_request.release.version
+    fail_msg: >-
+      the installer this controller published builds
+      {{ containercluster_media_agent_version.stdout_lines[0] | default('an unreadable release') }},
+      and this cluster declares {{ bootwright_cluster_media_request.release.version }};
+      run bootwright apply --stage controller before building its image
+    quiet: true
+
+- name: Observe what this block has already published
+  bootwright.core.containercluster_media_inspect:
+    request: '{{ bootwright_cluster_media_request }}'
+  register: containercluster_media_agent_before
+
+- name: Build and publish the boot image when it is not already this request's
+  ansible.builtin.include_tasks: build.yml
+  when: not (containercluster_media_agent_published | bool)
+
+- name: Report boot image completion
+  bootwright.core.containercluster_media_protocol:
+    phase: group
+    group: build-image
+    status: ok
+  no_log: true
+
+- name: Report boot image publication
+  bootwright.core.containercluster_media_protocol:
+    phase: group
+    group: publish-image
+    status: running
+  no_log: true
+
+- name: Prove the published image is in place
+  bootwright.core.containercluster_media_inspect:
+    request: '{{ bootwright_cluster_media_request }}'
+  register: containercluster_media_agent_after
+
+- name: Report boot image publication completion
+  bootwright.core.containercluster_media_protocol:
+    phase: group
+    group: publish-image
+    status: ok
+  no_log: true
+
+- name: Publish bounded boot-media completion evidence
+  bootwright.core.containercluster_media_protocol:
+    phase: completed
+    outcome: >-
+      {{ 'unchanged' if containercluster_media_agent_published | bool else 'changed' }}
+    digest: '{{ bootwright_cluster_media_digest }}'
+    observation: '{{ containercluster_media_agent_after.observation }}'
+  no_log: true

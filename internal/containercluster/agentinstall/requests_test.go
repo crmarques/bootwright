@@ -77,7 +77,7 @@ func TestMediaReservationsClaimTheImageTreeAndWorkArea(t *testing.T) {
 func TestSecretReferencesNameEveryBoundDeclaration(t *testing.T) {
 	media, install, _ := onlyRequests(t, singleNodeCatalog())
 	if got := media.SecretReferences(); !slices.Equal(got, []string{
-		"artifact-server-tls", "openshift-pull-secret", "sno-cluster-admin-ssh-key",
+		"openshift-pull-secret", "sno-cluster-admin-ssh-key",
 	}) {
 		t.Fatalf("media secrets = %v", got)
 	}
