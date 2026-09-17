@@ -72,7 +72,7 @@ func (s Service) WithRuntime(ctx context.Context, request RuntimeRequest, call f
 		}
 	}()
 	return s.workspace.RunLifecycle(ctx, name, func(view RunView) error {
-		area, location, requirement, err := approvedBundle(ctx, view)
+		approved, err := approvedBundle(ctx, view)
 		if err != nil {
 			return err
 		}
@@ -81,9 +81,9 @@ func (s Service) WithRuntime(ctx context.Context, request RuntimeRequest, call f
 			return err
 		}
 		defer func() { _ = output.Close(ctx) }()
-		return s.guard.WithPython(ctx, area, requirement, func(launch prerequisites.PythonLaunch, _ func() error) error {
+		return s.guard.WithPython(ctx, approved.area, approved.requirement, func(launch prerequisites.PythonLaunch, _ func() error) error {
 			return call(ctx, Runtime{
-				Context: view.Identity(), Launch: launch, Bundle: location, Area: area, Material: material,
+				Context: view.Identity(), Launch: launch, Bundle: approved.location, Area: approved.area, Material: material,
 				Output: output, LogLocation: directory, Logs: []string{target},
 			})
 		})
@@ -177,28 +177,38 @@ func (s Service) lend(ctx context.Context, name string, references []string) (st
 	return result.ID, material, nil
 }
 
+// bundle is the approved execution boundary one operation runs inside: the
+// area itself, where it sits on this host, and the requirement its runtime
+// must satisfy. An operation opens it once and every attempt shares it,
+// because opening it per attempt would ask the transaction to record what it
+// has open while its own blocks are running.
+type bundle struct {
+	area        prerequisites.BundleArea
+	location    prerequisites.BundleLocation
+	requirement prerequisites.ExecutionRequirement
+}
+
 // approvedBundle opens the execution bundle the retained controller setup
 // approved for this context, with the requirement its runtime must satisfy.
-func approvedBundle(ctx context.Context, view View) (prerequisites.BundleArea, prerequisites.BundleLocation, prerequisites.ExecutionRequirement, error) {
-	var requirement prerequisites.ExecutionRequirement
+func approvedBundle(ctx context.Context, view View) (bundle, error) {
 	receipt := view.Controller().State.Receipt
 	if receipt.Definition == nil {
-		return nil, prerequisites.BundleLocation{}, requirement, failure("controller.state",
+		return bundle{}, failure("controller.state",
 			"the retained controller setup has no execution definition", "run bootwright setup")
 	}
 	if view.Controller().OpenBundle == nil {
-		return nil, prerequisites.BundleLocation{}, requirement, failure("controller.state", "the approved execution bundle is unavailable", "run bootwright setup")
+		return bundle{}, failure("controller.state", "the approved execution bundle is unavailable", "run bootwright setup")
 	}
 	area, err := view.Controller().OpenBundle(ctx, receipt.CatalogDigest)
 	if err != nil {
-		return nil, prerequisites.BundleLocation{}, requirement, err
+		return bundle{}, err
 	}
 	if area == nil {
-		return nil, prerequisites.BundleLocation{}, requirement, failure("controller.state", "the approved execution bundle is missing", "run bootwright setup")
+		return bundle{}, failure("controller.state", "the approved execution bundle is missing", "run bootwright setup")
 	}
 	location, err := area.Location(ctx)
 	if err != nil {
-		return nil, prerequisites.BundleLocation{}, requirement, err
+		return bundle{}, err
 	}
-	return area, location, receipt.Definition.Execution, nil
+	return bundle{area: area, location: location, requirement: receipt.Definition.Execution}, nil
 }

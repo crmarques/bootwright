@@ -58,7 +58,7 @@ func (t *lifecycleTransaction) ClientArea(ctx context.Context, id string) (prere
 	}
 	area.canWrite = func() bool { return !sealed() }
 	area.sealed = sealed
-	t.areas = append(t.areas, area)
+	t.areas.keep(area)
 	return area, nil
 }
 
@@ -148,12 +148,7 @@ func (t *lifecycleTransaction) SealClientArea(ctx context.Context, id string) er
 }
 
 func (t *lifecycleTransaction) openArea(id string) *controllerBundleArea {
-	for _, area := range t.areas {
-		if area.reservation.ID == id && area.dir != nil {
-			return area
-		}
-	}
-	return nil
+	return t.areas.find(id)
 }
 
 // RetainDependencies records what a controller stage resolved before it

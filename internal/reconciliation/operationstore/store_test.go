@@ -7,15 +7,25 @@ import (
 	"errors"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
+// fixedClock advances a second per reading so records carry distinct stamps.
+// Blocks running at the same time each stamp their own records, so it is
+// guarded: the production clock is the wall clock, which needs no guard.
 func fixedClock() func() time.Time {
+	var mutex sync.Mutex
 	moment := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
-	return func() time.Time { moment = moment.Add(time.Second); return moment }
+	return func() time.Time {
+		mutex.Lock()
+		defer mutex.Unlock()
+		moment = moment.Add(time.Second)
+		return moment
+	}
 }
 
 func testPlan(t *testing.T, ids ...string) reconciliation.Plan {
@@ -433,6 +443,59 @@ func TestPublishingABeforeStateNeverSyncsTheRecord(t *testing.T) {
 	for _, target := range area.syncs {
 		if _, isRecord := area.files[target]; isRecord {
 			t.Fatalf("a record was named as the directory to sync: %q", target)
+		}
+	}
+}
+
+// Blocks of one operation run at the same time and each publishes its own
+// records. Every block writes only its own paths, so the store serializes
+// nothing here; what it must not do is corrupt the expectations it remembers
+// for all of them. Without the guard this reports a concurrent map write.
+func TestConcurrentBlocksPublishTheirOwnRecords(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	blocks := []string{"alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel"}
+	plan := testPlan(t, blocks...)
+	operation := testOperation(t, plan)
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Register(ctx, operation, plan); err != nil {
+		t.Fatal(err)
+	}
+	var wait sync.WaitGroup
+	failures := make(chan error, len(blocks))
+	for _, block := range blocks {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			number, err := store.StartAttempt(ctx, operation.ID, block)
+			if err != nil {
+				failures <- err
+				return
+			}
+			if err := store.CompleteAttempt(ctx, operation.ID, block, number,
+				reconciliation.OutcomeChanged, reconciliation.EffectCompleted, reconciliation.BlockDone,
+				json.RawMessage(`{"postcondition":true}`)); err != nil {
+				failures <- err
+			}
+		}()
+	}
+	wait.Wait()
+	close(failures)
+	for err := range failures {
+		t.Fatal(err)
+	}
+	states, err := store.BlockStates(ctx, operation.ID, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, block := range blocks {
+		if states[block] != reconciliation.BlockDone {
+			t.Fatalf("block %s = %q", block, states[block])
+		}
+		if _, exists := area.files[operation.ID+"/blocks/"+block+"/attempt-000001.json"]; !exists {
+			t.Fatalf("block %s lost its attempt record", block)
 		}
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/crmarques/bootwright/internal/controller"
@@ -49,12 +50,50 @@ type lifecycleTransaction struct {
 	base    *transaction
 	stored  controllerStored
 	context *directory
-	areas   []*controllerBundleArea
+	areas   openedBundles
 	// active and guard are the capability boundary every area this operation
 	// opens shares: it expires with the callback, and each access reproves that
 	// the shared controller record has not changed underneath it.
 	active func() bool
 	guard  func(context.Context) error
+}
+
+// openedBundles collects every bundle area an opener handed out, so the
+// callback that expires them closes all of them. The opener is a published
+// capability reachable from an operation's concurrently running blocks, so
+// what it collects is guarded here rather than by how often one caller
+// happens to open a bundle.
+type openedBundles struct {
+	mutex sync.Mutex
+	areas []*controllerBundleArea
+}
+
+func (o *openedBundles) keep(area *controllerBundleArea) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	o.areas = append(o.areas, area)
+}
+
+func (o *openedBundles) closeAll() {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	for _, area := range o.areas {
+		area.close()
+	}
+	o.areas = nil
+}
+
+// find answers with the open area of one reservation, so a caller that already
+// opened it works through the same handle rather than a second one.
+func (o *openedBundles) find(id string) *controllerBundleArea {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	for _, area := range o.areas {
+		if area.reservation.ID == id && area.dir != nil {
+			return area
+		}
+	}
+	return nil
 }
 
 func lifecycleRecord(registry contexts.Registry, name string) (contexts.Record, error) {
@@ -154,12 +193,10 @@ func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, ca
 		return safeError(err)
 	}
 	active := true
-	areas := []*controllerBundleArea{}
+	var areas openedBundles
 	defer func() {
 		active = false
-		for _, area := range areas {
-			area.close()
-		}
+		areas.closeAll()
 	}()
 	// A bounded run executes inside the controller's approved bundle, so it
 	// needs the same opener a mutation has. An inspection runs nothing and is
@@ -183,7 +220,7 @@ func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, ca
 			if err != nil || area == nil {
 				return nil, err
 			}
-			areas = append(areas, area)
+			areas.keep(area)
 			return area, nil
 		}
 	}
@@ -244,9 +281,7 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 		}
 		defer func() {
 			active = false
-			for _, area := range tx.areas {
-				area.close()
-			}
+			tx.areas.closeAll()
 		}()
 		tx.active = func() bool { return active }
 		tx.guard = func(call context.Context) error {
@@ -273,7 +308,7 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 			if err != nil || area == nil {
 				return nil, err
 			}
-			tx.areas = append(tx.areas, area)
+			tx.areas.keep(area)
 			return area, nil
 		}
 		// Every publication this transaction performs is independently atomic

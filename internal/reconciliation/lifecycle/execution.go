@@ -566,6 +566,12 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 	if err != nil {
 		return result, err
 	}
+	// Every attempt of this operation runs inside one approved bundle, so it is
+	// opened once here rather than by each attempt in turn.
+	approved, err := approvedBundle(ctx, tx)
+	if err != nil {
+		return result, err
+	}
 	boundary := false
 	var cause error
 	for {
@@ -581,12 +587,12 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 		if unproved(states[block.ID]) {
 			// The resolution's durable transition is authoritative even when it
 			// reports a refusal, so the operation state matches what was recorded.
-			outcome, err = s.resolveUnknown(ctx, tx, store, operation, block, material, index+1, len(plan.Blocks))
+			outcome, err = s.resolveUnknown(ctx, tx, store, approved, operation, block, material, index+1, len(plan.Blocks))
 			if outcome == "" {
 				outcome = reconciliation.BlockUnknown
 			}
 		} else {
-			outcome, err = s.attempt(ctx, tx, store, operation, block, material, index+1, len(plan.Blocks))
+			outcome, err = s.attempt(ctx, tx, store, approved, operation, block, material, index+1, len(plan.Blocks))
 		}
 		states[block.ID] = outcome
 		if err != nil || outcome != reconciliation.BlockDone {
@@ -613,12 +619,12 @@ const (
 // that cannot read its target reports live, because an environment that cannot
 // prove it is idle is never assumed to be.
 func (s Service) proveQuiescent(ctx context.Context, tx Transaction, plan reconciliation.Plan, material map[string]secrets.Material) error {
-	area, location, requirement, err := approvedBundle(ctx, tx)
+	approved, err := approvedBundle(ctx, tx)
 	if err != nil {
 		return err
 	}
 	var live, stops []string
-	err = s.guard.WithPython(ctx, area, requirement, func(launch prerequisites.PythonLaunch, _ func() error) error {
+	err = s.guard.WithPython(ctx, approved.area, approved.requirement, func(launch prerequisites.PythonLaunch, _ func() error) error {
 		for index, block := range plan.Blocks {
 			if err := ctx.Err(); err != nil {
 				return err
@@ -634,7 +640,7 @@ func (s Service) proveQuiescent(ctx context.Context, tx Transaction, plan reconc
 				Completed: index, Declared: len(plan.Blocks),
 			})
 			state, err := capability.Quiescent(ctx, Probe{
-				Block: block, Launch: launch, Bundle: location, Area: area, Material: material,
+				Block: block, Launch: launch, Bundle: approved.location, Area: approved.area, Material: material,
 			})
 			if err != nil {
 				return err

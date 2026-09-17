@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -33,8 +34,11 @@ const (
 	testAutomaton   = "aaaa0123456789abcdef0123456789abcdef0123456789abcdef0123456789ab"
 )
 
-// memoryArea models the Workspace-held operation area contract.
+// memoryArea models the Workspace-held operation area contract. The real area
+// serializes concurrent blocks through the filesystem, so this one holds a
+// mutex: without it the race detector reports the fake rather than the engine.
 type memoryArea struct {
+	mutex sync.Mutex
 	files map[string][]byte
 	fail  map[string]error
 }
@@ -44,6 +48,8 @@ func newArea() *memoryArea { return &memoryArea{files: map[string][]byte{}, fail
 // written reports whether this area holds anything under one identity, so a
 // test can prove a bounded run left the operation records alone.
 func (a *memoryArea) written(identity string) bool {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	for name := range a.files {
 		if strings.HasPrefix(name, identity+"/") {
 			return true
@@ -53,6 +59,8 @@ func (a *memoryArea) written(identity string) bool {
 }
 
 func (a *memoryArea) clone() *memoryArea {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	copied := newArea()
 	for name, data := range a.files {
 		copied.files[name] = slices.Clone(data)
@@ -61,6 +69,8 @@ func (a *memoryArea) clone() *memoryArea {
 }
 
 func (a *memoryArea) Read(_ context.Context, target string, _ int) ([]byte, bool, error) {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	if err := a.fail["read "+target]; err != nil {
 		return nil, false, err
 	}
@@ -69,6 +79,8 @@ func (a *memoryArea) Read(_ context.Context, target string, _ int) ([]byte, bool
 }
 
 func (a *memoryArea) Entries(_ context.Context, target string) ([]operationstore.Entry, error) {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	prefix := target
 	if prefix != "" {
 		prefix += "/"
@@ -93,6 +105,8 @@ func (a *memoryArea) Entries(_ context.Context, target string) ([]operationstore
 func (a *memoryArea) EnsureDirectory(context.Context, string) error { return nil }
 
 func (a *memoryArea) WriteExclusive(_ context.Context, target string, data []byte) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	if err := a.fail["write "+target]; err != nil {
 		return err
 	}
@@ -104,6 +118,8 @@ func (a *memoryArea) WriteExclusive(_ context.Context, target string, data []byt
 }
 
 func (a *memoryArea) Replace(_ context.Context, target string, data, expected []byte) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	if err := a.fail["replace "+target]; err != nil {
 		return err
 	}
@@ -120,6 +136,8 @@ func (a *memoryArea) Replace(_ context.Context, target string, data, expected []
 }
 
 func (a *memoryArea) Append(_ context.Context, target string, data []byte) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	if err := a.fail["append "+target]; err != nil {
 		return err
 	}
@@ -147,6 +165,9 @@ type testWorkspace struct {
 	retained     []prerequisites.DependencySource
 	resolutions  int
 	failPublish  error
+	// opened counts how many times this operation asked for the approved
+	// execution bundle, which an operation does once however many blocks run.
+	opened int
 }
 
 func (w *testWorkspace) view() *testView {
@@ -258,8 +279,11 @@ func (v *testView) RetainDependencies(_ context.Context, definition *prerequisit
 }
 
 // testCapability records what the engine asked it to do and replays scripted
-// outcomes, so every orchestration rule is observable without an adapter.
+// outcomes, so every orchestration rule is observable without an adapter. The
+// engine calls it from each running block's own goroutine, so what it records
+// is guarded.
 type testCapability struct {
+	mutex        sync.Mutex
 	definitions  []reconciliation.BlockDefinition
 	reservations []prerequisites.HostReservation
 	secrets      []string
@@ -283,10 +307,26 @@ type testCapability struct {
 	consumes     map[string][]string
 }
 
+// record appends what one call saw under the fixture's own lock, so blocks
+// running at the same time never race what it remembers. The lock is never
+// held across the call itself, because a test that holds one block until
+// another starts would otherwise deadlock on the bookkeeping.
+func (c *testCapability) record(target *[]string, value string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	*target = append(*target, value)
+}
+
+func (c *testCapability) recordExecution(execution Execution) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.executions = append(c.executions, execution)
+}
+
 // Removal answers from the fixture. It records which frozen blocks a removal
 // read, so a test can prove a plan came from them rather than from input.
 func (c *testCapability) Removal(_ context.Context, block reconciliation.Block) (Removal, error) {
-	c.removals = append(c.removals, block.ID)
+	c.record(&c.removals, block.ID)
 	if c.removalErr != nil {
 		return Removal{}, c.removalErr
 	}
@@ -301,7 +341,7 @@ func (c *testCapability) Removal(_ context.Context, block reconciliation.Block) 
 // Quiescent answers from the fixture, and settles by default so a removal that
 // is not exercising the gate is not written as though it were.
 func (c *testCapability) Quiescent(_ context.Context, probe Probe) (Quiescence, error) {
-	c.probes = append(c.probes, probe.Block.ID)
+	c.record(&c.probes, probe.Block.ID)
 	if c.quiescentErr != nil {
 		return Quiescence{}, c.quiescentErr
 	}
@@ -321,6 +361,8 @@ func (c *testCapability) Plan(_ context.Context, input PlanInput) (CapabilityPla
 func (c *testCapability) Unsupported(*compilation.State) []string { return c.unsupported }
 
 func (c *testCapability) next(outcomes *[]Result) Result {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	if len(*outcomes) == 0 {
 		return Result{Outcome: reconciliation.OutcomeChanged, Evidence: json.RawMessage(`{"ok":true}`)}
 	}
@@ -330,9 +372,11 @@ func (c *testCapability) next(outcomes *[]Result) Result {
 }
 
 func (c *testCapability) Apply(ctx context.Context, execution Execution) (Result, error) {
+	c.mutex.Lock()
 	c.applies = append(c.applies, execution.Block.ID)
 	c.material = append(c.material, execution.Material)
 	c.executions = append(c.executions, execution)
+	c.mutex.Unlock()
 	if execution.Progress != nil {
 		execution.Progress(ctx, "pull-image", "running")
 		execution.Progress(ctx, "pull-image", "ok")
@@ -354,13 +398,15 @@ func (c *testCapability) Apply(ctx context.Context, execution Execution) (Result
 }
 
 func (c *testCapability) Destroy(_ context.Context, execution Execution) (Result, error) {
-	c.destroys = append(c.destroys, execution.Block.ID)
+	c.record(&c.destroys, execution.Block.ID)
 	return c.next(&c.outcomes), nil
 }
 
 func (c *testCapability) Observe(_ context.Context, execution Execution) (Observation, error) {
-	c.observes = append(c.observes, execution.Block.ID)
-	c.executions = append(c.executions, execution)
+	c.record(&c.observes, execution.Block.ID)
+	c.recordExecution(execution)
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	if c.observeErr != nil {
 		return Observation{}, c.observeErr
 	}
@@ -494,9 +540,20 @@ func (p *testPresenter) PresentLifecyclePlan(_ context.Context, result PlanResul
 	return nil
 }
 
-type testClock struct{ moment time.Time }
+// testClock advances a second per reading so records carry distinct stamps.
+// Blocks running at the same time stamp their own records through it, so it is
+// guarded: the production clock is the wall clock, which needs no guard.
+type testClock struct {
+	mutex  sync.Mutex
+	moment time.Time
+}
 
-func (c *testClock) Now() time.Time { c.moment = c.moment.Add(time.Second); return c.moment }
+func (c *testClock) Now() time.Time {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.moment = c.moment.Add(time.Second)
+	return c.moment
+}
 
 type harness struct {
 	service    Service
@@ -561,8 +618,11 @@ func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinitio
 				},
 				Bindings: []prerequisites.ControllerBinding{{Context: testContextName, Machine: "controller", HostDigest: digest}},
 			},
-			OpenBundle: func(context.Context, string) (prerequisites.BundleArea, error) { return testBundle{}, nil },
 		},
+	}
+	workspace.controller.OpenBundle = func(context.Context, string) (prerequisites.BundleArea, error) {
+		workspace.opened++
+		return testBundle{}, nil
 	}
 	capability := &testCapability{definitions: definitions, secrets: []string{"artifact-server-tls"}}
 	binder := &testBinder{material: map[string]secrets.Material{"artifact-server-tls": secrets.NewMaterial(nil)}}
@@ -682,7 +742,11 @@ func TestApplyRefusesAnUnpreparedControllerHost(t *testing.T) {
 	}
 }
 
+// testProgress collects the stream the presenter would render. Blocks running
+// at the same time report from their own goroutines, exactly as they do to the
+// real presenter, so this one is guarded the same way.
 type testProgress struct {
+	mutex          sync.Mutex
 	rows           []string
 	location       string
 	rowsAtLocation int
@@ -696,12 +760,23 @@ func (p *testProgress) ReportProgress(_ context.Context, event ProgressEvent) {
 	if event.Phase != EffectPhase {
 		row = event.Phase + ":" + row
 	}
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
 	p.rows = append(p.rows, row)
 }
 
 func (p *testProgress) ReportLogLocation(_ context.Context, location string) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
 	p.location = location
 	p.rowsAtLocation = len(p.rows)
+}
+
+// reported copies the stream so an assertion reads a stable list.
+func (p *testProgress) reported() []string {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	return slices.Clone(p.rows)
 }
 
 // Progress names each block by its description and each group by the frozen
@@ -2042,5 +2117,22 @@ func TestLogLocationIsNamedBeforeTheFirstEffect(t *testing.T) {
 	}
 	if result.LogLocation != want {
 		t.Fatalf("result location = %q, want %q", result.LogLocation, want)
+	}
+}
+
+// Every block of one operation runs inside the same approved bundle, so the
+// operation opens it once before its first effect rather than once per block.
+// Opening it per attempt asks the transaction to record what it has open while
+// its own blocks are running, which is exactly what must not happen.
+func TestAnOperationOpensItsApprovedBundleOnce(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab", "artifact-server-spare")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if h.workspace.opened != 1 {
+		t.Fatalf("the approved bundle was opened %d times", h.workspace.opened)
+	}
+	if len(h.capability.applies) != 2 {
+		t.Fatalf("applied %v", h.capability.applies)
 	}
 }

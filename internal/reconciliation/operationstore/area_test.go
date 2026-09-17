@@ -7,12 +7,15 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"sync"
 )
 
 // memoryArea models the contract contextfs implements: exclusive creation,
 // expectation-checked replacement and append-only logs, with no other way to
-// change a published byte.
+// change a published byte. The real area serializes concurrent blocks through
+// the filesystem, so this one holds a mutex and answers each call whole.
 type memoryArea struct {
+	mutex       sync.Mutex
 	files       map[string][]byte
 	directories map[string]bool
 	fail        map[string]error
@@ -34,6 +37,8 @@ func (a *memoryArea) check(operation, target string) error {
 }
 
 func (a *memoryArea) Read(ctx context.Context, target string, maximum int) ([]byte, bool, error) {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	a.reads++
 	if err := a.check("read", target); err != nil {
 		return nil, false, err
@@ -49,6 +54,8 @@ func (a *memoryArea) Read(ctx context.Context, target string, maximum int) ([]by
 }
 
 func (a *memoryArea) Entries(ctx context.Context, target string) ([]Entry, error) {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	if err := a.check("entries", target); err != nil {
 		return nil, err
 	}
@@ -81,6 +88,8 @@ func (a *memoryArea) Entries(ctx context.Context, target string) ([]Entry, error
 }
 
 func (a *memoryArea) EnsureDirectory(ctx context.Context, target string) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	if err := a.check("ensure", target); err != nil {
 		return err
 	}
@@ -91,6 +100,8 @@ func (a *memoryArea) EnsureDirectory(ctx context.Context, target string) error {
 }
 
 func (a *memoryArea) WriteExclusive(ctx context.Context, target string, data []byte) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	if err := a.check("write", target); err != nil {
 		return err
 	}
@@ -102,6 +113,8 @@ func (a *memoryArea) WriteExclusive(ctx context.Context, target string, data []b
 }
 
 func (a *memoryArea) Replace(ctx context.Context, target string, data, expected []byte) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	if err := a.check("replace", target); err != nil {
 		return err
 	}
@@ -118,6 +131,8 @@ func (a *memoryArea) Replace(ctx context.Context, target string, data, expected 
 }
 
 func (a *memoryArea) Append(ctx context.Context, target string, data []byte) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	a.appends++
 	if err := a.check("append", target); err != nil {
 		return err

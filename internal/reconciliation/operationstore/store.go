@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"path"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -16,14 +17,37 @@ const indexPath = "index.json"
 // Store publishes the operation subtree through one held Workspace area. It is
 // invocation-scoped: the exclusive coordination its area was opened under is
 // what makes a remembered expectation a safe replacement guard.
+//
+// Blocks of one operation publish their own records at the same time, so the
+// expectation map is guarded. Each block writes only its own paths, so the
+// guard protects the map rather than serializing the writes.
 type Store struct {
 	area     Area
 	clock    func() time.Time
+	mutex    sync.Mutex
 	expected map[string][]byte
 }
 
 func New(area Area, clock func() time.Time) *Store {
 	return &Store{area: area, clock: clock, expected: map[string][]byte{}}
+}
+
+// remember records the exact bytes a later replacement must still find. A nil
+// value remembers that the path was absent, which is a replacement guard of
+// its own and not the same as never having read it.
+func (s *Store) remember(target string, data []byte) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.expected[target] = data
+}
+
+// expectation reads back what this store last observed at a path, and whether
+// it observed it at all.
+func (s *Store) expectation(target string) ([]byte, bool) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	data, read := s.expected[target]
+	return data, read
 }
 
 func (s *Store) now() (string, error) {
@@ -43,7 +67,7 @@ func (s *Store) Index(ctx context.Context) (Index, error) {
 		return Index{}, err
 	}
 	if !found {
-		s.expected[indexPath] = nil
+		s.remember(indexPath, nil)
 		return Index{Version: 1}, nil
 	}
 	var index Index
@@ -53,7 +77,7 @@ func (s *Store) Index(ctx context.Context) (Index, error) {
 	if err := validateIndex(index); err != nil {
 		return Index{}, err
 	}
-	s.expected[indexPath] = slices.Clone(data)
+	s.remember(indexPath, slices.Clone(data))
 	return index, nil
 }
 
@@ -100,15 +124,16 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 	if err := s.area.WriteExclusive(ctx, s.operationPath(operation.ID), encoded); err != nil {
 		return err
 	}
-	s.expected[s.operationPath(operation.ID)] = slices.Clone(encoded)
+	s.remember(s.operationPath(operation.ID), slices.Clone(encoded))
 	index, err := encode(Index{Version: 1, Current: operation.ID}, MaxIndexBytes)
 	if err != nil {
 		return err
 	}
-	if err := s.area.Replace(ctx, indexPath, index, s.expected[indexPath]); err != nil {
+	current, _ := s.expectation(indexPath)
+	if err := s.area.Replace(ctx, indexPath, index, current); err != nil {
 		return err
 	}
-	s.expected[indexPath] = slices.Clone(index)
+	s.remember(indexPath, slices.Clone(index))
 	return nil
 }
 
@@ -149,7 +174,7 @@ func (s *Store) ReadOperation(ctx context.Context, id string) (Operation, error)
 	if operation.ID != id {
 		return Operation{}, recordError("lifecycle operation record contradicts its location")
 	}
-	s.expected[s.operationPath(id)] = slices.Clone(data)
+	s.remember(s.operationPath(id), slices.Clone(data))
 	return operation, nil
 }
 
@@ -208,14 +233,14 @@ func (s *Store) UpdateOperation(ctx context.Context, operation Operation) error 
 		return err
 	}
 	target := s.operationPath(operation.ID)
-	expected, ok := s.expected[target]
-	if !ok || expected == nil {
+	expected, read := s.expectation(target)
+	if !read || expected == nil {
 		return recordError("lifecycle operation replacement lacks its exact read expectation")
 	}
 	if err := s.area.Replace(ctx, target, encoded, expected); err != nil {
 		return err
 	}
-	s.expected[target] = slices.Clone(encoded)
+	s.remember(target, slices.Clone(encoded))
 	return nil
 }
 
@@ -276,7 +301,7 @@ func (s *Store) readBlock(ctx context.Context, id, block string) (BlockRecord, e
 		return BlockRecord{}, err
 	}
 	if !found {
-		s.expected[target] = nil
+		s.remember(target, nil)
 		return BlockRecord{Version: 1, Block: block, State: reconciliation.BlockPending}, nil
 	}
 	var record BlockRecord
@@ -289,7 +314,7 @@ func (s *Store) readBlock(ctx context.Context, id, block string) (BlockRecord, e
 	if record.Block != block {
 		return BlockRecord{}, recordError("lifecycle block record contradicts its location")
 	}
-	s.expected[target] = slices.Clone(data)
+	s.remember(target, slices.Clone(data))
 	return record, nil
 }
 
@@ -305,10 +330,11 @@ func (s *Store) publishBlock(ctx context.Context, id string, record BlockRecord)
 	if err := s.area.EnsureDirectory(ctx, path.Join(id, "blocks", record.Block)); err != nil {
 		return err
 	}
-	if err := s.area.Replace(ctx, target, encoded, s.expected[target]); err != nil {
+	current, _ := s.expectation(target)
+	if err := s.area.Replace(ctx, target, encoded, current); err != nil {
 		return err
 	}
-	s.expected[target] = slices.Clone(encoded)
+	s.remember(target, slices.Clone(encoded))
 	return nil
 }
 
