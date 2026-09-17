@@ -77,7 +77,7 @@ func requestFor(catalog api.Catalog, server api.Object, controllerMachine, conte
 	}
 	request := Request{
 		BindAddress: spec.Get("bindAddress").Text(),
-		ContentRoot: contentRootPrefix + "/" + contextName + "/artifact-server/" + name,
+		ContentRoot: ContentRoot(contextName, name),
 		Egress:      egress,
 		Endpoints:   endpoints,
 		Identity:    Identity{Block: BlockID(name), Context: contextName, Service: name},

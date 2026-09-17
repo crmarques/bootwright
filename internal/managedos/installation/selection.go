@@ -7,8 +7,8 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/managedos"
-	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -136,7 +136,7 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	if err != nil {
 		return Request{}, Requirements{}, err
 	}
-	placement, err := serverPlacement(catalog, imageServer, controllerMachine)
+	placement, err := artifactserver.PlacementFor(catalog, imageServer, controllerMachine)
 	if err != nil {
 		return Request{}, Requirements{}, err
 	}
@@ -160,11 +160,12 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	// A machine proved by a key this installation delivers needs that key, and
 	// the key cannot travel in publicly served content.
 	if target.Channel == substrate.ChannelDeliveredKey {
-		private, certificate, err := privateFor(catalog, anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"),
-			contextName, name, machine.Identity())
+		published, certificate, err := artifactserver.PrivatePath(catalog, imageServer,
+			anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"), contextName, consumerPrefix, name, machine.Identity())
 		if err != nil {
 			return Request{}, Requirements{}, err
 		}
+		private := Publication{Path: published.Path, URL: published.URL}
 		if target.HostKeyRef == "" {
 			return Request{}, Requirements{}, refusal("api.required", "the Machine declares no SSH host key for its installation to deliver",
 				"set spec.os.install.hostKeyRef on "+machine.Identity())
@@ -250,92 +251,18 @@ func treeFor(catalog api.Catalog, source api.Value, contextName string, profile 
 	return hostedTree{media: &media, publication: &publication}, nil
 }
 
-// publicationFor derives the owned subtree and the URL a consumer fetches it
-// at, from the exact managed endpoint the profile selects.
+// publicationFor is this block's own subtree beneath the selected server's
+// served root, in the shape that server's publication contract fixes.
 func publicationFor(catalog api.Catalog, selection api.Value, contextName, object, leaf, identity string) (api.Object, Publication, error) {
-	server, ok := catalog.Find(api.ArtifactServer, selection.Get("serverRef").Text())
-	if !ok {
-		return api.Object{}, Publication{}, refusal("api.reference", "the selected artifact server is not in the selected graph", "declare it or correct artifactServerEndpoint.serverRef on "+identity)
-	}
-	if server.Spec().Get("management").Text() != "managed" {
-		return api.Object{}, Publication{}, refusal("lifecycle.state", "an installation publishes only into a managed artifact server", "select a managed server on "+identity)
-	}
-	base, err := endpointURL(catalog, server, selection.Get("endpointRef").Text(), identity)
+	server, err := artifactserver.Selected(catalog, selection, identity)
 	if err != nil {
 		return api.Object{}, Publication{}, err
 	}
-	root := contentRoot(contextName, server.Name())
-	return server, Publication{
-		Path: root + "/" + servedRoot + "/" + consumerPrefix + "/" + object + "/" + leaf,
-		URL:  base + "/" + consumerPrefix + "/" + object + "/" + leaf,
-	}, nil
-}
-
-// privateFor derives the subtree this block owns for material only the
-// installing machine may read, and the URL beneath which the attempt publishes
-// it. The unguessable final segment is not here: it is minted by the attempt,
-// so the plan, the evidence and every log name only the parent.
-func privateFor(catalog api.Catalog, selection api.Value, contextName, object, identity string) (Publication, string, error) {
-	server, ok := catalog.Find(api.ArtifactServer, selection.Get("serverRef").Text())
-	if !ok {
-		return Publication{}, "", refusal("api.reference", "the selected artifact server is not in the selected graph", "declare it or correct artifactServerEndpoint.serverRef on "+identity)
-	}
-	base, err := endpointURL(catalog, server, selection.Get("endpointRef").Text(), identity)
+	published, err := artifactserver.PublicPath(catalog, server, selection, contextName, consumerPrefix, object, leaf, identity)
 	if err != nil {
-		return Publication{}, "", err
+		return api.Object{}, Publication{}, err
 	}
-	if !strings.HasPrefix(base, "https://") {
-		return Publication{}, "", refusal("lifecycle.state", "material only one machine may read is served only over a verified connection",
-			"select an https endpoint for redfishVirtualMedia on "+identity)
-	}
-	certificate := server.Spec().Get("tls", "secretRef").Text()
-	if certificate == "" {
-		return Publication{}, "", refusal("api.required", "the selected artifact server declares no serving certificate to verify",
-			"set spec.tls.secretRef on "+server.Identity())
-	}
-	root := contentRoot(contextName, server.Name())
-	return Publication{
-		Path: root + "/" + servedRoot + "/" + privatePrefix + "/" + object,
-		URL:  base + "/" + privatePrefix + "/" + object,
-	}, certificate, nil
-}
-
-// contentRoot repeats the artifact server's own owned layout, because a
-// consumer publishes beneath the root that server created.
-func contentRoot(contextName, server string) string {
-	return "/var/lib/bootwright-services/" + contextName + "/artifact-server/" + server
-}
-
-func endpointURL(catalog api.Catalog, server api.Object, endpointRef, identity string) (string, error) {
-	endpoint, ok := findNamed(server.Spec().Get("endpoints"), "name", endpointRef)
-	if !ok {
-		return "", refusal("api.reference", "the selected artifact server endpoint does not resolve", "correct artifactServerEndpoint.endpointRef on "+identity)
-	}
-	listener, ok := findNamed(server.Spec().Get("listeners"), "name", endpoint.Get("listenerRef").Text())
-	if !ok {
-		return "", refusal("api.reference", "the selected endpoint names no listener on its server", "correct the endpoint on "+server.Identity())
-	}
-	machine, ok := catalog.Find(api.Machine, server.Spec().Get("machineRef").Text())
-	if !ok {
-		return "", refusal("api.reference", "the artifact server's placement Machine is not in the selected graph", "declare it or correct machineRef on "+server.Identity())
-	}
-	address, err := lifecycle.MachineAddress(machine, endpoint.Get("addressRef").Text())
-	if err != nil {
-		return "", err
-	}
-	port, ok := listener.Get("port").Int64()
-	if !ok || port < 1 {
-		return "", refusal("api.value", "the selected listener declares no port", "correct the listener on "+server.Identity())
-	}
-	return listener.Get("protocol").Text() + "://" + address + ":" + substrate.FormatPort(int(port)), nil
-}
-
-func serverPlacement(catalog api.Catalog, server api.Object, controllerMachine string) (lifecycle.Placement, error) {
-	machine, ok := catalog.Find(api.Machine, server.Spec().Get("machineRef").Text())
-	if !ok {
-		return lifecycle.Placement{}, refusal("api.reference", "the artifact server's placement Machine is not in the selected graph", "declare it or correct machineRef on "+server.Identity())
-	}
-	return lifecycle.PlacementFor(machine, controllerMachine)
+	return server, Publication{Path: published.Path, URL: published.URL}, nil
 }
 
 // targetFor reads the realized machine this installation acts on. Everything

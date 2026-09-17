@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -159,7 +159,7 @@ func resolverAddresses(catalog api.Catalog, machine api.Object, needs *Requireme
 	}
 	var addresses []string
 	for _, selection := range spec.Get("dns").Items() {
-		address, name, err := serviceEndpoint(catalog, api.DNSServer, selection, machine.Identity())
+		address, name, err := managedservice.ServiceEndpoint(catalog, api.DNSServer, selection, machine.Identity())
 		if err != nil {
 			return nil, err
 		}
@@ -180,7 +180,7 @@ func timeAddresses(catalog api.Catalog, machine, profile api.Object, needs *Requ
 	}
 	var addresses []string
 	for _, selection := range selections.Items() {
-		address, name, err := serviceEndpoint(catalog, api.NTPServer, selection, machine.Identity())
+		address, name, err := managedservice.ServiceEndpoint(catalog, api.NTPServer, selection, machine.Identity())
 		if err != nil {
 			return nil, err
 		}
@@ -190,38 +190,6 @@ func timeAddresses(catalog api.Catalog, machine, profile api.Object, needs *Requ
 		}
 	}
 	return addresses, nil
-}
-
-// serviceEndpoint resolves one managed service selection to the address a
-// consumer reaches it at, and to the object whose block must complete first.
-func serviceEndpoint(catalog api.Catalog, kind api.Kind, selection api.Value, identity string) (string, string, error) {
-	reference := selection.Get("serverRef").Text()
-	server, ok := catalog.Find(kind, reference)
-	if !ok {
-		return "", "", refusal("api.reference", "a selected "+string(kind)+" is not in the selected graph", "declare "+reference+" or correct the selection on "+identity)
-	}
-	if server.Spec().Get("management").Text() != "managed" {
-		return "", "", refusal("lifecycle.state", "an installation uses only managed name and time services", "select a managed "+string(kind)+" on "+identity)
-	}
-	machine, ok := catalog.Find(api.Machine, server.Spec().Get("machineRef").Text())
-	if !ok {
-		return "", "", refusal("api.reference", "the service's placement Machine is not in the selected graph", "declare it or correct machineRef on "+server.Identity())
-	}
-	endpoints := server.Spec().Get("endpoints")
-	entry, found := findNamed(endpoints, "name", selection.Get("endpointRef").Text())
-	if !found {
-		if items := endpoints.Items(); len(items) == 1 {
-			entry, found = items[0], true
-		}
-	}
-	if !found {
-		return "", "", refusal("api.reference", "a service selection names no endpoint", "set endpointRef on the selection of "+identity)
-	}
-	address, err := lifecycle.MachineAddress(machine, entry.Get("addressRef").Text())
-	if err != nil {
-		return "", "", err
-	}
-	return address, server.Name(), nil
 }
 
 func repositoriesFor(customizations api.Value) []Repository {

@@ -29,6 +29,12 @@ whose RHEL Bootwright installs through an emulated Redfish BMC. It uses
 documentation addresses and a synthetic domain, and its README walks the
 journey that prepares the controller from it.
 
+[`lab-sno/`](lab-sno/) is that same single-machine lab with one
+single-node OpenShift cluster instead of an installed RHEL guest: the same
+managed proxy, DNS, NTP and artifact-server set, one libvirt Machine the
+substrate realizes and the agent installer supplies the operating system of,
+and the cluster that installs onto it. Its README walks the journey.
+
 ## Local work in progress
 
 `examples/wip/` is intentionally ignored. It is the place for complete

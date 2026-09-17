@@ -1,0 +1,43 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: sno
+
+spec:
+  distribution:
+    type: openshift
+    release:
+      version: 4.21.15
+
+  install:
+    method: agent
+    mode: connected
+
+    endpoints:
+      api:
+        source:
+          type: node
+
+      ingress:
+        source:
+          type: node
+
+    agent:
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+
+    pullSecretRef: openshift-pull-secret
+
+    nodeSSH:
+      keyPairRef: sno-cluster-admin-ssh-key
+
+    ntp:
+      - serverRef: lab-ntp
+        endpointRef: ip
+
+  nodes:
+    - name: master-0
+      role: master
+      machineRef: sno-01

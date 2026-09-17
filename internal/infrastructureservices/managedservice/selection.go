@@ -185,3 +185,46 @@ func hostPrefix(value string) string {
 	}
 	return host + "/" + strconv.Itoa(address.BitLen())
 }
+
+// ServiceEndpoint resolves one managed service selection to the address a
+// consumer reaches it at, and to the object whose block must complete first.
+// It is the one reader of that grammar, so every consumer of a name or time
+// service resolves the same selection to the same address.
+func ServiceEndpoint(catalog api.Catalog, kind api.Kind, selection api.Value, identity string) (string, string, error) {
+	reference := selection.Get("serverRef").Text()
+	server, ok := catalog.Find(kind, reference)
+	if !ok {
+		return "", "", Refusal("api.reference", "a selected "+string(kind)+" is not in the selected graph", "declare "+reference+" or correct the selection on "+identity)
+	}
+	if server.Spec().Get("management").Text() != "managed" {
+		return "", "", Refusal("lifecycle.state", "an installation uses only managed name and time services", "select a managed "+string(kind)+" on "+identity)
+	}
+	placement, ok := catalog.Find(api.Machine, server.Spec().Get("machineRef").Text())
+	if !ok {
+		return "", "", Refusal("api.reference", "the service's placement Machine is not in the selected graph", "declare it or correct machineRef on "+server.Identity())
+	}
+	endpoints := server.Spec().Get("endpoints")
+	entry, found := namedEndpoint(endpoints, selection.Get("endpointRef").Text())
+	if !found {
+		return "", "", Refusal("api.reference", "a service selection names no endpoint", "set endpointRef on the selection of "+identity)
+	}
+	address, err := lifecycle.MachineAddress(placement, entry.Get("addressRef").Text())
+	if err != nil {
+		return "", "", err
+	}
+	return address, server.Name(), nil
+}
+
+// namedEndpoint selects the named endpoint, or the only one when a selection
+// names none.
+func namedEndpoint(endpoints api.Value, name string) (api.Value, bool) {
+	for _, entry := range endpoints.Items() {
+		if entry.Get("name").Text() == name {
+			return entry, true
+		}
+	}
+	if items := endpoints.Items(); len(items) == 1 {
+		return items[0], true
+	}
+	return api.Value{}, false
+}
