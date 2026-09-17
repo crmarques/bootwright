@@ -179,6 +179,38 @@ func TestOwnedSubsetOfAPausedApplyIsItsDoneBlocks(t *testing.T) {
 	}
 }
 
+// A block permitted to begin may have changed anything up to the point it
+// stopped, so an interruption that lost its outcome owns it exactly as a
+// failure does. Only a block that never started is left out.
+func TestOwnedSubsetKeepsBlocksWhoseOutcomeIsUnproved(t *testing.T) {
+	plan := nestedPlan(t)
+	for _, state := range []BlockState{BlockRunning, BlockUnknown} {
+		states := map[string]BlockState{"artifacts": BlockDone, "provider-metal": state, "host-node": BlockPending}
+		if got := ids(OwnedSubset(plan, states).Blocks); !slices.Equal(got, []string{"artifacts", "provider-metal"}) {
+			t.Fatalf("owned with %s = %v", state, got)
+		}
+	}
+}
+
+// Resolving an unproved block moves it to done or failed, both of which the
+// owned set already held. A removal planned before the resolution therefore
+// covers exactly what it covers after, which is what lets a removal present
+// its plan and then prove the outcomes it is about to take back.
+func TestOwnedSubsetDoesNotMoveWhenAnUnprovedBlockResolves(t *testing.T) {
+	plan := nestedPlan(t)
+	before := ids(OwnedSubset(plan, map[string]BlockState{
+		"artifacts": BlockDone, "provider-metal": BlockUnknown, "host-node": BlockPending,
+	}).Blocks)
+	for _, resolved := range []BlockState{BlockDone, BlockFailed} {
+		after := ids(OwnedSubset(plan, map[string]BlockState{
+			"artifacts": BlockDone, "provider-metal": resolved, "host-node": BlockPending,
+		}).Blocks)
+		if !slices.Equal(before, after) {
+			t.Fatalf("owned moved from %v to %v when the block resolved to %s", before, after, resolved)
+		}
+	}
+}
+
 // A fresh removal supersedes an incomplete one over exactly what it has not
 // proved gone, so a block it already removed is never attempted again.
 func TestRemainingSubsetExcludesWhatARemovalProvedGone(t *testing.T) {

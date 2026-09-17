@@ -185,6 +185,9 @@ type testWorkspace struct {
 	// opened counts how many times this operation asked for the approved
 	// execution bundle, which an operation does once however many blocks run.
 	opened int
+	// beforeMutation runs as the exclusive lock is taken, so a test can advance
+	// durable state exactly between a decision and the effects it authorized.
+	beforeMutation func()
 }
 
 func (w *testWorkspace) view() *testView {
@@ -207,6 +210,12 @@ func (w *testWorkspace) RunLifecycle(ctx context.Context, name string, callback 
 }
 
 func (w *testWorkspace) MutateLifecycle(ctx context.Context, name string, callback func(Transaction) error) error {
+	// The real store takes the exclusive lock here, so this is the moment
+	// another invocation's committed work becomes visible to a decision that
+	// was taken under the shared one.
+	if w.beforeMutation != nil {
+		w.beforeMutation()
+	}
 	w.mutations++
 	return callback(w.view())
 }
@@ -1897,21 +1906,268 @@ func TestDestroyOverAFailedDestroyCoversOnlyWhatRemains(t *testing.T) {
 	}
 }
 
-// An unproved effect is the one incomplete state a removal may not supersede:
-// resolution is the only thing that may follow it.
-func TestDestroyOverAnUnknownOperationStillRefuses(t *testing.T) {
+// An effect no observation can prove still admits no removal, because nothing
+// says what it owns. The removal proves what it can and registers nothing.
+func TestDestroyOverAnUnprovableBlockRefusesBeforeRegistration(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
-	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	h.capability.outcomeFor = map[string]Result{"artifact-server-lab": {Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
 		t.Fatal("an unknown outcome reported success")
 	}
+	current := currentOperation(t, h)
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectUnknown}}
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "lifecycle.state" {
+	reported := diagnostics.Of(err)
+	if len(reported) == 0 || reported[len(reported)-1].Code != "lifecycle.unknown" {
+		t.Fatalf("refusal = %+v", reported)
+	}
+	if !strings.Contains(reported[len(reported)-1].Message, "artifact-server-lab") {
+		t.Fatalf("the refusal does not name the effect it could not prove: %+v", reported)
+	}
+	if len(h.capability.destroys) != 0 {
+		t.Fatalf("an unprovable block was destroyed: %v", h.capability.destroys)
+	}
+	if !slices.Equal(h.capability.observes, []string{"artifact-server-lab"}) {
+		t.Fatalf("observations = %v", h.capability.observes)
+	}
+	if after := currentOperation(t, h); after != current {
+		t.Fatalf("a refused removal registered an operation: %q became %q", current, after)
+	}
+	status, err := h.service.Status(context.Background(), StatusRequest{ContextName: "lab"})
+	if err != nil || status.Lifecycle == nil || status.Lifecycle.State != "unknown" {
+		t.Fatalf("durable operation = %+v (%v)", status.Lifecycle, err)
+	}
+	if len(h.binder.released) != 0 {
+		t.Fatalf("a refused removal released the apply's binding: %v", h.binder.released)
+	}
+}
+
+// An interrupted apply owns every block it started, including the one whose
+// outcome it lost. The removal proves that outcome first, which is what admits
+// the removal, and then takes back the whole set.
+func TestDestroyOverAnInterruptedApplyResolvesThenRemoves(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		effect reconciliation.EffectState
+	}{
+		{"partly realized", reconciliation.EffectPartial},
+		{"completed", reconciliation.EffectCompleted},
+		{"never performed", reconciliation.EffectNoEffect},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), definition("bravo")})
+			h.service.options.Concurrency = 1
+			h.capability.outcomeFor = map[string]Result{
+				"alpha": {Outcome: reconciliation.OutcomeChanged},
+				"bravo": {Outcome: reconciliation.OutcomeUnknown},
+			}
+			if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+				t.Fatal("an unknown outcome reported success")
+			}
+			h.capability.outcomeFor = nil
+			h.capability.observations = []Observation{{Effect: tc.effect}}
+			result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+			if err != nil {
+				t.Fatalf("an interrupted apply refused its removal: %v", err)
+			}
+			if result.Receipt.State != string(reconciliation.OperationDone) || result.Receipt.Next != "none" {
+				t.Fatalf("receipt = %+v", result.Receipt)
+			}
+			if !slices.Equal(h.capability.observes, []string{"bravo"}) {
+				t.Fatalf("observations = %v", h.capability.observes)
+			}
+			if !slices.Equal(h.capability.destroys, []string{"alpha", "bravo"}) {
+				t.Fatalf("destroyed blocks = %v", h.capability.destroys)
+			}
+			pristine, _ := reconciliation.PristineEvidence().Bytes()
+			if !slices.Equal(h.workspace.evidence, pristine) {
+				t.Fatalf("evidence = %q", h.workspace.evidence)
+			}
+			if !slices.Equal(h.binder.released, []string{"bind-1"}) {
+				t.Fatalf("released bindings = %v", h.binder.released)
+			}
+		})
+	}
+}
+
+// An executor that died mid-attempt leaves its block durably running, which is
+// an unproved effect and not work in progress. A removal resolves it exactly as
+// it resolves one the interrupt recorded.
+func TestDestroyOverADeadExecutorResolvesTheRunningBlock(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	ctx, cancel := context.WithCancel(context.Background())
+	h.capability.hold = func(string) { cancel() }
+	h.capability.errorFor = map[string]error{"artifact-server-lab": context.Canceled}
+	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("an interrupted apply reported success")
+	}
+	leaveRunning(t, h, "artifact-server-lab")
+	h.capability.hold, h.capability.errorFor = nil, nil
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectPartial}}
+	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil {
+		t.Fatalf("a dead executor refused its removal: %v", err)
+	}
+	if result.Receipt.State != string(reconciliation.OperationDone) {
+		t.Fatalf("receipt = %+v", result.Receipt)
+	}
+	if !slices.Equal(h.capability.observes, []string{"artifact-server-lab"}) {
+		t.Fatalf("observations = %v", h.capability.observes)
+	}
+	if !slices.Equal(h.capability.destroys, []string{"artifact-server-lab"}) {
+		t.Fatalf("destroyed blocks = %v", h.capability.destroys)
+	}
+}
+
+// A removal observes only what is unproved. An apply stopped with nothing in
+// flight is removed without reaching the host to ask about it.
+func TestDestroyOverAnIncompleteApplyWithNothingUnprovedObservesNothing(t *testing.T) {
+	h := newPlannedHarness(t, nestedDefinitions())
+	h.capability.outcomeFor = map[string]Result{"provider-metal": {Outcome: reconciliation.OutcomeChanged}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"substrates"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	status, err := h.service.Status(context.Background(), StatusRequest{ContextName: "lab"})
+	if err != nil || status.Lifecycle == nil || status.Lifecycle.State != "paused" {
+		t.Fatalf("durable operation = %+v (%v)", status.Lifecycle, err)
+	}
+	if !slices.Contains(status.NextSteps, "bootwright destroy") {
+		t.Fatalf("next steps = %v", status.NextSteps)
+	}
+	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil {
+		t.Fatalf("a paused apply refused its removal: %v", err)
+	}
+	if result.Receipt.State != string(reconciliation.OperationDone) {
+		t.Fatalf("receipt = %+v", result.Receipt)
+	}
+	if len(h.capability.observes) != 0 {
+		t.Fatalf("a proved apply was observed: %v", h.capability.observes)
+	}
+	if !slices.Equal(h.capability.destroys, []string{"provider-metal"}) {
+		t.Fatalf("destroyed blocks = %v", h.capability.destroys)
+	}
+}
+
+// Resolution and the quiescence gate compose: the removal proves every outcome
+// first and then refuses because what it would take back is in use. The proof
+// is durable, so repeating the removal does not observe the same effect again.
+func TestDestroyOverAnInterruptedApplyIsStillGated(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.capability.outcomeFor = map[string]Result{"artifact-server-lab": {Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("an unknown outcome reported success")
+	}
+	h.capability.outcomeFor = nil
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectPartial}}
+	h.capability.quiescence = map[string]Quiescence{
+		"artifact-server-lab": {State: Live, Reason: "rhel-01 is running", Stop: "bootwright machine stop --name rhel-01"},
+	}
+	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if code := firstCode(err); code != "lifecycle.live" {
 		t.Fatalf("refusal = %q", code)
 	}
 	if len(h.capability.destroys) != 0 {
-		t.Fatalf("an unknown block was destroyed: %v", h.capability.destroys)
+		t.Fatalf("a gated removal destroyed something: %v", h.capability.destroys)
 	}
+	status, err := h.service.Status(context.Background(), StatusRequest{ContextName: "lab"})
+	if err != nil || status.Lifecycle == nil || status.Lifecycle.State != "failed" {
+		t.Fatalf("the resolution was not recorded: %+v (%v)", status.Lifecycle, err)
+	}
+	h.capability.quiescence = nil
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(h.capability.observes, []string{"artifact-server-lab"}) {
+		t.Fatalf("the second removal observed again: %v", h.capability.observes)
+	}
+}
+
+// The decision is read under the shared lock and the effects run under the
+// exclusive one. An operation that moved in between invalidates the frozen plan
+// waiting to register, so the removal refuses instead of applying it.
+func TestDestroyRefusesWhenTheOperationItReplacesMoved(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.capability.outcomeFor = map[string]Result{"artifact-server-lab": {Outcome: reconciliation.OutcomeFailed}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("a failed block reported success")
+	}
+	h.workspace.beforeMutation = func() {
+		h.workspace.beforeMutation = nil
+		leaveRunning(t, h, "artifact-server-lab")
+	}
+	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.state" {
+		t.Fatalf("refusal = %+v", reported)
+	}
+	if !strings.Contains(reported[0].Message, "no longer the one the context holds") {
+		t.Fatalf("refusal message = %q", reported[0].Message)
+	}
+	if len(h.capability.destroys) != 0 {
+		t.Fatalf("a stale removal destroyed something: %v", h.capability.destroys)
+	}
+}
+
+// An incomplete removal is continued, never replaced by an apply.
+func TestApplyOverAnIncompleteDestroyStillRefuses(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("a failed removal reported success")
+	}
+	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.state" {
+		t.Fatalf("refusal = %+v", reported)
+	}
+	if !strings.Contains(reported[0].Message, "an incomplete destroy must be continued") {
+		t.Fatalf("refusal message = %q", reported[0].Message)
+	}
+}
+
+// currentOperation names the operation the context holds, read the way the
+// engine reads it.
+func currentOperation(t *testing.T, h *harness) string {
+	t.Helper()
+	status, err := h.service.Status(context.Background(), StatusRequest{ContextName: "lab"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Lifecycle == nil {
+		return ""
+	}
+	return status.Lifecycle.Operation
+}
+
+// leaveRunning rewrites one block's durable state as an executor that died
+// mid-attempt leaves it, which no interrupt this engine survives can produce.
+func leaveRunning(t *testing.T, h *harness, block string) {
+	t.Helper()
+	operation := currentOperation(t, h)
+	target := path.Join(operation, "blocks", block, "state.json")
+	h.workspace.area.mutex.Lock()
+	defer h.workspace.area.mutex.Unlock()
+	current, ok := h.workspace.area.files[target]
+	if !ok {
+		t.Fatalf("block %q has no durable state", block)
+	}
+	const field = `"state":"`
+	start := strings.Index(string(current), field)
+	if start < 0 {
+		t.Fatalf("block record has no state: %q", current)
+	}
+	start += len(field)
+	end := strings.Index(string(current[start:]), `"`)
+	if end < 0 {
+		t.Fatalf("block record has no state: %q", current)
+	}
+	h.workspace.area.files[target] = []byte(string(current[:start]) + string(reconciliation.BlockRunning) + string(current[start+end:]))
 }
 
 func TestStageSelectionWithNothingStartableRefuses(t *testing.T) {
@@ -2328,5 +2584,31 @@ func TestAnOperationOpensItsApprovedBundleOnce(t *testing.T) {
 	}
 	if len(h.capability.applies) != 2 {
 		t.Fatalf("applied %v", h.capability.applies)
+	}
+}
+
+// A removal proves what it is about to take back and then takes it back, and
+// each of those runs inside one approved bundle however many blocks it covers.
+func TestARemovalOpensItsApprovedBundleOncePerPhase(t *testing.T) {
+	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), definition("bravo")})
+	h.service.options.Concurrency = 2
+	h.capability.outcomeFor = map[string]Result{
+		"alpha": {Outcome: reconciliation.OutcomeUnknown},
+		"bravo": {Outcome: reconciliation.OutcomeUnknown},
+	}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("an unknown outcome reported success")
+	}
+	applied := h.workspace.opened
+	h.capability.outcomeFor = nil
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectPartial}, {Effect: reconciliation.EffectPartial}}
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if opened := h.workspace.opened - applied; opened != 2 {
+		t.Fatalf("the removal opened the approved bundle %d times, want one to prove and one to remove", opened)
+	}
+	if len(h.capability.observes) != 2 || len(h.capability.destroys) != 2 {
+		t.Fatalf("observed %v and destroyed %v", h.capability.observes, h.capability.destroys)
 	}
 }

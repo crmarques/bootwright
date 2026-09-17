@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"maps"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -49,6 +51,20 @@ type transition struct {
 	release   []string
 	states    map[string]reconciliation.BlockState
 	selection reconciliation.StageSelection
+	// replaced is the incomplete operation a fresh removal takes the place of,
+	// which is the context's current operation. It is not always source: a
+	// removal that replaces a failed removal inherits that one's apply as its
+	// source while replacing the removal itself.
+	replaced replacement
+}
+
+// replacement is the durable state a fresh removal was planned from. The
+// decision is taken under the shared lock and the effects run under the
+// exclusive one, so the removal re-proves this before it does anything.
+type replacement struct {
+	operation string
+	state     reconciliation.OperationState
+	blocks    map[string]reconciliation.BlockState
 }
 
 func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextName string, selection reconciliation.StageSelection, authorizations []string, skipConfirmation, borrowed bool) (*OperationResult, error) {
@@ -191,8 +207,12 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 				"the desired state changed after this apply completed",
 				"destroy what it owns before applying the changed input")
 		}
-		return s.freshDestroy(ctx, operation.Executable, operation.ID, firstBinding(operation.Bindings),
+		decided, err := s.freshDestroy(ctx, operation.Executable, operation.ID, firstBinding(operation.Bindings),
 			operation.Bindings, reconciliation.OwnedSubset(frozen, states))
+		if err != nil {
+			return transition{}, err
+		}
+		return replacing(decided, operation, states), nil
 	}
 	if verb == reconciliation.Destroy {
 		return transition{noop: true, verb: verb, operation: operation, plan: frozen, states: states}, nil
@@ -286,27 +306,32 @@ func (s Service) freshApply(ctx context.Context, view View, selection reconcilia
 }
 
 // supersedable reports whether a fresh removal may replace an incomplete
-// operation. A pause is a resumable boundary and a failure is a retry point;
-// neither holds an unproved effect, so what the context still owns is exactly
-// derivable from the frozen plan. A failed operation needs this road because
-// its continuation is frozen to the automation it registered under: repairing
-// the very adapter that failed it would otherwise leave no way out.
+// operation. Any apply that has not completed qualifies, because what it owns
+// is every block it started and that set is the same whether a block stopped
+// at a boundary, failed, or lost its outcome to an interruption. An unproved
+// block is not an exception to that: the removal proves it before it registers
+// anything, and a block it cannot prove refuses the removal there. An
+// incomplete removal is continued instead, and only a failed one is replaced,
+// because a removal that lost an outcome is resolved by repeating itself.
+// Replacement is the only road out of a repaired adapter, since a continuation
+// is frozen to the automation its operation registered under.
 func supersedable(operation operationstore.Operation) bool {
-	switch operation.State {
-	case reconciliation.OperationPaused:
-		return operation.Verb == reconciliation.Apply
-	case reconciliation.OperationFailed:
-		return true
+	if operation.Verb == reconciliation.Apply {
+		return operation.State != reconciliation.OperationDone
 	}
-	return false
+	return operation.State == reconciliation.OperationFailed
 }
 
 // supersede plans a fresh removal over what an incomplete operation still owns:
 // the blocks an apply started, or the blocks a removal has not yet proved gone.
 func (s Service) supersede(ctx context.Context, view View, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (transition, error) {
 	if operation.Verb == reconciliation.Apply {
-		return s.freshDestroy(ctx, operation.Executable, operation.ID, firstBinding(operation.Bindings),
+		decided, err := s.freshDestroy(ctx, operation.Executable, operation.ID, firstBinding(operation.Bindings),
 			operation.Bindings, reconciliation.OwnedSubset(frozen, states))
+		if err != nil {
+			return transition{}, err
+		}
+		return replacing(decided, operation, states), nil
 	}
 	// A superseded removal is continued by nothing, so its own binding is
 	// released beside the apply's once the replacement completes. The one it
@@ -328,8 +353,20 @@ func (s Service) supersede(ctx context.Context, view View, store OperationStore,
 			reopen = inherited
 		}
 	}
-	return s.freshDestroy(ctx, operation.Executable, operation.Source, reopen, release,
+	decided, err := s.freshDestroy(ctx, operation.Executable, operation.Source, reopen, release,
 		reconciliation.RemainingSubset(frozen, states))
+	if err != nil {
+		return transition{}, err
+	}
+	return replacing(decided, operation, states), nil
+}
+
+// replacing records the durable state a fresh removal was planned from. The
+// decision is read under the shared lock and the effects run under the
+// exclusive one, so the removal re-proves this before it registers.
+func replacing(decided transition, operation operationstore.Operation, states map[string]reconciliation.BlockState) transition {
+	decided.replaced = replacement{operation: operation.ID, state: operation.State, blocks: maps.Clone(states)}
+	return decided
 }
 
 func firstBinding(bindings []string) string {
@@ -536,13 +573,22 @@ func clearMaterial(material map[string]secrets.Material) {
 // reservations, sequential block execution and the evidence projection.
 func (s Service) run(ctx context.Context, tx Transaction, decided transition, binding string, material map[string]secrets.Material) (*OperationResult, error) {
 	store := s.store(tx)
-	// A removal proves every asset it would take back is out of use before it
-	// registers. A per-effect check alone would not do: a removal takes
-	// dependents first, so it would delete the quiescent leaves and then stop
-	// at the running machine, leaving a context that can only continue the
-	// destroy it should never have started.
+	// A removal proves the outcome of every effect it would take back, and then
+	// that none of it is still in use, before it registers. Proving either one
+	// per effect instead would not do: a removal takes dependents first, so it
+	// would take back the settled leaves and then stop at the running machine,
+	// leaving a context that can only continue the destroy it should never have
+	// started. Both proofs share one approved bundle, exactly as the operation's
+	// own effects share one once it has registered.
 	if decided.fresh && decided.verb == reconciliation.Destroy {
-		if err := s.proveQuiescent(ctx, tx, decided.plan, material); err != nil {
+		proving, err := approvedBundle(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.proveRemovable(ctx, tx, store, proving, decided, material); err != nil {
+			return nil, err
+		}
+		if err := s.proveQuiescent(ctx, proving, decided.plan, material); err != nil {
 			return nil, err
 		}
 	}
@@ -577,13 +623,168 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 	return final, withCause(cause, terminal)
 }
 
-// The gate is one step, and the blocks it probes are that step's sub-steps, so
-// a removal of any size settles the whole proof as one row and the rows that
-// follow are the plan's effects alone.
+// Each gate is one step, and the blocks it covers are that step's sub-steps, so
+// a removal of any size settles each proof as one row and the rows that follow
+// are the plan's effects alone.
 const (
 	quiescenceCheck            = "quiescence"
 	quiescenceCheckDescription = "prove nothing this removal takes back is still in use"
+	resolutionCheck            = "resolution"
+	resolutionCheckDescription = "prove the outcome of every effect this removal takes back"
 )
+
+// proveRemovable re-proves, under the exclusive lock, the operation this
+// removal replaces, and resolves every effect of it whose outcome is still
+// unproved. Both happen before the removal registers anything: an unproved
+// effect admits no removal, because nothing says what it owns, and a resolution
+// is read-only, so a removal that cannot prove one leaves the context exactly
+// as it found it.
+func (s Service) proveRemovable(ctx context.Context, tx Transaction, store OperationStore, approved bundle, decided transition, material map[string]secrets.Material) error {
+	if decided.replaced.operation == "" {
+		return nil
+	}
+	replaced, frozen, states, err := s.verifyReplacement(ctx, store, decided.replaced)
+	if err != nil {
+		return err
+	}
+	unproved := unprovedBlocks(frozen, states)
+	if len(unproved) == 0 {
+		return nil
+	}
+	observed := s
+	reporter := &resolutionProgress{report: s.report, declared: len(unproved)}
+	observed.options.Progress = reporter
+	cause := observed.observe(ctx, tx, store, approved, replaced, frozen, states, material)
+	if err := s.recordResolved(recordingContext(ctx), tx, store, replaced, frozen, states); err != nil {
+		return err
+	}
+	if remaining := unprovedBlocks(frozen, states); len(remaining) != 0 {
+		s.reportResolution(ctx, ProgressEvent{Status: "unknown"})
+		return withCause(cause, failure("lifecycle.unknown",
+			"this removal cannot prove what these effects left behind: "+strings.Join(remaining, ", "),
+			"restore the host they ran against and repeat the removal"))
+	}
+	s.reportResolution(ctx, ProgressEvent{Status: "ok"})
+	return nil
+}
+
+// verifyReplacement proves the context still holds the exact operation this
+// removal was planned from. Anything else means another invocation advanced the
+// context between the decision and this transaction, so the frozen plan waiting
+// to register may no longer describe what the context owns.
+func (s Service) verifyReplacement(ctx context.Context, store OperationStore, planned replacement) (operationstore.Operation, reconciliation.Plan, map[string]reconciliation.BlockState, error) {
+	moved := func() (operationstore.Operation, reconciliation.Plan, map[string]reconciliation.BlockState, error) {
+		return operationstore.Operation{}, reconciliation.Plan{}, nil, failure("lifecycle.state",
+			"the operation this removal was planned from is no longer the one the context holds",
+			"repeat the removal to plan it from the operation the context holds now")
+	}
+	index, err := store.Index(ctx)
+	if err != nil {
+		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
+	}
+	if index.Current != planned.operation {
+		return moved()
+	}
+	operation, err := store.ReadOperation(ctx, planned.operation)
+	if err != nil {
+		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
+	}
+	if operation.State != planned.state {
+		return moved()
+	}
+	frozen, err := store.ReadPlan(ctx, operation.ID)
+	if err != nil {
+		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
+	}
+	states, err := store.BlockStates(ctx, operation.ID, frozen)
+	if err != nil {
+		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
+	}
+	if !maps.Equal(states, planned.blocks) {
+		return moved()
+	}
+	return operation, frozen, states, nil
+}
+
+// recordResolved publishes what the resolutions proved about the replaced
+// operation, so its durable state matches its blocks whether or not this
+// removal goes on to register. A later invocation then takes the ordinary road
+// instead of observing the same effects again.
+func (s Service) recordResolved(ctx context.Context, tx Transaction, store OperationStore, replaced operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) error {
+	ordered := make([]reconciliation.BlockState, 0, len(frozen.Blocks))
+	for _, block := range frozen.Blocks {
+		state := states[block.ID]
+		if state == "" {
+			state = reconciliation.BlockPending
+		}
+		ordered = append(ordered, state)
+	}
+	next, err := reconciliation.NextOperationState(ordered, false)
+	if err != nil {
+		return err
+	}
+	if next == replaced.State {
+		return nil
+	}
+	replaced.State = next
+	if err := store.UpdateOperation(ctx, replaced); err != nil {
+		return err
+	}
+	return s.project(ctx, tx, replaced.Verb, next)
+}
+
+// unprovedBlocks names every block of a plan whose effect has no proved
+// outcome, in frozen order.
+func unprovedBlocks(plan reconciliation.Plan, states map[string]reconciliation.BlockState) []string {
+	var found []string
+	for _, block := range plan.Blocks {
+		if unproved(states[block.ID]) {
+			found = append(found, block.ID)
+		}
+	}
+	return found
+}
+
+// resolutionProgress reports the resolutions a removal performs as one check
+// row whose sub-steps are the blocks it proves, which is how a proof that
+// precedes every effect reports. The engine observes blocks concurrently, so
+// what it counts is guarded.
+type resolutionProgress struct {
+	report   func(context.Context, ProgressEvent)
+	declared int
+	mutex    sync.Mutex
+	settled  map[string]bool
+}
+
+func (p *resolutionProgress) ReportProgress(ctx context.Context, event ProgressEvent) {
+	if event.Block == "" {
+		return
+	}
+	p.mutex.Lock()
+	if event.Status != "running" {
+		if p.settled == nil {
+			p.settled = map[string]bool{}
+		}
+		p.settled[event.Block] = true
+	}
+	completed := len(p.settled)
+	p.mutex.Unlock()
+	p.report(ctx, ProgressEvent{
+		Phase: CheckPhase, Block: resolutionCheck, Description: resolutionCheckDescription,
+		Group: event.Block, Detail: event.Description, Status: "running",
+		Completed: completed, Declared: p.declared,
+	})
+}
+
+func (p *resolutionProgress) ReportLogLocation(context.Context, string) {}
+
+// reportResolution settles the resolution proof as one row. It runs before the
+// operation exists, so it belongs to no block and counts against no frozen
+// total.
+func (s Service) reportResolution(ctx context.Context, event ProgressEvent) {
+	event.Phase, event.Block, event.Description = CheckPhase, resolutionCheck, resolutionCheckDescription
+	s.report(ctx, event)
+}
 
 // proveQuiescent observes every block a removal would take back and refuses
 // while any of it is still in use. Every block is probed rather than the first
@@ -591,13 +792,9 @@ const (
 // discovering the next obstacle each time they repeat the command. A probe
 // that cannot read its target reports live, because an environment that cannot
 // prove it is idle is never assumed to be.
-func (s Service) proveQuiescent(ctx context.Context, tx Transaction, plan reconciliation.Plan, material map[string]secrets.Material) error {
-	approved, err := approvedBundle(ctx, tx)
-	if err != nil {
-		return err
-	}
+func (s Service) proveQuiescent(ctx context.Context, approved bundle, plan reconciliation.Plan, material map[string]secrets.Material) error {
 	var live, stops []string
-	err = s.guard.WithPython(ctx, approved.area, approved.requirement, func(launch prerequisites.PythonLaunch, _ func() error) error {
+	err := s.guard.WithPython(ctx, approved.area, approved.requirement, func(launch prerequisites.PythonLaunch, _ func() error) error {
 		for index, block := range plan.Blocks {
 			if err := ctx.Err(); err != nil {
 				return err

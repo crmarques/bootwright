@@ -168,16 +168,34 @@ completed removal released the context's ownership evidence.
 
 Interrupting during an image pull leaves the operation `unknown`, which is the
 honest outcome: the executable cannot prove whether the effect completed. The
-next `apply` observes the exact frozen request, resolves that block from live
-evidence and continues without repeating work it can prove is already done.
-Changing the input, the executable or the embedded automation while an
-operation is incomplete refuses instead, and names the recovery it needs.
+records that say so are written as the command exits, so `status` reports
+`unknown` rather than claiming the block is still running. Two roads follow,
+and `status` offers both.
 
-A block that fails for a nameable reason is different: the operation is
-`failed`, the next `apply` retries that block, and a `destroy` removes what the
-apply started instead. That removal is the road out of a repaired adapter. A
-continuation runs the automation its operation froze, so rebuilding the
-collection refuses one, while a fresh removal runs under the build in hand:
+The next `apply` observes the exact frozen request, resolves that block from
+live evidence and continues without repeating work it can prove is already
+done. Changing the input, the executable or the embedded automation while an
+operation is incomplete refuses that road instead, and names the recovery it
+needs.
+
+A `destroy` takes the environment back rather than finishing it. It resolves
+every effect whose outcome the interruption lost, reporting that proof under
+`Checks` before anything else, and then removes every block the apply started.
+Nothing is registered until each one is proved, so a removal that cannot reach
+the host leaves the context exactly as it found it:
+
+```sh
+./bin/bootwright status                     # unknown, with both roads offered
+./bin/bootwright destroy --yes
+./bin/bootwright apply --yes
+```
+
+A block that fails for a nameable reason behaves the same way, except that
+nothing is left to resolve: the operation is `failed`, the next `apply` retries
+that block, and a `destroy` removes what the apply started. That removal is the
+road out of a repaired adapter. A continuation runs the automation its operation
+froze, so rebuilding the collection refuses one, while a fresh removal runs
+under the build in hand:
 
 ```sh
 make build && sudo ./bin/bootwright setup   # publish the repaired automation

@@ -21,8 +21,9 @@ Supported operation modes are:
 - a fresh full-context `apply`, optionally stopping at a stage boundary;
 - continuation of a paused, interrupted or failed `apply`, or of an
   interrupted or failed `destroy`, against its exact frozen plan; and
-- a `destroy` of everything the apply recorded as owned, which for a paused
-  apply is exactly the blocks it completed.
+- a `destroy` of everything the apply recorded as owned, which is every block
+  it started, whether that apply completed or stopped at a boundary, at a
+  failure, or at an interruption.
 
 There is no reconciliation, partial planning, adoption, reclaim, or force path.
 A completed apply must be destroyed before an apply of *changed* desired state
@@ -208,10 +209,10 @@ overwriting durable evidence.
 | Durable state | Allowed lifecycle transition |
 | --- | --- |
 | no operation, or completed destroy | start a fresh apply; a `destroy` settles without effect |
-| apply running | continue that exact apply |
+| apply running | continue that exact apply, or start a fresh destroy of the blocks it started |
 | apply failed | continue that exact apply, or start a fresh destroy of the blocks it started |
-| apply paused | continue that exact apply under any stage selection, or start a fresh destroy of the blocks it completed |
-| apply unknown | resolve the exact unknown block; start no effect or retry |
+| apply paused | continue that exact apply under any stage selection, or start a fresh destroy of the blocks it started |
+| apply unknown | resolve the exact unknown block, or start a fresh destroy of the blocks it started, which resolves that block first; start no other effect or retry |
 | apply done | start a fresh destroy; an `apply` of the unchanged input settles without effect, and of a changed input refuses |
 | destroy running | continue that exact destroy |
 | destroy failed | continue that exact destroy, or start a fresh destroy of what it has not removed |
@@ -451,9 +452,9 @@ Resolution permits only these evidence-backed transitions:
 
 A partial realization is the ordinary outcome of an interrupted effect, and
 resolving it to `failed` is what lets the context move: an `unknown` block
-starts no retry, no dependent block, no removal and no deletion, so a target
-that is provably this context's own and provably incomplete must not be left
-there. What a capability accepts as partial is its own, under the converge
+starts no retry, no dependent block, no removal effect and no deletion, so a
+target that is provably this context's own and provably incomplete must not be
+left there. What a capability accepts as partial is its own, under the converge
 rule below, and it is never a target it cannot prove is ours: a foreign or
 unreadable observation stays `unknown`.
 
@@ -468,6 +469,18 @@ destroy effect, or replacement operation. Confirmation, authorization, manual
 state editing, elapsed time, and a dead prior executor cannot resolve it. The
 resolution evidence and resulting transition must be durable before execution
 continues.
+
+A removal may perform that resolution itself, as its first step. Planning a
+removal needs no resolution, because ownership is every block the operation
+started and resolving one never changes that set, so the plan an operator
+confirms is the plan either outcome produces. Performing one does: a removal
+resolves every unproved effect it would take back, read-only and against the
+frozen request, before it proves quiescence and before it registers anything of
+its own. It records each resolution on the operation it replaces, so what was
+proved survives whether or not the removal then goes on to register. A removal
+that still cannot prove an effect registers nothing and refuses, naming each
+block it could not prove, because an effect no observation resolves says
+nothing about what it owns.
 
 A required-log failure is also a durable operation fault. Restoration permits
 new logging but never repairs, appends to, or replaces the failed attempt log.
@@ -498,10 +511,12 @@ not from what current code would derive from it. Every block a removal carries
 keeps the identity, implementation, content digest and canonical request its
 apply wrote, so a removal describes exactly the effects that exist rather than
 the effects this executable would create today. An operation owns every block
-it started: a paused apply owns the blocks it completed, and a failed apply
-owns those plus the block that failed, because an effect permitted to begin is
-proved absent only by its own inverse. A removal covers exactly that set and
-nothing the operation never started.
+it started, whatever stopped it: an effect permitted to begin is proved absent
+only by its own inverse, so a block that completed, one that failed, and one
+whose outcome was lost are owned alike, and only a block that never started is
+not. A removal covers exactly that set and nothing the operation never started.
+Ownership therefore does not move as an unproved block is resolved, because
+resolution leaves it `done` or `failed` and the set already held both.
 
 A frozen block records what creating it did; removing it is the other half of
 the same request. Each capability therefore reads its own frozen request and
@@ -537,12 +552,24 @@ blocks outside that set. Both results are ordered by the one canonical rule
 every plan obeys, so a frozen removal is rebuilt from its own record exactly as
 it was written.
 
-A fresh removal may supersede an incomplete operation that holds no unproved
-effect: a paused apply, a failed apply, or a failed destroy, which is removed
-over what it has not yet proved gone. This is the only road out of a repaired
+A fresh removal may supersede any apply that has not completed, and a failed
+destroy, which is removed over what it has not yet proved gone. An apply
+qualifies however it stopped, because what it owns is every block it started
+and that set is the same at a boundary, at a failure, and at an interruption.
+An unproved effect is not an exception: the removal resolves it first and
+refuses, registering nothing, when it cannot. An incomplete removal is
+continued rather than replaced, because a removal that lost an outcome is
+resolved by repeating itself. Replacement is the only road out of a repaired
 adapter, because a continuation is frozen to the automation its operation
-registered under while a fresh operation runs under the current one. An
-unknown block admits no removal; only its resolution may follow it.
+registered under while a fresh operation runs under the current one.
+
+A removal is decided from durable state read under the shared lock and performs
+its effects under the exclusive one. Before it resolves, proves quiescence or
+registers, it re-proves that the context still holds the exact operation it was
+planned from, in the same state and with the same block states. Anything else
+means another invocation advanced the context in between, so the frozen plan
+waiting to register may no longer describe what the context owns, and the
+removal refuses rather than applying it.
 
 Destroy retains evidence until positive removal or positive absence is durable.
 It accepts no stage selection.

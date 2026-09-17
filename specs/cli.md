@@ -466,6 +466,13 @@ offered as the operation's own verb repeated — `continue-apply` and `resolve`
 as `bootwright apply` — and `none` is offered as no step at all. No next step
 names a verb this executable does not expose.
 
+`status` offers `bootwright destroy` beside the continuation of an apply that
+has not completed, whichever state it stopped in, because that apply owns every
+block it started and taking them back is as legitimate a way forward as
+continuing. A completed apply is the one exception, for the reason above. This
+is a next step only; the receipt's `next` still names what the operation's own
+state calls for.
+
 ## Resource inspection and explicit access
 
 List and info commands derive their result from validated desired state,

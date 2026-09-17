@@ -165,10 +165,13 @@ build that changes `ansible/` changes the bundle a context is bound to. Run
 reports the incompatible retained bundle and `apply` refuses rather than
 executing automation the receipt does not cover. An operation left incomplete
 by the previous build cannot be continued under the new one, because a
-continuation runs the automation it froze. A failed one is removed instead: a
-fresh `destroy` runs under the build in hand, which is the ordinary loop when
-the repair is to the role that failed. A removal first proves every Machine it
-would take back is down, so stop any running one with `bootwright machine stop`
+continuation runs the automation it froze. It is removed instead: a fresh
+`destroy` supersedes any apply that did not complete and runs under the build
+in hand, which is the ordinary loop when the repair is to the role that failed.
+An apply interrupted with Ctrl-C takes the same road, and the removal resolves
+each effect whose outcome the interrupt lost before it plans anything, so no
+separate `apply` is needed first. A removal also proves every Machine it would
+take back is down, so stop any running one with `bootwright machine stop`
 before it; the refusal names each Machine and the command that stops it, and
 nothing is registered until they are.
 

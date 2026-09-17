@@ -302,14 +302,20 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 	if next == reconciliation.OperationDone || next == reconciliation.OperationPaused {
 		return result, nil
 	}
-	return result, terminalFailure(next)
+	return result, terminalFailure(operation.Verb, next)
 }
 
-func terminalFailure(state reconciliation.OperationState) error {
+// terminalFailure reports what an operation that did not complete asks for. An
+// apply names the removal beside the resolution, because the removal proves the
+// same effects itself and is the road out when the repair is to the automation
+// the operation froze. A removal offers only itself.
+func terminalFailure(verb reconciliation.Verb, state reconciliation.OperationState) error {
 	if state == reconciliation.OperationUnknown {
-		return failure("lifecycle.unknown",
-			"an effect has an unresolved outcome",
-			"repeat the operation to resolve it from live evidence")
+		remediation := "repeat the operation to resolve it from live evidence"
+		if verb == reconciliation.Apply {
+			remediation += ", or destroy what it owns"
+		}
+		return failure("lifecycle.unknown", "an effect has an unresolved outcome", remediation)
 	}
 	return failure("lifecycle.state",
 		"the operation did not complete",

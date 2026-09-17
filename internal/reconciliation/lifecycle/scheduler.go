@@ -50,24 +50,40 @@ type scheduler struct {
 	held    map[string]string
 	causes  map[string]error
 	results chan step
+	// observeOnly admits resolutions and nothing else. A removal uses it to
+	// prove the outcome of the effects it is about to take back, which is
+	// read-only and may start no attempt of the operation it observes.
+	observeOnly bool
 }
 
 // converge runs the operation's blocks until nothing more may start, and
 // reports whether it stopped at a stage boundary and what any block that did
 // not complete reported.
 func (s Service) converge(ctx context.Context, tx Transaction, store OperationStore, approved bundle, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.StageSelection) (bool, error) {
+	return s.newScheduler(tx, store, approved, operation, plan, states, material, selection).converge(ctx)
+}
+
+// observe resolves every unproved effect of an operation and starts nothing
+// else, leaving the block states it was given holding what each one proved.
+func (s Service) observe(ctx context.Context, tx Transaction, store OperationStore, approved bundle, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material) error {
+	run := s.newScheduler(tx, store, approved, operation, plan, states, material, reconciliation.StageSelection{})
+	run.observeOnly = true
+	_, err := run.converge(ctx)
+	return err
+}
+
+func (s Service) newScheduler(tx Transaction, store OperationStore, approved bundle, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.StageSelection) *scheduler {
 	bound := s.options.Concurrency
 	if bound <= 0 {
 		bound = MaxRunningBlocks
 	}
-	run := &scheduler{
+	return &scheduler{
 		service: s, tx: tx, store: store, approved: approved, operation: operation,
 		plan: plan, material: material, selection: selection, bound: bound,
 		states: states, running: map[string]bool{}, worked: map[string]bool{},
 		held: map[string]string{}, causes: map[string]error{},
 		results: make(chan step, len(plan.Blocks)),
 	}
-	return run.converge(ctx)
 }
 
 func (c *scheduler) converge(ctx context.Context) (bool, error) {
@@ -114,7 +130,7 @@ func (c *scheduler) next() (reconciliation.Block, int, bool) {
 			return block, index, true
 		}
 	}
-	if c.anyState(unproved) {
+	if c.observeOnly || c.anyState(unproved) {
 		return reconciliation.Block{}, 0, false
 	}
 	failed := func(state reconciliation.BlockState) bool { return state == reconciliation.BlockFailed }

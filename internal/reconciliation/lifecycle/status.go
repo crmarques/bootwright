@@ -216,9 +216,10 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	if command := nextCommand(operation.Verb, summary.Next); command != "" {
 		result.NextSteps = append(result.NextSteps, command)
 	}
-	// A pause owns everything it completed, so removal is a safe next action
-	// beside continuing the operation the selection stopped.
-	if operation.State == reconciliation.OperationPaused {
+	// An apply owns every block it started, so removal is a next action beside
+	// continuing it however it stopped. A completed apply admits one too, but
+	// naming it there reads as an instruction to undo what just succeeded.
+	if operation.Verb == reconciliation.Apply && operation.State != reconciliation.OperationDone {
 		result.NextSteps = append(result.NextSteps, "bootwright destroy")
 	}
 	return result, nil

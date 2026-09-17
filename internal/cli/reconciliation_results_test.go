@@ -447,6 +447,64 @@ func TestQuiescenceChecksSettleAsOneRowBeforeTheEffects(t *testing.T) {
 	}
 }
 
+// A removal over an apply that did not finish proves the outcome of what it
+// takes back before it proves nothing is in use. Both precede every effect, so
+// each settles as one row under the same heading, in the order it is performed.
+func TestResolutionChecksSettleAsOneRowBeforeTheGate(t *testing.T) {
+	var out bytes.Buffer
+	presenter := NewLifecycleProgressPresenter(&out, nil)
+	ctx := context.Background()
+	resolution := func(group, detail, status string, completed int) lifecycle.ProgressEvent {
+		return lifecycle.ProgressEvent{
+			Phase: lifecycle.CheckPhase, Block: "resolution",
+			Description: "prove the outcome of every effect this removal takes back",
+			Group:       group, Detail: detail, Status: status,
+			Completed: completed, Declared: 2,
+		}
+	}
+	presenter.ReportProgress(ctx, resolution("dns-lab", "resolve names for lab-dns", "running", 0))
+	presenter.ReportProgress(ctx, resolution("ntp-lab", "serve time for lab-ntp", "running", 1))
+	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{
+		Phase: lifecycle.CheckPhase, Block: "resolution",
+		Description: "prove the outcome of every effect this removal takes back", Status: "ok",
+	})
+	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{
+		Phase: lifecycle.CheckPhase, Block: "quiescence",
+		Description: "prove nothing this removal takes back is still in use", Status: "ok",
+	})
+	want := "\nChecks\n" +
+		"  [RUNNING]  prove the outcome of every effect this removal takes back: resolve names for lab-dns - 0%\n" +
+		"  [RUNNING]  prove the outcome of every effect this removal takes back: serve time for lab-ntp - 50%\n" +
+		"  [OK]       prove the outcome of every effect this removal takes back\n" +
+		"  [OK]       prove nothing this removal takes back is still in use\n"
+	if out.String() != want {
+		t.Fatalf("progress = %q, want %q", out.String(), want)
+	}
+}
+
+// A removal that cannot prove an effect settles its proof as unknown and
+// registers nothing, so no Progress heading ever opens.
+func TestUnresolvedRemovalChecksSettleAsUnknown(t *testing.T) {
+	var out bytes.Buffer
+	presenter := NewLifecycleProgressPresenter(&out, nil)
+	ctx := context.Background()
+	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{
+		Phase: lifecycle.CheckPhase, Block: "resolution",
+		Description: "prove the outcome of every effect this removal takes back",
+		Group:       "dns-lab", Detail: "resolve names for lab-dns", Status: "running", Declared: 1,
+	})
+	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{
+		Phase: lifecycle.CheckPhase, Block: "resolution",
+		Description: "prove the outcome of every effect this removal takes back", Status: "unknown",
+	})
+	want := "\nChecks\n" +
+		"  [RUNNING]  prove the outcome of every effect this removal takes back: resolve names for lab-dns - 0%\n" +
+		"  [UNKNOWN]  prove the outcome of every effect this removal takes back\n"
+	if out.String() != want {
+		t.Fatalf("progress = %q, want %q", out.String(), want)
+	}
+}
+
 // On a terminal the whole gate occupies the one line its rows redraw, so the
 // heading that follows it is the only thing that terminates it.
 func TestTerminalQuiescenceChecksOccupyOneLine(t *testing.T) {

@@ -122,14 +122,14 @@ func Deferrals(plan Plan, states map[string]BlockState, selection StageSelection
 }
 
 // OwnedSubset is the part of an apply's plan the context still holds: every
-// block whose effects are durable, and every block that failed after it was
-// permitted to change its target. A removal plans from it, because a block that
-// never ran has nothing to remove while a failed one may have changed anything
-// up to the point it stopped, and only its inverse can prove that absent.
+// block it started. A block that never started has nothing to remove, while a
+// block permitted to change its target may have changed anything up to the
+// point it stopped, whatever stopped it, and only its own inverse proves that
+// absent. Ownership therefore does not move as an unproved block is resolved,
+// so a removal planned from this set stays exactly as wide once every effect
+// it covers is proved.
 func OwnedSubset(plan Plan, states map[string]BlockState) Plan {
-	return subset(plan, states, func(state BlockState) bool {
-		return state == BlockDone || state == BlockFailed
-	})
+	return subset(plan, states, func(state BlockState) bool { return state != BlockPending })
 }
 
 // RemainingSubset is the part of a removal plan that is not yet proved gone, so
