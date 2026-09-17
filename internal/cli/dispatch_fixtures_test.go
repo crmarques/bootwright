@@ -347,7 +347,7 @@ func dispatchFlags() *pflag.FlagSet {
 		flags.String(name, value, "")
 	}
 	for _, name := range []string{
-		"yes", "purge", "short", "renew", "checksums", "dry-run",
+		"yes", "purge", "purge-old-bundles", "short", "renew", "checksums", "dry-run",
 		"trust-on-first-use", "verbose", "watch", "sensitive", "silent", "secrets",
 		"ssh-ask-sudo-password", "ssh-user-for-provisioned",
 	} {

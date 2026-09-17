@@ -62,6 +62,9 @@ func verifyControllerBundleReservations(ctx context.Context, owner *directory, r
 		}
 	}
 	for _, reservation := range reservations {
+		if reservation.Mode == "retiring" {
+			continue
+		}
 		if reservation.DirectoryInode != 0 && !slices.Contains(names, reservation.ID) {
 			return state("attributed controller bundle is missing")
 		}
@@ -101,6 +104,9 @@ func openControllerBundle(ctx context.Context, store *Store, root *directory, re
 	index := slices.IndexFunc(stored.bundles, func(item controllerBundleReservation) bool { return item.ID == id })
 	if index < 0 {
 		return nil, nil
+	}
+	if stored.bundles[index].Mode == "retiring" {
+		return nil, controllerFailure("controller.state", "this controller bundle is being retired; repeat setup to complete its removal")
 	}
 	if stored.bundles[index].DirectoryInode == 0 {
 		return nil, controllerFailure("controller.identity", "required controller bundle is not attributable; run controller setup")

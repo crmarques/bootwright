@@ -108,7 +108,11 @@ Only explicit setup can finish an attributable initialization.
 The private Controller record version is `2`. Its fields are `version`, `host`,
 `receipt`, `bindings`, `retainedSources`, optional `retainedDefinitions`,
 `bundles` and optional `reservations`, encoded as compact JSON
-in schema order followed by LF. Unknown fields, duplicate keys, noncanonical
+in schema order followed by LF. A bundle reservation is `reserved` while its
+area is being published, `attributed` once the store owns the directory,
+`sealed` once its content is immutable, and `retiring` once its removal is
+intended, which is the one mode an area may never be read or published through.
+Unknown fields, duplicate keys, noncanonical
 records and versions refuse. A record is proved canonical by re-encoding what
 was read and comparing it byte for byte, so a field added to any value this
 record contains must encode to nothing when it is unset: otherwise every host

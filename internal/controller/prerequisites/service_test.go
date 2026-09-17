@@ -78,6 +78,8 @@ type memoryStorage struct {
 	bundleRequests  []string
 	failPublication int
 	mutationError   error
+	retired         []string
+	retireErr       error
 }
 
 func (m *memoryStorage) view() StorageView {
@@ -150,6 +152,19 @@ func (m *memoryStorage) Bundle(ctx context.Context, _ string) (BundleArea, error
 	m.bundleExists = true
 	return dummyArea{}, nil
 }
+
+// RetireBundles records what a retirement asked for and drops the retained
+// resolutions it names, exactly as the store does.
+func (m *memoryStorage) RetireBundles(_ context.Context, ids []string) error {
+	if m.retireErr != nil {
+		return m.retireErr
+	}
+	m.retired = append(m.retired, ids...)
+	m.state.RetainedDefinitions = slices.DeleteFunc(slices.Clone(m.state.RetainedDefinitions),
+		func(definition Definition) bool { return slices.Contains(ids, definition.CatalogDigest) })
+	return nil
+}
+
 func copyState(s HostState) HostState {
 	s.Bindings = slices.Clone(s.Bindings)
 	s.RetainedSources = slices.Clone(s.RetainedSources)
@@ -702,5 +717,81 @@ func TestRefusalBeforeDurableIntentIsNotReportedAsIncomplete(t *testing.T) {
 	}
 	if report.Outcome != "planned" {
 		t.Fatalf("outcome = %q, want planned", report.Outcome)
+	}
+}
+
+// Retirement removes the execution bundles a completed setup no longer needs,
+// and nothing else. What the receipt names is never one of them, and a setup
+// that did not complete retires nothing at all.
+func TestPurgeRetiresOnlySupersededBundlesOfACompletedSetup(t *testing.T) {
+	f := newFixture(t)
+	result, err := f.service.Setup(context.Background(), SetupRequest{})
+	if err != nil || result.Outcome != "changed" {
+		t.Fatalf("setup=%#v err=%v", result, err)
+	}
+	current := f.store.state.Receipt.CatalogDigest
+	superseded := strings.Repeat("b", 64)
+	f.store.state.RetainedDefinitions = []Definition{
+		{CatalogDigest: superseded}, {CatalogDigest: current},
+	}
+	result, err = f.service.Setup(context.Background(), SetupRequest{PurgeOldBundles: true})
+	if err != nil || result.Outcome != "unchanged" {
+		t.Fatalf("purge=%#v err=%v", result, err)
+	}
+	if !slices.Equal(result.RetiredBundles, []string{superseded}) {
+		t.Fatalf("retired = %v", result.RetiredBundles)
+	}
+	if !slices.Equal(f.store.retired, []string{superseded}) {
+		t.Fatalf("the store was asked to retire %v", f.store.retired)
+	}
+	// The resolution a retired bundle carries goes with it; the one the receipt
+	// names stays, because the next carry-forward reads it.
+	if len(f.store.state.RetainedDefinitions) != 1 || f.store.state.RetainedDefinitions[0].CatalogDigest != current {
+		t.Fatalf("retained definitions = %#v", f.store.state.RetainedDefinitions)
+	}
+	// Repeating it retires nothing, because nothing is superseded any more.
+	f.store.retired = nil
+	result, err = f.service.Setup(context.Background(), SetupRequest{PurgeOldBundles: true})
+	if err != nil || len(result.RetiredBundles) != 0 || len(f.store.retired) != 0 {
+		t.Fatalf("a second purge retired %v (%v)", f.store.retired, err)
+	}
+}
+
+// Retirement is decided by what a completed setup left behind, so a preview and
+// a refusal retire nothing.
+func TestPurgeRetiresNothingWithoutACompletedSetup(t *testing.T) {
+	for name, request := range map[string]SetupRequest{
+		"dry run":  {DryRun: true, PurgeOldBundles: true},
+		"declined": {PurgeOldBundles: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t)
+			if name == "declined" {
+				f.confirmationError = errors.New("declined")
+			}
+			f.store.state.RetainedDefinitions = []Definition{{CatalogDigest: strings.Repeat("b", 64)}}
+			result, _ := f.service.Setup(context.Background(), request)
+			if result != nil && len(result.RetiredBundles) != 0 || len(f.store.retired) != 0 {
+				t.Fatalf("retired %v without a completed setup", f.store.retired)
+			}
+		})
+	}
+}
+
+// A retirement that cannot be completed fails the invocation rather than
+// reporting a setup that quietly left the host at its retention bound.
+func TestAFailedRetirementIsReported(t *testing.T) {
+	f := newFixture(t)
+	if _, err := f.service.Setup(context.Background(), SetupRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	f.store.state.RetainedDefinitions = []Definition{{CatalogDigest: strings.Repeat("b", 64)}}
+	f.store.retireErr = errors.New("busy")
+	result, err := f.service.Setup(context.Background(), SetupRequest{PurgeOldBundles: true})
+	if err == nil {
+		t.Fatal("a failed retirement was reported as success")
+	}
+	if result == nil || len(result.RetiredBundles) != 0 {
+		t.Fatalf("result = %#v", result)
 	}
 }

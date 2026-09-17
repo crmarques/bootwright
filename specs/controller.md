@@ -159,8 +159,37 @@ its retained sources by size, the private interpreter, each target tool's
 source and files, and each selected native root package by name. The report
 shows the frozen release as required and the installed release as observed.
 Process exit status alone does not prove readiness. An older bundle needed for
-retry or a future frozen lifecycle is retained; setup supplies no uninstall or
-garbage-collection command.
+retry or a future frozen lifecycle is retained, and setup removes nothing of its
+own accord.
+
+**Retiring superseded bundles.** `setup --purge-old-bundles` retires the
+execution bundles this host no longer needs, after the setup it runs beside has
+completed and only then: a setup that refuses, fails or previews retires
+nothing, because what may be retired is decided by what the new bundle now
+holds. A bundle is retired only when it is positively identified as a
+superseded execution bundle, which is one a retained resolution names and that
+the completed receipt does not. Everything else is left untouched, including
+every [client area](#the-controller-stage), which is shared host state no
+context uninstalls, and any area this record does not account for.
+
+Retirement is safe because a completed setup leaves nothing behind that needed
+the bundles it replaces. Publication writes every source into the bundle it
+publishes, whether that source was acquired or recovered from the bundle a
+[carried-forward resolution](#supported-host-and-dependency-selection) read, so
+the next carry-forward reads the bundle this setup just sealed. A lifecycle
+operation always runs the bundle the current receipt names, so no frozen
+operation reaches a retired one.
+
+The resolution a retired bundle carries is retired with it, because a retained
+resolution whose sources are gone can be carried forward from nothing. That is
+what returns capacity: the retained resolutions and bundle areas a host may
+hold are bounded, and without retirement the bound is reached and every later
+setup refuses.
+
+Retirement records its intent before it removes anything, so an interruption
+leaves an area marked as retiring rather than an area the record still presents
+as usable. Repeating the command completes it. A partially removed area is
+never readable, published into, or counted as retained.
 
 ## Selection and command journeys
 

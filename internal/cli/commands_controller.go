@@ -12,7 +12,7 @@ func controllerPreflightCommand() commandSpec {
 }
 
 func controllerSetupCommand() commandSpec {
-	return available(commandSpec{path: "setup", short: "Set up context-independent controller prerequisites", flags: []flagSpec{dryRunFlag(), confirmationFlag()}, long: "Prepare this host's context-independent controller prerequisites: the private execution bundle and the baseline native packages. Setup selects no context; the prerequisites a context adds are installed by the controller stage of apply. --dry-run previews the plan with unverified checks and makes no changes. Review the plan before confirming; --yes skips ordinary confirmation."})
+	return available(commandSpec{path: "setup", short: "Set up context-independent controller prerequisites", flags: []flagSpec{dryRunFlag(), confirmationFlag(), boolFlag("purge-old-bundles", "Retire the execution bundles this host no longer needs")}, long: "Prepare this host's context-independent controller prerequisites: the private execution bundle and the baseline native packages. Setup selects no context; the prerequisites a context adds are installed by the controller stage of apply. --dry-run previews the plan with unverified checks and makes no changes. --purge-old-bundles retires the superseded execution bundles this host still holds, after the setup completes and only then; it removes no client closure and nothing the current receipt names. Review the plan before confirming; --yes skips ordinary confirmation."})
 }
 
 type ControllerService interface {
@@ -33,6 +33,7 @@ func (s Services) invokeController(ctx context.Context, path string, values *req
 		result.controller, err = invokeResult(ctx, values, prerequisites.SetupRequest{
 			DryRun:           values.boolean("dry-run"),
 			SkipConfirmation: values.boolean("yes"),
+			PurgeOldBundles:  values.boolean("purge-old-bundles"),
 		}, s.Controller.Setup)
 	default:
 		return commandResult{}, errors.New("command has no application dispatch")

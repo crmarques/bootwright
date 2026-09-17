@@ -85,7 +85,11 @@ func decodeControllerRecord(data []byte) (prerequisites.HostState, []controllerB
 	}
 	previous := ""
 	for _, bundle := range record.Bundles {
-		if !validControllerDigest(bundle.ID) || bundle.ID <= previous || bundle.Mode != "reserved" && bundle.Mode != "attributed" && bundle.Mode != "sealed" || bundle.DirectoryInode == 0 && (bundle.DirectoryDevice != 0 || bundle.Mode != "reserved") || bundle.DirectoryInode != 0 && bundle.Mode != "attributed" && bundle.Mode != "sealed" {
+		// A retiring entry is an area whose removal is intended. It keeps the
+		// attribution that proves the directory is this store's own, because
+		// that is what its removal is verified against.
+		attributed := bundle.Mode == "attributed" || bundle.Mode == "sealed" || bundle.Mode == "retiring"
+		if !validControllerDigest(bundle.ID) || bundle.ID <= previous || !attributed && bundle.Mode != "reserved" || bundle.DirectoryInode == 0 && (bundle.DirectoryDevice != 0 || bundle.Mode != "reserved") || bundle.DirectoryInode != 0 && !attributed {
 			return prerequisites.HostState{}, nil, state("controller bundle reservation is invalid")
 		}
 		previous = bundle.ID

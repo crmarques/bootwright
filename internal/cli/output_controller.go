@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"io"
+	"strconv"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
@@ -236,6 +237,11 @@ func controllerOutcomeFields(command string, report *prerequisites.Report) []fie
 	if report.PlanPresented && (report.Outcome == "changed" || report.Outcome == "unchanged") {
 		fields = append(fields, field{Label: "Readiness", Value: "all required prerequisites verified"})
 	}
+	// Retirement removes shared host content, so what it took back is reported
+	// rather than left for the operator to discover.
+	if len(report.RetiredBundles) != 0 {
+		fields = append(fields, field{Label: "Retired", Value: strconv.Itoa(len(report.RetiredBundles)) + " superseded execution " + bundleNoun(len(report.RetiredBundles))})
+	}
 	if report.Outcome != "ready" {
 		fields = append(fields, field{Label: "Next", Value: controllerNextCommand(report)})
 	}
@@ -339,4 +345,11 @@ func controllerPlanText(text *display, report *prerequisites.Report, scope, chec
 		actions = append(actions, step{Text: action})
 	}
 	text.steps(actions)
+}
+
+func bundleNoun(count int) string {
+	if count == 1 {
+		return "bundle"
+	}
+	return "bundles"
 }

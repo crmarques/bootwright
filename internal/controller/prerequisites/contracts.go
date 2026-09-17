@@ -107,6 +107,11 @@ type StorageTransaction interface {
 	Snapshot() StorageView
 	Publish(context.Context, HostState) (Publication, error)
 	Bundle(context.Context, string) (BundleArea, error)
+	// RetireBundles removes superseded execution bundle areas and the retained
+	// resolutions they carry. It records its intent before removing anything,
+	// so an interruption leaves an area that is never read rather than one the
+	// record still presents as usable.
+	RetireBundles(context.Context, []string) error
 }
 
 // BundleArea confines the qualified bundle adapter to one catalog namespace.

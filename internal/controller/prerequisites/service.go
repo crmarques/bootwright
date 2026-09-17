@@ -101,6 +101,54 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*Report, erro
 }
 
 func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, error) {
+	report, err := s.setup(ctx, request)
+	// Retirement reads what the completed setup left behind, so it runs only
+	// after one completed: a refusal, a failure and a preview all retire
+	// nothing, because what may be retired is decided by what the bundle this
+	// setup sealed now holds.
+	if err != nil || report == nil || !request.PurgeOldBundles {
+		return report, err
+	}
+	if report.Outcome != "changed" && report.Outcome != "unchanged" {
+		return report, nil
+	}
+	if err := s.retireSuperseded(ctx, report); err != nil {
+		return report, err
+	}
+	return report, nil
+}
+
+// retireSuperseded removes every execution bundle a retained resolution names
+// that the completed receipt does not. A client area is never one of them, and
+// neither is an area this record does not account for.
+func (s Service) retireSuperseded(ctx context.Context, report *Report) error {
+	return s.storage.MutateController(ctx, SetupContext{}, false, func(tx StorageTransaction) error {
+		view := tx.Snapshot()
+		if view.State.Receipt.Status != "complete" {
+			return nil
+		}
+		var superseded []string
+		for _, definition := range view.State.RetainedDefinitions {
+			if definition.CatalogDigest == "" || definition.CatalogDigest == view.State.Receipt.CatalogDigest {
+				continue
+			}
+			if !slices.Contains(superseded, definition.CatalogDigest) {
+				superseded = append(superseded, definition.CatalogDigest)
+			}
+		}
+		slices.Sort(superseded)
+		if len(superseded) == 0 {
+			return nil
+		}
+		if err := tx.RetireBundles(ctx, superseded); err != nil {
+			return err
+		}
+		report.RetiredBundles = superseded
+		return nil
+	})
+}
+
+func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}

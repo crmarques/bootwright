@@ -8,6 +8,9 @@ type CheckRequest struct{ ContextName string }
 type SetupRequest struct {
 	DryRun           bool
 	SkipConfirmation bool
+	// PurgeOldBundles retires the execution bundles this host no longer needs,
+	// after the setup it runs beside has completed and only then.
+	PurgeOldBundles bool
 }
 
 // Check scopes tell the operator which command settles a missing prerequisite:
@@ -50,6 +53,10 @@ type Report struct {
 	// failure report adds only its outcome rather than repeating the headline.
 	ProgressPresented bool
 	Progress          []ActionProgress
+	// RetiredBundles names the superseded execution bundles this invocation
+	// removed, in canonical order. It is empty unless retirement was asked for
+	// and the setup it runs beside completed.
+	RetiredBundles []string
 }
 
 // PendingScope names the narrowest scope that has an unmet check, so a result
