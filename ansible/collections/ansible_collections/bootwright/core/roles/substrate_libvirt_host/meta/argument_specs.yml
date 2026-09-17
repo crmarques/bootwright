@@ -39,7 +39,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [substrate-host-libvirt-v1]
+            choices: [substrate-host-libvirt-v2]
       bootwright_substrate_host_material:
         type: dict
         required: true

@@ -55,9 +55,15 @@ func ServiceUnits() []string { return append([]string(nil), serviceUnits...) }
 const domainOff = "shut off"
 
 const (
-	hostRequestVersion    = "substrate-host-libvirt-v1"
+	hostRequestVersion    = "substrate-host-libvirt-v2"
 	machineRequestVersion = "machine-libvirt-v1"
 )
+
+// priorHostRequestVersion is the version this capability reads but no longer
+// writes, so a provider host realized under it is removable by this build. It
+// named the single daemon its URI answered on, before the modular drivers that
+// own a managed network and pool were named beside it.
+const priorHostRequestVersion = "substrate-host-libvirt-v1"
 
 // HostBlockID and MachineBlockID name the blocks each capability contributes.
 // A consumer states requirements by API object, never by these identities.

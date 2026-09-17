@@ -104,17 +104,76 @@ type MachineRequest struct {
 }
 
 func (r HostRequest) Canonical() ([]byte, error)    { return canonical(r, "provider host") }
+func (r hostRequestV1) Canonical() ([]byte, error)  { return canonical(r, "provider host") }
 func (r MachineRequest) Canonical() ([]byte, error) { return canonical(r, "machine") }
 
+// hostRequestV1 is the provider host request as substrate-host-libvirt-v1
+// froze it: one daemon rather than the drivers a managed network and pool live
+// in. Its field order is the order that version encoded, because the bytes it
+// froze are checked against it.
+type hostRequestV1 struct {
+	Identity    Identity            `json:"identity"`
+	Networks    []Network           `json:"networks"`
+	Packages    []string            `json:"packages"`
+	Placement   lifecycle.Placement `json:"placement"`
+	PoolName    string              `json:"poolName"`
+	PoolPath    string              `json:"poolPath"`
+	Provisioned bool                `json:"provisioned"`
+	Service     string              `json:"service"`
+	URI         string              `json:"uri"`
+	Version     string              `json:"version"`
+}
+
+// upgrade keeps the daemon the frozen request named rather than substituting
+// the set this build derives, because what is being removed is what that host
+// was realized with.
+func (r hostRequestV1) upgrade() HostRequest {
+	return HostRequest{
+		Identity: r.Identity, Networks: r.Networks, Packages: r.Packages,
+		Placement: r.Placement, PoolName: r.PoolName, PoolPath: r.PoolPath,
+		Provisioned: r.Provisioned, Services: []string{r.Service},
+		URI: r.URI, Version: hostRequestVersion,
+	}
+}
+
+// DecodeHostRequest reads the version this build writes and the one before it,
+// so a provider host realized by an earlier build is still removable here.
 func DecodeHostRequest(data []byte) (HostRequest, error) {
+	version, err := frozenVersion(data, "provider host")
+	if err != nil {
+		return HostRequest{}, err
+	}
+	if version == priorHostRequestVersion {
+		var prior hostRequestV1
+		if err := decode(data, &prior, "provider host"); err != nil {
+			return HostRequest{}, err
+		}
+		if err := verifyCanonical(data, prior, "provider host"); err != nil {
+			return HostRequest{}, err
+		}
+		return prior.upgrade(), nil
+	}
 	var request HostRequest
 	if err := decode(data, &request, "provider host"); err != nil {
 		return HostRequest{}, err
 	}
 	if request.Version != hostRequestVersion {
-		return HostRequest{}, refusal("lifecycle.state", "the frozen provider host request has an unsupported version", "")
+		return HostRequest{}, refusal("lifecycle.state",
+			"the frozen provider host request has an unsupported version: "+version, "")
 	}
 	return request, verifyCanonical(data, request, "provider host")
+}
+
+// frozenVersion reads only the version a frozen request declares, so the shape
+// it is decoded into is chosen by what wrote it.
+func frozenVersion(data []byte, subject string) (string, error) {
+	var declared struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(data, &declared); err != nil || declared.Version == "" {
+		return "", refusal("lifecycle.state", "the frozen "+subject+" request declares no version", "")
+	}
+	return declared.Version, nil
 }
 
 func DecodeMachineRequest(data []byte) (MachineRequest, error) {
