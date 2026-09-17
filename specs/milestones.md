@@ -222,6 +222,13 @@ dependency, and frozen exclusive sets through inverse and narrowing), the
 `operationstore` concurrent-record test, the `managedos/installation` shared
 tree cases, and the whole Go suite under the race detector.
 
+**Verification model.** M1d's model continues: every rule above is proved
+in-tree, and an apply and a destroy driven end to end against a real host are
+operator-run and are not a gate of this delivery. No such run has happened
+under this delivery yet, and the wave-major order changes every plan digest, so
+a context an earlier build applied must be destroyed with that build before
+this one runs.
+
 Constraints left behind: the operation still holds the exclusive root lock for
 its whole duration, so a concurrent reader waits (C7); the removal's quiescence
 probes still run one block at a time, because they settle as a single check
