@@ -144,14 +144,7 @@ func DecodeHostRequest(data []byte) (HostRequest, error) {
 		return HostRequest{}, err
 	}
 	if version == priorHostRequestVersion {
-		var prior hostRequestV1
-		if err := decode(data, &prior, "provider host"); err != nil {
-			return HostRequest{}, err
-		}
-		if err := verifyCanonical(data, prior, "provider host"); err != nil {
-			return HostRequest{}, err
-		}
-		return prior.upgrade(), nil
+		return decodePriorHostRequest(data)
 	}
 	var request HostRequest
 	if err := decode(data, &request, "provider host"); err != nil {
@@ -162,6 +155,37 @@ func DecodeHostRequest(data []byte) (HostRequest, error) {
 			"the frozen provider host request has an unsupported version: "+version, "")
 	}
 	return request, verifyCanonical(data, request, "provider host")
+}
+
+// decodePriorHostRequest reads the two bodies the prior version was frozen
+// over: the single daemon it was declared with, and this build's driver set,
+// which the builds between that change and the version bump froze under the
+// prior label. The key that changed tells them apart, and each body is proved
+// canonical against the shape that wrote it.
+func decodePriorHostRequest(data []byte) (HostRequest, error) {
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(data, &keys); err != nil {
+		return HostRequest{}, refusal("lifecycle.state", "the frozen provider host request is malformed", "")
+	}
+	if _, drivers := keys["services"]; drivers {
+		var request HostRequest
+		if err := decode(data, &request, "provider host"); err != nil {
+			return HostRequest{}, err
+		}
+		if err := verifyCanonical(data, request, "provider host"); err != nil {
+			return HostRequest{}, err
+		}
+		request.Version = hostRequestVersion
+		return request, nil
+	}
+	var prior hostRequestV1
+	if err := decode(data, &prior, "provider host"); err != nil {
+		return HostRequest{}, err
+	}
+	if err := verifyCanonical(data, prior, "provider host"); err != nil {
+		return HostRequest{}, err
+	}
+	return prior.upgrade(), nil
 }
 
 // frozenVersion reads only the version a frozen request declares, so the shape

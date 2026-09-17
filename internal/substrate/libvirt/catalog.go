@@ -62,7 +62,8 @@ const (
 // priorHostRequestVersion is the version this capability reads but no longer
 // writes, so a provider host realized under it is removable by this build. It
 // named the single daemon its URI answered on, before the modular drivers that
-// own a managed network and pool were named beside it.
+// own a managed network and pool were named beside it; the builds between that
+// change and the bump froze the driver set under this label too.
 const priorHostRequestVersion = "substrate-host-libvirt-v1"
 
 // HostBlockID and MachineBlockID name the blocks each capability contributes.
