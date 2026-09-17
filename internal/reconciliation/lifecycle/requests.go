@@ -55,6 +55,12 @@ type PlanStep struct {
 	State       string
 	Selection   string
 	WaitsOn     string
+	// After names the steps this one waits for, by their place in the plan, so
+	// an operator reads what orders the work from the list itself. A step that
+	// waits for nothing names none.
+	After []int
+	// Wave is the earliest round this step can start in, counted from one.
+	Wave int
 }
 
 const (
@@ -66,10 +72,16 @@ const (
 // PlanResult previews the next legal operation or the exact continuation point
 // of an incomplete one. It allocates no identity and creates no log.
 type PlanResult struct {
-	Context      ContextIdentity
-	Verb         string
-	Steps        []PlanStep
-	Stages       []string
+	Context ContextIdentity
+	Verb    string
+	Steps   []PlanStep
+	Stages  []string
+	// Waves is how many rounds the plan's own shape needs, and Widest is how
+	// many of its steps share the fullest one. Together they say how much of
+	// the work the graph lets run at once, which is what an operator reads to
+	// know whether a long plan is a long queue or a wide one.
+	Waves        int
+	Widest       int
 	Startable    int
 	Deferred     int
 	Continuation bool

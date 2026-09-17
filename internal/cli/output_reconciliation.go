@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -132,14 +133,56 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 		if marker := selectionMarker(planned); marker != "" {
 			line += " [" + marker + "]"
 		}
+		if waiting := waitMarker(planned); waiting != "" {
+			line += " " + waiting
+		}
 		items = append(items, step{Text: line, Effects: planned.Impacts})
 	}
 	text.steps(items)
+	var closing []field
 	if len(result.Stages) != 0 {
-		text.section("")
-		text.fields(field{Label: "Stages", Value: strings.Join(result.Stages, ", ")},
+		closing = append(closing, field{Label: "Stages", Value: strings.Join(result.Stages, ", ")},
 			field{Label: "Starts", Value: startSummary(result)})
 	}
+	if summary := concurrencySummary(result); summary != "" {
+		closing = append(closing, field{Label: "Concurrency", Value: summary})
+	}
+	if len(closing) != 0 {
+		text.section("")
+		text.fields(closing...)
+	}
+}
+
+// waitMarker names the steps one step waits for, by their place in the plan, so
+// the list itself says what orders the work. A step that waits for nothing
+// carries no marker, which is what marks it as one of the first to start.
+func waitMarker(planned lifecycle.PlanStep) string {
+	if len(planned.After) == 0 {
+		return ""
+	}
+	places := make([]string, 0, len(planned.After))
+	for _, position := range planned.After {
+		places = append(places, strconv.Itoa(position))
+	}
+	return "[after " + strings.Join(places, ", ") + "]"
+}
+
+// concurrencySummary says how much of the plan its own shape lets run at once.
+// A plan whose steps are one long chain says so, which is the difference
+// between a long queue and a wide one.
+func concurrencySummary(result lifecycle.PlanResult) string {
+	if result.Waves == 0 || len(result.Steps) == 0 {
+		return ""
+	}
+	steps := "steps"
+	if result.Widest == 1 {
+		steps = "step"
+	}
+	waves := "waves"
+	if result.Waves == 1 {
+		waves = "wave"
+	}
+	return fmt.Sprintf("%d %s, up to %d %s at once", result.Waves, waves, result.Widest, steps)
 }
 
 // selectionMarker says what a stage selection would do with one pending step,

@@ -262,6 +262,18 @@ func TestPlanOrderGroupsBlocksByTheWaveTheyCanStartIn(t *testing.T) {
 	if schedule.Waves["alpha"] != 0 || schedule.Waves["bravo"] != 1 || schedule.Waves["charlie"] != 2 {
 		t.Fatalf("waves = %v", schedule.Waves)
 	}
+	// The first wave counts too: a schedule that measured only the blocks with
+	// dependencies would report a plan of four roots as one step at a time.
+	wide, err := NewPlan(Apply, []BlockDefinition{
+		definition("alpha"), definition("bravo"), definition("charlie"),
+		definition("delta", "alpha"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if schedule := ScheduleOf(wide); schedule.Count != 2 || schedule.Widest != 3 {
+		t.Fatalf("schedule = %d waves, widest %d, want 2 and 3", schedule.Count, schedule.Widest)
+	}
 	// A block sits one wave past the deepest block it waits for, never past
 	// the first, so a long chain never overlaps what follows it.
 	deep, err := NewPlan(Apply, []BlockDefinition{

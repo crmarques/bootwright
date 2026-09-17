@@ -178,6 +178,11 @@ func continuationAction(operation operationstore.Operation, states map[string]re
 }
 
 func steps(plan reconciliation.Plan, states map[string]reconciliation.BlockState) []PlanStep {
+	schedule := reconciliation.ScheduleOf(plan)
+	position := make(map[string]int, len(plan.Blocks))
+	for index, block := range plan.Blocks {
+		position[block.ID] = index + 1
+	}
 	out := make([]PlanStep, 0, len(plan.Blocks))
 	for _, block := range plan.Blocks {
 		state := string(reconciliation.BlockPending)
@@ -186,9 +191,17 @@ func steps(plan reconciliation.Plan, states map[string]reconciliation.BlockState
 				state = string(current)
 			}
 		}
+		var after []int
+		for _, dependency := range block.Dependencies {
+			if place, known := position[dependency]; known {
+				after = append(after, place)
+			}
+		}
+		slices.Sort(after)
 		out = append(out, PlanStep{
 			ID: block.ID, Description: block.Description, Stage: string(block.Stage),
 			Impacts: slices.Clone(block.Impacts), State: state,
+			After: after, Wave: schedule.Waves[block.ID] + 1,
 		})
 	}
 	return out
@@ -198,7 +211,11 @@ func steps(plan reconciliation.Plan, states map[string]reconciliation.BlockState
 // the rest, so an operator reads the consequence of the selection before
 // confirming it. Without a selection the steps carry no marker.
 func planPreview(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.StageSelection) PlanResult {
-	result := PlanResult{Steps: steps(plan, states), Stages: selection.Names()}
+	schedule := reconciliation.ScheduleOf(plan)
+	result := PlanResult{
+		Steps: steps(plan, states), Stages: selection.Names(),
+		Waves: schedule.Count, Widest: schedule.Widest,
+	}
 	if len(selection) == 0 {
 		return result
 	}

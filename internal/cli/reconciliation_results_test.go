@@ -490,3 +490,54 @@ func TestTerminalLogLocationSurvivesTheRedrawnRow(t *testing.T) {
 		t.Fatalf("the open row was not terminated before the location: %q", rendered)
 	}
 }
+
+// The plan says what orders the work: each step names the steps it waits for
+// by their place in the list, and a closing field says how much of the plan
+// its own shape lets run at once. A step that waits for nothing names none,
+// which is what marks it as one of the first to start.
+func TestPlanNamesTheStepsEachOneWaitsFor(t *testing.T) {
+	result := previewResult()
+	result.Waves, result.Widest = 3, 2
+	result.Steps = []lifecycle.PlanStep{
+		{ID: "artifacts", Description: "serve artifacts for lab", Stage: "infra-components", State: "pending", Wave: 1},
+		{ID: "names", Description: "resolve names for lab", Stage: "infra-components", State: "pending", Wave: 1},
+		{ID: "provider", Description: "realize the libvirt host", Stage: "substrates", State: "pending", After: []int{1, 2}, Wave: 2},
+		{ID: "machine", Description: "realize the machine rhel-01", Stage: "machines", State: "pending", After: []int{3}, Wave: 3},
+	}
+	var out bytes.Buffer
+	if err := writeLifecyclePlan(&out, result); err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	for _, want := range []string{
+		"1. serve artifacts for lab [infra-components]\n",
+		"3. realize the libvirt host [substrates] [after 1, 2]\n",
+		"4. realize the machine rhel-01 [machines] [after 3]\n",
+		"Concurrency  3 waves, up to 2 steps at once\n",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("plan text %q omits %q", rendered, want)
+		}
+	}
+	if strings.Contains(rendered, "1. serve artifacts for lab [infra-components] [after") {
+		t.Fatalf("a step that waits for nothing named a predecessor: %q", rendered)
+	}
+}
+
+// A plan whose steps are one chain says so, so a long plan that cannot be made
+// any faster is not read as one that could.
+func TestPlanReportsAChainAsOneStepAtATime(t *testing.T) {
+	result := previewResult()
+	result.Waves, result.Widest = 2, 1
+	result.Steps = []lifecycle.PlanStep{
+		{ID: "first", Description: "prepare the controller", Stage: "controller", State: "pending", Wave: 1},
+		{ID: "second", Description: "serve artifacts for lab", Stage: "infra-components", State: "pending", After: []int{1}, Wave: 2},
+	}
+	var out bytes.Buffer
+	if err := writeLifecyclePlan(&out, result); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Concurrency  2 waves, up to 1 step at once\n") {
+		t.Fatalf("plan text = %q", out.String())
+	}
+}

@@ -400,7 +400,17 @@ whose steps are the frozen blocks in plan order, each naming its stage and
 carrying its own impacts as indented lines, a `Checks` section for what the
 operation proves before it registers, a `Progress` section while effects run, a
 `Result` section of status rows, the `Logs` reference when an operation log
-exists, and the receipt as the final four lines. With a stage selection,
+exists, and the receipt as the final four lines.
+
+Because the plan is frozen
+[wave by wave](../state-reconciliation.md#plan-and-execution), the numbered
+steps are the order the work is started in. Each step that waits for another
+names the steps it waits for by their place in that list, as `[after 2, 5]`,
+and a step that waits for nothing carries no such marker, which is what marks
+it as one of the first to start. A closing `Concurrency` field reports how many
+waves the plan needs and how many of its steps share the fullest one, so a long
+plan that is one chain reads differently from a long plan that is wide. With a
+stage selection,
 each pending step also says whether this invocation would start it, that it is
 not selected, or which block it waits on, and a closing field reports how many
 blocks would start and how many are deferred. A block row leads with its status

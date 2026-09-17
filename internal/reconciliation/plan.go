@@ -266,6 +266,10 @@ func waves(known map[string]BlockDefinition) (map[string]int, error) {
 	depth := make(map[string]int, len(known))
 	var ready []string
 	for id, definition := range known {
+		// Every block carries a wave, including one nothing waits for: a reader
+		// that only learns the depth of blocks with dependencies counts the
+		// first wave as empty.
+		depth[id] = 0
 		for _, dependency := range definition.Dependencies {
 			if _, ok := known[dependency]; !ok {
 				return nil, planError("lifecycle block depends on a block the plan does not contain")

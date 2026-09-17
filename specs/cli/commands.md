@@ -85,7 +85,7 @@ explicit `--context` changes nothing they do.
 | `bootwright preflight storage-cluster` | same flags as `preflight infra`, with StorageCluster-only selection | storage-cluster readiness checks | observe unless `--dry-run` |
 | `bootwright preflight add-ons` | `--clusters <list>` default all ContainerClusters; `--output text\|json` default `text` | add-on prerequisite checks | bounded observation |
 | `bootwright preflight all` | `--dry-run` false; `--output text\|json` default `text`; `--trust-on-first-use=<bool>` default `true`; `-v, --verbose` false | all controller, infrastructure, cluster, storage, and add-on checks | observe unless `--dry-run` |
-| `bootwright plan` | `--stage <list>` default all stages | next legal full-context plan or exact continuation point, with the blocks a stage selection would start | none |
+| `bootwright plan` | `--stage <list>` default all stages | next legal full-context plan or exact continuation point, with the steps each block waits for, how much of it can run at once, and the blocks a stage selection would start | none |
 | `bootwright status` | `--output text\|json` default `text`; `--watch` false; `--watch-interval <duration>` default `5s` | context readiness, lifecycle state, and next safe commands | read local state; watch repeats reads |
 | `bootwright render` | `--input-dir <file-or-dir>`; `--output-dir <dir>`; `--clusters <list>` default all; `--sensitive` false; `--output text\|json` default `text` | whole external-tool artifact manifest, or render help when neither path flag is supplied | local artifact writes only |
 | `bootwright render effective` | `--output text\|json` default `text` | normalized effective desired state and object counts | none |

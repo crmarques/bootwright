@@ -411,3 +411,42 @@ func TestAStageBoundaryPausesWhileBlocksRunTogether(t *testing.T) {
 		t.Fatalf("applied %v", applied)
 	}
 }
+
+// A preview derives what orders the work from the frozen plan itself: each
+// step's predecessors by their place in the list, and how many rounds the
+// plan's own shape needs.
+func TestPlanPreviewNamesPredecessorsAndWaves(t *testing.T) {
+	h := scheduled(t, 4, definition("alpha"), definition("zulu"),
+		dependent("bravo", "alpha", "zulu"), dependent("charlie", "bravo"))
+	result, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Waves != 3 || result.Widest != 2 {
+		t.Fatalf("schedule = %d waves, widest %d", result.Waves, result.Widest)
+	}
+	places := map[string]plannedPlace{}
+	for index, planned := range result.Steps {
+		places[planned.ID] = plannedPlace{position: index + 1, after: planned.After, wave: planned.Wave}
+	}
+	// The two blocks nothing waits for open the plan and name no predecessor.
+	for _, root := range []string{"alpha", "zulu"} {
+		if len(places[root].after) != 0 || places[root].wave != 1 {
+			t.Fatalf("%s = %+v", root, places[root])
+		}
+	}
+	want := []int{places["alpha"].position, places["zulu"].position}
+	slices.Sort(want)
+	if !slices.Equal(places["bravo"].after, want) || places["bravo"].wave != 2 {
+		t.Fatalf("bravo = %+v, want after %v", places["bravo"], want)
+	}
+	if !slices.Equal(places["charlie"].after, []int{places["bravo"].position}) || places["charlie"].wave != 3 {
+		t.Fatalf("charlie = %+v", places["charlie"])
+	}
+}
+
+type plannedPlace struct {
+	position int
+	after    []int
+	wave     int
+}
