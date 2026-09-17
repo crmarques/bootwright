@@ -98,3 +98,63 @@ func TestAFileInPlaceOfAnOperationDirectoryIsRefusedByName(t *testing.T) {
 		t.Fatalf("the refusal does not name the blocking entry: %#v", reported)
 	}
 }
+
+// A publication in flight is not a foreign entry. The walk lists a directory
+// and then opens each name separately, so a name it already listed can be
+// mid-publication when it opens it, and the answer then is neither success nor
+// absence. Reporting that first answer is what failed a real apply that passed
+// on the retry, so the answer has to reproduce before the entry is called
+// foreign.
+func TestAnEntryThatRefusesOnlyWhileItIsPublishedDoesNotRefuseTheWrite(t *testing.T) {
+	ctx := context.Background()
+	store, _ := lifecycleFixture(t)
+	root := operationsRoot(t, store, "example")
+	publishing := filepath.Join(root, "op-1")
+	if err := os.Mkdir(publishing, 0755); err != nil {
+		t.Fatal(err)
+	}
+	confirmed := false
+	store.fail = func(name string) error {
+		if name != "confirm-operation-entry" || confirmed {
+			return nil
+		}
+		confirmed = true
+		return os.Chmod(publishing, 0700)
+	}
+	err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		return tx.Operations().WriteExclusive(ctx, "index.json", []byte("{}\n"))
+	})
+	if !confirmed {
+		t.Fatal("the walk never confirmed an entry it could not resolve")
+	}
+	if err != nil {
+		t.Fatalf("an entry that refused only while it was published refused the write: %#v", diagnostics.Of(err))
+	}
+}
+
+// An entry that keeps refusing is still foreign, and the refusal has to name
+// what refused it. Naming only the path left three separate apply failures to
+// be diagnosed by inference from git history, because a transient answer and a
+// foreign entry read identically in the message.
+func TestAForeignOperationEntryNamesWhatRefusedIt(t *testing.T) {
+	ctx := context.Background()
+	store, _ := lifecycleFixture(t)
+	root := operationsRoot(t, store, "example")
+	foreign := filepath.Join(root, "op-1")
+	if err := os.Mkdir(foreign, 0755); err != nil {
+		t.Fatal(err)
+	}
+	err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		return tx.Operations().WriteExclusive(ctx, "index.json", []byte("{}\n"))
+	})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "context.state" {
+		t.Fatalf("refusal = %#v", reported)
+	}
+	if !strings.Contains(reported[0].Message, foreign) {
+		t.Fatalf("the refusal does not name the entry it refused: %q", reported[0].Message)
+	}
+	if !strings.Contains(reported[0].Message, "permissions") {
+		t.Fatalf("the refusal does not name what refused the entry: %q", reported[0].Message)
+	}
+}

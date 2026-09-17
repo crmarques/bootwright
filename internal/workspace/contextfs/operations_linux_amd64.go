@@ -10,7 +10,9 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"time"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
@@ -40,12 +42,82 @@ func safeOperationName(name string) bool {
 	return strings.Count(name, ".") <= 1
 }
 
-// unsafeEntry names the exact entry that would not open as this store's own,
-// because every lifecycle write measures the whole subtree first: without the
-// path, one foreign entry anywhere refuses every later operation and says only
-// that something, somewhere, is unsafe.
-func unsafeEntry(parent *directory, name string) error {
-	return state("lifecycle operation entry is not this store's own: " + filepath.Join(parent.path, name))
+// unsafeEntry names the entry that would not open as this store's own and the
+// answer that refused it. Without the path, one foreign entry anywhere refuses
+// every later operation and names nothing; without the cause, a transient
+// answer and a foreign entry read identically.
+func unsafeEntry(parent *directory, name string, cause error) error {
+	message := "lifecycle operation entry is not this store's own: " + filepath.Join(parent.path, name)
+	if text := causeText(cause); text != "" {
+		message += ": " + text
+	}
+	return state(message)
+}
+
+// causeText renders why an entry was refused. A refusal this area raised is a
+// diagnostic whose Error is a fixed placeholder, so its message carries the
+// reason.
+func causeText(cause error) string {
+	if cause == nil {
+		return ""
+	}
+	reported := diagnostics.Of(cause)
+	if len(reported) == 0 {
+		return cause.Error()
+	}
+	messages := make([]string, 0, len(reported))
+	for _, diagnostic := range reported {
+		messages = append(messages, diagnostic.Message)
+	}
+	return strings.Join(messages, "; ")
+}
+
+// entryConfirmations bounds how often an entry that will not resolve is re-read
+// before it is called foreign.
+const entryConfirmations = 3
+
+// resolveEntry reads one listed entry, separating an entry this area does not
+// own from one a concurrent publication moved while the walk read the
+// directory. Every publication stages a pending name beside its target and
+// renames it away while every lifecycle write measures the whole subtree, so a
+// refusal is evidence about the entry only once it reproduces.
+func (a *operationArea) resolveEntry(ctx context.Context, dir *directory, name string) (syscall.Stat_t, bool, error) {
+	var stat syscall.Stat_t
+	for attempt := 0; ; attempt++ {
+		child, err := openRelative(dir, name, pathHandle, 0)
+		if err == nil {
+			stat, err = statHandle(child)
+			child.Close()
+			if err == nil {
+				return stat, true, nil
+			}
+		}
+		if errors.Is(err, syscall.ENOENT) {
+			return stat, false, nil
+		}
+		if attempt == entryConfirmations {
+			return stat, false, err
+		}
+		time.Sleep(time.Millisecond << attempt)
+		if err := a.store.checkpoint(ctx, "confirm-operation-entry"); err != nil {
+			return stat, false, err
+		}
+	}
+}
+
+// confirmDirectory opens a listed entry as this area's own directory under the
+// same confirmation.
+func (a *operationArea) confirmDirectory(ctx context.Context, parent *directory, name string) (*directory, error) {
+	for attempt := 0; ; attempt++ {
+		nested, err := openDirectory(parent, name)
+		if err == nil || errors.Is(err, syscall.ENOENT) || attempt == entryConfirmations {
+			return nested, err
+		}
+		time.Sleep(time.Millisecond << attempt)
+		if err := a.store.checkpoint(ctx, "confirm-operation-entry"); err != nil {
+			return nil, err
+		}
+	}
 }
 
 func operationPath(target string, minimum int) ([]string, error) {
@@ -154,7 +226,7 @@ func (a *operationArea) descend(ctx context.Context, parts []string, create bool
 			if errors.Is(err, syscall.ENOENT) {
 				return nil, "", nil, err
 			}
-			return nil, "", nil, unsafeEntry(parent, part)
+			return nil, "", nil, unsafeEntry(parent, part, err)
 		}
 		closers = append(closers, func() { child.file.Close() })
 		parent = child
@@ -218,23 +290,18 @@ func (a *operationArea) Entries(ctx context.Context, target string) ([]operation
 	entries := make([]operationstore.Entry, 0, len(names))
 	for _, name := range names {
 		if !safeOperationName(name) {
-			return nil, unsafeEntry(parent, name)
+			return nil, unsafeEntry(parent, name, errors.New("its name is not one this area creates"))
 		}
-		file, err := openRelative(parent, name, pathHandle, 0)
-		if errors.Is(err, syscall.ENOENT) {
+		stat, present, err := a.resolveEntry(ctx, parent, name)
+		if err != nil {
+			return nil, unsafeEntry(parent, name, err)
+		}
+		if !present {
 			continue
-		}
-		if err != nil {
-			return nil, unsafeEntry(parent, name)
-		}
-		stat, err := statHandle(file)
-		file.Close()
-		if err != nil {
-			return nil, unsafeEntry(parent, name)
 		}
 		directory := stat.Mode&syscall.S_IFMT == syscall.S_IFDIR
 		if !directory && stat.Mode&syscall.S_IFMT != syscall.S_IFREG {
-			return nil, unsafeEntry(parent, name)
+			return nil, unsafeEntry(parent, name, errors.New("it is neither a regular file nor a directory"))
 		}
 		entries = append(entries, operationstore.Entry{Name: name, Directory: directory, Size: stat.Size})
 	}
@@ -266,7 +333,7 @@ func (a *operationArea) directory(ctx context.Context, parts []string, create bo
 			if errors.Is(err, syscall.ENOENT) {
 				return nil, nil, err
 			}
-			return nil, nil, unsafeEntry(parent, part)
+			return nil, nil, unsafeEntry(parent, part, err)
 		}
 		closers = append(closers, func() { child.file.Close() })
 		parent = child
@@ -470,12 +537,9 @@ func (a *operationArea) capacity(ctx context.Context, additional int) error {
 	return nil
 }
 
-// scan measures the subtree. An entry that disappears between the listing and
-// its own open is skipped rather than refused: every atomic publication stages
-// a pending name beside its target and every write and log append measures the
-// whole subtree first, so a concurrent publication legitimately removes a name
-// this walk already listed. Only an entry that still exists and will not open
-// as this store's own is foreign.
+// scan measures the subtree, and one entry this store does not own refuses the
+// write it measures for. Resolution is confirmed first, because a listed name
+// legitimately moves under this walk.
 func (a *operationArea) scan(ctx context.Context, dir *directory, depth int) (int, int64, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, 0, err
@@ -492,28 +556,22 @@ func (a *operationArea) scan(ctx context.Context, dir *directory, depth int) (in
 		if err := a.store.checkpoint(ctx, "measure-operation-entry"); err != nil {
 			return 0, 0, err
 		}
-		entries++
-		child, err := openRelative(dir, name, pathHandle, 0)
-		if errors.Is(err, syscall.ENOENT) {
-			entries--
+		stat, present, err := a.resolveEntry(ctx, dir, name)
+		if err != nil {
+			return 0, 0, unsafeEntry(dir, name, err)
+		}
+		if !present {
 			continue
 		}
-		if err != nil {
-			return 0, 0, unsafeEntry(dir, name)
-		}
-		stat, statErr := statHandle(child)
-		child.Close()
-		if statErr != nil {
-			return 0, 0, unsafeEntry(dir, name)
-		}
+		entries++
 		if stat.Mode&syscall.S_IFMT == syscall.S_IFDIR {
-			nested, err := openDirectory(dir, name)
+			nested, err := a.confirmDirectory(ctx, dir, name)
 			if errors.Is(err, syscall.ENOENT) {
 				entries--
 				continue
 			}
 			if err != nil {
-				return 0, 0, unsafeEntry(dir, name)
+				return 0, 0, unsafeEntry(dir, name, err)
 			}
 			childEntries, childBytes, err := a.scan(ctx, nested, depth+1)
 			nested.file.Close()
