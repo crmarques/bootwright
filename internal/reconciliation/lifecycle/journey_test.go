@@ -277,6 +277,7 @@ type testCapability struct {
 	probes       []string
 	quiescence   map[string]Quiescence
 	quiescentErr error
+	observeErr   error
 }
 
 // Quiescent answers from the fixture, and settles by default so a removal that
@@ -342,6 +343,9 @@ func (c *testCapability) Destroy(_ context.Context, execution Execution) (Result
 func (c *testCapability) Observe(_ context.Context, execution Execution) (Observation, error) {
 	c.observes = append(c.observes, execution.Block.ID)
 	c.executions = append(c.executions, execution)
+	if c.observeErr != nil {
+		return Observation{}, c.observeErr
+	}
 	if len(c.observations) == 0 {
 		return Observation{Effect: reconciliation.EffectUnknown}, nil
 	}
@@ -915,6 +919,39 @@ func TestUnknownOutcomeIsResolvedFromLiveEvidence(t *testing.T) {
 				t.Fatal("an unresolved block started another attempt")
 			}
 		})
+	}
+}
+
+// An observation that could not be performed is not an inconclusive
+// observation. The operator needs the reason it never ran, because the
+// unresolved diagnosis sends them to restore a target that was already
+// reachable, and repeating the operation reproduces the same silence.
+func TestAnObservationThatNeverRanReportsWhy(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("an unproved effect completed")
+	}
+	h.capability.observeErr = diagnostics.NewFailureWithRemediation(
+		"controller.identity", "the approved execution bundle is unavailable", "", "run bootwright setup")
+	resolved, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err == nil {
+		t.Fatalf("a failed observation resolved cleanly = %+v", resolved.Receipt)
+	}
+	var named bool
+	for _, reported := range diagnostics.Of(err) {
+		if reported.Code == "controller.identity" && reported.Remediation == "run bootwright setup" {
+			named = true
+		}
+		if reported.Message == "the frozen effect could not be resolved from live evidence" {
+			t.Fatalf("a failed observation was reported as an inconclusive one = %+v", reported)
+		}
+	}
+	if !named {
+		t.Fatalf("resolution discarded why the observation never ran = %+v", diagnostics.Of(err))
+	}
+	if resolved.Receipt.State != "unknown" || resolved.Receipt.Next != "resolve" {
+		t.Fatalf("receipt = %+v", resolved.Receipt)
 	}
 }
 

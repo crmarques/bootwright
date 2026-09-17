@@ -11,6 +11,7 @@ import (
 	"strconv"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -106,6 +107,9 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	if err != nil {
 		return reconciliation.BlockUnknown, err
 	}
+	for _, reported := range diagnostics.Of(runErr) {
+		_ = log.Append(ctx, operationstore.LogRecord{Event: "observation-failed", Block: block.ID, Detail: reported.Code + ": " + reported.Message})
+	}
 	_ = log.Append(ctx, operationstore.LogRecord{Event: "resolution", Block: block.ID, Detail: string(resolvedEffect)})
 	if err := store.CompleteResolution(ctx, operation.ID, block.ID, attemptNumber, number, resolvedEffect, state, observation.Evidence); err != nil {
 		return reconciliation.BlockUnknown, err
@@ -114,6 +118,11 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	switch {
 	case state == reconciliation.BlockDone:
 		return state, nil
+	// An observation that never ran carries the reason it could not, and that
+	// reason is actionable where the unresolved diagnosis is not: it names a
+	// target the operator can restore rather than one already reachable.
+	case runErr != nil:
+		return state, runErr
 	case resolvedEffect == reconciliation.EffectNoEffect:
 		return state, failure("lifecycle.state",
 			"the frozen effect was never performed",
