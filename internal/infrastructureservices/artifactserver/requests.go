@@ -3,11 +3,11 @@ package artifactserver
 import (
 	"bytes"
 	"encoding/json"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
-	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 const requestVersion = "artifact-server-nginx-v1"
@@ -35,7 +35,7 @@ type Request struct {
 // it always had while the derivation is implemented once.
 type (
 	Identity  = managedservice.Identity
-	Placement = lifecycle.Placement
+	Placement = machineref.Placement
 	Egress    = managedservice.Egress
 )
 
@@ -58,8 +58,8 @@ type TLS struct {
 }
 
 const (
-	connectionLocal = lifecycle.ConnectionLocal
-	connectionSSH   = lifecycle.ConnectionSSH
+	connectionLocal = machineref.ConnectionLocal
+	connectionSSH   = machineref.ConnectionSSH
 )
 
 // Canonical encodes the request exactly as the plan digest and the adapter

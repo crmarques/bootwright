@@ -3,8 +3,7 @@ package power
 import (
 	"bytes"
 	"encoding/json"
-
-	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 )
 
 // PowerRequest is what one invocation asks for.
@@ -38,11 +37,11 @@ type Controller struct {
 // secret value: the controller credential reaches the adapter as an
 // operation-scoped file at execution.
 type Request struct {
-	Controller Controller          `json:"controller"`
-	Force      bool                `json:"force"`
-	Identity   Identity            `json:"identity"`
-	Placement  lifecycle.Placement `json:"placement"`
-	Verb       string              `json:"verb"`
+	Controller Controller           `json:"controller"`
+	Force      bool                 `json:"force"`
+	Identity   Identity             `json:"identity"`
+	Placement  machineref.Placement `json:"placement"`
+	Verb       string               `json:"verb"`
 	// Version is the request shape the adapter validates before it acts, so
 	// automation never runs against a request it does not understand.
 	Version string `json:"version"`

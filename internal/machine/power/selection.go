@@ -1,6 +1,7 @@
 package power
 
 import (
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -43,24 +44,24 @@ func requestFor(catalog api.Catalog, contextName, name, verb string, force bool,
 // controller that realization created, so it answers only while this context
 // owns it; a physical Machine's controller exists without Bootwright and needs
 // no ownership at all.
-func controllerFor(catalog api.Catalog, object api.Object, contextName, controllerMachine string, owned map[string]machine.OwnershipState) (Controller, lifecycle.Placement, error) {
+func controllerFor(catalog api.Catalog, object api.Object, contextName, controllerMachine string, owned map[string]machine.OwnershipState) (Controller, machineref.Placement, error) {
 	if object.Spec().Get("substrate", "providerRef").Text() == "" && !object.Spec().Has("hardware", "management", "bmc") {
-		return Controller{}, lifecycle.Placement{}, failure("access.unavailable",
+		return Controller{}, machineref.Placement{}, failure("access.unavailable",
 			"this Machine has no management controller this context can reach",
 			"author spec.hardware.management.bmc on "+object.Identity()+", or place it on a provider that emulates one")
 	}
 	target, err := substrate.TargetFor(catalog, object, contextName, controllerMachine)
 	if err != nil {
-		return Controller{}, lifecycle.Placement{}, err
+		return Controller{}, machineref.Placement{}, err
 	}
 	if !target.Physical && !owned[object.Identity()].Realized() {
-		return Controller{}, lifecycle.Placement{}, failure("access.unavailable",
+		return Controller{}, machineref.Placement{}, failure("access.unavailable",
 			"this Machine's emulated management controller is not realized",
 			"apply this context so "+object.Identity()+" and its controller exist")
 	}
-	placement, err := lifecycle.PlacementFor(target.PlacementMachine, controllerMachine)
+	placement, err := machineref.PlacementFor(target.PlacementMachine, controllerMachine)
 	if err != nil {
-		return Controller{}, lifecycle.Placement{}, err
+		return Controller{}, machineref.Placement{}, err
 	}
 	return Controller{
 		CredentialsRef: target.Controller.CredentialsRef,

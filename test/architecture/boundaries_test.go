@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -72,6 +73,58 @@ func packageRoles() map[string]packageRole {
 		roles["internal/"+capability] = applicationRole
 	}
 	return roles
+}
+
+// applicationDependencies is the complete set of application packages one
+// application package may consume, each because its consumer calls that
+// context's published capability rather than reproducing its rules. A new
+// entry is a new cross-context coupling and needs its reason stated here.
+func applicationDependencies() map[string][]string {
+	return map[string][]string{
+		// The engine coordinates the contexts an operation crosses.
+		"internal/reconciliation/lifecycle": {
+			"internal/controller/prerequisites", "internal/desiredstate/compilation",
+			"internal/reconciliation/operationstore", "internal/secrets/custody",
+			"internal/secrets/secretstore",
+		},
+		// Every lifecycle capability consumes the engine's own port vocabulary,
+		// the compiler that produced its input, the controller evidence its host
+		// was prepared with, and the operation store's log record.
+		"internal/controller/clients":                    capabilityDependencies(),
+		"internal/substrate/libvirt":                     capabilityDependencies(),
+		"internal/substrate/baremetal":                   capabilityDependencies(),
+		"internal/managedos/installation":                append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice"),
+		"internal/containercluster/agentinstall":         append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice"),
+		"internal/infrastructureservices/artifactserver": append(capabilityDependencies(), "internal/infrastructureservices/managedservice"),
+		"internal/infrastructureservices/managedservice": capabilityDependencies(),
+		"internal/machine/access":                        {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},
+		"internal/machine/power":                         {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},
+		"internal/machine/inventory":                     {"internal/desiredstate/compilation"},
+		"internal/trust/enrollment":                      {"internal/desiredstate/compilation"},
+		"internal/managedos/media":                       {},
+		"internal/controller/prerequisites":              {"internal/desiredstate/compilation"},
+		"internal/secrets/custody":                       {"internal/desiredstate/compilation", "internal/secrets/secretstore"},
+		"internal/secrets/encryption":                    {"internal/secrets/secretstore"},
+		"internal/secrets/secretstore":                   {"internal/workspace/contexts"},
+		"internal/workspace/contexts":                    {"internal/desiredstate/compilation", "internal/reconciliation/contextguard", "internal/secrets/secretstore"},
+		"internal/desiredstate/compilation":              {},
+		// The guard implements a Workspace-owned interface, so it consumes that
+		// package's vocabulary and nothing else.
+		"internal/reconciliation/contextguard":   {"internal/workspace/contexts"},
+		"internal/reconciliation/operationstore": {},
+		// Each named service is one managed-service definition and consumes only
+		// the package whose capability runs it.
+		"internal/infrastructureservices/dnsserver": {"internal/infrastructureservices/managedservice"},
+		"internal/infrastructureservices/ntpserver": {"internal/infrastructureservices/managedservice"},
+		"internal/infrastructureservices/proxy":     {"internal/infrastructureservices/managedservice"},
+	}
+}
+
+func capabilityDependencies() []string {
+	return []string{
+		"internal/controller/prerequisites", "internal/desiredstate/compilation",
+		"internal/reconciliation/lifecycle", "internal/reconciliation/operationstore",
+	}
 }
 
 func permitsDependency(consumer, provider packageRole) bool {
@@ -169,6 +222,17 @@ func TestPackageDependencyDirection(t *testing.T) {
 			}
 			if !permitsDependency(consumer, provider) {
 				t.Errorf("%s (%s) depends on %s (%s)", source.path, consumer, providerPath, provider)
+				continue
+			}
+			if consumer == applicationRole && provider == applicationRole && source.owner != providerPath {
+				allowed, declared := applicationDependencies()[source.owner]
+				if !declared {
+					t.Errorf("%s consumes another application package but declares no dependency set", source.owner)
+					continue
+				}
+				if !slices.Contains(allowed, providerPath) {
+					t.Errorf("%s consumes %s without declaring why in applicationDependencies", source.path, providerPath)
+				}
 			}
 		}
 	}

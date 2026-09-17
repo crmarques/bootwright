@@ -276,42 +276,44 @@ func (r *recorder) execution(t *testing.T, block reconciliation.Block, state pre
 	}
 	return lifecycle.Execution{
 		Operation: "op-0000000000000000000000000000", Attempt: 1, Block: block, Area: &fakeArea{sealed: true},
-		Setup: prerequisites.StorageView{
-			Exists: true, Initialized: true, State: state,
-			OpenBundle: func(_ context.Context, id string) (prerequisites.BundleArea, error) {
-				if !r.published[id] {
-					return nil, nil
+		Stage: &lifecycle.ControllerStage{
+			Setup: prerequisites.StorageView{
+				Exists: true, Initialized: true, State: state,
+				OpenBundle: func(_ context.Context, id string) (prerequisites.BundleArea, error) {
+					if !r.published[id] {
+						return nil, nil
+					}
+					return r.area, nil
+				},
+			},
+			ClientArea: func(_ context.Context, id string) (prerequisites.BundleArea, error) {
+				r.areas = append(r.areas, id)
+				if r.openErr != nil {
+					return nil, r.openErr
 				}
+				r.published[id] = true
 				return r.area, nil
 			},
+			SealClientArea: func(_ context.Context, id string) error {
+				if r.sealErr != nil {
+					return r.sealErr
+				}
+				r.sealed = append(r.sealed, id)
+				return nil
+			},
+			RetainDependencies: func(_ context.Context, definition *prerequisites.Definition, sources []prerequisites.DependencySource) error {
+				r.retained = append(r.retained, sources...)
+				if definition != nil {
+					r.resolved++
+				}
+				return nil
+			},
+			Prepare: func(context.Context, prerequisites.NativePreparation) error {
+				r.prepared++
+				return nil
+			},
+			ReleaseFoundation: func() error { r.released++; return nil },
 		},
-		ClientArea: func(_ context.Context, id string) (prerequisites.BundleArea, error) {
-			r.areas = append(r.areas, id)
-			if r.openErr != nil {
-				return nil, r.openErr
-			}
-			r.published[id] = true
-			return r.area, nil
-		},
-		SealClientArea: func(_ context.Context, id string) error {
-			if r.sealErr != nil {
-				return r.sealErr
-			}
-			r.sealed = append(r.sealed, id)
-			return nil
-		},
-		RetainDependencies: func(_ context.Context, definition *prerequisites.Definition, sources []prerequisites.DependencySource) error {
-			r.retained = append(r.retained, sources...)
-			if definition != nil {
-				r.resolved++
-			}
-			return nil
-		},
-		Prepare: func(context.Context, prerequisites.NativePreparation) error {
-			r.prepared++
-			return nil
-		},
-		ReleaseFoundation: func() error { r.released++; return nil },
 		Progress: func(_ context.Context, group, status string) {
 			r.groups = append(r.groups, group+"="+status)
 		},
@@ -560,7 +562,7 @@ func TestApplyRefusesAnUnpreparedHost(t *testing.T) {
 	block := planBlock(t, capability, state, reconciliation.Apply)
 	recorder := newRecorder(&fakeArea{})
 	execution := recorder.execution(t, block, prerequisites.HostState{})
-	execution.Setup.Initialized = false
+	execution.Stage.Setup.Initialized = false
 	_, err := capability.Apply(context.Background(), execution)
 	if firstCode(err) != "controller.identity" {
 		t.Fatalf("code = %q (%v)", firstCode(err), err)

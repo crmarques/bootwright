@@ -82,8 +82,8 @@ func installExecution(t *testing.T, catalog api.Catalog, digest string) (lifecyc
 			BlockDefinition: reconciliation.BlockDefinition{ID: InstallBlockID("sno"), Request: canonical},
 			RequestDigest:   digest,
 		},
-		Material: material,
-		Setup:    retainedClients(),
+		Material:   material,
+		LocateTool: locatorOver(retainedClients()),
 	}, requests[0]
 }
 
@@ -215,10 +215,10 @@ func TestAnInstallationCrossesTheAdapterWithItsClientsAndCredentials(t *testing.
 // a node is booted, and names the command that publishes them.
 func TestAbsentClientsRefuseBeforeBooting(t *testing.T) {
 	execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
-	execution.Setup = prerequisites.StorageView{
+	execution.LocateTool = locatorOver(prerequisites.StorageView{
 		State:      prerequisites.HostState{},
 		OpenBundle: func(context.Context, string) (prerequisites.BundleArea, error) { return nil, nil },
-	}
+	})
 	runner := &fakeRunner{}
 	if _, err := NewInstall(runner).Apply(context.Background(), execution); err == nil {
 		t.Fatal("an installation ran without the clients its release names")

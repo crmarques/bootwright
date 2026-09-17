@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	controllerscope "github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -232,7 +233,7 @@ func (c MediaCapability) run(ctx context.Context, execution lifecycle.Execution,
 	values := map[string]string{}
 	var materials []lifecycle.MaterialFile
 	if operation == "apply" {
-		installer, err := ToolPath(ctx, execution.Setup, request.Tool, installerTool)
+		installer, err := ToolPath(ctx, execution, request.Tool, installerTool)
 		if err != nil {
 			return lifecycle.RunResult{}, err
 		}
@@ -274,59 +275,18 @@ func (c MediaCapability) run(ctx context.Context, execution lifecycle.Execution,
 }
 
 // ToolPath is the exact executable the controller stage published for one
-// declared release, located in the sealed client area that stage sealed. A
-// search path is never authority: an installer is the release pin, so the one
-// this block runs is the one this context's own graph selected, and the client
-// that reads the installed cluster back comes from the same closure.
-func ToolPath(ctx context.Context, setup prerequisites.StorageView, tool Tool, executable string) (string, error) {
-	if setup.OpenBundle == nil {
+// declared release. A search path is never authority: an installer is the
+// release pin, so the one this block runs is the one this context's own graph
+// selected, and the client that reads the installed cluster back comes from
+// the same closure.
+func ToolPath(ctx context.Context, execution lifecycle.Execution, tool Tool, executable string) (string, error) {
+	if execution.LocateTool == nil {
 		return "", refusal("controller.state", "the retained controller areas are unavailable",
 			"run bootwright setup, then apply --stage controller")
 	}
-	for _, definition := range setup.State.RetainedDefinitions {
-		member, found := publishedTool(definition.Tools, tool, executable)
-		if !found {
-			continue
-		}
-		area, err := setup.OpenBundle(ctx, prerequisites.ToolsDigest(definition.Tools))
-		if err != nil || area == nil {
-			continue
-		}
-		entries, err := area.Entries(ctx)
-		if err != nil {
-			continue
-		}
-		if !slices.ContainsFunc(entries, func(entry prerequisites.BundleEntry) bool {
-			return entry.Path == member && !entry.Directory
-		}) {
-			continue
-		}
-		location, err := area.Location(ctx)
-		if err != nil {
-			continue
-		}
-		return location.Path + "/" + member, nil
-	}
-	return "", refusal("controller.state",
-		"the "+executable+" of release "+tool.Version+" is not installed on this controller",
-		"run bootwright apply --stage controller")
-}
-
-// publishedTool is the file one retained closure publishes for exactly this
-// client kind, compatibility and version. A closure publishes more than one
-// executable, so the member is named rather than inferred from the kind.
-func publishedTool(tools []prerequisites.ToolDefinition, tool Tool, executable string) (string, bool) {
-	for _, definition := range tools {
-		if definition.Kind != tool.Kind || definition.Compatibility != tool.Compatibility || definition.Version != tool.Version {
-			continue
-		}
-		for _, file := range definition.Files {
-			if strings.HasSuffix(file.Path, "/"+executable) {
-				return file.Path, true
-			}
-		}
-	}
-	return "", false
+	return execution.LocateTool(ctx, controllerscope.InstalledTool{
+		Kind: tool.Kind, Compatibility: tool.Compatibility, Version: tool.Version, Executable: executable,
+	})
 }
 
 // publicHalf reads the public half of one bound key pair. A private half never

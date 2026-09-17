@@ -1887,28 +1887,48 @@ func TestControllerBlockReceivesItsPublicationBoundary(t *testing.T) {
 	if execution.Attempt != 1 || execution.Resolution != 0 {
 		t.Fatalf("attempt identity = %d/%d", execution.Attempt, execution.Resolution)
 	}
-	if !execution.Setup.Exists || execution.Setup.State.Receipt.Status != "complete" {
-		t.Fatalf("setup evidence = %+v", execution.Setup.State.Receipt)
+	if execution.Stage == nil {
+		t.Fatal("the controller block received no publication boundary")
+	}
+	if !execution.Stage.Setup.Exists || execution.Stage.Setup.State.Receipt.Status != "complete" {
+		t.Fatalf("setup evidence = %+v", execution.Stage.Setup.State.Receipt)
 	}
 	for name, supplied := range map[string]bool{
-		"ClientArea":         execution.ClientArea != nil,
-		"SealClientArea":     execution.SealClientArea != nil,
-		"RetainDependencies": execution.RetainDependencies != nil,
-		"Prepare":            execution.Prepare != nil,
-		"ReleaseFoundation":  execution.ReleaseFoundation != nil,
+		"ClientArea":         execution.Stage.ClientArea != nil,
+		"SealClientArea":     execution.Stage.SealClientArea != nil,
+		"RetainDependencies": execution.Stage.RetainDependencies != nil,
+		"Prepare":            execution.Stage.Prepare != nil,
+		"ReleaseFoundation":  execution.Stage.ReleaseFoundation != nil,
 	} {
 		if !supplied {
 			t.Fatalf("the controller block received no %s capability", name)
 		}
 	}
-	if err := execution.RetainDependencies(context.Background(), nil, nil); err != nil {
+	if err := execution.Stage.RetainDependencies(context.Background(), nil, nil); err != nil {
 		t.Fatalf("retention refused: %v", err)
 	}
-	if _, err := execution.ClientArea(context.Background(), strings.Repeat("d", 64)); err != nil {
+	if _, err := execution.Stage.ClientArea(context.Background(), strings.Repeat("d", 64)); err != nil {
 		t.Fatalf("client area refused: %v", err)
 	}
-	if err := execution.SealClientArea(context.Background(), strings.Repeat("d", 64)); err != nil {
+	if err := execution.Stage.SealClientArea(context.Background(), strings.Repeat("d", 64)); err != nil {
 		t.Fatalf("sealing refused: %v", err)
+	}
+}
+
+// Every block outside the controller stage receives no publication boundary at
+// all, so one capability's specifics cannot reach another's attempt.
+func TestOnlyTheControllerBlockReceivesThePublicationBoundary(t *testing.T) {
+	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
+		stagedDefinition("artifact-server-lab", reconciliation.StageInfraComponents),
+	})
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.capability.executions) != 1 {
+		t.Fatalf("executions = %d", len(h.capability.executions))
+	}
+	if h.capability.executions[0].Stage != nil {
+		t.Fatal("a block outside the controller stage reached that stage's boundary")
 	}
 }
 
@@ -1933,7 +1953,7 @@ func TestObservationCannotAuthorizeAHostEffect(t *testing.T) {
 	if observation.Resolution == 0 {
 		t.Fatalf("the observation carries no resolution identity: %+v", observation)
 	}
-	if err := observation.Prepare(context.Background(), prerequisites.NativePreparation{}); err == nil {
+	if err := observation.Stage.Prepare(context.Background(), prerequisites.NativePreparation{}); err == nil {
 		t.Fatal("an observation published a before-state")
 	}
 }

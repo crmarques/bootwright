@@ -3,6 +3,7 @@ package managedservice
 import (
 	"context"
 	"encoding/json"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 	"strings"
 	"testing"
@@ -73,7 +74,7 @@ func TestRequestsDeriveTheFrozenLocalPlacement(t *testing.T) {
 		t.Fatalf("requests = %+v (%v)", requests, err)
 	}
 	request := requests[0]
-	if request.Placement.Connection != lifecycle.ConnectionLocal || request.Placement.Machine != "controller" {
+	if request.Placement.Connection != machineref.ConnectionLocal || request.Placement.Machine != "controller" {
 		t.Fatalf("placement = %+v", request.Placement)
 	}
 	if request.Unit != "bootwright-"+testContext+"-proxy-lab-proxy" {

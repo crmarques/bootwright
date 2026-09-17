@@ -253,7 +253,7 @@ func (c InstallCapability) run(ctx context.Context, execution lifecycle.Executio
 		installerTool: request.Tool,
 		"oc":          {Compatibility: request.Release.Distribution, Kind: clientTool, Version: request.Release.Version},
 	} {
-		path, err := ToolPath(ctx, execution.Setup, tool, executable)
+		path, err := ToolPath(ctx, execution, tool, executable)
 		if err != nil {
 			return lifecycle.RunResult{}, err
 		}

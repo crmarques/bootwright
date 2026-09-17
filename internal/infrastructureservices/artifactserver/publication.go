@@ -2,7 +2,7 @@ package artifactserver
 
 import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 )
 
 // servedRoot is the directory this server serves, beneath its own content
@@ -99,7 +99,7 @@ func EndpointURL(catalog api.Catalog, server api.Object, endpointRef, identity s
 		return "", refusal("api.reference", "the artifact server's placement Machine is not in the selected graph",
 			"declare it or correct machineRef on "+server.Identity())
 	}
-	address, err := lifecycle.MachineAddress(machine, endpoint.Get("addressRef").Text())
+	address, err := machineref.ResolveAddress(machine, endpoint.Get("addressRef").Text())
 	if err != nil {
 		return "", err
 	}
@@ -112,13 +112,13 @@ func EndpointURL(catalog api.Catalog, server api.Object, endpointRef, identity s
 
 // PlacementFor is the arm a consumer's publication runs through: the Machine
 // this server is placed on, reached the way managed services reach it.
-func PlacementFor(catalog api.Catalog, server api.Object, controllerMachine string) (lifecycle.Placement, error) {
+func PlacementFor(catalog api.Catalog, server api.Object, controllerMachine string) (machineref.Placement, error) {
 	machine, ok := catalog.Find(api.Machine, server.Spec().Get("machineRef").Text())
 	if !ok {
-		return lifecycle.Placement{}, refusal("api.reference", "the artifact server's placement Machine is not in the selected graph",
+		return machineref.Placement{}, refusal("api.reference", "the artifact server's placement Machine is not in the selected graph",
 			"declare it or correct machineRef on "+server.Identity())
 	}
-	return lifecycle.PlacementFor(machine, controllerMachine)
+	return machineref.PlacementFor(machine, controllerMachine)
 }
 
 func named(values api.Value, name string) (api.Value, bool) {

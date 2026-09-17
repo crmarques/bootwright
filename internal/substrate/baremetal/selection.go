@@ -1,12 +1,12 @@
 package baremetal
 
 import (
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -39,7 +39,7 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	if err != nil {
 		return Request{}, err
 	}
-	placement, err := lifecycle.PlacementFor(target.PlacementMachine, controllerMachine)
+	placement, err := machineref.PlacementFor(target.PlacementMachine, controllerMachine)
 	if err != nil {
 		return Request{}, err
 	}

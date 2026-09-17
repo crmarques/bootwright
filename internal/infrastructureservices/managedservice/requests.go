@@ -3,10 +3,10 @@ package managedservice
 import (
 	"bytes"
 	"encoding/json"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 
 	"github.com/crmarques/bootwright/internal/machine"
-	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
@@ -25,22 +25,22 @@ type Record struct {
 // it carries no secret value. The kind-specific arrays are omitted when the
 // kind does not use them, so a request means exactly one thing.
 type Request struct {
-	BindAddress  string              `json:"bindAddress"`
-	Clients      []string            `json:"clients,omitempty"`
-	ContentRoot  string              `json:"contentRoot"`
-	Egress       Egress              `json:"egress"`
-	Endpoints    []Endpoint          `json:"endpoints"`
-	Forwarders   []string            `json:"forwarders,omitempty"`
-	Identity     Identity            `json:"identity"`
-	Image        string              `json:"image"`
-	IngressHosts []string            `json:"ingressHosts,omitempty"`
-	Kind         string              `json:"kind"`
-	Placement    lifecycle.Placement `json:"placement"`
-	Port         int                 `json:"port"`
-	Records      []Record            `json:"records,omitempty"`
-	Sources      []string            `json:"sources,omitempty"`
-	Unit         string              `json:"unit"`
-	Version      string              `json:"version"`
+	BindAddress  string               `json:"bindAddress"`
+	Clients      []string             `json:"clients,omitempty"`
+	ContentRoot  string               `json:"contentRoot"`
+	Egress       Egress               `json:"egress"`
+	Endpoints    []Endpoint           `json:"endpoints"`
+	Forwarders   []string             `json:"forwarders,omitempty"`
+	Identity     Identity             `json:"identity"`
+	Image        string               `json:"image"`
+	IngressHosts []string             `json:"ingressHosts,omitempty"`
+	Kind         string               `json:"kind"`
+	Placement    machineref.Placement `json:"placement"`
+	Port         int                  `json:"port"`
+	Records      []Record             `json:"records,omitempty"`
+	Sources      []string             `json:"sources,omitempty"`
+	Unit         string               `json:"unit"`
+	Version      string               `json:"version"`
 }
 
 // Canonical encodes the request exactly as the plan digest and the adapter

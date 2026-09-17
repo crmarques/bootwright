@@ -206,7 +206,7 @@ func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (l
 	if c.tools == nil || c.native == nil || c.inspector == nil || c.installer == nil {
 		return failed, refuse("controller.unsupported", "controller prerequisite installation is not configured", "use a compatible executable")
 	}
-	if execution.ClientArea == nil || execution.SealClientArea == nil || execution.RetainDependencies == nil || execution.Prepare == nil || execution.ReleaseFoundation == nil {
+	if execution.Stage == nil || execution.Stage.ClientArea == nil || execution.Stage.SealClientArea == nil || execution.Stage.RetainDependencies == nil || execution.Stage.Prepare == nil || execution.Stage.ReleaseFoundation == nil {
 		return failed, refuse("lifecycle.state", "the controller prerequisites block has no publication capability", "")
 	}
 	request, err := DecodeRequest(execution.Block.Request)
@@ -260,7 +260,7 @@ func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (l
 	// Intent precedes acquisition: the exact identities this attempt will
 	// acquire are durable before a single byte is downloaded, so a later
 	// inspection can always name the closure an interrupted attempt chose.
-	if err := execution.RetainDependencies(ctx, transaction, install.Sources); err != nil {
+	if err := execution.Stage.RetainDependencies(ctx, transaction, install.Sources); err != nil {
 		return failed, err
 	}
 	return c.publish(ctx, execution, request, install, tools, native)
@@ -272,7 +272,7 @@ func (c Capability) publish(ctx context.Context, execution lifecycle.Execution, 
 	failed := lifecycle.Result{Outcome: reconciliation.OutcomeFailed}
 	unknown := lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}
 	area := prerequisites.ToolsDigest(tools)
-	target, err := execution.ClientArea(ctx, area)
+	target, err := execution.Stage.ClientArea(ctx, area)
 	if err != nil {
 		return failed, err
 	}
@@ -287,8 +287,8 @@ func (c Capability) publish(ctx context.Context, execution lifecycle.Execution, 
 		Definition: install,
 		Egress:     request.Egress,
 		Launch:     execution.Launch,
-		Release:    execution.ReleaseFoundation,
-		Publish:    execution.Prepare,
+		Release:    execution.Stage.ReleaseFoundation,
+		Publish:    execution.Stage.Prepare,
 		Progress: func(event prerequisites.ProgressEvent) {
 			report(ctx, execution, "publish-clients", event.Status)
 		},
@@ -320,7 +320,7 @@ func (c Capability) publish(ctx context.Context, execution lifecycle.Execution, 
 	if !present {
 		return unknown, refuse("controller.unknown", "the published target clients could not be verified", "repeat the operation to resolve it from live evidence")
 	}
-	if err := execution.SealClientArea(ctx, area); err != nil {
+	if err := execution.Stage.SealClientArea(ctx, area); err != nil {
 		return unknown, err
 	}
 	report(ctx, execution, "verify-clients", "ok")
@@ -349,7 +349,7 @@ func (c Capability) retained(execution lifecycle.Execution, request Request) ([]
 	if len(request.Tools) == 0 {
 		return []prerequisites.ToolDefinition{}, true, nil
 	}
-	return c.tools.Select(request.ToolRequests(), execution.Setup.State.RetainedSources)
+	return c.tools.Select(request.ToolRequests(), execution.Stage.Setup.State.RetainedSources)
 }
 
 // nativeRoots reports each selected native client root that is installed, by
@@ -373,10 +373,10 @@ func (c Capability) published(ctx context.Context, execution lifecycle.Execution
 	if len(tools) == 0 {
 		return true, nil
 	}
-	if execution.Setup.OpenBundle == nil {
+	if execution.Stage.Setup.OpenBundle == nil {
 		return false, refuse("controller.state", "the retained controller areas are unavailable", "run bootwright setup")
 	}
-	area, err := execution.Setup.OpenBundle(ctx, prerequisites.ToolsDigest(tools))
+	area, err := execution.Stage.Setup.OpenBundle(ctx, prerequisites.ToolsDigest(tools))
 	if err != nil || area == nil {
 		return false, err
 	}
@@ -404,7 +404,7 @@ func retainedNative(execution lifecycle.Execution, platform prerequisites.Platfo
 	if !request.installsNative() {
 		return nil
 	}
-	retained := execution.Setup.State.RetainedDefinitions
+	retained := execution.Stage.Setup.State.RetainedDefinitions
 	for index := len(retained) - 1; index >= 0; index-- {
 		value := retained[index]
 		if value.Native == nil || !value.NativeRequirements.LibvirtClient || value.Platform != platform ||
@@ -423,7 +423,7 @@ func retainedNative(execution lifecycle.Execution, platform prerequisites.Platfo
 // foundation is the host resolution setup froze. This stage extends it; it
 // never resolves the Python, Ansible or baseline native closure again.
 func foundation(execution lifecycle.Execution) (prerequisites.Definition, error) {
-	view := execution.Setup
+	view := execution.Stage.Setup
 	if !view.Exists || !view.Initialized {
 		return prerequisites.Definition{}, refuse("controller.identity", "this host has no completed controller setup", "run bootwright setup")
 	}

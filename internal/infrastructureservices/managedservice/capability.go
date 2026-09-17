@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 	"strings"
 
@@ -136,7 +137,7 @@ func (c Capability) requestFor(catalog api.Catalog, object api.Object, controlle
 	if !found {
 		return Request{}, Refusal("api.reference", "the managed service's placement Machine is not in the selected graph", "declare "+spec.Get("machineRef").Text()+" or change the reference")
 	}
-	placement, err := lifecycle.PlacementFor(machine, controllerMachine)
+	placement, err := machineref.PlacementFor(machine, controllerMachine)
 	if err != nil {
 		return Request{}, err
 	}

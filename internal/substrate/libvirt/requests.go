@@ -3,9 +3,9 @@ package libvirt
 import (
 	"bytes"
 	"encoding/json"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 
-	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -31,12 +31,12 @@ type Network struct {
 // closure it runs, the networks its attachments declare and the pool its
 // emulated controllers stage media in. It carries no secret value.
 type HostRequest struct {
-	Identity  Identity            `json:"identity"`
-	Networks  []Network           `json:"networks"`
-	Packages  []string            `json:"packages"`
-	Placement lifecycle.Placement `json:"placement"`
-	PoolName  string              `json:"poolName"`
-	PoolPath  string              `json:"poolPath"`
+	Identity  Identity             `json:"identity"`
+	Networks  []Network            `json:"networks"`
+	Packages  []string             `json:"packages"`
+	Placement machineref.Placement `json:"placement"`
+	PoolName  string               `json:"poolName"`
+	PoolPath  string               `json:"poolPath"`
 	// Provisioned is true when this block installs the closure itself through
 	// the host's own package manager. The controller stage installs only the
 	// libvirt client a provider selects, so the daemon, its emulator and the
@@ -86,21 +86,21 @@ type Controller struct {
 // management controller. It names the credential declaration its controller
 // answers with, never any material.
 type MachineRequest struct {
-	Controller Controller          `json:"controller"`
-	Directory  string              `json:"directory"`
-	Disks      []Disk              `json:"disks"`
-	Domain     string              `json:"domain"`
-	Identity   Identity            `json:"identity"`
-	Interfaces []Interface         `json:"interfaces"`
-	MemoryMiB  int                 `json:"memoryMiB"`
-	Placement  lifecycle.Placement `json:"placement"`
-	PoolName   string              `json:"poolName"`
-	PoolPath   string              `json:"poolPath"`
-	TPM        bool                `json:"tpm"`
-	URI        string              `json:"uri"`
-	UUID       string              `json:"uuid"`
-	VCPU       int                 `json:"vcpu"`
-	Version    string              `json:"version"`
+	Controller Controller           `json:"controller"`
+	Directory  string               `json:"directory"`
+	Disks      []Disk               `json:"disks"`
+	Domain     string               `json:"domain"`
+	Identity   Identity             `json:"identity"`
+	Interfaces []Interface          `json:"interfaces"`
+	MemoryMiB  int                  `json:"memoryMiB"`
+	Placement  machineref.Placement `json:"placement"`
+	PoolName   string               `json:"poolName"`
+	PoolPath   string               `json:"poolPath"`
+	TPM        bool                 `json:"tpm"`
+	URI        string               `json:"uri"`
+	UUID       string               `json:"uuid"`
+	VCPU       int                  `json:"vcpu"`
+	Version    string               `json:"version"`
 }
 
 func (r HostRequest) Canonical() ([]byte, error)    { return canonical(r, "provider host") }

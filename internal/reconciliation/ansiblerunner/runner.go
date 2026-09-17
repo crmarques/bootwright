@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"io"
 	"slices"
 	"strings"
@@ -110,7 +111,7 @@ func readProtocol(reader io.Reader, messages chan<- protocolMessage) error {
 
 // inventory targets exactly one host. The SSH arm pins host-key checking to
 // the bound entry and forbids every ambient identity and password path.
-func inventory(placement lifecycle.Placement, interpreter string, paths map[string]string) map[string]any {
+func inventory(placement machineref.Placement, interpreter string, paths map[string]string) map[string]any {
 	host := map[string]any{"ansible_python_interpreter": interpreter}
 	if placement.Local() {
 		host["ansible_connection"] = "local"

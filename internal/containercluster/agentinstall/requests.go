@@ -3,9 +3,8 @@ package agentinstall
 import (
 	"bytes"
 	"encoding/json"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
-
-	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 // Identity names the block, context and cluster one request belongs to.
@@ -85,34 +84,34 @@ type Endpoint struct {
 // secret value: the pull secret, the cluster key and each trust bundle are
 // named as declarations and reach the adapter at execution.
 type MediaRequest struct {
-	AgentConfig     map[string]any      `json:"agentConfig"`
-	Identity        Identity            `json:"identity"`
-	Image           Publication         `json:"image"`
-	InstallConfig   map[string]any      `json:"installConfig"`
-	Placement       lifecycle.Placement `json:"placement"`
-	PullSecretRef   string              `json:"pullSecretRef"`
-	Release         Release             `json:"release"`
-	SSHKeyRef       string              `json:"sshKeyRef"`
-	Tool            Tool                `json:"tool"`
-	TrustBundleRefs []string            `json:"trustBundleRefs,omitempty"`
-	Version         string              `json:"version"`
-	WorkRoot        string              `json:"workRoot"`
+	AgentConfig     map[string]any       `json:"agentConfig"`
+	Identity        Identity             `json:"identity"`
+	Image           Publication          `json:"image"`
+	InstallConfig   map[string]any       `json:"installConfig"`
+	Placement       machineref.Placement `json:"placement"`
+	PullSecretRef   string               `json:"pullSecretRef"`
+	Release         Release              `json:"release"`
+	SSHKeyRef       string               `json:"sshKeyRef"`
+	Tool            Tool                 `json:"tool"`
+	TrustBundleRefs []string             `json:"trustBundleRefs,omitempty"`
+	Version         string               `json:"version"`
+	WorkRoot        string               `json:"workRoot"`
 }
 
 // InstallRequest is the complete frozen intent for installing one cluster from
 // that image: the nodes to boot, the names the controller must resolve first,
 // and the budgets each wait is bounded by.
 type InstallRequest struct {
-	Budgets   Budgets             `json:"budgets"`
-	Endpoints []Endpoint          `json:"endpoints"`
-	Identity  Identity            `json:"identity"`
-	Image     Publication         `json:"image"`
-	Nodes     []Node              `json:"nodes"`
-	Placement lifecycle.Placement `json:"placement"`
-	Release   Release             `json:"release"`
-	Tool      Tool                `json:"tool"`
-	Version   string              `json:"version"`
-	WorkRoot  string              `json:"workRoot"`
+	Budgets   Budgets              `json:"budgets"`
+	Endpoints []Endpoint           `json:"endpoints"`
+	Identity  Identity             `json:"identity"`
+	Image     Publication          `json:"image"`
+	Nodes     []Node               `json:"nodes"`
+	Placement machineref.Placement `json:"placement"`
+	Release   Release              `json:"release"`
+	Tool      Tool                 `json:"tool"`
+	Version   string               `json:"version"`
+	WorkRoot  string               `json:"workRoot"`
 }
 
 // Budgets bound each phase by wall clock. The installer gives up on its own

@@ -216,7 +216,7 @@ where a behavior lives:
 
 | Package | Owns |
 | --- | --- |
-| `internal/<context>` | Pure domain values, invariants and the kind admission rules (`Normalize`, `Validate`, `ValidateAuthored`, `ValidatePartial`) that the compiler composes, plus shared values such as `machine.SSHOptions` and `secrets.Material`. No ports and no I/O. |
+| `internal/<context>` | Pure domain values, invariants and the kind admission rules (`Normalize`, `Validate`, `ValidateAuthored`, `ValidatePartial`) that the compiler composes, plus shared values such as `machine.SSHOptions`, `machine.Placement` and `secrets.Material`. No ports and no I/O. |
 | `internal/<context>/<capability>` | One application service package per command family. `service.go` declares `Service`, its constructor and one exported method per command; `requests.go` declares the request and result types the CLI consumes; `contracts.go` declares every interface the package consumes, and no other file declares an exported interface; remaining files hold private use-case logic. |
 | `internal/<context>/<implementation>` | A driven adapter named by what it binds: `contextfs`, `selectionfs`, `inputfs`, `yamlstream`, `encoding`, `localkeyring`, `material`, `hostlinux`, `bundlelocal`, `ansiblelocal`, `nativelocal`, `privilege`, `ansiblerunner`, `medialocal`, `sshlocal`. It implements another package's contract and never calls another adapter. |
 | `internal/diagnostics` | The diagnostic and typed-failure vocabulary every layer emits; it imports nothing first-party. |
@@ -361,9 +361,10 @@ installation belongs to
 `managedos/medialocal` adapter, container-cluster installation to one package
 per installation method, `containercluster/agentinstall` beside the
 `containercluster/installation` render service, and the one Ansible runner every lifecycle
-capability crosses to `reconciliation/ansiblerunner`, whose request, placement
-and material values `reconciliation/lifecycle` owns; each is created with its
-first authorized behavior.
+capability crosses to `reconciliation/ansiblerunner`, whose request and material
+values `reconciliation/lifecycle` owns while the Machine context root owns the
+placement and address every run resolves; each is created with its first
+authorized behavior.
 
 ### Domain communication graph
 
@@ -701,6 +702,14 @@ area and the reservation record are Workspace primitives, and Reconciliation
 alone decides what they contain. Secret custody, controller host evidence and
 the private execution runtime are consumed through their owning contexts'
 published capabilities rather than reimplemented here.
+
+One attempt's `Execution` carries only what every capability consumes. Work
+belonging to a single stage travels in its own value, present on the blocks the
+plan froze into that stage and absent everywhere else, so one capability's
+specifics never widen the contract the others receive. The controller stage's
+publication boundary is such a value. Which blocks receive it follows the stage
+the plan froze, which is declared domain vocabulary; no application policy reads
+an implementation identity to decide.
 
 ### Native projection and publication
 

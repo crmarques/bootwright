@@ -2,6 +2,7 @@ package libvirt
 
 import (
 	"context"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -430,7 +431,7 @@ func (c MachineCapability) run(ctx context.Context, execution lifecycle.Executio
 // invocation is the one shape every substrate effect crosses the adapter
 // boundary in. Bound material reaches the adapter only as operation-scoped
 // files it removes.
-func invocation(execution lifecycle.Execution, implementation, variable, operation string, canonical []byte, placement lifecycle.Placement, materials []lifecycle.MaterialFile, values map[string]string) lifecycle.RunRequest {
+func invocation(execution lifecycle.Execution, implementation, variable, operation string, canonical []byte, placement machineref.Placement, materials []lifecycle.MaterialFile, values map[string]string) lifecycle.RunRequest {
 	return lifecycle.RunRequest{
 		Implementation: implementation,
 		Operation:      operation,

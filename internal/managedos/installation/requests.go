@@ -3,9 +3,8 @@ package installation
 import (
 	"bytes"
 	"encoding/json"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
-
-	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 // Identity names the block, context and Machine one request belongs to.
@@ -99,14 +98,14 @@ type Request struct {
 	// FleetKeyRef names the Secret whose public half the installation
 	// authorizes for the product-owned account. Only that half ever leaves the
 	// binding, and it reaches the adapter at execution rather than in the plan.
-	FleetKeyRef string              `json:"fleetKeyRef"`
-	HostKeyPath string              `json:"hostKeyPath"`
-	Hostname    string              `json:"hostname"`
-	Identity    Identity            `json:"identity"`
-	Image       Publication         `json:"image"`
-	Kickstart   string              `json:"kickstart"`
-	MarkerPath  string              `json:"markerPath"`
-	Placement   lifecycle.Placement `json:"placement"`
+	FleetKeyRef string               `json:"fleetKeyRef"`
+	HostKeyPath string               `json:"hostKeyPath"`
+	Hostname    string               `json:"hostname"`
+	Identity    Identity             `json:"identity"`
+	Image       Publication          `json:"image"`
+	Kickstart   string               `json:"kickstart"`
+	MarkerPath  string               `json:"markerPath"`
+	Placement   machineref.Placement `json:"placement"`
 	// Private is the subtree this block owns for material only the installing
 	// machine may read. The attempt mints the unguessable final segment, so
 	// this names the parent it owns and never the path itself.

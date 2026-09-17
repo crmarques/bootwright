@@ -1,6 +1,7 @@
 package managedservice
 
 import (
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"net/netip"
 	"slices"
 	"strconv"
@@ -8,7 +9,6 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 // ContentRootPrefix is outside the Bootwright state root, so an owned service
@@ -64,7 +64,7 @@ func EndpointsFor(spec api.Value, machine api.Object) ([]Endpoint, error) {
 	items := spec.Get("endpoints").Items()
 	endpoints := make([]Endpoint, 0, len(items))
 	for _, item := range items {
-		address, err := lifecycle.MachineAddress(machine, item.Get("addressRef").Text())
+		address, err := machineref.ResolveAddress(machine, item.Get("addressRef").Text())
 		if err != nil {
 			return nil, err
 		}
@@ -208,7 +208,7 @@ func ServiceEndpoint(catalog api.Catalog, kind api.Kind, selection api.Value, id
 	if !found {
 		return "", "", Refusal("api.reference", "a service selection names no endpoint", "set endpointRef on the selection of "+identity)
 	}
-	address, err := lifecycle.MachineAddress(placement, entry.Get("addressRef").Text())
+	address, err := machineref.ResolveAddress(placement, entry.Get("addressRef").Text())
 	if err != nil {
 		return "", "", err
 	}

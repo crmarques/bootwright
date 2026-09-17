@@ -1,13 +1,13 @@
 package libvirt
 
 import (
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"net/netip"
 	"slices"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -139,7 +139,7 @@ func MachineRequests(catalog api.Catalog, controllerMachine, contextName string)
 	return requests, nil
 }
 
-func machineRequestFor(catalog api.Catalog, provider, machine api.Object, placement lifecycle.Placement, contextName string, port int) (MachineRequest, error) {
+func machineRequestFor(catalog api.Catalog, provider, machine api.Object, placement machineref.Placement, contextName string, port int) (MachineRequest, error) {
 	name := machine.Name()
 	if !substrate.SafeSegment(name) {
 		return MachineRequest{}, refusal("lifecycle.state", "the Machine name is not a safe host identifier", "rename "+machine.Identity())
@@ -248,13 +248,13 @@ func interfacesFor(catalog api.Catalog, provider, machine api.Object, contextNam
 
 // placementFor selects the arm this provider's effects run through: the
 // controller when it hosts the provider, otherwise that host's own SSH access.
-func placementFor(catalog api.Catalog, provider api.Object, controllerMachine string) (lifecycle.Placement, error) {
+func placementFor(catalog api.Catalog, provider api.Object, controllerMachine string) (machineref.Placement, error) {
 	reference := provider.Spec().Get("libvirt", "machineRef").Text()
 	host, found := catalog.Find(api.Machine, reference)
 	if !found {
-		return lifecycle.Placement{}, refusal("api.reference", "the provider's host Machine is not in the selected graph", "declare "+reference+" or change spec.libvirt.machineRef")
+		return machineref.Placement{}, refusal("api.reference", "the provider's host Machine is not in the selected graph", "declare "+reference+" or change spec.libvirt.machineRef")
 	}
-	return lifecycle.PlacementFor(host, controllerMachine)
+	return machineref.PlacementFor(host, controllerMachine)
 }
 
 func findNamed(values api.Value, key, name string) (api.Value, bool) {

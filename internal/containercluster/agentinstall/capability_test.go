@@ -80,8 +80,17 @@ func mediaExecution(t *testing.T, digest string) (lifecycle.Execution, MediaRequ
 				secrets.PublicKeyPart: []byte("ssh-ed25519 AAAAPUBLIC cluster\n"),
 			}),
 		},
-		Setup: retainedController(),
+		LocateTool: locatorOver(retainedController()),
 	}, request
+}
+
+// locatorOver is the tool locator composition binds over one host's retained
+// controller evidence, so a capability test exercises the production lookup
+// rather than a substitute for it.
+func locatorOver(view prerequisites.StorageView) func(context.Context, controllerscope.InstalledTool) (string, error) {
+	return func(ctx context.Context, tool controllerscope.InstalledTool) (string, error) {
+		return prerequisites.LocateInstalledTool(ctx, view, tool)
+	}
 }
 
 // retainedController is a host the controller stage has already prepared: it
@@ -230,10 +239,10 @@ func TestAnApplyCrossesTheAdapterWithItsInstallerAndBoundMaterial(t *testing.T) 
 // built, and names the command that publishes it.
 func TestAnAbsentInstallerRefusesBeforeBuilding(t *testing.T) {
 	execution, _ := mediaExecution(t, testDigest)
-	execution.Setup = prerequisites.StorageView{
+	execution.LocateTool = locatorOver(prerequisites.StorageView{
 		State:      prerequisites.HostState{},
 		OpenBundle: func(context.Context, string) (prerequisites.BundleArea, error) { return nil, nil },
-	}
+	})
 	runner := &fakeRunner{}
 	if _, err := NewMedia(runner).Apply(context.Background(), execution); err == nil {
 		t.Fatal("an apply ran without the installer its release names")

@@ -2,6 +2,7 @@ package ansiblerunner
 
 import (
 	"encoding/json"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 	"strings"
 	"testing"
@@ -15,7 +16,7 @@ func localRequest() lifecycle.RunRequest {
 		Implementation: "artifact-server-nginx-v1", Operation: "apply", Variable: "bootwright_artifact_server",
 		Digest:    strings.Repeat("d", 64),
 		Canonical: []byte(`{"unit":"bootwright-lab-artifacts-lab"}`),
-		Placement: lifecycle.Placement{Connection: "local", Machine: "controller"},
+		Placement: machineref.Placement{Connection: "local", Machine: "controller"},
 		Materials: []lifecycle.MaterialFile{
 			{Name: "tls.crt", Part: secrets.CertificatePart, Secret: "artifact-server-tls", Variable: "certificate"},
 			{Name: "tls.key", Part: secrets.PrivateKeyPart, Secret: "artifact-server-tls", Variable: "privateKey"},
@@ -26,7 +27,7 @@ func localRequest() lifecycle.RunRequest {
 
 func sshRequest() lifecycle.RunRequest {
 	request := localRequest()
-	request.Placement = lifecycle.Placement{
+	request.Placement = machineref.Placement{
 		Address: "192.0.2.9", Connection: "ssh", KnownHostsRef: "host-key",
 		Machine: "services", Port: 2222, PrivateKeyRef: "services-key",
 		SudoPasswordRef: "services-sudo", User: "operator",

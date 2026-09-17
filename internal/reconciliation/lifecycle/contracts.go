@@ -272,32 +272,35 @@ type Execution struct {
 	Bundle     prerequisites.BundleLocation
 	Area       prerequisites.BundleArea
 	Material   map[string]secrets.Material
-	// Setup is the retained controller evidence this host was prepared with. A
-	// block that extends those prerequisites reads the resolution and sources
-	// setup froze rather than resolving the host foundation again.
-	Setup prerequisites.StorageView
-	// ClientArea, SealClientArea and RetainDependencies are the controller
-	// stage's publication boundary: the shared area its closure is published
-	// into, its sealing, and the durable identities it records before any
-	// acquisition. Every other block leaves them untouched.
-	ClientArea         func(context.Context, string) (prerequisites.BundleArea, error)
-	SealClientArea     func(context.Context, string) error
-	RetainDependencies func(context.Context, *prerequisites.Definition, []prerequisites.DependencySource) error
-	// Prepare publishes the before-state this attempt observed, before it is
-	// permitted to change the host. A block with no host-wide effect never
-	// calls it.
-	Prepare func(context.Context, prerequisites.NativePreparation) error
-	// ReleaseFoundation hands the native package read lock this execution holds
-	// back, so a block whose own transaction needs the write lock can take it.
-	// It is valid once, and only before that transaction starts.
-	ReleaseFoundation func() error
-	Log               func(context.Context, operationstore.LogRecord) error
-	Progress          func(context.Context, string, string)
+	// LocateTool answers where the controller stage installed one executable,
+	// so a block runs the exact file that stage published for the release its
+	// own graph selected.
+	LocateTool func(context.Context, controller.InstalledTool) (string, error)
+	// Stage is the controller stage's own publication boundary and is present
+	// only on the block that extends this host's prerequisites. Every other
+	// capability receives nil and cannot reach it.
+	Stage    *ControllerStage
+	Log      func(context.Context, operationstore.LogRecord) error
+	Progress func(context.Context, string, string)
 	// Output retains what the adapter prints on its own standard output and
 	// error, for an operator to read when no structured event explains what a
 	// run did. An adapter hands it the process's streams and writes nothing
 	// itself; whoever opened it owns closing it.
 	Output prerequisites.RunOutput
+}
+
+// ControllerStage is what extending the host's prerequisites needs and nothing
+// else does: the evidence setup froze, the shared area a closure is published
+// into with its sealing, the durable identities recorded before any
+// acquisition, the before-state published ahead of any host change, and the
+// one handback of the native package read lock.
+type ControllerStage struct {
+	Setup              prerequisites.StorageView
+	ClientArea         func(context.Context, string) (prerequisites.BundleArea, error)
+	SealClientArea     func(context.Context, string) error
+	RetainDependencies func(context.Context, *prerequisites.Definition, []prerequisites.DependencySource) error
+	Prepare            func(context.Context, prerequisites.NativePreparation) error
+	ReleaseFoundation  func() error
 }
 
 type Result struct {

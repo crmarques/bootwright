@@ -1,6 +1,7 @@
 package prerequisites
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
@@ -119,4 +121,59 @@ func WithTools(base Definition, tools []ToolDefinition) (Definition, error) {
 		base.CatalogDigest = hex.EncodeToString(digest[:])
 	}
 	return base, nil
+}
+
+// LocateInstalledTool answers the absolute path of one executable a retained
+// controller closure published on this host. A search path is never authority:
+// a consumer runs the exact file the controller stage installed for the
+// release its own graph selected.
+func LocateInstalledTool(ctx context.Context, view StorageView, tool controller.InstalledTool) (string, error) {
+	if view.OpenBundle == nil {
+		return "", failure("controller.state", "the retained controller areas are unavailable",
+			"run bootwright setup, then apply --stage controller")
+	}
+	for _, definition := range view.State.RetainedDefinitions {
+		member, found := publishedMember(definition.Tools, tool)
+		if !found {
+			continue
+		}
+		area, err := view.OpenBundle(ctx, ToolsDigest(definition.Tools))
+		if err != nil || area == nil {
+			continue
+		}
+		entries, err := area.Entries(ctx)
+		if err != nil {
+			continue
+		}
+		if !slices.ContainsFunc(entries, func(entry BundleEntry) bool {
+			return entry.Path == member && !entry.Directory
+		}) {
+			continue
+		}
+		location, err := area.Location(ctx)
+		if err != nil {
+			continue
+		}
+		return location.Path + "/" + member, nil
+	}
+	return "", failure("controller.state",
+		"the "+tool.Executable+" of release "+tool.Version+" is not installed on this controller",
+		"run bootwright apply --stage controller")
+}
+
+// publishedMember is the file one retained closure publishes for exactly this
+// client kind, compatibility and version. A closure publishes more than one
+// executable, so the member is named rather than inferred from the kind.
+func publishedMember(tools []ToolDefinition, tool controller.InstalledTool) (string, bool) {
+	for _, definition := range tools {
+		if definition.Kind != tool.Kind || definition.Compatibility != tool.Compatibility || definition.Version != tool.Version {
+			continue
+		}
+		for _, file := range definition.Files {
+			if strings.HasSuffix(file.Path, "/"+tool.Executable) {
+				return file.Path, true
+			}
+		}
+	}
+	return "", false
 }

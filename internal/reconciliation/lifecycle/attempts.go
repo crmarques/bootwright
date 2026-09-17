@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -167,23 +168,36 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 		}
 	}()
 	err = s.guard.WithPython(ctx, area, requirement, func(launch prerequisites.PythonLaunch, release func() error) error {
+		// Only a block the plan froze into the controller stage receives that
+		// stage's publication boundary. The stage is declared domain
+		// vocabulary, so no implementation identity is read here.
+		var stage *ControllerStage
+		if block.Stage == reconciliation.StageController {
+			stage = &ControllerStage{
+				Setup:              view,
+				ClientArea:         tx.ClientArea,
+				SealClientArea:     tx.SealClientArea,
+				RetainDependencies: tx.RetainDependencies,
+				ReleaseFoundation:  release,
+				Prepare: func(inner context.Context, preparation prerequisites.NativePreparation) error {
+					if resolution != 0 {
+						return failure("lifecycle.state", "an observation may not authorize a host effect", "")
+					}
+					encoded, err := json.Marshal(preparation)
+					if err != nil {
+						return failure("lifecycle.state", "the attempt before-state cannot be canonically represented", "")
+					}
+					return store.RecordPreparation(inner, operation.ID, block.ID, attempt, encoded)
+				},
+			}
+		}
 		execution := Execution{
 			Operation: operation.ID, Attempt: attempt, Resolution: resolution, Block: block, Launch: launch, Bundle: location, Area: area,
-			Material: material, Setup: view,
-			ClientArea:         tx.ClientArea,
-			SealClientArea:     tx.SealClientArea,
-			RetainDependencies: tx.RetainDependencies,
-			ReleaseFoundation:  release,
-			Prepare: func(inner context.Context, preparation prerequisites.NativePreparation) error {
-				if resolution != 0 {
-					return failure("lifecycle.state", "an observation may not authorize a host effect", "")
-				}
-				encoded, err := json.Marshal(preparation)
-				if err != nil {
-					return failure("lifecycle.state", "the attempt before-state cannot be canonically represented", "")
-				}
-				return store.RecordPreparation(inner, operation.ID, block.ID, attempt, encoded)
+			Material: material,
+			LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
+				return prerequisites.LocateInstalledTool(inner, view, tool)
 			},
+			Stage: stage,
 			Log: func(inner context.Context, record operationstore.LogRecord) error {
 				return log.Append(inner, record)
 			},

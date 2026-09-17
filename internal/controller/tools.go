@@ -17,6 +17,16 @@ type ToolRequest struct {
 	Mirror        string `json:"mirror"`
 }
 
+// InstalledTool names one executable the controller stage published. A
+// consumer asks for it by this identity so it runs the exact file that stage
+// installed rather than whatever a search path offers.
+type InstalledTool struct {
+	Kind          string
+	Compatibility string
+	Version       string
+	Executable    string
+}
+
 // SelectTools consumes only the selected effective graph. Download mirrors
 // change acquisition, never target version or compatibility requirements.
 func SelectTools(catalog api.Catalog) ([]ToolRequest, error) {
