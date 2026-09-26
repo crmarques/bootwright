@@ -1,0 +1,13 @@
+{
+  "absent": false,
+  "cluster": "",
+  "identity": "4245f5e001d445663c189f04c0a614168ed3c05a522d38680d1aa1ca248d6049",
+  "media": [],
+  "missing": [
+    "master-0"
+  ],
+  "postcondition": false,
+  "powered": [],
+  "release": "",
+  "request": "1111111111111111111111111111111111111111111111111111111111111111"
+}

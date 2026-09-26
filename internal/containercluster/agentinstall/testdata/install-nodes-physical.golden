@@ -1,0 +1,55 @@
+{
+  "nodes": [
+    {
+      "address": "198.51.100.41",
+      "controller": {
+        "credentialsRef": "metal-bmc",
+        "endpoint": "https://metal-01-bmc.lab.example.test/redfish/v1/Systems/1",
+        "tlsVerify": true,
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": true,
+          "trust": "disable-verification"
+        }
+      },
+      "machine": "metal-01",
+      "name": "master-0",
+      "physical": true,
+      "substrate": "baremetal"
+    },
+    {
+      "address": "198.51.100.42",
+      "controller": {
+        "credentialsRef": "metal-bmc",
+        "endpoint": "https://metal-02-bmc.lab.example.test/redfish/v1/Systems/1",
+        "tlsVerify": true,
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": true,
+          "trust": "disable-verification"
+        }
+      },
+      "machine": "metal-02",
+      "name": "master-1",
+      "physical": true,
+      "substrate": "baremetal"
+    },
+    {
+      "address": "198.51.100.43",
+      "controller": {
+        "credentialsRef": "metal-bmc",
+        "endpoint": "https://metal-03-bmc.lab.example.test/redfish/v1/Systems/1",
+        "tlsVerify": true,
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": true,
+          "trust": "disable-verification"
+        }
+      },
+      "machine": "metal-03",
+      "name": "master-2",
+      "physical": true,
+      "substrate": "baremetal"
+    }
+  ]
+}
