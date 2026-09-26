@@ -72,8 +72,9 @@
     quiet: true
 
 # Every directory from the owned subtree down is 0711 and the image itself
-# 0600, so nothing is listable and the unguessable segment is the only way to
-# name what it contains.
+# 0640 root:root, so nothing is listable, the unguessable segment is the only
+# way to name what it contains, and only root and the serving worker's group
+# can read it.
 - name: Create the private subtree this block owns
   ansible.builtin.file:
     path: '{{ containercluster_media_agent_private }}'
@@ -130,12 +131,15 @@
   changed_when: true
   no_log: true
 
+# The server's workers run as the image's application user in group root
+# (infra_artifact_server_nginx/templates/nginx.conf.j2), so the group grants
+# them read and nothing is granted to any other account.
 - name: Keep the published image readable only by the serving process
   ansible.builtin.file:
     path: '{{ containercluster_media_agent_directory }}/agent.iso'
     owner: root
     group: root
-    mode: '0600'
+    mode: '0640'
   changed_when: false
   no_log: true
 
@@ -148,6 +152,52 @@
       - '{{ containercluster_media_agent_private | dirname | dirname | dirname }}'
       - '{{ containercluster_media_agent_private }}'
   changed_when: true
+
+# Publication is proved by the fetch a controller will make: through the
+# listener, verified against the serving certificate the server installed from
+# its bound material beneath its content root, and never through a proxy. One
+# byte proves the worker can open the image. The result carries the token, so
+# it is judged in a separate step that names only what failed, and before the
+# receipt, so a refused image is built again rather than replayed.
+- name: Fetch the first byte of the published image through the listener
+  ansible.builtin.uri:
+    url: >-
+      {{ bootwright_cluster_media_request.image.url }}/{{ containercluster_media_agent_token.stdout | trim }}/agent.iso
+    method: GET
+    headers:
+      Range: bytes=0-0
+    ca_path: '{{ containercluster_media_agent_private | dirname | dirname | dirname | dirname }}/tls/server.crt'
+    validate_certs: true
+    use_proxy: false
+    follow_redirects: none
+    status_code: [200, 206]
+    timeout: 30
+  register: containercluster_media_agent_probe
+  failed_when: false
+  changed_when: false
+  no_log: true
+
+- name: Refuse a published image the listener does not serve
+  ansible.builtin.fail:
+    msg: >-
+      the published agent image could not be fetched through its artifact
+      server listener, so no node could boot from it:
+      {{ 'the listener answered 403, so the worker it serves as cannot read the image'
+         if containercluster_media_agent_probe_status == 403 else
+         'the listener answered 404, so the worker it serves as finds no image at the path this attempt published'
+         if containercluster_media_agent_probe_status == 404 else
+         ('its certificate did not verify against the serving certificate the server installed: '
+          ~ containercluster_media_agent_probe_cause)
+         if containercluster_media_agent_probe_cause is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed') else
+         ('the request failed before any status line: ' ~ containercluster_media_agent_probe_cause)
+         if containercluster_media_agent_probe_status == -1 else
+         ('the listener answered ' ~ containercluster_media_agent_probe_status ~ ' where 200 or 206 was expected') }}
+  vars:
+    containercluster_media_agent_probe_status: '{{ containercluster_media_agent_probe.status | default(-1) | int }}'
+    containercluster_media_agent_probe_cause: >-
+      {{ containercluster_media_agent_probe.msg | default('the request recorded no result')
+         | replace(containercluster_media_agent_token.stdout | trim, '<token>') }}
+  when: containercluster_media_agent_probe.status | default(-1) | int not in [200, 206]
 
 - name: Record what this image was built from
   ansible.builtin.copy:

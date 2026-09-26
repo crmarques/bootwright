@@ -182,8 +182,11 @@ from the operating system's cryptographic random source, minted by the attempt
 that publishes it and never by the plan, so it appears in no frozen request, no
 evidence, no progress output and no log. The consumer block owns
 `private/<object>/` as its reserved path; every directory from `private/` down
-is `0711` and every file `0600` for the serving process, so nothing is
-listable and the token is the only way to name what it contains.
+is `0711` `root:root`, so nothing is listable and the token is the only way to
+name what it contains. Every file is `0640` `root:root`: the server's workers
+run as the image's application user with group `root`, the identity the
+server configuration names, so the group grant is what lets the serving
+process read the file and no other account is granted anything.
 
 Its confidentiality rests on two properties together, and each must hold. The
 token is unguessable, so the path cannot be found by enumeration. And the
@@ -191,6 +194,20 @@ fetch is made over a listener whose certificate the fetching machine verifies
 against the bound certificate it was given, so the path cannot be learned by
 observing the network. A consumer that would have to disable verification to
 fetch it must not publish confidentially this way.
+
+The attempt that publishes proves the publication before its block completes.
+From the placement Machine it requests the first byte of the published file
+through the selected listener, with no proxy, verifying the listener's
+certificate against the serving certificate the server installed from its
+bound material. Any answer but `200` or `206` fails the block with its cause:
+the status, or the connection or verification failure. The request names the
+token, so neither it nor the response reaches output; only that cause does,
+with the token redacted. The proof precedes anything that lets a later attempt
+treat the publication as complete.
+
+Not yet met: the physical installation's host-key publication carries no such
+proof, and its refusal before registration leaves that publication unreachable;
+tracked as [backlog S3b](milestones/backlog.md#audit-follow-ups-2026-09).
 
 Published material is removed as soon as the work that needed it completes,
 and its absence is part of that block's completion evidence, because material
