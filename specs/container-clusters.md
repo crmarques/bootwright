@@ -103,11 +103,12 @@ on the artifact server's placement Machine,
 created `0700` because the installer retains inside it the material it was
 given. The attempt writes the frozen input files there, substitutes the bound
 material into them, and invokes the installer once. The installer consumes its
-inputs into its own asset state and keeps there the cluster identity and the
-access the installation later needs, so the area outlives the attempt that
-created it, is never enumerated in evidence, progress output or a log, and is
-discarded and rebuilt rather than reused whenever the inputs it was built from
-are not the inputs frozen now.
+inputs into its own asset state and writes beside the image the access the
+installation later needs, whose trust anchor is the cluster's
+[identity](#installation), so the area outlives the attempt that created it, is
+never enumerated in evidence, progress output or a log, and is discarded and
+rebuilt rather than reused whenever the inputs it was built from are not the
+inputs frozen now.
 
 **Publication is private.** The image embeds the pull secret and the cluster
 SSH key in its own ignition, so it is confidential on every substrate and is
@@ -185,35 +186,46 @@ host and what that state means. A give-up that proves a declared node never
 registered fails the block naming that node, because the cluster waits for
 exactly the nodes the install configuration declares.
 
-**The access it produces.** A completed installation produces the cluster
-administrator kubeconfig and the initial administrator password, which the
-installer writes into the work area beside the state it already keeps there.
-That area is root-owned, `0700` and never served, and it already holds the
-material the installer was given, so the access lives there with it rather than
-somewhere more protected than its own inputs. It is never written to evidence,
-progress output or a log. Moving it into this context's confidential custody,
-and revealing it through `cluster kubeconfig`, is a separate contract this one
-does not claim.
+**The access it produces.** The installer writes the cluster administrator
+kubeconfig and the initial administrator password into the work area when it
+builds the image, beside the state it keeps there, and a completed installation
+is what they then grant access to. That area is root-owned, `0700` and never
+served, and it already holds the material the installer was given, so the
+access lives there with it rather than somewhere more protected than its own
+inputs. It is never written to evidence, progress output or a log. Moving it
+into this context's confidential custody, and revealing it through
+`cluster kubeconfig`, is a separate contract this one does not claim.
 
 **Releasing the media.** Once the installation has completed, and only then,
 each node's virtual media is ejected and its controller is pointed at the
 installed disk, in node-name order.
 
-**Completion.** Completion requires the cluster answering with the identity
-this operation's own installer recorded, reporting the release it was installed
-for, holding every declared node, with no node's controller still presenting
-the media it booted from. The cluster is read through its own API with the
+**Completion.** Completion requires the cluster answering with this build's
+identity, reporting the release it was installed for, holding every declared
+node, with no node's controller still presenting the media it booted from. The
+identity is the SHA-256 of the certificate authority and the client certificate
+in the administrator kubeconfig, both minted when the image was built, so it
+names the cluster that image installs and no other; the agent installer records
+no other identity, and a work area without that kubeconfig, or with one the
+installer would not write, names none. The cluster answers with the identity
+only when its `ClusterVersion` is read through that kubeconfig with the serving
+certificate verified against that authority and the request authenticated by
+that client certificate. An API that answers but rejects the anchor, with a
+certificate the authority does not verify or a 401 or 403, is a foreign answer,
+recorded as a fixed marker that never equals an identity, and an API that does
+not answer is recorded as none. The cluster is read through its own API with the
 client the controller stage published, so completion is what the cluster says
 about itself rather than what the installer said before it exited. The evidence
-records the identity, the release, the declared nodes still missing and the
-nodes still presenting media; it records no credential and no path.
+records the identity, what answered, the release, the declared nodes still
+missing and the nodes still presenting media; it records no credential and no
+path.
 
 **Replay.** A cluster already answering with this operation's identity, at the
 declared release and holding every declared node, reports `completed` with the
 same evidence, boots nothing and waits for nothing. The only difference it
-converges is media it did not finish releasing. A cluster answering with
-another identity is not converged: there is no reinstall path, and installing
-again requires this cluster's nodes to be destroyed and applied again.
+converges is media it did not finish releasing. A foreign answer is not
+converged: there is no reinstall path, and installing again requires this
+cluster's nodes to be destroyed and applied again.
 
 **Inverse.** Destroy ejects the media each node still presents and proves none
 is left. The work area and the published image leave with the media block's own
@@ -228,9 +240,8 @@ and with its media released, is positive completion. Nothing answering, no node
 running and no media inserted is positive no effect. That same cluster
 answering while the completion is not yet true is a positive partial
 realization the next attempt converges. Anything else stays unknown, including
-a cluster answering with another identity and a node running while nothing
-answers, because the first belongs to another installation and the second may
-be installing now.
+a foreign answer and a node running while nothing answers, because the first
+belongs to another installation and the second may be installing now.
 
 **Quiescence and cancellation.** This block owns published boot media and
 controller-side state that a running cluster does not read, so its quiescence

@@ -2,7 +2,10 @@
 # Read the cluster back through its own API, and each node through its own
 # controller. Every answer here is an observation: nothing is echoed from the
 # request, so the evidence says what is true rather than what was asked for.
-- name: Read the identity the cluster reports
+# The cluster is read through the kubeconfig the installer wrote with the
+# image, so a read that succeeds has verified the serving certificate against
+# that build's authority and been authenticated by its client certificate.
+- name: Read ClusterVersion through this build's own trust anchor
   ansible.builtin.command:
     argv:
       - '{{ containercluster_install_agent_client }}'
@@ -12,7 +15,7 @@
       - clusterversion
       - version
       - --output
-      - jsonpath={.spec.clusterID}
+      - name
   register: containercluster_install_agent_cluster
   changed_when: false
   failed_when: false
@@ -64,10 +67,24 @@
   register: containercluster_install_agent_controllers
   no_log: true
 
+# The cluster answers with this build's identity only when the read above
+# succeeded, and with the foreign marker when an API answered but refused the
+# anchor: a serving certificate the authority does not verify, or a client
+# certificate it rejects (401 or 403). Anything else is nothing answering. A
+# success through a kubeconfig whose anchor the inspection could not name is
+# foreign too, because it proves no cluster of this build. The rejections are
+# matched in the form oc prints them, through kubectl's StandardErrorMessage,
+# and the marker is no SHA-256, so it never equals an identity.
 - name: Resolve what the cluster and its nodes answered
   ansible.builtin.set_fact:
     containercluster_install_agent_state:
-      cluster: '{{ containercluster_install_agent_cluster.stdout | default("") | trim }}'
+      cluster: >-
+        {{ (containercluster_install_agent_identity or containercluster_install_agent_foreign)
+           if (containercluster_install_agent_cluster.rc | default(1)) == 0
+           else (containercluster_install_agent_foreign
+                 if (containercluster_install_agent_cluster.stderr | default(''))
+                    is search(containercluster_install_agent_rejected)
+                 else '') }}
       release: '{{ containercluster_install_agent_release.stdout | default("") | trim }}'
       missing: >-
         {{ bootwright_cluster_install_request.nodes | map(attribute='name') | list
@@ -80,4 +97,10 @@
         {{ containercluster_install_agent_controllers.results | default([])
            | selectattr('power', 'defined') | selectattr('power', 'equalto', 'On')
            | map(attribute='item.machine') | list }}
+  vars:
+    containercluster_install_agent_identity: >-
+      {{ containercluster_install_agent_before.observation.identity | default('') }}
+    containercluster_install_agent_foreign: foreign
+    containercluster_install_agent_rejected: >-
+      x509: |You must be logged in to the server|Error from server \(Forbidden\)
   changed_when: false

@@ -118,9 +118,12 @@ func decodeMediaEvidence(data []byte, digest string) (MediaEvidence, error) {
 // installed and the release it reports — and nothing secret.
 type InstallEvidence struct {
 	Absent bool `json:"absent"`
-	// Cluster is the identity the live cluster reports, and Identity the one
-	// this operation's own installer recorded. A cluster answering with
-	// another identity belongs to another installation.
+	// Identity is this build's trust anchor: the SHA-256 of the certificate
+	// authority and client certificate in the kubeconfig its installer wrote
+	// with the image. Cluster is that identity when the cluster answers a read
+	// through that kubeconfig, verified and authenticated; a fixed foreign
+	// marker when an API answers but rejects the anchor; and empty when nothing
+	// answers. A foreign answer belongs to another installation.
 	Cluster  string `json:"cluster"`
 	Identity string `json:"identity"`
 	// Media names every node whose controller still presents boot media, and
