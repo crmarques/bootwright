@@ -156,7 +156,7 @@ func Select(catalog api.Catalog, attachments []Attachment) Selection {
 			result.ExcludedStorageClusters = append(result.ExcludedStorageClusters, object.Name())
 		}
 		if object.Kind() == api.ContainerCluster || object.Kind() == api.StorageCluster {
-			result.Problems = append(result.Problems, SelectionIssue{object, api.Issue{Code: "api.deferred", Field: "$.metadata.name", Message: "cluster root is excluded by the Environment selection", Remediation: "include the cluster in the matching Environment root selection"}})
+			result.Problems = append(result.Problems, SelectionIssue{object, api.Issue{Code: "api.selection", Field: "$.metadata.name", Message: "cluster root is excluded by the Environment selection", Remediation: "include the cluster in the matching Environment root selection"}})
 		}
 	}
 	result.Catalog = CanonicalCatalog(objects)

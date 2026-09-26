@@ -100,7 +100,7 @@ func TestLabBaremetalExampleRefusesItsInstallation(t *testing.T) {
 	}
 	_, err := capability.Plan(context.Background(), input)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+	if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" ||
 		reported[0].Message != "a delivered host key would be readable from the publicly served installer image" {
 		t.Fatalf("refusal = %#v", reported)
 	}

@@ -20,10 +20,11 @@ import (
 
 // recordingContext is the boundary an outcome is recorded under. Every
 // operation-store write refuses a cancelled context, so an interrupt that
-// recorded nothing would leave durable state claiming an effect is still
-// running, which is the one state no later operation may resolve, remove or
-// delete past. What the attempt proved is written whether or not the
-// invocation that performed it was interrupted.
+// recorded nothing would leave the block durably running: unproved, so no
+// later operation continues past, removes or deletes it until an observation
+// resolves it, although the attempt had proved its outcome. What the attempt
+// proved is written whether or not the invocation that performed it was
+// interrupted.
 func recordingContext(ctx context.Context) context.Context { return context.WithoutCancel(ctx) }
 
 // attempt runs one block: it allocates and records the attempt before the

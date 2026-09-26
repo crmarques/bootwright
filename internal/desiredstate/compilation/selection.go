@@ -109,7 +109,7 @@ func selectResources(sources desiredstate.Sources, documents []desiredstate.Docu
 			remediation = "relocate the declaration inside the Environment directory before adding its relative path to resources"
 		}
 		location := diagnostics.SourceLocation{Path: file.Path()}
-		ds.add(diagnostics.Diagnostic{Severity: "warning", Code: "api.deferred", Message: "resource file is excluded: " + strings.Join(sortedNames(identities), ", "), Source: &location, Remediation: remediation})
+		ds.add(diagnostics.Diagnostic{Severity: "warning", Code: "api.selection", Message: "resource file is excluded: " + strings.Join(sortedNames(identities), ", "), Source: &location, Remediation: remediation})
 	}
 	slices.Sort(excluded)
 	return selected, excluded

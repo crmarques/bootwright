@@ -104,7 +104,7 @@ func TestCompilerResourceSelectionAndCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(state.Effective().Objects()) != 2 || report.Counts.FilesSeen != 2 || report.Counts.ObjectsDecoded != 2 || len(report.Advisories) != 1 || !reflect.DeepEqual(report.ExcludedResourceFiles, []string{"excluded.yaml"}) {
+	if len(state.Effective().Objects()) != 2 || report.Counts.FilesSeen != 2 || report.Counts.ObjectsDecoded != 2 || len(report.Advisories) != 0 || len(report.Diagnostics) != 1 || report.Diagnostics[0].Code != "api.selection" || !reflect.DeepEqual(report.ExcludedResourceFiles, []string{"excluded.yaml"}) {
 		t.Fatalf("unexpected report: %#v", report)
 	}
 	ctx, cancel := context.WithCancel(context.Background())

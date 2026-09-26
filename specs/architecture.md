@@ -85,7 +85,8 @@ Across bounded contexts, identify the producer and consumer, dependency
 direction, exchanged contract, semantic owner, data and state owner, and
 translation location. An application service may coordinate contexts, but it
 must call each through its published capability and must not reproduce its
-rules. An adapter never calls another adapter to bypass that service.
+rules. An adapter never calls another adapter to bypass that service. The
+[named exceptions](#named-exceptions) are the only departures from these rules.
 
 Every replaceable service, repository, resolver, and effect implementation is
 consumed through an injected contract, including dependencies between components
@@ -121,6 +122,37 @@ No context shares a writable model or store with another. One component owns
 each mutable datum and consistency boundary. Crossing that boundary requires a
 value snapshot or explicit operation, with partial failure, retry,
 compensation, crash, and continuation behavior represented rather than hidden.
+
+### Named exceptions
+
+Each is deliberate and bounded; another like it is a defect.
+
+- **Adapter-to-adapter wiring.** No adapter imports another
+  (`TestPackageDependencyDirection`), but within Controller composition injects
+  one adapter's capability into another through a Controller-owned contract:
+  `controller/ansiblelocal` receives the execution guard as a
+  `prerequisites.PythonExecutionGuard`, and `controller/nativelocal` receives
+  `bundlelocal.FetchMetadata` as its `MetadataReader`.
+- **The execution guard.** Every process running the installed private Python
+  runtime (setup's Ansible run, a bundle probe, and a lifecycle attempt,
+  quiescence probe or bounded run) starts inside
+  `controller/bundlelocal.ExecutionGuard`, which first verifies that foundation.
+  Composition binds it to `prerequisites.PythonExecutionGuard` and directly to
+  `lifecycle.ExecutionGuard`, not through a Controller service.
+- **Machine's direct SSH sessions.** `machine/sshlocal`, the one pinned SSH
+  client an explicit session and a host-key observation cross, is a Go-owned
+  remote access path outside the
+  [Go and Ansible boundary](#go-and-ansible-responsibility-boundary), bound only
+  to `machine/access` and `trust/enrollment`.
+  [Direct SSH sessions](security.md#direct-ssh-sessions) owns its security rules.
+- **Composition translation.** `machineOwnership` and `machineHostKeys` in
+  `cmd/bootwright/wiring_machine.go` present Reconciliation's evidence in
+  Machine vocabulary and decode, through `installation.HostKeyEvidence`, the
+  host key `managedos/installation` proved, which Machine packages may not
+  import.
+- **The schema registry.** `api/v1alpha1`'s `init` functions fill its
+  package-global kind-to-schema map through `register`, which panics on a
+  duplicate; nothing writes it afterwards, and `Schema` returns a fresh `Shape`.
 
 ## Dependency selection and reuse
 
@@ -211,36 +243,44 @@ Internal contexts translate boundary values when their invariants require a
 domain model; they do not mechanically duplicate the API or pass API objects
 around as shared mutable state.
 
-Packages are domain-first and follow one fixed shape, so a reader can predict
-where a behavior lives:
+Packages are domain-first, so a reader can predict where a behavior lives. Each
+has one kind, and its role in `packageRoles`
+(`test/architecture/boundaries_test.go`) decides what it may import:
 
-| Package | Owns |
-| --- | --- |
-| `internal/<context>` | Pure domain values, invariants and the kind admission rules (`Normalize`, `Validate`, `ValidateAuthored`, `ValidatePartial`) that the compiler composes, plus shared values such as `machine.SSHOptions`, `machine.Placement` and `secrets.Material`. No ports and no I/O. |
-| `internal/<context>/<capability>` | One application service package per command family. `service.go` declares `Service`, its constructor and one exported method per command; `requests.go` declares the request and result types the CLI consumes; `contracts.go` declares every interface the package consumes, and no other file declares an exported interface; remaining files hold private use-case logic. |
-| `internal/<context>/<implementation>` | A driven adapter named by what it binds: `contextfs`, `selectionfs`, `inputfs`, `yamlstream`, `encoding`, `localkeyring`, `material`, `hostlinux`, `bundlelocal`, `ansiblelocal`, `nativelocal`, `privilege`, `ansiblerunner`, `medialocal`, `sshlocal`. It implements another package's contract and never calls another adapter. |
-| `internal/diagnostics` | The diagnostic and typed-failure vocabulary every layer emits; it imports nothing first-party. |
-| `internal/availability` | The single unavailable-capability sentinel. |
+| Kind | Path | Owns | Role |
+| --- | --- | --- | --- |
+| Context root | `internal/<context>` | Pure domain values, invariants and derivations such as `substrate.TargetFor`, the kind admission rules (`Normalize`, `Validate`, `ValidateAuthored`, `ValidatePartial`) the compiler composes, and shared values such as `machine.Placement` and `secrets.Material`. No ports and no I/O. `desiredstate/customplaybooks` is of the same kind. | domain |
+| Command service | `internal/<context>/<capability>` | One command family. `service.go` declares `Service`, its constructor and one exported method per command; `requests.go` the request and result types the CLI consumes; `contracts.go` every interface the package consumes. A recognized but unavailable family is a stub, `service.go` alone, listed in `stubCapabilities`. | application |
+| Lifecycle capability | `internal/<context>/<capability>`, such as `managedos/installation`, `containercluster/agentinstall`, `infrastructureservices/managedservice` and `infrastructureservices/artifactserver` | The [`Capability` port](#lifecycle-ports) implementations of one substrate arm, installation method or service, or of the controller stage. `capability.go` declares a capability type and its constructor, `contracts.go` its ports, `requests.go` and `evidence.go` its frozen request and the evidence it proves, and, where it has them, `catalog.go` its kind and implementation identities and `selection.go` the objects it plans. | application |
+| Capability definition | `infrastructureservices/dnsserver`, `ntpserver` and `proxy` | One `managedservice.Definition` the shared capability runs; it consumes no other application package. | application |
+| Application store | `reconciliation/operationstore`, `secrets/secretstore` | A durable record format and its consistency over an `Area` a Workspace adapter supplies. `reconciliation/contextguard` likewise implements `workspace/contexts.ContextMutationGuard` for Reconciliation and consumes no port. | application |
+| Driven adapter | `internal/<context>/<implementation>`, named by what it binds | One effect behind another package's contract, within what `TestAdmissionEffectBoundary` allows it. `secrets/material` and `controller/privilege` keep their consumed interfaces in `contracts.go`. | adapter |
+| Diagnostics | `internal/diagnostics` | The diagnostic and typed-failure vocabulary every layer emits; it imports nothing first-party. | technical |
+| Availability | `internal/availability` | The single unavailable-capability sentinel, `ErrNotImplemented`. | technical |
 
-Each application capability exposes a concrete `Service`. Dependencies are
-private fields; add constructors when there are actual dependencies to inject.
-Consumer-owned ports are repeated on purpose: `Confirmer` and `Compiler` are
-declared by every service that needs them, because each consumer owns the
-smallest interface it uses and composition binds one implementation to all of
-them. Add domain files and implementation packages with their first authorized
-behavior. Do not create empty packages or repeat generic `domain`,
-`application`, `ports`, and `adapters` layers inside every context.
+In an application package no file but `contracts.go` declares an exported
+interface. `api/v1alpha1` is a domain package; `internal/cli`, `cmd/bootwright`
+and the embedded `ansible` assets have roles of their own.
+`applicationDependencies` names every application package another consumes, and
+why. A consumer of a realized Machine reads `substrate.TargetFor` and imports no
+substrate arm package.
 
-`cmd/bootwright` is the only composition root:
+A command service exposes a concrete `Service`, a lifecycle capability concrete
+capability types. Dependencies are private fields; add constructors when
+there are actual dependencies to inject. Consumer-owned ports are repeated on
+purpose: `Confirmer` and `Compiler` are declared by every service that needs
+them, because each consumer owns the smallest interface it uses and composition
+binds one implementation to all of them. Add domain files and packages with
+their first authorized behavior. Do not create empty packages or repeat generic
+`domain`, `application`, `ports`, and `adapters` layers inside every context.
 
-| File | Responsibility |
-| --- | --- |
-| `main.go` | Process entrypoint and exit; linker-injected `version`, `commit`, `source`, and `dependencyBundle` variables. |
-| `run.go` | The local privilege boundary, then the CLI invocation with process streams and build information. |
-| `wiring.go` | `wireServices` returns the statically typed `cli.Services` bundle by calling one `wire<Domain>` function per domain. |
-| `wiring_<domain>.go` | Constructs that domain's adapters and injects them into its service, naming every adapter bound to every port. |
-| `wiring_account.go` | The lazily acquired invoking-account capabilities: selection store and operator identity. |
-| `wiring_stubs.go` | The unavailable services. |
+`cmd/bootwright` is the only composition root. `main.go` is the process
+entrypoint and holds the linker-injected build identity; `run.go` crosses the
+local privilege boundary, then invokes the CLI with process streams and build
+information. `wireServices` in `wiring.go` returns the statically typed
+`cli.Services` bundle by calling one `wire<Domain>` function per domain, and
+each `wiring_<domain>.go` constructs that domain's adapters and injects them,
+naming every adapter bound to every port.
 
 Wiring constructs adapters and injects them into their consumers as capabilities
 are implemented. It performs no context discovery, application work, domain
@@ -261,27 +301,27 @@ validation, help content and templates, prompts, presentation, diagnostics,
 output-mode selection, and exit-code mapping. `runner.go` orders one invocation:
 parse, validate, dispatch, render. `catalog.go` is the single list of commands;
 each entry also records whether the command requires root and whether it is
-implemented, so no second list of command paths exists. `dispatch.go` routes a
-resolved path to its domain's request translation, `results.go` routes a result
-to its domain's renderer, and `services.go` holds the typed dependency bundle
-with one interface field per domain service. Each `commands_<domain>.go` keeps
-its command declarations, consumer interface, and request translation together;
-`output_<domain>.go` keeps its rendering. CLI code never constructs a driven
-adapter or sequences a cross-domain workflow.
+implemented, so no second list of command paths exists. Each
+`commands_<domain>.go` keeps its command declarations, consumer interface, and
+request translation together and `output_<domain>.go` its rendering;
+`dispatch.go` and `results.go` route a path and a result to them, and
+`services.go` holds one interface field per domain service. CLI code never
+constructs a driven adapter or sequences a cross-domain workflow.
 
 Application services receive complete validated immutable requests and return
 presentation-independent results. Domain decisions are pure. Filesystem,
 process, persistence, network, clock, randomness, and remote access occur only
 in injected adapters. Package-global mutable flags, streams, registries, clocks,
-configuration, and service instances are forbidden. An unavailable use case is a
+configuration, and service instances are forbidden, apart from the
+[schema registry](#named-exceptions). An unavailable use case is a
 typed stub whose every method returns `availability.ErrNotImplemented` after the
 context check; it exposes no successful result schema, and the CLI alone renders
 results and unavailable messages.
 
 Repository-fitness packages under `test/architecture` inspect source and assets
 but contain no production behavior. They enforce dependency direction, effect
-boundaries, composition-only binding, the file convention above, the CLI import
-allowlist, and the stub set.
+boundaries, composition-only binding, the package kinds above, the CLI import
+allowlist, and the stub set, whose commands the CLI catalog leaves unavailable.
 
 ### Finding code
 
@@ -294,309 +334,37 @@ allowlist, and the stub set.
 4. `cmd/bootwright/wiring_<domain>.go` names the adapter package bound to each
    port.
 5. The pure rules for an API kind are in `internal/<context>/admission.go`.
+6. A lifecycle effect starts at its capability in `buildCapabilities`, and
+   `operationPlaybook` binds its playbooks, both in
+   `cmd/bootwright/wiring_reconciliation.go`.
 
-Adding a command touches the spec in `commands_<domain>.go` with its privilege
-and implementation flags, the request type in the capability's `requests.go`,
-the method on its `Service` and consumer interface, a case in `dispatch.go`, a
-renderer in `output_<domain>.go` with its case in `results.go`, the binding in
-`wiring_<domain>.go`, the row in the map below, and the public catalog fixture.
-The catalog-completeness test fails until dispatch has the case.
+Adding a command touches its spec in `commands_<domain>.go`, marked `available`
+once implemented, the request type in the capability's `requests.go`, the
+method on its `Service` and consumer interface, a case in `dispatch.go`, a
+renderer in `output_<domain>.go` with its case in `results.go`, and the binding
+in `wiring_<domain>.go`. `TestPublicCatalog` and
+`TestCommandModesComeFromTheCatalog` hold its flags and modes,
+`TestEveryCatalogCommandHasApplicationDispatch` fails until dispatch has the
+case, and implementing a stub removes it from `stubCapabilities`.
 
-### Command and package map
+### Adding a lifecycle capability
 
-Status `I` means implemented; `S` means the typed stub that returns the
-[unavailable result](cli.md#recognized-but-unavailable-commands). A milestone
-that implements a row updates the row and the stub fitness test together.
-
-| Commands (context) | `internal/cli` file | Service package | Adapters bound | Status |
-| --- | --- | --- | --- | --- |
-| `context init/update/use/list/current/delete` (Workspace) | `commands_workspace.go` | `workspace/contexts` | `workspace/contextfs`, `workspace/selectionfs`, `desiredstate/inputfs`, `reconciliation/contextguard` | I |
-| `secret set/generate/check/list/show/delete` (Secrets) | `commands_secrets.go` | `secrets/custody` | `secrets/secretstore`, `secrets/localkeyring`, `secrets/material` | I |
-| `secret encryption init/status/rotate` (Secrets) | `commands_secrets.go` | `secrets/encryption` | `secrets/secretstore`, `secrets/localkeyring` | I |
-| `validate`, `render effective` (Desired state) | `commands_desiredstate.go` | `desiredstate/compilation` | `desiredstate/inputfs`, `desiredstate/yamlstream`, `desiredstate/encoding` | I |
-| `setup`, `preflight controller` (Controller) | `commands_controller.go` | `controller/prerequisites` | `controller/hostlinux`, `controller/bundlelocal`, `controller/ansiblelocal`, `controller/nativelocal`, `workspace/contextfs` | I |
-| Local privilege boundary for every root-requiring command (Controller) | `invocation.go` classifies only | — | `controller/privilege`, bound in `run.go` | I |
-| `plan`, `status`, `apply`, `destroy` (State reconciliation) | `commands_reconciliation.go` | `reconciliation/lifecycle` | `reconciliation/operationstore`, `workspace/contextfs`, `desiredstate/compilation`, `secrets/custody`, `controller/hostlinux`, `controller/bundlelocal`, `controller/nativelocal`, `controller/ansiblelocal`, `controller/clients`, `substrate/libvirt`, `substrate/baremetal`, `managedos/installation`, `infrastructureservices/artifactserver`, `infrastructureservices/managedservice` with the `proxy`, `dnsserver` and `ntpserver` definitions, over `reconciliation/ansiblerunner` | I |
-| `render` (Native artifacts) | `commands_nativeartifacts.go` | `nativeartifacts/rendering` | — | S |
-| `render installer` (Container cluster) | `commands_containercluster.go` | `containercluster/installation` | — | S |
-| `render storage` (Storage) | `commands_storage.go` | `storage/rendering` | — | S |
-| `preflight infra/clusters/all` (Environment) | `commands_environment.go` | `environment/preflight` | — | S |
-| `preflight container-cluster` (Container cluster) | `commands_containercluster.go` | `containercluster/preflight` | — | S |
-| `preflight storage-cluster` (Storage) | `commands_storage.go` | `storage/preflight` | — | S |
-| `preflight add-ons` (Add-ons) | `commands_addons.go` | `addons/preflight` | — | S |
-| `cluster list/info` (Environment) | `commands_environment.go` | `environment/inspection` | — | S |
-| `cluster rsh/exec` (Environment) | `commands_environment.go` | `environment/access` | — | S |
-| `cluster oc/kubectl/kubeconfig` (Container cluster) | `commands_containercluster.go` | `containercluster/access` | — | S |
-| `machine list` (Machine) | `commands_machine.go` | `machine/inventory` | `desiredstate/compilation`, `reconciliation/lifecycle` evidence, `machine/power` for a requested reading | I |
-| `machine rsh/exec` (Machine) | `commands_machine.go` | `machine/access` | `desiredstate/compilation`, `reconciliation/lifecycle` material and evidence, `trust` records over `workspace/contextfs`, over `machine/sshlocal` | I |
-| `machine start/stop/restart` (Machine) | `commands_machine.go` | `machine/power` | `desiredstate/compilation`, `reconciliation/lifecycle` runtime and evidence, over `reconciliation/ansiblerunner` | I |
-| `machine trust` (Trust) | `commands_trust.go` | `trust/enrollment` | `desiredstate/compilation`, `trust` records over `workspace/contextfs`, over `machine/sshlocal` | I |
-| `media add/list/delete` (Managed OS) | `commands_managedos.go` | `managedos/media` | `managedos/medialocal`, `workspace/contextfs` | I |
-| `add-ons list/add/delete` (Add-ons) | `commands_addons.go` | `addons/catalog` | — | S |
-| `version`, `help`, `completion *` (CLI) | `commands_cli.go`, `runner.go` | — | — | I |
-
-The kind admission rules that the compiler composes live at the context roots
-`environment`, `secrets`, `addons`, `desiredstate/customplaybooks`, `storage`,
-`machine`, `substrate`, `managedos`, `containercluster`, and
-`infrastructureservices`. Environment's three preflight methods belong to
-`environment/preflight`, its two inspection methods to `environment/inspection`,
-and its two access methods to `environment/access`; platform rules remain with
-their owning contexts. Machine inspection belongs to
-`machine/inventory`, explicit Machine access to `machine/access` over the
-`machine/sshlocal` adapter, which is the one pinned SSH client both a session
-and a host-key observation cross, and day-2 power to `machine/power`, which
-reads the Machine domain's own ownership vocabulary rather than the engine that
-published it. That package owns reading a power state as well as driving one,
-so an inspection asking for a live reading crosses exactly the boundary a power
-verb crosses and no second path to a management controller exists. The host-key record format and the `known_hosts` grammar both a
-session and `machine trust` resolve belong to the `trust` context root, beside
-the `trust/enrollment` capability that maintains them. Substrate realization with
-its identity and power operations belongs to one package per substrate arm,
-`substrate/libvirt` and `substrate/baremetal`, while the pure derivation that
-answers which arm realizes a Machine, and with which management controller and
-identity channel, belongs to the `substrate` context root beside its admission
-rules. That placement is what keeps a consumer substrate-agnostic: managed-OS
-installation and day-2 power both read that one answer, and neither imports a
-substrate package nor grows a branch when an arm is added. Managed-OS
-installation belongs to
-`managedos/installation`, the media store to `managedos/media` over the
-`managedos/medialocal` adapter, container-cluster installation to one package
-per installation method, `containercluster/agentinstall` beside the
-`containercluster/installation` render service, and the one Ansible runner every lifecycle
-capability crosses to `reconciliation/ansiblerunner`, whose request and material
-values `reconciliation/lifecycle` owns while the Machine context root owns the
-placement and address every run resolves; each is created with its first
-authorized behavior. Composition binds that runner's entrypoints, so a
-capability names no playbook and adding one changes wiring alone.
-
-### Domain communication graph
-
-`A ─port→ B` means package A declares interface `port` in its `contracts.go` and
-composition binds B's concrete type to it; `fn` is a typed function capability.
-Arrows point only from a consumer to a provider through the consumer's own
-interface, and no adapter calls another adapter.
-
-```text
-internal/cli ─ContextService──────→ workspace/contexts.Service
-internal/cli ─SecretService───────→ secrets/custody.Service
-internal/cli ─EncryptionService───→ secrets/encryption.Service
-internal/cli ─DesiredStateService─→ desiredstate/compilation.Service
-internal/cli ─ControllerService───→ controller/prerequisites.Service
-internal/cli ─MediaService────────→ managedos/media.Service
-internal/cli ─LifecycleService────→ reconciliation/lifecycle.Service
-internal/cli ─MachineInventoryService→ machine/inventory.Service
-internal/cli ─MachineAccessService──→ machine/access.Service
-internal/cli ─MachinePowerService───→ machine/power.Service
-internal/cli ─MachineTrustService───→ trust/enrollment.Service
-internal/cli ─eleven stub ports───→ <capability>.Service{} returning availability.ErrNotImplemented
-
-machine/inventory.Service and machine/access.Service
-   ─EffectiveState─→ desiredstate/compilation.Service
-   ─Ownership──────→ reconciliation/lifecycle.Service, through composition's own evidence adapter
-   ─fn CurrentSelection→ workspace/selectionfs.Store, through the invoking account
-machine/inventory.Service
-   ─PowerReader────→ machine/power.Service, for the one answer local state cannot hold
-machine/access.Service
-   ─MaterialLender─→ reconciliation/lifecycle.Service, which binds the session's Secrets alone
-   ─Evidence───────→ reconciliation/lifecycle.Service and managedos/installation, through composition's own host-key adapter
-   ─HostKeyStore───→ workspace/contextfs.Store, for the context trust records
-   ─Observer, Launcher→ machine/sshlocal.Launcher, the one pinned SSH client
-   ─Confirmer──────→ internal/cli.Confirmation, for the first-use host-key decision
-machine/power.Service
-   ─EffectiveState, Ownership, fn CurrentSelection→ as above
-   ─Runtime────────→ reconciliation/lifecycle.Service, which lends the approved bundle and binds its Secrets
-   ─Runner─────────→ reconciliation/ansiblerunner.Runner
-   ─Confirmer──────→ internal/cli.Confirmation
-   ─Reporter───────→ internal/cli.LifecycleProgressPresenter, for the one line it reports
-
-workspace/contexts.Service
-   ─Repository, Transaction, ControllerInputGuard→ workspace/contextfs.Store
-   ─Compiler───────────────────────────────────→ desiredstate/compilation.Compiler
-   ─DirectoryReader, ConfigurationReader───────→ desiredstate/inputfs.Reader
-   ─ContextMutationGuard───────────────────────→ reconciliation/contextguard.Guard
-   ─SelectionStore─────────────────────────────→ workspace/selectionfs.Store, through the invoking account
-   ─Confirmer───────────────────────────────────→ internal/cli.Confirmation
-   ─fn InitializeSecrets, fn ValidateConfiguration→ secrets/secretstore.Access and .ImplementationCatalog
-   contexts.Inputs and contexts.SelectionWorkspace are values that other services consume
-
-desiredstate/compilation.Service
-   ─SourceReader──→ desiredstate/inputfs.Reader
-   ─InputCompiler─→ desiredstate/compilation.Compiler
-   ─ContextInputs─→ workspace/contexts.Inputs ─InputRepository→ workspace/contextfs.Store
-desiredstate/compilation.Compiler
-   ─SyntaxParser──→ desiredstate/yamlstream.Parser
-   ─fn SelectGraph→ compilation.GraphSelector{fn environment.Select, fn addons.StorageAttachments}
-   ─Rules (fn Normalize, Validate*)→ the ten context roots
-
-managedos/media.Service
-   ─Store────────→ workspace/contextfs.Store host-wide media area
-   ─Acquirer─────→ managedos/medialocal.Acquirer
-   ─Confirmer────→ internal/cli.Confirmation
-   ─Clock────────→ composition
-   pure: managedos media names, digests and records at the context root
-
-secrets/custody.Service
-   ─StoreAccess──→ secrets/secretstore.Access
-   ─Compiler─────→ desiredstate/compilation.Compiler
-   ─Materializer─→ secrets/material.Service ─InputReader→ process stdin; ─Operator→ invoking account
-   ─Confirmer────→ internal/cli.Confirmation
-secrets/encryption.Service
-   ─StoreAccess──→ secrets/secretstore.Access
-   ─Confirmer────→ internal/cli.Confirmation
-secrets/secretstore.Access
-   ─Workspace──────────────→ workspace/contexts.SelectionWorkspace{workspace/contextfs.Store, SelectionStore}
-   ─ImplementationResolver─→ secrets/secretstore.ImplementationCatalog
-        ─SecretStoreImplementation, StoreSession→ secrets/localkeyring.Implementation ─Area→ contextfs secret area
-   ─SessionMaterialSource──→ none; the local keyring needs no session material
-
-controller/prerequisites.Service
-   ─Storage, StorageTransaction, BundleArea→ workspace/contextfs.Store
-   ─Compiler──────────────────────────────→ desiredstate/compilation.Compiler
-   ─HostInspector─────────────────────────→ controller/hostlinux.Inspector
-   ─DependencyCatalog, BundleManager, TargetToolCatalog, BootstrapResolver→ controller/bundlelocal
-   ─RuntimeInstaller──────────────────────→ controller/ansiblelocal.Installer
-        ─PythonExecutionGuard→ controller/bundlelocal.ExecutionGuard → embedded bootwright.core collection
-   ─NativeResolver, NativeInspector───────→ controller/nativelocal.Resolver
-   ─Confirmer, PlanPresenter, ProgressReporter→ internal/cli
-   pure: controller.Select and controller.SelectTools at the context root
-
-reconciliation/lifecycle.Service
-   ─Inputs────────────────────────→ workspace/contexts.Inputs
-   ─Compiler──────────────────────→ desiredstate/compilation.Compiler
-   ─SecretBinder──────────────────→ secrets/custody.Service
-   ─Workspace, LifecycleTransaction→ workspace/contextfs.Store
-        ─OperationStore───────────→ reconciliation/operationstore.Store ─Area→ contextfs operation area
-   ─HostIdentity──────────────────→ controller/hostlinux.Inspector
-   ─AutomationIdentity────────────→ controller/bundlelocal catalog identity
-   ─ExecutionGuard────────────────→ controller/bundlelocal.ExecutionGuard
-   ─CapabilityResolver, Capability→ ordered set over controller/clients.Capability,
-                                     substrate/libvirt.MachineCapability,
-                                     substrate/baremetal.MachineCapability,
-                                     managedos/installation.Capability,
-                                     substrate/libvirt.HostCapability,
-                                     infrastructureservices/artifactserver.Capability
-                                     and managedservice.Capability bound to the proxy,
-                                     dnsserver and ntpserver definitions
-   pure: substrate.TargetFor answers which arm realizes a Machine; managedos and
-         machine/power consume it and import no substrate package
-        ─Runner───────────────────→ reconciliation/ansiblerunner.Runner
-             ─process boundary────→ embedded bootwright.core collection
-
-controller/clients.Capability
-   ─ToolCatalog───────────────────→ controller/bundlelocal.ToolCatalog
-   ─NativeResolver, NativeInspector→ controller/nativelocal.Resolver
-   ─Installer─────────────────────→ controller/ansiblelocal.Installer
-        ─process boundary─────────→ embedded bootwright.core collection, inside the
-                                     execution foundation the lifecycle block holds
-   pure: controller.Select and controller.SelectTools at the context root
-   ─Confirmer, PlanPresenter, ProgressReporter→ internal/cli
-   ─Clock, Entropy────────────────→ composition
-   pure: reconciliation plan, state machine and identity allocation at the context root
-
-reconciliation/contextguard.Guard implements workspace/contexts.ContextMutationGuard and consumes no port
-cmd/bootwright/run.go ─→ controller/privilege for the invoking account, sudo supervision and executable pinning, before any service exists
-                      ─→ controller.RouteFromEnvironment for the context-free acquisition route, admitted before sudo and supplied to
-                         controller/prerequisites and managedos/medialocal as a value; no other package reads the process environment for one
-```
-
-### Interface catalog
-
-Every interface lives in its consumer's `contracts.go`. The right column is the
-production binding; tests substitute fakes through the same interface.
-
-| Consumer | Interface | Methods | Bound implementation |
-| --- | --- | --- | --- |
-| `internal/cli` | `ContextService` | Init, Update, Use, List, Current, Delete | `workspace/contexts.Service` |
-| `internal/cli` | `SecretService` | Set, Generate, Check, List, Show, Delete | `secrets/custody.Service` |
-| `internal/cli` | `EncryptionService` | Types, Init, Status, Rotate | `secrets/encryption.Service` |
-| `internal/cli` | `DesiredStateService` | Validate, RenderEffective | `desiredstate/compilation.Service` |
-| `internal/cli` | `ControllerService` | Check, Setup | `controller/prerequisites.Service` |
-| `internal/cli` | `MediaService` | Add, List, Delete | `managedos/media.Service` |
-| `internal/cli` | `LifecycleService` | Plan, Status, Apply, Destroy | `reconciliation/lifecycle.Service` |
-| `internal/cli` | `MachineInventoryService` | List | `machine/inventory.Service` |
-| `internal/cli` | `MachineAccessService` | Rsh, Exec | `machine/access.Service` |
-| `internal/cli` | `MachinePowerService` | Start, Stop, Restart | `machine/power.Service` |
-| `internal/cli` | eleven stub ports, one per `S` row of the map | one method per command | `<capability>.Service{}` |
-| `reconciliation/lifecycle` | `Inputs` | ReadInputs | `workspace/contexts.Inputs` |
-| `reconciliation/lifecycle` | `Compiler` | Compile | `desiredstate/compilation.Compiler` |
-| `reconciliation/lifecycle` | `SecretBinder` | Bind, Reopen, Release | `secrets/custody.Service` |
-| `reconciliation/lifecycle` | `Workspace` | ReadLifecycle, RunLifecycle, MutateLifecycle | `workspace/contextfs.Store` |
-| `reconciliation/lifecycle` | `Transaction` | View, PublishEvidence, Bind, Reserve, ReleaseReservations, ClientArea, SealClientArea, RetainDependencies | `contextfs` lifecycle transaction |
-| `reconciliation/lifecycle` | `OperationStore` | Index, Register, ReadOperation, ReadPlan, UpdateOperation, BlockStates, Block, Attempt, StartAttempt, RecordPreparation, CompleteAttempt, LastAttempt, StartResolution, CompleteResolution, OpenLog, OpenAdapterOutput, LogPaths, LogDirectory | `reconciliation/operationstore.Store` |
-| `machine/inventory`, `machine/access`, `machine/power` | `EffectiveState` | RenderEffective | `desiredstate/compilation.Service` |
-| `machine/inventory`, `machine/access`, `machine/power` | `Ownership` | Ownership | composition adapter over `reconciliation/lifecycle.Service` |
-| `machine/inventory` | `PowerReader` | Read | `machine/power.Service` |
-| `machine/access` | `MaterialLender` | WithMaterial | `reconciliation/lifecycle.Service` |
-| `machine/access` | `Evidence` | HostKey | composition adapter over `reconciliation/lifecycle.Service` and `managedos/installation` |
-| `machine/access` | `HostKeyStore` | ReadHostKeys, ReplaceHostKeys | `workspace/contextfs.Store` |
-| `machine/access` | `Observer`, `Launcher` | Observe; Run, IdentityFile | `machine/sshlocal.Launcher` |
-| `machine/access` | `Confirmer` | ConfirmHostKey | `internal/cli.Confirmation` |
-| `trust/enrollment` | `EffectiveState` | RenderEffective | `desiredstate/compilation.Service` |
-| `trust/enrollment` | `HostKeyStore` | ReadHostKeys, ReplaceHostKeys | `workspace/contextfs.Store` |
-| `trust/enrollment` | `Observer` | Observe | `machine/sshlocal.Launcher` |
-| `trust/enrollment` | `Confirmer` | Confirm | `internal/cli.Confirmation` |
-| `machine/power` | `Runtime` | WithRuntime | `reconciliation/lifecycle.Service` |
-| `machine/power` | `Runner` | Run | `reconciliation/ansiblerunner.Runner` |
-| `machine/power` | `Reporter` | ReportLogLocation | `internal/cli.LifecycleProgressPresenter` |
-| `reconciliation/lifecycle` | `HostIdentity` | Identity | `controller/hostlinux.Inspector` |
-| `reconciliation/lifecycle` | `AutomationIdentity` | CatalogDigest | composition value over `controller/bundlelocal` and the embedded collection |
-| `reconciliation/lifecycle` | `ExecutionGuard` | WithPython | `controller/bundlelocal.ExecutionGuard` |
-| `reconciliation/lifecycle` | `CapabilityResolver`, `Capability` | Bindings, Resolve; Plan, Removal, Apply, Observe, Quiescent, Destroy | immutable ordered composition set over `controller/clients.Capability`, `infrastructureservices/artifactserver.Capability`, `infrastructureservices/managedservice.Capability`, `substrate/libvirt.HostCapability`, `substrate/libvirt.MachineCapability`, `substrate/baremetal.MachineCapability` and `managedos/installation.Capability` |
-| `reconciliation/lifecycle` | `Confirmer`, `PlanPresenter`, `ProgressReporter` | Confirm; PresentLifecyclePlan; ReportProgress, ReportLogLocation | `internal/cli` |
-| `reconciliation/lifecycle` | `Clock`, `Entropy` | Now; Read | composition |
-| `reconciliation/operationstore` | `Area` | Read, Entries, EnsureDirectory, WriteExclusive, Replace, Append, Sync, Location | `contextfs` operation area |
-| `infrastructureservices/artifactserver`, `infrastructureservices/managedservice` | `Runner` | Run | `reconciliation/ansiblerunner.Runner` |
-| `workspace/contexts` | `Repository` (embeds `InputRepository`) | ReadInputs, CheckInputDirectory, View, Transact | `workspace/contextfs.Store` |
-| `workspace/contexts` | `Transaction` | Registry, Reserve, Configuration, InitializeSecrets, Publish, MutationState, Delete, Commit | `contextfs` transaction |
-| `workspace/contexts` | `ControllerInputGuard` | CheckControllerInput | `contextfs` transaction |
-| `workspace/contexts` | `Compiler` | Compile | `desiredstate/compilation.Compiler` |
-| `workspace/contexts` | `DirectoryReader` | ReadDirectory | `desiredstate/inputfs.Reader` |
-| `workspace/contexts` | `ConfigurationReader` | ReadFile | `desiredstate/inputfs.Reader` |
-| `workspace/contexts` | `ContextMutationGuard` | Check | `reconciliation/contextguard.Guard` |
-| `workspace/contexts` | `SelectionStore` | Read, Write, Clear | `workspace/selectionfs.Store` through the invoking account |
-| `workspace/contexts` | `Confirmer` | Confirm | `internal/cli.Confirmation` |
-| `desiredstate/compilation` | `SourceReader` | Read | `desiredstate/inputfs.Reader` |
-| `desiredstate/compilation` | `InputCompiler` | Compile | `desiredstate/compilation.Compiler` |
-| `desiredstate/compilation` | `ContextInputs` | ReadInputs | `workspace/contexts.Inputs` |
-| `desiredstate/compilation` | `SyntaxParser` | Parse | `desiredstate/yamlstream.Parser` |
-| `secrets/custody` | `StoreAccess` | Context, View, Mutate | `secrets/secretstore.Access` |
-| `secrets/custody` | `Materializer` | Acquire, File, Generate, Validate | `secrets/material.Service` |
-| `secrets/custody` | `Compiler` | Compile | `desiredstate/compilation.Compiler` |
-| `secrets/custody` | `Confirmer` | Confirm | `internal/cli.Confirmation` |
-| `secrets/encryption` | `StoreAccess` | Context, Types, View, Mutate, Initialize | `secrets/secretstore.Access` |
-| `secrets/encryption` | `Confirmer` | Confirm | `internal/cli.Confirmation` |
-| `secrets/secretstore` | `Workspace` | SecretContext, ReadSecrets, MutateSecrets | `workspace/contexts.SelectionWorkspace` over `workspace/contextfs.Store` |
-| `secrets/secretstore` | `Area` | Read, ReadMutable, Entries, EnsureDirectory, WriteExclusive, PublishExclusive, Replace, Prune, PruneUnpublished, SyncFile, Sync | `contextfs` secret area |
-| `secrets/secretstore` | `ImplementationResolver` | Types, Select, Reopen | `secrets/secretstore.ImplementationCatalog` |
-| `secrets/secretstore` | `SecretStoreImplementation` | Backend, Selection, Requirements, Initialize, Open | `secrets/localkeyring.Implementation` |
-| `secrets/secretstore` | `StoreSession` | Inspect, Read, PutBatch, Delete, Bind, Reopen, Release, Rotate, Close | `localkeyring` session |
-| `secrets/secretstore` | `SessionMaterialSource`, `SessionMaterial` | Acquire; Close | none in production |
-| `managedos/media` | `Store` | ReadMedia, MutateMedia | `workspace/contextfs.Store` |
-| `managedos/media` | `View`, `Transaction` | Entries, Names, Digest, Frozen; Stage, Publish, Delete | `contextfs` host-wide media area |
-| `managedos/media` | `Acquirer`, `Payload` | Open; Read, Close | `managedos/medialocal.Acquirer` |
-| `managedos/media` | `Confirmer`, `Clock` | Confirm; Now | `internal/cli.Confirmation`; composition |
-| `substrate/libvirt`, `substrate/baremetal`, `managedos/installation` | `Runner` | Run | `reconciliation/ansiblerunner.Runner` |
-| `secrets/material` | `InputReader` | Read | process standard input |
-| `secrets/material` | `Operator` | FileIdentity | the invoking account |
-| `secrets/material` | `Cryptography` | GenerateECDSA, GenerateRSA, CreateCertificate | the package default over the standard library |
-| `controller/clients` | `ToolCatalog` | Select, Resolve, Present | `controller/bundlelocal.ToolCatalog` |
-| `controller/clients` | `NativeResolver`, `NativeInspector` | Resolve; Check | `controller/nativelocal.Resolver` |
-| `controller/clients` | `Installer` | Clients | `controller/ansiblelocal.Installer` |
-| `controller/prerequisites` | `Storage` | ReadController, MutateController | `workspace/contextfs.Store` |
-| `controller/prerequisites` | `StorageTransaction` | Snapshot, Publish, Bundle, RetireBundles | `contextfs` controller transaction |
-| `controller/prerequisites` | `BundleArea` | Read, Write, EnsureDirectory, Entries, Verify, Location | `contextfs` bundle area |
-| `controller/prerequisites` | `Compiler` | Compile | `desiredstate/compilation.Compiler` |
-| `controller/prerequisites` | `HostInspector` | Platform, Identity, Runtime | `controller/hostlinux.Inspector` |
-| `controller/prerequisites` | `DependencyCatalog` | Select, ValidateEgress | `controller/bundlelocal.Catalog` |
-| `controller/prerequisites` | `BundleManager` | Inspect, Prepare, Rebase | `controller/bundlelocal.Manager` |
-| `controller/prerequisites` | `TargetToolCatalog` | Select, Resolve, Present | `controller/bundlelocal.ToolCatalog` |
-| `controller/prerequisites` | `BootstrapResolver` | Resolve | `controller/bundlelocal.BootstrapCatalog` |
-| `controller/prerequisites` | `RuntimeInstaller` | Prepare, Recover | `controller/ansiblelocal.Installer` |
-| `controller/prerequisites` | `PythonExecutionGuard` | WithPython | `controller/bundlelocal.ExecutionGuard` |
-| `controller/prerequisites` | `NativeResolver`, `NativeInspector` | Resolve; Check | `controller/nativelocal.Resolver` |
-| `controller/prerequisites` | `PlanPresenter`, `ProgressReporter` | PresentControllerPlan; ReportProgress | `internal/cli` presenters |
-| `controller/prerequisites` | `Confirmer` | Confirm | `internal/cli.Confirmation` |
-| `controller/privilege` | `Executor`, `Delay` | Run; Wait | `privilege.ProcessExecutor`, `privilege.Timer` |
+1. Create the package in the lifecycle-capability shape above, implementing
+   every method of `Capability` in
+   `internal/reconciliation/lifecycle/contracts.go`.
+2. In `test/architecture/boundaries_test.go`, add it to the capability list in
+   `packageRoles` and give it an `applicationDependencies` entry, normally
+   `capabilityDependencies()`, with the reason for any other edge.
+3. In `test/architecture/composition_test.go`, list in `applicationValues` each
+   exported type with methods that an adapter constructs as a value rather than
+   receives as a service.
+4. In `cmd/bootwright/wiring_reconciliation.go`, add its `boundCapability` to
+   `buildCapabilities` in API kind order and bind each operation's playbook in
+   `operationPlaybook`; `TestBoundPlaybooksCoverExactlyTheOfferedCapabilities`
+   and `TestEveryBoundPlaybookExistsInTheEmbeddedCollection` fail until those
+   agree with each other and the collection.
+5. Add its playbooks, role and protocol plugin to the
+   [collection](#ansible-collection-structure).
 
 ### Context admission and compilation
 
@@ -687,13 +455,17 @@ preserve the descriptor, session and export boundaries defined by
 ### Lifecycle ports
 
 `reconciliation/lifecycle.Service` owns the operation; every platform effect
-reaches it through the `Capability` port. The interface catalog above lists the
-complete set. Three rules constrain how that set grows.
+reaches it through the `Capability` port that
+`internal/reconciliation/lifecycle/contracts.go` declares beside every other
+port the engine consumes. Three rules constrain how the set of capabilities
+grows.
 
 Composition injects an immutable resolver of the available capability
 implementations, keyed by the API kind and the resolved implementation
-identity. No global registry, ambient discovery or runtime plugin path exists,
-and application policy never switches on a concrete implementation.
+identity, and binds the lifecycle runner's playbook entrypoints, so a
+capability names no playbook. No global registry, ambient discovery or runtime
+plugin path exists, and application policy never switches on a concrete
+implementation.
 
 Reconciliation owns cross-domain ordering, operation transitions and durable
 records. A capability plans its own blocks and owns the meaning of their
@@ -754,9 +526,10 @@ Go owns:
 Ansible owns controller dependency installation and Bootwright-controlled
 interaction with managed remote components.
 Remote observation, access, configuration, installation, verification, and
-removal cross an Ansible adapter boundary. Ansible does not infer desired
-state, choose product workflow, order cross-domain work, grant authorization,
-own operation state, or format product output.
+removal cross an Ansible adapter boundary, apart from
+[Machine's direct SSH sessions](#named-exceptions). Ansible does not infer
+desired state, choose product workflow, order cross-domain work, grant
+authorization, own operation state, or format product output.
 
 An Ansible adapter receives one frozen validated request and returns a bounded
 structured result with required evidence. A local native tool may run
@@ -833,6 +606,14 @@ authored variables, gathered facts, and arbitrary role/task/plugin names cannot
 select executable code. Do not use implicit role dependencies or shared mutable
 facts to communicate across capability boundaries.
 
+A consumer of a realized Machine dispatches on the substrate arm or identity
+channel Go froze into its request, through that substrate role's fixed task
+files, and each dispatch ends in a terminal fail for a value it has no task file
+for. Who owns substrate composition is an open owner decision
+([backlog A3 (port)](milestones/backlog.md#audit-follow-ups-2026-09)).
+
+Not yet met: the Managed OS and cluster-install dispatches refuse an unknown value with a leading assert, not a terminal fail, and no structural test checks either; tracked as [backlog Y1](milestones/backlog.md#audit-follow-ups-2026-09).
+
 ### Ansible collection plugins and results
 
 A Bootwright module or action validates a frozen request, invokes the required
@@ -847,32 +628,60 @@ sensitive detail follow [security.md](security.md).
 
 #### The adapter result protocol
 
-Every lifecycle adapter reports on one channel the runner owns and the adapter
-inherits: a write descriptor for its records and a read descriptor for the
-runner's acknowledgement. Neither is a file the automation names, and nothing
-the adapter prints on its own output is part of this protocol. One record is
-one canonical JSON object on one line, bounded so a malformed or oversized
-record refuses rather than being parsed.
+Every adapter run reports on one channel its runner owns and the adapter
+inherits: descriptor 3 carries the adapter's records and descriptor 4 the
+runner's acknowledgements. Neither is a file the automation names, and nothing
+the adapter prints on its own output is part of this protocol. A record is one
+canonical JSON object (sorted keys, no insignificant whitespace, ASCII) on one
+line of at most 64 KiB with its newline, carrying exactly its phase's fields;
+an acknowledgement is the line `proceed`. The lifecycle runner
+(`reconciliation/ansiblerunner`) and the controller runner
+(`controller/ansiblelocal`, for `setup` and the controller stage) accept these
+phases:
 
-The phases are fixed. `loaded` is published once, before any effect, and waits
-for the runner's acknowledgement, so an adapter that was started without
-authorization performs nothing. `group` reports one declared presentation group
-entering or leaving a run, and only a group the frozen block declares may
-advance completion. `completed` carries the bounded evidence, and the outcome
-it proves, exactly once. The controller stage adds `prepared`, which publishes
-the before-state a host-wide effect is permitted to change, and is the only
-phase outside this set.
+| Phase | Runner | Direction | Fields | Acknowledgement | Bounds | Failure effect |
+| --- | --- | --- | --- | --- | --- | --- |
+| `loaded` | both | adapter → runner | `phase` | before any effect | first, once | Acknowledgement EOF or another reply fails the adapter before its first effect. |
+| `prepared` | controller | adapter → runner | `phase`, `preparation`: `inventorySHA256`, `addedSources`, and for a native plan `afterInventorySHA256`, `planDigest`, `transitionsSHA256` | after the runner matches this before-state to the frozen request and publishes it durably | once, after `loaded`, except on recovery; at most 512 sources | Unmatched or unpublished, it is never acknowledged, so no host-wide effect runs. |
+| `native` | controller | adapter → runner | `phase` | before the native package transaction | once, after `prepared`, only for native actions | Once authorized, the transaction is not killed on a deadline or cancellation. |
+| `continue` | controller | adapter → runner | `phase` | before each tool installation | one per frozen tool, in order, after `prepared`; at most 128 | Acknowledgement EOF fails the adapter before that tool. |
+| `group` | lifecycle | adapter → runner | `phase`, `group`, `status` | none | after `loaded` | Progress only; a settled status advances completion only for a group the frozen block declares. |
+| `completed` | both | adapter → runner | `phase`, `outcome`, non-empty `evidence` | none | last, once | Absent when the channel closes, the run has no result. |
+
+`outcome` is `changed` or `unchanged`, and the controller runner refuses
+`unchanged` after an authorized `native`. `status` is `running`, `ok`, `failed`
+or `skipped`, and every status but `running` settles its group. Go alone derives
+`failed`, `unknown` and `canceled`; they never cross the channel.
+
+Both runners refuse a malformed or oversized record, an unknown, repeated or
+out-of-order phase, a record after `completed`, and more records than their
+bound: 64 for the lifecycle runner, 132 for the controller runner (`loaded`,
+`prepared`, `native`, `completed` and a `continue` per tool). A refusal ends the
+protocol; no further acknowledgement is sent. A deadline (2 hours for a
+lifecycle run, 10 minutes for the controller runner) or a cancellation kills
+the adapter's process group, sparing only an authorized native transaction. A
+descendant still holding the channel after the adapter exits is drained for 5
+seconds, or 60 once a controller run is prepared or cancelled, and the result
+is lost.
+
+A lifecycle attempt is then `unknown` after a refusal, a deadline, a lost result
+or a zero exit without `completed`; `failed` after a non-zero exit that broke no
+protocol rule; and `canceled` when the operator cancels. The controller runner
+reports `failed` for any failure before `prepared` is published, since no
+host-wide effect was yet permitted, and `unknown` after it or on cancellation.
 
 A completion publishes evidence proving no postcondition only when the run is a
 read-only observation, because the engine resolves a part-way effect from that
-evidence while a mutation must reach its postcondition or fail. A refusal names
-the fields and objects still unproved, never their values, so the message stays
-safe where the evidence itself is censored.
+evidence while a mutation must reach its postcondition or fail. An adapter's
+refusal names the fields and objects still unproved, never their values, so the
+message stays safe where the evidence itself is censored.
 
-The protocol, its phases and that rule are one shared implementation. What the
-evidence contains, and what proves it, belong to each capability. Go decides
-what an outcome and its evidence mean; a plugin neither schedules work nor
-authorizes it.
+The protocol, its phases and these rules are one shared implementation, and one
+runner carries every adapter run. What the evidence contains, and what proves
+it, belong to each capability. Go decides what an outcome and its evidence
+mean; a plugin neither schedules work nor authorizes it.
+
+Not yet met: `controller/ansiblelocal` and `reconciliation/ansiblerunner` each decode the protocol, with bounds of 132 and 64 records; the lifecycle decoder admits duplicate keys, a `group` on `completed` and any non-empty `status`; and each capability's action plugin copies the phase dispatch, enums and postcondition rule; tracked as [backlog C28](milestones/backlog.md#candidates).
 
 ## Implementations and version variation
 

@@ -135,7 +135,7 @@ func (s Service) refuseUnsupported(state *compilation.State) error {
 	if len(unsupported) == 0 {
 		return nil
 	}
-	return failure("lifecycle.state",
+	return failure("lifecycle.unsupported",
 		"this executable cannot realize "+strings.Join(unsupported, ", "),
 		"remove those objects from the selected Environment, or use an example within the supported shape such as "+supportedExample)
 }

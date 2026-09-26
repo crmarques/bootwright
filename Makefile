@@ -45,8 +45,10 @@ vulncheck:
 ansible-check:
 	./scripts/ansible-check
 
+# Guidance links, cited paths and tests, command lines, and the tables specs
+# share with code: diagnostics, bounds, the command catalog and transitions.
 docs-check:
-	$(GO) test -count=1 -run '^TestDocs' ./test/architecture ./internal/cli
+	$(GO) test -count=1 -run '^(TestDocs|TestDiagnosticCodesMatchOutputSpec|TestDocumentedBoundsMatchCode|TestCommandCatalogMatchesSpec|TestTransitionTablesMatchSpec)' ./test/architecture ./internal/cli ./internal/reconciliation/lifecycle
 
 # The inner-loop tier: formatting, vet, the architecture suite and the packages
 # this branch changed together with their dependents.

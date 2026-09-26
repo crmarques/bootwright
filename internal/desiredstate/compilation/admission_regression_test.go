@@ -18,16 +18,17 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-func regressionCompiler() compilation.Compiler {
-	selection := func(catalog api.Catalog) compilation.Selection {
-		selected := environment.Select(catalog, nil)
-		result := compilation.Selection{Catalog: selected.Catalog, ExcludedContainerClusters: selected.ExcludedContainerClusters, ExcludedStorageClusters: selected.ExcludedStorageClusters}
-		for _, problem := range selected.Problems {
-			result.Problems = append(result.Problems, compilation.ObjectIssue{Object: problem.Object, Issue: problem.Issue})
-		}
-		return result
+func environmentSelection(catalog api.Catalog) compilation.Selection {
+	selected := environment.Select(catalog, nil)
+	result := compilation.Selection{Catalog: selected.Catalog, ExcludedContainerClusters: selected.ExcludedContainerClusters, ExcludedStorageClusters: selected.ExcludedStorageClusters}
+	for _, problem := range selected.Problems {
+		result.Problems = append(result.Problems, compilation.ObjectIssue{Object: problem.Object, Issue: problem.Issue})
 	}
-	return compilation.NewCompiler(yamlstream.Parser{}, selection,
+	return result
+}
+
+func regressionCompiler() compilation.Compiler {
+	return compilation.NewCompiler(yamlstream.Parser{}, environmentSelection,
 		compilation.Rules{Normalize: environment.Normalize, Validate: environment.Validate},
 		compilation.Rules{Normalize: infrastructureservices.Normalize, ValidateAuthored: infrastructureservices.ValidateAuthored, ValidatePartial: infrastructureservices.ValidatePartial, Validate: infrastructureservices.Validate},
 		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, ValidatePartial: secrets.ValidateAuthored, Validate: secrets.Validate},
@@ -231,5 +232,38 @@ spec:
 	env, _ := state.Effective().Find(api.Environment, "synthetic")
 	if !env.Spec().Has("defaults", "ContainerCluster", "install", "agent", "bootArtifacts") {
 		t.Fatal("recipient suppression mutated the authored defaults fragment")
+	}
+}
+
+// An excluded cluster root is a selection warning, not an advisory: advisories
+// carry only inactive authored semantics.
+func TestExcludedClusterRootIsASelectionWarning(t *testing.T) {
+	cluster := `
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata: {name: NAME}
+spec:
+  distribution: {type: okd, release: {version: 4.20.0}}
+  install:
+    mode: connected
+    platform: {type: none}
+    endpoints:
+      api: {source: {type: node}}
+      ingress: {}
+  nodes: [{name: master, role: master, machineRef: node}]
+`
+	input := sources(environmentYAML + "  containerClusters: [kept]\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: node}\nspec: {os: {provided: true}}\n" +
+		strings.Replace(cluster, "NAME", "kept", 1) + strings.Replace(cluster, "NAME", "dropped", 1))
+	compiler := compilation.NewCompiler(yamlstream.Parser{}, environmentSelection, compilation.Rules{Normalize: environment.Normalize, Validate: environment.Validate})
+	state, report, err := compiler.Compile(context.Background(), input)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	if _, ok := state.Effective().Find(api.ContainerCluster, "dropped"); ok {
+		t.Fatal("the excluded cluster root stayed in effective state")
+	}
+	if !reflect.DeepEqual(report.ExcludedContainerClusters, []string{"dropped"}) || len(report.Advisories) != 0 || len(report.Diagnostics) != 1 || report.Diagnostics[0].Code != "api.selection" {
+		t.Fatalf("unexpected report: %#v", report)
 	}
 }

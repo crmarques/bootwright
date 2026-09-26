@@ -202,6 +202,85 @@ continuation verifies the operation kind, context identity, frozen-input
 digest, plan digest, every selected implementation and execution-dependency
 digest, and required ownership evidence before doing work.
 
+The four tables below state the transition code exactly:
+`TestTransitionTablesMatchSpec` drives that code with every row, so a row
+changes only together with the code.
+
+### Attempt outcomes
+
+An attempt records the effect and block state its capability's outcome
+justifies. An outcome outside this set is recorded as `unknown`, and an attempt
+its invocation's cancellation interrupted as `canceled`, whatever it reported.
+
+| Adapter outcome | Effect state | Block |
+| --- | --- | --- |
+| `changed` | `completed` | `done` |
+| `unchanged` | `completed` | `done` |
+| `failed` | `unknown` | `failed` |
+| `canceled` | `unknown` | `unknown` |
+| `unknown` | `unknown` | `unknown` |
+
+A typed failure proves nothing about the target, so its effect stays `unknown`,
+yet its block is `failed` rather than `unknown`: the retry that follows
+[converges](#converging-an-effect) whatever the attempt left. An attempt never
+records `no-effect` or `partial`; only a resolution does.
+
+### Resolution outcomes
+
+A resolution is the read-only observation that
+[converging an effect](#converging-an-effect) defines, and it is the only way
+an unproved block moves. An operator starts one only by repeating the
+operation's verb: a continuation observes every unproved block before it starts
+anything else, and a fresh `destroy` over an incomplete apply observes them
+before it registers. No command edits a block state. An observation that fails
+or reports an effect outside this set is recorded as `unknown`.
+
+| Observation proves | Effect state | Block |
+| --- | --- | --- |
+| Positive completion | `completed` | `done` |
+| Positive no effect | `no-effect` | `failed` |
+| Positive partial realization this context owns | `partial` | `failed` |
+| Failed, forbidden, empty, malformed, contradictory, or foreign observation | `unknown` | `unknown` |
+
+The operation then takes the state its blocks give it under
+[precedence](#operation-state-precedence), and a block resolved `failed` is
+retried by a new attempt, which converges it.
+
+### Block transitions
+
+| Block state | Step | Leads to |
+| --- | --- | --- |
+| `pending` | `attempt` | `running`, then `failed`, `unknown` or `done` |
+| `failed` | `retry` | `running`, then `failed`, `unknown` or `done` |
+| `running` | `observe` | `failed`, `unknown` or `done` |
+| `unknown` | `observe` | `failed`, `unknown` or `done` |
+| `done` | `none` | `done` |
+
+An `attempt` starts once every dependency is `done` and the block's stage is
+selected; a `retry` is a new attempt of the first failed block the selection
+admits, run alone. Either records `running` before its first side effect and
+then its [attempt outcome](#attempt-outcomes). An `observe` step is a
+resolution and records its [resolution outcome](#resolution-outcomes);
+unproved blocks are observed before any other step starts.
+
+A block that an invocation finds `running` lost its executor mid-attempt.
+Nothing recorded its outcome, so it is unproved exactly as an `unknown` block
+is: the next continuation or removal observes it under the exclusive lock, and
+it becomes `unknown` only when that observation proves nothing.
+
+### Operation state precedence
+
+When an invocation ends, the operation records the state of the first row its
+blocks satisfy:
+
+| Operation state | Holds when |
+| --- | --- |
+| `unknown` | any block is `unknown` |
+| `failed` | any block is `failed` |
+| `done` | every block is `done` |
+| `paused` | its execution stopped uncancelled with work left |
+| `running` | otherwise |
+
 ## Plan and execution
 
 [Secrets](secrets.md#immutable-binding-and-contexts) owns confidential immutable
@@ -218,7 +297,9 @@ pending registry before its first platform side effect.
 A plan is a dependency DAG of stable blocks. Each block has an ID, description,
 stage, dependencies, the host resources it will not share, impacts, and
 execution kind. Operations are `running`, `paused`, `failed`, `unknown`, or
-`done`; blocks are `pending`, `running`, `failed`, `unknown`, or `done`.
+`done`; blocks are `pending`, `running`, `failed`, `unknown`, or `done`; the
+effect an attempt or resolution records is `no-effect`, `partial`,
+`completed`, or `unknown`.
 
 A plan is written wave by wave. A block's *wave* is one past the deepest block
 it waits for, and a block that waits for nothing is in the first wave. Blocks
@@ -375,9 +456,10 @@ state.
 ### Attempts and unknown outcomes
 
 The executor allocates the next attempt number and durably records `running`
-before a block's first side effect. Each attempt durably records its effect
-state as `no-effect`, `completed`, or `unknown`; only positive evidence permits
-the first two. A Bootwright-controlled block reaches `done` only after its
+before a block's first side effect. Each attempt durably records the effect
+state its [outcome](#attempt-outcomes) justifies, `completed` or `unknown`, and
+only positive evidence permits an effect state other than `unknown`. A
+Bootwright-controlled block reaches `done` only after its
 effect plus required ownership and completion evidence are durable. It reaches
 `failed` only with a typed failure whose evidence and capability contract
 define a safe continuation or retry boundary. A direct apply or destroy result
@@ -404,16 +486,18 @@ it: a failed block is retried by repeating its operation, and a block resolved
 from a partial realization is retried the same way. Each capability owns which
 of its own differences are convergible and names them beside its replay rules.
 
-A lost response, dead executor, cancellation, required-log failure, or
-contradictory observation moves the attempt effect state, block, and operation
-to durable `unknown` unless positive evidence already proves completion or no
-effect. Once an attempt's outcome is decided, the records that state it are
-written under a boundary the cancellation does not reach, because an
-interruption that recorded nothing would leave durable state claiming its
-effect is still running, and a running effect is the one state no later
-operation may continue past, resolve, remove, or delete. Cancellation stops
-the next attempt from starting; it never suppresses the record of the attempt
-that already ran. Resolving `unknown` is a read-only, capability-owned
+A lost response, cancellation, required-log failure, or contradictory
+observation moves the attempt effect state, block, and operation to durable
+`unknown` unless positive evidence already proves completion or no effect. A
+dead executor records nothing and leaves its block `running`, which every later
+invocation treats as `unknown` ([block transitions](#block-transitions)). Once
+an attempt's outcome is decided, the records that state it are written under a
+boundary the cancellation does not reach, because an interruption that recorded
+nothing would leave its block durably `running`: unproved, so no later
+operation may continue past, remove, or delete it until a new observation
+resolves it, although the attempt had already proved its outcome. Cancellation
+stops the next attempt from starting; it never suppresses the record of the
+attempt that already ran. Resolving `unknown` is a read-only, capability-owned
 observation against the frozen request and exact target identity. Before any resolution
 observation—including local process, network, or remote probing—Bootwright must
 restore the required operation logging boundary, durably allocate the next
@@ -425,22 +509,16 @@ logging-boundary restoration or resolution-log creation failure sets or
 preserves the durable log fault; a resolution-number allocation failure leaves
 its prior log-fault value unchanged.
 
-Resolution permits only these evidence-backed transitions:
-
-| Durable evidence | Effect state | Block | Operation |
-| --- | --- | --- | --- |
-| Positive completion | `completed` | `done` | `running` or `done`, as the frozen plan requires |
-| Positive no effect | `no-effect` | `failed` | `failed`; a new attempt converges it |
-| Positive partial realization this context owns | `partial` | `failed` | `failed`; a new attempt converges it |
-| Failed, forbidden, empty, malformed, contradictory, or foreign observation | `unknown` | `unknown` | `unknown` |
+Resolution permits only the evidence-backed transitions of the
+[resolution outcomes](#resolution-outcomes).
 
 A partial realization is the ordinary outcome of an interrupted effect, and
 resolving it to `failed` is what lets the context move: an `unknown` block
 starts no retry, no dependent block, no removal effect and no deletion, so a
 target that is provably this context's own and provably incomplete must not be
-left there. What a capability accepts as partial is its own, under the converge
-rule below, and it is never a target it cannot prove is ours: a foreign or
-unreadable observation stays `unknown`.
+left there. What a capability accepts as partial is its own, under the rule of
+[converging an effect](#converging-an-effect), and it is never a target it
+cannot prove is ours: a foreign or unreadable observation stays `unknown`.
 
 Resolution-log failure requests cancellation, preserves its identity without
 reuse, and sets or preserves the durable log fault. It permits a transition
@@ -466,16 +544,18 @@ that still cannot prove an effect registers nothing and refuses, naming each
 block it could not prove, because an effect no observation resolves says
 nothing about what it owns.
 
-A required-log failure is also a durable operation fault. Restoration permits
-new logging but never repairs, appends to, or replaces the failed attempt log.
-Even when positive evidence resolves the affected block to `done` or `failed`,
-no later effect or retry starts until the required private logging boundary is
-safely restored. Missing or truncated log detail is never reconstructed,
+A required-log write failure is also a sticky, durable operation fault: it sets
+the operation record's `logFault` flag, and no later effect or retry starts
+until the required private logging boundary is safely restored, even when
+positive evidence resolves the affected block to `done` or `failed`.
+Restoration permits new logging but never repairs, appends to, or replaces the
+failed attempt log. Missing or truncated log detail is never reconstructed,
 treated as operation evidence, or used to weaken the resolution rules above.
 
-Not yet met: no failure sets the durable log fault, and an attempt discards a
-failed log append, so a later invocation continues without restoration;
-tracked as [backlog S10](milestones/backlog.md#audit-follow-ups-2026-09).
+Not yet met: nothing sets `logFault`, a log that fails to open refuses only the
+invocation that opened it, and every later log `Append` error is discarded, so
+a later invocation continues without restoration; tracked as
+[backlog S10](milestones/backlog.md#audit-follow-ups-2026-09).
 
 ### Continuation and removal
 

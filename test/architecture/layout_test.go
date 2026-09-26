@@ -8,8 +8,8 @@ import (
 )
 
 // stubCapabilities are the application packages whose command is recognized but
-// unavailable. Implementing one updates this list and the command map in
-// specs/architecture.md together.
+// unavailable. Implementing one removes it here and marks its commands available
+// in the CLI command catalog in the same change.
 func stubCapabilities() map[string]bool {
 	return map[string]bool{
 		"internal/addons/catalog":                true,

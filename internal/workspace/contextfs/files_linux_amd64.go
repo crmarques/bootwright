@@ -13,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 	"unsafe"
+
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 const (
@@ -640,11 +642,28 @@ func renameNoReplaceAt(parent *directory, oldName, newName string) error {
 	return nil
 }
 
+// busyError is a root lock or context lease another Bootwright command holds.
+// Nothing is wrong with the store, so it is reported as lifecycle.lease rather
+// than context.state: the same command succeeds once the holder finishes, and
+// Bootwright never takes a lock over.
+type busyError struct{ failure error }
+
+func busy(message string) error {
+	return &busyError{diagnostics.NewFailureWithRemediation("lifecycle.lease", message, "",
+		"retry after the running Bootwright command finishes")}
+}
+
+func (e *busyError) Error() string { return e.failure.Error() }
+
+func (e *busyError) Unwrap() error { return e.failure }
+
 func lock(dir *directory) error {
 	if err := dir.verify(); err != nil {
 		return err
 	}
-	if err := syscall.Flock(int(dir.file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err := syscall.Flock(int(dir.file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); errors.Is(err, syscall.EWOULDBLOCK) {
+		return busy("context state is held by another mutator")
+	} else if err != nil {
 		return state("context state is held by another mutator")
 	}
 	return dir.verify()
@@ -654,7 +673,9 @@ func lockShared(dir *directory) error {
 	if err := dir.verify(); err != nil {
 		return err
 	}
-	if err := syscall.Flock(int(dir.file.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
+	if err := syscall.Flock(int(dir.file.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); errors.Is(err, syscall.EWOULDBLOCK) {
+		return busy("context storage is busy")
+	} else if err != nil {
 		return state("context storage is busy")
 	}
 	return nil

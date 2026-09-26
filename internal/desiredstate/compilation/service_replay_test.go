@@ -71,7 +71,7 @@ spec:
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	if report.Counts != (compilation.Counts{FilesSeen: 3, ObjectsDecoded: 3}) || !reflect.DeepEqual(report.ExcludedResourceFiles, []string{"excluded.yaml"}) || len(report.Diagnostics) != 1 || len(report.Advisories) != 1 {
+	if report.Counts != (compilation.Counts{FilesSeen: 3, ObjectsDecoded: 3}) || !reflect.DeepEqual(report.ExcludedResourceFiles, []string{"excluded.yaml"}) || len(report.Diagnostics) != 1 || report.Diagnostics[0].Code != "api.selection" || len(report.Advisories) != 0 {
 		t.Fatalf("replay lost counts or exclusions: %#v", report)
 	}
 	if report.Diagnostics[0].Source.Path != "/synthetic/original/config/excluded.yaml" {
@@ -90,7 +90,7 @@ spec:
 	if len(result.Effective.Objects()) != 3 || result.Effective.Objects()[0].Name() == "" {
 		t.Fatal("effective result exposed mutable catalog storage")
 	}
-	if len(report.Diagnostics) != 1 || len(report.Advisories) != 1 {
+	if len(report.Diagnostics) != 1 {
 		t.Fatal("rendering erased validation warnings from a prior result")
 	}
 

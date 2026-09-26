@@ -17,7 +17,7 @@ the [unavailable result](cli.md#recognized-but-unavailable-commands).
 | [M4a](#m4a--single-node-openshift-through-the-agent-installer) | Single-node OpenShift through the agent installer | Container cluster, Substrate | product | Specified | awaiting operator acceptance |
 | [X11](#x11--audit-phase-0-and-spec-restructure) | Audit Phase 0 and spec restructure | Architecture | safety | Specified | in progress |
 
-- **Next for agents:** finish X11; promote [audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09) only on request.
+- **Next for agents:** land X11 and record its landing commit as the M1h and M4a acceptance baseline; promote [audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09) only on request.
 - **Next for operator:** once X11 lands, run [lab-rhel](../examples/lab-rhel/README.md#run-it) and record it in the [acceptance ledger](../docs/acceptance.md) (M1h), then [lab-sno](../examples/lab-sno/README.md) (M4a); M5a's rehearsal waits for S3b.
 - **Next to define:** M1i, the [GitOps handoff gate](#next-ordered-outcomes).
 
@@ -238,9 +238,9 @@ owner decisions of 2026-09-25. **Definition:** Specified. **Delivery:** in
 progress. Items: S1, S2a, S3a, S4a, S5, S6a, S7 to S9 (first steps), O1 to O8,
 Z1, G1 to G9 and A1 to A8, less the backlog's follow-ups. It adds the M5a and
 M4a deviations and binds lifecycle concurrency to one until S4b. Remaining:
-A1 to A8, the stale split-tracking comment in
-`test/architecture/complexity_test.go`, and M1h's and M4a's acceptance
-baselines. Exit gates: `make check`, `make docs-check` and CI.
+landing on the default branch through its pull request; the landing commit
+becomes M1h's and M4a's acceptance baseline. Exit gates: `make check`,
+`make docs-check` and CI.
 
 ## Next ordered outcomes
 

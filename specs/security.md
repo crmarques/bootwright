@@ -324,29 +324,22 @@ input exists.
 ## Required security proof
 
 Security-sensitive changes require executable negative proof, not only
-successful examples. Tests must cover:
+successful examples, and proof that prohibited effects do not occur. Each
+invariant names the tests that guard it and, where proof is known to be
+missing, the backlog item that adds it. Destructive and remote paths also
+require qualified real-system tests, recorded in the
+[acceptance ledger](../docs/acceptance.md), before production use.
 
-- malformed, ambiguous, oversized, over-deep, and high-cardinality inputs at
-  every declared bound;
-- traversal, symlink, hard-link, special-file, concurrent-replacement,
-  permission, atomic-publication, and cleanup failures;
-- executable, argument, environment, working-directory, descriptor, inventory,
-  plugin, endpoint, redirect, DNS, proxy, and privilege substitution attempts;
-- invalid TLS and SSH identity, failed and ambiguous remote probes, target
-  drift, and unauthorized scope expansion;
-- secret and credential leakage through human and JSON output, diagnostics,
-  verbose paths, logs, adapter events, retries, errors, cancellation, and
-  `no_log` handling;
-- time, retry, concurrency, memory, disk, log, and process-output limits,
-  including cancellation and process-tree reaping;
-- dependency integrity, lock agreement, native-schema compatibility, and
-  refusal of runtime-tool substitution or drift; and
-- mutation crash points, lease conflict, replay, partial success, rollback,
-  evidence loss, and required-log write failure.
-
-Tests must also prove prohibited effects do not occur: read-only commands
-perform no writes, payload reads, processes, network access, secret lookup, or
-generation; rejected operations perform no effect; and a failed security check
-cannot be bypassed by verbosity, confirmation, retry, or adapter behavior.
-Destructive and remote paths require qualified real-system tests in addition
-to hermetic port tests before production use.
+| Invariant | Guarding tests | Gap |
+| --- | --- | --- |
+| Malformed, ambiguous, oversized, over-deep and high-cardinality input refuses at every declared bound. | `TestExpandedDepthCeilingIsInclusiveAndStopsLaterNormalizers`, `TestDiagnosticCeilingDeduplicatesAndStopsLaterValidators`, `TestFileReaderRejectsOversizeBeforeReading`, `TestAmbientRouteRefusesEveryAmbiguousOrUnqualifiedValue` | T2 |
+| Traversal, symlink, hard-link, special-file, concurrent-replacement, permission, atomic-publication and cleanup failures fail closed. | `TestDiscoveredYAMLSymlinkIsRejected`, `TestSecretSubtreeRefusesUnsafeEntriesBeforeCallback`, `TestSecretReplaceRejectsSameByteInodeSubstitution`, `TestPublicationLeavesNoStageOnFailure` | S8 |
+| Executable, argument, environment, working-directory, descriptor, inventory, plugin, endpoint, redirect, DNS, proxy and privilege substitution refuses. | `TestReexecutionPathPinsRunningExecutable`, `TestSupervisorRefusesAnAssignmentOutsideTheRouteVocabulary`, `TestInventoryPinsTheSSHIdentityAndHostKey`, `TestDownloadsFollowNoRedirectAndRefuseAnythingButOneServedImage`, `TestExplicitProxyIgnoresAmbientAndMatchesWithoutDNS` | F2, Y1 |
+| Invalid TLS and SSH identity, failed and ambiguous remote probes, target drift and unauthorized scope expansion refuse. | `TestCertificateValidationRejectsMismatchExpiryUsageAndFalseChain`, `TestADeclaredHostKeyForAnotherTargetRefuses`, `TestInstalledHostIdentityRefusesUntrustedOrAmbiguousEvidence`, `TestContinuationRefusesDriftedInputExecutableOrHost` | S3b, S11 |
+| Secret and credential material never reaches output, diagnostics, verbose paths, logs, adapter events, retries, errors, cancellation or `no_log` handling. | `TestSecretNormalOutputsAndStateNeverContainMaterialOrDigests`, `TestMaterialNeverAppearsInMetadataOrErrors`, `TestVariablesCarryPathsNotMaterial`, `TestAcquisitionRequiresExactBoundedPublisherBytesAndRedactsFailures` | Y1 |
+| Time, retry, concurrency, memory, disk, log and process-output limits hold, including cancellation and process-tree reaping. | `TestAdapterOutputStreamsWhileItRunsAndBoundsWhatItKeeps`, `TestGuardedCommandDiesAndIsReapedAfterParentExit`, `TestRunnerReapsUnauthorizedChildOnCancellationDuringRecovery`, `TestLifecycleConcurrencyBound`, `TestOperationBoundaryPreservesOrdinaryCancellationAndDeadline` | S4b, Z2 |
+| Dependency integrity, lock agreement and native-schema compatibility hold, and runtime-tool substitution or drift refuses. | `TestFrozenToolRejectsVersionRouteAndChecksumSubstitution`, `TestBootstrapRejectsSelfConsistentSourceAndVersionSubstitution`, `TestNativeSolveRefusesChangedBytesForSameRetainedRelease`, `TestRuntimeRequiresSelectedNativeCLIToRemainExecutable` | Y1 |
+| Mutation crash points, lease conflict, replay, partial success, rollback, evidence loss and required-log write failure leave a recoverable context. | `TestCrashReleasesLocksAndLeavesCompleteSelection`, `TestLifecyclePublicationCheckpointsFireAndFailClosed`, `TestMutationGuardLayoutAndLeases`, `TestAPartlyRealizedBlockIsConvergedByRepeatingTheOperation`, `TestRequiredLogFaultStopsTheOperation` | S10, T2 |
+| Read-only commands perform no writes, payload reads, processes, network access, secret lookup or generation. | `TestImmutableInputAndReadOnlyLifecycleBoundary`, `TestALifecycleInspectionRunsNothing`, `TestPlanPreviewsWithoutWritingAnything`, `TestStubServicesRemainStubs` | none |
+| Rejected operations perform no effect. | `TestCancellationBeforeAnyEffectRegistersNothing`, `TestDeclinedConfirmationRegistersNothing`, `TestUnsupportedObjectsRefuseBeforeRegistration`, `TestInvalidAdmissionAndUnavailableRoutesDoNotWrite` | none |
+| A failed security check cannot be bypassed by verbosity, confirmation, retry or adapter behavior. | `TestMissingSafeguardsCannotBeReplacedByConfirmationFlags`, `TestOrphanAcknowledgementClaimsNothingAndReplacesNoOtherSafeguard`, `TestDestroyOverAnInterruptedApplyIsStillGated` | F3 |

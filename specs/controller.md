@@ -567,8 +567,8 @@ Each check reports `ready` or `not-ready`, or `unverified` where a dry run
 cannot verify it.
 
 The [diagnostic taxonomy](cli/output.md#diagnostic-taxonomy-and-order) owns
-`preflight.*` and `controller.*` failure codes; existing context, privilege,
-output and cancellation codes retain their meanings. Failures include a safe
+`preflight.*` and `controller.*` failure codes; existing context, privilege
+and cancellation codes retain their meanings. Failures include a safe
 actionable next step. A failed acquisition names the publisher host it could
 not use and distinguishes unresolvable names, an untrusted certificate, an
 expired acquisition timeout and an unreachable endpoint, because each needs a
