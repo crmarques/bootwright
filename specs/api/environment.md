@@ -154,7 +154,7 @@ discovered under [the API input rules](../api.md#environment-directory-and-selec
   invalid.
 
 A native add-on descriptor published by the add-on registration journey
-([milestones](../milestones.md#candidates) candidate C10 owns its storage and
+([milestones](../milestones/backlog.md#candidates) candidate C10 owns its storage and
 publication) is the sole selection exception.
 `add-ons/_store/<name>/add-on.yaml` is selected when it contains exactly one
 `ClusterAddon/<name>` and the same directory contains the exact sibling basename

@@ -415,7 +415,7 @@ the selected context's lease for its entire execution, because its host
 reservations, controller evidence and operation records must stay coherent
 while its effects run. Concurrent context reads therefore wait for it, and a
 second mutator refuses rather than waiting indefinitely. Narrowing that
-boundary is [deferred work](milestones.md#candidates). Within it, Workspace
+boundary is [deferred work](milestones/backlog.md#candidates). Within it, Workspace
 supplies the operation area, the mutation-evidence replacement primitive and
 the reservation publication; Reconciliation owns what they contain and when
 they advance.

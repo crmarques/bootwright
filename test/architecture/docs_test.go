@@ -20,7 +20,7 @@ func docsByteBudgets() map[string]int {
 		"AGENTS.md":           2600,
 		"CLAUDE.md":           64,
 		"specs/index.md":      5120,
-		"specs/milestones.md": 84000,
+		"specs/milestones.md": 16800,
 		".agents/skills/code-implementation/SKILL.md": 8500,
 	}
 }

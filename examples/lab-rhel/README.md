@@ -25,16 +25,31 @@ reservations, readiness evidence and the inverse.
 | [`lab-bmc-credentials`](secret-descriptors/lab-bmc-credentials.yaml) | Generated credentials the emulated BMCs answer with. |
 | [`bootwright-machine-key`](secret-descriptors/bootwright-machine-key.yaml) | The fleet key installed for the `bootwright` account on every Machine this graph installs. |
 
-## Before the first real run
+## Host prerequisites
 
-This build realizes every object the example declares, and its plan orders the
-controller stage, the four services, the provider host, the machine and its
-installation in that dependency order. Every in-tree test is unitary, though:
-none of them creates a container, a network or a guest. Two things are still
-qualified by hand before a first real run, and both are recorded in
-[emulated-BMC knowledge](../../.agents/knowledge/sushy-tools-emulated-bmc.md):
-the Redfish surface of the pinned sushy-tools image, and `mkksiso` against the
-RHEL 9.8 boot media. Expect to correct something the first time through.
+- Fedora on linux/amd64. RHEL 9 prepares with `setup`, but its controller stage
+  refuses the `libvirt` requirement this controller declares until an approved
+  entitled source is defined.
+- Hardware virtualization with `/dev/kvm`; the controller stage installs
+  libvirt, QEMU, swtpm and the ISO tooling itself.
+- Root, or an account that may run `sudo`: Bootwright asks for authorization
+  when a command needs it.
+- The guest's 4 vCPUs and 8 GiB of memory beyond what the host and the four
+  service containers use, and disk for the two media images, the DVD package
+  tree published from them and the guest's 60 GiB disk.
+- One lab per host at a time: `lab-sno` binds the same sockets and the same
+  guest bridge.
+- The RHEL 9.8 boot and DVD images, and the addresses below adjusted to the
+  host before the input is imported.
+
+Every in-tree test is unitary: none creates a container, a network or a guest.
+Running this journey under a build matching M1h's acceptance baseline and
+recording it in the
+[acceptance ledger](../../docs/acceptance.md) is M1h's operator gate. The first
+real runs, which qualified the emulated BMC's Redfish surface and `mkksiso`
+against RHEL 9.8 boot media, are described in
+[development](../../docs/development.md) and
+[installation knowledge](../../.agents/knowledge/installation-completion-proof.md).
 
 ## Lab conventions
 
@@ -81,88 +96,112 @@ If chronyd holds `0.0.0.0:123`, either give it explicit `bindaddress` lines for
 the addresses it should serve and reload it, or stop it for the duration of the
 test and start it again afterwards.
 
+The run restarts the host, so make the controller address and any chronyd
+change persist across a reboot.
+
 ## Media
 
 The two images this example installs from live in the host-wide media store,
 which every context shares. The store lives beside the rest of the prepared
-host state, so run `bootwright setup` before the first `media add`. Add each
-image once, under the exact name the `MachineImage` and the install profile
-select:
-
-```sh
-./bin/bootwright media add --name rhel-9.8-x86_64-boot.iso --from-file /path/to/rhel-9.8-x86_64-boot.iso
-./bin/bootwright media add --name rhel-9.8-x86_64-dvd.iso --from-file /path/to/rhel-9.8-x86_64-dvd.iso
-./bin/bootwright media list --checksums
-```
-
+host state, so `setup` runs before the first `media add`. Each image is added
+once, under the exact name the `MachineImage` and the install profile select.
 An operation that uses a stored image freezes it: `media list` marks it
 reserved, and `media delete` refuses until every context that froze it is
 destroyed.
 
 ## Run it
 
-Bootwright requests sudo authorization for context, setup and lifecycle
-commands. The automation is embedded in the executable, so a build that changes
-it also changes the dependency-bundle identity: run `setup` again after `make
-build`, otherwise `apply` refuses with the retained bundle it cannot use.
+Run the block one line at a time from the repository root. `setup`, `apply`,
+`machine stop` and `destroy` present what they will do and ask for
+confirmation, and any command may ask for sudo authorization. The automation
+is embedded in the executable, so run `setup` again after any `make build` that
+changes it; `apply` refuses the retained bundle otherwise.
 
 ```sh
 make build
-./bin/bootwright validate -f examples/lab-rhel
-./bin/bootwright context init --name lab-rhel --input-dir "$PWD/examples/lab-rhel"
+./bin/bootwright setup
+./bin/bootwright media add --name rhel-9.8-x86_64-boot.iso --from-file /path/to/rhel-9.8-x86_64-boot.iso
+./bin/bootwright media add --name rhel-9.8-x86_64-dvd.iso --from-file /path/to/rhel-9.8-x86_64-dvd.iso
+./bin/bootwright media list --checksums
+./bin/bootwright context init --name lab-rhel
+./bin/bootwright context update --name lab-rhel --input-dir "$PWD/examples/lab-rhel" --yes
 ./bin/bootwright secret generate
 ./bin/bootwright secret check
-./bin/bootwright setup
+./bin/bootwright apply --stage controller
 ./bin/bootwright preflight controller --context lab-rhel
 ./bin/bootwright plan
-./bin/bootwright plan --stage infra-components
 ./bin/bootwright apply --stage infra-components
-```
-
-The plan marks each block with its stage. A stage selection that admits no
-startable block previews nothing to start, and applying it refuses before
-registering anything.
-
-The first apply presents its plan, asks for confirmation, installs the client
-closure its graph selects, pulls each pinned image, publishes the
-configuration, starts the units and proves every service answers. Verify it
-independently:
-
-```sh
 curl -sk https://192.0.2.1:8443/ -o /dev/null -w '%{http_code}\n'
 curl -x http://192.0.2.1:3128 -sI http://example.com/ | head -1
 dig @192.0.2.1 controller.lab.example.test +short
 dig @192.0.2.1 +tcp rhel-01.lab.example.test +short
 chronyd -Q -t 3 'server 192.0.2.1 iburst port 123'
 systemctl list-units 'bootwright-*'
+./bin/bootwright apply
+./bin/bootwright status
+./bin/bootwright apply
+./bin/bootwright destroy --authorize data-loss
+./bin/bootwright machine stop --name rhel-01
+./bin/bootwright destroy --authorize data-loss
+./bin/bootwright apply
+sudo systemctl reboot
+./bin/bootwright machine start --name rhel-01
+./bin/bootwright machine stop --name rhel-01
+./bin/bootwright destroy --authorize data-loss
 ```
 
-An empty served root answers `404` and the proxy answers `400` to a request
-that is not a proxy request; both are well-formed answers and both are what
-readiness proves. A completed apply is terminal: repeating it over the same
-input settles without an effect, and editing the input first refuses with
-`lifecycle.state`, because there is
-[no reconciliation path](../../specs/state-reconciliation.md#lifecycle-unit).
-The inverse removes exactly what the apply created, and the destroy that
-deletes the guest's disks consumes the `data-loss` authorization:
+Every block depends on the controller block, so the first apply selects the
+`controller` stage: it binds the context to this host and installs the client,
+hypervisor and installer-tooling closures the graph selects, then pauses.
+`preflight controller --context lab-rhel` then proves that context's own
+tools, and `plan` previews the rest of the paused operation, marking each block
+with its stage. A stage selection that admits no startable block refuses
+before registering anything.
 
-A removal proves every Machine it would take back is down before it
-registers, so a destroy while the guest is still running refuses
-`lifecycle.live` and names the command that stops it. Nothing is removed and no
-operation is created, so stopping the guest and repeating the command is the
-whole recovery:
+The `infra-components` apply pulls each pinned image, publishes the
+configuration, starts the units and proves every service answers; the `curl`,
+`dig`, `chronyd` and `systemctl` lines check the same independently. An empty
+served root answers `404` and the proxy answers `400` to a request that is not
+a proxy request; both are well-formed answers and both are what readiness
+proves.
+
+The unscoped `apply` realizes the provider host and `rhel-01` and installs RHEL
+through its emulated BMC; `status` reports the result. A completed apply is
+terminal: the second `apply` settles without an effect, and editing the input
+first refuses with `lifecycle.state`, because there is
+[no reconciliation path](../../specs/state-reconciliation.md#lifecycle-unit).
+
+The removal deletes the guest's disks, so `destroy` consumes the `data-loss`
+authorization; without `--authorize data-loss` it refuses before registering
+anything. It also proves every Machine it would take back is down before it
+registers, so the first `destroy` refuses `lifecycle.live` while `rhel-01` runs
+and names the command that stops it. Nothing is removed and no operation is
+created, so stopping the guest and repeating the command is the whole recovery.
+The inverse removes exactly what the apply created, and destroy ends
+`state: done` and `next: none`; repeating it settles.
+
+M1h's operator gate continues past that destroy. A fresh `apply` realizes the
+environment again under a new operation. The host restart then proves the
+provider host carries its guest network and storage pool across a reboot: once
+the host is back, return to the repository root and `machine start` powers
+`rhel-01` on through its emulated BMC. Only then do the final `machine stop`
+and `destroy` take the environment back, which leaves it ready for the undo
+below.
+
+## Undo
+
+A completed destroy releases the context's ownership evidence, so the context
+and the media it froze can then be deleted:
 
 ```sh
-./bin/bootwright apply --yes    # settles: nothing to do
-./bin/bootwright destroy        # refuses while rhel-01 is running
-./bin/bootwright machine stop --name rhel-01
-./bin/bootwright destroy
-./bin/bootwright destroy        # settles: nothing to remove
 ./bin/bootwright context delete --name lab-rhel --purge
+./bin/bootwright media delete --name rhel-9.8-x86_64-boot.iso
+./bin/bootwright media delete --name rhel-9.8-x86_64-dvd.iso
 ```
 
-Destroy ends `state: done` and `next: none`, and the purge succeeds because the
-completed removal released the context's ownership evidence.
+What `setup` and the controller stage installed stays: nothing uninstalls host
+packages or client closures. If you stopped chronyd for the run, start it
+again.
 
 ## Interrupting an apply
 
@@ -198,7 +237,7 @@ froze, so rebuilding the collection refuses one, while a fresh removal runs
 under the build in hand:
 
 ```sh
-make build && sudo ./bin/bootwright setup   # publish the repaired automation
+make build && ./bin/bootwright setup        # publish the repaired automation
 ./bin/bootwright machine stop --name rhel-01 --force   # if its guest is running
 ./bin/bootwright destroy                    # names any authorization it needs
 ./bin/bootwright apply --yes

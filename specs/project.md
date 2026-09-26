@@ -83,7 +83,7 @@ Never depend on an external location after admission: a command that admits
 input copies it into the Bootwright store, later commands read only that copy,
 and a recorded source location is provenance, never identity, uniqueness or a
 read path. Secret `file` sources are the recorded exception until
-[C21](milestones.md#candidates) brings them under this rule.
+[C21](milestones/backlog.md#candidates) brings them under this rule.
 
 Day-2 operations are outside the current scope, including ongoing drift repair
 and publication of application or fleet GitOps content. Bootwright's lifecycle
