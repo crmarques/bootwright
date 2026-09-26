@@ -223,8 +223,12 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 				"the desired state changed after this apply completed",
 				"destroy what it owns before applying the changed input")
 		}
+		owned, err := completedOwnership(operation, frozen, states)
+		if err != nil {
+			return transition{}, err
+		}
 		decided, err := s.freshDestroy(ctx, operation.Executable, operation.ID, firstBinding(operation.Bindings),
-			operation.Bindings, reconciliation.OwnedSubset(frozen, states), false)
+			operation.Bindings, owned, false)
 		if err != nil {
 			return transition{}, err
 		}
@@ -238,6 +242,34 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 		return transition{}, err
 	}
 	return plannedFrom(decided, operation, states), nil
+}
+
+// completedOwnership is what a completed apply owns: its whole frozen plan,
+// because an apply completes only once every block of it is done. A block whose
+// record reads anything else contradicts that completion, and a lost record is
+// such a block, since absence reads back as pending. A removal of the done rest
+// would leave that block's effect in place and then release the binding it
+// needs, so the removal refuses instead, naming every such block, before it
+// binds, probes, registers or releases anything. An incomplete apply and a
+// failed removal legitimately hold blocks that are not done and never come here.
+func completedOwnership(operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (reconciliation.Plan, error) {
+	unfinished := []string{}
+	for _, block := range frozen.Blocks {
+		state := states[block.ID]
+		if state == reconciliation.BlockDone {
+			continue
+		}
+		if state == "" {
+			state = reconciliation.BlockPending
+		}
+		unfinished = append(unfinished, block.ID+" ("+string(state)+")")
+	}
+	if len(unfinished) != 0 {
+		return reconciliation.Plan{}, failure("lifecycle.state",
+			"the completed apply "+operation.ID+" records no block completion for these blocks, and a removal that skipped one would leave its effect in place: "+strings.Join(unfinished, ", "),
+			"review its durable state with bootwright status")
+	}
+	return reconciliation.OwnedSubset(frozen, states), nil
 }
 
 // unchangedInput reports whether this context still holds exactly the desired
