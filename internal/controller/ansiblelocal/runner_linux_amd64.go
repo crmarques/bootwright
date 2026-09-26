@@ -221,8 +221,15 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 		case message, open := <-messages:
 			if !open {
 				messages = nil
-				if err := <-readResult; err != nil && operationErr == nil {
-					operationErr = failure("controller.unknown", "the Ansible structured result was incomplete")
+				if err := <-readResult; err != nil {
+					if operationErr == nil {
+						operationErr = failure("controller.unknown", "the Ansible structured result was incomplete")
+					}
+					// A refused or unreadable record ends the protocol at once:
+					// the closed authorization channel fails a waiting adapter.
+					// Nothing is killed, so an authorized native transaction
+					// runs to its end and its channel is drained as usual.
+					input.Close()
 				}
 				continue
 			}

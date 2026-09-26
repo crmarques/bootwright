@@ -208,6 +208,18 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, output, input *o
 			drain = timer.C
 		}
 	}
+	// A refused or unreadable record ends the protocol at once. Closing the
+	// authorization channel releases whatever waits on it, and no lifecycle
+	// effect outlives the protocol, so the process group goes too. A group
+	// already seen to exit or killed by cancellation is left alone.
+	killed := false
+	refuse := func() {
+		input.Close()
+		if !killed && !canceled && waited != nil {
+			killed = true
+			_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+		}
+	}
 	cancelled := ctx.Done()
 	for messages != nil || waited != nil {
 		select {
@@ -232,8 +244,11 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, output, input *o
 		case message, open := <-messages:
 			if !open {
 				messages = nil
-				if err := <-readResult; err != nil && operationErr == nil {
-					operationErr = failure("lifecycle.unknown", "the adapter structured result was incomplete", outputRemediation)
+				if err := <-readResult; err != nil {
+					if operationErr == nil {
+						operationErr = failure("lifecycle.unknown", "the adapter structured result was incomplete", outputRemediation)
+					}
+					refuse()
 				}
 				continue
 			}
@@ -265,7 +280,7 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, output, input *o
 				operationErr = failure("lifecycle.unknown", "the adapter capability protocol was invalid", outputRemediation)
 			}
 			if operationErr != nil || canceled {
-				input.Close()
+				refuse()
 				continue
 			}
 			if message.Phase == "loaded" {

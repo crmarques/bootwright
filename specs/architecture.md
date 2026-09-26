@@ -657,13 +657,17 @@ or `skipped`, and every status but `running` settles its group. Go alone derives
 Both runners refuse a malformed or oversized record, an unknown, repeated or
 out-of-order phase, a record after `completed`, and more records than their
 bound: 64 for the lifecycle runner, 132 for the controller runner (`loaded`,
-`prepared`, `native`, `completed` and a `continue` per tool). A refusal ends the
-protocol; no further acknowledgement is sent. A deadline (2 hours for a
-lifecycle run, 10 minutes for the controller runner) or a cancellation kills
-the adapter's process group, sparing only an authorized native transaction. A
-descendant still holding the channel after the adapter exits is drained for 5
-seconds, or 60 once a controller run is prepared or cancelled, and the result
-is lost.
+`prepared`, `native`, `completed` and a `continue` per tool). A refusal, or a
+channel that cannot be read, ends the protocol at once: the runner closes the
+acknowledgement channel, so an adapter waiting for one fails instead of waiting
+out the deadline, and the lifecycle runner kills the adapter's process group.
+The controller runner kills nothing on a refusal: the adapter fails at its next
+acknowledgement, and an authorized native transaction first runs to its end. A
+deadline (2 hours for a lifecycle run, 10 minutes for the controller runner) or
+a cancellation kills the adapter's process group, sparing only an authorized
+native transaction. A descendant still holding the channel after the adapter
+exits is drained for 5 seconds, or 60 once a controller run is prepared or
+cancelled, and the result is lost.
 
 A lifecycle attempt is then `unknown` after a refusal, a deadline, a lost result
 or a zero exit without `completed`; `failed` after a non-zero exit that broke no

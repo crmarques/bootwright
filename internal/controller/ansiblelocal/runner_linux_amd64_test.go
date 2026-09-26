@@ -56,6 +56,21 @@ func TestRunnerProtocolChild(t *testing.T) {
 		os.Exit(0)
 	}
 	emit(map[string]any{"phase": "loaded"}, true)
+	if mode == "refused" || mode == "refused-native" {
+		if mode == "refused-native" {
+			emit(map[string]any{"phase": "native"}, true)
+		}
+		_, _ = output.Write([]byte("not a record\n"))
+		if mode == "refused-native" {
+			// The authorized transaction is still running when the record is
+			// refused, and it must be allowed to finish.
+			time.Sleep(300 * time.Millisecond)
+			_ = os.WriteFile(os.Getenv("BOOTWRIGHT_TEST_TRANSACTION"), []byte("done\n"), 0600)
+		}
+		// Only a closed authorization channel answers this wait.
+		_, _ = input.ReadString('\n')
+		os.Exit(19)
+	}
 	if mode == "recover-native" {
 		emit(map[string]any{"phase": "native"}, true)
 		emit(map[string]any{"phase": "completed", "outcome": "changed", "evidence": map[string]any{"request": sha, "before": sha, "after": strings.Repeat("b", 64), "planDigest": strings.Repeat("c", 64), "added": []string{"native-one"}, "tools": []string{}, "postcondition": true}}, false)
@@ -202,6 +217,45 @@ func TestRunnerReapsUnauthorizedChildOnCancellationDuringRecovery(t *testing.T) 
 			}
 			if !errors.Is(err, context.Canceled) {
 				t.Fatalf("%s cancellation = %v (outcome %s)", operation, err, result.Outcome)
+			}
+		})
+	}
+}
+
+// A refused record ends the protocol at once: the closed authorization channel
+// fails an adapter waiting on it instead of leaving it to the ten-minute
+// deadline. Nothing is killed, so an authorized native transaction still
+// running when its record is refused finishes first.
+func TestAProtocolRefusalReleasesAWaitingAdapter(t *testing.T) {
+	for name, mode := range map[string]string{"before preparation": "refused", "during a native transaction": "refused-native"} {
+		t.Run(name, func(t *testing.T) {
+			launch, request, boundary := runnerFixture(t, mode)
+			boundary.authorizedDrain, boundary.completedDrain = 200*time.Millisecond, 200*time.Millisecond
+			transaction := filepath.Join(t.TempDir(), "transaction")
+			launch.Environment = append(launch.Environment, "BOOTWRIGHT_TEST_TRANSACTION="+transaction)
+			want := "failed"
+			if mode == "refused-native" {
+				request.Operation = "recover"
+				request.Native = &prerequisites.NativeResolvedPlan{Digest: strings.Repeat("c", 64), BeforeSHA256: strings.Repeat("a", 64), AfterSHA256: strings.Repeat("b", 64), Actions: []prerequisites.NativeAction{{SourceID: "native-one"}}}
+				transitions, err := prerequisites.NativeTransitionsDigest(request.Native.Actions)
+				if err != nil {
+					t.Fatal(err)
+				}
+				request.Preparation = &prerequisites.NativePreparation{InventorySHA256: request.Native.BeforeSHA256, AfterInventorySHA256: request.Native.AfterSHA256, PlanDigest: request.Native.Digest, TransitionsSHA256: transitions, AddedSources: []string{"native-one"}}
+				want = "unknown"
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			started := time.Now()
+			result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary)
+			if elapsed := time.Since(started); ctx.Err() != nil || elapsed > 5*time.Second {
+				t.Fatalf("the refused adapter waited %s for an acknowledgement (%v)", elapsed, err)
+			}
+			if err == nil || result.Outcome != want {
+				t.Fatalf("a refused record left the run %s (%v), want %s", result.Outcome, err, want)
+			}
+			if _, err := os.Stat(transaction); mode == "refused-native" && err != nil {
+				t.Fatalf("the authorized native transaction did not finish: %v", err)
 			}
 		})
 	}
