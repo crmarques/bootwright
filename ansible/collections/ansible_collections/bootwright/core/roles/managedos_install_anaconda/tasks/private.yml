@@ -1,8 +1,10 @@
 ---
 # Material only the installing machine may read, published beneath an
 # unguessable directory this attempt minted. Every directory from the owned
-# root down is 0711 and every file 0600, so nothing is listable and the
-# unguessable segment is the only way to name what it contains.
+# root down is 0711 and every file 0640 root:root, so nothing is listable, the
+# unguessable segment is the only way to name what it contains, and only root
+# and the serving worker, whose group is root
+# (infra_artifact_server_nginx/templates/nginx.conf.j2), can read it.
 - name: Create the private subtree this block owns
   ansible.builtin.file:
     path: '{{ managedos_install_anaconda_private_root }}'
@@ -27,7 +29,7 @@
     remote_src: true
     owner: root
     group: root
-    mode: '0600'
+    mode: '0640'
   loop:
     - name: identity
       source: '{{ bootwright_os_install_material.hostIdentity }}'
