@@ -190,7 +190,10 @@ admission, derived requests and reservation keys in
 placement uses the same request and evidence contract and is operator-run.
 Executed service effects, the process and cancellation boundary of the service
 adapter, and SSH placement against a real host are covered by no in-tree gate.
-Its consumer is now [`examples/lab-rhel`](../../examples/lab-rhel).
+The operator-run acceptance it named, the journey of the since removed
+managed-infra-components example (staged apply, replay, interrupt, continue and
+destroy against a real container runtime), the single-service lab-artifacts
+journey and SSH placement against a second OS-ready host, is unrecorded. Its consumer is now [`examples/lab-rhel`](../../examples/lab-rhel).
 
 ### M1g — controller prerequisites by selecting scope
 
@@ -247,9 +250,12 @@ block [`examples/lab-rhel`](../../examples/lab-rhel) plans; and `make check`.
 
 **Constraints left behind:** an executed native client transaction, an executed
 target-client publication and the RHEL libvirt refusal against a real entitled
-source are covered by no in-tree gate. An operator upgrading a host runs
-`setup` again before the first `apply` of each context, because no binding
-exists until then.
+source are covered by no in-tree gate. The operator-run acceptance it named,
+`apply --stage controller` for a context selecting OpenShift clients and Helm
+followed by a repeated apply that reports `unchanged` without publisher access,
+and the same for a context declaring `libvirt` on Fedora, is unrecorded. An
+operator upgrading a host runs `setup` again before the first `apply` of each
+context, because no binding exists until then.
 
 ## Out-of-sequence slices
 

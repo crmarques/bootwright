@@ -36,4 +36,6 @@ adapter. [Architecture](specs/architecture.md) owns the rules.
 ## Development
 
 See [development](docs/development.md) for the pinned toolchain, the check
-tiers and shell-runtime requirements.
+tiers and shell-runtime requirements, and the
+[operator guide](docs/operator-guide.md) for preparing a host, running the
+labs and recording a run.
