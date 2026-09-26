@@ -8,8 +8,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -184,4 +186,89 @@ func TestTerminalFlagsAreRestoredAfterReadyAndEmptyReads(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertFlags()
+}
+
+// A closed terminal or a lost SSH session delivers SIGHUP. Uncaught, it ends
+// the process at once, skipping the cancellation that stops and reaps the
+// operation's adapters, so it cancels exactly as SIGINT and SIGTERM do.
+func TestHangupCancelsTheOperationLikeTerminate(t *testing.T) {
+	for _, received := range []syscall.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP} {
+		t.Run(received.String(), func(t *testing.T) {
+			// A second subscriber keeps an unhandled signal from ending the test
+			// binary, so a missing registration fails here instead.
+			guard := make(chan os.Signal, 1)
+			signal.Notify(guard, received)
+			defer signal.Stop(guard)
+			ctx, finish := beginSignalOperation(context.Background())
+			defer finish()
+			if err := syscall.Kill(os.Getpid(), received); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case <-ctx.Done():
+			case <-time.After(5 * time.Second):
+				t.Fatalf("%s did not cancel the operation", received)
+			}
+			if cause := context.Cause(ctx); !errors.Is(cause, cli.ErrInterrupted) {
+				t.Fatalf("%s canceled with %v, want the interrupt cause", received, cause)
+			}
+		})
+	}
+}
+
+// A process started with hangups ignored, as nohup starts it, was asked to
+// outlive them, so a hangup leaves its operation running.
+func TestAnIgnoredHangupLeavesTheOperationRunning(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	// The shell ignores SIGHUP and the helper inherits that across exec.
+	command := exec.CommandContext(ctx, "/bin/sh", "-c", `trap '' HUP; exec "$0" "$@"`, os.Args[0], "-test.run=^TestIgnoredHangupHelper$")
+	command.Env = append(os.Environ(), "BOOTWRIGHT_HANGUP_HELPER=1")
+	input, err := command.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := command.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	reader := bufio.NewReader(output)
+	if line, err := reader.ReadString('\n'); err != nil || line != "ready\n" {
+		cancel()
+		_ = command.Wait()
+		t.Fatalf("the operation did not begin: %q (%v)", line, err)
+	}
+	if err := command.Process.Signal(syscall.SIGHUP); err != nil {
+		t.Fatal(err)
+	}
+	// The hangup is pending or handled before the helper reads this line.
+	if _, err := io.WriteString(input, "sent\n"); err != nil {
+		t.Fatal(err)
+	}
+	rest, _ := io.ReadAll(reader)
+	if err := command.Wait(); err != nil || string(rest) != "running\n" {
+		t.Fatalf("an ignored hangup ended the operation: %q (%v)", rest, err)
+	}
+}
+
+func TestIgnoredHangupHelper(t *testing.T) {
+	if os.Getenv("BOOTWRIGHT_HANGUP_HELPER") != "1" {
+		return
+	}
+	ctx, finish := beginSignalOperation(context.Background())
+	defer finish()
+	fmt.Println("ready")
+	if _, err := bufio.NewReader(os.Stdin).ReadString('\n'); err != nil {
+		os.Exit(20)
+	}
+	select {
+	case <-ctx.Done():
+		fmt.Println("canceled")
+	case <-time.After(500 * time.Millisecond):
+		fmt.Println("running")
+	}
+	os.Exit(0)
 }

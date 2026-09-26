@@ -129,6 +129,39 @@ them with bounded structured decoding, sanitize them before any presentation,
 and do not treat prose or exit status alone as proof of effect, ownership, or
 rollback.
 
+A lifecycle adapter dies with its invocation, even an invocation killed
+outright, as the elevated child is when its sudo parent dies. Its runner starts
+it with a parent-death signal from an operating-system thread held until the
+adapter is reaped, because Linux sends that signal when the creating thread
+ends, not the process. The adapter's supervisor, a child subreaper, arms the
+same signal for itself and then re-checks that its original parent still
+lives, because a parent that died first sends none. On that signal it kills
+every descendant, including an Ansible worker that moved into a session of its
+own, then its process group and itself; its `ansible-playbook` child is killed
+by the supervisor's death. Cancellation, a deadline and a protocol refusal end
+the tree the same way: the runner sends the adapter that signal, then kills its
+process group once the adapter is reaped or the 5-second drain passes,
+whichever comes first. A group kill alone never reaches a worker in a session
+of its own, and sent first it would end the supervisor before its handler ran.
+A controller run arms no parent-death signal: an authorized native package
+transaction runs to its end, and the adapter stops at its next acknowledgement,
+which fails once the invocation's ends of the channels close.
+
+Not yet met: a supervisor killed on its own, as by the out-of-memory killer,
+runs no handler, so its `ansible-playbook` child dies with it but an Ansible
+worker in a session of its own runs on; tracked as
+[backlog S15](milestones/backlog.md#pre-openshift-readiness-program-2026-09).
+
+The process that runs a Bootwright-owned operation cancels it on SIGHUP exactly
+as on SIGINT and SIGTERM, so a closed terminal or a lost session interrupts the
+operation instead of ending the process past its cleanup. A process started
+with SIGHUP ignored, as `nohup` starts it, keeps ignoring it.
+
+Not yet met: the unprivileged supervisor of a sudo invocation handles SIGINT
+and SIGTERM but not SIGHUP, so a hangup delivered to it alone ends it without
+relaying the signal to the elevated child; tracked as
+[backlog S15](milestones/backlog.md#pre-openshift-readiness-program-2026-09).
+
 Native-shaped authored maps are closed against the pinned supported native
 schema before projection. Only their owning typed renderer may produce an
 allowlisted argument or private native file. Generated scripts are
@@ -337,7 +370,7 @@ require qualified real-system tests, recorded in the
 | Executable, argument, environment, working-directory, descriptor, inventory, plugin, endpoint, redirect, DNS, proxy and privilege substitution refuses. | `TestReexecutionPathPinsRunningExecutable`, `TestSupervisorRefusesAnAssignmentOutsideTheRouteVocabulary`, `TestInventoryPinsTheSSHIdentityAndHostKey`, `TestDownloadsFollowNoRedirectAndRefuseAnythingButOneServedImage`, `TestExplicitProxyIgnoresAmbientAndMatchesWithoutDNS`, `TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment`, `TestOnlyContextFreeAcquisitionForwardsTheInvokingRoute` | Y1 |
 | Invalid TLS and SSH identity, failed and ambiguous remote probes, target drift and unauthorized scope expansion refuse. | `TestCertificateValidationRejectsMismatchExpiryUsageAndFalseChain`, `TestADeclaredHostKeyForAnotherTargetRefuses`, `TestInstalledHostIdentityRefusesUntrustedOrAmbiguousEvidence`, `TestContinuationRefusesDriftedInputExecutableOrHost` | S3b, S11 |
 | Secret and credential material never reaches output, diagnostics, verbose paths, logs, adapter events, retries, errors, cancellation or `no_log` handling. | `TestSecretNormalOutputsAndStateNeverContainMaterialOrDigests`, `TestMaterialNeverAppearsInMetadataOrErrors`, `TestVariablesCarryPathsNotMaterial`, `TestAcquisitionRequiresExactBoundedPublisherBytesAndRedactsFailures` | Y1 |
-| Time, retry, concurrency, memory, disk, log and process-output limits hold, including cancellation and process-tree reaping. | `TestAdapterOutputStreamsWhileItRunsAndBoundsWhatItKeeps`, `TestGuardedCommandDiesAndIsReapedAfterParentExit`, `TestRunnerReapsUnauthorizedChildOnCancellationDuringRecovery`, `TestLifecycleConcurrencyBound`, `TestOperationBoundaryPreservesOrdinaryCancellationAndDeadline` | S4b, Z2 |
+| Time, retry, concurrency, memory, disk, log and process-output limits hold, including cancellation and process-tree reaping. | `TestAdapterOutputStreamsWhileItRunsAndBoundsWhatItKeeps`, `TestGuardedCommandDiesAndIsReapedAfterParentExit`, `TestAKilledInvocationTakesItsAdapter`, `TestStoppingAnAdapterEndsItsTreeBeyondItsGroup`, `TestThreadChurnNeverSignalsARunningAdapter`, `TestHangupCancelsTheOperationLikeTerminate`, `TestAnIgnoredHangupLeavesTheOperationRunning`, `TestRunnerReapsUnauthorizedChildOnCancellationDuringRecovery`, `TestLifecycleConcurrencyBound`, `TestOperationBoundaryPreservesOrdinaryCancellationAndDeadline` | S4b, Z2 |
 | Dependency integrity, lock agreement and native-schema compatibility hold, and runtime-tool substitution or drift refuses. | `TestFrozenToolRejectsVersionRouteAndChecksumSubstitution`, `TestBootstrapRejectsSelfConsistentSourceAndVersionSubstitution`, `TestNativeSolveRefusesChangedBytesForSameRetainedRelease`, `TestRuntimeRequiresSelectedNativeCLIToRemainExecutable` | Y1 |
 | Mutation crash points, lease conflict, replay, partial success, rollback, evidence loss and required-log write failure leave a recoverable context. | `TestCrashReleasesLocksAndLeavesCompleteSelection`, `TestLifecyclePublicationCheckpointsFireAndFailClosed`, `TestMutationGuardLayoutAndLeases`, `TestAPartlyRealizedBlockIsConvergedByRepeatingTheOperation`, `TestRequiredLogFaultStopsTheOperation`, `TestARestorationWhoseClearFailsStartsNothing` | S10 (rest), T2 |
 | Read-only commands perform no writes, payload reads, processes, network access, secret lookup or generation. | `TestImmutableInputAndReadOnlyLifecycleBoundary`, `TestALifecycleInspectionRunsNothing`, `TestPlanPreviewsWithoutWritingAnything`, `TestStubServicesRemainStubs` | none |
