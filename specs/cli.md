@@ -219,7 +219,10 @@ reads its answer the same way. `--yes` suppresses only this prompt, under
 
 Classify and validate arguments before privilege effects. Help, completion,
 version, invalid invocations, unavailable commands, explicit-input validate and
-`setup --dry-run` never elevate. Available controller setup and inspection may
+`setup --dry-run` never elevate. The same classification selects, from the
+parsed flags, the invocations that read the
+[context-free acquisition route](controller.md#the-context-free-acquisition-route)
+before `sudo` can prompt. Available controller setup and inspection may
 need private shared-host metadata or installation privilege; their exact
 effects follow [Controller](controller.md#selection-and-command-journeys).
 Available commands requiring context state run as root; a
@@ -289,8 +292,8 @@ never verifies the invoking host.
 `setup` and `preflight controller` follow the
 [Controller journeys](controller.md#selection-and-command-journeys), including
 preparation before context creation or Environment import and the context each
-consumes. Which commands read the invoking environment's proxy route is owned
-by the [context-free acquisition route](controller.md#the-context-free-acquisition-route).
+consumes. Which invocations read the invoking environment's proxy route is
+owned by the [context-free acquisition route](controller.md#the-context-free-acquisition-route).
 Controller selection alone does not cause setup, install a container runtime or
 start services.
 

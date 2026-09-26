@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/spf13/pflag"
 )
 
 // InvocationClass contains only syntactic decisions, made without acquiring
@@ -13,9 +14,10 @@ type InvocationClass struct {
 	RequiresRoot bool
 	JSON         bool
 	Command      string
-	// AmbientRoute marks the commands that acquire before any context exists,
-	// so the invoking environment is the only place a proxy choice can come
-	// from. Every context-backed command takes its Machine's choice instead.
+	// AmbientRoute marks the invocations whose parsed flags acquire before any
+	// context exists, so the invoking environment is the only place a proxy
+	// choice can come from. Every context-backed or local shape, including
+	// one of the same command, takes no route from it.
 	AmbientRoute bool
 }
 
@@ -42,14 +44,28 @@ func ClassifyInvocation(args []string) InvocationClass {
 			return InvocationClass{}
 		}
 	}
+	ambient := contextFreeAcquisition(path, command.Flags())
 	if path == "setup" && boolValue(command.Flags(), "dry-run") {
-		return InvocationClass{Command: path, AmbientRoute: true}
+		return InvocationClass{Command: path, AmbientRoute: ambient}
 	}
-	return InvocationClass{RequiresRoot: true, JSON: selectedJSON(command), Command: path, AmbientRoute: contextFreeAcquisition(path)}
+	return InvocationClass{RequiresRoot: true, JSON: selectedJSON(command), Command: path, AmbientRoute: ambient}
 }
 
-func contextFreeAcquisition(path string) bool {
-	return path == "setup" || path == "preflight controller" || path == "media add"
+// contextFreeAcquisition decides from an admitted invocation's parsed flags
+// whether it acquires, or previews acquisition, before any context exists. One
+// command path can hold both shapes, so the path alone never decides: setup
+// selects no context and always does, a controller preflight does only while
+// its final --context is empty, and a media import only from a URL.
+func contextFreeAcquisition(path string, flags *pflag.FlagSet) bool {
+	switch path {
+	case "setup":
+		return true
+	case "preflight controller":
+		return stringValue(flags, "context") == ""
+	case "media add":
+		return stringValue(flags, "from-url") != ""
+	}
+	return false
 }
 
 // Failure preserves the already-established output contract for errors at the

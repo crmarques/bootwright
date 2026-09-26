@@ -378,15 +378,17 @@ Secrets consumer and recovery definition.
 ### The context-free acquisition route
 
 A command that acquires before any context exists has no Environment to select
-a route from, so it reads one from the environment that invoked it. Exactly
-three commands do: `setup`, `preflight controller` without `--context`, and
-`media add --from-url`. Every context-backed command, including
-`apply --stage controller`, `preflight controller --context <name>` and every
-lifecycle block, continues to take its Machine's normalized proxy choice alone,
-so one context never acquires over two routes. An invocation that is not
-admitted reads no route.
-
-Not yet met: the route is read by command path, so `preflight controller --context` and `media add --from-file` read it too; tracked as [backlog F2](milestones/backlog.md#audit-follow-ups-2026-09).
+a route from, so it reads one from the environment that invoked it. An admitted
+invocation's parsed flags decide this, never its command path alone, and
+exactly three shapes read it: `setup`, whose `--dry-run` preview reports the
+route setup would take; `preflight controller` while its final `--context` is
+omitted or empty, which reports the host's route; and `media add --from-url`.
+Every context-backed shape, including `apply --stage controller`,
+`preflight controller --context <name>` and every lifecycle block, continues to
+take its Machine's normalized proxy choice alone, so one context never acquires
+over two routes. A local shape, such as `media add --from-file`, and an
+invocation that is not admitted read no route, so neither refuses over nor
+forwards a route it never uses.
 
 The route is read from `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`, in either
 case. An unset environment is direct access. The two spellings of one name set
