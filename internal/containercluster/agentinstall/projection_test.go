@@ -304,6 +304,232 @@ func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.
 	}
 }
 
+// A multi-node cluster on a platform the projection has no arm for refuses
+// before registration with the same refusal as every other declaration this
+// contract does not install, rather than later, when its installer inputs are
+// derived. One node on the same platform installs on none and is accepted.
+func TestAMultiNodeClusterOnAnotherPlatformRefusesBeforeRegistration(t *testing.T) {
+	for _, platform := range []string{"vsphere", "external"} {
+		t.Run(platform, func(t *testing.T) {
+			objects := append(base(),
+				guest("ocp-01", "198.51.100.31/24"), guest("ocp-02", "198.51.100.32/24"), guest("ocp-03", "198.51.100.33/24"))
+			objects = append(objects, cluster("ocp",
+				installSelection(
+					endpoints("198.51.100.10", "198.51.100.10", "198.51.100.11", "external"),
+					field("platform", api.MapValue(text("type", platform))),
+				),
+				node("master-0", "master", "ocp-01", "master-0.ocp.lab.example.test"),
+				node("master-1", "master", "ocp-02", "master-1.ocp.lab.example.test"),
+				node("master-2", "master", "ocp-03", "master-2.ocp.lab.example.test")))
+			catalog := api.NewCatalog(objects)
+			if unsupported := Unsupported(catalog); len(unsupported) != 1 || unsupported[0] != "ContainerCluster/ocp" {
+				t.Fatalf("unsupported = %v", unsupported)
+			}
+			_, _, _, err := Requests(catalog, "controller", testContext)
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" ||
+				reported[0].Message != "this executable installs no multi-node cluster on the declared platform" {
+				t.Fatalf("refusal = %#v", reported)
+			}
+
+			single := append(base(), guest("sno-01", "198.51.100.21/24"), cluster("sno",
+				installSelection(
+					endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node"),
+					field("platform", api.MapValue(text("type", platform))),
+				),
+				node("master-0", "master", "sno-01", "master-0.sno.lab.example.test")))
+			if unsupported := Unsupported(api.NewCatalog(single)); len(unsupported) != 0 {
+				t.Fatalf("a single node on %s is refused: %v", platform, unsupported)
+			}
+			media, _, _ := onlyRequests(t, api.NewCatalog(single))
+			if got := encoded(t, media.InstallConfig["platform"]); got != `{"none":{}}` {
+				t.Fatalf("single-node platform = %s", got)
+			}
+		})
+	}
+}
+
+// A multi-node cluster that declares the none platform, or no platform at all,
+// is accepted and installs on none, so the refusal above reaches only the
+// platforms the projection has no arm for.
+func TestAMultiNodeClusterOnNoPlatformInstallsOnNone(t *testing.T) {
+	for name, declared := range map[string][]api.FieldValue{
+		"none":       {field("platform", api.MapValue(text("type", "none")))},
+		"undeclared": nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			objects := append(base(),
+				guest("ocp-01", "198.51.100.31/24"), guest("ocp-02", "198.51.100.32/24"), guest("ocp-03", "198.51.100.33/24"))
+			objects = append(objects, cluster("ocp",
+				installSelection(append([]api.FieldValue{
+					endpoints("198.51.100.10", "198.51.100.10", "198.51.100.11", "external"),
+				}, declared...)...),
+				node("master-0", "master", "ocp-01", "master-0.ocp.lab.example.test"),
+				node("master-1", "master", "ocp-02", "master-1.ocp.lab.example.test"),
+				node("master-2", "master", "ocp-03", "master-2.ocp.lab.example.test")))
+			catalog := api.NewCatalog(objects)
+			if unsupported := Unsupported(catalog); len(unsupported) != 0 {
+				t.Fatalf("unsupported = %v", unsupported)
+			}
+			media, _, _ := onlyRequests(t, catalog)
+			if got := encoded(t, media.InstallConfig["platform"]); got != `{"none":{}}` {
+				t.Fatalf("platform = %s", got)
+			}
+		})
+	}
+}
+
+// hypervisor is a second libvirt host, hv-01, with the provider far-libvirt it
+// hosts and the artifact server far-artifacts placed on it, so a node and the
+// server its boot image is fetched from can be placed on different Machines.
+func hypervisor() []api.Object {
+	host := api.NewObject(api.Machine, "hv-01", api.Value{}, api.MapValue(
+		field("capabilities", api.StringList("libvirt")),
+		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("network", api.MapValue(field("addresses", api.ListValue(
+			api.MapValue(text("name", "ip"), text("address", "192.0.2.2")),
+		)))),
+		field("access", api.MapValue(field("ssh", api.MapValue(
+			text("addressRef", "ip"), text("knownHostsRef", "hv-01-host-key"),
+			field("auth", api.MapValue(text("privateKeyRef", "hv-01-key"))),
+		)))),
+	))
+	provider := api.NewObject(api.InfraProvider, "far-libvirt", api.Value{}, libvirtProvider().Spec().
+		WithPath(api.StringValue("hv-01"), "libvirt", "machineRef").
+		WithPath(api.StringValue("192.0.2.2"), "libvirt", "bmcEmulationDefaults", "bindAddress"))
+	farServer := api.NewObject(api.ArtifactServer, "far-artifacts", api.Value{}, artifactServer().Spec().
+		WithPath(api.StringValue("hv-01"), "machineRef").
+		WithPath(api.StringValue("192.0.2.2"), "bindAddress"))
+	return []api.Object{host, provider, farServer}
+}
+
+// servedBy selects another artifact server for the cluster's boot image.
+func servedBy(server string, declared api.Object) api.Object {
+	return declared.WithSpec(declared.Spec().WithPath(api.StringValue(server),
+		"install", "agent", "redfishVirtualMedia", "artifactServerEndpoint", "serverRef"))
+}
+
+// onRemote places a guest on the provider hv-01 hosts.
+func onRemote(machine api.Object) api.Object {
+	return machine.WithSpec(machine.Spec().WithPath(api.StringValue("far-libvirt"), "substrate", "providerRef"))
+}
+
+// An emulated controller fetches the private boot image without verifying the
+// server, so the image is safe only while that fetch never leaves the provider
+// host the controller runs on. A node on a provider hosted anywhere but the
+// artifact server's placement Machine refuses before registration, naming the
+// node, its provider host, the server and the Machine it is placed on.
+func TestANodeOffTheArtifactServersHostRefusesBeforeRegistration(t *testing.T) {
+	for name, test := range map[string]struct {
+		objects     []api.Object
+		cluster     string
+		remediation string
+	}{
+		"single node": {
+			[]api.Object{onRemote(guest("sno-01", "198.51.100.21/24")), cluster("sno",
+				installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
+				node("master-0", "master", "sno-01", "master-0.sno.lab.example.test"))},
+			"ContainerCluster/sno",
+			"Machine/sno-01 is booted through a controller on Machine/hv-01 and ArtifactServer/lab-artifacts is placed on Machine/controller; " +
+				"place InfraProvider/far-libvirt and ArtifactServer/lab-artifacts on the same Machine",
+		},
+		"one node of three": {
+			[]api.Object{
+				guest("ocp-01", "198.51.100.31/24"), guest("ocp-02", "198.51.100.32/24"), onRemote(guest("ocp-03", "198.51.100.33/24")),
+				cluster("ocp",
+					installSelection(
+						endpoints("198.51.100.10", "198.51.100.10", "198.51.100.11", "openshift"),
+						field("platform", api.MapValue(text("type", "baremetal"))),
+					),
+					node("master-0", "master", "ocp-01", "master-0.ocp.lab.example.test"),
+					node("master-1", "master", "ocp-02", "master-1.ocp.lab.example.test"),
+					node("master-2", "master", "ocp-03", "master-2.ocp.lab.example.test")),
+			},
+			"ContainerCluster/ocp",
+			"Machine/ocp-03 is booted through a controller on Machine/hv-01 and ArtifactServer/lab-artifacts is placed on Machine/controller; " +
+				"place InfraProvider/far-libvirt and ArtifactServer/lab-artifacts on the same Machine",
+		},
+		"server off the provider host": {
+			[]api.Object{guest("sno-01", "198.51.100.21/24"), servedBy("far-artifacts", cluster("sno",
+				installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
+				node("master-0", "master", "sno-01", "master-0.sno.lab.example.test")))},
+			"ContainerCluster/sno",
+			"Machine/sno-01 is booted through a controller on Machine/controller and ArtifactServer/far-artifacts is placed on Machine/hv-01; " +
+				"place InfraProvider/lab-libvirt and ArtifactServer/far-artifacts on the same Machine",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			catalog := api.NewCatalog(append(append(base(), hypervisor()...), test.objects...))
+			if unsupported := Unsupported(catalog); len(unsupported) != 1 || unsupported[0] != test.cluster {
+				t.Fatalf("unsupported = %v", unsupported)
+			}
+			_, _, _, err := Requests(catalog, "controller", testContext)
+			reported := diagnostics.Of(err)
+			const reason = "an emulated controller fetches the boot image without verifying its server, " +
+				"so the server is placed on the provider host that controller runs on"
+			if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" || reported[0].Message != reason {
+				t.Fatalf("refusal = %#v", reported)
+			}
+			if reported[0].Remediation != test.remediation {
+				t.Fatalf("remediation = %q", reported[0].Remediation)
+			}
+		})
+	}
+}
+
+// The rule is that the node's provider host is the server's placement Machine,
+// not that both are the controller: a node on hv-01 booted from a server on
+// hv-01 is not refused by it. Derivation still refuses that server, because the
+// image is built where the installer is, on the controller.
+func TestANodeOnTheArtifactServersHostIsNotRefusedForItsFetch(t *testing.T) {
+	objects := append(append(base(), hypervisor()...), onRemote(guest("sno-01", "198.51.100.21/24")), servedBy("far-artifacts",
+		cluster("sno",
+			installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
+			node("master-0", "master", "sno-01", "master-0.sno.lab.example.test"))))
+	catalog := api.NewCatalog(objects)
+	if unsupported := Unsupported(catalog); len(unsupported) != 0 {
+		t.Fatalf("unsupported = %v", unsupported)
+	}
+	_, _, _, err := Requests(catalog, "controller", testContext)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+		reported[0].Message != "a cluster's boot image is built on the controller, so the server it is published through is placed there" {
+		t.Fatalf("refusal = %#v", reported)
+	}
+}
+
+// A selection that resolves no managed server leaves the fetch with no server
+// to compare, so derivation refuses the selection itself rather than the
+// provider host being refused against an empty placement.
+func TestAnUnresolvedServerIsRefusedAsTheSelection(t *testing.T) {
+	external := api.NewObject(api.ArtifactServer, "lab-artifacts", api.Value{}, api.MapValue(
+		text("management", "external"),
+		field("endpoints", api.ListValue(
+			api.MapValue(text("name", "ip-https"), text("url", "https://artifacts.lab.example.test:8443")),
+		)),
+	))
+	var objects []api.Object
+	for _, object := range base() {
+		if object.Kind() != api.ArtifactServer {
+			objects = append(objects, object)
+		}
+	}
+	objects = append(objects, external, guest("sno-01", "198.51.100.21/24"), cluster("sno",
+		installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
+		node("master-0", "master", "sno-01", "master-0.sno.lab.example.test")))
+	catalog := api.NewCatalog(objects)
+	if unsupported := Unsupported(catalog); len(unsupported) != 0 {
+		t.Fatalf("unsupported = %v", unsupported)
+	}
+	_, _, _, err := Requests(catalog, "controller", testContext)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+		reported[0].Message != "a consumer publishes only into a managed artifact server" ||
+		reported[0].Remediation != "select a managed server on ContainerCluster/sno" {
+		t.Fatalf("refusal = %#v", reported)
+	}
+}
+
 // A supported cluster is named by nothing, so an operation registers.
 func TestASupportedClusterIsNotRefused(t *testing.T) {
 	for name, catalog := range map[string]api.Catalog{

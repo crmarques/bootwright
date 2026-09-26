@@ -74,7 +74,11 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 			return "this executable does not install " + strings.Join(path, "."), ""
 		}
 	}
+	if spec.Get("nodes").Len() > 1 && !multiNodePlatform(spec.Get("install", "platform", "type").Text()) {
+		return "this executable installs no multi-node cluster on the declared platform", ""
+	}
 	controllerMachine := controllerMachineName(catalog)
+	server, serverHost, served := mediaServer(catalog, cluster)
 	for _, node := range spec.Get("nodes").Items() {
 		bound, found := catalog.Find(api.Machine, node.Get("machineRef").Text())
 		if !found {
@@ -99,8 +103,32 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 		if target.Controller.VirtualMedia.Trust == substrate.TrustImportCertificate {
 			return "importing a certificate into a management controller is not implemented", ""
 		}
+		// A virtual node's controller is emulated on its provider host and
+		// fetches the private image without verifying the server, so the token
+		// is the image's only protection unless that fetch never leaves the
+		// host. The server is therefore placed on that same host.
+		if !target.Physical && served && target.PlacementMachine.Name() != serverHost.Name() {
+			return "an emulated controller fetches the boot image without verifying its server, so the server is placed on the provider host that controller runs on",
+				bound.Identity() + " is booted through a controller on " + target.PlacementMachine.Identity() + " and " +
+					server.Identity() + " is placed on " + serverHost.Identity() + "; place " +
+					string(api.InfraProvider) + "/" + target.Provider + " and " + server.Identity() + " on the same Machine"
+		}
 	}
 	return "", ""
+}
+
+// mediaServer is the artifact server the cluster's boot image is published
+// through and the Machine it is placed on, which is where every node's
+// controller fetches that image from. It is absent while the selection does
+// not resolve, which derivation then refuses naming the selection itself.
+func mediaServer(catalog api.Catalog, cluster api.Object) (server, host api.Object, found bool) {
+	selection := cluster.Spec().Get("install", "agent", "redfishVirtualMedia", "artifactServerEndpoint")
+	server, err := artifactserver.Selected(catalog, selection, cluster.Identity())
+	if err != nil {
+		return api.Object{}, api.Object{}, false
+	}
+	host, found = catalog.Find(api.Machine, server.Spec().Get("machineRef").Text())
+	return server, host, found
 }
 
 // controllerMachineName is the Machine this Environment selects as its
