@@ -202,7 +202,7 @@ confirmed setup:
 | Path | Purpose and retention |
 | --- | --- |
 | `registry.json` | One atomic map of context names to their selected inputs and status, plus the Controller descriptor once setup publishes it. |
-| `media/` | Host-wide installer media under the [Managed OS media contract](managed-os.md#media-store): each image's exact bytes beside its canonical record, created by the first `media add`, shared read-only by every context and frozen through shared reservations rather than copied. Images and records are published exclusively and atomically; deletion is guarded by the reservation record. |
+| `media/` | Host-wide installer media under the [Managed OS media contract](managed-os.md#media-store): each image's exact bytes beside its canonical record, created by the first `media add`, shared read-only by every context and frozen through shared reservations rather than copied. An image is [acquired](#media-acquisition) into a private stage in this directory while no root lock is held, then published exclusively and atomically with its record; deletion is guarded by the reservation record. |
 | `contexts/<name>/context.yaml` | Canonical immutable Context configuration; keeps the authored configuration contract separate from runtime metadata. |
 | `desired-state/revisions/<revision-id>/` | Immutable input snapshot, so publication and protected recovery can retain a complete selected revision. Collect unselected revisions only with disposal proof. |
 | `manifest.json` | Original input provenance, blob mapping, sizes and hashes needed to verify and replay the snapshot. |
@@ -253,14 +253,19 @@ Two advisory locks guard the store, and neither is ever waited for:
 - a context's **lease**, an exclusive lock on that context's directory, taken
   only while the exclusive root lock is held.
 
+A media stage's own lock marks a live [acquisition](#media-acquisition) and
+guards nothing else.
+
 | Root lock | Lease | Commands |
 | --- | --- | --- |
 | shared | none | Every read: `context list` and `current`, `plan`, `status`, `preflight controller`, `secret check`, `list` and `show`, `secret encryption status`, `media list`, SSH-trust and input reads, [bounded runs](cli/output.md#bounded-run-output), and the reads that precede `setup`, `apply` and `destroy`. |
-| exclusive | none | Every other command that may publish, such as `context use`, a `context update` that imports no input, `setup`, `media add` and `delete`, and the SSH trust that `machine trust` or a confirmed first use records. |
+| exclusive | none | Every other command that may publish, such as `context use`, a `context update` that imports no input, `setup`, `media delete`, the admission and publication of `media add`, and the SSH trust that `machine trust` or a confirmed first use records. |
+| none | none | The [acquisition](#media-acquisition) of `media add` between those two holds: its copy or download and its digest verification. |
 | exclusive | held | `context init`; a `context update` that imports input; `context delete` of a ready context; `secret set`, `generate` and `delete`, `secret encryption init` and `rotate`, and the Secret binding `apply` and `destroy` take before they execute; and the execution of `apply` and `destroy`. |
 
 A read holds its lock until all stored input or secret-session files have been
-consumed, and a mutator holds its locks until it finishes. A command that
+consumed, and a mutator holds its locks until it finishes, except that
+`media add` releases the root lock while it acquires. A command that
 cannot take the lock or lease refuses with `lifecycle.lease` and a retry
 remedy; no lock or lease is ever waited for or taken over. Revalidate target,
 identity and evidence under those locks. Read-only operations perform no
@@ -269,7 +274,9 @@ repair, initialization or publication.
 A lifecycle operation holds the exclusive root lock and the selected context's
 lease for its entire execution, because its host reservations, controller
 evidence and operation records must stay coherent while its effects run. Every
-other store command, a read included, therefore refuses while one runs.
+other store command, a read included, therefore refuses while one runs; only
+the lock-free [acquisition](#media-acquisition) of a `media add` admitted
+earlier continues, and it refuses at its second hold.
 Narrowing that boundary to the lease alone is
 [deferred work](milestones/backlog.md#candidates). Within it, Workspace
 supplies the operation area, the mutation-evidence replacement primitive and
@@ -332,9 +339,9 @@ filesystems are ext4, XFS, Btrfs, tmpfs and overlayfs; Linux must provide
 
 Bounds apply before allocation/traversal: registry 8 MiB; manifest 4 MiB and
 32 MiB aggregate referenced manifests; paths 4096 bytes; mutation records
-64 KiB; media images 32 GiB each and 64 entries, with records of at most 4 KiB;
-and the operator-visible bounds below. Input and Secrets limits additionally
-bound their trees.
+64 KiB; media images 32 GiB each and 64 entries, with records of at most 4 KiB
+and at most 16 stages; and the operator-visible bounds below. Input and
+Secrets limits additionally bound their trees.
 
 | Operator-visible bound | Value | Go constant |
 | --- | --- | --- |
@@ -366,6 +373,38 @@ files left by an interrupted registry replacement; those files are ignored,
 never adopted. Any other entry refuses with the same complete-store guidance,
 whether or not the registry holds contexts. Bounds never authorize evidence
 deletion to make room.
+
+### Media acquisition
+
+`media add` takes the exclusive root lock twice and holds no root lock
+between, because an image may take hours to arrive and every other store
+command on the host would refuse for that long. The first hold admits the
+request as the [media store](managed-os.md#media-store) requires and claims the
+image's stage: the private file `media/staging-<32 lowercase hexadecimal digits>`,
+named by the first 128 bits of the SHA-256 of the image name. The stage shares
+the media directory's filesystem, so publication is one rename, and it is
+created exclusively, so a second claim of the same name refuses while it
+lives. Its owner holds an exclusive advisory lock on the stage from the claim
+until it publishes or removes it, and copies or downloads the image into it,
+computing the digest as it writes, with no root lock held. The second hold
+re-proves the admission against the store as it then stands and proves that
+the stage is still the file its owner filled, holding exactly the bytes it
+measured, and that the record states their size and digest; a stage or record
+that fails that proof refuses before a replacement removes the image it
+supersedes. It then renames the stage to the image name without replacing
+anything, proves the renamed file is still that stage, and only then publishes
+the record. A
+command that cannot take the lock for the second hold refuses with
+`lifecycle.lease`, removes its stage and publishes nothing.
+
+A failed, refused or cancelled acquisition removes its own stage while it still
+holds the stage's lock. A stage whose lock no process holds, such as one a
+killed `media add` left, is abandoned: it is never listed or adopted, and the
+next `media add` or `media delete` removes it under the exclusive root lock
+before it claims anything, as it removes the record temporary files named
+`pending-<32 lowercase hexadecimal digits>` that only an exclusive holder
+writes. At most 16 stages exist at once, live or abandoned; a claim beyond them
+refuses until another `media add` finishes.
 
 ## Format and restore boundary
 

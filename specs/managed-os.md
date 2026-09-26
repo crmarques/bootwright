@@ -31,6 +31,14 @@ existing entry requires ordinary confirmation, and refuses while the entry is
 frozen. A mismatch, an over-bound image, a non-regular source or an interrupted
 transfer publishes nothing.
 
+Acquisition holds no store lock, so a long download blocks no other command;
+[Workspace](contexts.md#media-acquisition) owns how. Every refusal and the
+confirmation precede it, and publication proves them again against the store
+as it then stands: the add refuses, publishing nothing, when meanwhile the
+image it would replace was deleted or frozen, the name it would take was
+occupied, or the store filled. While one add acquires a name, a second add of
+that name refuses before it acquires anything.
+
 `media list` reads only records and file metadata. `--checksums` reads every
 image in full, reports each computed digest, and marks an entry whose bytes no
 longer match its record as failed. `media delete --name <filename.iso>` removes

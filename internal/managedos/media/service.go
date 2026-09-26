@@ -36,7 +36,10 @@ func (s Service) available(ctx context.Context) error {
 
 // Add acquires one image, proves its bytes and publishes it with its record.
 // Confirmation and every refusal precede acquisition, so a declined
-// replacement never downloads anything.
+// replacement never downloads anything. Acquisition holds no root lock: an
+// image may take hours to arrive, and every other store command on the host
+// would refuse while it did. Admission is therefore proved twice, once to claim
+// a stage and again, against the store as it now stands, to publish it.
 func (s Service) Add(ctx context.Context, request AddMediaRequest) (*MutationResult, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
@@ -56,70 +59,40 @@ func (s Service) Add(ctx context.Context, request AddMediaRequest) (*MutationRes
 	if source.URL != "" && expected == "" {
 		return nil, failure("a downloaded image requires its expected digest", "repeat the command with --sha256 <digest>")
 	}
-	var result *MutationResult
+	var stage Stage
+	replacing := false
 	err = s.store.MutateMedia(ctx, func(tx Transaction) error {
-		published, err := s.publish(ctx, tx, request, source, expected)
-		result = published
+		var err error
+		if replacing, err = s.admit(ctx, tx, request); err != nil {
+			return err
+		}
+		stage, err = tx.Stage(ctx, request.Name)
 		return err
 	})
+	if stage != nil {
+		// Close's own failure is ignored: the outcome to report is the
+		// publication or the refusal that preceded it, and a stage Close could
+		// not remove is stale, so the next media mutation removes it.
+		defer stage.Close()
+	}
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
-}
-
-func (s Service) publish(ctx context.Context, tx Transaction, request AddMediaRequest, source Source, expected string) (*MutationResult, error) {
-	occupied, err := tx.Names(ctx)
+	entry, err := s.acquire(ctx, stage, request.Name, source, expected)
 	if err != nil {
 		return nil, err
-	}
-	replacing := slices.Contains(occupied, request.Name)
-	if !replacing && len(occupied) >= managedos.MaxMediaEntries {
-		return nil, failure("the media store already holds its maximum number of images",
-			"delete an image this host no longer installs from")
-	}
-	if replacing {
-		frozen, err := tx.Frozen(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if slices.Contains(frozen, request.Name) {
-			return nil, frozenFailure(request.Name)
-		}
-		if !request.SkipConfirmation {
-			if s.confirmer == nil {
-				return nil, failure("replacing a stored image requires confirmation", "review the image and repeat with --yes")
-			}
-			if err := s.confirmer.Confirm(ctx, "media replace", request.Name); err != nil {
-				return nil, err
-			}
-		}
-	}
-	acquisition, err := s.acquirer.Open(ctx, source)
-	if err != nil {
-		return nil, err
-	}
-	defer acquisition.Payload.Close()
-	staged, err := tx.Stage(ctx, acquisition.Payload, managedos.MaxMediaBytes)
-	if err != nil {
-		return nil, err
-	}
-	if expected != "" && staged.SHA256 != expected {
-		return nil, failure("the acquired image does not match its expected digest",
-			"verify the source and its published digest, then repeat the command")
-	}
-	entry := managedos.MediaEntry{
-		Name:   request.Name,
-		Size:   staged.Size,
-		SHA256: staged.SHA256,
-		Source: acquisition.Origin,
-		Added:  s.clock.Now().UTC().Truncate(1e9).Format("2006-01-02T15:04:05Z07:00"),
 	}
 	record, err := managedos.EncodeMediaRecord(entry)
 	if err != nil {
 		return nil, err
 	}
-	if err := tx.Publish(ctx, entry.Name, staged, record, replacing); err != nil {
+	err = s.store.MutateMedia(ctx, func(tx Transaction) error {
+		if err := revalidate(ctx, tx, request.Name, replacing); err != nil {
+			return err
+		}
+		return tx.Publish(ctx, entry.Name, stage, record, replacing)
+	})
+	if err != nil {
 		return nil, err
 	}
 	outcome := "stored"
@@ -127,6 +100,84 @@ func (s Service) publish(ctx context.Context, tx Transaction, request AddMediaRe
 		outcome = "replaced"
 	}
 	return &MutationResult{Name: entry.Name, Size: entry.Size, SHA256: entry.SHA256, Outcome: outcome}, nil
+}
+
+// admit proves the store can take the image and confirms a replacement. It
+// reports whether the name is occupied, which is what was confirmed.
+func (s Service) admit(ctx context.Context, tx Transaction, request AddMediaRequest) (bool, error) {
+	replacing, err := admissible(ctx, tx, request.Name)
+	if err != nil || !replacing || request.SkipConfirmation {
+		return replacing, err
+	}
+	if s.confirmer == nil {
+		return false, failure("replacing a stored image requires confirmation", "review the image and repeat with --yes")
+	}
+	return true, s.confirmer.Confirm(ctx, "media replace", request.Name)
+}
+
+// revalidate re-proves admission under the lock that publishes. Only this
+// invocation's stage can publish the name, so the name's occupancy changes only
+// when another command deletes it, and a lifecycle operation may have frozen it
+// meanwhile; any change refuses rather than publishing what was not confirmed.
+func revalidate(ctx context.Context, tx Transaction, name string, replacing bool) error {
+	occupied, err := admissible(ctx, tx, name)
+	if err != nil {
+		return err
+	}
+	if occupied != replacing {
+		return failure("image "+name+" changed in the media store while it was being acquired",
+			"review the store with bootwright media list, then repeat the command")
+	}
+	return nil
+}
+
+func admissible(ctx context.Context, tx Transaction, name string) (bool, error) {
+	occupied, err := tx.Names(ctx)
+	if err != nil {
+		return false, err
+	}
+	replacing := slices.Contains(occupied, name)
+	if !replacing && len(occupied) >= managedos.MaxMediaEntries {
+		return false, failure("the media store already holds its maximum number of images",
+			"delete an image this host no longer installs from")
+	}
+	if !replacing {
+		return false, nil
+	}
+	frozen, err := tx.Frozen(ctx)
+	if err != nil {
+		return false, err
+	}
+	if slices.Contains(frozen, name) {
+		return false, frozenFailure(name)
+	}
+	return true, nil
+}
+
+// acquire fills the stage from the source and proves the bytes against the
+// expected digest. It runs outside every store transaction, so it holds no
+// root lock.
+func (s Service) acquire(ctx context.Context, stage Stage, name string, source Source, expected string) (managedos.MediaEntry, error) {
+	acquisition, err := s.acquirer.Open(ctx, source)
+	if err != nil {
+		return managedos.MediaEntry{}, err
+	}
+	defer acquisition.Payload.Close()
+	staged, err := stage.Fill(ctx, acquisition.Payload, managedos.MaxMediaBytes)
+	if err != nil {
+		return managedos.MediaEntry{}, err
+	}
+	if expected != "" && staged.SHA256 != expected {
+		return managedos.MediaEntry{}, failure("the acquired image does not match its expected digest",
+			"verify the source and its published digest, then repeat the command")
+	}
+	return managedos.MediaEntry{
+		Name:   name,
+		Size:   staged.Size,
+		SHA256: staged.SHA256,
+		Source: acquisition.Origin,
+		Added:  s.clock.Now().UTC().Truncate(1e9).Format("2006-01-02T15:04:05Z07:00"),
+	}, nil
 }
 
 // List reports the store's inventory. Without checksums it reads records and

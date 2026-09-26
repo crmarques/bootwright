@@ -15,7 +15,9 @@ type Payload interface {
 }
 
 // Store is the host-wide media area. Media is shared by every context, so a
-// callback holds the store's root coordination and no context lease.
+// callback holds the store's root coordination and no context lease. A Stage
+// is the one handle that outlives a callback: it lets an image be acquired
+// while the store holds no root lock.
 type Store interface {
 	ReadMedia(context.Context, func(View) error) error
 	MutateMedia(context.Context, func(Transaction) error) error
@@ -34,21 +36,34 @@ type View interface {
 	Frozen(context.Context) ([]string, error)
 }
 
-// Staged is one bounded image copied into private staging, with the exact
-// bytes the store observed while writing it.
+// Staged is one bounded image written into a stage, with the exact bytes the
+// store observed while writing it.
 type Staged struct {
-	ID     string
 	Size   int64
 	SHA256 string
 }
 
+// Stage is private staging a transaction claimed for one image name. It
+// outlives that transaction, so the image is acquired into it while the store
+// holds no root lock, and a later transaction publishes it. While a stage
+// lives, no other stage can claim its name.
+type Stage interface {
+	// Fill copies the payload into the stage under the byte limit and reports
+	// what it wrote. It holds no root lock and publishes nothing.
+	Fill(context.Context, Payload, int64) (Staged, error)
+	// Close discards the stage unless it was published. It takes no context,
+	// so a cancelled acquisition still removes what it wrote.
+	Close() error
+}
+
 type Transaction interface {
 	View
-	// Stage copies the payload into private staging under the byte limit and
-	// reports what it wrote. A staged image is discarded unless it is published.
-	Stage(context.Context, Payload, int64) (Staged, error)
-	// Publish atomically installs a staged image and its record.
-	Publish(context.Context, string, Staged, []byte, bool) error
+	// Stage claims private staging for the named image. It refuses while
+	// another live stage holds that name.
+	Stage(context.Context, string) (Stage, error)
+	// Publish atomically installs a filled stage as the named image with its
+	// record.
+	Publish(context.Context, string, Stage, []byte, bool) error
 	Delete(context.Context, string) error
 }
 

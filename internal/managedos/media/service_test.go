@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
-	"strings"
 	"testing"
 	"time"
 
@@ -27,13 +26,22 @@ type fakeStore struct {
 	deleted    string
 	stageError error
 	writes     int
+	closed     int
+	// locked is true while a callback holds the store's root lock.
+	locked bool
+	// duringFill changes the store while an image is being acquired.
+	duringFill func(*fakeStore)
 }
 
 func (s *fakeStore) ReadMedia(ctx context.Context, callback func(View) error) error {
+	s.locked = true
+	defer func() { s.locked = false }()
 	return callback(s)
 }
 
 func (s *fakeStore) MutateMedia(ctx context.Context, callback func(Transaction) error) error {
+	s.locked = true
+	defer func() { s.locked = false }()
 	return callback(s)
 }
 
@@ -45,21 +53,53 @@ func (s *fakeStore) Digest(_ context.Context, name string) (string, error) {
 	return s.digests[name], nil
 }
 
-func (s *fakeStore) Stage(_ context.Context, payload Payload, limit int64) (Staged, error) {
+func (s *fakeStore) Stage(_ context.Context, name string) (Stage, error) {
 	if s.stageError != nil {
-		return Staged{}, s.stageError
+		return nil, s.stageError
+	}
+	return &fakeStage{store: s, name: name}, nil
+}
+
+// fakeStage refuses to be filled under the root lock, so every test that adds
+// an image proves that acquisition runs outside it.
+type fakeStage struct {
+	store  *fakeStore
+	name   string
+	staged *Staged
+	closed bool
+}
+
+func (f *fakeStage) Fill(_ context.Context, payload Payload, limit int64) (Staged, error) {
+	if f.store.locked {
+		return Staged{}, errors.New("the image was acquired while the root lock was held")
+	}
+	if f.store.duringFill != nil {
+		f.store.duringFill(f.store)
 	}
 	data, err := io.ReadAll(payload)
 	if err != nil {
 		return Staged{}, err
 	}
-	s.staged = data
-	s.writes++
+	f.store.staged = data
+	f.store.writes++
 	sum := sha256.Sum256(data)
-	return Staged{ID: "pending-" + strings.Repeat("0", 32), Size: int64(len(data)), SHA256: hex.EncodeToString(sum[:])}, nil
+	f.staged = &Staged{Size: int64(len(data)), SHA256: hex.EncodeToString(sum[:])}
+	return *f.staged, nil
 }
 
-func (s *fakeStore) Publish(_ context.Context, name string, staged Staged, record []byte, replace bool) error {
+func (f *fakeStage) Close() error {
+	if !f.closed {
+		f.closed = true
+		f.store.closed++
+	}
+	return nil
+}
+
+func (s *fakeStore) Publish(_ context.Context, name string, stage Stage, record []byte, replace bool) error {
+	filled, ok := stage.(*fakeStage)
+	if !ok || filled.staged == nil || filled.closed || filled.name != name {
+		return errors.New("the publication named no filled stage of this image")
+	}
 	s.published, s.replaced = record, replace
 	return nil
 }
@@ -137,8 +177,8 @@ func TestAddPublishesTheAcquiredImageWithItsProvenance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if entry.Source != "file:///images/demo.iso" || entry.Added != "2026-09-15T09:00:00Z" || store.replaced {
-		t.Fatalf("published record = %+v replaced=%t", entry, store.replaced)
+	if entry.Source != "file:///images/demo.iso" || entry.Added != "2026-09-15T09:00:00Z" || store.replaced || store.closed != 1 {
+		t.Fatalf("published record = %+v replaced=%t closed stages=%d", entry, store.replaced, store.closed)
 	}
 }
 
@@ -149,8 +189,39 @@ func TestAddRefusesAnImageWhoseBytesDoNotMatchTheExpectedDigest(t *testing.T) {
 		Name: "demo.iso", SourceFile: "/images/demo.iso", SHA256: digestOf("installer bytes"),
 	})
 	expectMediaFailure(t, err)
-	if store.published != nil {
-		t.Fatal("a mismatched image was published")
+	if store.published != nil || store.closed != 1 {
+		t.Fatalf("a mismatched image was published or its stage kept: closed %d", store.closed)
+	}
+}
+
+// Acquisition holds no root lock, so the store may change while an image
+// arrives. Publication re-proves admission and refuses a change rather than
+// publishing what was never admitted or confirmed.
+func TestAddRefusesWhatChangedInTheStoreWhileItAcquired(t *testing.T) {
+	for name, test := range map[string]struct {
+		occupied []string
+		change   func(*fakeStore)
+	}{
+		"the replaced image was deleted": {[]string{"demo.iso"}, func(s *fakeStore) { s.occupied = nil }},
+		"the replaced image was frozen":  {[]string{"demo.iso"}, func(s *fakeStore) { s.frozen = []string{"demo.iso"} }},
+		"the name was published":         {nil, func(s *fakeStore) { s.occupied = []string{"demo.iso"} }},
+		"the store filled up": {nil, func(s *fakeStore) {
+			for index := range managedos.MaxMediaEntries {
+				s.occupied = append(s.occupied, string(rune('a'+index%26))+string(rune('a'+index/26))+"-full.iso")
+			}
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := &fakeStore{occupied: test.occupied, duringFill: test.change}
+			acquirer := &fakeAcquirer{data: "installer bytes", origin: "file:///images/demo.iso"}
+			_, err := newService(store, acquirer, nil).Add(context.Background(), AddMediaRequest{
+				Name: "demo.iso", SourceFile: "/images/demo.iso", SkipConfirmation: true,
+			})
+			expectMediaFailure(t, err)
+			if store.writes != 1 || store.published != nil || store.closed != 1 {
+				t.Fatalf("writes %d, published %q, closed stages %d", store.writes, store.published, store.closed)
+			}
+		})
 	}
 }
 
