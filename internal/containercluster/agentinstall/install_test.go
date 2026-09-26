@@ -102,7 +102,7 @@ const (
 func installEvidence(t *testing.T, digest string, mutate func(*InstallEvidence)) json.RawMessage {
 	t.Helper()
 	evidence := InstallEvidence{
-		Cluster: anchorIdentity, Identity: anchorIdentity, Media: []string{}, Missing: []string{},
+		Cluster: anchorIdentity, Completed: true, Identity: anchorIdentity, Media: []string{}, Missing: []string{},
 		Postcondition: true, Powered: []string{"sno-01"}, Release: "4.21.15", Request: digest,
 	}
 	if mutate != nil {
@@ -308,6 +308,7 @@ func TestEvidenceThatProvesAnotherClusterIsRefused(t *testing.T) {
 		"nothing answers":           func(e *InstallEvidence) { e.Cluster = "" },
 		"no identity recorded":      func(e *InstallEvidence) { e.Identity, e.Cluster = "", "" },
 		"another release":           func(e *InstallEvidence) { e.Release = "4.20.0" },
+		"not reported completed":    func(e *InstallEvidence) { e.Completed = false },
 		"a node is missing":         func(e *InstallEvidence) { e.Missing = []string{"master-0"} },
 		"media still inserted":      func(e *InstallEvidence) { e.Media = []string{"sno-01"} },
 		"no postcondition":          func(e *InstallEvidence) { e.Postcondition = false },
@@ -342,6 +343,12 @@ func TestInstallObservationClassifiesWhatItFound(t *testing.T) {
 		"ours, media not released": {func(e *InstallEvidence) {
 			e.Postcondition, e.Media = false, []string{"sno-01"}
 		}, reconciliation.EffectPartial},
+		"ours, still installing": {func(e *InstallEvidence) {
+			e.Postcondition, e.Completed, e.Media = false, false, []string{"sno-01"}
+		}, reconciliation.EffectPartial},
+		"ours, not reported completed, claiming its postcondition": {func(e *InstallEvidence) {
+			e.Completed = false
+		}, reconciliation.EffectUnknown},
 		"an API rejects the anchor": {func(e *InstallEvidence) {
 			e.Postcondition, e.Cluster = false, foreignAnswer
 		}, reconciliation.EffectUnknown},

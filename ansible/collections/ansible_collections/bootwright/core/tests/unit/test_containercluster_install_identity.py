@@ -165,7 +165,8 @@ def test_the_completion_publishes_the_identity_the_settled_decision_compared(bef
     templar = Templar(loader=LOADER, variables={
         "bootwright_cluster_install_request": {"release": {"version": "4.21.0"}},
         "containercluster_install_agent_before": {"observation": {"identity": before}},
-        "containercluster_install_agent_state": {"cluster": IDENTITY, "release": "4.21.0", "missing": []},
+        "containercluster_install_agent_state": {"cluster": IDENTITY, "release": "4.21.0", "missing": [],
+                                                 "completed": True},
     })
     assert templar.template(decide["ansible.builtin.set_fact"]["containercluster_install_agent_settled"]) is settled
     assert templar.template(completion("apply.yml")) == before

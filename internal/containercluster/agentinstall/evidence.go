@@ -124,8 +124,14 @@ type InstallEvidence struct {
 	// through that kubeconfig, verified and authenticated; a fixed foreign
 	// marker when an API answers but rejects the anchor; and empty when nothing
 	// answers. A foreign answer belongs to another installation.
-	Cluster  string `json:"cluster"`
-	Identity string `json:"identity"`
+	Cluster string `json:"cluster"`
+	// Completed is the cluster's own report, read through the same kubeconfig,
+	// that its installation finished at the declared release: ClusterVersion's
+	// Available condition is True and the newest entry of its update history
+	// is Completed at that version. An installer that exited, or a cluster that
+	// answers while it is still installing, reports false.
+	Completed bool   `json:"completed"`
+	Identity  string `json:"identity"`
 	// Media names every node whose controller still presents boot media, and
 	// Missing every declared node the cluster does not hold. Both are node
 	// names, so a refusal can say which.
@@ -141,7 +147,8 @@ type InstallEvidence struct {
 
 // ValidateInstallPresence accepts evidence only when it proves the cluster
 // this operation installed is the cluster answering, at the declared release,
-// holding every declared node, with no node still presenting boot media.
+// reporting its installation completed, holding every declared node, with no
+// node still presenting boot media.
 func ValidateInstallPresence(data []byte, request InstallRequest, digest string) error {
 	evidence, err := decodeInstallEvidence(data, digest)
 	if err != nil {
@@ -155,6 +162,9 @@ func ValidateInstallPresence(data []byte, request InstallRequest, digest string)
 	}
 	if evidence.Release != request.Release.Version {
 		return refusal("lifecycle.state", "the cluster reports another release than the one it was installed for", "")
+	}
+	if !evidence.Completed {
+		return refusal("lifecycle.state", "the cluster does not report its installation completed at the declared release", "")
 	}
 	if len(evidence.Missing) != 0 {
 		return refusal("lifecycle.state", "the cluster is short of a declared node", "")
