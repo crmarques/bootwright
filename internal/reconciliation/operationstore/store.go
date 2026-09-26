@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"path"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -295,27 +296,35 @@ func (s *Store) Attempt(ctx context.Context, id, block string, number int) (Atte
 }
 
 func (s *Store) readBlock(ctx context.Context, id, block string) (BlockRecord, error) {
+	record, _, err := s.readBlockRecord(ctx, id, block)
+	return record, err
+}
+
+// readBlockRecord also reports whether the record exists, because a start
+// reasons from that: absence reads as pending, yet only a record that exists
+// can prove which attempts it has already counted.
+func (s *Store) readBlockRecord(ctx context.Context, id, block string) (BlockRecord, bool, error) {
 	target := s.blockPath(id, block)
 	data, found, err := s.area.Read(ctx, target, MaxAttemptBytes)
 	if err != nil {
-		return BlockRecord{}, err
+		return BlockRecord{}, false, err
 	}
 	if !found {
 		s.remember(target, nil)
-		return BlockRecord{Version: 1, Block: block, State: reconciliation.BlockPending}, nil
+		return BlockRecord{Version: 1, Block: block, State: reconciliation.BlockPending}, false, nil
 	}
 	var record BlockRecord
 	if err := decode(data, MaxAttemptBytes, &record); err != nil {
-		return BlockRecord{}, err
+		return BlockRecord{}, false, err
 	}
 	if err := validateBlock(record); err != nil {
-		return BlockRecord{}, err
+		return BlockRecord{}, false, err
 	}
 	if record.Block != block {
-		return BlockRecord{}, recordError("lifecycle block record contradicts its location")
+		return BlockRecord{}, false, recordError("lifecycle block record contradicts its location")
 	}
 	s.remember(target, slices.Clone(data))
-	return record, nil
+	return record, true, nil
 }
 
 func (s *Store) publishBlock(ctx context.Context, id string, record BlockRecord) error {
@@ -340,8 +349,15 @@ func (s *Store) publishBlock(ctx context.Context, id string, record BlockRecord)
 
 // StartAttempt allocates the next attempt number and durably records running
 // before the caller performs any side effect.
+//
+// A start writes two records yet is one publication. The attempt record is
+// created exclusively before the block record counts it, so the block record
+// never names an attempt that has no record. A start that stops between the
+// two leaves a running record of the next number that no effect ran under,
+// because its caller begins nothing until a start returns; the next start
+// adopts that record instead of refusing the number in every later invocation.
 func (s *Store) StartAttempt(ctx context.Context, id, block string) (int, error) {
-	record, err := s.readBlock(ctx, id, block)
+	record, recorded, err := s.readBlockRecord(ctx, id, block)
 	if err != nil {
 		return 0, err
 	}
@@ -350,20 +366,39 @@ func (s *Store) StartAttempt(ctx context.Context, id, block string) (int, error)
 	if err != nil {
 		return 0, err
 	}
-	started, err := s.now()
+	target := path.Join(id, "blocks", block, "attempt-"+name+".json")
+	existing, found, err := s.area.Read(ctx, target, MaxAttemptBytes)
 	if err != nil {
 		return 0, err
 	}
-	attempt := Attempt{Version: 1, Block: block, Number: number, Phase: "running", Started: started, Updated: started}
-	encoded, err := encode(attempt, MaxAttemptBytes)
-	if err != nil {
-		return 0, err
-	}
-	if err := s.area.EnsureDirectory(ctx, path.Join(id, "blocks", block)); err != nil {
-		return 0, err
-	}
-	if err := s.area.WriteExclusive(ctx, path.Join(id, "blocks", block, "attempt-"+name+".json"), encoded); err != nil {
-		return 0, err
+	if found {
+		if err := s.adoptable(ctx, id, block, number, recorded, existing); err != nil {
+			return 0, err
+		}
+	} else {
+		// A block record exists before any of its attempts does, so an
+		// attempt record beside no block record is a lost record and never
+		// an interrupted start. This one reads exactly as the absence did.
+		if !recorded {
+			if err := s.publishBlock(ctx, id, record); err != nil {
+				return 0, err
+			}
+		}
+		started, err := s.now()
+		if err != nil {
+			return 0, err
+		}
+		attempt := Attempt{Version: 1, Block: block, Number: number, Phase: "running", Started: started, Updated: started}
+		encoded, err := encode(attempt, MaxAttemptBytes)
+		if err != nil {
+			return 0, err
+		}
+		if err := s.area.EnsureDirectory(ctx, path.Join(id, "blocks", block)); err != nil {
+			return 0, err
+		}
+		if err := s.area.WriteExclusive(ctx, target, encoded); err != nil {
+			return 0, err
+		}
 	}
 	record.Attempts = number
 	record.State = reconciliation.BlockRunning
@@ -371,6 +406,46 @@ func (s *Store) StartAttempt(ctx context.Context, id, block string) (int, error)
 		return 0, err
 	}
 	return number, nil
+}
+
+// adoptable proves that the record already at a block's next attempt number is
+// an interrupted start of that block and nothing else: its block record exists
+// and counts every earlier attempt, and the record is running, published no
+// before-state and has no resolution allocated against it. Only such a record
+// is one no effect can have run under; anything else there refuses rather than
+// starting over an effect that may have begun or reusing a number.
+func (s *Store) adoptable(ctx context.Context, id, block string, number int, recorded bool, data []byte) error {
+	if !recorded {
+		return recordError("the block holds an attempt record but no block record that counts it")
+	}
+	var record Attempt
+	if err := decode(data, MaxAttemptBytes, &record); err != nil {
+		return err
+	}
+	if err := validateAttempt(record); err != nil {
+		return err
+	}
+	if record.Block != block || record.Number != number || record.Resolution != 0 {
+		return recordError("the lifecycle attempt record contradicts its location")
+	}
+	if record.Phase != "running" || len(record.Preparation) != 0 {
+		return recordError("the block's next attempt number already holds an attempt that may have begun its effect")
+	}
+	name, err := reconciliation.FormatNumber(number)
+	if err != nil {
+		return err
+	}
+	entries, err := s.area.Entries(ctx, path.Join(id, "blocks", block))
+	if err != nil {
+		return err
+	}
+	prefix := "attempt-" + name + "-resolution-"
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name, prefix) {
+			return recordError("the block's next attempt number already has a resolution allocated against it")
+		}
+	}
+	return nil
 }
 
 // RecordPreparation publishes the before-state one running attempt observed,
