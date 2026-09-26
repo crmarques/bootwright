@@ -1,0 +1,29 @@
+#!/bin/sh
+# Test what this branch changed: every Go package with a changed file since the
+# branch left main, every package that depends on one, and the architecture
+# fitness suite. A change to the module files, or no base to compare against,
+# tests everything.
+set -eu
+repository=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$repository"
+base=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null || true)
+if test -z "$base"; then
+    exec ./scripts/go test ./...
+fi
+changed=$({ git diff --name-only "$base" --; git ls-files --others --exclude-standard; } | sort -u)
+if printf '%s\n' "$changed" | grep -Eq '^(go\.mod|go\.sum)$'; then
+    exec ./scripts/go test ./...
+fi
+module=$(./scripts/go list -m)
+directories=$(printf '%s\n' "$changed" | grep '\.go$' | while IFS= read -r file; do
+    directory=$(dirname -- "$file")
+    if test -d "$directory"; then printf '%s\n' "$directory"; fi
+done | sort -u)
+if test -z "$directories"; then
+    exec ./scripts/go test ./test/architecture/...
+fi
+targets=$(printf '%s\n' "$directories" | sed "s|^\.$|$module|; s|^\([^/].*\)$|$module/\1|" | sort -u)
+packages=$(./scripts/go list -f '{{.ImportPath}} {{join .Deps " "}}' ./... | awk -v targets="$targets" '
+    BEGIN { n = split(targets, list, "\n"); for (i = 1; i <= n; i++) wanted[list[i]] = 1 }
+    { for (i = 1; i <= NF; i++) if ($i in wanted) { print $1; next } }')
+exec ./scripts/go test ./test/architecture/... $packages

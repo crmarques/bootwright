@@ -11,15 +11,36 @@ import sys
 import tempfile
 
 
+def cache_root(root: Path) -> Path:
+    """Return the shared check cache that scripts/cache-dir names."""
+    completed = subprocess.run(
+        [str(root / "scripts/cache-dir")], check=True, capture_output=True, text=True
+    )
+    return Path(completed.stdout.strip())
+
+
+SUITES = ("syntax", "lint", "sanity", "units", "integration")
+
+
+def selected_suites(arguments: list[str]) -> set[str]:
+    """Return the suites to run: all of them, or the one --suite names.
+
+    A partial run serves an agent's inner loop; the complete gate is the
+    argument-free form that CI and make check run.
+    """
+    if not arguments:
+        return set(SUITES)
+    if len(arguments) == 2 and arguments[0] == "--suite" and arguments[1] in SUITES:
+        return {arguments[1]}
+    raise SystemExit("Usage: scripts/ansible-check [--suite " + "|".join(SUITES) + "]")
+
+
 def main() -> int:
     if sys.version_info[:3] != (3, 13, 15):
         raise SystemExit(
             "Ansible checks require the pinned CPython 3.13.15 interpreter."
         )
-    if len(sys.argv) != 1:
-        raise SystemExit(
-            "scripts/ansible-check does not accept partial check controls."
-        )
+    selected = selected_suites(sys.argv[1:])
 
     root = Path(__file__).resolve().parents[2]
     requirements = root / "scripts/tools/ansible-requirements.txt"
@@ -46,7 +67,7 @@ def main() -> int:
     fixtures = Path(
         os.environ.get(
             "BOOTWRIGHT_ANSIBLE_TEST_ARTIFACTS",
-            str(root / ".cache/ansible-test-artifacts"),
+            str(cache_root(root) / "ansible-test-artifacts"),
         )
     )
     with tempfile.TemporaryDirectory(prefix="bootwright-ansible-check-") as temporary:
@@ -87,37 +108,41 @@ def main() -> int:
             raise SystemExit(
                 "No shipped Ansible playbooks were found for syntax checking."
             )
-        for playbook in playbooks:
+        if "syntax" in selected:
+            for playbook in playbooks:
+                subprocess.run(
+                    [
+                        str(executable),
+                        "-I",
+                        "-m",
+                        "ansible.cli.playbook",
+                        "--syntax-check",
+                        "-i",
+                        str(inventory),
+                        str(playbook),
+                    ],
+                    cwd=root,
+                    env=environment,
+                    check=True,
+                )
+        if "lint" in selected:
             subprocess.run(
                 [
                     str(executable),
                     "-I",
                     "-m",
-                    "ansible.cli.playbook",
-                    "--syntax-check",
-                    "-i",
-                    str(inventory),
-                    str(playbook),
+                    "ansiblelint",
+                    "--offline",
+                    "--project-dir",
+                    str(automation),
+                    str(automation),
                 ],
                 cwd=root,
                 env=environment,
                 check=True,
             )
-        subprocess.run(
-            [
-                str(executable),
-                "-I",
-                "-m",
-                "ansiblelint",
-                "--offline",
-                "--project-dir",
-                str(automation),
-                str(automation),
-            ],
-            cwd=root,
-            env=environment,
-            check=True,
-        )
+        if not selected & {"sanity", "units", "integration"}:
+            return 0
         test_collection = area / "collections/ansible_collections/bootwright/core"
         shutil.copytree(
             collection,
@@ -171,6 +196,8 @@ def main() -> int:
             suites.append(["integration", "controller_native"])
             suites.append(["integration", "controller_prerequisites"])
         for arguments in suites:
+            if arguments[0] not in selected:
+                continue
             subprocess.run(
                 ansible_test
                 + arguments

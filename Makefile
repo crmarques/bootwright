@@ -1,4 +1,4 @@
-.PHONY: build test vet fmt-check modules-check completion-test vulncheck ansible-check check
+.PHONY: build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check quick race check-offline check
 
 GO := ./scripts/go
 VULNDB ?= https://vuln.go.dev
@@ -28,6 +28,10 @@ fmt-check:
 	unformatted="$$(printf '%s\n' "$$directories" | while IFS= read -r directory; do "$$formatter" -l "$$directory" || exit $$?; done)"; \
 	if test -n "$$unformatted"; then printf 'Go files require formatting:\n%s\n' "$$unformatted" >&2; exit 1; fi
 
+tidy-check:
+	$(GO) mod tidy -diff
+	$(GO) -C scripts/tools mod tidy -diff
+
 modules-check:
 	$(GO) mod verify
 	$(GO) -C scripts/tools mod verify
@@ -41,5 +45,21 @@ vulncheck:
 ansible-check:
 	./scripts/ansible-check
 
-check: fmt-check modules-check test vet completion-test vulncheck ansible-check
+docs-check:
+	$(GO) test -count=1 -run '^TestDocs' ./test/architecture ./internal/cli
+
+# The inner-loop tier: formatting, vet, the architecture suite and the packages
+# this branch changed together with their dependents.
+quick: fmt-check vet
+	./scripts/quick-test
+
+race:
+	$(GO) test -race ./internal/reconciliation/... ./internal/controller/privilege/... ./cmd/bootwright/...
+
+# Every gate that needs no network once module caches are warm. Vulnerability
+# data and the Ansible tool bootstrap need network, so they are reported unrun.
+check-offline: fmt-check test vet completion-test
+	@echo 'check-offline: vulncheck, ansible-check and modules-check were not run; they are unrun, not passed.'
+
+check: fmt-check modules-check tidy-check test vet completion-test vulncheck ansible-check
 	git diff --check

@@ -37,14 +37,22 @@ dependencies, keeping check tooling out of the application module graph.
 | Command | Result |
 | --- | --- |
 | `make build` | Build `bin/bootwright`, stamped with the version, commit and source state of the checkout it was built from. |
+| `make quick` | Inner loop: formatting, vet, the architecture suite, and the packages this branch changed with their dependents. |
+| `make docs-check` | Check guidance links, anchors, cited paths and tests, documented command lines, skill frontmatter and byte budgets. |
 | `make test` | Run all package tests. |
 | `make vet` | Run Go static analysis. |
 | `make fmt-check` | Check Go formatting. |
 | `make modules-check` | Verify both module locks. |
+| `make tidy-check` | Check that both module files are tidy. |
 | `make completion-test` | Source and exercise all four shell integrations. |
+| `make race` | Run the race detector over the concurrent lifecycle, privilege and composition packages. |
 | `make vulncheck` | Scan for known reachable vulnerabilities. |
-| `make ansible-check` | Run pinned Ansible syntax, lint, collection sanity, unit and safe integration checks. |
-| `make check` | Run all verification gates, including completion. |
+| `make ansible-check` | Run pinned Ansible syntax, lint, collection sanity, unit and safe integration checks; `./scripts/ansible-check --suite <name>` runs one suite locally. |
+| `make check-offline` | Run every gate that needs no network once caches are warm, and name the gates it left unrun. |
+| `make check` | Run all verification gates, including completion. CI runs it on every push and pull request, and `make race` nightly. |
+
+Reusable check caches live in the directory `scripts/cache-dir` prints: the
+primary checkout's `.cache`, shared by every worktree of the clone.
 
 Completion tests require `bash` on the test runner's `PATH`, or
 `BOOTWRIGHT_TEST_BASH` set to an absolute executable path. The other generated

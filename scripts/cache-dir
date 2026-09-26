@@ -1,0 +1,16 @@
+#!/bin/sh
+# Print the directory that holds reusable check caches. Every worktree of one
+# clone shares its primary checkout's .cache, so a fresh worktree does not
+# rebuild the Python tool environment or the vulnerability tool.
+set -eu
+if test -n "${BOOTWRIGHT_CACHE_DIR:-}"; then
+    printf '%s\n' "$BOOTWRIGHT_CACHE_DIR"
+    exit 0
+fi
+repository=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+common=$(git -C "$repository" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+if test -n "$common" && test "$(basename -- "$common")" = .git; then
+    printf '%s/.cache\n' "$(dirname -- "$common")"
+else
+    printf '%s/.cache\n' "$repository"
+fi

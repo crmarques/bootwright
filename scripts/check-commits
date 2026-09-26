@@ -1,0 +1,22 @@
+#!/bin/sh
+# Check every non-merge commit in BASE..HEAD: a Conventional Commit subject and
+# a body that says what was verified. Attribution trailers alone are not a body.
+set -eu
+if test "$#" -ne 2; then
+    echo "usage: scripts/check-commits BASE HEAD" >&2
+    exit 2
+fi
+status=0
+for commit in $(git rev-list --no-merges "$1..$2"); do
+    subject=$(git log -1 --format=%s "$commit")
+    if ! printf '%s\n' "$subject" | grep -Eq '^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9-]+\))?!?: [^ ]'; then
+        echo "$commit: subject is not a Conventional Commit: $subject" >&2
+        status=1
+    fi
+    body=$(git log -1 --format=%b "$commit" | grep -Ev '^(Co-Authored-By|Claude-Session|Signed-off-by|Refs):' | tr -d '[:space:]')
+    if test -z "$body"; then
+        echo "$commit: body is empty; state the gates that ran and their results" >&2
+        status=1
+    fi
+done
+exit "$status"

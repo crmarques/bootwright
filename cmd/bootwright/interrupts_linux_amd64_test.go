@@ -24,7 +24,7 @@ func openTestTerminal(t *testing.T) (*os.File, *os.File) {
 	t.Helper()
 	descriptor, err := syscall.Open("/dev/ptmx", syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_CLOEXEC, 0)
 	if err != nil {
-		t.Fatalf("open PTY master: %v", err)
+		t.Skipf("no pseudo-terminal is available to this test: %v", err)
 	}
 	master := os.NewFile(uintptr(descriptor), "test-terminal-master")
 	t.Cleanup(func() { master.Close() })
