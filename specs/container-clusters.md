@@ -35,7 +35,10 @@ proxy, `security.fips`, `security.diskEncryption`,
 the `vsphere` or `external` platform (one on `baremetal`, on `none` or with no
 declared platform is accepted), a node on a substrate this
 executable does not realize, a node whose management controller would have
-to be taught a new certificate, a node that selects an install profile,
+to be taught a new certificate, a virtual node whose provider host is not the
+Machine the selected artifact server is placed on, because its emulated
+controller fetches the private [boot image](#boot-media) without verifying the
+server, a node that selects an install profile,
 because managed OS and the cluster installer would both write its disk, and a
 node whose realized target is physical, because nothing proves each such node
 is the declared machine, powered off, before its boot erases it. Those last two
@@ -121,21 +124,25 @@ owns `private/clusters/<cluster>/` as its reserved path.
 That contract requires the fetching controller to verify the serving
 certificate. A physical management controller does so under the trust its
 Machine declares. An [emulated controller](substrates.md#machine-realization)
-does not: it fetches over plain HTTP from the host it runs on, so on that
-substrate confidentiality rests on the token and on the fetch never leaving the
-provider host. This is the one exception, it is recorded here rather than
+does not: it fetches over HTTPS without verifying the server's certificate, so
+on that substrate confidentiality rests on the token and on the fetch never
+leaving the provider host. Selection enforces the second: a virtual node whose
+provider host is not the Machine the artifact server is placed on refuses before
+registration. This is the one exception, it is recorded here rather than
 implied, and it does not extend to any other consumer.
 
 **Reservations.** `path:` for the work area and `path:` for the private
 publication subtree, so a second context refuses rather than taking either.
 
-**Evidence.** Completion requires the published image present at the frozen
-path with the digest the attempt computed, the installer version it was built
-with, and the digest of the inputs it was built from. Replay reports
-`completed` without rebuilding when the published image was built from the same
-inputs by the same installer version. The inverse removes the published image
-and the private directory that held it, discards the installer work directory,
-and proves each absent.
+**Evidence.** Completion requires an image published beneath the frozen path
+and the receipt its build left in the work area naming the digest of the inputs
+it was built from and the installer version that built it, both equal to the
+ones frozen now. The evidence carries no digest of the image itself, so
+completion claims which inputs and which installer produced the image, not its
+bytes. Replay reports `completed` without rebuilding when the published image
+was built from the same inputs by the same installer version. The inverse
+removes the published image and the private directory that held it, discards
+the installer work directory, and proves each absent.
 
 ## Installation
 

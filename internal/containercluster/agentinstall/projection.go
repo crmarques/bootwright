@@ -94,6 +94,14 @@ func installPlatform(cluster api.Object, nodes []nodeProjection) (map[string]any
 		"declare a baremetal platform, or none, on "+cluster.Identity())
 }
 
+// multiNodePlatform reports whether a cluster of more than one node installs on
+// the platform it declares: bare metal, or none, which is also what declaring
+// no platform selects. Selection refuses every other platform before
+// registration, so the refusal above is a guard that planning never reaches.
+func multiNodePlatform(declared string) bool {
+	return declared == "" || declared == "none" || declared == "baremetal"
+}
+
 func provisioningNetwork(value string) string {
 	switch value {
 	case "disabled":
