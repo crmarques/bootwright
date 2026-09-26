@@ -111,7 +111,23 @@ installation later needs, whose trust anchor is the cluster's
 [identity](#installation), so the area outlives the attempt that created it, is
 never enumerated in evidence, progress output or a log, and is discarded and
 rebuilt rather than reused whenever the inputs it was built from are not the
-inputs frozen now.
+inputs frozen now, unless an installation has booted from it.
+
+**A work area an installation booted from is never rebuilt.** The area also
+holds the state the [installation](#installation) boots its nodes into and the
+only administrator access to the cluster they install, and a rebuild starts by
+discarding it. The installation block therefore marks the area with the file
+`.bootwright-booted` before it hands any node the image, whether or not that
+attempt then boots one, and this block's observation reports the mark. An
+attempt that finds the area marked and would build again, because no image
+built there is published, no receipt there records what it was built from, or
+the inputs or installer version it records are not the ones frozen now, refuses
+before any effect, naming each reason and directing the operator to destroy the
+cluster's installation first. A marked area whose published image is this
+request's is replayed as below, and an unmarked area is rebuilt as before. The
+mark leaves only with the area itself, in this block's inverse, which a
+removal starts only once the installation's own inverse has completed, because
+a removal [waits on its dependents](state-reconciliation.md#continuation-and-removal).
 
 **Publication is private.** The image embeds the pull secret and the cluster
 SSH key in its own ignition, so it is confidential on every substrate and is
@@ -140,7 +156,13 @@ it was built from and the installer version that built it, both equal to the
 ones frozen now. The evidence carries no digest of the image itself, so
 completion claims which inputs and which installer produced the image, not its
 bytes. Replay reports `completed` without rebuilding when the published image
-was built from the same inputs by the same installer version. The inverse
+was built from the same inputs by the same installer version. It publishes
+nothing, yet it applies the published image's mode and label again and proves
+the publication by the same fetch through the listener a build makes, as the
+[private consumer publication contract](infrastructure-services.md#private-consumer-publication)
+requires, before it reports: an image an earlier executable published with a
+mode the serving process cannot read is repaired and reported changed, and one
+the listener still refuses fails the block with its cause. The inverse
 removes the published image and the private directory that held it, discards
 the installer work directory, and proves each absent.
 

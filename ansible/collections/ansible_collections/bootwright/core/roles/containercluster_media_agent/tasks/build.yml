@@ -1,75 +1,84 @@
 ---
+# Included by every apply. A replay, whose published image is already this
+# request's, builds and publishes nothing, yet still re-applies the mode and
+# label of what it serves and fetches it through the listener, so an image an
+# earlier executable published is repaired and proved rather than replayed.
+
 # The installer consumes its inputs into its own asset state, so a build always
-# starts from the frozen bytes rather than from what a previous one left.
-- name: Discard the installer work area a previous build left
-  ansible.builtin.file:
-    path: '{{ containercluster_media_agent_work }}'
-    state: absent
-  changed_when: false
+# starts from the frozen bytes rather than from what a previous one left. The
+# apply refused before this when the cluster's installation marked the area.
+- name: Build the image from the frozen inputs
+  when: not (containercluster_media_agent_published | bool)
+  block:
+    - name: Discard the installer work area a previous build left
+      ansible.builtin.file:
+        path: '{{ containercluster_media_agent_work }}'
+        state: absent
+      changed_when: false
 
-- name: Create the work area this cluster's installer keeps its state in
-  ansible.builtin.file:
-    path: '{{ containercluster_media_agent_work }}'
-    state: directory
-    owner: root
-    group: root
-    mode: '0700'
-  changed_when: false
+    - name: Create the work area this cluster's installer keeps its state in
+      ansible.builtin.file:
+        path: '{{ containercluster_media_agent_work }}'
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+      changed_when: false
 
-# The bound material reaches the installer inputs here and nowhere else: the
-# frozen request carries the declarations, never their values.
-- name: Write the install configuration with its bound material
-  ansible.builtin.copy:
-    content: >-
-      {{ bootwright_cluster_media_request.installConfig
-         | combine({
-             'pullSecret': lookup('ansible.builtin.file', bootwright_cluster_media_material.pullSecret),
-             'sshKey': bootwright_cluster_media_material.sshKey,
-           })
-         | to_nice_yaml(indent=2) }}
-    dest: '{{ containercluster_media_agent_work }}/install-config.yaml'
-    owner: root
-    group: root
-    mode: '0600'
-  changed_when: true
-  no_log: true
+    # The bound material reaches the installer inputs here and nowhere else: the
+    # frozen request carries the declarations, never their values.
+    - name: Write the install configuration with its bound material
+      ansible.builtin.copy:
+        content: >-
+          {{ bootwright_cluster_media_request.installConfig
+             | combine({
+                 'pullSecret': lookup('ansible.builtin.file', bootwright_cluster_media_material.pullSecret),
+                 'sshKey': bootwright_cluster_media_material.sshKey,
+               })
+             | to_nice_yaml(indent=2) }}
+        dest: '{{ containercluster_media_agent_work }}/install-config.yaml'
+        owner: root
+        group: root
+        mode: '0600'
+      changed_when: true
+      no_log: true
 
-- name: Write the agent configuration
-  ansible.builtin.copy:
-    content: '{{ bootwright_cluster_media_request.agentConfig | to_nice_yaml(indent=2) }}'
-    dest: '{{ containercluster_media_agent_work }}/agent-config.yaml'
-    owner: root
-    group: root
-    mode: '0600'
-  changed_when: true
+    - name: Write the agent configuration
+      ansible.builtin.copy:
+        content: '{{ bootwright_cluster_media_request.agentConfig | to_nice_yaml(indent=2) }}'
+        dest: '{{ containercluster_media_agent_work }}/agent-config.yaml'
+        owner: root
+        group: root
+        mode: '0600'
+      changed_when: true
 
-- name: Build the image this cluster's nodes boot
-  ansible.builtin.command:
-    argv:
-      - '{{ containercluster_media_agent_installer }}'
-      - agent
-      - create
-      - image
-      - --dir
-      - '{{ containercluster_media_agent_work }}'
-      - --log-level
-      - info
-  register: containercluster_media_agent_built
-  changed_when: true
+    - name: Build the image this cluster's nodes boot
+      ansible.builtin.command:
+        argv:
+          - '{{ containercluster_media_agent_installer }}'
+          - agent
+          - create
+          - image
+          - --dir
+          - '{{ containercluster_media_agent_work }}'
+          - --log-level
+          - info
+      register: containercluster_media_agent_built
+      changed_when: true
 
-- name: Find the image the installer produced
-  ansible.builtin.find:
-    paths: '{{ containercluster_media_agent_work }}'
-    patterns: 'agent.*.iso'
-    file_type: file
-  register: containercluster_media_agent_products
+    - name: Find the image the installer produced
+      ansible.builtin.find:
+        paths: '{{ containercluster_media_agent_work }}'
+        patterns: 'agent.*.iso'
+        file_type: file
+      register: containercluster_media_agent_products
 
-- name: Refuse a build that produced no single image
-  ansible.builtin.assert:
-    that:
-      - containercluster_media_agent_products.files | length == 1
-    fail_msg: the installer produced no single agent image for this cluster
-    quiet: true
+    - name: Refuse a build that produced no single image
+      ansible.builtin.assert:
+        that:
+          - containercluster_media_agent_products.files | length == 1
+        fail_msg: the installer produced no single agent image for this cluster
+        quiet: true
 
 # Every directory from the owned subtree down is 0711 and the image itself
 # 0640 root:root, so nothing is listable, the unguessable segment is the only
@@ -82,17 +91,20 @@
     owner: root
     group: root
     mode: '0711'
+  when: not (containercluster_media_agent_published | bool)
 
 - name: Find the directory a previous attempt published in
   ansible.builtin.find:
     paths: '{{ containercluster_media_agent_private }}'
     file_type: directory
+  when: not (containercluster_media_agent_published | bool)
   register: containercluster_media_agent_previous
 
 - name: Remove what a previous attempt published
   ansible.builtin.file:
     path: '{{ item.path }}'
     state: absent
+  when: not (containercluster_media_agent_published | bool)
   loop: '{{ containercluster_media_agent_previous.files }}'
   loop_control:
     label: a previous publication
@@ -107,9 +119,46 @@
       - rand
       - -hex
       - '32'
+  when: not (containercluster_media_agent_published | bool)
   register: containercluster_media_agent_token
   changed_when: false
   no_log: true
+
+# A replay mints nothing: the directory it proves is the one the inspection
+# found the image in, the first by name directly beneath the owned subtree that
+# holds one. Like the inspection, the search also enters a directory whose name
+# starts with a dot: it skips only matches whose own name does.
+- name: Name the directory the image already published sits in
+  when: containercluster_media_agent_published | bool
+  vars:
+    containercluster_media_agent_holders: >-
+      {{ containercluster_media_agent_found.files | map(attribute='path') | map('dirname')
+         | reject('equalto', containercluster_media_agent_private) | list }}
+  block:
+    - name: Find the image an earlier attempt published
+      ansible.builtin.find:
+        paths: '{{ containercluster_media_agent_private }}'
+        patterns: agent.iso
+        file_type: file
+        recurse: true
+        depth: 2
+      register: containercluster_media_agent_found
+      no_log: true
+
+    - name: Refuse a replay whose published image is gone
+      ansible.builtin.assert:
+        that:
+          - containercluster_media_agent_holders | length > 0
+        fail_msg: >-
+          the published agent image this replay observed a moment earlier is
+          gone, so there is nothing to prove; repeat the apply
+        quiet: true
+
+    - name: Take the unguessable segment of the directory holding it
+      ansible.builtin.set_fact:
+        containercluster_media_agent_token:
+          stdout: '{{ containercluster_media_agent_holders | sort | first | basename }}'
+      no_log: true
 
 - name: Create the directory this attempt publishes in
   ansible.builtin.file:
@@ -118,6 +167,7 @@
     owner: root
     group: root
     mode: '0711'
+  when: not (containercluster_media_agent_published | bool)
   changed_when: true
   no_log: true
 
@@ -128,19 +178,21 @@
       - --no-target-directory
       - '{{ containercluster_media_agent_products.files[0].path }}'
       - '{{ containercluster_media_agent_directory }}/agent.iso'
+  when: not (containercluster_media_agent_published | bool)
   changed_when: true
   no_log: true
 
 # The server's workers run as the image's application user in group root
 # (infra_artifact_server_nginx/templates/nginx.conf.j2), so the group grants
-# them read and nothing is granted to any other account.
+# them read and nothing is granted to any other account. A replay applies it
+# too, and a replay that had to change it reports the repair as a change.
 - name: Keep the published image readable only by the serving process
   ansible.builtin.file:
     path: '{{ containercluster_media_agent_directory }}/agent.iso'
     owner: root
     group: root
     mode: '0640'
-  changed_when: false
+  register: containercluster_media_agent_served
   no_log: true
 
 - name: Label the published subtree so the serving process can read it
@@ -158,7 +210,8 @@
 # its bound material beneath its content root, and never through a proxy. One
 # byte proves the worker can open the image. The result carries the token, so
 # it is judged in a separate step that names only what failed, and before the
-# receipt, so a refused image is built again rather than replayed.
+# receipt, so a refused image is built again rather than replayed. A replay
+# fetches the image it found the same way, and a refusal fails it the same way.
 - name: Fetch the first byte of the published image through the listener
   ansible.builtin.uri:
     url: >-
@@ -208,4 +261,5 @@
     owner: root
     group: root
     mode: '0600'
+  when: not (containercluster_media_agent_published | bool)
   changed_when: true

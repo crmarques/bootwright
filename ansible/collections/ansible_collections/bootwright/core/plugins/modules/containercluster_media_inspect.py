@@ -9,8 +9,9 @@ short_description: Observe the boot image one container cluster publishes
 version_added: "0.1.0"
 description:
   - Reports whether the agent boot image is published beneath the served root,
-    whether the installer's work area exists, and what the receipt says the
-    published image was built from.
+    whether the installer's work area exists, what the receipt says the
+    published image was built from, and whether the cluster's installation
+    marked the work area as one its nodes were booted from.
   - Performs no change and is safe to repeat.
 options:
   request:
@@ -46,6 +47,12 @@ from ansible.module_utils.basic import AnsibleModule
 IMAGE = "agent.iso"
 RECEIPT = "bootwright-media.json"
 MAX_RECEIPT = 4096
+# MARKER is what the cluster's installation writes into the same work area
+# before it hands any node the image (containercluster_install_agent). From then
+# on the area holds the state those nodes install from and the only
+# administrator access to the cluster, so anything at that name counts: a
+# rebuild refuses rather than discarding an area it cannot prove unbooted.
+MARKER = ".bootwright-booted"
 
 
 def published(root):
@@ -80,21 +87,25 @@ def receipt(path):
     return recorded
 
 
-def main():
-    module = AnsibleModule(
-        argument_spec={"request": {"type": "dict", "required": True}},
-        supports_check_mode=True,
-    )
-    request = module.params["request"]
+def observe(request):
+    """What this block has published and what its work area holds."""
     work = request["workRoot"]
     recorded = receipt(os.path.join(work, RECEIPT))
-    observation = {
+    return {
+        "booted": os.path.lexists(os.path.join(work, MARKER)),
         "image": published(request["image"]["path"]) is not None,
         "inputs": str(recorded.get("inputs") or ""),
         "installer": str(recorded.get("installer") or ""),
         "work": os.path.isdir(work),
     }
-    module.exit_json(changed=False, observation=observation)
+
+
+def main():
+    module = AnsibleModule(
+        argument_spec={"request": {"type": "dict", "required": True}},
+        supports_check_mode=True,
+    )
+    module.exit_json(changed=False, observation=observe(module.params["request"]))
 
 
 if __name__ == "__main__":

@@ -81,6 +81,20 @@
     status: running
   no_log: true
 
+# The work area the image was built in holds the state these nodes install from
+# and the only administrator access to the cluster they install, and the media
+# block's rebuild starts by discarding it. It is marked before any node is
+# handed the image, and whether or not this attempt boots one, so a rebuild
+# refuses from then on. The mark leaves only with the area itself, in the media
+# block's inverse, which the removal plan starts after this block's own.
+- name: Mark the work area as one this cluster's nodes boot from
+  ansible.builtin.copy:
+    content: ''
+    dest: '{{ containercluster_install_agent_work }}/.bootwright-booted'
+    owner: root
+    group: root
+    mode: '0600'
+
 - name: Boot each node from the image its cluster published
   ansible.builtin.include_tasks: boot.yml
   loop: '{{ bootwright_cluster_install_request.nodes }}'

@@ -50,9 +50,50 @@
     request: '{{ bootwright_cluster_media_request }}'
   register: containercluster_media_agent_before
 
-- name: Build and publish the boot image when it is not already this request's
+# A build starts by discarding the work area. Once the cluster's installation
+# has marked it, the area holds the state that installation's nodes install
+# from and the only administrator access to the cluster, so nothing builds in
+# it again: this refuses before any effect, naming why a build would be needed.
+- name: Refuse to rebuild a work area an installation already booted from
+  ansible.builtin.fail:
+    msg: >-
+      the installation of cluster {{ bootwright_cluster_media_request.identity.cluster }}
+      marked the work area its boot image is built in before it booted any
+      node from that image, so the area holds the state those nodes install
+      from and the cluster's only administrator access, and building the image
+      again would start by discarding it; it would be built again because
+      {{ containercluster_media_agent_rebuild_causes | join(', and ') }}.
+      Nothing was changed. Destroy the cluster's installation first: bootwright
+      destroy --context {{ bootwright_cluster_media_request.identity.context }}
+      ejects its media before the work area is discarded, and the apply after
+      it builds the image afresh
+  vars:
+    containercluster_media_agent_seen: '{{ containercluster_media_agent_before.observation }}'
+    containercluster_media_agent_recorded: >-
+      {{ (containercluster_media_agent_seen.inputs | length > 0)
+         and (containercluster_media_agent_seen.installer | length > 0) }}
+    containercluster_media_agent_rebuild_causes: >-
+      {{ (['no image built there is published any more']
+          if not containercluster_media_agent_seen.image else [])
+         + (['no receipt there records what its image was built from']
+            if not containercluster_media_agent_recorded else [])
+         + (['the inputs frozen now are not the ones its image was built from']
+            if containercluster_media_agent_recorded
+               and containercluster_media_agent_seen.inputs != bootwright_cluster_media_digest else [])
+         + (['its image was built by installer ' ~ containercluster_media_agent_seen.installer
+             ~ ' and this cluster declares ' ~ bootwright_cluster_media_request.release.version]
+            if containercluster_media_agent_recorded
+               and containercluster_media_agent_seen.installer != bootwright_cluster_media_request.release.version
+            else []) }}
+  when:
+    - not (containercluster_media_agent_published | bool)
+    - containercluster_media_agent_before.observation.booted
+
+# A replay builds nothing, and build.yml still repairs and proves what it
+# serves, so an image an earlier executable published is fetched through the
+# listener before it is reported unchanged.
+- name: Build and publish the boot image, or prove the one already published
   ansible.builtin.include_tasks: build.yml
-  when: not (containercluster_media_agent_published | bool)
 
 - name: Report boot image completion
   bootwright.core.containercluster_media_protocol:
@@ -84,7 +125,9 @@
   bootwright.core.containercluster_media_protocol:
     phase: completed
     outcome: >-
-      {{ 'unchanged' if containercluster_media_agent_published | bool else 'changed' }}
+      {{ 'unchanged'
+         if containercluster_media_agent_published | bool and containercluster_media_agent_served is not changed
+         else 'changed' }}
     digest: '{{ bootwright_cluster_media_digest }}'
     observation: '{{ containercluster_media_agent_after.observation }}'
   no_log: true
