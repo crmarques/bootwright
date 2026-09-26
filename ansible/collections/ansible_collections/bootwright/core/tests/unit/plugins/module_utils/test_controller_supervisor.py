@@ -269,13 +269,13 @@ def running(pid):
     return stat[stat.rfind(b")") + 2 :][:1] not in (b"Z", b"X")
 
 
-def kill_invocation(invocation, _):
+def kill_invocation(invocation, _signum):
     invocation.kill()
     invocation.wait()
 
 
 def signal_supervisor(signum):
-    return lambda _, pid: os.kill(pid, signum)
+    return lambda _invocation, pid: os.kill(pid, signum)
 
 
 def stopped_tree_runs(tmp_path, marker, stop, watched, settle):
