@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"syscall"
 	"time"
 
@@ -32,9 +33,15 @@ const (
 type Runner struct {
 	jobParent     string
 	scratchParent string
-	command       func(string, ...string) *exec.Cmd
-	drain         time.Duration
-	playbooks     map[string]string
+	// owner is the only identity whose run directories a sweep considers:
+	// root, which every lifecycle adapter runs as.
+	owner uint32
+	// treeEntries bounds the entries a sweep reads from one run directory
+	// tree; zero is maxRunTreeEntries.
+	treeEntries int
+	command     func(string, ...string) *exec.Cmd
+	drain       time.Duration
+	playbooks   map[string]string
 }
 
 // New binds the entrypoints composition authorizes, keyed by implementation
@@ -42,7 +49,7 @@ type Runner struct {
 func New(playbooks map[string]string) Runner {
 	// Invocation state is small and must not survive a reboot; staging is
 	// larger and must not either, so both live outside the context store.
-	return Runner{jobParent: "/run", scratchParent: "/var/tmp", command: exec.Command, playbooks: maps.Clone(playbooks)}
+	return Runner{jobParent: "/run", scratchParent: "/var/tmp", owner: 0, command: exec.Command, playbooks: maps.Clone(playbooks)}
 }
 
 func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
@@ -59,20 +66,33 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if err := verifyAutomation(ctx, request); err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	job, err := os.MkdirTemp(r.jobParent, "bootwright-run-")
+	// Nothing starts while an earlier adapter still holds its job, and what a
+	// dead one left, with the material in it, goes first.
+	if err := r.sweep(); err != nil {
+		return lifecycle.RunResult{}, err
+	}
+	job, err := os.MkdirTemp(r.jobParent, jobPrefix)
 	if err != nil {
 		return lifecycle.RunResult{}, failure("lifecycle.state", "private adapter invocation storage is unavailable", "")
 	}
-	// Operation-scoped material never outlives its invocation.
-	defer os.RemoveAll(job)
 	if err := os.Chmod(job, 0700); err != nil {
+		_ = os.RemoveAll(job)
 		return lifecycle.RunResult{}, failure("lifecycle.state", "private adapter invocation storage is unsafe", "")
 	}
-	scratch, err := os.MkdirTemp(r.scratchParent, "bootwright-run-scratch-")
+	lock, err := claim(job, request)
+	if err != nil {
+		// Nothing but the lock was written, and no adapter ever held it.
+		_ = os.RemoveAll(job)
+		return lifecycle.RunResult{}, err
+	}
+	// Operation-scoped material never outlives the adapter processes that
+	// hold the job lock.
+	scratch := ""
+	defer func() { r.release(job, scratch, lock) }()
+	scratch, err = os.MkdirTemp(r.scratchParent, scratchPrefix+strings.TrimPrefix(filepath.Base(job), jobPrefix)+"-")
 	if err != nil {
 		return lifecycle.RunResult{}, failure("lifecycle.state", "private adapter staging storage is unavailable", "")
 	}
-	defer os.RemoveAll(scratch)
 	paths, err := r.materialize(job, request)
 	if err != nil {
 		return lifecycle.RunResult{}, err
@@ -95,7 +115,7 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if err := writeJSON(job, "request.json", values); err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	return r.execute(ctx, job, scratch, playbook, request)
+	return r.execute(ctx, job, scratch, lock, playbook, request)
 }
 
 func (r Runner) materialize(job string, request lifecycle.RunRequest) (map[string]string, error) {
@@ -132,7 +152,7 @@ func writeJSON(job, name string, value any) error {
 	return nil
 }
 
-func (r Runner) execute(ctx context.Context, job, scratch, playbook string, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
+func (r Runner) execute(ctx context.Context, job, scratch string, lock *os.File, playbook string, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, invocationTimeout)
 	defer cancel()
 	grace := r.drain
@@ -171,7 +191,10 @@ func (r Runner) execute(ctx context.Context, job, scratch, playbook string, requ
 	}
 	defer childInput.Close()
 	defer input.Close()
-	command.ExtraFiles = []*os.File{childOutput, childInput}
+	// The adapter inherits the job lock, and so does every process its
+	// supervisor forks: the ansible-playbook child and each Ansible worker.
+	// The lock is free only once none of them runs.
+	command.ExtraFiles = []*os.File{childOutput, childInput, lock}
 	// The adapter's own streams are retained as they are produced, so a run
 	// that completes is as readable afterwards as one that failed.
 	command.Stdout, command.Stderr = request.Output, request.Output

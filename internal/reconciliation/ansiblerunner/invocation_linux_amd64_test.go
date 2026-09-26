@@ -35,7 +35,7 @@ func TestAdapterInvocationIsUnbufferedSoItsOutputIsReadableWhileItRuns(t *testin
 	defer cancel()
 	// The run itself cannot complete against a stub child; only the invocation
 	// this builds is under test.
-	_, _ = runner.execute(ctx, t.TempDir(), t.TempDir(), "apply.yml", request)
+	_, _ = runner.execute(ctx, t.TempDir(), t.TempDir(), nil, "apply.yml", request)
 	joined := strings.Join(arguments, "\x00")
 	if !strings.Contains(joined, "-u\x00-I\x00-B\x00-S\x00-c") {
 		t.Fatalf("adapter invocation = %q, want the unbuffered isolated boundary", joined)

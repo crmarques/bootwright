@@ -456,6 +456,7 @@ package-level variable initializer, and nothing else
 | `lifecycle.lease` | The context root lock or mutation lease cannot be safely acquired or recovered. |
 | `lifecycle.unknown` | A frozen block has an unresolved unknown effect outcome. |
 | `lifecycle.live` | A removal would take back state that is still in use, and refuses before registering. |
+| `lifecycle.adapter-running` | An earlier lifecycle adapter still holds its job lock, so no adapter starts until it ends. |
 | `trust.identity` | SSH identity is missing, changed, contradictory, or not authorized. |
 | `access.unavailable` | An applicable access request lacks required local access metadata or an available credential artifact. |
 | `access.target` | Explicit access cannot resolve one exact authorized target. |
