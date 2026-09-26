@@ -29,8 +29,9 @@ func recordingContext(ctx context.Context) context.Context { return context.With
 
 // attempt runs one block: it allocates and records the attempt before the
 // first side effect, executes it inside the controller's private runtime, then
-// records the durable outcome its evidence justifies.
-func (s Service) attempt(ctx context.Context, tx Transaction, store OperationStore, approved bundle, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, position, total int) (reconciliation.BlockState, error) {
+// records the durable outcome its evidence justifies. A required-log failure
+// is the boundary's to report, so it is never this block's cause.
+func (s Service) attempt(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, position, total int) (reconciliation.BlockState, error) {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
 		return reconciliation.BlockFailed, failure("lifecycle.state",
@@ -46,13 +47,16 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 		return reconciliation.BlockPending, err
 	}
 	recording := recordingContext(ctx)
-	log, err := store.OpenLog(ctx, logPath)
+	log, err := boundary.open(ctx, logPath)
 	if err != nil {
-		return reconciliation.BlockUnknown, logFault(err)
+		// The effect never ran, but an attempt proves no absence: the
+		// required-log failure leaves it unknown until an observation.
+		return reconciliation.BlockUnknown, store.CompleteAttempt(recording, operation.ID, block.ID, number,
+			reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil)
 	}
-	defer func() { _ = log.Close(recording) }()
+	defer boundary.close(ctx, log)
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: "running", Position: position, Total: total})
-	result, runErr := s.invoke(ctx, tx, store, approved, operation, block, material, log, number, 0, position, total, func(inner context.Context, execution Execution) (Result, error) {
+	result, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, block, material, log, number, 0, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		if operation.Verb == reconciliation.Destroy {
 			return capability.Destroy(inner, execution)
 		}
@@ -65,11 +69,16 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	if runErr != nil && errors.Is(runErr, context.Canceled) {
 		outcome = reconciliation.OutcomeCanceled
 	}
+	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "outcome", Block: block.ID, Detail: string(outcome)})
+	// A typed failure proves less than completion, so an attempt whose log
+	// failed before its outcome was logged records it unknown.
+	if log.Failed() && outcome == reconciliation.OutcomeFailed {
+		outcome = reconciliation.OutcomeUnknown
+	}
 	effect, state, err := reconciliation.AttemptTransition(outcome)
 	if err != nil {
 		return reconciliation.BlockUnknown, err
 	}
-	_ = log.Append(recording, operationstore.LogRecord{Event: "outcome", Block: block.ID, Detail: string(outcome)})
 	if err := store.CompleteAttempt(recording, operation.ID, block.ID, number, outcome, effect, state, result.Evidence); err != nil {
 		return reconciliation.BlockUnknown, err
 	}
@@ -78,35 +87,37 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 }
 
 // resolveUnknown observes the exact frozen request read-only under a freshly
-// allocated resolution identity and log, before any observation begins.
-func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store OperationStore, approved bundle, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, position, total int) (reconciliation.BlockState, error) {
+// allocated resolution identity and log, before any observation begins. Until
+// both exist it has observed nothing, so it returns no state and the block
+// keeps the one it had: a resolution that cannot start moves nothing.
+func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, position, total int) (reconciliation.BlockState, error) {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
-		return reconciliation.BlockUnknown, failure("lifecycle.state",
+		return "", failure("lifecycle.state",
 			"this executable cannot observe the implementation this block froze",
 			"install the executable that registered this operation")
 	}
 	attemptNumber, err := store.LastAttempt(ctx, operation.ID, block.ID)
 	if err != nil {
-		return reconciliation.BlockUnknown, err
+		return "", err
 	}
 	number, err := store.StartResolution(ctx, operation.ID, block.ID, attemptNumber)
 	if err != nil {
-		return reconciliation.BlockUnknown, err
+		return "", err
 	}
 	logPath, err := operationstore.AttemptLogPath(operation.ID, block.ID, attemptNumber, number)
 	if err != nil {
-		return reconciliation.BlockUnknown, err
+		return "", err
 	}
 	recording := recordingContext(ctx)
-	log, err := store.OpenLog(ctx, logPath)
+	log, err := boundary.open(ctx, logPath)
 	if err != nil {
-		return reconciliation.BlockUnknown, logFault(err)
+		return "", nil
 	}
-	defer func() { _ = log.Close(recording) }()
+	defer boundary.close(ctx, log)
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Detail: "resolving the unknown outcome from live evidence", Status: "running", Position: position, Total: total})
 	var observation Observation
-	_, runErr := s.invoke(ctx, tx, store, approved, operation, block, material, log, attemptNumber, number, position, total, func(inner context.Context, execution Execution) (Result, error) {
+	_, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, block, material, log, attemptNumber, number, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		value, err := capability.Observe(inner, execution)
 		observation = value
 		return Result{Outcome: reconciliation.OutcomeUnknown}, err
@@ -115,14 +126,16 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	if !reconciliation.ValidEffectState(effect) || runErr != nil {
 		effect = reconciliation.EffectUnknown
 	}
-	resolvedEffect, state, _, err := reconciliation.ResolutionTransition(effect)
+	resolvedEffect, state, err := reconciliation.ResolutionTransition(effect)
 	if err != nil {
 		return reconciliation.BlockUnknown, err
 	}
+	// A log failure here still permits the transition positive evidence
+	// proves; the fault it latches is what blocks the work that would follow.
 	for _, reported := range diagnostics.Of(runErr) {
-		_ = log.Append(recording, operationstore.LogRecord{Event: "observation-failed", Block: block.ID, Detail: reported.Code + ": " + reported.Message})
+		_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "observation-failed", Block: block.ID, Detail: reported.Code + ": " + reported.Message})
 	}
-	_ = log.Append(recording, operationstore.LogRecord{Event: "resolution", Block: block.ID, Detail: string(resolvedEffect)})
+	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "resolution", Block: block.ID, Detail: string(resolvedEffect)})
 	if err := store.CompleteResolution(recording, operation.ID, block.ID, attemptNumber, number, resolvedEffect, state, observation.Evidence); err != nil {
 		return reconciliation.BlockUnknown, err
 	}
@@ -152,7 +165,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 // invoke runs the capability inside the private Python execution boundary,
 // exactly as controller setup does. The approved bundle is the operation's
 // own, opened once before its first effect.
-func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStore, approved bundle, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, log *operationstore.Log, attempt, resolution, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
+func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, log *operationstore.Log, attempt, resolution, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
 	view := tx.Controller()
 	result := Result{Outcome: reconciliation.OutcomeUnknown}
 	// Completion is counted in proved groups, not in elapsed time: the adapter
@@ -172,7 +185,7 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 			if truncated {
 				detail += ", truncated"
 			}
-			_ = log.Append(ctx, operationstore.LogRecord{Event: "adapter-output", Block: block.ID, Detail: detail})
+			_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "adapter-output", Block: block.ID, Detail: detail})
 		}
 	}()
 	err = s.guard.WithPython(ctx, approved.area, approved.requirement, func(launch prerequisites.PythonLaunch, release func() error) error {
@@ -206,8 +219,9 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 				return prerequisites.LocateInstalledTool(inner, view, tool)
 			},
 			Stage: stage,
+			// A failed record latches the boundary, which cancels this run.
 			Log: func(inner context.Context, record operationstore.LogRecord) error {
-				return log.Append(inner, record)
+				return boundary.append(inner, log, record)
 			},
 			Output: output,
 			Progress: func(inner context.Context, group, status string) {
@@ -264,8 +278,10 @@ func (s Service) project(ctx context.Context, tx Transaction, verb reconciliatio
 }
 
 // finish records the operation's terminal state, releases what a completed
-// removal no longer owns, and assembles the result the CLI renders.
-func (s Service) finish(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, boundary bool, result *OperationResult) (*OperationResult, error) {
+// removal no longer owns, and assembles the result the CLI renders. A log fault
+// this invocation latched is recorded again here, so the operation keeps it
+// even when the latch could not write it.
+func (s Service) finish(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, boundary, faulted bool, result *OperationResult) (*OperationResult, error) {
 	ordered := make([]reconciliation.BlockState, 0, len(plan.Blocks))
 	for _, block := range plan.Blocks {
 		state := states[block.ID]
@@ -282,7 +298,7 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 	if err != nil {
 		return result, err
 	}
-	current.State = next
+	current.State, current.LogFault = next, current.LogFault || faulted
 	if err := store.UpdateOperation(ctx, current); err != nil {
 		return result, err
 	}

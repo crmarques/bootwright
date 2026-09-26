@@ -344,6 +344,7 @@ type testCapability struct {
 	hold        func(string)
 	released    func(string)
 	observeHold func(string)
+	destroyHold func(string)
 	// outcomeFor and errorFor answer per block. Blocks running together finish
 	// in no fixed order, so a queue of scripted outcomes would be handed out by
 	// a race rather than by the test.
@@ -457,6 +458,12 @@ func (c *testCapability) Apply(ctx context.Context, execution Execution) (Result
 
 func (c *testCapability) Destroy(_ context.Context, execution Execution) (Result, error) {
 	c.record(&c.destroys, execution.Block.ID)
+	c.mutex.Lock()
+	hold := c.destroyHold
+	c.mutex.Unlock()
+	if hold != nil {
+		hold(execution.Block.ID)
+	}
 	return c.next(&c.outcomes), nil
 }
 
@@ -1446,15 +1453,604 @@ func TestMissingImplementationRefusesTheBlock(t *testing.T) {
 	}
 }
 
+// A required-log failure is a durable fault of the operation, not of the
+// invocation that met it: a later invocation starts nothing until it has
+// proved the boundary writable again, and only that proof clears the fault.
 func TestRequiredLogFaultStopsTheOperation(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
-	h.workspace.area.fail["append "+path.Join("op-"+strings.Repeat("01", 16), "logs", "operation.jsonl")] = errors.New("no space")
+	operationLog := "append " + path.Join("op-"+strings.Repeat("01", 16), "logs", "operation.jsonl")
+	h.workspace.area.fail[operationLog] = errors.New("no space")
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	if code := firstCode(err); code != "runtime.log" {
 		t.Fatalf("log fault = %q (%v)", code, err)
 	}
 	if len(h.capability.applies) != 0 {
 		t.Fatal("an effect ran after the logging boundary failed")
+	}
+	if record, _ := durableOperation(t, h); !record.LogFault {
+		t.Fatal("the log fault was not recorded on the operation")
+	}
+	_, err = h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if code := firstCode(err); code != "runtime.log" {
+		t.Fatalf("an unrestored boundary = %q (%v)", code, err)
+	}
+	if record, _ := durableOperation(t, h); len(h.capability.applies) != 0 || !record.LogFault {
+		t.Fatalf("an unrestored boundary admitted work: applies=%v fault=%t", h.capability.applies, record.LogFault)
+	}
+	delete(h.workspace.area.fail, operationLog)
+	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil || result.Receipt.State != string(reconciliation.OperationDone) {
+		t.Fatalf("a restored boundary = %+v (%v)", result, err)
+	}
+	if record, _ := durableOperation(t, h); record.LogFault || len(h.capability.applies) != 1 {
+		t.Fatalf("restoration left fault=%t after applies=%v", record.LogFault, h.capability.applies)
+	}
+}
+
+// The first required-log failure latches: it requests cancellation of the work
+// in flight and records the fault, and every later failure reports that fault.
+func TestALogFaultLatchesCancellationAndItsRecord(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	store := operationstore.New(h.workspace.area, (&testClock{moment: time.Date(2026, 9, 13, 0, 0, 0, 0, time.UTC)}).Now)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	logging := newLogBoundary(store, currentOperation(t, h), cancel)
+	first := logging.fail(ctx, errors.New("no space"))
+	if code := firstCode(first); code != "runtime.log" || ctx.Err() == nil {
+		t.Fatalf("fault = %q, cancellation requested %t", code, ctx.Err() != nil)
+	}
+	if record, _ := durableOperation(t, h); !record.LogFault {
+		t.Fatal("the latched fault was not recorded")
+	}
+	if again := logging.fail(ctx, errors.New("denied")); again != first || !logging.faulted() {
+		t.Fatalf("a second failure = %v, want the latched %v", again, first)
+	}
+}
+
+// A fault the latch could not write when it met it is still recorded as the
+// operation settles, so the record never depends on that one write.
+func TestALogFaultTheLatchCouldNotRecordIsRecordedAsTheOperationSettles(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	operation := "op-" + strings.Repeat("01", 16)
+	record := "replace " + path.Join(operation, "operation.json")
+	h.capability.hold = func(block string) {
+		failDuring(h, path.Join(operation, "logs", "blocks", block, "attempt-000001.jsonl"))(block)
+		h.workspace.area.mutex.Lock()
+		defer h.workspace.area.mutex.Unlock()
+		h.workspace.area.fail[record] = errors.New("no space")
+	}
+	// The block's settled row comes after the latch tried and before the
+	// operation settles.
+	h.service.options.Progress = progressFunc(func(_ context.Context, event ProgressEvent) {
+		if event.Block != "" && event.Group == "" && event.Status != "running" {
+			h.workspace.area.mutex.Lock()
+			defer h.workspace.area.mutex.Unlock()
+			delete(h.workspace.area.fail, record)
+		}
+	})
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); firstCode(err) != "runtime.log" {
+		t.Fatalf("apply = %v", err)
+	}
+	if settled, _ := durableOperation(t, h); !settled.LogFault {
+		t.Fatal("the fault was lost when the latch could not record it")
+	}
+}
+
+// failDuring makes one path's appends fail from the moment a capability call
+// reaches it, so the log it names opened cleanly and fails part way through.
+func failDuring(h *harness, target string) func(string) {
+	return func(string) {
+		h.workspace.area.mutex.Lock()
+		defer h.workspace.area.mutex.Unlock()
+		h.workspace.area.fail["append "+target] = errors.New("no space")
+	}
+}
+
+// An attempt log that cannot be created runs no effect, and one that fails
+// after its effect ran admits nothing further, even beside a block that
+// completed. A typed failure it could not log proves less than completion, so
+// it is recorded unknown for an observation to resolve.
+func TestAFailedAttemptLogStopsTheInvocationAndLeavesTheAttemptUnknown(t *testing.T) {
+	attemptLog := path.Join("op-"+strings.Repeat("01", 16), "logs", "blocks", "alpha", "attempt-000001.jsonl")
+	for name, tc := range map[string]struct {
+		arrange   func(*harness)
+		reported  reconciliation.Outcome
+		applies   []string
+		operation reconciliation.OperationState
+		alpha     reconciliation.BlockState
+		recorded  reconciliation.Outcome
+	}{
+		"never created": {
+			func(h *harness) { h.workspace.area.fail["append "+attemptLog] = errors.New("no space") },
+			reconciliation.OutcomeFailed, nil, reconciliation.OperationUnknown, reconciliation.BlockUnknown, reconciliation.OutcomeUnknown,
+		},
+		"failed after a typed failure": {
+			func(h *harness) { h.capability.hold = failDuring(h, attemptLog) },
+			reconciliation.OutcomeFailed, []string{"alpha"}, reconciliation.OperationUnknown, reconciliation.BlockUnknown, reconciliation.OutcomeUnknown,
+		},
+		"failed after a completed effect": {
+			func(h *harness) { h.capability.hold = failDuring(h, attemptLog) },
+			reconciliation.OutcomeChanged, []string{"alpha"}, reconciliation.OperationRunning, reconciliation.BlockDone, reconciliation.OutcomeChanged,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), definition("bravo")})
+			h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: tc.reported}}
+			tc.arrange(h)
+			result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+			if code := firstCode(err); code != "runtime.log" || result == nil || result.Receipt.State != string(tc.operation) {
+				t.Fatalf("apply = %+v (%q, %v)", result, code, err)
+			}
+			if !slices.Equal(h.capability.applies, tc.applies) {
+				t.Fatalf("applies = %v, want %v", h.capability.applies, tc.applies)
+			}
+			record, states := durableOperation(t, h)
+			if !record.LogFault || states["alpha"] != tc.alpha || states["bravo"] != reconciliation.BlockPending {
+				t.Fatalf("durable operation = fault %t with %v", record.LogFault, states)
+			}
+			attempt := string(h.workspace.area.files[path.Join(record.ID, "blocks", "alpha", "attempt-000001.json")])
+			if !strings.Contains(attempt, `"outcome":"`+string(tc.recorded)+`"`) {
+				t.Fatalf("attempt record = %s", attempt)
+			}
+		})
+	}
+}
+
+// A resolution first restores the operation's logging boundary and then
+// creates its own log. Either failing observes nothing and leaves the block and
+// the operation as they were; the resolution identity it allocated is never
+// reused.
+func TestAResolutionWithoutItsLogsObservesNothing(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("an unknown outcome reported success")
+	}
+	operation := currentOperation(t, h)
+	blocks := path.Join(operation, "blocks", "artifact-server-lab")
+	for _, broken := range []string{
+		path.Join(operation, "logs", "operation.jsonl"),
+		path.Join(operation, "logs", "blocks", "artifact-server-lab", "attempt-000001-resolution-000001.jsonl"),
+	} {
+		h.workspace.area.fail["append "+broken] = errors.New("no space")
+		_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+		if code := firstCode(err); code != "runtime.log" {
+			t.Fatalf("%s: apply = %q (%v)", broken, code, err)
+		}
+		delete(h.workspace.area.fail, "append "+broken)
+		record, states := durableOperation(t, h)
+		if len(h.capability.observes) != 0 || !record.LogFault ||
+			record.State != reconciliation.OperationUnknown || states["artifact-server-lab"] != reconciliation.BlockUnknown {
+			t.Fatalf("%s: observes=%v fault=%t state=%s blocks=%v", broken, h.capability.observes, record.LogFault, record.State, states)
+		}
+	}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatalf("a restored resolution = %v", err)
+	}
+	if _, found := h.workspace.area.files[path.Join(blocks, "attempt-000001-resolution-000002.json")]; !found {
+		t.Fatal("the resolution reused the identity a failed one allocated")
+	}
+	if record, _ := durableOperation(t, h); record.LogFault || record.State != reconciliation.OperationDone {
+		t.Fatalf("restored operation = %s, fault %t", record.State, record.LogFault)
+	}
+}
+
+// A removal's resolution that proves its block still records the transition
+// when its log fails, but the fault refuses the removal before it registers,
+// and a later removal restores the boundary before it proceeds.
+func TestALogFaultDuringARemovalsResolutionRefusesTheRemoval(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("an unknown outcome reported success")
+	}
+	applied := currentOperation(t, h)
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+	h.capability.observeHold = failDuring(h, path.Join(applied, "logs", "blocks", "artifact-server-lab", "attempt-000001-resolution-000001.jsonl"))
+	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if code := firstCode(err); code != "runtime.log" {
+		t.Fatalf("destroy = %q (%v)", code, err)
+	}
+	record, states := durableOperation(t, h)
+	if record.ID != applied || !record.LogFault || states["artifact-server-lab"] != reconciliation.BlockDone || len(h.capability.destroys) != 0 {
+		t.Fatalf("after the fault: current %s fault %t blocks %v destroys %v", record.ID, record.LogFault, states, h.capability.destroys)
+	}
+	h.capability.observeHold = nil
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatalf("a restored removal = %v", err)
+	}
+	if !slices.Equal(h.capability.destroys, []string{"artifact-server-lab"}) {
+		t.Fatalf("destroys = %v", h.capability.destroys)
+	}
+	store := operationstore.New(h.workspace.area, func() time.Time { return time.Unix(0, 0) })
+	if restored, err := store.ReadOperation(context.Background(), applied); err != nil || restored.LogFault {
+		t.Fatalf("the replaced operation = %+v (%v)", restored, err)
+	}
+}
+
+// A completed removal whose last log write failed holds the fault too: it
+// still releases what it no longer needs, and the next apply restores its
+// boundary before it registers anything.
+func TestAFreshApplyRestoresTheBoundaryACompletedRemovalFaulted(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	removal := "op-" + strings.Repeat("02", 16)
+	h.capability.destroyHold = failDuring(h, path.Join(removal, "logs", "blocks", "artifact-server-lab", "attempt-000001.jsonl"))
+	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if code := firstCode(err); code != "runtime.log" || result == nil || result.Receipt.State != string(reconciliation.OperationDone) {
+		t.Fatalf("destroy = %+v (%q, %v)", result, code, err)
+	}
+	if record, _ := durableOperation(t, h); record.ID != removal || !record.LogFault {
+		t.Fatalf("completed removal = %s, fault %t", record.ID, record.LogFault)
+	}
+	if !slices.Equal(h.binder.released, []string{"bind-1"}) {
+		t.Fatalf("released bindings = %v", h.binder.released)
+	}
+	operationLog := "append " + path.Join(removal, "logs", "operation.jsonl")
+	h.workspace.area.fail[operationLog] = errors.New("no space")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); firstCode(err) != "runtime.log" {
+		t.Fatalf("apply over an unrestored removal = %v", err)
+	}
+	if currentOperation(t, h) != removal || len(h.capability.applies) != 1 {
+		t.Fatalf("an unrestored boundary registered %s after applies %v", currentOperation(t, h), h.capability.applies)
+	}
+	delete(h.workspace.area.fail, operationLog)
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatalf("apply over a restored removal = %v", err)
+	}
+	store := operationstore.New(h.workspace.area, func() time.Time { return time.Unix(0, 0) })
+	if restored, err := store.ReadOperation(context.Background(), removal); err != nil || restored.LogFault {
+		t.Fatalf("restored removal = %+v (%v)", restored, err)
+	}
+}
+
+// A removal restores the boundary of the operation it replaces before it
+// proves, probes or registers anything, so a restoration that fails starts
+// nothing and leaves the fault where it was, even when every effect of that
+// operation is already proved.
+func TestARemovalOverAnUnrestoredBoundaryStartsNothing(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	applied := currentOperation(t, h)
+	store := operationstore.New(h.workspace.area, (&testClock{moment: time.Date(2026, 9, 13, 0, 0, 0, 0, time.UTC)}).Now)
+	if err := markLogFault(context.Background(), store, applied); err != nil {
+		t.Fatal(err)
+	}
+	operationLog := "append " + path.Join(applied, "logs", "operation.jsonl")
+	h.workspace.area.fail[operationLog] = errors.New("no space")
+	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if code := firstCode(err); code != "runtime.log" {
+		t.Fatalf("destroy = %q (%v)", code, err)
+	}
+	record, _ := durableOperation(t, h)
+	if record.ID != applied || !record.LogFault || len(h.capability.probes) != 0 || len(h.capability.destroys) != 0 {
+		t.Fatalf("an unrestored boundary admitted work: current %s fault %t probes %v destroys %v",
+			record.ID, record.LogFault, h.capability.probes, h.capability.destroys)
+	}
+	delete(h.workspace.area.fail, operationLog)
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatalf("a restored removal = %v", err)
+	}
+	if !slices.Equal(h.capability.destroys, []string{"artifact-server-lab"}) {
+		t.Fatalf("destroys = %v", h.capability.destroys)
+	}
+}
+
+// Restoration clears the fault only by a durable write, so a clear that fails
+// starts nothing, even for an operation that is already running and so needs
+// no other write before its next block.
+func TestARestorationWhoseClearFailsStartsNothing(t *testing.T) {
+	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), definition("bravo")})
+	h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeChanged}}
+	operation := "op-" + strings.Repeat("01", 16)
+	attemptLog := path.Join(operation, "logs", "blocks", "alpha", "attempt-000001.jsonl")
+	h.capability.hold = failDuring(h, attemptLog)
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); firstCode(err) != "runtime.log" {
+		t.Fatalf("apply = %v", err)
+	}
+	if record, _ := durableOperation(t, h); record.State != reconciliation.OperationRunning || !record.LogFault {
+		t.Fatalf("faulted operation = %s, fault %t", record.State, record.LogFault)
+	}
+	h.capability.hold = nil
+	delete(h.workspace.area.fail, "append "+attemptLog)
+	h.workspace.area.fail["replace "+path.Join(operation, "operation.json")] = errors.New("no space")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("a restoration that could not clear the fault reported success")
+	}
+	if record, _ := durableOperation(t, h); !record.LogFault || !slices.Equal(h.capability.applies, []string{"alpha"}) {
+		t.Fatalf("an uncleared fault admitted work: fault %t, applies %v", record.LogFault, h.capability.applies)
+	}
+}
+
+// loggingCapability records through the attempt's own log before it applies,
+// exactly as the adapter records each group it settles.
+type loggingCapability struct {
+	*testCapability
+	log func(context.Context, Execution)
+}
+
+func (c *loggingCapability) Apply(ctx context.Context, execution Execution) (Result, error) {
+	c.log(ctx, execution)
+	return c.testCapability.Apply(ctx, execution)
+}
+
+// A record the adapter logs through its execution is a required-log write like
+// any other: one the attempt log cannot keep latches the fault and cancels the
+// run that made it, rather than letting it go on changing the host unlogged.
+func TestALogRecordTheAttemptLogCannotKeepCancelsTheRun(t *testing.T) {
+	const block = "artifact-server-lab"
+	h := newHarness(t, block)
+	canceled := false
+	h.service.capabilities = testResolver{capability: &loggingCapability{testCapability: h.capability, log: func(ctx context.Context, execution Execution) {
+		err := execution.Log(ctx, operationstore.LogRecord{Event: "group", Group: "pull-image", Detail: "ok"})
+		canceled = err != nil && ctx.Err() != nil
+	}}}
+	attemptLog := path.Join("op-"+strings.Repeat("01", 16), "logs", "blocks", block, "attempt-000001.jsonl")
+	// The block's running row follows the attempt log's opening record.
+	h.service.options.Progress = progressFunc(func(_ context.Context, event ProgressEvent) {
+		if event.Block == block && event.Group == "" && event.Status == "running" {
+			failDuring(h, attemptLog)(block)
+		}
+	})
+	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if code := firstCode(err); code != "runtime.log" || !canceled {
+		t.Fatalf("apply = %q (%v), run canceled %t", code, err, canceled)
+	}
+	if record, _ := durableOperation(t, h); !record.LogFault {
+		t.Fatal("the log fault was not recorded on the operation")
+	}
+}
+
+// A log that outgrew its bound is finalized with an explicit truncation marker,
+// so a reader never mistakes it for a complete one, and a marker that cannot be
+// written is a log fault like any other write.
+func TestALogThatCannotBeFinalizedIsALogFault(t *testing.T) {
+	const block = "artifact-server-lab"
+	h := newHarness(t, block)
+	detail := strings.Repeat("x", 512)
+	h.service.capabilities = testResolver{capability: &loggingCapability{testCapability: h.capability, log: func(ctx context.Context, execution Execution) {
+		// Every record exceeds a kilobyte, so this many outgrow the bound.
+		for range operationstore.MaxLogBytes/1024 + 1 {
+			_ = execution.Log(ctx, operationstore.LogRecord{Event: "group", Group: detail, Detail: detail})
+		}
+	}}}
+	attemptLog := path.Join("op-"+strings.Repeat("01", 16), "logs", "blocks", block, "attempt-000001.jsonl")
+	// The block's settled row follows its outcome record and precedes the
+	// finalize, so only the truncation marker meets the failure.
+	h.service.options.Progress = progressFunc(func(_ context.Context, event ProgressEvent) {
+		if event.Block == block && event.Group == "" && event.Status != "running" {
+			failDuring(h, attemptLog)(block)
+		}
+	})
+	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if code := firstCode(err); code != "runtime.log" {
+		t.Fatalf("apply = %q (%v)", code, err)
+	}
+	if record, _ := durableOperation(t, h); !record.LogFault {
+		t.Fatal("a log that could not be finalized recorded no fault")
+	}
+}
+
+// A log is recorded rather than performed, so an interrupt reaches none of its
+// writes and is never a log fault.
+func TestAnInterruptIsNotALogFault(t *testing.T) {
+	store := operationstore.New(newArea(), (&testClock{moment: time.Date(2026, 9, 13, 0, 0, 0, 0, time.UTC)}).Now)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	operation := "op-" + strings.Repeat("01", 16)
+	logging := newLogBoundary(store, operation, nil)
+	log, err := logging.open(ctx, operationstore.OperationLogPath(operation))
+	if err != nil {
+		t.Fatalf("an interrupted open = %v", err)
+	}
+	if err := logging.append(ctx, log, operationstore.LogRecord{Event: "outcome", Detail: "canceled"}); err != nil {
+		t.Fatalf("an interrupted append = %v", err)
+	}
+	logging.close(ctx, log)
+	if logging.faulted() {
+		t.Fatalf("an interrupt latched %v", logging.err())
+	}
+}
+
+// durableOperation reads the context's current operation record as the store
+// holds it, including what no result reports, such as its log fault.
+func durableOperation(t *testing.T, h *harness) (operationstore.Operation, map[string]reconciliation.BlockState) {
+	t.Helper()
+	ctx := context.Background()
+	store := operationstore.New(h.workspace.area, func() time.Time { return time.Unix(0, 0) })
+	index, err := store.Index(ctx)
+	if err != nil || index.Current == "" {
+		t.Fatalf("current operation = %q (%v)", index.Current, err)
+	}
+	operation, err := store.ReadOperation(ctx, index.Current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := store.ReadPlan(ctx, operation.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	states, err := store.BlockStates(ctx, operation.ID, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return operation, states
+}
+
+// A resolution that cannot start performs no observation, so it proves nothing
+// and moves nothing: an operation an executor died in stays running with its
+// running block, whether a continuation or a removal tried and whatever step
+// stopped it. Only a resolution log that cannot be created is a log fault.
+func TestAResolutionThatCannotStartLeavesTheOperationUnchanged(t *testing.T) {
+	const block = "artifact-server-lab"
+	repeats := map[string]func(*harness) error{
+		"continuation": func(h *harness) error {
+			_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+			return err
+		},
+		"removal": func(h *harness) error {
+			_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+			return err
+		},
+	}
+	for name, tc := range map[string]struct {
+		arrange  func(t *testing.T, h *harness, operation string)
+		logFault bool
+	}{
+		"its identity cannot be allocated": {arrange: func(_ *testing.T, h *harness, operation string) {
+			h.workspace.area.fail["write "+path.Join(operation, "blocks", block, "attempt-000001-resolution-000001.json")] = errors.New("no space")
+		}},
+		"its log cannot be created": {arrange: func(_ *testing.T, h *harness, operation string) {
+			h.workspace.area.fail["append "+path.Join(operation, "logs", "blocks", block, "attempt-000001-resolution-000001.jsonl")] = errors.New("no space")
+		}, logFault: true},
+		"its capability is missing": {arrange: func(_ *testing.T, h *harness, _ string) {
+			h.service.capabilities = testResolver{missing: true}
+		}},
+		"its block records no attempt": {arrange: func(t *testing.T, h *harness, operation string) {
+			target := path.Join(operation, "blocks", block, "state.json")
+			h.workspace.area.mutex.Lock()
+			defer h.workspace.area.mutex.Unlock()
+			record := string(h.workspace.area.files[target])
+			if !strings.Contains(record, `"attempts":1`) {
+				t.Fatalf("block record = %s", record)
+			}
+			h.workspace.area.files[target] = []byte(strings.Replace(record, `"attempts":1`, `"attempts":0`, 1))
+		}},
+	} {
+		for verb, repeat := range repeats {
+			t.Run(name+"/"+verb, func(t *testing.T) {
+				h := newHarness(t, block)
+				h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+				if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+					t.Fatal("an unknown outcome reported success")
+				}
+				leaveExecutorDead(t, h, block)
+				tc.arrange(t, h, currentOperation(t, h))
+				err := repeat(h)
+				if err == nil {
+					t.Fatal("a resolution that could not start reported success")
+				}
+				if len(h.capability.observes) != 0 {
+					t.Fatalf("observations = %v", h.capability.observes)
+				}
+				record, states := durableOperation(t, h)
+				if record.State != reconciliation.OperationRunning || states[block] != reconciliation.BlockRunning {
+					t.Fatalf("durable state = %s with %v, want it unchanged", record.State, states)
+				}
+				if record.LogFault != tc.logFault {
+					t.Fatalf("log fault = %t, want %t", record.LogFault, tc.logFault)
+				}
+				if code := firstCode(err); tc.logFault && code != "runtime.log" {
+					t.Fatalf("refusal = %q (%v)", code, err)
+				}
+			})
+		}
+	}
+}
+
+// An apply that started nothing owns nothing, so removing it takes nothing
+// back: the removal completes without an effect or a probe and leaves the
+// context at rest, from which a fresh apply starts.
+func TestADestroyOverAnApplyThatStartedNothingCompletes(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	open := h.workspace.controller.OpenBundle
+	h.workspace.controller.OpenBundle = func(context.Context, string) (prerequisites.BundleArea, error) {
+		return nil, errors.New("bundle unavailable")
+	}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("an apply without its bundle reported success")
+	}
+	applied := currentOperation(t, h)
+	if _, states := durableOperation(t, h); states["artifact-server-lab"] != reconciliation.BlockPending {
+		t.Fatalf("the apply started %v", states)
+	}
+	h.workspace.controller.OpenBundle = open
+	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil {
+		t.Fatalf("a removal of nothing refused: %+v", diagnostics.Of(err))
+	}
+	if result.Receipt.State != string(reconciliation.OperationDone) || result.Receipt.Operation == applied || len(result.Blocks) != 0 {
+		t.Fatalf("receipt = %+v over %d blocks", result.Receipt, len(result.Blocks))
+	}
+	if len(h.capability.destroys) != 0 || len(h.capability.probes) != 0 || len(h.capability.observes) != 0 {
+		t.Fatalf("a removal of nothing reached the host: destroys=%v probes=%v observes=%v",
+			h.capability.destroys, h.capability.probes, h.capability.observes)
+	}
+	pristine, _ := reconciliation.PristineEvidence().Bytes()
+	if !slices.Equal(h.workspace.evidence, pristine) || !slices.Equal(h.binder.released, []string{"bind-1"}) {
+		t.Fatalf("evidence = %q, released bindings = %v", h.workspace.evidence, h.binder.released)
+	}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatalf("the context was not left at rest: %v", err)
+	}
+	if !slices.Equal(h.capability.applies, []string{"artifact-server-lab"}) {
+		t.Fatalf("applies = %v", h.capability.applies)
+	}
+}
+
+// Only an apply still running or paused may have started nothing. Any other
+// operation whose records leave nothing to remove contradicts them, so its
+// removal refuses before it registers, reaches a host, or releases the
+// material the effects still on that host need.
+func TestARemovalOverRecordsThatContradictThemselvesRefuses(t *testing.T) {
+	const block = "artifact-server-lab"
+	for name, arrange := range map[string]func(*testing.T, *harness){
+		"a completed apply without its block record": func(t *testing.T, h *harness) {
+			if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+				t.Fatal(err)
+			}
+			h.workspace.area.mutex.Lock()
+			defer h.workspace.area.mutex.Unlock()
+			delete(h.workspace.area.files, path.Join("op-"+strings.Repeat("01", 16), "blocks", block, "state.json"))
+		},
+		"a failed apply that records no started block": func(t *testing.T, h *harness) {
+			open := h.workspace.controller.OpenBundle
+			h.workspace.controller.OpenBundle = func(context.Context, string) (prerequisites.BundleArea, error) {
+				return nil, errors.New("bundle unavailable")
+			}
+			if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+				t.Fatal("an apply without its bundle reported success")
+			}
+			h.workspace.controller.OpenBundle = open
+			rewriteState(t, h, path.Join(currentOperation(t, h), "operation.json"), string(reconciliation.OperationFailed))
+		},
+		"a failed removal with nothing remaining": func(t *testing.T, h *harness) {
+			if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+				t.Fatal(err)
+			}
+			h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
+			if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+				t.Fatal("a failed removal reported success")
+			}
+			rewriteState(t, h, path.Join(currentOperation(t, h), "blocks", block, "state.json"), string(reconciliation.BlockDone))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t, block)
+			arrange(t, h)
+			current := currentOperation(t, h)
+			h.capability.destroys, h.capability.probes, h.capability.observes = nil, nil, nil
+			_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+			reported := diagnostics.Of(err)
+			if len(reported) == 0 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "records no block") {
+				t.Fatalf("destroy = %+v (%v)", reported, err)
+			}
+			if currentOperation(t, h) != current || len(h.binder.released) != 0 {
+				t.Fatalf("the refusal registered %s or released %v", currentOperation(t, h), h.binder.released)
+			}
+			if len(h.capability.destroys) != 0 || len(h.capability.probes) != 0 || len(h.capability.observes) != 0 {
+				t.Fatalf("the refusal reached the host: destroys=%v probes=%v observes=%v",
+					h.capability.destroys, h.capability.probes, h.capability.observes)
+			}
+		})
 	}
 }
 
@@ -1542,6 +2138,10 @@ func TestAnInterruptedBlockIsRecordedUnknown(t *testing.T) {
 	if result == nil || result.Receipt.State != "unknown" || result.Receipt.Next != "resolve" {
 		t.Fatalf("receipt = %+v", result)
 	}
+	// The interrupt reaches no log write, so it is never a log fault.
+	if record, _ := durableOperation(t, h); record.LogFault || firstCode(err) == "runtime.log" {
+		t.Fatalf("an interrupt read as a log fault: fault %t (%v)", record.LogFault, err)
+	}
 	status, err := h.service.Status(context.Background(), StatusRequest{ContextName: "lab"})
 	if err != nil {
 		t.Fatal(err)
@@ -1617,8 +2217,12 @@ func TestAnInterruptedResolutionIsRecordedUnknown(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	h.capability.observeHold = func(string) { cancel() }
 	h.capability.observeErr = context.Canceled
-	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+	_, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err == nil {
 		t.Fatal("an interrupted resolution reported success")
+	}
+	if record, _ := durableOperation(t, h); record.LogFault || firstCode(err) == "runtime.log" {
+		t.Fatalf("an interrupt read as a log fault: fault %t (%v)", record.LogFault, err)
 	}
 	record := string(h.workspace.area.files[resolutionRecord(h, "artifact-server-lab")])
 	if !strings.Contains(record, `"phase":"observed"`) || !strings.Contains(record, `"effect":"unknown"`) {
@@ -2311,25 +2915,36 @@ func currentOperation(t *testing.T, h *harness) string {
 // mid-attempt leaves it, which no interrupt this engine survives can produce.
 func leaveRunning(t *testing.T, h *harness, block string) {
 	t.Helper()
-	operation := currentOperation(t, h)
-	target := path.Join(operation, "blocks", block, "state.json")
+	rewriteState(t, h, path.Join(currentOperation(t, h), "blocks", block, "state.json"), string(reconciliation.BlockRunning))
+}
+
+// leaveExecutorDead rewrites the current operation and one of its blocks as an
+// executor that died mid-attempt leaves both: running, with nothing recorded.
+func leaveExecutorDead(t *testing.T, h *harness, block string) {
+	t.Helper()
+	leaveRunning(t, h, block)
+	rewriteState(t, h, path.Join(currentOperation(t, h), "operation.json"), string(reconciliation.OperationRunning))
+}
+
+func rewriteState(t *testing.T, h *harness, target, state string) {
+	t.Helper()
 	h.workspace.area.mutex.Lock()
 	defer h.workspace.area.mutex.Unlock()
 	current, ok := h.workspace.area.files[target]
 	if !ok {
-		t.Fatalf("block %q has no durable state", block)
+		t.Fatalf("%s has no durable record", target)
 	}
 	const field = `"state":"`
 	start := strings.Index(string(current), field)
 	if start < 0 {
-		t.Fatalf("block record has no state: %q", current)
+		t.Fatalf("record has no state: %q", current)
 	}
 	start += len(field)
 	end := strings.Index(string(current[start:]), `"`)
 	if end < 0 {
-		t.Fatalf("block record has no state: %q", current)
+		t.Fatalf("record has no state: %q", current)
 	}
-	h.workspace.area.files[target] = []byte(string(current[:start]) + string(reconciliation.BlockRunning) + string(current[start+end:]))
+	h.workspace.area.files[target] = []byte(string(current[:start]) + state + string(current[start+end:]))
 }
 
 func TestStageSelectionWithNothingStartableRefuses(t *testing.T) {

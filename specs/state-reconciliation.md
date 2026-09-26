@@ -28,9 +28,10 @@ can start, and an edited input refuses by naming that removal.
 
 A verb whose work durable state already proves performs none of it and
 succeeds: an `apply` repeated over the unchanged input its completed apply
-froze, and a `destroy` of a context that owns nothing, each report the
-completed operation and `done` without registering an operation, opening a
-transaction, binding a Secret, claiming a reservation or reaching a host. Such
+froze, and a `destroy` of a context that owns nothing, which is one holding no
+operation or a completed destroy, each report the completed operation and
+`done` without registering an operation, opening a transaction, binding a
+Secret, claiming a reservation or reaching a host. Such
 an invocation requires no authorization and no confirmation, because it has no
 consequence to acknowledge, and a token it is given authorizes nothing and
 refuses nothing. Repeating a verb is therefore always safe, which is what lets
@@ -211,6 +212,10 @@ changes only together with the code.
 An attempt records the effect and block state its capability's outcome
 justifies. An outcome outside this set is recorded as `unknown`, and an attempt
 its invocation's cancellation interrupted as `canceled`, whatever it reported.
+An attempt whose required log failed before its outcome was logged records a
+reported `failed` as `unknown`, because a typed failure proves less than
+completion, and one whose log could not be created records `unknown` without
+running its effect.
 
 | Adapter outcome | Effect state | Block |
 | --- | --- | --- |
@@ -266,7 +271,10 @@ unproved blocks are observed before any other step starts.
 A block that an invocation finds `running` lost its executor mid-attempt.
 Nothing recorded its outcome, so it is unproved exactly as an `unknown` block
 is: the next continuation or removal observes it under the exclusive lock, and
-it becomes `unknown` only when that observation proves nothing.
+it becomes `unknown` only when that observation proves nothing. A resolution
+that cannot start observes nothing, so the block stays `running` and its
+operation keeps its state; an execution stopped with a block still `running` is
+never a pause.
 
 ### Operation state precedence
 
@@ -500,9 +508,10 @@ stops the next attempt from starting; it never suppresses the record of the
 attempt that already ran. Resolving `unknown` is a read-only, capability-owned
 observation against the frozen request and exact target identity. Before any resolution
 observation—including local process, network, or remote probing—Bootwright must
-restore the required operation logging boundary, durably allocate the next
-resolution number for the exact unknown effect attempt, and securely create its
-separate required resolution-attempt log. The resolution identity and log path
+restore the required operation logging boundary as defined below, durably
+allocate the next resolution number for the exact unknown effect attempt, and
+securely create its separate required resolution-attempt log. The resolution
+identity and log path
 are durable before observation begins. Failure at any of those steps performs
 no observation and leaves the effect state, block, and operation unchanged. A
 logging-boundary restoration or resolution-log creation failure sets or
@@ -547,15 +556,28 @@ nothing about what it owns.
 A required-log write failure is also a sticky, durable operation fault: it sets
 the operation record's `logFault` flag, and no later effect or retry starts
 until the required private logging boundary is safely restored, even when
-positive evidence resolves the affected block to `done` or `failed`.
-Restoration permits new logging but never repairs, appends to, or replaces the
-failed attempt log. Missing or truncated log detail is never reconstructed,
-treated as operation evidence, or used to weaken the resolution rules above.
+positive evidence resolves the affected block to `done` or `failed`. The
+required logs are the operation log and each effect or resolution attempt log,
+and a failure to create, append to or finalize one is the fault; retained
+adapter output is not a required log. The invocation that meets it admits
+nothing further, requests cancellation of what is in flight, appends nothing
+more to the log that failed, records the flag under the boundary cancellation
+does not reach, and returns `runtime.log`.
 
-Not yet met: nothing sets `logFault`, a log that fails to open refuses only the
-invocation that opened it, and every later log `Append` error is discarded, so
-a later invocation continues without restoration; tracked as
-[backlog S10](milestones/backlog.md#audit-follow-ups-2026-09).
+Restoration is proved, never assumed. Any later invocation that would observe,
+probe, register or start anything while the faulted operation is the context's
+current one first reopens that operation's operation log under the exclusive
+lock and durably writes its opening record, and only then durably clears the
+flag.
+Nothing else clears it: not elapsed time, a read, a settled verb, or a write to
+any other log. A failure at either step preserves the flag and starts nothing.
+A continuation performs the same reopening before any work whether or not the
+flag is set, and a removal performs it for the operation it replaces before
+resolving any of its effects; that reopening is the restoration a resolution
+requires. Restoration permits new logging but never repairs, appends to, or
+replaces the failed attempt log. Missing or truncated log detail is never
+reconstructed, treated as operation evidence, or used to weaken the resolution
+rules above.
 
 ### Continuation and removal
 
@@ -584,7 +606,18 @@ only by its own inverse, so a block that completed, one that failed, and one
 whose outcome was lost are owned alike, and only a block that never started is
 not. A removal covers exactly that set and nothing the operation never started.
 Ownership therefore does not move as an unproved block is resolved, because
-resolution leaves it `done` or `failed` and the set already held both.
+resolution leaves it `done` or `failed` and the set already held both. An
+incomplete apply that started no block, which is one still `running` or
+`paused`, owns no effect, yet it is still the context's operation, which only
+the exact input it froze could continue; its removal is therefore not a settled
+verb but a removal that carries no block: it registers, performs no effect and
+completes, which releases what the apply claimed and leaves the context at
+rest. No other operation can leave nothing to remove: a completed apply's
+blocks are all `done`, a `failed` or `unknown` apply holds the block that made
+it so, and a failed removal holds the block that failed. Records that say
+otherwise contradict themselves, so a removal over them refuses before it
+registers, reaches a host, or releases a binding the effects still on the host
+need.
 
 A frozen block records what creating it did; removing it is the other half of
 the same request. Each capability therefore reads its own frozen request and

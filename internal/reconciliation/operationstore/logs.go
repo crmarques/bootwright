@@ -42,7 +42,9 @@ type LogRecord struct {
 }
 
 // Log is troubleshooting material, never ownership evidence or a continuation
-// cursor. It reports its own faults so the caller can stop new work.
+// cursor. It reports its own faults so the caller can stop new work. A failed
+// write is sticky: nothing is appended after it, so a record that did land is
+// never followed by one written past a gap.
 type Log struct {
 	area    Area
 	stamp   func() (string, error)
@@ -50,9 +52,13 @@ type Log struct {
 	written int
 	dropped int
 	closed  bool
+	failed  error
 }
 
 func (l *Log) Path() string { return l.path }
+
+// Failed reports whether a write to this log has failed.
+func (l *Log) Failed() bool { return l != nil && l.failed != nil }
 
 func OperationLogPath(id string) string { return path.Join(id, "logs", "operation.jsonl") }
 
@@ -212,8 +218,12 @@ func (l *Log) Append(ctx context.Context, record LogRecord) error {
 	if l == nil || l.closed {
 		return recordError("the private operation log is not open")
 	}
+	if l.failed != nil {
+		return l.failed
+	}
 	stamp, err := l.stamp()
 	if err != nil {
+		l.failed = err
 		return err
 	}
 	record.Time = stamp
@@ -234,6 +244,7 @@ func (l *Log) Append(ctx context.Context, record LogRecord) error {
 		return nil
 	}
 	if err := l.area.Append(ctx, l.path, line); err != nil {
+		l.failed = err
 		return err
 	}
 	l.written += len(line)
@@ -241,14 +252,15 @@ func (l *Log) Append(ctx context.Context, record LogRecord) error {
 }
 
 // Close makes truncation explicit: a reader must never mistake a bounded log
-// for a complete one.
+// for a complete one. A log whose write already failed gains no marker, since
+// its failure was reported when it happened.
 func (l *Log) Close(ctx context.Context) error {
 	if l == nil || l.closed {
 		return nil
 	}
 	dropped := l.dropped
 	l.closed = true
-	if dropped == 0 {
+	if dropped == 0 || l.failed != nil {
 		return nil
 	}
 	line, err := json.Marshal(struct {

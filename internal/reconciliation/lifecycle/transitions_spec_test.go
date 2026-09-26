@@ -59,7 +59,7 @@ func checkResolutionOutcomes(t *testing.T, lines []string) {
 	covered := map[string]bool{}
 	for _, row := range specTable(t, lines, "### Resolution outcomes", "Observation proves", "Effect state", "Block") {
 		effect := specCode(t, row[1])
-		recorded, block, _, err := reconciliation.ResolutionTransition(reconciliation.EffectState(effect))
+		recorded, block, err := reconciliation.ResolutionTransition(reconciliation.EffectState(effect))
 		if row[0] == "" || err != nil || string(recorded) != effect || row[2] != specList(string(block)) {
 			t.Errorf("row %q: the code records %q and %q (%v)", row, recorded, block, err)
 		}
@@ -80,7 +80,7 @@ func checkBlockTransitions(t *testing.T, lines []string) {
 		attempted[string(block)] = true
 	}
 	for _, effect := range declaredValues(t, "EffectState") {
-		_, block, _, err := reconciliation.ResolutionTransition(reconciliation.EffectState(effect))
+		_, block, err := reconciliation.ResolutionTransition(reconciliation.EffectState(effect))
 		if err != nil {
 			t.Fatal(err)
 		}

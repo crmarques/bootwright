@@ -99,19 +99,20 @@ func AttemptTransition(outcome Outcome) (EffectState, BlockState, error) {
 // ResolutionTransition applies the resolution table: only durable positive
 // evidence moves an unknown attempt. Positive absence and a positive partial
 // realization are both failures, because each names a target the capability
-// may converge; only an observation that proves neither stays unknown.
-func ResolutionTransition(observed EffectState) (EffectState, BlockState, OperationState, error) {
+// may converge; only an observation that proves neither stays unknown. The
+// operation state follows from its blocks under NextOperationState.
+func ResolutionTransition(observed EffectState) (EffectState, BlockState, error) {
 	switch observed {
 	case EffectCompleted:
-		return EffectCompleted, BlockDone, OperationRunning, nil
+		return EffectCompleted, BlockDone, nil
 	case EffectNoEffect:
-		return EffectNoEffect, BlockFailed, OperationFailed, nil
+		return EffectNoEffect, BlockFailed, nil
 	case EffectPartial:
-		return EffectPartial, BlockFailed, OperationFailed, nil
+		return EffectPartial, BlockFailed, nil
 	case EffectUnknown:
-		return EffectUnknown, BlockUnknown, OperationUnknown, nil
+		return EffectUnknown, BlockUnknown, nil
 	}
-	return "", "", "", stateError("lifecycle resolution evidence is not recognized")
+	return "", "", stateError("lifecycle resolution evidence is not recognized")
 }
 
 // NextOperationState derives the operation from its blocks. An unknown block

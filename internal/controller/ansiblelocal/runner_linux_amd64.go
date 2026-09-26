@@ -38,6 +38,10 @@ const (
 	authorizedResultDrain = 60 * time.Second
 )
 
+// runTimeout bounds one controller Ansible run: setup, its recovery or a
+// controller-stage client installation.
+const runTimeout = 10 * time.Minute
+
 func run(ctx context.Context, launch prerequisites.PythonLaunch, request capabilityRequest, release func() error, publish func(context.Context, prerequisites.NativePreparation) error, progress func(prerequisites.ProgressEvent), retain prerequisites.RunOutput) (prerequisites.ActionResult, error) {
 	// Invocation state is small and must not survive a reboot, so it lives on
 	// the runtime filesystem. Package staging is large and must not, so it goes
@@ -57,7 +61,7 @@ type processBoundary struct {
 }
 
 func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request capabilityRequest, release func() error, publish func(context.Context, prerequisites.NativePreparation) error, progress func(prerequisites.ProgressEvent), retain prerequisites.RunOutput, boundary processBoundary) (prerequisites.ActionResult, error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, runTimeout)
 	defer cancel()
 	// Each protocol phase names the work Ansible is about to do, so the native
 	// transaction and every tool transfer are visible while they run.

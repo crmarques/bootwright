@@ -36,6 +36,9 @@ type scheduler struct {
 	material  map[string]secrets.Material
 	selection reconciliation.StageSelection
 	bound     int
+	// logging is the invocation's required logging boundary. Once it latches
+	// a fault, nothing further is admitted.
+	logging *logBoundary
 
 	states map[string]reconciliation.BlockState
 	// running are the blocks this invocation has in flight. It is deliberately
@@ -59,14 +62,14 @@ type scheduler struct {
 // converge runs the operation's blocks until nothing more may start, and
 // reports whether it stopped at a stage boundary and what any block that did
 // not complete reported.
-func (s Service) converge(ctx context.Context, tx Transaction, store OperationStore, approved bundle, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.StageSelection) (bool, error) {
-	return s.newScheduler(tx, store, approved, operation, plan, states, material, selection).converge(ctx)
+func (s Service) converge(ctx context.Context, tx Transaction, store OperationStore, approved bundle, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.StageSelection) (bool, error) {
+	return s.newScheduler(tx, store, approved, logging, operation, plan, states, material, selection).converge(ctx)
 }
 
 // observe resolves every unproved effect of an operation and starts nothing
 // else, leaving the block states it was given holding what each one proved.
-func (s Service) observe(ctx context.Context, tx Transaction, store OperationStore, approved bundle, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material) error {
-	run := s.newScheduler(tx, store, approved, operation, plan, states, material, reconciliation.StageSelection{})
+func (s Service) observe(ctx context.Context, tx Transaction, store OperationStore, approved bundle, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material) error {
+	run := s.newScheduler(tx, store, approved, logging, operation, plan, states, material, reconciliation.StageSelection{})
 	run.observeOnly = true
 	_, err := run.converge(ctx)
 	return err
@@ -82,10 +85,10 @@ func (s Service) Concurrency() int {
 	return s.options.Concurrency
 }
 
-func (s Service) newScheduler(tx Transaction, store OperationStore, approved bundle, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.StageSelection) *scheduler {
+func (s Service) newScheduler(tx Transaction, store OperationStore, approved bundle, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.StageSelection) *scheduler {
 	return &scheduler{
 		service: s, tx: tx, store: store, approved: approved, operation: operation,
-		plan: plan, material: material, selection: selection, bound: s.Concurrency(),
+		plan: plan, material: material, selection: selection, bound: s.Concurrency(), logging: logging,
 		states: states, running: map[string]bool{}, worked: map[string]bool{},
 		held: map[string]string{}, causes: map[string]error{},
 		results: make(chan step, len(plan.Blocks)),
@@ -105,16 +108,22 @@ func (c *scheduler) converge(ctx context.Context) (bool, error) {
 		}
 		c.settle(<-c.results)
 	}
-	if ctx.Err() != nil {
+	// A log fault requests cancellation, so a stop it caused is never a pause
+	// whether or not that request has reached this context yet.
+	if ctx.Err() != nil || c.logging.faulted() {
 		return false, c.cause()
 	}
-	return pendingRemains(c.plan, c.states), c.cause()
+	// A stop that leaves an effect unproved is not a pause: a block still
+	// durably running is one whose resolution could not start.
+	return pendingRemains(c.plan, c.states) && !c.anyState(unproved), c.cause()
 }
 
 // admit starts every block the durable state and the bound allow, so a wave of
-// independent work goes out together rather than one block at a time.
+// independent work goes out together rather than one block at a time. A
+// latched log fault admits nothing, whatever the cancellation it requested has
+// reached so far.
 func (c *scheduler) admit(ctx context.Context) {
-	for len(c.running) < c.bound {
+	for len(c.running) < c.bound && !c.logging.faulted() {
 		block, position, ok := c.next()
 		if !ok {
 			return
@@ -201,19 +210,22 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 	for _, key := range block.Exclusive {
 		c.held[key] = block.ID
 	}
-	observing := unproved(c.states[block.ID])
+	prior := c.states[block.ID]
+	observing := unproved(prior)
 	go func() {
 		var state reconciliation.BlockState
 		var err error
 		if observing {
 			// The observation's durable transition is authoritative even when
 			// it reports a refusal, so the operation state matches the record.
-			state, err = c.service.resolveUnknown(ctx, c.tx, c.store, c.approved, c.operation, block, c.material, position+1, len(c.plan.Blocks))
+			// One that never started recorded nothing, and the block keeps the
+			// state it had.
+			state, err = c.service.resolveUnknown(ctx, c.tx, c.store, c.approved, c.logging, c.operation, block, c.material, position+1, len(c.plan.Blocks))
 			if state == "" {
-				state = reconciliation.BlockUnknown
+				state = prior
 			}
 		} else {
-			state, err = c.service.attempt(ctx, c.tx, c.store, c.approved, c.operation, block, c.material, position+1, len(c.plan.Blocks))
+			state, err = c.service.attempt(ctx, c.tx, c.store, c.approved, c.logging, c.operation, block, c.material, position+1, len(c.plan.Blocks))
 		}
 		c.results <- step{block: block.ID, state: state, err: err}
 	}()

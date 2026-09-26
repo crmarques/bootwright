@@ -247,6 +247,8 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, output, input *o
 				if valid && request.Progress != nil {
 					request.Progress(ctx, message.Group, message.Status)
 				}
+				// A record the log could not keep is the engine's log fault: its
+				// callback latches it and cancels this run, which ends below.
 				if valid && request.Log != nil {
 					_ = request.Log(ctx, operationstore.LogRecord{Event: "group", Group: message.Group, Detail: message.Status})
 				}
