@@ -52,6 +52,8 @@ func TestLifecycleAdapterChild(t *testing.T) {
 		os.Exit(0)
 	case "supervising", "supervising-refused", "stubborn":
 		superviseLikeTheCollection(mode, result)
+	case "orphaning":
+		leaveAnOrphan(result, authorization)
 	}
 	// One descendant shares the adapter's process group. The other waits on
 	// the authorization channel in a session of its own, beyond a group kill,
@@ -255,7 +257,7 @@ func TestStoppingAnAdapterEndsItsTreeBeyondItsGroup(t *testing.T) {
 			job, scratch := t.TempDir(), t.TempDir()
 			ended := make(chan error, 1)
 			go func() {
-				_, err := runner.execute(ctx, job, scratch, "apply.yml", request)
+				_, err := runner.execute(ctx, job, scratch, nil, "apply.yml", request)
 				output.Close()
 				ended <- err
 			}()
@@ -325,7 +327,7 @@ func TestTheSupervisorIsStartedInLifecycleMode(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	// Only the invocation this builds is under test.
-	_, _ = runner.execute(ctx, t.TempDir(), t.TempDir(), "apply.yml", request)
+	_, _ = runner.execute(ctx, t.TempDir(), t.TempDir(), nil, "apply.yml", request)
 	supervisor := slices.IndexFunc(arguments, func(argument string) bool {
 		return strings.HasSuffix(argument, "/plugins/module_utils/controller_supervisor.py")
 	})
@@ -443,7 +445,7 @@ func TestThreadChurnNeverSignalsARunningAdapter(t *testing.T) {
 	defer func() { close(stop); <-churned }()
 	// The window is at each start, so many short runs expose it.
 	for range 100 {
-		if _, err := runner.execute(context.Background(), job, scratch, "apply.yml", request); err != nil {
+		if _, err := runner.execute(context.Background(), job, scratch, nil, "apply.yml", request); err != nil {
 			t.Fatalf("a thread ending elsewhere in the invocation signaled its adapter: %v", err)
 		}
 	}

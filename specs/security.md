@@ -152,6 +152,36 @@ runs no handler, so its `ansible-playbook` child dies with it but an Ansible
 worker in a session of its own runs on; tracked as
 [backlog S15](milestones/backlog.md#pre-openshift-readiness-program-2026-09).
 
+Each lifecycle adapter invocation owns a job directory `bootwright-run-<n>`
+beneath `/run` and a scratch directory `bootwright-run-scratch-<n>-<m>` beneath
+`/var/tmp` that carries its job's `<n>`. Before it writes anything else into
+the job, the runner takes an exclusive advisory lock on its `lock` file, then
+records beside it the adapter's implementation, operation, Machine and request
+digest. The adapter inherits the lock, and so do the `ansible-playbook` child
+its supervisor forks and every Ansible worker, so the lock is free only once
+none of them runs, and the worker that a supervisor killed on its own leaves
+running still holds it. A run refuses with `lifecycle.adapter-running`, naming
+the held lock, while another job's lock is held, and starts nothing. An
+invocation removes its own directories when it ends only if their lock is free;
+otherwise they stay, with the material in them, for the processes that still
+use them. Every run first removes each job whose lock is free, with its
+scratch, and each scratch whose job is gone, as after a reboot empties `/run`.
+Like the [abandoned media stage](contexts.md#media-acquisition), it considers
+only entries with the runner's exact names that are private directories owned
+by root, reaches each through its held parent, decides on the opened handle,
+which must be the entry listed, follows no link, crosses no filesystem and
+fails closed when it cannot remove one, or when a parent holds more run
+directories or a tree more depth or entries than its bounds allow. A job's
+record and lock go last, so a job it could not remove fails every later sweep
+closed too, while a job without its record is still being created and is left
+alone.
+
+Not yet met: the run request carries neither its context nor its block, so a
+job records the adapter's implementation, operation, Machine and request digest
+in their place, and the refusal covers every context on the host rather than
+the held job's own; tracked as
+[backlog S16](milestones/backlog.md#pre-openshift-readiness-program-2026-09).
+
 The process that runs a Bootwright-owned operation cancels it on SIGHUP exactly
 as on SIGINT and SIGTERM, so a closed terminal or a lost session interrupts the
 operation instead of ending the process past its cleanup. A process started
@@ -365,12 +395,12 @@ require qualified real-system tests, recorded in the
 
 | Invariant | Guarding tests | Gap |
 | --- | --- | --- |
-| Malformed, ambiguous, oversized, over-deep and high-cardinality input refuses at every declared bound. | `TestExpandedDepthCeilingIsInclusiveAndStopsLaterNormalizers`, `TestDiagnosticCeilingDeduplicatesAndStopsLaterValidators`, `TestFileReaderRejectsOversizeBeforeReading`, `TestAmbientRouteRefusesEveryAmbiguousOrUnqualifiedValue` | T2 |
-| Traversal, symlink, hard-link, special-file, concurrent-replacement, permission, atomic-publication and cleanup failures fail closed. | `TestDiscoveredYAMLSymlinkIsRejected`, `TestSecretSubtreeRefusesUnsafeEntriesBeforeCallback`, `TestSecretReplaceRejectsSameByteInodeSubstitution`, `TestPublicationLeavesNoStageOnFailure` | S8 |
+| Malformed, ambiguous, oversized, over-deep and high-cardinality input refuses at every declared bound. | `TestExpandedDepthCeilingIsInclusiveAndStopsLaterNormalizers`, `TestDiagnosticCeilingDeduplicatesAndStopsLaterValidators`, `TestFileReaderRejectsOversizeBeforeReading`, `TestAmbientRouteRefusesEveryAmbiguousOrUnqualifiedValue`, `TestTheSweepRefusesBeyondItsBounds` | T2 |
+| Traversal, symlink, hard-link, special-file, concurrent-replacement, permission, atomic-publication and cleanup failures fail closed. | `TestDiscoveredYAMLSymlinkIsRejected`, `TestSecretSubtreeRefusesUnsafeEntriesBeforeCallback`, `TestSecretReplaceRejectsSameByteInodeSubstitution`, `TestPublicationLeavesNoStageOnFailure`, `TestTheSweepNeverFollowsALinkOrTouchesWhatIsNotItsOwn`, `TestTheSweepNeverEmptiesAMount`, `TestAJobThatCannotBeRemovedKeepsFailingClosed`, `TestAnInvocationKeepsAJobWhoseLockWasReplaced` | S8 |
 | Executable, argument, environment, working-directory, descriptor, inventory, plugin, endpoint, redirect, DNS, proxy and privilege substitution refuses. | `TestReexecutionPathPinsRunningExecutable`, `TestSupervisorRefusesAnAssignmentOutsideTheRouteVocabulary`, `TestInventoryPinsTheSSHIdentityAndHostKey`, `TestDownloadsFollowNoRedirectAndRefuseAnythingButOneServedImage`, `TestExplicitProxyIgnoresAmbientAndMatchesWithoutDNS`, `TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment`, `TestOnlyContextFreeAcquisitionForwardsTheInvokingRoute` | Y1 |
 | Invalid TLS and SSH identity, failed and ambiguous remote probes, target drift and unauthorized scope expansion refuse. | `TestCertificateValidationRejectsMismatchExpiryUsageAndFalseChain`, `TestADeclaredHostKeyForAnotherTargetRefuses`, `TestInstalledHostIdentityRefusesUntrustedOrAmbiguousEvidence`, `TestContinuationRefusesDriftedInputExecutableOrHost` | S3b, S11 |
 | Secret and credential material never reaches output, diagnostics, verbose paths, logs, adapter events, retries, errors, cancellation or `no_log` handling. | `TestSecretNormalOutputsAndStateNeverContainMaterialOrDigests`, `TestMaterialNeverAppearsInMetadataOrErrors`, `TestVariablesCarryPathsNotMaterial`, `TestAcquisitionRequiresExactBoundedPublisherBytesAndRedactsFailures` | Y1 |
-| Time, retry, concurrency, memory, disk, log and process-output limits hold, including cancellation and process-tree reaping. | `TestAdapterOutputStreamsWhileItRunsAndBoundsWhatItKeeps`, `TestGuardedCommandDiesAndIsReapedAfterParentExit`, `TestAKilledInvocationTakesItsAdapter`, `TestStoppingAnAdapterEndsItsTreeBeyondItsGroup`, `TestThreadChurnNeverSignalsARunningAdapter`, `TestHangupCancelsTheOperationLikeTerminate`, `TestAnIgnoredHangupLeavesTheOperationRunning`, `TestRunnerReapsUnauthorizedChildOnCancellationDuringRecovery`, `TestLifecycleConcurrencyBound`, `TestOperationBoundaryPreservesOrdinaryCancellationAndDeadline` | S4b, Z2 |
+| Time, retry, concurrency, memory, disk, log and process-output limits hold, including cancellation and process-tree reaping. | `TestAdapterOutputStreamsWhileItRunsAndBoundsWhatItKeeps`, `TestGuardedCommandDiesAndIsReapedAfterParentExit`, `TestAKilledInvocationTakesItsAdapter`, `TestStoppingAnAdapterEndsItsTreeBeyondItsGroup`, `TestThreadChurnNeverSignalsARunningAdapter`, `TestAnAdapterStillRunningRefusesTheNextRun`, `TestAStaleRunDirectoryIsRemovedWithItsSecretFiles`, `TestHangupCancelsTheOperationLikeTerminate`, `TestAnIgnoredHangupLeavesTheOperationRunning`, `TestRunnerReapsUnauthorizedChildOnCancellationDuringRecovery`, `TestLifecycleConcurrencyBound`, `TestOperationBoundaryPreservesOrdinaryCancellationAndDeadline` | S4b, Z2 |
 | Dependency integrity, lock agreement and native-schema compatibility hold, and runtime-tool substitution or drift refuses. | `TestFrozenToolRejectsVersionRouteAndChecksumSubstitution`, `TestBootstrapRejectsSelfConsistentSourceAndVersionSubstitution`, `TestNativeSolveRefusesChangedBytesForSameRetainedRelease`, `TestRuntimeRequiresSelectedNativeCLIToRemainExecutable` | Y1 |
 | Mutation crash points, lease conflict, replay, partial success, rollback, evidence loss and required-log write failure leave a recoverable context. | `TestCrashReleasesLocksAndLeavesCompleteSelection`, `TestLifecyclePublicationCheckpointsFireAndFailClosed`, `TestMutationGuardLayoutAndLeases`, `TestAPartlyRealizedBlockIsConvergedByRepeatingTheOperation`, `TestRequiredLogFaultStopsTheOperation`, `TestARestorationWhoseClearFailsStartsNothing` | S10 (rest), T2 |
 | Read-only commands perform no writes, payload reads, processes, network access, secret lookup or generation. | `TestImmutableInputAndReadOnlyLifecycleBoundary`, `TestALifecycleInspectionRunsNothing`, `TestPlanPreviewsWithoutWritingAnything`, `TestStubServicesRemainStubs` | none |
