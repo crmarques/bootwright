@@ -243,6 +243,8 @@ physical nodes keep running (C9).
 of the
 [pre-OpenShift program](milestones/backlog.md#pre-openshift-readiness-program-2026-09).
 Exit gates: each item's exit evidence, `make check`, `make docs-check` and CI.
+Every item is implemented; what they left is backlog S15 (rest), S16 (rest)
+and S17 (rest). Remaining: landing through its pull request.
 
 ## Next ordered outcomes
 
