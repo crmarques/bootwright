@@ -15,9 +15,9 @@ the [unavailable result](cli.md#recognized-but-unavailable-commands).
 | [M1h](#m1h--managed-rhel-on-emulated-bare-metal) | Managed RHEL on emulated bare metal | Substrate, Managed OS | product | Specified | awaiting operator acceptance |
 | [M5a](#m5a--managed-rhel-on-physical-bare-metal) | Managed RHEL on physical bare metal | Substrate, Managed OS | product | Specified | blocked |
 | [M4a](#m4a--single-node-openshift-through-the-agent-installer) | Single-node OpenShift through the agent installer | Container cluster, Substrate | product | Specified | awaiting operator acceptance |
-| [X12](#x12--audit-phase-1-context-and-guards) | Audit Phase 1: context and guards | Architecture | safety | Specified | in progress |
+| [X13](#x13--scheduler-liveness-and-completed-removal-proof) | Scheduler liveness and completed-removal proof | State reconciliation | safety | Specified | in progress |
 
-- **Next for agents:** land X12; promote [audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09) only on request.
+- **Next for agents:** deliver X13; promote [audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09) only on request.
 - **Next for operator:** on a clean build descending from `8aa4494`, run [lab-rhel](../examples/lab-rhel/README.md#run-it) and record it in the [acceptance ledger](../docs/acceptance.md) as the [operator guide](../docs/operator-guide.md) describes (M1h), then [lab-sno](../examples/lab-sno/README.md) (M4a); M5a's rehearsal waits for S3b.
 - **Next to define:** M1i, the [GitOps handoff gate](#next-ordered-outcomes).
 
@@ -231,19 +231,18 @@ not configured, so the operator routes the managed zone; disconnected
 installation waits for a managed `Registry` (C2); and a destroyed cluster's
 physical nodes keep running (C9).
 
-### X12 — audit Phase 1: context and guards
+### X13 — scheduler liveness and completed-removal proof
 
-**Owner:** Architecture, with State reconciliation, Workspace, Controller and
-CLI. **Kind:** safety, out of sequence, on explicit request on 2026-09-26.
-**Requires:** [X11](milestones/delivered.md#x11--audit-phase-0-and-spec-restructure).
+**Owner:** State reconciliation. **Kind:** safety, out of sequence, on explicit
+request on 2026-09-26. **Requires:**
+[X12](milestones/delivered.md#x12--audit-phase-1-context-and-guards).
 **Definition:** Specified. **Delivery:** in progress. Items, each with its
 bounded outcome and exit evidence in the
-[audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09): S10 (its
-Phase 1 part), F1, F2, F3 (the withdrawal), F4, R6 and G8 (rest). Exit gates:
-each item's exit evidence, `make check`, `make docs-check` and CI. Every item is
-implemented; what they left is backlog S10 (rest), F1 (rest), F4 (rest) and
-R6 (rest), and they surfaced the pre-existing S12 and F12. Remaining: landing
-through its pull request.
+[audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09): F12 (a
+failed attempt start stops admission instead of re-admitting its block) and S12
+(a destroy after a completed apply refuses when a block record is not `done`),
+both found while X12 was delivered. Exit gates: each item's exit evidence,
+`make check`, `make docs-check` and CI.
 
 ## Next ordered outcomes
 

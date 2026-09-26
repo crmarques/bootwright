@@ -653,3 +653,38 @@ refuse until S2b; concurrency stays one until S4b and a real-host run;
 session's egress refuses their hosts; architecture.md stays near 50 KB; and
 every item not executed is an
 [audit follow-up](backlog.md#audit-follow-ups-2026-09).
+
+### X12 — audit Phase 1: context and guards
+
+**Owner:** Architecture, with State reconciliation, Workspace, Controller and
+CLI. Landed on `main` at `ecaef1a` through pull request 2 on 2026-09-26, on
+explicit request.
+
+**Outcome:** the audit's decision-free Phase 1 items. A required-log failure is
+a durable, sticky operation fault that only a later invocation re-proving its
+log clears; a destroy over an apply that started nothing completes; a
+resolution that cannot start leaves the operation unchanged (S10, Phase 1
+part). `plan` previews a fresh operation through the decision `apply` makes
+(F1). The ambient proxy route follows the flags that decide acquisition (F2).
+`status --watch`, `--watch-interval` and `--verbose` are withdrawn, and no
+request field may go unread (F3). `media add` acquires with no root lock held
+and publishes under a short exclusive hold that re-proves its stage (F4).
+Fitness ratchets fail on stale entries, the collection's Python has a
+function-length check and the diagnostic registry walks package variables
+(R6). The developer and operator guides are separate and the lab-baremetal
+journey is indexed (G8, rest).
+
+**Guard tests:** `TestALogFaultLatchesCancellationAndItsRecord`,
+`TestARestorationWhoseClearFailsStartsNothing`,
+`TestADestroyOverAnApplyThatStartedNothingCompletes`,
+`TestAResolutionThatCannotStartLeavesTheOperationUnchanged`,
+`TestFreshPlanAndApplyShareOneDecision`,
+`TestOnlyContextFreeAcquisitionForwardsTheInvokingRoute`,
+`TestWithdrawnFlagsAreUsageErrors`, `TestEveryRequestFieldIsRead`,
+`TestMediaAddHoldsNoRootLockWhileItAcquires`,
+`TestASubstitutedStageNeverReplacesTheStoredImage` and
+`TestDiagnosticCodesAreFoundInPackageVariables`.
+
+**Constraints left behind:** backlog S10 (rest), F1 (rest), F4 (rest) and
+R6 (rest); the pre-existing F12 and S12 it surfaced became X13; and
+`ansible-check --suite units` and `vulncheck` ran only in CI.
