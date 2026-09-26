@@ -190,8 +190,8 @@ func TestMediaEvidenceMatchesItsGoldens(t *testing.T) {
 
 // Each install evidence golden is what containercluster_install_protocol.py
 // publishes from the state its role resolves for the lab-sno cluster: missing
-// lists node names, media and powered list Machine names, and every list is
-// present even when empty.
+// lists node names, media, ownMedia and powered list Machine names, and every
+// list is present even when empty.
 func TestInstallEvidenceMatchesItsGoldens(t *testing.T) {
 	_, install, _ := onlyRequests(t, singleNodeCatalog())
 	for name, test := range map[string]struct {
@@ -203,7 +203,8 @@ func TestInstallEvidenceMatchesItsGoldens(t *testing.T) {
 		"completed": {
 			InstallEvidence{
 				Cluster: anchorIdentity, Completed: true, Identity: anchorIdentity, Media: []string{}, Missing: []string{},
-				Postcondition: true, Powered: []string{"sno-01"}, Release: "4.21.15", Request: testDigest,
+				OwnMedia: []string{}, Postcondition: true, Powered: []string{"sno-01"}, Release: "4.21.15",
+				Request: testDigest,
 			},
 			func(data []byte) error { return ValidateInstallPresence(data, install, testDigest) },
 		},
@@ -211,8 +212,8 @@ func TestInstallEvidenceMatchesItsGoldens(t *testing.T) {
 		"removed": {
 			InstallEvidence{
 				Absent: true, Cluster: anchorIdentity, Completed: true, Identity: anchorIdentity,
-				Media: []string{}, Missing: []string{}, Postcondition: true, Powered: []string{"sno-01"},
-				Release: "4.21.15", Request: testDigest,
+				Media: []string{}, Missing: []string{}, OwnMedia: []string{}, Postcondition: true,
+				Powered: []string{"sno-01"}, Release: "4.21.15", Request: testDigest,
 			},
 			func(data []byte) error { return ValidateInstallAbsence(data, testDigest) },
 		},
@@ -222,7 +223,17 @@ func TestInstallEvidenceMatchesItsGoldens(t *testing.T) {
 		"partial": {
 			InstallEvidence{
 				Cluster: anchorIdentity, Identity: anchorIdentity, Media: []string{"sno-01"}, Missing: []string{},
-				Powered: []string{"sno-01"}, Release: "4.21.15", Request: testDigest,
+				OwnMedia: []string{"sno-01"}, Powered: []string{"sno-01"}, Release: "4.21.15", Request: testDigest,
+			},
+			func(data []byte) error { return ValidateInstallPartial(data, testDigest) },
+		},
+		// Nothing answers yet, and the node runs presenting the image this
+		// cluster published: an apply interrupted during boot or the bootstrap
+		// wait, before the API answers. The node is not yet in the cluster.
+		"partial-booted": {
+			InstallEvidence{
+				Identity: anchorIdentity, Media: []string{"sno-01"}, Missing: []string{"master-0"},
+				OwnMedia: []string{"sno-01"}, Powered: []string{"sno-01"}, Request: testDigest,
 			},
 			func(data []byte) error { return ValidateInstallPartial(data, testDigest) },
 		},
@@ -231,7 +242,7 @@ func TestInstallEvidenceMatchesItsGoldens(t *testing.T) {
 		"no-effect": {
 			InstallEvidence{
 				Identity: anchorIdentity, Media: []string{}, Missing: []string{"master-0"},
-				Powered: []string{}, Request: testDigest,
+				OwnMedia: []string{}, Powered: []string{}, Request: testDigest,
 			},
 			func(data []byte) error { return ValidateInstallNoEffect(data, testDigest) },
 		},
