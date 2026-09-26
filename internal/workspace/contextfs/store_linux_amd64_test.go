@@ -89,6 +89,18 @@ func expectState(t *testing.T, err error) {
 	}
 }
 
+// expectBusy requires the typed contention refusal: lifecycle.lease with the
+// retry remedy, never a context.state defect.
+func expectBusy(t *testing.T, err error) {
+	t.Helper()
+	var held *busyError
+	reported := diagnostics.Of(err)
+	if !errors.As(err, &held) || len(reported) != 1 || reported[0].Code != "lifecycle.lease" ||
+		reported[0].Remediation != "retry after the running Bootwright command finishes" {
+		t.Fatalf("expected a lifecycle.lease busy refusal, got %v %#v", err, reported)
+	}
+}
+
 func expectMissingRegistry(t *testing.T, err error) {
 	t.Helper()
 	diagnostics := diagnostics.Of(err)
@@ -763,7 +775,7 @@ func TestMutationGuardLayoutAndLeases(t *testing.T) {
 	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		t.Fatal(err)
 	}
-	expectState(t, store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
+	expectBusy(t, store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
 		_, err := tx.MutationState(context.Background(), record.Name)
 		return err
 	}))
@@ -774,7 +786,9 @@ func TestMutationGuardLayoutAndLeases(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
-		expectState(t, store.Transact(context.Background(), false, nil, func(contexts.Transaction) error { t.Fatal("second mutator acquired root"); return nil }))
+		expectBusy(t, store.Transact(context.Background(), false, nil, func(contexts.Transaction) error { t.Fatal("second mutator acquired root"); return nil }))
+		_, err := store.ReadInputs(context.Background(), "example")
+		expectBusy(t, err)
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -932,7 +946,7 @@ func TestConcurrentReadersSeeCompleteRevisions(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
-	expectState(t, store.Transact(context.Background(), false, nil, func(contexts.Transaction) error { t.Fatal("mutator entered shared reader lock"); return nil }))
+	expectBusy(t, store.Transact(context.Background(), false, nil, func(contexts.Transaction) error { t.Fatal("mutator entered shared reader lock"); return nil }))
 }
 
 func TestCrashReleasesLocksAndLeavesCompleteSelection(t *testing.T) {

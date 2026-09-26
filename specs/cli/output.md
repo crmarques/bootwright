@@ -393,7 +393,9 @@ Not yet met: `status --watch` is accepted but reads once; tracked as [backlog F3
 Diagnostic codes are stable machine identifiers. Include an object identity
 only when its kind and name form a valid API identity; malformed names are
 reported through the source coordinates and `$.metadata.name` field without
-repeating unbounded authored text in every diagnostic. The shared codes are:
+repeating unbounded authored text in every diagnostic. This table is the
+registry: it lists every code production code emits and nothing else
+(`TestDiagnosticCodesMatchOutputSpec`).
 
 | Code | Meaning |
 | --- | --- |
@@ -421,7 +423,6 @@ repeating unbounded authored text in every diagnostic. The shared codes are:
 | `cli.usage` | Arguments or flags do not match this contract. |
 | `cli.not-implemented` | The command is defined but its application use case is not available. |
 | `runtime.encode` | A trustworthy result could not be encoded. |
-| `runtime.output` | The selected output writer failed. |
 | `runtime.log` | A required private operation log could not be safely maintained. |
 | `runtime.interrupted` | An operating-system interrupt canceled the command. |
 | `runtime.canceled` | The supplied context was canceled without an interrupt. |
@@ -432,34 +433,42 @@ repeating unbounded authored text in every diagnostic. The shared codes are:
 | `context.input` | The context has no desired-state revision; import one with context update. |
 | `context.state` | Context state does not permit the requested local transition. |
 | `context.unsafe-delete` | Required ownership or recovery evidence prevents deletion. |
-| `addon.catalog` | An add-on name, version, registration, or catalog identity is invalid. |
 | `secret.store` | Confidential material cannot be safely read, generated, written, rotated, or deleted. |
+| `secret.declaration` | A secret name or declaration is invalid, unresolved or duplicated. |
+| `secret.source` | The declared source or its parameters do not permit the operation, or stored material no longer matches the declaration. |
+| `secret.part` | A secret part is missing, not applicable, out of bounds or unusable by its consumer. |
+| `secret.input` | Secret input or material is invalid, or a requested secret, version or binding has no usable material. |
+| `secret.store.uninitialized` | The configured secret store is not initialized. |
+| `secret.store.implementation` | The secret store implementation is unconfigured, unavailable or incompatible. |
+| `secret.store.key-unavailable` | The secret store key or unlock session is unavailable. |
+| `secret.store.conflict` | Secret storage changed during the operation or refuses the requested access. |
+| `secret.store.corrupt` | Stored secret state is invalid, incomplete or not attributable. |
+| `secret.store.crypto` | Secret encryption randomness or key material is unusable. |
+| `secret.store.limit` | A secret material, input, metadata or recovery bound was exceeded. |
 | `media.store` | Media identity, integrity, import, publication, or deletion failed. |
 | `preflight.failed` | One or more required readiness checks definitely failed. |
-| `preflight.unknown` | Required readiness could not be positively determined. |
 | `controller.unsupported` | The setup host, dependency combination or acquisition route is not qualified. |
 | `controller.identity` | Required controller binding or verified host evidence is missing or contradictory. |
 | `controller.state` | Retained setup evidence is incomplete, contradictory or no longer valid. |
 | `controller.conflict` | Another setup or context protects a shared prerequisite or holds its coordination boundary. |
 | `controller.setup` | A local controller prerequisite action definitely failed. |
 | `controller.unknown` | A local controller prerequisite action has an unresolved effect outcome. |
-| `render.publish` | A requested artifact could not be safely rendered or published. |
 | `lifecycle.state` | Durable lifecycle state does not permit the requested transition or continuation. |
+| `lifecycle.unsupported` | This executable cannot realize a selected object: no capability claims its kind, or its capability reports the shape unsupported. |
 | `lifecycle.stage` | The stage selection admits no startable block, or excludes the block the operation must retry. |
 | `lifecycle.authorization` | The frozen plan requires an authorization that was not validly supplied, or a supplied one it does not require. |
-| `lifecycle.lease` | The context mutation lease cannot be safely acquired or recovered. |
+| `lifecycle.lease` | The context root lock or mutation lease cannot be safely acquired or recovered. |
 | `lifecycle.unknown` | A frozen block has an unresolved unknown effect outcome. |
 | `lifecycle.live` | A removal would take back state that is still in use, and refuses before registering. |
 | `trust.identity` | SSH identity is missing, changed, contradictory, or not authorized. |
-| `cluster.not-applicable` | The resolved cluster kind or variant does not support the requested cluster command. |
 | `access.unavailable` | An applicable access request lacks required local access metadata or an available credential artifact. |
 | `access.target` | Explicit access cannot resolve one exact authorized target. |
 | `access.handoff` | An explicit access descriptor cannot be safely resolved or encoded. |
 | `machine.power` | A power transition was refused before it ran, or its confirmation could not be answered. |
 
-Command contexts may add narrower codes beneath these namespaces before the
-corresponding failure is exposed. A namespace alone is not a fallback code.
-New codes may be added, but the meaning of an existing code cannot change.
+A command context that needs a narrower code adds its row with the code's
+first emission. A namespace alone is not a fallback code. New codes may be
+added, but the meaning of an existing code cannot change.
 
 Diagnostics are sorted by:
 

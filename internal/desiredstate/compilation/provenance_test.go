@@ -123,6 +123,21 @@ func TestMalformedEnvironmentDoesNotEstablishScope(t *testing.T) {
 	}
 }
 
+// Exactly one Environment is a graph rule, so a missing or repeated one is
+// reported as the documented api.invariant rather than a code of its own.
+func TestEnvironmentCardinalityIsAGraphInvariant(t *testing.T) {
+	second := strings.Replace(environmentYAML, "name: synthetic", "name: second", 1)
+	for name, input := range map[string]desiredstate.Sources{
+		"none":     {Roots: []string{"/synthetic"}},
+		"repeated": sources(environmentYAML + "---\n" + second),
+	} {
+		_, _, err := compiler().Compile(context.Background(), input)
+		if sink := diagnostics.Of(err); len(sink) == 0 || sink[0].Code != "api.invariant" || sink[0].Message != "exactly one Environment is required" {
+			t.Fatalf("%s: Environment cardinality = %+v", name, sink)
+		}
+	}
+}
+
 func TestSyntaxDiagnosticBudgetFollowsResourceSelection(t *testing.T) {
 	for _, excluded := range []bool{false, true} {
 		t.Run(map[bool]string{false: "selected", true: "excluded"}[excluded], func(t *testing.T) {

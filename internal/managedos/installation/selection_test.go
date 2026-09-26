@@ -218,7 +218,7 @@ func TestAPhysicalInstallationWithoutANamedRootDeviceRefuses(t *testing.T) {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 			_, _, err := Requests(catalog, "controller", testContext)
-			expectRefusal(t, err, "lifecycle.state")
+			expectRefusal(t, err, "lifecycle.unsupported")
 			remediation := diagnostics.Of(err)[0].Remediation
 			if !strings.Contains(remediation, "spec.os.install.rootDeviceHints.deviceName on Machine/metal-01") ||
 				!strings.Contains(remediation, "wwn-only selection is not yet supported") {
@@ -238,7 +238,7 @@ func TestAPhysicalInstallationRefusesWhileItsHostKeyWouldBePublic(t *testing.T) 
 		t.Fatalf("unsupported = %v", unsupported)
 	}
 	_, _, err := Requests(catalog, "controller", testContext)
-	expectRefusal(t, err, "lifecycle.state")
+	expectRefusal(t, err, "lifecycle.unsupported")
 	reported := diagnostics.Of(err)[0]
 	if reported.Message != "a delivered host key would be readable from the publicly served installer image" {
 		t.Fatalf("message = %q", reported.Message)

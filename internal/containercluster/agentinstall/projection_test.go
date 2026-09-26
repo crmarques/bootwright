@@ -249,7 +249,7 @@ func TestUnsupportedNamesEveryClusterThisContractCannotInstall(t *testing.T) {
 			}
 			if _, _, _, err := Requests(catalog, "controller", testContext); err == nil {
 				t.Fatal("a cluster this contract cannot install was derived anyway")
-			} else if code := refusalCode(t, err); code != "lifecycle.state" {
+			} else if code := refusalCode(t, err); code != "lifecycle.unsupported" {
 				t.Fatalf("refusal = %s", code)
 			}
 		})
@@ -294,7 +294,7 @@ func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.
 				t.Fatal("a cluster this contract cannot boot was derived anyway")
 			}
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != test.reason {
+			if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" || reported[0].Message != test.reason {
 				t.Fatalf("refusal = %#v", reported)
 			}
 			if reported[0].Remediation != test.remediation {

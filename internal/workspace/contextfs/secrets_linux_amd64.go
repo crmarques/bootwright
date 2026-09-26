@@ -37,6 +37,16 @@ func secretConflict(ctx context.Context, message string, err error) error {
 	return secretstore.Failure("store.conflict", message)
 }
 
+// secretLockFailure reports a lock another command holds as lifecycle.lease,
+// like every other store command, and any other lock failure as a conflict.
+func secretLockFailure(ctx context.Context, message string, err error) error {
+	var held *busyError
+	if errors.As(err, &held) && ctx.Err() == nil {
+		return err
+	}
+	return secretConflict(ctx, message, err)
+}
+
 func secretEffectFailure(ctx context.Context, message string, err error) error {
 	if err != nil && ctx.Err() != nil {
 		return ctx.Err()
@@ -148,7 +158,7 @@ func (s *Store) MutateSecrets(ctx context.Context, expected secretstore.Context,
 	}
 	defer root.file.Close()
 	if err := lock(root); err != nil {
-		return secretConflict(ctx, "secret storage is held by another mutator", err)
+		return secretLockFailure(ctx, "secret storage is held by another mutator", err)
 	}
 	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
 	registry, _, err := readRegistry(ctx, root)
@@ -176,7 +186,7 @@ func (s *Store) MutateSecrets(ctx context.Context, expected secretstore.Context,
 	defer container.file.Close()
 	defer dir.file.Close()
 	if err := lock(dir); err != nil {
-		return secretConflict(ctx, "secret context is held by another mutator", err)
+		return secretLockFailure(ctx, "secret context is held by another mutator", err)
 	}
 	defer syscall.Flock(int(dir.file.Fd()), syscall.LOCK_UN)
 	if err := verifySecretContextLayout(ctx, dir); err != nil {

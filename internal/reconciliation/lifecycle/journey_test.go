@@ -923,7 +923,7 @@ func TestUnsupportedObjectsRefuseBeforeRegistration(t *testing.T) {
 	h.capability.unsupported = []string{"ContainerCluster/sno", "Machine/guest"}
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	reported := diagnostics.Of(err)
-	if err == nil || len(reported) != 1 || !strings.Contains(reported[0].Message, "ContainerCluster/sno") || !strings.Contains(reported[0].Remediation, supportedExample) {
+	if err == nil || len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" || !strings.Contains(reported[0].Message, "ContainerCluster/sno") || !strings.Contains(reported[0].Remediation, supportedExample) {
 		t.Fatalf("unsupported refusal = %+v", reported)
 	}
 	if len(h.workspace.area.files) != 0 || h.workspace.mutations != 0 {
@@ -1528,8 +1528,8 @@ func TestCancellationBeforeAnyEffectRegistersNothing(t *testing.T) {
 
 // An interrupt arrives while a block is in flight, which is the only moment it
 // can strand an effect. The records that say so are written under a boundary
-// the interrupt does not reach, because a durable `running` block is the one
-// state no later operation may resolve, remove or delete past.
+// the interrupt does not reach, because a durable `running` block stays
+// unproved until a later observation resolves it.
 func TestAnInterruptedBlockIsRecordedUnknown(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
 	ctx, cancel := context.WithCancel(context.Background())

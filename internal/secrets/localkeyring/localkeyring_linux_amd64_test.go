@@ -348,7 +348,7 @@ func TestReaderBlocksPublicationAndRotationUntilSessionCloses(t *testing.T) {
 				entered = true
 				return mutation(current)
 			})
-			if entered || failureCode(err) != "secret.store.conflict" {
+			if entered || failureCode(err) != "lifecycle.lease" {
 				t.Fatalf("mutation during read session: entered=%v error=%v", entered, err)
 			}
 			if _, err := reader.Inspect(context.Background()); err != nil {

@@ -266,7 +266,7 @@ config. Keys expose id/state/seals. Items reports currentVersions/boundVersions/
 materialParts/retainedArtifacts/cleanupRequired. Uninitialized has null IDs,
 empty keys and zero counts. Status never prompts/unlocks/initializes/writes.
 
-Failures: secret.declaration/source/part/input and secret.store.uninitialized/
-implementation/key-unavailable/conflict/corrupt/crypto/limit. Existing CLI
+Failures use the `secret.*` codes of the
+[diagnostic taxonomy](cli/output.md#diagnostic-taxonomy-and-order). Existing CLI
 envelope/exit/cancellation rules apply. Normal results, logs, diagnostics and
 evidence never contain material or material digests.

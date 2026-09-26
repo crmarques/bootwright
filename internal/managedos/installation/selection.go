@@ -332,14 +332,14 @@ func refusedTarget(machine api.Object, target substrate.Target) error {
 	// admitted as a selector but not yet derived into a device the installer
 	// and its own target proof can name.
 	if target.Physical && target.RootDevice == "" {
-		return refusal("lifecycle.state", "a physical installation erases only a root device named by path, and the Machine names none",
+		return refusal("lifecycle.unsupported", "a physical installation erases only a root device named by path, and the Machine names none",
 			"set spec.os.install.rootDeviceHints.deviceName on "+machine.Identity()+"; a wwn-only selection is not yet supported")
 	}
 	// A delivered key reaches the installer at a tokenized URL the Kickstart
 	// names, and the Kickstart is implanted in an installer image served
 	// without authentication, so the token would protect nothing.
 	if target.Identity.Channel == substrate.ChannelDeliveredKey {
-		return refusal("lifecycle.state", "a delivered host key would be readable from the publicly served installer image",
+		return refusal("lifecycle.unsupported", "a delivered host key would be readable from the publicly served installer image",
 			"physical managed-OS installation is disabled until private delivery is repaired; remove "+machine.Identity()+
 				" from the selected Environment or install its operating system outside Bootwright")
 	}

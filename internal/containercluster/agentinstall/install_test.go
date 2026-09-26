@@ -161,7 +161,7 @@ func TestAVirtualInstallationConsumesNothingAndAPhysicalOneRefuses(t *testing.T)
 		if err == nil {
 			t.Fatalf("a physical cluster planned a %s", verb)
 		}
-		if code := refusalCode(t, err); code != "lifecycle.state" {
+		if code := refusalCode(t, err); code != "lifecycle.unsupported" {
 			t.Fatalf("refusal = %s", code)
 		}
 	}

@@ -137,8 +137,8 @@ reconciliation supplies global IDs and cross-context edges. Actions carry no
 executable names, shell text, unreviewed arguments, Secret values or
 package-selected privilege.
 
-Attempt results separate typed success/failure from effect state `completed`,
-`no-effect` or `unknown`, and include retry boundaries and bounded safe
+Attempt results separate typed success/failure from the effect state their
+[attempt outcome](../state-reconciliation.md#attempt-outcomes) records, and include retry boundaries and bounded safe
 structured evidence/diagnostics. Direct `no-effect` is a failure; an
 already-ready apply or already-absent destroy is `completed` only with positive
 evidence. Exit status, prose, presence or elapsed time alone proves no
@@ -338,3 +338,10 @@ only authored declaration relationships, without inspecting template tokens.
 The step timeout, target limit, and output format have effective defaults
 `10m`, `firstReachable`, and `text` for their effectful consumers. They remain
 absent in effective state when unauthored.
+
+## Reserved diagnostic code
+
+`addon.catalog`, for an invalid add-on name, version, registration or catalog
+identity, joins the
+[diagnostic taxonomy](../cli/output.md#diagnostic-taxonomy-and-order) with its
+first emission.

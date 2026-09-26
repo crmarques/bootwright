@@ -246,18 +246,32 @@ with empty revision and Environment-directory strings; no input is invented.
 Reservation, manifest and keyring formats are versioned independently. Mutation
 evidence follows the Reconciliation-owned closed record contract.
 
-Readers hold a shared nonblocking lock on the verified, never-replaced root
-inode until all stored input or secret-session files have been consumed.
-Mutators hold its exclusive lock plus the context lease where applicable;
-contention fails safely. Revalidate target, identity and evidence under those
-locks. Read-only operations perform no repair, initialization or publication.
+Two advisory locks guard the store, and neither is ever waited for:
 
-A lifecycle operation is one such mutator: it holds the exclusive root lock and
-the selected context's lease for its entire execution, because its host
-reservations, controller evidence and operation records must stay coherent
-while its effects run. Concurrent context reads therefore wait for it, and a
-second mutator refuses rather than waiting indefinitely. Narrowing that
-boundary is [deferred work](milestones/backlog.md#candidates). Within it, Workspace
+- the host-wide **root lock** on the verified, never-replaced root inode,
+  shared for a read and exclusive for any command that may publish; and
+- a context's **lease**, an exclusive lock on that context's directory, taken
+  only while the exclusive root lock is held.
+
+| Root lock | Lease | Commands |
+| --- | --- | --- |
+| shared | none | Every read: `context list` and `current`, `plan`, `status`, `preflight controller`, `secret check`, `list` and `show`, `secret encryption status`, `media list`, SSH-trust and input reads, [bounded runs](cli/output.md#bounded-run-output), and the reads that precede `setup`, `apply` and `destroy`. |
+| exclusive | none | Every other command that may publish, such as `context use`, a `context update` that imports no input, `setup`, `media add` and `delete`, and the SSH trust that `machine trust` or a confirmed first use records. |
+| exclusive | held | `context init`; a `context update` that imports input; `context delete` of a ready context; `secret set`, `generate` and `delete`, `secret encryption init` and `rotate`, and the Secret binding `apply` and `destroy` take before they execute; and the execution of `apply` and `destroy`. |
+
+A read holds its lock until all stored input or secret-session files have been
+consumed, and a mutator holds its locks until it finishes. A command that
+cannot take the lock or lease refuses with `lifecycle.lease` and a retry
+remedy; no lock or lease is ever waited for or taken over. Revalidate target,
+identity and evidence under those locks. Read-only operations perform no
+repair, initialization or publication.
+
+A lifecycle operation holds the exclusive root lock and the selected context's
+lease for its entire execution, because its host reservations, controller
+evidence and operation records must stay coherent while its effects run. Every
+other store command, a read included, therefore refuses while one runs.
+Narrowing that boundary to the lease alone is
+[deferred work](milestones/backlog.md#candidates). Within it, Workspace
 supplies the operation area, the mutation-evidence replacement primitive and
 the reservation publication; Reconciliation owns what they contain and when
 they advance.
@@ -316,11 +330,24 @@ substitution. Every publication revalidates location. Supported local
 filesystems are ext4, XFS, Btrfs, tmpfs and overlayfs; Linux must provide
 `openat2`. Unsupported containment or durability primitives fail closed.
 
-Bounds apply before allocation/traversal: registry 8 MiB and 4096 active or
-reserved names; manifest 4 MiB and 32 MiB aggregate referenced manifests; paths 4096
-bytes; mutation records 64 KiB; 4096 revisions per context; media images 32 GiB
-each and 64 entries, with records of at most 4 KiB. Input and Secrets
-limits additionally bound their trees. Missing registry in a nonempty root is
+Bounds apply before allocation/traversal: registry 8 MiB; manifest 4 MiB and
+32 MiB aggregate referenced manifests; paths 4096 bytes; mutation records
+64 KiB; media images 32 GiB each and 64 entries, with records of at most 4 KiB;
+and the operator-visible bounds below. Input and Secrets limits additionally
+bound their trees.
+
+| Operator-visible bound | Value | Go constant |
+| --- | --- | --- |
+| Active or reserved context names | 4096 | `maxContexts` in `internal/workspace/contextfs/store.go` |
+| Revisions per context | 4096 | `maxRevisions` in `internal/workspace/contextfs/store.go` |
+| Retained [controller bundle namespaces](contexts/controller-record.md#bounds) | 16 | `maxControllerBundles` in `internal/workspace/contextfs/controller_bundles_linux_amd64.go` |
+| Lifecycle operations one context retains | 4096 | `MaxOperations` in `internal/reconciliation/operationstore/records.go` |
+| One lifecycle adapter invocation | 2 hours | `invocationTimeout` in `internal/reconciliation/ansiblerunner/process_linux_amd64.go` |
+| One controller Ansible run: setup, its recovery or a controller-stage client installation | 10 minutes | none yet: the literal deadline `runProcess` sets in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
+
+`TestDocumentedBoundsMatchCode` compares each value with its code.
+
+Missing registry in a nonempty root is
 corruption, except that explicit init may finish publication when the root's
 only entry is one private `pending-<32 lowercase hexadecimal digits>.json` file
 whose bytes are exactly the canonical empty registry. Recovery holds

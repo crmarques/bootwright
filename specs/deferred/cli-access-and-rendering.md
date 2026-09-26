@@ -211,3 +211,14 @@ group orders `blockId`, `groupId`, `description`, `status`, `machines`,
 `machines`. Exceptions include exactly failed, unreachable, canceled, and
 unknown Machines in canonical order. `log` is the safe relative attempt path on
 the final group in its block and `null` otherwise.
+
+## Reserved diagnostic codes
+
+These codes join the [diagnostic taxonomy](../cli/output.md#diagnostic-taxonomy-and-order)
+with their first emission:
+
+| Code | Meaning |
+| --- | --- |
+| `cluster.not-applicable` | A cluster command does not apply to the selected cluster's kind. |
+| `render.publish` | A requested artifact could not be safely rendered or published. |
+| `preflight.unknown` | Required readiness could not be positively determined. |

@@ -146,7 +146,7 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 		if remediation == "" {
 			remediation = "correct " + cluster.Identity()
 		}
-		return empty(refusal("lifecycle.state", reason, remediation))
+		return empty(refusal("lifecycle.unsupported", reason, remediation))
 	}
 	needs := Requirements{}
 	nodes, err := nodeProjections(catalog, cluster, contextName, controllerMachine, &needs)
