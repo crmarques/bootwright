@@ -103,17 +103,7 @@ func TestAMultiNodeClusterInstallsOnItsDeclaredPlatform(t *testing.T) {
 // A cluster whose endpoints something outside it answers declares its load
 // balancer user-managed, because the installer owns neither address.
 func TestExternallyAnsweredEndpointsDeclareAUserManagedLoadBalancer(t *testing.T) {
-	objects := append(base(),
-		guest("ocp-01", "198.51.100.31/24"), guest("ocp-02", "198.51.100.32/24"), guest("ocp-03", "198.51.100.33/24"))
-	objects = append(objects, cluster("ocp",
-		installSelection(
-			endpoints("198.51.100.20", "198.51.100.20", "198.51.100.21", "external"),
-			field("platform", api.MapValue(text("type", "baremetal"))),
-		),
-		node("master-0", "master", "ocp-01", "master-0.ocp.lab.example.test"),
-		node("master-1", "master", "ocp-02", "master-1.ocp.lab.example.test"),
-		node("master-2", "master", "ocp-03", "master-2.ocp.lab.example.test")))
-	media, _, _ := onlyRequests(t, api.NewCatalog(objects))
+	media, _, _ := onlyRequests(t, externalCatalog())
 	platform, _ := media.InstallConfig["platform"].(map[string]any)
 	arm, _ := platform["baremetal"].(map[string]any)
 	balancer, ok := arm["loadBalancer"].(map[string]any)

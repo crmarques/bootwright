@@ -1,0 +1,99 @@
+{
+  "budgets": {
+    "bootSeconds": 900,
+    "bootstrapSeconds": 5400,
+    "buildSeconds": 1800,
+    "installSeconds": 5400
+  },
+  "endpoints": [
+    {
+      "address": "198.51.100.10",
+      "name": "api-int.ocp.lab.example.test"
+    },
+    {
+      "address": "198.51.100.10",
+      "name": "api.ocp.lab.example.test"
+    },
+    {
+      "address": "198.51.100.11",
+      "name": "console-openshift-console.apps.ocp.lab.example.test"
+    }
+  ],
+  "identity": {
+    "block": "cluster-install-ocp",
+    "cluster": "ocp",
+    "context": "lab"
+  },
+  "image": {
+    "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/private/clusters/ocp",
+    "url": "https://192.0.2.1:8443/private/clusters/ocp"
+  },
+  "nodes": [
+    {
+      "address": "198.51.100.31",
+      "controller": {
+        "credentialsRef": "lab-bmc-credentials",
+        "endpoint": "http://192.0.2.1:8000/redfish/v1/Systems/566b9a1d-0751-86e3-ae9d-87255c81379e",
+        "tlsVerify": true,
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": false,
+          "trust": "established"
+        }
+      },
+      "machine": "ocp-01",
+      "name": "master-0",
+      "physical": false,
+      "substrate": "libvirt"
+    },
+    {
+      "address": "198.51.100.32",
+      "controller": {
+        "credentialsRef": "lab-bmc-credentials",
+        "endpoint": "http://192.0.2.1:8001/redfish/v1/Systems/ae08d076-33d5-8cb7-9edd-060818340b06",
+        "tlsVerify": true,
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": false,
+          "trust": "established"
+        }
+      },
+      "machine": "ocp-02",
+      "name": "master-1",
+      "physical": false,
+      "substrate": "libvirt"
+    },
+    {
+      "address": "198.51.100.33",
+      "controller": {
+        "credentialsRef": "lab-bmc-credentials",
+        "endpoint": "http://192.0.2.1:8002/redfish/v1/Systems/9b149228-70e9-86ab-b2fa-998239057cb5",
+        "tlsVerify": true,
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": false,
+          "trust": "established"
+        }
+      },
+      "machine": "ocp-03",
+      "name": "master-2",
+      "physical": false,
+      "substrate": "libvirt"
+    }
+  ],
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "release": {
+    "distribution": "openshift",
+    "version": "4.21.15"
+  },
+  "tool": {
+    "compatibility": "openshift",
+    "kind": "openshift-install",
+    "version": "4.21.15"
+  },
+  "version": "cluster-install-agent-v1",
+  "workRoot": "/var/lib/bootwright-clusters/lab/ocp"
+}

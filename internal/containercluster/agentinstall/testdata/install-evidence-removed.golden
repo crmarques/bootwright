@@ -1,0 +1,13 @@
+{
+  "absent": true,
+  "cluster": "4245f5e001d445663c189f04c0a614168ed3c05a522d38680d1aa1ca248d6049",
+  "identity": "4245f5e001d445663c189f04c0a614168ed3c05a522d38680d1aa1ca248d6049",
+  "media": [],
+  "missing": [],
+  "postcondition": true,
+  "powered": [
+    "sno-01"
+  ],
+  "release": "4.21.15",
+  "request": "1111111111111111111111111111111111111111111111111111111111111111"
+}

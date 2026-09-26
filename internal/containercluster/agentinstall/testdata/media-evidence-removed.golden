@@ -1,0 +1,9 @@
+{
+  "absent": true,
+  "image": false,
+  "inputs": "",
+  "installer": "",
+  "postcondition": true,
+  "request": "1111111111111111111111111111111111111111111111111111111111111111",
+  "work": false
+}
