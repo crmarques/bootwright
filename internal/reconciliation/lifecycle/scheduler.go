@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"context"
+	"errors"
 	"slices"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -21,6 +22,9 @@ type step struct {
 	block string
 	state reconciliation.BlockState
 	err   error
+	// unstarted is an attempt that could not start. It performed no effect
+	// and recorded nothing, so state is the one the block already had.
+	unstarted bool
 }
 
 // scheduler starts every block the frozen plan admits, up to the bound, and
@@ -47,8 +51,14 @@ type scheduler struct {
 	running map[string]bool
 	// worked names every block this invocation already attempted or observed,
 	// so a block it failed is not retried by the same invocation that failed
-	// it and one it left unproved is not observed twice.
+	// it, one it left unproved is not observed twice, and one whose attempt
+	// never ran is not admitted again.
 	worked map[string]bool
+	// unstarted names every block whose attempt could not start. One is
+	// enough to admit nothing further, exactly as a failure admits nothing:
+	// the block is never admitted again by this invocation, and nothing shows
+	// that what refused it would not refuse the next attempt too.
+	unstarted map[string]bool
 	// held maps each exclusive resource in use to the block using it.
 	held    map[string]string
 	causes  map[string]error
@@ -89,7 +99,7 @@ func (s Service) newScheduler(tx Transaction, store OperationStore, approved bun
 	return &scheduler{
 		service: s, tx: tx, store: store, approved: approved, operation: operation,
 		plan: plan, material: material, selection: selection, bound: s.Concurrency(), logging: logging,
-		states: states, running: map[string]bool{}, worked: map[string]bool{},
+		states: states, running: map[string]bool{}, worked: map[string]bool{}, unstarted: map[string]bool{},
 		held: map[string]string{}, causes: map[string]error{},
 		results: make(chan step, len(plan.Blocks)),
 	}
@@ -109,8 +119,10 @@ func (c *scheduler) converge(ctx context.Context) (bool, error) {
 		c.settle(<-c.results)
 	}
 	// A log fault requests cancellation, so a stop it caused is never a pause
-	// whether or not that request has reached this context yet.
-	if ctx.Err() != nil || c.logging.faulted() {
+	// whether or not that request has reached this context yet. Nor is one an
+	// attempt that could not start caused: its block was startable, and only
+	// the failure stopped it.
+	if ctx.Err() != nil || c.logging.faulted() || len(c.unstarted) != 0 {
 		return false, c.cause()
 	}
 	// A stop that leaves an effect unproved is not a pause: a block still
@@ -121,9 +133,10 @@ func (c *scheduler) converge(ctx context.Context) (bool, error) {
 // admit starts every block the durable state and the bound allow, so a wave of
 // independent work goes out together rather than one block at a time. A
 // latched log fault admits nothing, whatever the cancellation it requested has
-// reached so far.
+// reached so far, and neither does an attempt that could not start; what is
+// already in flight is waited for either way.
 func (c *scheduler) admit(ctx context.Context) {
-	for len(c.running) < c.bound && !c.logging.faulted() {
+	for len(c.running) < c.bound && !c.logging.faulted() && len(c.unstarted) == 0 {
 		block, position, ok := c.next()
 		if !ok {
 			return
@@ -139,7 +152,9 @@ func (c *scheduler) admit(ctx context.Context) {
 // runs alone, because what follows it depends on it succeeding: it waits for
 // everything in flight and starts only within the stage selection. Otherwise
 // the first startable block in frozen order runs, provided nothing already
-// running holds a resource it needs to itself.
+// running holds a resource it needs to itself and this invocation has not
+// already worked it: a worked block still pending is one whose attempt never
+// ran, and admitting it again would only meet the same refusal.
 func (c *scheduler) next() (reconciliation.Block, int, bool) {
 	for index, block := range c.plan.Blocks {
 		if unproved(c.states[block.ID]) && !c.running[block.ID] && !c.worked[block.ID] {
@@ -159,7 +174,7 @@ func (c *scheduler) next() (reconciliation.Block, int, bool) {
 	}
 	startable := reconciliation.Startable(c.plan, c.states, c.selection)
 	for index, block := range c.plan.Blocks {
-		if c.running[block.ID] || !c.free(block) {
+		if c.running[block.ID] || c.worked[block.ID] || !c.free(block) {
 			continue
 		}
 		if slices.ContainsFunc(startable, func(ready reconciliation.Block) bool { return ready.ID == block.ID }) {
@@ -215,6 +230,7 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 	go func() {
 		var state reconciliation.BlockState
 		var err error
+		var unstarted bool
 		if observing {
 			// The observation's durable transition is authoritative even when
 			// it reports a refusal, so the operation state matches the record.
@@ -225,9 +241,14 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 				state = prior
 			}
 		} else {
+			// An attempt that never started recorded nothing either, and the
+			// block keeps the state it had.
 			state, err = c.service.attempt(ctx, c.tx, c.store, c.approved, c.logging, c.operation, block, c.material, position+1, len(c.plan.Blocks))
+			if state == "" {
+				state, unstarted = prior, true
+			}
 		}
-		c.results <- step{block: block.ID, state: state, err: err}
+		c.results <- step{block: block.ID, state: state, err: err, unstarted: unstarted}
 	}()
 }
 
@@ -240,6 +261,9 @@ func (c *scheduler) settle(finished step) {
 		}
 	}
 	c.states[finished.block] = finished.state
+	if finished.unstarted {
+		c.unstarted[finished.block] = true
+	}
 	if finished.err != nil {
 		c.causes[finished.block] = finished.err
 	}
@@ -251,10 +275,35 @@ func (c *scheduler) settle(finished step) {
 func (c *scheduler) cause() error {
 	var reported []diagnostics.Diagnostic
 	for _, block := range c.plan.Blocks {
-		reported = append(reported, diagnostics.Of(c.causes[block.ID])...)
+		reported = append(reported, c.reported(block.ID)...)
 	}
 	if len(reported) == 0 {
 		return nil
 	}
 	return &diagnostics.Failure{Diagnostics: reported}
+}
+
+// reported is what one block's cause says. A cause that carries no diagnostic,
+// such as an operation-store write that failed, is still why its block did not
+// complete, so it is reported the way the CLI reports any failure that escaped
+// a typed boundary: as runtime.internal, naming the block and never the
+// failure's own text, which may carry a private path or a raw store message. A
+// cancellation carries none either, and is left for the boundary that
+// recognizes it.
+func (c *scheduler) reported(block string) []diagnostics.Diagnostic {
+	err := c.causes[block]
+	if err == nil {
+		return nil
+	}
+	if reported := diagnostics.Of(err); len(reported) != 0 {
+		return reported
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return nil
+	}
+	message := "the block " + block + " stopped on a failure that escaped a typed boundary"
+	if c.unstarted[block] {
+		message = "the attempt of the block " + block + " could not record its start, so it performed no effect"
+	}
+	return diagnostics.Of(failure("runtime.internal", message, ""))
 }

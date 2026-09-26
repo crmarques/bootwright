@@ -53,12 +53,14 @@ to preserve a safety rule that predates concurrency:
    bound, skipping any whose exclusive resources are in use.
 
 The `worked` set is what keeps this equal to the old behavior: an invocation
-never retries a block it failed itself and never observes an effect it just
-left unproved. Without it the scheduler retries a fresh failure immediately and
-loops.
+never retries a block it failed itself, never observes an effect it just left
+unproved and never starts again a block whose attempt could not start. Without
+it the scheduler retries a fresh failure immediately and loops; before X13 the
+startable branch skipped the check, so a persistently failing attempt start
+re-admitted its block without end.
 
-A failure or a cancellation **admits nothing further and waits** for what is in
-flight. Killing an attempt mid-effect converts a provable outcome into an
+A failure, an attempt that could not start or a cancellation **admits nothing
+further and waits** for what is in flight. Killing an attempt mid-effect converts a provable outcome into an
 unproved one, which is the one state nothing can retry, destroy or delete past.
 
 ## The bound is not plan intent

@@ -268,6 +268,18 @@ then its [attempt outcome](#attempt-outcomes). An `observe` step is a
 resolution and records its [resolution outcome](#resolution-outcomes);
 unproved blocks are observed before any other step starts.
 
+An attempt that cannot start, because this executable lacks its implementation
+or the store refuses to allocate its number and record `running`, performs no
+effect and records no outcome. Its block record and the log-fault flag are
+unchanged, so the block keeps the state it had: `pending`, or the `failed` it
+was retrying. The invocation that meets it admits nothing further, never admits
+that block again, and waits for what is already running. Its operation then
+takes the state its blocks give it under
+[precedence](#operation-state-precedence), and the stop is never a pause. The
+result names that failure as its block's cause, as `runtime.internal` naming
+the block when the failure carries no diagnostic of its own, and never in the
+failure's own words.
+
 A block that an invocation finds `running` lost its executor mid-attempt.
 Nothing recorded its outcome, so it is unproved exactly as an `unknown` block
 is: the next continuation or removal observes it under the exclusive lock, and
@@ -286,7 +298,7 @@ blocks satisfy:
 | `unknown` | any block is `unknown` |
 | `failed` | any block is `failed` |
 | `done` | every block is `done` |
-| `paused` | its execution stopped uncancelled with work left |
+| `paused` | its execution paused: it stopped uncancelled with work left, no log fault and every start recorded |
 | `running` | otherwise |
 
 ## Plan and execution

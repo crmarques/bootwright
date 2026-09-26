@@ -31,16 +31,21 @@ func recordingContext(ctx context.Context) context.Context { return context.With
 // first side effect, executes it inside the controller's private runtime, then
 // records the durable outcome its evidence justifies. A required-log failure
 // is the boundary's to report, so it is never this block's cause.
+//
+// Until its running record is durable it has performed nothing, so an attempt
+// that cannot start returns no state and the block keeps the one it had: a
+// pending block stays pending and a failed one it would have retried stays
+// failed, exactly as their records still say.
 func (s Service) attempt(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, position, total int) (reconciliation.BlockState, error) {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
-		return reconciliation.BlockFailed, failure("lifecycle.state",
+		return "", failure("lifecycle.state",
 			"this executable does not offer the implementation this block froze",
 			"install the executable that registered this operation")
 	}
 	number, err := store.StartAttempt(ctx, operation.ID, block.ID)
 	if err != nil {
-		return reconciliation.BlockPending, err
+		return "", err
 	}
 	logPath, err := operationstore.AttemptLogPath(operation.ID, block.ID, number, 0)
 	if err != nil {
