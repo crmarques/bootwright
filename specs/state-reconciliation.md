@@ -638,6 +638,16 @@ otherwise contradict themselves, so a removal over them refuses before it
 registers, reaches a host, or releases a binding the effects still on the host
 need.
 
+A completed apply owns its whole frozen plan, so the removal of one refuses
+`lifecycle.state` while any block of that plan is not `done`, rather than
+removing only the `done` rest. A lost block record reads back as `pending`, and
+a removal that skipped that block would leave its effect in place and then
+release the binding it needs. The refusal names the apply and every such block
+with the state its record reads, points at `bootwright status`, and comes
+before the removal binds, probes, registers or releases anything. An incomplete
+apply and a failed removal are not held to this, because blocks that are not
+`done` are legitimate in both.
+
 A frozen block records what creating it did; removing it is the other half of
 the same request. Each capability therefore reads its own frozen request and
 states what removing that block does: the words it is planned and reported in,
