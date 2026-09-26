@@ -17,7 +17,7 @@ the [unavailable result](cli.md#recognized-but-unavailable-commands).
 | [M4a](#m4a--single-node-openshift-through-the-agent-installer) | Single-node OpenShift through the agent installer | Container cluster, Substrate | product | Specified | awaiting operator acceptance |
 | [X12](#x12--audit-phase-1-context-and-guards) | Audit Phase 1: context and guards | Architecture | safety | Specified | in progress |
 
-- **Next for agents:** deliver X12; promote [audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09) only on request.
+- **Next for agents:** land X12; promote [audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09) only on request.
 - **Next for operator:** on a clean build descending from `8aa4494`, run [lab-rhel](../examples/lab-rhel/README.md#run-it) and record it in the [acceptance ledger](../docs/acceptance.md) as the [operator guide](../docs/operator-guide.md) describes (M1h), then [lab-sno](../examples/lab-sno/README.md) (M4a); M5a's rehearsal waits for S3b.
 - **Next to define:** M1i, the [GitOps handoff gate](#next-ordered-outcomes).
 
@@ -240,7 +240,10 @@ CLI. **Kind:** safety, out of sequence, on explicit request on 2026-09-26.
 bounded outcome and exit evidence in the
 [audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09): S10 (its
 Phase 1 part), F1, F2, F3 (the withdrawal), F4, R6 and G8 (rest). Exit gates:
-each item's exit evidence, `make check`, `make docs-check` and CI.
+each item's exit evidence, `make check`, `make docs-check` and CI. Every item is
+implemented; what they left is backlog S10 (rest), F1 (rest), F4 (rest) and
+R6 (rest), and they surfaced the pre-existing S12 and F12. Remaining: landing
+through its pull request.
 
 ## Next ordered outcomes
 
