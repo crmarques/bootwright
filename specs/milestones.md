@@ -17,7 +17,7 @@ the [unavailable result](cli.md#recognized-but-unavailable-commands).
 | [M4a](#m4a--single-node-openshift-through-the-agent-installer) | Single-node OpenShift through the agent installer | Container cluster, Substrate | product | Specified | awaiting operator acceptance |
 | [X13](#x13--scheduler-liveness-and-completed-removal-proof) | Scheduler liveness and completed-removal proof | State reconciliation | safety | Specified | in progress |
 
-- **Next for agents:** deliver X13; promote [audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09) only on request.
+- **Next for agents:** land X13; promote [audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09) only on request.
 - **Next for operator:** on a clean build descending from `8aa4494`, run [lab-rhel](../examples/lab-rhel/README.md#run-it) and record it in the [acceptance ledger](../docs/acceptance.md) as the [operator guide](../docs/operator-guide.md) describes (M1h), then [lab-sno](../examples/lab-sno/README.md) (M4a); M5a's rehearsal waits for S3b.
 - **Next to define:** M1i, the [GitOps handoff gate](#next-ordered-outcomes).
 
@@ -242,7 +242,9 @@ bounded outcome and exit evidence in the
 failed attempt start stops admission instead of re-admitting its block) and S12
 (a destroy after a completed apply refuses when a block record is not `done`),
 both found while X12 was delivered. Exit gates: each item's exit evidence,
-`make check`, `make docs-check` and CI.
+`make check`, `make docs-check` and CI. Both items are implemented; what they
+left is backlog S12 (rest), and they surfaced the pre-existing S13. Remaining:
+landing through its pull request.
 
 ## Next ordered outcomes
 
