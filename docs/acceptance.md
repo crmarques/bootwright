@@ -3,7 +3,8 @@
 This ledger records operator-run gates: journeys run by hand on a real host,
 which no in-tree test can perform. [Milestones](../specs/milestones.md#completion-and-verification)
 owns the rule that uses it: a slice with an operator gate completes only on a
-row here that matches it.
+row here that matches it. The [operator guide](operator-guide.md#record-a-run)
+walks a run from a prepared host to a row.
 
 ## Row format
 

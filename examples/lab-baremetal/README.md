@@ -9,8 +9,10 @@ Machine that declares the hardware it must be proved to be.
 repaired (backlog S3b), the installation of `Machine/metal-01`
 [refuses before registration](../../specs/managed-os.md#physical-installation),
 because the delivered host key would be readable from the publicly served
-installer image, so an apply of this example registers nothing. The rest of
-this page describes the run that repair restores.
+installer image, so an apply of this example registers nothing.
+[Run it today](#run-it-today) walks what an operator can run before that
+refusal; [rehearsing it without hardware](#rehearsing-it-without-hardware)
+describes the run that repair restores.
 
 What differs from [lab-rhel](../lab-rhel/README.md), which installs the same
 operating system on a libvirt guest, follows from the machine existing before
@@ -32,13 +34,53 @@ Bootwright and outliving this context:
   the key pair the installation delivers, so completion is proved against a key
   that was known before the machine was ever contacted.
 
+## Run it today
+
+What runs today is everything before the installation: admission, the import
+into a context, the Secrets it generates, and the refusal itself. It needs no
+hardware and no media, and the last line deletes the context the block
+created. Run the block one line at a time from the repository root; the
+[operator guide](../../docs/operator-guide.md#prepare-a-host) covers the build
+and privileges.
+
+```sh
+make build
+./bin/bootwright validate -f examples/lab-baremetal
+./bin/bootwright context init --name lab-baremetal
+./bin/bootwright context update --name lab-baremetal --input-dir "$PWD/examples/lab-baremetal" --yes
+./bin/bootwright secret generate
+./bin/bootwright secret check
+./bin/bootwright plan
+./bin/bootwright apply --authorize data-loss
+./bin/bootwright status
+./bin/bootwright context delete --name lab-baremetal --purge
+```
+
+`validate` admits all 14 files, and the import copies them. `secret generate`
+creates the serving certificate, the fleet key and `metal-01-host-key`.
+`secret check` fails on `lab-bmc-credentials`, the management controller's
+account, until `secret set` stores it with `--username` and `--password-stdin`;
+nothing in this block reads it.
+
+`plan` refuses with `lifecycle.unsupported`: a delivered host key would be
+readable from the publicly served installer image, and the remediation names
+`Machine/metal-01`. `apply` refuses with the same code before it asks for
+confirmation or registers anything, naming `Machine/metal-01` as what this
+executable cannot realize; a `--stage` selection refuses the same way. `status`
+still lists every managed service as pending, because nothing was registered.
+`TestLabBaremetalExampleRefusesItsInstallation` holds that refusal in-tree.
+
+A run of this block is an observation, not M5a's operator gate: the gate is the
+rehearsal below, and M5a records no acceptance baseline until S3b lands.
+
 ## Rehearsing it without hardware
 
 The rehearsal stops at the installation refusal above until private host-key
 delivery is repaired (backlog S3b). Once it is, the physical path can be driven
 end to end on one workstation, because the emulated controller `lab-rhel` uses
 implements the same Redfish surface this one drives, including the
-`EthernetInterfaces` collection the target proof reads.
+`EthernetInterfaces` collection the target proof reads. This rehearsal is the
+first run that proves that collection against the pinned emulator image.
 
 Apply a libvirt context whose Machine is installer-provisioned — `os.provided:
 false` with no `installProfileRef`, so the substrate realizes the domain and
