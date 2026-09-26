@@ -14,7 +14,6 @@ type InfrastructurePreflightRequest struct {
 	Clusters        []string
 	DryRun          bool
 	TrustOnFirstUse bool
-	Verbose         bool
 	SSH             machine.SSHOptions
 }
 
@@ -30,7 +29,6 @@ type ClustersPreflightRequest struct {
 	Clusters        []string
 	DryRun          bool
 	TrustOnFirstUse bool
-	Verbose         bool
 	SSH             machine.SSHOptions
 }
 
@@ -45,7 +43,6 @@ type AllPreflightRequest struct {
 	ContextName     string
 	DryRun          bool
 	TrustOnFirstUse bool
-	Verbose         bool
 	SSH             machine.SSHOptions
 }
 

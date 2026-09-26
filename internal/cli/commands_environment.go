@@ -19,7 +19,7 @@ func clustersPreflightCommand() commandSpec {
 }
 
 func allPreflightCommand() commandSpec {
-	return commandSpec{path: "preflight all", short: "Check all prerequisites", flags: []flagSpec{dryRunFlag(), outputFlag(), trustFlag(), verboseFlag()}}
+	return commandSpec{path: "preflight all", short: "Check all prerequisites", flags: []flagSpec{dryRunFlag(), outputFlag(), trustFlag()}}
 }
 
 func environmentClusterCommands() []commandSpec {
@@ -58,7 +58,6 @@ func (s Services) invokeEnvironmentPreflight(ctx context.Context, path string, v
 			Clusters:        values.names("clusters"),
 			DryRun:          values.boolean("dry-run"),
 			TrustOnFirstUse: values.boolean("trust-on-first-use"),
-			Verbose:         values.boolean("verbose"),
 			SSH:             values.ssh(),
 		}, s.EnvironmentPreflight.PreflightInfrastructure)
 	case "preflight clusters":
@@ -67,7 +66,6 @@ func (s Services) invokeEnvironmentPreflight(ctx context.Context, path string, v
 			Clusters:        values.names("clusters"),
 			DryRun:          values.boolean("dry-run"),
 			TrustOnFirstUse: values.boolean("trust-on-first-use"),
-			Verbose:         values.boolean("verbose"),
 			SSH:             values.ssh(),
 		}, s.EnvironmentPreflight.PreflightClusters)
 	case "preflight all":
@@ -75,7 +73,6 @@ func (s Services) invokeEnvironmentPreflight(ctx context.Context, path string, v
 			ContextName:     values.text("context"),
 			DryRun:          values.boolean("dry-run"),
 			TrustOnFirstUse: values.boolean("trust-on-first-use"),
-			Verbose:         values.boolean("verbose"),
 			SSH:             values.ssh(),
 		}, s.EnvironmentPreflight.PreflightAll)
 	default:

@@ -348,7 +348,7 @@ func dispatchFlags() *pflag.FlagSet {
 	}
 	for _, name := range []string{
 		"yes", "purge", "allow-orphans", "purge-old-bundles", "short", "renew", "checksums", "dry-run",
-		"trust-on-first-use", "verbose", "watch", "sensitive", "silent", "secrets", "power-status",
+		"trust-on-first-use", "sensitive", "silent", "secrets", "power-status",
 		"ssh-ask-sudo-password", "ssh-user-for-provisioned",
 	} {
 		flags.Bool(name, true, "")
@@ -357,6 +357,5 @@ func dispatchFlags() *pflag.FlagSet {
 	flags.Bool("value-stdin", false, "")
 	flags.StringArray("file", []string{"inputs"}, "")
 	flags.StringArray("authorize", []string{"data-loss"}, "")
-	flags.String("watch-interval", "7s", "")
 	return flags
 }

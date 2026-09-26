@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -63,12 +62,6 @@ func (v *requestValues) strings(name string) []string {
 	value, err := v.flags.GetStringArray(name)
 	v.recordFirstError(err)
 	return slices.Clone(value)
-}
-
-func (v *requestValues) duration(name string) time.Duration {
-	value, err := time.ParseDuration(v.text(name))
-	v.recordFirstError(err)
-	return value
 }
 
 func (v *requestValues) names(name string) []string {

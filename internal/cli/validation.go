@@ -4,7 +4,6 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -138,19 +137,6 @@ func validateInvocation(command *cobra.Command, path string) string {
 		if path == "media add" {
 			if message := validateMediaSource(flags); message != "" {
 				return message
-			}
-		}
-	case "status":
-		interval, err := time.ParseDuration(stringValue(flags, "watch-interval"))
-		if err != nil {
-			return "--watch-interval must be a Go duration"
-		}
-		if boolValue(flags, "watch") {
-			if selectedJSON(command) {
-				return "--watch conflicts with JSON output"
-			}
-			if interval <= 0 {
-				normalizeScalar(flags, "watch-interval", "5s")
 			}
 		}
 	case "render":

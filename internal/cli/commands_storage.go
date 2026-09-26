@@ -35,7 +35,6 @@ func (s Services) invokeStoragePreflight(ctx context.Context, path string, value
 			Clusters:        values.names("clusters"),
 			DryRun:          values.boolean("dry-run"),
 			TrustOnFirstUse: values.boolean("trust-on-first-use"),
-			Verbose:         values.boolean("verbose"),
 			SSH:             values.ssh(),
 		}, s.StoragePreflight.Check)
 	default:
