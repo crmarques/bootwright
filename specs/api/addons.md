@@ -5,9 +5,11 @@ This page owns `ClusterAddon`, `ClusterAddonProfile`, and
 declaration. Profiles compose add-ons and other profiles. Bindings attach the
 expanded set to one `ContainerCluster` and supply scalar input values.
 
-[The add-on contract](../add-ons.md) owns executable packages, catalogs,
-drivers and lifecycle qualification. Schema acceptance implies no execution
-support; all declarations obey [the compiler boundary](../api.md#compiler-boundary).
+[The add-on boundary](../add-ons.md) owns what these declarations may never
+grant, and the [add-ons design](../deferred/add-ons-design.md) records the
+packages, catalogs and drivers a promoted lifecycle would add. Schema
+acceptance implies no execution support; all declarations obey
+[the compiler boundary](../api.md#compiler-boundary).
 
 References are plain scalar names in fixed namespaces: `clusterRef` names a
 `ContainerCluster`, `profileRefs` name `ClusterAddonProfile` objects,
@@ -27,7 +29,7 @@ their kind-specific validation and built-in defaults.
 | `spec.olm` | object | conditional | — | Exactly one of `olm` and `manifestSet` is present. |
 | `spec.manifestSet` | object | conditional | — | Exactly one of `olm` and `manifestSet` is present. |
 | `spec.readiness` | object | no | — | Timeout and readiness checks. |
-| `spec.steps` | array of objects | no | `[]` | Ordered lifecycle-step declarations. |
+| `spec.steps` | array of objects | no | `[]` | Ordered step declarations, admitted and [inert](#steps). |
 
 The implementation arm selects the add-on variant. Missing, multiple, or
 unknown arms are invalid; the selected arm must satisfy its required fields.
@@ -70,9 +72,11 @@ Validation checks effect compatibility and resolves supplied object names.
 The storage attachment also defines the relationship used by
 [Environment cluster selection](environment.md#resource-and-cluster-selection).
 An empty effect list declares no such built-in relationship or operation.
-Effects never grant execution authority. The [add-on contract](../add-ons.md#closed-execution-vocabulary)
-requires qualified implementations and refuses unsupported effects, including
-global pull-secret merging without a proven ownership-aware inverse.
+Effects never grant execution authority. The
+[closed execution vocabulary](../deferred/add-ons-design.md#closed-execution-vocabulary)
+records the qualified implementations a promoted lifecycle requires, including
+its refusal of global pull-secret merging without a proven ownership-aware
+inverse.
 
 ### OLM arm
 
@@ -152,65 +156,15 @@ Each check sets exactly one arm:
 
 ### Steps
 
-`spec.steps` is an ordered array keyed by unique `name`. The exact step shape
-is:
-
-| Field | Type | Required | Default | Rule |
-| --- | --- | --- | --- | --- |
-| `name` | string | yes | — | Unique provisioning token. |
-| `gates` | string | conditional | — | Exactly one of `gates` and `follows`; only `apply`. |
-| `follows` | string | conditional | — | `operatorReady` or `ready`; `operatorReady` is OLM-only. |
-| `requires` | readiness-check array | no | `[]` | Same three-arm union as add-on readiness. |
-| `source` | object | no | — | Shared playbook source shape below. |
-| `playbook` | string | conditional | — | Relative entrypoint with a case-insensitive `.yaml` or `.yml` suffix; co-located content has a `playbooks` path segment. |
-| `rolesPath` | string | no | — | Contained relative roles directory. |
-| `collectionsPath` | string | no | — | Contained relative collections directory. |
-| `target` | object | conditional | — | Required with a playbook; union below. |
-| `extraVars` | object | no | `{}` | Arbitrary non-connection extra-variable values. |
-| `secretRefs` | array of strings | no | `[]` | Set of `Secret` refs. |
-| `timeout` | string | no | `10m` | Positive Go duration. |
-| `outputs` | array of objects | no | `[]` | Requires a playbook. |
-| `manifests` | array of objects | no | `[]` | Ordered manifest templates. |
-
-A step declares `playbook`, `manifests`, or both; `run` and `onFailure` are
-unknown fields. Reject reserved connection, inventory and privilege names in
-`extraVars`. Co-located playbooks, roles and collections use their corresponding
-reserved path segment. External content is relative to its source root without
-that segment requirement; all paths remain contained.
-
-The shared `source` union is:
-
-- `path`: one absolute external content directory outside the input tree; or
-- `git: {url, ref, subdir?, secretRef?}`.
-
-A present source requires exactly one arm; empty blocks are invalid. Add-on
-steps reject `source.git` because content belongs to the package. Validation
-checks source and contained path spelling only.
-
-A playbook target sets exactly one selection arm and an optional limit:
-
-| Field | Shape | Rule |
-| --- | --- | --- |
-| `boundCluster` | `{}` | Machines of the binding's `ContainerCluster`. |
-| `fromInput` | `{input: <name>}` | A declared `resourceKind` input of kind `StorageExport`, `StorageCluster`, `ContainerCluster`, or `Machine`. A `StorageExport` input also declares `storageExportAttachment`. |
-| `static` | `{clusters?: [names], machines?: [names]}` | At least one list is non-empty. Cluster names resolve to `ContainerCluster` or `StorageCluster`; machine names resolve to SSH-accessible `Machine` objects. |
-| `limit` | string | `firstReachable` by default, or `all`. |
-
-The target is forbidden on a manifest-only step. No target selects the
-controller or an ambient inventory group.
-
-Each output is:
-
-| Field | Type | Required | Default | Rule |
-| --- | --- | --- | --- | --- |
-| `name` | string | yes | — | Unique provisioning token. |
-| `file` | string | yes | — | Clean contained relative path. |
-| `secret` | boolean | no | `false` | Marks sensitive output for a private consumer. |
-| `format` | string | no | `text` | `text`, `json`, or `sha256`; `sha256` cannot be secret. |
-
-Each step manifest is `{path, reclaimRendered?}`. Its `path` follows the
-manifest-set path rules; `reclaimRendered` defaults false. Validation checks
-only authored declaration relationships, without inspecting template tokens.
+`spec.steps` is admitted and inert. Admission validates each step's closed
+shape and its references as the [add-ons design](../deferred/add-ons-design.md#steps)
+records it: an ordered set keyed by unique `name`, a playbook or manifest
+declaration, a contained content path, a Bootwright-owned target selection,
+and no `source.git`, reserved connection variable or controller target. No
+lifecycle, renderer or command reads a step, so `gates`, `follows`, `outputs`,
+`reclaimRendered` and manifest template tokens have no defined meaning and
+their consumer defaults never materialize. A step grants no execution
+authority under the [add-on boundary](../add-ons.md#trust-boundary).
 
 ## ClusterAddonProfile
 
@@ -262,9 +216,7 @@ source namespace and install-plan approval. These built-in defaults never
 create an OperatorGroup still omitted after Environment defaults or append to
 a supplied readiness-check list.
 
-The step timeout, target limit, and output format have effective defaults
-`10m`, `firstReachable`, and `text` for their effectful consumers. They remain
-absent in effective state when unauthored. Explicit false remains false,
-including an optional input's `required` value.
+Explicit false remains false, including an optional input's `required`
+value.
 Ordered arrays retain order; set-valued arrays and map keys canonicalize under
 the common API rules.

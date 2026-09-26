@@ -6,20 +6,15 @@ each Machine's virtual hardware and management controller, and the normalized
 identity and power operations other domains consume. The
 [kind schemas](api/machines.md) own declaration; [state reconciliation](state-reconciliation.md)
 owns operations, ordering and durable records; [managed OS](managed-os.md)
-owns what is installed on a realized Machine; availability follows
-[milestones](milestones.md).
+owns what is installed on a realized Machine.
 
 A substrate is a [lifecycle capability](state-reconciliation.md#plan-and-execution)
 that plans two block families: one provider-host block per `InfraProvider` in
 the `substrates` stage, and one machine block per hosted Machine in the
 `machines` stage. A substrate whose provider host runs nothing Bootwright
 installs plans no host block at all, so an Environment of physical machines
-has an empty `substrates` stage. Each block resolves to exactly one
-implementation whose identity, content digest and request digest freeze with
-the plan, and the machine family has one implementation per substrate arm, so
-a block resolves by kind and implementation together. The capability owns what
-its blocks mean; it never schedules another domain's work, allocates an
-operation identity or writes lifecycle state.
+has an empty `substrates` stage. The machine family has one implementation
+per substrate arm, so a block resolves by kind and implementation together.
 
 ## Selection and refusal
 
@@ -31,12 +26,14 @@ KubeVirt provider, and every non-provided Machine on one, refuses before
 operation registration with one diagnostic naming every unsupported object.
 
 Which arm realizes a Machine is settled once, from the substrate its provider
-declares, and every consumer of a realized Machine reads that one answer
-rather than deriving its own. A consumer therefore never learns which
-substrates exist: it receives the Machine's management controller, its identity
-channel, the interfaces the machine presents with the hardware addresses they
-report, and the block that realizes it, and a substrate added later reaches
-every consumer without changing one of them.
+declares, and frozen into the realized target every consumer reads: the
+Machine's substrate arm, its management controller, its identity channel, the
+interfaces the machine presents with the hardware addresses they report, and
+the block that realizes it. No consumer derives any of it again. Consumers
+dispatch on the frozen arm through fixed, allowlisted task files, and an arm a
+consumer has no task file for fails closed before anything is published,
+inserted or booted, so a substrate added later supplies those task files to
+every consumer that dispatches on it.
 
 The libvirt provider host is the Machine `spec.libvirt.machineRef` names. It
 must be OS-ready and reachable through one of the
@@ -52,8 +49,6 @@ A provider whose emulated BMC binds a wildcard address refuses before
 registration: every hosted Machine's controller endpoint must be one address
 its consumers can name.
 
-Selection is pure and reads no host, endpoint or Secret material.
-
 ## Provider host realization
 
 The block `substrate-host-<provider>` realizes the host's virtualization
@@ -65,10 +60,10 @@ emulator, `qemu-img`, `swtpm` for emulated TPMs, and the libvirt client. On the
 controller it is a [context prerequisite](controller.md#the-controller-stage)
 selected by the provider's host reference, so the controller block installs it
 and this block proves presence only, refusing before it defines anything and
-naming the stage that supplies it. On an SSH host this block installs it
-through the host's native package manager, freezing the exact transaction in
-its attempt before authorizing it under the same before-state rules the
-controller stage has. The libvirt driver daemons this provider's own resources
+naming the stage that supplies it. On an SSH host this block installs the named
+packages with the host's native package manager from the repositories that host
+already configures; versions are not pinned and no before-state is published.
+The libvirt driver daemons this provider's own resources
 live in — the hypervisor the `uri` answers on, the network driver that owns a
 managed attachment's bridge, and the storage driver that owns the media pool —
 are each started and enabled to start with the host, because a network or pool
@@ -76,6 +71,10 @@ set to autostart is only restored by the driver that owns it: a socket-activated
 driver leaves both absent until something asks for them, so a host that
 restarts carries neither. The declared `uri` must answer before any network or
 pool is defined.
+
+Not yet met: an SSH-host installation frozen as an exact transaction and
+authorized under the controller stage's before-state rules; tracked as
+[backlog F9](milestones/backlog.md#audit-follow-ups-2026-09).
 
 **Managed networks.** Each `networkAttachments[]` entry whose libvirt arm
 declares `management: managed` becomes one persistent libvirt network named
@@ -196,10 +195,6 @@ account for is treated as in use. The refusal names
 that is not shut off rather than forcing it, under the
 [removal gate](state-reconciliation.md#quiescence-before-removal).
 
-**Cancellation.** Cancellation stops authorization of new effects and
-terminates the owned process tree; an authorized effect becomes unknown unless
-positive evidence proves its outcome.
-
 ## Physical machine realization
 
 The block `machine-<machine>` on a bare-metal provider realizes nothing. A
@@ -226,6 +221,10 @@ relies on before it erases a disk, and it is deliberately stricter than a name
 or an address: those locate a machine, and only the complete MAC set together
 with the ComputerSystem identity distinguishes it from another server that
 answers at the same endpoint after a re-cabling or a re-addressing.
+
+Not yet met: the ComputerSystem identity is recorded but not yet compared with
+the identity an earlier attempt proved, so only the MAC set distinguishes a
+replacement server; tracked as [backlog S11](milestones/backlog.md#audit-follow-ups-2026-09).
 
 **Claim.** The block claims `bmc:<host>:<port>/<system>` for the normalized
 endpoint, so two contexts cannot both drive one physical server. The claim
@@ -260,11 +259,8 @@ this block is always quiescent under the
 [removal gate](state-reconciliation.md#quiescence-before-removal) and says so.
 The running operating system is not this block's to stop: a removal that leaves
 the machine untouched interrupts nothing, and the installation that would
-change it has its own gate below.
-
-**Cancellation.** Cancellation stops authorization of new reads and terminates
-the owned process tree. No effect of this block can be left half performed,
-because it performs none.
+change it has its own gate below. No effect of this block can be left half
+performed by cancellation, because it performs none.
 
 ## Identity and power operations
 
@@ -286,9 +282,15 @@ itself. An emulated controller has no one-time override: selecting a device
 rewrites the domain's persistent boot order, which then survives the reboot an
 installer performs and boots the installer again, so the operation selects
 nothing and relies on the [boot order](#machine-realization) the domain already
-declares. A consumer therefore inserts media and asks the substrate to boot the
-machine, and neither learns which of the two it is talking to nor carries a
-rule that is true of only one.
+declares. The [cluster installation](container-clusters.md#installation)
+inserts media and asks the substrate to boot the machine this way. The
+[managed-OS installation](managed-os.md#installation) instead sets a one-time
+boot from the inserted media on either arm and, once the installer has powered
+the machine off, selects the installed disk before powering it on again.
+
+Not yet met: every consumer booting through this substrate-owned operation
+rather than selecting a boot device itself; tracked as
+[backlog A3 (port)](milestones/backlog.md#audit-follow-ups-2026-09).
 
 Day-2 power commands consume exactly these operations. `machine start`,
 `machine stop` and `machine restart` freeze one request naming the Machine's
@@ -348,24 +350,22 @@ own identity proof before its installation path is promoted.
 
 Every substrate effect crosses the
 [Go/Ansible boundary](architecture.md#go-and-ansible-responsibility-boundary)
-through one fixed entrypoint per block family, implementation and operation.
-Go freezes the request, authorizes each phase and validates the returned
-evidence strictly; the adapter invokes `virsh`, `qemu-img`, `podman` and
-`systemctl` with exact argument vectors, or speaks Redfish to exactly the
-endpoint the frozen request names, chooses no target, implementation or
-workflow, and returns bounded structured results. Both placement arms use the
-same roles, requests and evidence. Secret material reaches the adapter only
-through operation-scoped `0600` files beneath a `0700` directory that is
-removed after the run.
+through one fixed entrypoint per block family, implementation and operation,
+under [the adapter result protocol](architecture.md#the-adapter-result-protocol)
+and the [process](security.md#process-boundary) and
+[Secret-material](security.md#sensitive-material) rules. The adapter invokes
+`virsh`, `qemu-img`, `podman` and `systemctl` with exact argument vectors, or
+speaks Redfish to exactly the endpoint the frozen request names. Both placement
+arms use the same roles, requests and evidence.
 
-Each substrate's machine role also publishes two fixed task files that
-[managed OS](managed-os.md#adapter-boundary) composes by qualified name, so the
-installation never branches on a substrate itself: one proves the exact target
-immediately before destructive media is inserted, and one performs the identity
-read above. A substrate supplies both or its installation path is not
-promoted. Because they are named task files of a role rather than free
-variables, the binding is allowlisted and frozen: authored data can never
-select which of them runs.
+Each substrate's machine role also publishes fixed task files that consumers
+compose by qualified name: one proves the exact target immediately before
+destructive media is inserted, one performs the identity read above, and one
+boots from inserted media. A consumer selects among them by the frozen arm, as
+[selection](#selection-and-refusal) states, and a substrate supplies them or
+its installation path is not promoted. Because they are named task files of a
+role rather than free variables, the binding is allowlisted and frozen:
+authored data can never select which of them runs.
 
 A Redfish client speaks to one endpoint and follows no redirect, uses no
 ambient proxy or credential, bounds every request and response, and treats a

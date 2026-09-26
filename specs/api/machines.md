@@ -27,8 +27,8 @@ required fields inside the selected arm.
 | --- | --- | --- | --- |
 | `spec.baremetal` | object | union | The bare-metal arm below. |
 | `spec.libvirt` | object | union | The libvirt arm below. |
-| `spec.vsphere` | object | union | The vSphere arm below. |
-| `spec.kubevirt` | object | union | The KubeVirt arm below. |
+| `spec.vsphere` | object | union | A [refused arm](#refused-arms). |
+| `spec.kubevirt` | object | union | A [refused arm](#refused-arms). |
 | `spec.networkAttachments` | array | no | Set keyed by `name`; each entry has exactly the arm matching the selected substrate. |
 
 ### Bare-metal arm
@@ -58,7 +58,7 @@ resolved reference and its `usernamePassword` type.
 | `spec.libvirt.bmcEmulationDefaults.enabled` | boolean | no | `true` | Current contract accepts only the enabled form. |
 | `spec.libvirt.bmcEmulationDefaults.protocol` | string | no | `redfish` | `redfish`. |
 | `spec.libvirt.bmcEmulationDefaults.emulator` | string | no | `sushy-tools` | `sushy-tools`. |
-| `spec.libvirt.bmcEmulationDefaults.bindAddress` | string | no | `0.0.0.0` | Listener address. |
+| `spec.libvirt.bmcEmulationDefaults.bindAddress` | string | no | `0.0.0.0` today, which is always refused (not yet met) | Listener address; a unicast address every hosted Machine's controller endpoint can name, never a wildcard. |
 | `spec.libvirt.bmcEmulationDefaults.port` | integer | no | `8000` | `1..65535`; the first port of the contiguous range the provider's emulated BMCs listen on. |
 | `spec.libvirt.bmcEmulationDefaults.auth.credentialsRef` | string | yes | — | `usernamePassword` `Secret`; required while emulation is enabled. |
 | `spec.libvirt.bmcEmulationDefaults.disableCertificateVerification` | boolean | no | `false` | Explicit TLS verification opt-out. |
@@ -74,81 +74,50 @@ media from the artifact server and opens no second listener.
 [Substrates](../substrates.md#machine-realization) owns the controller each
 Machine receives.
 
-### vSphere arm
+Not yet met: admission neither refuses a wildcard `bindAddress` nor stops
+defaulting it to `0.0.0.0`, so a provider that omits it validates and then
+refuses at apply, before registration, while the `plan` preview accepts it;
+tracked as [backlog F6](../milestones/backlog.md#audit-follow-ups-2026-09),
+with the preview gap as
+[backlog F1](../milestones/backlog.md#audit-follow-ups-2026-09).
 
-| Field | Type | Required | Rule |
-| --- | --- | --- | --- |
-| `spec.vsphere.vcenters` | array | yes | Non-empty set with unique `server`. |
-| `spec.vsphere.vcenters[].server` | string | yes | vCenter server name or address. |
-| `spec.vsphere.vcenters[].port` | integer | no | `0..65535`; zero/absence leaves the native default. |
-| `spec.vsphere.vcenters[].datacenters` | array of strings | yes | Non-empty datacenter inventory names. |
-| `spec.vsphere.vcenters[].credentialsRef` | string | yes | `usernamePassword` `Secret`. |
-| `spec.vsphere.vcenters[].disableCertificateVerification` | boolean | no | Defaults `false`. |
-| `spec.vsphere.failureDomains` | array | yes | Non-empty set keyed by `name`. |
-| `spec.vsphere.failureDomains[].name` | string | yes | Provider-local failure-domain name. |
-| `spec.vsphere.failureDomains[].region` | string | yes | Non-empty region tag. |
-| `spec.vsphere.failureDomains[].zone` | string | yes | Non-empty zone tag. |
-| `spec.vsphere.failureDomains[].server` | string | yes | Resolves to `vcenters[].server`. |
-| `spec.vsphere.failureDomains[].topology` | object | yes | Required `datacenter`, `computeCluster`, `datastore`, and non-empty `networks`; optional `folder` and `resourcePool`. |
-| `spec.vsphere.nodeNetworking.external.networkSubnetCidr` | array of strings | no | Valid external network CIDRs; effective state masks host bits. The final YAML word is exactly `Cidr`. |
-| `spec.vsphere.nodeNetworking.internal.networkSubnetCidr` | array of strings | no | Valid internal network CIDRs; effective state masks host bits. |
-| `spec.vsphere.isoStaging.datastore` | string | conditional | Defaults to the selected failure domain's `topology.datastore`; at least one of `datastore` or `folder` is present when `isoStaging` is set. |
-| `spec.vsphere.isoStaging.folder` | string | conditional | Defaults to `bootwright-vmedia`; same presence rule for an authored `isoStaging` block. |
-| `spec.vsphere.machineProfiles` | array | no | Provider-local set keyed by `name`; common profile shape below. |
+### Refused arms
 
-A failure domain with more than one topology network requires
-`nodeNetworking`. A machine profile must set `failureDomainRef` when more than
-one failure domain exists; with one domain the reference is implicit.
-
-### KubeVirt arm
-
-| Field | Type | Required | Default | Rule |
-| --- | --- | --- | --- | --- |
-| `spec.kubevirt.hostClusterRef` | string | union | — | Global `ContainerCluster` reference. |
-| `spec.kubevirt.kubeconfigRef` | string | union | — | Kubeconfig-bearing `opaque` `Secret` reference. |
-| `spec.kubevirt.namespace` | string | yes | — | Kubernetes DNS label. |
-| `spec.kubevirt.storageClassRef` | string | no | — | External Kubernetes storage-class name. |
-| `spec.kubevirt.machineProfiles` | array | no | `[]` | Provider-local set keyed by `name`. |
-
-Exactly one of `hostClusterRef` and `kubeconfigRef` is present. The former
-selects a managed cluster and the latter an external host-cluster credential;
-they are never combined.
+The `vsphere` and `kubevirt` provider arms, their network-attachment arms and
+the `templateClone` installer arm are admitted by the closed schema and refused
+before registration by [substrate selection](../substrates.md#selection-and-refusal)
+and [managed-OS installation](../managed-os.md#installation). Their field
+detail is recorded in [refused machine arms](../deferred/machine-arms.md),
+which C1 revives.
 
 ### Machine profiles and network attachments
 
 Every libvirt, vSphere, and KubeVirt `machineProfiles[]` entry has this exact
-shape:
+shape; the vSphere-only `template` and `failureDomainRef` fields belong to the
+[refused arms](#refused-arms):
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `name` | string | yes | — | Unique in the provider. |
-| `cpu` | integer | no | `0` | Non-negative; greater than zero for vSphere. |
-| `memoryMiB` | integer | no | `0` | Non-negative; greater than zero for vSphere. |
-| `diskGiB` | integer | no | `0` | Non-negative; greater than zero for vSphere. |
-| `template` | string | vSphere clone profiles | — | vSphere-only template inventory reference; required when a consuming install profile uses `templateClone`. |
-| `failureDomainRef` | string | conditional | sole vSphere domain | Provider-local `failureDomains[].name`; vSphere-only. |
+| `cpu` | integer | no | `0` | Non-negative; greater than zero for libvirt and vSphere. |
+| `memoryMiB` | integer | no | `0` | Non-negative; greater than zero for libvirt and vSphere. |
+| `diskGiB` | integer | no | `0` | Non-negative; greater than zero for libvirt and vSphere. |
 | `dataDisks` | array | no | `[]` | Libvirt/vSphere only; set keyed by required `name`, with positive `sizeGiB`. |
 | `tpm` | object | no | — | Libvirt/KubeVirt only; its presence requests TPM 2.0. |
 | `tpm.persistent` | boolean | KubeVirt only | `true` | Forbidden for libvirt, whose emulated TPM state is already persistent. |
 
+Not yet met: admission requires positive sizes only for vSphere and
+materializes `0` for an omitted libvirt size, which libvirt planning refuses;
+tracked as [backlog F6](../milestones/backlog.md#audit-follow-ups-2026-09).
+
 `networkAttachments[]` names are unique. Each entry has required `name` and
-exactly one arm matching the provider's selected substrate:
+exactly one arm matching the provider's selected substrate; the `vsphere` and
+`kubevirt` arms are [refused](#refused-arms):
 
 | Arm | Exact fields | Rule |
 | --- | --- | --- |
 | `baremetal` | optional integer `vlan` | `0..4094`; zero means no VLAN selection. |
 | `libvirt` | required string `bridge`; optional string `management`; conditional string `address`; conditional string `forward` | `management` is `managed` or `external` and defaults to `external`. `external` names an existing bridge and forbids `address` and `forward`. `managed` requires `address`, the host's IP with its prefix on a bridge Bootwright defines, and permits `forward`, `nat` or `none`, defaulting to `nat`; [substrates](../substrates.md#provider-host-realization) owns the network it defines. |
-| `vsphere` | required string `portgroup`; optional string `distributedSwitch` | `distributedSwitch` is required when the provider spans multiple failure domains. |
-| `kubevirt` | required object `networkRef` | `networkRef.name` is required. `kind` defaults `ClusterUserDefinedNetwork`; known native kinds also include `UserDefinedNetwork` and `NetworkAttachmentDefinition`. `apiGroup` defaults to `k8s.ovn.org` for the first two and `k8s.cni.cncf.io` for the latter; another kind requires explicit `apiGroup`. Scope rules below. |
-
-External KubeVirt `networkRef` has exactly `apiGroup`, `kind`, `name`, and
-optional `namespace`. `ClusterUserDefinedNetwork` is cluster-scoped and
-forbids `namespace`. `UserDefinedNetwork` and `NetworkAttachmentDefinition`
-are namespaced; an omitted namespace inherits the selected KubeVirt
-provider's namespace. An explicit namespace is a DNS label. Other kinds have
-no inferred scope or namespace; a qualified native consumer must verify the
-declared group, kind, and scope before effects. Namespace presence must match
-the native resource's scope.
 
 ## Machine
 
@@ -212,9 +181,7 @@ having no Bootwright-performed installation to deliver it.
 
 NIC names and canonical MACs are unique in a machine, and authored MACs are
 unique across the complete graph. Effective normalization writes MACs as
-lowercase colon-separated EUI-48 values. A vSphere-authored MAC is in the
-manual assignment range `00:50:56:00:00:00` through
-`00:50:56:3f:ff:ff`.
+lowercase colon-separated EUI-48 values.
 
 ### BMC and root-device shape
 
@@ -256,7 +223,6 @@ registration until it derives a device from one.
 | `configRef` | string | union | — | Global `NetworkConfig`. |
 | `inline` | `NetworkConfig.spec` object | union | — | Inline one-off alternative with the same NMState, CIDR, and DNS selection constraints. |
 | `attachmentRef` | string | conditional | `configRef` name | Provider-local `networkAttachments[].name`; applies one attachment to every effective physical interface. |
-| `interfaceAttachments` | array | conditional | `[]` | KubeVirt-only set of `{interface, attachmentRef}`; mutually exclusive with `attachmentRef`. |
 | `installAddressRef` | string | when a consumer requires a static install IP | unique eligible address below | Machine-local `addresses[].name`; selects an interface-assigned IP inside a consumed machine network. |
 | `addresses` | array | no | `[]`, plus derived `fqdn` contact | Set keyed by `name`; exact entry shape below. |
 | `interfaceBinding` | array | conditional | exact NIC-name matches for bare-metal install | Set of `{nicRef, interfaceName}`; the field name is singular `interfaceBinding`. |
@@ -277,10 +243,7 @@ when the provider exposes exactly one attachment and that name resolves;
 otherwise an explicit selection is required. An authored attachment always
 wins. Inline configuration has no reference name from which to derive an
 attachment. A Machine attached to a managed libvirt network selects an install
-address inside that attachment's prefix. `interfaceAttachments` is the KubeVirt alternative for
-per-interface networks: interface names are unique, every effective physical
-interface is covered exactly once, and each `attachmentRef` resolves to a
-KubeVirt arm in the selected provider.
+address inside that attachment's prefix.
 
 `network.addresses[]` has exactly these fields:
 
@@ -371,7 +334,7 @@ Use install-profile defaults to share Bootwright OS installation proxy policy
 without adding a proxy field to those downstream Machines.
 
 Provided-machine proxy intent does not request an OS proxy reconfiguration or
-change ambient process trust. Each future executable consumer must define how
+change ambient process trust. Each executable consumer defines how
 it uses this Machine-owned egress choice. The controller is identified only
 by [Environment selection](environment.md#controller-machine), not by its proxy,
 Machine name or local access. The retired `Machine.spec.os.install.proxy` and
@@ -450,7 +413,7 @@ download fields are not part of this contract. Validation is lexical only.
 | `spec.os.version` | string | yes | Non-empty; when it has a numeric major, the major is at least `9`. |
 | `spec.os.architecture` | string | yes | Non-empty architecture name. |
 | `spec.installer.anaconda` | object | union | Anaconda arm below. |
-| `spec.installer.templateClone` | object | union | Template-clone arm below. |
+| `spec.installer.templateClone` | object | union | A [refused arm](#refused-arms). |
 | `spec.subscription.entitlementRef` | string | no | Global `Entitlement` of type `redhat-rhel`. |
 | `spec.proxy` | choice object | no | External Proxy choice; omission uses direct access. |
 | `spec.ntp` | array of selections | no | NTPServer selections; omission leaves the native OS default. |
@@ -483,11 +446,6 @@ The optional package-source arms are exact:
   DVD media, distinct from the boot image's `bootMedia`, plus required
   `artifactServerEndpoint` with the same `{serverRef, endpointRef}` shape.
   Its selected managed endpoint supports HTTP package content.
-
-The `templateClone` arm has required `seed`, and `seed` has exactly one arm:
-`cloudInit`. `cloudInit.growRootFilesystem` is optional and defaults `true`.
-Template clone consumes no `MachineImage` or Anaconda package source. A
-consuming machine uses a vSphere provider profile whose `template` is present.
 
 ### Installation network services
 
@@ -558,12 +516,8 @@ passphrase.
 selected, and is invalid without `pcrIds`. A consuming virtual profile supplies
 TPM support.
 
-Template clone permits hostname, SSH password-authentication policy,
-repositories, services, and subscription intent. It rejects the Anaconda-only
-localization, initial-password, storage, package, SELinux, firewall, FIPS, and
-disk-encryption customizations. Any referenced install profile enables `sshd`;
-cross-field service and firewall requirements are checked before effective
-rendering.
+Any referenced install profile enables `sshd`; cross-field service and
+firewall requirements are checked before effective rendering.
 
 ## NetworkConfig
 

@@ -14,12 +14,14 @@ output.
 | Human usage failure | empty | usage diagnostic and concise help, LF-terminated | `2` |
 | JSON success or failure | exactly one JSON document followed by one LF | empty | the document's required `exitCode` |
 | Effective-state text | exact canonical effective YAML with its required final LF | empty | `0` |
-| Human effectful outcome | ordered plan, status, and presentation groups | ordered warnings and diagnostics | `0`, `1`, or `130` |
+| Human effectful outcome | ordered plan, progress, status and result | ordered warnings and diagnostics | `0`, `1`, or `130` |
 | Explicit sensitive result | exact requested bytes, with no added LF | diagnostics only on failure | `0` or `1` |
 | Completion script | exact script with its required final LF | empty | `0` |
 | Access handoff | one bounded, escaped descriptor followed by one LF | ordered diagnostics only | `0` or `1` |
 | [SSH session](../cli.md#machine-ssh-sessions) | the remote process's own bytes | Bootwright diagnostics and the host-key confirmation before the connection, then the remote process's own bytes | the SSH client's exit status |
 | Interrupt-driven cancellation | as required by the selected structured mode | as required by that mode | `130` |
+
+Not yet met: `machine start`, `machine stop` and `machine restart` with `--output json` write the human `Logs` field before the document; tracked as [backlog F5](../milestones/backlog.md#audit-follow-ups-2026-09).
 
 An operating-system interrupt reports `runtime.interrupted` and exits `130` for
 a Bootwright-owned operation. Another canceled context or expired deadline
@@ -116,12 +118,11 @@ Four rules govern the stream:
 
 1. **Coverage.** Any unit of work that can exceed the heartbeat interval opens
    a `[RUNNING]` row before it starts, including work before confirmation.
-   `setup` and `preflight controller` open with their scope and report
-   each host check under a `Checks` heading as it is verified; `setup`
-   reports dependency resolution under `Resolving` before it presents the
-   plan; every command reports confirmed effects under `Progress`. The first
-   row opens its heading, and a section the stream already showed is not
-   repeated by the result that follows.
+   `setup` and `preflight controller` stream the headings
+   [their results](../controller.md#results-and-qualification) define; every
+   command reports confirmed effects under `Progress`. The first row opens its
+   heading, and a section the stream already showed is not repeated by the
+   result that follows.
 
    `Progress` holds effects alone. A proof a command performs before it may
    have any effect, such as
@@ -195,7 +196,8 @@ the carriage return, the erase-line sequence and the upward move named above.
 
 Context identity is presented by the commands that own it. `context init`,
 `context update`, `context use`, `context current`, `context list`, and
-`context delete` present the selected context's name, identifier, and mode.
+`context delete` present the selected context's name, and its mode where
+[their results](../contexts.md#command-results-and-confirmation) show one.
 Every other human result omits the context block; the selected context is
 already addressable through `context current`. JSON results keep their
 documented `context` field unchanged, so machine consumers lose nothing.
@@ -311,10 +313,9 @@ field between array, object, scalar, and `null`.
 
 JSON uses no insignificant whitespace, does not HTML-escape strings, and ends
 with one LF. A JSON-mode failure never emits a partial success document followed
-by an error document. Help is always human text; requesting help performs no
-command work and does not establish JSON mode. The successful bare-`render`
-special case likewise emits human render help even when `--output json` was
-validly selected.
+by an error document. Help is always human text and does not establish JSON
+mode. The successful bare-`render` special case likewise emits human render
+help even when `--output json` was validly selected.
 
 A diagnostic object orders its fields as follows:
 
@@ -334,67 +335,13 @@ characters, ESC, newline, and invalid UTF-8 bytes with deterministic `\\`,
 
 ## Cluster discovery
 
-`cluster list` returns one `clusters` array containing both cluster kinds in
-ascending bytewise order of cluster name. Every entry identifies `name` and
-`kind`, with `kind` exactly `ContainerCluster` or `StorageCluster`. Human output
-shows the same names and kinds in the same order.
-
-`cluster info` retains its `context`, `clusters`, and `storage` result fields.
-`clusters` is the ContainerCluster array and `storage` is the StorageCluster
-array; each sorts by cluster name and is empty when its kind is not selected.
-Each cluster entry includes `name`, `kind`, and `accessCommands` alongside its
-endpoints and artifact metadata. Human output shows container clusters then
-storage clusters with the same membership and ordering as JSON. An explicitly
-selected unknown or excluded cluster fails `access.target` with exit `1` under
-the selected human or JSON failure mode; it never yields a successful empty
-selection. Without `--name`, the catalog's default-all selection applies.
-
-`accessCommands` contains exactly one entry for each canonical command, ordered
-`cluster exec`, `cluster kubeconfig`, `cluster kubectl`, `cluster oc`, then
-`cluster rsh`. Each entry orders these fields:
-
-| Field | Contract |
-| --- | --- |
-| `command` | Canonical command path without the executable. |
-| `status` | Exactly `not-applicable`, `not-implemented`, `unavailable`, or `ready`, selected by the precedence below. |
-| `node` | Default node's declared name for applicable `cluster rsh` and `cluster exec`; omitted for other entries. |
-| `reason` | Required non-empty safe explanation when status is not `ready`; omitted when ready. |
-
-Within an available `cluster info` result, evaluate each entry as follows:
-
-1. `not-applicable`: the cluster fails the catalog's
-   [applicability rule](commands.md#cluster-command-applicability).
-2. `not-implemented`: the command applies but this executable does not implement
-   the requested access use case.
-3. `unavailable`: the command applies and is implemented, but local access
-   metadata, credential-artifact availability, identity, ownership, or context
-   state does not establish the prerequisites. The reason identifies the
-   missing or blocking evidence and the safe next action.
-4. `ready`: the prerequisites are established by local context-owned metadata
-   and evidence. This means ready to request the descriptor or explicit export;
-   it does not assert live endpoint readiness or success of later execution.
-
-SSH entries describe the default node selected under
-[cluster node selection](../cli.md#cluster-node-selection); readiness for that
-node makes no claim about other nodes. Inspection opens no credential bytes by
-default and performs no live probes to populate these fields. Secret declarations
-alone do not prove that access material is available. Sensitive `cluster info
---secrets` retains its separate explicit disclosure boundary.
-
-Human `cluster info` includes these statuses and reasons, identifies the default
-SSH node, and gives context- and cluster-qualified invocation templates for
-applicable commands, including `--node` for SSH and `-- <command>...` for a
-required payload. Unavailable and unimplemented templates are visibly labeled;
-inapplicable entries explain the restriction and offer no invocation template.
-A template is guidance, never an executable handoff or a promise of readiness.
-
-These inspection statuses do not alter invocation precedence: invoking an
-unavailable command still follows the no-context-read
-[unavailable-command gate](../cli.md#recognized-but-unavailable-commands).
+The `cluster list` and `cluster info` result shape, `accessCommands` included,
+is [deferred](../deferred/cli-access-and-rendering.md#cluster-discovery) to a
+[C6](../milestones/backlog.md#candidates) slice.
 
 ## Lifecycle and status results
 
-`plan`, `apply` and `destroy` are text only. Their human result composes the
+The human result of `plan`, `apply` and `destroy` composes the
 [shared layout](#shared-human-layout): an optional headline, a `Plan` section
 whose steps are the frozen blocks in plan order, each naming its stage and
 carrying its own impacts as indented lines, a `Checks` section for what the
@@ -414,8 +361,8 @@ stage selection,
 each pending step also says whether this invocation would start it, that it is
 not selected, or which block it waits on, and a closing field reports how many
 blocks would start and how many are deferred. A block row leads with its status
-token and names the block description and its outcome; group rows follow their
-block under [multi-machine presentation](#multi-machine-presentation). A
+token and names the block description and its outcome; its
+[presentation groups](#multi-machine-presentation) are never result rows. A
 preview and a refusal have no progress, result rows or log reference.
 
 `status` is the machine-readable view of the same durable state and performs no
@@ -423,19 +370,23 @@ probe. Its result orders these fields:
 
 | Field | Contract |
 | --- | --- |
-| `context` | `name`, `id`, `mode` of the resolved context. |
+| `context` | `name`, `mode` of the resolved context. |
 | `setupChecks` | Ordered `{id, status}` rows derived from stored controller evidence alone, without host probes. `status` uses the check vocabulary of [controller readiness](../controller.md#results-and-qualification). |
 | `desired` | `revision`, `environment` and admission `counts` of the selected immutable input, or nulls when no revision is imported. |
-| `clusters`, `storageClusters` | Ordered `{name, kind, status}` rows for selected cluster roots. `status` is `unsupported` until a milestone implements that cluster's lifecycle. |
+| `clusters`, `storageClusters` | Ordered `{name, kind, status}` rows for selected cluster roots. `status` is `unsupported` when this executable has no lifecycle capability for that cluster. |
 | `shared` | Ordered `{kind, name, machine, status}` rows for selected shared services. `status` is `unsupported`, `pending`, `done` or `unknown`, derived from the frozen plan and its durable evidence. |
 | `secrets` | `declared` and `bound` counts. |
 | `nextSteps` | Ordered safe command strings, empty when no action is available. |
 | `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe relative paths. |
 
+Not yet met: nested status objects carry Go field names and another shape, and setup checks use their own vocabulary; tracked as [backlog F5](../milestones/backlog.md#audit-follow-ups-2026-09).
+
 Rows sort by their documented key: checks and blocks in frozen order,
 everything else in ascending bytewise name order. Human `status` presents the
 same membership and order, omitting empty sections. `--watch` repeats the read
 at its interval and preserves no partial structured result across an interrupt.
+
+Not yet met: `status --watch` is accepted but reads once; tracked as [backlog F3](../milestones/backlog.md#audit-follow-ups-2026-09).
 
 ## Diagnostic taxonomy and order
 
@@ -495,8 +446,7 @@ repeating unbounded authored text in every diagnostic. The shared codes are:
 | `render.publish` | A requested artifact could not be safely rendered or published. |
 | `lifecycle.state` | Durable lifecycle state does not permit the requested transition or continuation. |
 | `lifecycle.stage` | The stage selection admits no startable block, or excludes the block the operation must retry. |
-| `lifecycle.destroy-unavailable` | Apply is operational but this executable cannot invoke the required future destroy. |
-| `lifecycle.authorization` | The frozen plan requires an authorization that was not validly supplied. |
+| `lifecycle.authorization` | The frozen plan requires an authorization that was not validly supplied, or a supplied one it does not require. |
 | `lifecycle.lease` | The context mutation lease cannot be safely acquired or recovered. |
 | `lifecycle.unknown` | A frozen block has an unresolved unknown effect outcome. |
 | `lifecycle.live` | A removal would take back state that is still in use, and refuses before registering. |
@@ -555,7 +505,7 @@ Managed operations use this tree:
   run.output
 ```
 
-Workspace owns `/var/lib/bootwright` and `<context-name>`; state reconciliation
+[Workspace](../contexts.md#storage-locking-and-publication) owns `<state-root>` and `<context-name>`; state reconciliation
 owns `<operation-id>`, `<run-id>`, `<block-id>`, and attempt numbers. Their safe
 grammar, allocation, collision, and crash-gap rules are defined by
 [state reconciliation](../state-reconciliation.md#durable-identities-and-private-paths).
@@ -644,45 +594,16 @@ Ansible prose, banners, recap, color, callback formatting, play names, or task
 names as managed-operation output.
 
 A multi-machine presentation group is a domain-owned step frozen into a plan
-block. Its stable ID, safe description, non-empty Machine target set, order, and
-outcome meanings come from the capability contract. Results are grouped as
-follows:
-
-1. blocks follow frozen plan order and groups follow their order within a block;
-2. Machines sort by canonical `Machine/<metadata.name>` identity;
-3. every targeted Machine receives exactly one terminal outcome; and
-4. event arrival, parallelism, retry, and callback batching cannot alter order.
-
-A human group begins with:
-
-```text
-[<STATUS>] <description>: <total> machines (<counts>)
-```
-
-Non-zero counts use this order: `changed`, `unchanged`, `skipped`, `failed`,
-`unreachable`, `canceled`, `unknown`. Failed, unreachable, canceled, and unknown
-Machine identities follow in canonical order:
-
-```text
-  [FAIL] Machine/<name>: failed
-  [FAIL] Machine/<name>: unreachable
-  [CANCELED] Machine/<name>: canceled
-  [UNKNOWN] Machine/<name>: unknown
-```
-
-Successful per-Machine detail is omitted. Aggregate precedence is `unknown`,
-then failed or unreachable, then canceled, then all-skipped, then success. A
-missing terminal event, lost connection, indeterminate callback, or unproved
-effect is unknown, never success or cancellation. Bootwright completes the
-group with one terminal outcome per target before presenting it.
-
-JSON-mode commands that report groups include a `groups` result array. Each
-group orders `blockId`, `groupId`, `description`, `status`, `machines`,
-`counts`, `exceptions`, and `log`. `status` is `ok`, `skipped`, `failed`,
-`canceled`, or `unknown`; all seven count members are present and sum to
-`machines`. Exceptions include exactly failed, unreachable, canceled, and
-unknown Machines in canonical order. `log` is the safe relative attempt path on
-the final group in its block and `null` otherwise.
+block; its identity, description, Machine target set, order and outcome meaning
+follow the [stage contract](../state-reconciliation.md#stages-and-the-pause-boundary).
+It is presented as a [sub-step](#long-running-progress) of its block: its frozen
+description is the detail of the block's running row, and only a group the
+frozen block declares advances the block's completion when it settles. A group
+never settles as a row of its own, adds no result row and appears in no JSON
+result, so event arrival, parallelism, retry and callback batching cannot alter
+the frozen order of the result that follows. Per-Machine group results, with
+their exception rows, aggregate precedence and JSON `groups`, are
+[deferred](../deferred/cli-access-and-rendering.md#multi-machine-group-results).
 
 Grouping is presentation only. Concurrency, retry, stop, replay, durable
 evidence, and continuation belong to

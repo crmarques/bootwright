@@ -36,7 +36,7 @@ other shells behind `BOOTWRIGHT_TEST_ALL_SHELLS=1`, see
 Machine, Managed OS and Container cluster.
 
 **Outcome:** context-free `validate -f` for every API kind under the
-[parser boundary](../api.md#parser-boundary); durable contexts (the `context`
+[parser boundary](../api/input.md#parser-boundary); durable contexts (the `context`
 tree), context-backed `validate` and public `render effective` under
 [Contexts](../contexts.md); and admission of the six
 [infrastructure service kinds](../api/infrastructure-services.md) and the
@@ -215,7 +215,7 @@ makes every other block wait for a controller block.
 client closure and the libvirt client a context selects on the controller
 Machine through that Machine's proxy choice; a context selecting nothing beyond
 the host baseline contributes no block. The clients go into a
-[client area](../contexts.md#controller-relationship-and-host-binding): a
+[client area](../contexts/controller-record.md#bundles-and-client-areas): a
 shared host namespace content-addressed by the exact closure, reserved before
 its directory exists, attributed to it and sealed once the tree is durable. The
 identities a stage will acquire are retained before acquisition, the native

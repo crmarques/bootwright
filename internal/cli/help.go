@@ -8,11 +8,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// controllerContextUsage describes --context for the two commands that never
+// fall back to the current context.
+func controllerContextUsage(path string) (string, bool) {
+	switch path {
+	case "setup":
+		return "Ignored: setup selects no context", true
+	case "preflight controller":
+		return "Select explicit Environment requirements (default: baseline)", true
+	}
+	return "", false
+}
+
 func writeHelp(w io.Writer, command *cobra.Command) error {
-	if path := command.Annotations["bootwright.command"]; path == "setup" || path == "preflight controller" {
+	if usage, ok := controllerContextUsage(command.Annotations["bootwright.command"]); ok {
 		if flag := command.InheritedFlags().Lookup("context"); flag != nil {
 			previous := flag.Usage
-			flag.Usage = "Select explicit Environment requirements (default: baseline)"
+			flag.Usage = usage
 			defer func() { flag.Usage = previous }()
 		}
 	}

@@ -1,4 +1,4 @@
-# Command and Flag Catalog
+# CLI Commands and Flags
 
 Read with [CLI behavior](../cli.md) and [output contracts](output.md).
 The tables define the complete public command tree, operands, flags and defaults.
@@ -13,9 +13,9 @@ its syntax and context-independent safety checks still apply.
 
 | Flag | Type and default | Contract |
 | --- | --- | --- |
-| `--context <name>` | context name; current context | Select the named context for a context-backed command. `preflight controller` consumes only an explicit nonempty value and omission selects its host baseline, ignoring current selection; `setup` selects no context and consumes no value. A non-empty value conflicts with context-free `render --input-dir`. |
+| `--context <name>` | context name; current context | Select the named context for a context-backed command. `setup` and `preflight controller` consume it as the [Controller journeys](../controller.md#selection-and-command-journeys) define, and the [flag relationships](#flag-relationships-and-safeguards) below restrict it. |
 | `--ssh-id-file <path>` | path; none | Offer this private key first for an SSH operation; a declared credential remains the fallback. A leading `~` resolves from the invoking account database, not an untrusted `HOME`; the opened file must satisfy the private-file rules in [security](../security.md). |
-| `--ssh-user <name>` | POSIX user name; none | Use one explicitly borrowed account for eligible OS-ready machines. On [`machine rsh` and `machine exec`](../cli.md#machine-ssh-sessions) it reaches any account: a value naming an identity this context holds resolves to that identity's credential, and any other value offers no stored credential. It does not alter desired state or the managed identity Bootwright installs. |
+| `--ssh-user <name>` | POSIX user name; none | Use one explicitly borrowed account for eligible OS-ready machines. On [`machine rsh` and `machine exec`](../cli.md#machine-ssh-sessions) it reaches any account under the session's credential rules. It does not alter desired state or the managed identity Bootwright installs. |
 | `--ssh-ask-sudo-password[=<bool>]` | Boolean; `false` | Prompt once for the borrowed account's sudo password, hold it only in bounded memory for this invocation, and never place it in arguments, environment, state, output, or logs. It conflicts with JSON output and non-interactive execution, and is not consumed by `machine rsh` or `machine exec`. |
 | `--ssh-user-for-provisioned[=<bool>]` | Boolean; `false` | Extend `--ssh-user` to Bootwright-provisioned machines. It requires `--ssh-user`; the same frozen account must pass the managed-OS ownership probe. It is not consumed by `machine rsh` or `machine exec`, which reach a provisioned Machine's accounts through `--ssh-user` alone. |
 
@@ -23,12 +23,9 @@ Every command also accepts `-h` and `--help`. Help performs no desired-state
 discovery, state lookup, secret access, privilege escalation, process launch,
 network access, or write after the command path and flag syntax are resolved.
 
-No command takes a proxy flag. `setup`, `preflight controller` without a
-context, and `media add --from-url` acquire before any Environment exists, so
-they read the
-[context-free acquisition route](../controller.md#the-context-free-acquisition-route)
-from the invoking environment; an invocation that is not admitted reads
-nothing. Every other command uses its Machine's declared proxy choice.
+No command takes a proxy flag; which commands read the invoking environment's
+route is owned by the
+[context-free acquisition route](../controller.md#the-context-free-acquisition-route).
 After surrounding whitespace is trimmed, an SSH user matches
 `^[a-z_][a-z0-9_-]{0,31}$` exactly.
 
@@ -57,7 +54,7 @@ process or network access. “Mutate” permits only the named, planned effects.
 | `bootwright context use` | required `--name <name>` | selected-current-context summary | local current-context update |
 | `bootwright context list` | none | contexts in canonical name order | read local state |
 | `bootwright context current` | `--short` false | current context details, or only its name with `--short` | read local state |
-| `bootwright context delete` | required `--name <name>` and `--purge`; `--allow-orphans` and `--yes` false | permanent local deletion summary, reporting any objects it abandoned | guarded removal under the [context rules](../cli.md#context-and-setup-behavior); never resource mutation |
+| `bootwright context delete` | required `--name <name>` and `--purge`; `--allow-orphans` and `--yes` false | permanent local deletion summary, reporting any objects it abandoned | guarded removal under [permanent deletion](../contexts.md#permanent-deletion); never resource mutation |
 | `bootwright add-ons list` | `--output text\|json` default `text` | built-in catalog and machine-local registrations | read embedded and local catalog state |
 | `bootwright add-ons add` | required `--name <name>[:<version>]`; `--version <version>` default catalog default; `--yes` false | registered immutable catalog release | local add-on registration |
 | `bootwright add-ons delete` | required `--name <name>[:<version>]`; `--yes` false | removed matching registration | local add-on registration deletion |
@@ -76,15 +73,14 @@ process or network access. “Mutate” permits only the named, planned effects.
 
 The required controller declaration and context-free setup boundary follow
 [controller command applicability](../cli.md#controller-declaration-and-command-applicability).
-The three `media` commands select no context: they manage the host-wide
-[media store](../managed-os.md#media-store) with the store's privilege, and an
-explicit `--context` changes nothing they do.
+The three `media` commands follow the host-wide
+[media store](../managed-os.md#media-store).
 
 ### Inspect and lifecycle commands
 
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
-| `bootwright preflight controller` | none | [host readiness, and a selected context own prerequisites and binding](../controller.md#selection-and-command-journeys) | bounded local observation; no state publication |
+| `bootwright validate` | repeatable `-f, --file <file-or-dir>`; `--output text\|json` default `text` | validation summary with admission counts, exclusions and advisories | read the supplied input, or the selected context's input when `-f` is omitted; no write |
 | `bootwright preflight controller` | none | [baseline or explicit-context controller readiness](../controller.md#selection-and-command-journeys), including the acquisition route it resolved | bounded local observation; no state publication |
 | `bootwright preflight infra` | `--clusters <list>` default all; `--dry-run` false; `--output text\|json` default `text`; `--trust-on-first-use=<bool>` default `true`; `-v, --verbose` false | infrastructure readiness checks | observe unless `--dry-run`, which is local-only |
 | `bootwright preflight clusters` | same flags as `preflight infra` | all selected cluster readiness checks | observe unless `--dry-run` |
@@ -112,7 +108,7 @@ explicit `--context` changes nothing they do.
 | `bootwright machine start` | required `--name <machine>`; `--output text\|json` default `text` | the power state the Machine's management controller proved once the operation settled | bounded power operation through that controller |
 | `bootwright machine stop` | required `--name <machine>`; `--force` false; `--yes` false; `--output text\|json` default `text` | same, after the operating system is asked to shut down | same |
 | `bootwright machine restart` | required `--name <machine>`; `--force` false; `--yes` false; `--output text\|json` default `text` | same, after a proved stop and a proved start | same |
-| `bootwright setup` | `--dry-run` false; `--yes` false; `--purge-old-bundles` false | [context-independent controller prerequisite plan or completed setup](../controller.md#selection-and-command-journeys), and with `--purge-old-bundles` the [superseded bundles it retired](../controller.md#supported-host-and-dependency-selection) | bounded dependency acquisition over the [context-free route](../controller.md#the-context-free-acquisition-route) and local installation; no context selection or binding; dry-run only previews; retirement removes only superseded execution bundles and only after the setup completes |
+| `bootwright setup` | `--dry-run` false; `--yes` false; `--purge-old-bundles` false | [context-independent controller prerequisite plan or completed setup](../controller.md#selection-and-command-journeys), and with `--purge-old-bundles` the [superseded bundles it retired](../controller.md#supported-host-and-dependency-selection) | bounded dependency acquisition over the [context-free route](../controller.md#the-context-free-acquisition-route) and local installation; dry-run only previews; retirement removes only superseded execution bundles and only after the setup completes |
 | `bootwright cluster list` | `--output text\|json` default `text` | container and storage cluster names and kinds in canonical order | read local state |
 | `bootwright cluster info` | `--name <cluster>` default all unless `--secrets`; `--secrets` false; `--output text\|json` default `text` | cluster kinds, endpoints, access-command applicability and availability, artifact availability, and optional explicit sensitive values | read local state and optional confidential material |
 | `bootwright cluster rsh` | required `--name <cluster>`; `--node <node>` default first node in canonical name order | bounded handoff for an interactive SSH session to the resolved cluster node | read target and access metadata only |
@@ -131,7 +127,7 @@ explicit `--context` changes nothing they do.
 
 `--name` selects from the shared ContainerCluster/StorageCluster name namespace
 in the selected context. The following table owns applicability; access evidence
-and resolution follow [resource inspection and explicit access](../cli.md#resource-inspection-and-explicit-access).
+and resolution are [deferred](../deferred/cli-access-and-rendering.md#cluster-inspection-and-explicit-access).
 
 | Command | Applicable targets |
 | --- | --- |
@@ -247,7 +243,8 @@ YAML output mode, global output flag, or `--format` alias. `apply`, `destroy`,
 `plan`, setup mutations, access-handoff commands, credential-export commands,
 `version`, help, and completion are text or raw only.
 
-`--yes` suppresses only the named command's ordinary confirmation after target
+`--yes` suppresses only the named command's
+[ordinary confirmation](../cli.md#ordinary-confirmation) after target
 selection and every independent safeguard and authorization succeeds. It may
 confirm a safe command-owned overwrite, recreation, or replacement, but it
 does not itself select a target or authorize data loss,
@@ -256,30 +253,26 @@ prompt remains necessary, the command fails instead when standard input is
 non-interactive, JSON output is selected, or a safe answer cannot be read.
 
 `context delete` requires `--purge` to resolve to `true`; omission or
-`--purge=false` fails without changing state. The flag acknowledges deletion of
-proven-disposable local context data, while `--yes` independently controls its
-ordinary confirmation. A context that still owns realized objects refuses
-deletion and names `bootwright destroy`. `--allow-orphans` acknowledges those
-objects and deletes anyway, abandoning them; it replaces neither `--purge` nor
-the confirmation, and unreadable lifecycle evidence refuses under it. A
-deletion that abandons objects warns once on standard error and reports the
-abandonment in its result.
+`--purge=false` fails without changing state. `--yes` independently controls
+its ordinary confirmation, and `--allow-orphans` replaces neither. What each
+flag acknowledges, and when deletion refuses, follow
+[permanent deletion](../contexts.md#permanent-deletion). A deletion that
+abandons objects warns once on standard error.
 
 `--stage` accepts only `controller`, `infra-components`, `substrates`,
-`machines`, `clusters`, and `add-ons`, and only on `plan` and `apply`. Whitespace around
-comma-separated members is ignored, empty members are ignored, duplicates
-collapse, and the last occurrence wins. A supplied value that resolves to no
-member and an unrecognized member are both usage errors. Omission selects every
-stage. The flag gates which blocks an invocation starts and never narrows the
-frozen plan, the lifecycle unit, or ownership; the complete contract is owned by
+`machines`, `clusters`, and `add-ons`, and only on `plan` and `apply`. Its
+members follow the [comma-list rules](../cli.md#parsing-and-input-conventions);
+a supplied value that resolves to no member and an unrecognized member are both
+usage errors. Omission selects every stage. What a selection gates is owned by
 [state reconciliation](../state-reconciliation.md#stages-and-the-pause-boundary).
 
 `--authorize` accepts only `data-loss`, and only on `apply` and `destroy`.
-Unknown, empty, duplicate, or inapplicable tokens are usage errors; `all` is not
-accepted. Whitespace around comma-separated tokens is ignored. The token
-acknowledges an already-planned irreversible consequence and grants none of
-selection, confirmation, identity, ownership, power, probe, or digest
-authority. The complete authorization boundary is defined by
+Unknown, empty, or duplicate tokens are usage errors; `all` is not accepted.
+Whitespace around comma-separated tokens is ignored. A token grants no
+confirmation authority either: it neither replaces nor implies
+[ordinary confirmation](../cli.md#ordinary-confirmation). Whether the frozen plan
+requires the token, what it acknowledges and the refusal of a token it does not
+require are owned by
 [state reconciliation](../state-reconciliation.md#confirmation-and-authorization).
 
 `--verbose` adds safe structured progress and troubleshooting detail. It never
@@ -288,13 +281,12 @@ adapter output, changes a decision, or weakens a log bound. Lifecycle verbose
 detail remains in the private attempt log; preflight verbose detail may be
 presented only after structural redaction.
 
-`--trust-on-first-use=true` permits bounded retrieval and presentation of an
-unknown SSH host key from the exact authorized endpoint. It never accepts,
-persists, or uses the key. The preflight fails `trust.identity` and names the
-exact `machine trust` request needed for explicit enrollment. A changed key
-always fails. `machine trust --replace` is the only interface for a deliberately
-changed key, and every replacement name must also be in that command's selected
-Machine set.
+Not yet met: `--verbose` is accepted but changes nothing; tracked as [backlog F3](../milestones/backlog.md#audit-follow-ups-2026-09).
+
+A changed SSH host key always fails. `machine trust --replace` is the only
+interface for a deliberately changed key, and every replacement name must also
+be in that command's selected Machine set. The preflight `--trust-on-first-use`
+flag's meaning is [deferred](../deferred/cli-access-and-rendering.md#preflight).
 
 `--sensitive` authorizes materialization, not disclosure in normal output. It
 applies only to the render rows that list it. Sensitive installer artifacts use
@@ -303,7 +295,8 @@ directories, atomic publication, and bounded cleanup in [security](../security.m
 It never permits a secret in an effective-state artifact, manifest, diagnostic,
 log, command argument, or path. `render --input-dir` always uses placeholders
 and requires `--output-dir`. A non-empty `--context` or
-`--sensitive=true` conflicts with `--input-dir`.
+`--sensitive=true` conflicts with `--input-dir`. Context-backed whole render
+requires `--output-dir` and `--sensitive`.
 
 `machine list --silent=true` emits only sorted names as text and conflicts
 with a resolved `--output json` and with `--power-status`, because a reading it

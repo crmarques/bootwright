@@ -1,10 +1,7 @@
 # State and Reconciliation Contract
 
-This file owns mutation and durable state. Operational lifecycle commands
-require the complete CLI, persistence, safety, and qualification boundaries;
-[cli.md](cli.md) owns invocation and presentation. A defined but unavailable
-command returns `cli.not-implemented` without context resolution, planning,
-registration, receipt, or effects.
+This file owns mutation and durable state; [cli.md](cli.md) owns invocation
+and presentation.
 
 ## Lifecycle unit
 
@@ -21,9 +18,9 @@ Supported operation modes are:
 - a fresh full-context `apply`, optionally stopping at a stage boundary;
 - continuation of a paused, interrupted or failed `apply`, or of an
   interrupted or failed `destroy`, against its exact frozen plan; and
-- a `destroy` of everything the apply recorded as owned, which is every block
-  it started, whether that apply completed or stopped at a boundary, at a
-  failure, or at an interruption.
+- a `destroy` of everything the apply [owns](#continuation-and-removal),
+  whether that apply completed or stopped at a boundary, at a failure, or at an
+  interruption.
 
 There is no reconciliation, partial planning, adoption, reclaim, or force path.
 A completed apply must be destroyed before an apply of *changed* desired state
@@ -39,29 +36,9 @@ consequence to acknowledge, and a token it is given authorizes nothing and
 refuses nothing. Repeating a verb is therefore always safe, which is what lets
 an operator or a script ask whether anything is left to do.
 
-An implementation may make `apply` operational before public `destroy` only
-for one complete selected Environment whose lifecycle obligations are fully
-supported and only when all of these staged-availability conditions hold:
-
-- every possible owned effect has an implemented and qualified inverse whose
-  immutable implementation and dependency identities are frozen with the
-  apply;
-- the operation preserves all secret bindings, ownership, completion, and
-  removal evidence needed for a later compatible executable to destroy the
-  snapshot without rediscovery;
-- the available command supports exact apply continuation and unknown-outcome
-  resolution;
-- once an apply operation is registered, context update, a fresh apply, and
-  final context purge refuse, preserving the selectable context and every
-  required record until compatible destruction releases its obligations; and
-- the operator receives the two-phase
-  `lifecycle.destroy-unavailable` warning defined by
-  [the CLI contract](cli.md#staged-apply-without-destroy), including in every
-  trustworthy post-registration result.
-
-Public `destroy` remains unavailable in that staged build. Plans remain
-complete and immutable; later artifact generation cannot append blocks or
-expand the operation. Expansion requires destroy followed by fresh apply.
+Plans remain complete and immutable; later artifact generation cannot append
+blocks or expand the operation. Expansion requires destroy followed by fresh
+apply.
 
 ## Context mutation evidence
 
@@ -69,12 +46,13 @@ Reconciliation owns a closed version-1 mutation record initialized with
 `operation: none` and `ownership: none`. Recognized operation states are `none`,
 `pending`, `failed`, `unknown` and `applied`; ownership is `none` or `retained`.
 A paused operation records `pending` and `retained`, exactly as a running one
-does, because it owns every effect it completed.
+does, because a pause leaves its [ownership](#continuation-and-removal) in
+place.
 This record establishes only local disposal/update restrictions, not native
 execution, readiness, ownership release or permission to run lifecycle work.
-Future lifecycle publication must participate in the same context lease and
-update its evidence before any remote mutation. Missing or unknown evidence
-fails closed. A live lease refuses every context mutation.
+Lifecycle publication participates in the same context lease and updates this
+evidence before any remote mutation. Missing or unknown evidence fails closed.
+A live lease refuses every context mutation.
 
 The guard allows update only without pending, failed or unknown operations;
 recreation/final deletion requires `none` operation and `none` ownership.
@@ -93,17 +71,16 @@ deletion safeguard, performs no remote effect, and there is no recovery-only
 archival mode.
 
 The [Workspace context contract](contexts.md) defines publication and permanent
-local deletion under this guard. The staged apply restriction above adds a
-stronger update prohibition when destroy is unavailable.
+local deletion under this guard.
 
 ## Durable identities and private paths
 
 [Contexts](contexts.md) owns the versioned registry, immutable input revisions,
 selection transactions and permanent deletion.
 
-Workspace owns selection and verification of `<state-root>` and allocation of
-`<context-id>`. `<state-root>` is a canonical absolute Bootwright-owned runtime
-state directory outside both the desired-state input root and selected
+Workspace owns selection and verification of `<state-root>` and reservation
+of each context name. `<state-root>` is a canonical absolute Bootwright-owned
+runtime state directory outside both the desired-state input root and selected
 environment directory. It is never either directory, a descendant of either,
 or a path derived by appending to either. Desired-state discovery never enters
 it.
@@ -129,7 +106,7 @@ resolution-attempt numbers. The identity contract is:
 
 | Identity | Grammar and scope |
 | --- | --- |
-| `<context-id>` | Stable and unique within `<state-root>` for one lifecycle unit. |
+| `<name>` | The context name: unique within `<state-root>` for one lifecycle unit under the [context identity contract](contexts.md#identity-and-selection). |
 | `<operation-id>` | Immutable and unique within one context; allocated before its operation record. |
 | `<run-id>` | Immutable and unique within one context; allocated before the bounded run it names, and never an operation identity. |
 | `<block-id>` | Immutable and unique within one operation's frozen plan. |
@@ -236,8 +213,7 @@ cache or registry writes, cleanup, lock takeover, or secret materialization.
 A fresh mutation validates the complete graph, freezes input and non-secret
 external content, binds each consumed secret to confidential immutable material
 or an immutable external version, and durably publishes the immutable plan and
-pending registry before its first platform side effect. Lifecycle commands
-remain unavailable until that secret-continuity boundary exists.
+pending registry before its first platform side effect.
 
 A plan is a dependency DAG of stable blocks. Each block has an ID, description,
 stage, dependencies, the host resources it will not share, impacts, and
@@ -277,11 +253,9 @@ never learns another capability's block-identity grammar and a frozen plan
 carries only resolved dependencies.
 
 A definition may also name the authorization tokens its effects *consume*,
-frozen with the plan and covered by its digest. The tokens an `apply` or
-`destroy` receives must equal the union its plan consumes: a missing token
-refuses `lifecycle.authorization` before registration, naming the blocks that
-consume it, and a surplus token is inapplicable under the
-[authorization rules](#confirmation-and-authorization).
+frozen with the plan and covered by its digest; the
+[authorization rules](#confirmation-and-authorization) require exactly the
+union a plan consumes.
 
 ### Stages and the pause boundary
 
@@ -333,9 +307,10 @@ plan permits, so it belongs to the executable and is never frozen with the
 plan, never named by desired state, and never a public flag: what may run
 together is the graph's answer and does not change between invocations. A
 continuation of an operation frozen by another build therefore runs under this
-build's bound, which changes no effect, no order and no evidence. Two blocks of
-one operation never run together while roles share host scratch paths (S4a
-binds the bound to one until S4b).
+build's bound, which changes no effect, no order and no evidence.
+
+Not yet met: roles still share host scratch paths, so the bound is one block;
+tracked as [backlog S4b](milestones/backlog.md#audit-follow-ups-2026-09).
 
 An operation is `paused` when execution stops because no block is startable,
 nothing is still running, no block is failed or unknown, and pending blocks
@@ -355,9 +330,17 @@ plan order and one outside the selection is never retried. When no failed
 block's stage is selected the operation refuses `lifecycle.stage` before any
 effect, naming the stage of the first. A selection that admits no startable block also refuses
 `lifecycle.stage` before registration, naming a stage that would unblock work.
-Objects whose kind no capability in the executable can realize refuse before
-registration regardless of the selection, because a frozen plan requires a
-resolved implementation for every block.
+
+A fresh `plan` and a fresh `apply` refuse, whatever stages are selected and
+before registration, every selected object this executable cannot realize: an
+effect-bearing object of a kind no capability claims, such as a storage or
+add-on object or a managed `Registry`, an enabled `CustomPlaybook`, and every
+shape a capability reports unsupported. A frozen plan requires a resolved
+implementation for every block; a removal planned from a frozen plan is never
+refused this way.
+
+Not yet met: the fresh `plan` preview does not run this refusal, so only
+`apply` refuses; tracked as [backlog F1](milestones/backlog.md#audit-follow-ups-2026-09).
 
 A domain capability may define ordered presentation groups within its block for
 one operation performed across one or more Machines. The capability owns each
@@ -390,12 +373,6 @@ evidence; never silently upgrade, substitute a dependency, or discard recovery
 state.
 
 ### Attempts and unknown outcomes
-
-Add-on blocks also freeze the package, catalog snapshot, payload manifest,
-driver, and compatibility decision under [add-ons.md](add-ons.md). They obey
-the same state machine and never re-resolve on continuation or destroy.
-Retain the selected non-secret package bytes in the operation snapshot through
-completed destroy, independent of source catalog availability.
 
 The executor allocates the next attempt number and durably records `running`
 before a block's first side effect. Each attempt durably records its effect
@@ -478,8 +455,8 @@ resolution evidence and resulting transition must be durable before execution
 continues.
 
 A removal may perform that resolution itself, as its first step. Planning a
-removal needs no resolution, because ownership is every block the operation
-started and resolving one never changes that set, so the plan an operator
+removal needs no resolution, because resolving a block never changes the
+[set the operation owns](#continuation-and-removal), so the plan an operator
 confirms is the plan either outcome produces. Performing one does: a removal
 resolves every unproved effect it would take back, read-only and against the
 frozen request, before it proves quiescence and before it registers anything of
@@ -495,6 +472,10 @@ Even when positive evidence resolves the affected block to `done` or `failed`,
 no later effect or retry starts until the required private logging boundary is
 safely restored. Missing or truncated log detail is never reconstructed,
 treated as operation evidence, or used to weaken the resolution rules above.
+
+Not yet met: no failure sets the durable log fault, and an attempt discards a
+failed log append, so a later invocation continues without restoration;
+tracked as [backlog S10](milestones/backlog.md#audit-follow-ups-2026-09).
 
 ### Continuation and removal
 
@@ -561,8 +542,8 @@ it was written.
 
 A fresh removal may supersede any apply that has not completed, and a failed
 destroy, which is removed over what it has not yet proved gone. An apply
-qualifies however it stopped, because what it owns is every block it started
-and that set is the same at a boundary, at a failure, and at an interruption.
+qualifies however it stopped, because the set it owns is the same at a
+boundary, at a failure, and at an interruption.
 An unproved effect is not an exception: the removal resolves it first and
 refuses, registering nothing, when it cannot. An incomplete removal is
 continued rather than replaced, because a removal that lost an outcome is
@@ -675,6 +656,8 @@ This composes with authorization rather than replacing it: `data-loss`
 acknowledges that removal destroys data, and quiescence proves that nothing is
 using that data now. Neither substitutes for the other.
 
+### Physical disk safety
+
 Existing operator-owned bare metal is the explicit external-substrate
 exception: Bootwright never claims ownership of or destroys the physical
 machine. Before changing it, an implementation must durably hold an exclusive
@@ -687,13 +670,20 @@ holds the claim and the controller-side proof, and
 [physical installation](managed-os.md#physical-installation) repeats that proof
 immediately before it boots and again inside the installer itself.
 
-Two limits remain and are stated rather than closed. The interval between the
-controller's last proof and the installer's first write is a residual race,
-narrowed by the in-installer check but not eliminated; the agent installer,
-which admits no equivalent check, is recorded in
-`.agents/knowledge/openshift-agent-disk-safety.md`. And physical destroy and
-offline disk erase remain unsupported until a separate spec defines and tests
-a safe path, so a removal retains the machine and the system installed on it.
+The interval between the controller's last proof and the installer's first
+write is a residual race, not an ownership proof. No MAC set, root-device hint,
+power-off state, context claim or `data-loss` authorization closes it, and none
+is described as closing it. The managed-OS installer narrows it with its
+in-installer check without eliminating it; the agent installer binds a host by
+declared MACs and root-device hints and offers no supported hook before disk
+erasure, so it admits no equivalent check. Every bare-metal apply therefore
+retains all controller-side proofs, fails closed on any mismatch or unknown
+probe, and passes explicit real-hardware qualification before it is called
+supported.
+
+Physical destroy and offline disk erase are outside this contract: a removal
+retains the machine and the system installed on it, and erasing one requires a
+separate safety contract ([backlog C9](milestones/backlog.md#candidates)).
 
 ### Controller-host protection
 
@@ -703,15 +693,14 @@ cluster node membership under
 alone does not prove live host identity or ownership.
 [Controller setup](controller.md) defines prerequisite preparation and uses
 [Workspace host binding](contexts.md#controller-relationship-and-host-binding).
-The following rules constrain later controller-hosted service effects; their
-availability is separate from prerequisite setup.
 
-Before enabling local service execution, the owning capabilities must define
-verified host binding and stable conflict identities for shared ports, paths,
-service instances and other exclusive host resources. Context-local leases
-remain necessary but do not coordinate two contexts targeting the same host.
-The capability and Reconciliation contracts must establish cross-context
-ownership, conflict refusal and recovery evidence before those effects run.
+A controller-hosted service effect runs only under verified host binding and
+the stable conflict identities of the
+[host reservations](infrastructure-services.md#host-reservations), which give
+shared ports, paths, service instances and other exclusive host resources
+cross-context ownership, conflict refusal and recovery evidence. Context-local
+leases remain necessary but do not coordinate two contexts targeting the same
+host.
 
 An apply or destroy must preserve the controller OS, power, Bootwright runtime,
 Workspace state, keyring and evidence needed to continue or remove owned
@@ -741,9 +730,10 @@ and inapplicable values are errors. A plan requires exactly the tokens its
 blocks [consume](#plan-and-execution). A token the frozen plan does not require
 is inapplicable and refuses with `lifecycle.authorization` before registration,
 so a habitual authorization cannot pre-authorize a future destructive plan; a
-required token that is not supplied refuses before registration as well. An
-enabled `CustomPlaybook` refuses before planning and has no authorization
-bypass.
+required token that is not supplied refuses the same way, naming the blocks
+that consume it. An
+enabled `CustomPlaybook` has no authorization bypass; it refuses under the
+[unrealizable-kind rule](#stages-and-the-pause-boundary).
 
 Before operational exposure, every supported substrate/component/version must
 pass the shared port suite, safety tests, and real-system qualification with

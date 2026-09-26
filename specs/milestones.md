@@ -238,14 +238,9 @@ owner decisions of 2026-09-25. **Definition:** Specified. **Delivery:** in
 progress. Items: S1, S2a, S3a, S4a, S5, S6a, S7 to S9 (first steps), O1 to O8,
 Z1, G1 to G9 and A1 to A8, less the backlog's follow-ups. It adds the M5a and
 M4a deviations and binds lifecycle concurrency to one until S4b. Remaining:
-G2's links from [security](security.md) and [secrets](secrets.md) to the
-[orphan-acknowledged delete](milestones/delivered.md#x10--orphan-acknowledged-context-delete),
-G3's disk-safety move into
-[mutation safety](state-reconciliation.md#mutation-safety), G4's Fusion and ODF
-candidate, the stale split-tracking comment in
+A1 to A8, the stale split-tracking comment in
 `test/architecture/complexity_test.go`, and M1h's and M4a's acceptance
-baselines. Exit gates: `make check`,
-`make docs-check` and CI.
+baselines. Exit gates: `make check`, `make docs-check` and CI.
 
 ## Next ordered outcomes
 

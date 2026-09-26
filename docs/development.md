@@ -18,7 +18,7 @@ The adapter verifies bounded source bytes before parsing, then checks each
 composed document's representation budget before decoding or retaining it.
 Its one-document lookahead, parser-error precedence and cooperative
 cancellation limits are defined by the
-[API parser boundary](../specs/api.md#parser-boundary). The isolated 1 GiB RSS
+[API parser boundary](../specs/api/input.md#parser-boundary). The isolated 1 GiB RSS
 and 120-second watchdog qualification is a required M1b check; this dependency
 choice alone is not evidence that the check passed.
 

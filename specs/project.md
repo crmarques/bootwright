@@ -24,11 +24,10 @@ The target platform families are:
   time synchronization and registries;
 - OpenShift and OKD container clusters;
 - open-source, Red Hat and IBM Ceph storage distributions; and
-- cluster-bound integrations, including IBM Fusion, IBM Fusion Data Foundation
-  and Red Hat OpenShift Data Foundation, plus built-in and custom add-ons.
+- cluster-bound integrations through built-in and custom add-ons.
 
-These platform families describe Bootwright's intended scope. Individual
-capabilities become available as they are implemented and tested.
+These platform families bound Bootwright's intended scope;
+[milestones](milestones.md) own what is delivered.
 
 ## Lifecycle and handoff
 
@@ -37,9 +36,10 @@ bounded operation. Every selected outcome is positively verified or fails
 closed. After durable registration, interruption or failure preserves the
 evidence needed for exact continuation of that operation.
 
-The [state contract](state-reconciliation.md) owns full-environment apply,
-destroy, continuation and ownership. A completed apply must be destroyed before
-another apply. Edited intent is never treated as continuation.
+The [state contract](state-reconciliation.md#lifecycle-unit) owns
+full-environment apply, destroy, continuation and ownership, including when a
+completed apply must be destroyed before another. Edited intent is never
+treated as continuation.
 
 The [GitOps handoff gate](state-reconciliation.md#bootstrap-completion-and-gitops-readiness)
 requires durable completion, readiness, access and ownership evidence for the
@@ -84,6 +84,9 @@ input copies it into the Bootwright store, later commands read only that copy,
 and a recorded source location is provenance, never identity, uniqueness or a
 read path. Secret `file` sources are the recorded exception until
 [C21](milestones/backlog.md#candidates) brings them under this rule.
+
+Before 1.0, a durable format change converts no earlier format: a record in an
+earlier format is refused, and the refusal names the remedy.
 
 Day-2 operations are outside the current scope, including ongoing drift repair
 and publication of application or fleet GitOps content. Bootwright's lifecycle

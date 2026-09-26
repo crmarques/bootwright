@@ -7,15 +7,15 @@ declared intent, and the evidence that it completed. The
 management controllers they are booted through;
 [infrastructure services](infrastructure-services.md#consumer-publication) own
 the served root its boot media is published beneath; [Secrets](secrets.md) owns
-the material it consumes; availability follows [milestones](milestones.md).
+the material it consumes.
 
-One installation contract covers every substrate, exactly as
-[managed-OS installation](managed-os.md#installation) does. It never asks which
-substrate a node is on: the [realized target](substrates.md#selection-and-refusal)
-supplies the management controller to boot through, the NICs the node reports,
-and whether the machine is physical, and everything that differs between
-substrates follows from those answers. A substrate added later inherits this
-installation whole.
+One installation contract covers every substrate, as
+[managed-OS installation](managed-os.md#installation) does. Each node's
+[realized target](substrates.md#selection-and-refusal) supplies its substrate
+arm, the management controller to boot through, the NICs the node reports, and
+whether the machine is physical. The installation dispatches on the frozen arm
+through the substrate's fixed task files and fails closed on an arm it has none
+for, before any media is inserted.
 
 ## Selection and refusal
 
@@ -31,7 +31,9 @@ resolves them from authored or load-balancer addresses. Every other declaration
 refuses before operation registration with one diagnostic naming the cluster:
 `okd`, `disconnected` mode, a release pinned by image alone, an installation
 proxy, `security.fips`, `security.diskEncryption`,
-`install.servingCertificates`, `install.registries`, a node on a substrate this
+`install.servingCertificates`, `install.registries`, a multi-node cluster on
+the `vsphere` or `external` platform (one on `baremetal`, on `none` or with no
+declared platform is accepted), a node on a substrate this
 executable does not realize, a node whose management controller would have
 to be taught a new certificate, a node that selects an install profile,
 because managed OS and the cluster installer would both write its disk, and a
@@ -41,8 +43,6 @@ refusals name the bound Machine in the remediation `bootwright plan` reports,
 because it is what the operator changes. Node `labels` and `taints` are accepted and reach no
 installer input, because they are post-installation placement intent rather
 than install configuration.
-
-Selection is pure and reads no host, endpoint or Secret material.
 
 ## Installer inputs
 
@@ -142,17 +142,16 @@ The block `cluster-install-<cluster>` boots the nodes from that image and
 watches the cluster install. It depends on the media block, and requires every
 node `Machine` and the same name and time services.
 
-A physical node refuses before registration, as
-[selection](#selection-and-refusal) states, until the pre-boot target proof for
-each node exists (backlog S2b). An operation registered before that refusal
-still froze its physical nodes, so its apply refuses at execution, naming the
+A node whose realized target is
+[physical](substrates.md#physical-machine-realization) makes this block consume
+`data-loss` on **apply**: the agent installer writes the release image to that
+node's disk, and that is the moment its existing content is lost. A cluster of
+virtual nodes consumes nothing here, because their disks are created by their
+realization and removed by its inverse. A physical node that no pre-boot proof
+covers refuses before registration, as [selection](#selection-and-refusal)
+states; an operation that froze one refuses its apply at execution, naming the
 node and directing the operator to destroy the operation and plan again, while
-its destroy and observation still run. Once that proof exists, a node whose
-realized target is [physical](substrates.md#physical-machine-realization) makes
-this block consume `data-loss` on **apply**: the agent installer writes the
-release image to that node's disk, and that is the moment its existing content
-is lost. A cluster of virtual nodes consumes nothing here, because their disks
-are created by their realization and removed by its inverse.
+its destroy and observation still run.
 
 **Resolution before boot.** The installer polls the cluster API from the
 controller, so before anything is booted the block proves that the controller
@@ -168,6 +167,10 @@ selection its controller needs, and the machine is powered on and polled to
 running. The media stays inserted: a live agent image is still being read after
 the node answers on the network, and removing it early corrupts the running
 installer.
+
+Not yet met: the per-node pre-boot target proof, so every physical node refuses
+and a virtual node boots without it; tracked as
+[backlog S2b](milestones/backlog.md#audit-follow-ups-2026-09).
 
 **Waiting.** The block waits for bootstrap completion and then for installation
 completion, through the same installer that built the image. Each wait is a
@@ -216,10 +219,8 @@ again requires this cluster's nodes to be destroyed and applied again.
 is left. The work area and the published image leave with the media block's own
 inverse, which the plan orders after this one. The installed cluster leaves with its nodes' disks, so this block
 removes nothing from a node and consumes no authorization of its own on
-removal. Physical nodes refuse before registration until the pre-boot target
-proof exists (backlog S2b), so what follows applies once it does: a cluster
-whose nodes are physical keeps running after its context is destroyed, exactly
-as a physically installed operating system does.
+removal. A cluster whose nodes are physical keeps running after its context is
+destroyed, exactly as a physically installed operating system does.
 
 **Unknown resolution.** Observation is read-only against the frozen request. A
 cluster answering with this operation's identity at the declared release, whole
@@ -231,25 +232,24 @@ a cluster answering with another identity and a node running while nothing
 answers, because the first belongs to another installation and the second may
 be installing now.
 
-**Quiescence.** This block owns published boot media and controller-side state
-that a running cluster does not read, so it is quiescent whenever the
-[removal gate](state-reconciliation.md#quiescence-before-removal) asks. A node
-still running is probed by its own Machine block in the same removal.
-
-**Cancellation.** Cancellation stops authorization of new effects and
-terminates the owned process tree. An installation already under way continues
-on the nodes; the attempt becomes unknown and is resolved by observing the
-cluster.
+**Quiescence and cancellation.** This block owns published boot media and
+controller-side state that a running cluster does not read, so its quiescence
+follows the Machines under the
+[removal gate](state-reconciliation.md#quiescence-before-removal). An
+installation already under way continues on the nodes after cancellation; the
+attempt becomes unknown and is resolved by observing the cluster.
 
 ## Adapter boundary
 
 Installation crosses the
 [Go/Ansible boundary](architecture.md#go-and-ansible-responsibility-boundary)
 through one fixed entrypoint per block and operation, on the Machine the
-artifact server is placed on, composing each substrate's boot and proof task
-files by fixed qualified name. Go freezes the request, locates the exact
-installer executable, authorizes each phase and validates the returned evidence
-strictly. The adapter substitutes bound material into the installer inputs,
-invokes the installer with exact argument vectors, and returns bounded
-structured evidence. No pull secret, private key or captured credential enters
-an argument, an environment variable, the evidence or a log.
+artifact server is placed on, under
+[the adapter result protocol](architecture.md#the-adapter-result-protocol) and
+the [process](security.md#process-boundary) and
+[Secret-material](security.md#sensitive-material) rules, composing each
+substrate's boot task file by fixed qualified name. Go locates
+the exact installer executable; the adapter substitutes bound material into the
+installer inputs and invokes the installer with exact argument vectors. No pull
+secret, private key or captured credential enters an argument, an environment
+variable, the evidence or a log.

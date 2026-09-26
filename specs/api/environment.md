@@ -22,7 +22,7 @@ Environment fields emit in this order:
 | `spec.downloads` | object | no | source-specific | Closed download-mirror policy below. |
 | `spec.dependencyVersions` | object | no | `latest` at apply | Version intent for the prerequisites this Environment controller stage installs; closed shape below. |
 | `spec.controller` | object | yes | — | Required controller Machine selection below. |
-| `spec.lifecycle` | object | no | — | Offline-rescue input; the declaration exposes no lifecycle command. |
+| `spec.lifecycle` | object | no | — | Offline-rescue input; admitted and validated, consumed by no lifecycle. |
 
 Omitted optional arrays remain omitted unless their owning rule declares a
 materialized default. Authored arrays reject duplicate entries by their
@@ -65,15 +65,15 @@ client. Supporting Python wheels and native package dependencies are resolved
 as a complete compatible closure; they are not individually configurable.
 An incompatible or unavailable exact request fails with a dependency
 diagnostic rather than silently substituting another root version.
-The controller adapter requires Ansible Core 2.19 or newer; the host
-prerequisite that supplies it is prepared by setup, which always resolves
-latest stable.
+The controller adapter requires Ansible Core 2.19 or newer, a
+[host prerequisite](../controller.md#supported-host-and-dependency-selection)
+no Environment versions.
 
 OpenShift/OKD installer and client versions remain tied to the target cluster's
 declared release. `openshift-install`, `oc` and `kubectl` are not override keys.
 `virtctl` defaults to upstream latest; declare an explicit version when the
-target virtualization installation requires a particular client. Setup does
-not infer its version from a running target cluster.
+target virtualization installation requires a particular client. No version
+is inferred from a running target cluster.
 
 For example:
 
@@ -86,12 +86,10 @@ spec:
 ```
 
 These fields follow the normal `defaults.Environment` inheritance rules.
-The controller stage resolves `latest` only when no retained resolution serves
-the declared intent; a serving resolution is reused without checking for newer
-releases, so moving a `latest` dependency forward means declaring the newer
-release here. An incomplete attempt retries its recorded exact selection
-without resolving new versions. Preflight checks retained dependencies by
-presence and never refreshes them.
+Resolution, retention, retry and reuse follow
+[the controller stage](../controller.md#the-controller-stage):
+a serving retained resolution is reused as frozen, so moving a `latest`
+dependency forward means declaring the newer release here.
 
 ## Domains
 
@@ -137,14 +135,15 @@ unused declared sites are valid and silent.
 ## Resource and cluster selection
 
 `spec.resources` refines the YAML universe acquired through the CLI and
-discovered under [the API input rules](../api.md#environment-directory-and-selected-state):
+discovered under [the API input rules](input.md#discovery):
 
 - every value is non-empty, has no surrounding whitespace, is relative to the
   Environment file, and remains within that file's directory after cleaning;
 - a value names a lowercase `.yaml`/`.yml` file or a directory containing at
   least one discoverable such file; skipped directories, reserved payload
-  roots, and their descendants from `api.md` are outside this universe, and
-  directory traversal and selected-file ordering are lexical;
+  roots, and their descendants from [discovery](input.md#discovery) are
+  outside this universe, and directory traversal and selected-file ordering
+  are lexical;
 - the Environment file is always selected;
 - a listed YAML file is selected as a complete multi-document stream;
 - a listed file or directory must not be a symlink, descendant directory
@@ -164,13 +163,13 @@ byte-order mark, carriage return, missing or additional LF, or any other
 leading, trailing, or internal whitespace is invalid. The directory segment,
 marker content, and `ClusterAddon.metadata.name` must be identical.
 
-Markers obey [input ceilings and processing order](../api.md#fixed-input-ceilings).
+Markers obey [input ceilings and processing order](input.md#fixed-input-ceilings).
 Open each relative to its held verified sibling directory with no-follow
 semantics; the opened handle must prove a stable regular file with link count
 one. A missing, linked, non-regular, unstable, oversized, malformed,
 mismatched, duplicate or ambiguous marker grants no exception. It grants
 selection only, never package authenticity or execution authority; see
-[the add-on package contract](../add-ons.md#package-standard).
+[the add-on boundary](../add-ons.md#trust-boundary).
 
 An excluded-file warning identifies its relative path, Bootwright object
 identities and safe recovery guidance under the
@@ -241,9 +240,10 @@ Defaults obey these rules in order:
 1. Read the authored defaults map from the selected Environment. Validate each
    entry against its kind's partial schema: field names, YAML types, scalar
    grammar/ranges still apply, but required record fields, discriminators, and
-   arms may be omitted in a fragment, except that an ArtifactServer fragment
-   containing `endpoints` must also state `management` to identify its endpoint
-   shape. Conflicting present arms and locally
+   arms may be omitted in a fragment, except where a kind requires a
+   discriminating field in its fragment, as
+   [ArtifactServer](infrastructure-services.md#artifactserver) does for
+   `endpoints`. Conflicting present arms and locally
    provable type violations remain errors. Recipient-dependent requirements
    and references are checked after application. An unused entry must still be
    a valid partial spec; it creates no object or retention edge by itself.
@@ -268,8 +268,9 @@ Defaults obey these rules in order:
    A valid explicit empty collection or source block wins completely.
 6. An authored discriminator or populated implementation arm selects the
    variant, using that union's own arm-population rules. An explicitly unset
-   value-shape arm, such as an empty/all-zero replicated pool block, does not
-   select a variant.
+   value-shape arm, such as an empty or all-zero
+   [replicated pool block](storage.md#replicated-protection), does not select
+   a variant.
    Defaults never introduce an alternative arm or change that selection.
    Compatible ordinary records within the selected arm may inherit missing
    fields. Without an authored selection, defaults may select one variant.
@@ -317,9 +318,9 @@ own expansion limits, canonical output, and immutable source provenance.
 | `helmMirror` | string | no | upstream source | Absolute HTTP(S) base URL for the resolved Helm release. |
 
 URLs require scheme and host and reject embedded credentials. These fields
-select download sources; they do not fill attributes on cluster objects.
-Setup qualifies HTTPS mirrors on the default port or port 443, without
-query strings or fragments. Helm archives reside directly under the base URL;
+select download sources; they do not fill attributes on cluster objects. A
+mirror is qualified only over HTTPS on the default port or port 443, without a
+query string or fragment. Helm archives reside directly under the base URL;
 OpenShift archives and `virtctl` binaries reside under `<base>/<exact-version>/`.
 The `virtctl` directory and filename include the release's `v` prefix.
 Publisher metadata determines versions and checksums even when a mirror supplies
@@ -399,8 +400,7 @@ Admission checks these declarations without inspecting the invoking host,
 opening runtime state or moving execution. The
 [Controller contract](../controller.md) defines setup and verified host
 binding; [Architecture](../architecture.md#controller-host-and-local-services)
-owns local-effect boundaries. Availability follows [milestones](../milestones.md).
-The former Environment fields
+owns local-effect boundaries. The former Environment fields
 `spec.proxy`, `spec.infraComponents`, `spec.registries`,
 `spec.componentImages`, and `spec.trustedCAs` remain unknown. Registry policy,
 image pins and service connection facts stay with their owning consumers and
@@ -423,9 +423,10 @@ contains exactly these required fields in order:
 | `artifactServerEndpoint` | object | Required `{serverRef, endpointRef}` selecting a persistent managed ArtifactServer directly; both references are required. |
 
 The selected artifact server must run on a Machine with `os.provided: true` so
-it remains reachable after managed machines shut down. A selected graph with a
-bare-metal Machine whose OS is not provided requires this complete rescue
-declaration before a fresh apply. Validation checks the declaration and refs.
+it remains reachable after managed machines shut down. Validation checks the
+declaration and its references. No lifecycle yet requires or consumes the
+declaration: whether it becomes a requirement, a refusal or is retired is an
+open owner decision, recorded in [backlog A6](../milestones/backlog.md#audit-follow-ups-2026-09).
 
 ## Aggregate invariants and read-only boundary
 

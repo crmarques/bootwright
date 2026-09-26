@@ -655,7 +655,8 @@ local setup, inspection and host-evidence requirements:
   `access.local` and controller selection cannot substitute for that evidence.
 - Workspace owns any durable binding between a context and its verified
   controller host, following the
-  [binding and publication contract](contexts.md#controller-relationship-and-host-binding).
+  [binding](contexts.md#controller-relationship-and-host-binding) and
+  [publication](contexts/controller-record.md#publication-and-recovery) contracts.
   Desired state never supplies a storage-root override or runtime identity token.
 - [Infrastructure services](infrastructure-services.md) own local service
   effects, their host reservations and their readiness, replay and inverse
@@ -768,7 +769,7 @@ contacting a managed remote component belongs inside Ansible.
 
 Operator-supplied automation and add-on package content are not internal
 adapters. A schema declaration or package origin grants no execution authority.
-[The add-on host contract](add-ons.md#versioned-host-interface) permits a
+[The custom-code rule](security.md#custom-code) permits a
 qualified Bootwright-owned driver to enter only a pinned embedded adapter;
 package-carried executable content remains ineligible.
 
@@ -904,7 +905,7 @@ silently selecting another implementation. Recovery follows
 
 For an add-on, implementation selection also binds the exact package, catalog
 snapshot, driver, and payload manifest defined by
-[add-ons.md](add-ons.md#package-standard). Package discovery never replaces
+[the add-ons design](deferred/add-ons-design.md#package-standard). Package discovery never replaces
 the allowlisted registry or introduces executable authority at runtime.
 
 ## Data, state, and effects
