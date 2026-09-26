@@ -30,6 +30,49 @@ func TestLogOpensBeforeItsEffectAndReportsFailure(t *testing.T) {
 	}
 }
 
+// A failed write leaves a gap, so nothing is appended past it once the cause
+// clears, not even the truncation marker closing would otherwise add. A record
+// that could not be stamped is as lost as one the area refused.
+func TestAFailedLogWriteIsSticky(t *testing.T) {
+	for name, fail := range map[string]func(log *Log, area *memoryArea) (heal func()){
+		"the area refuses it": func(log *Log, area *memoryArea) func() {
+			area.fail["append "+log.Path()] = errors.New("no space")
+			return func() { delete(area.fail, "append "+log.Path()) }
+		},
+		"it cannot be stamped": func(log *Log, _ *memoryArea) func() {
+			stamp := log.stamp
+			log.stamp = func() (string, error) { return "", errors.New("no clock") }
+			return func() { log.stamp = stamp }
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			store, area := newStore(t)
+			target := OperationLogPath("op-" + strings.Repeat("ab", 16))
+			log, err := store.OpenLog(ctx, target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			log.dropped = 1
+			heal := fail(log, area)
+			if err := log.Append(ctx, LogRecord{Event: "lost"}); err == nil || !log.Failed() {
+				t.Fatalf("a failed write = %v, failed %t", err, log.Failed())
+			}
+			heal()
+			written := string(area.files[target])
+			if err := log.Append(ctx, LogRecord{Event: "after"}); err == nil {
+				t.Fatal("a log accepted a record after a failed write")
+			}
+			if err := log.Close(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if string(area.files[target]) != written {
+				t.Fatalf("a failed log was written past its gap: %s", area.files[target])
+			}
+		})
+	}
+}
+
 func TestLogRecordsAreBoundedAndSanitized(t *testing.T) {
 	ctx := context.Background()
 	store, area := newStore(t)

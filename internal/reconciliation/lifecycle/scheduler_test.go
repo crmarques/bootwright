@@ -480,7 +480,7 @@ func TestFailedBlocksNamingOneResourceAreRetriedOneAtATime(t *testing.T) {
 		t.Fatal(err)
 	}
 	states := map[string]reconciliation.BlockState{"alpha": reconciliation.BlockFailed, "bravo": reconciliation.BlockFailed}
-	run := Service{options: Options{Concurrency: 4}}.newScheduler(nil, nil, bundle{}, operationstore.Operation{}, plan, states, nil, nil)
+	run := Service{options: Options{Concurrency: 4}}.newScheduler(nil, nil, bundle{}, nil, operationstore.Operation{}, plan, states, nil, nil)
 	retried, _, ok := run.next()
 	if !ok || retried.ID != "alpha" {
 		t.Fatalf("the first retry = %q (%t)", retried.ID, ok)

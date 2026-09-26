@@ -343,7 +343,7 @@ bound their trees.
 | Retained [controller bundle namespaces](contexts/controller-record.md#bounds) | 16 | `maxControllerBundles` in `internal/workspace/contextfs/controller_bundles_linux_amd64.go` |
 | Lifecycle operations one context retains | 4096 | `MaxOperations` in `internal/reconciliation/operationstore/records.go` |
 | One lifecycle adapter invocation | 2 hours | `invocationTimeout` in `internal/reconciliation/ansiblerunner/process_linux_amd64.go` |
-| One controller Ansible run: setup, its recovery or a controller-stage client installation | 10 minutes | none yet: the literal deadline `runProcess` sets in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
+| One controller Ansible run: setup, its recovery or a controller-stage client installation | 10 minutes | `runTimeout` in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
 
 `TestDocumentedBoundsMatchCode` compares each value with its code.
 

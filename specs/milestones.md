@@ -250,7 +250,7 @@ N and L items.
 
 | Outcome | Owner and outcome | Requires | Definition and exit evidence |
 | --- | --- | --- | --- |
-| M1i — GitOps handoff gate (audit G4) | State reconciliation and CLI: a derived, effect-free `status` handoff section whose [predicate](state-reconciliation.md#bootstrap-completion-and-gitops-readiness) uses facts the code has: the apply is done, every planned block is done, no unresolved `unknown`, no durable fault. | M1h, M5a, M4a | **Needs definition:** whether block completion discharges frozen readiness and access requirements; the log fault is unset until S10. Status goldens for ready and each unready reason. |
+| M1i — GitOps handoff gate (audit G4) | State reconciliation and CLI: a derived, effect-free `status` handoff section whose [predicate](state-reconciliation.md#bootstrap-completion-and-gitops-readiness) uses facts the code has: the apply is done, every planned block is done, no unresolved `unknown`, no durable fault. | M1h, M5a, M4a | **Needs definition:** whether block completion discharges frozen readiness and access requirements, and how a completed apply whose last write latched the log fault restores it short of a destroy. Status goldens for ready and each unready reason. |
 | M2a — OpenShift/OKD native files | Container cluster and Native artifacts: `render installer` writes M4a's installer inputs as a standalone artifact. | M1e, M4a | N1 to N3; non-disclosure and release goldens. |
 | M2b — Ceph native files | Storage and Native artifacts: one release-specific file set. | M1e, N3 | N5; qualified schemas and goldens. |
 | M3 — Ceph-pool script | Storage and Native artifacts: one deterministic pool script. | M1e | N4; replay and goldens, no execution. |

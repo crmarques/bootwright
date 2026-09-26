@@ -39,7 +39,7 @@ func documentedBounds() []documentedBound {
 		{"specs/contexts/controller-record.md", "There are at most %s retained bundle", bundles, "maxControllerBundles"},
 		{contexts, "| Lifecycle operations one context retains | %s |", operations, "MaxOperations"},
 		{contexts, "| One lifecycle adapter invocation | %s |", lifecycleRun, "invocationTimeout"},
-		{contexts, "| One controller Ansible run: setup, its recovery or a controller-stage client installation | %s |", setupRun, "runProcess()"},
+		{contexts, "| One controller Ansible run: setup, its recovery or a controller-stage client installation | %s |", setupRun, "runTimeout"},
 	}
 }
 
