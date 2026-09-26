@@ -202,7 +202,7 @@ func (c Capability) Destroy(ctx context.Context, execution lifecycle.Execution) 
 
 func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.Result, error) {
 	unknown := lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}
-	request, marker, err := c.prepare(ctx, execution)
+	request, marker, err := c.prepare(ctx, execution, operation)
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
@@ -239,7 +239,7 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 // marker and one powered on without any.
 func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
-	request, marker, err := c.prepare(ctx, execution)
+	request, marker, err := c.prepare(ctx, execution, "observe")
 	if err != nil {
 		return unknown, err
 	}
@@ -263,7 +263,7 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 
 // prepare decodes the frozen request and derives the exact marker bytes this
 // attempt proves, which name the request digest the plan froze.
-func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution) (Request, []byte, error) {
+func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution, operation string) (Request, []byte, error) {
 	if err := ctx.Err(); err != nil {
 		return Request{}, nil, err
 	}
@@ -274,11 +274,36 @@ func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution) 
 	if err != nil {
 		return Request{}, nil, err
 	}
+	if operation == "apply" {
+		if err := refusedContinuation(request); err != nil {
+			return Request{}, nil, err
+		}
+	}
 	marker, err := MarkerFor(request, execution.Block.RequestDigest)
 	if err != nil {
 		return Request{}, nil, err
 	}
 	return request, marker, nil
+}
+
+// refusedContinuation says why this executable does not apply a request an
+// earlier executable froze, or nothing when it would plan that request itself.
+// Planning refuses a physical target and a private publication before
+// registration, but an operation registered before that refusal still carries
+// one, and an apply performs exactly what was frozen. A destroy and an
+// observation are never refused: the one takes back published content and the
+// other reads.
+func refusedContinuation(request Request) error {
+	machine := "Machine/" + request.Identity.Object
+	remediation := "run bootwright destroy to end this operation, then plan it again under this executable"
+	if request.Target.Physical {
+		return refusal("lifecycle.state", "this operation froze a physical installation of "+machine+", which this executable refuses", remediation)
+	}
+	if request.Private != nil {
+		return refusal("lifecycle.state", "this operation froze a private publication for "+machine+
+			" that the publicly served installer image would expose, which this executable refuses", remediation)
+	}
+	return nil
 }
 
 func (c Capability) run(ctx context.Context, execution lifecycle.Execution, operation string, request Request, marker []byte) (lifecycle.RunResult, error) {

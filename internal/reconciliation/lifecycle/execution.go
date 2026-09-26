@@ -51,20 +51,36 @@ type transition struct {
 	release   []string
 	states    map[string]reconciliation.BlockState
 	selection reconciliation.StageSelection
-	// replaced is the incomplete operation a fresh removal takes the place of,
+	// basis is the durable state this transition was planned from. For a fresh
+	// removal it is the incomplete operation the removal takes the place of,
 	// which is the context's current operation. It is not always source: a
 	// removal that replaces a failed removal inherits that one's apply as its
 	// source while replacing the removal itself.
-	replaced replacement
+	basis basis
 }
 
-// replacement is the durable state a fresh removal was planned from. The
-// decision is taken under the shared lock and the effects run under the
-// exclusive one, so the removal re-proves this before it does anything.
-type replacement struct {
+// basis is the durable state a transition was planned from: the context's
+// current operation, its state and its block states, or no operation at all.
+// The decision is taken under the shared lock and the effects run under the
+// exclusive one, so the transition re-proves this before it does anything.
+type basis struct {
 	operation string
 	state     reconciliation.OperationState
 	blocks    map[string]reconciliation.BlockState
+	// revision and input are the input revision and digest a fresh apply
+	// compiled its plan from. Every other transition plans from frozen records
+	// rather than from the input, so it leaves them empty.
+	revision string
+	input    string
+}
+
+// describe names the operation a basis holds and that operation's state, in
+// the words a refusal reports them with.
+func (b basis) describe() string {
+	if b.operation == "" {
+		return "no operation"
+	}
+	return "operation " + b.operation + " (" + string(b.state) + ")"
 }
 
 func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextName string, selection reconciliation.StageSelection, authorizations []string, skipConfirmation, borrowed bool) (*OperationResult, error) {
@@ -196,7 +212,7 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 			}
 			decided.release = applied.Bindings
 		}
-		return decided, nil
+		return plannedFrom(decided, operation, states), nil
 	}
 	if operation.Verb == reconciliation.Apply {
 		if verb == reconciliation.Apply {
@@ -212,12 +228,16 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 		if err != nil {
 			return transition{}, err
 		}
-		return replacing(decided, operation, states), nil
+		return plannedFrom(decided, operation, states), nil
 	}
 	if verb == reconciliation.Destroy {
 		return transition{noop: true, verb: verb, operation: operation, plan: frozen, states: states}, nil
 	}
-	return s.freshApply(ctx, view, selection)
+	decided, err := s.freshApply(ctx, view, selection)
+	if err != nil {
+		return transition{}, err
+	}
+	return plannedFrom(decided, operation, states), nil
 }
 
 // unchangedInput reports whether this context still holds exactly the desired
@@ -253,7 +273,9 @@ func settled(identity ContextIdentity, decided transition) *OperationResult {
 
 // refuseStageBoundary refuses before any effect when the selected stages admit
 // no work. It names the stage that would unblock the operation, so a selection
-// mistake is corrected rather than silently doing nothing.
+// mistake is corrected rather than silently doing nothing. While any block is
+// failed, the work is the retry the scheduler would choose, so a selection
+// that admits none of the failed blocks refuses whichever one comes first.
 func refuseStageBoundary(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.StageSelection) error {
 	for _, block := range plan.Blocks {
 		switch states[block.ID] {
@@ -265,7 +287,7 @@ func refuseStageBoundary(plan reconciliation.Plan, states map[string]reconciliat
 		if states[block.ID] != reconciliation.BlockFailed {
 			continue
 		}
-		if selection.Selects(block.Stage) {
+		if _, _, ok := retryCandidate(plan, states, selection, nil); ok {
 			return nil
 		}
 		return failure("lifecycle.stage",
@@ -302,7 +324,10 @@ func (s Service) freshApply(ctx context.Context, view View, selection reconcilia
 	if err := refuseStageBoundary(plan, nil, selection); err != nil {
 		return transition{}, err
 	}
-	return transition{fresh: true, verb: reconciliation.Apply, plan: plan, binding: binding, selection: selection}, nil
+	return transition{
+		fresh: true, verb: reconciliation.Apply, plan: plan, binding: binding, selection: selection,
+		basis: basis{revision: view.Identity().Revision, input: inputDigest(view)},
+	}, nil
 }
 
 // supersedable reports whether a fresh removal may replace an incomplete
@@ -331,7 +356,7 @@ func (s Service) supersede(ctx context.Context, view View, store OperationStore,
 		if err != nil {
 			return transition{}, err
 		}
-		return replacing(decided, operation, states), nil
+		return plannedFrom(decided, operation, states), nil
 	}
 	// A superseded removal is continued by nothing, so its own binding is
 	// released beside the apply's once the replacement completes. The one it
@@ -358,14 +383,15 @@ func (s Service) supersede(ctx context.Context, view View, store OperationStore,
 	if err != nil {
 		return transition{}, err
 	}
-	return replacing(decided, operation, states), nil
+	return plannedFrom(decided, operation, states), nil
 }
 
-// replacing records the durable state a fresh removal was planned from. The
+// plannedFrom records the durable state a transition was planned from. The
 // decision is read under the shared lock and the effects run under the
-// exclusive one, so the removal re-proves this before it registers.
-func replacing(decided transition, operation operationstore.Operation, states map[string]reconciliation.BlockState) transition {
-	decided.replaced = replacement{operation: operation.ID, state: operation.State, blocks: maps.Clone(states)}
+// exclusive one, so the transition re-proves this before it registers. It
+// keeps the input a fresh apply recorded compiling its plan.
+func plannedFrom(decided transition, operation operationstore.Operation, states map[string]reconciliation.BlockState) transition {
+	decided.basis.operation, decided.basis.state, decided.basis.blocks = operation.ID, operation.State, maps.Clone(states)
 	return decided
 }
 
@@ -640,10 +666,14 @@ const (
 // is read-only, so a removal that cannot prove one leaves the context exactly
 // as it found it.
 func (s Service) proveRemovable(ctx context.Context, tx Transaction, store OperationStore, approved bundle, decided transition, material map[string]secrets.Material) error {
-	if decided.replaced.operation == "" {
+	if decided.basis.operation == "" {
 		return nil
 	}
-	replaced, frozen, states, err := s.verifyReplacement(ctx, store, decided.replaced)
+	replaced, frozen, states, err := s.verifyBasis(ctx, store, decided.basis, func(basis) error {
+		return failure("lifecycle.state",
+			"the operation this removal was planned from is no longer the one the context holds",
+			"repeat the removal to plan it from the operation the context holds now")
+	})
 	if err != nil {
 		return err
 	}
@@ -668,42 +698,67 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 	return nil
 }
 
-// verifyReplacement proves the context still holds the exact operation this
-// removal was planned from. Anything else means another invocation advanced the
-// context between the decision and this transaction, so the frozen plan waiting
-// to register may no longer describe what the context owns.
-func (s Service) verifyReplacement(ctx context.Context, store OperationStore, planned replacement) (operationstore.Operation, reconciliation.Plan, map[string]reconciliation.BlockState, error) {
-	moved := func() (operationstore.Operation, reconciliation.Plan, map[string]reconciliation.BlockState, error) {
-		return operationstore.Operation{}, reconciliation.Plan{}, nil, failure("lifecycle.state",
-			"the operation this removal was planned from is no longer the one the context holds",
-			"repeat the removal to plan it from the operation the context holds now")
+// verifyBasis proves the context still holds exactly the durable state a
+// transition was planned from, and otherwise returns what refuse makes of the
+// state it holds instead. Anything else means another invocation advanced the
+// context between the decision and this transaction, so the plan waiting to
+// register may no longer describe what the context owns. A context that held
+// no operation must still hold none.
+func (s Service) verifyBasis(ctx context.Context, store OperationStore, planned basis, refuse func(current basis) error) (operationstore.Operation, reconciliation.Plan, map[string]reconciliation.BlockState, error) {
+	fail := func(err error) (operationstore.Operation, reconciliation.Plan, map[string]reconciliation.BlockState, error) {
+		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
 	}
 	index, err := store.Index(ctx)
 	if err != nil {
-		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
+		return fail(err)
 	}
-	if index.Current != planned.operation {
-		return moved()
+	current := basis{operation: index.Current}
+	if current.operation == "" {
+		if planned.operation != "" {
+			return fail(refuse(current))
+		}
+		return operationstore.Operation{}, reconciliation.Plan{}, nil, nil
 	}
-	operation, err := store.ReadOperation(ctx, planned.operation)
+	operation, err := store.ReadOperation(ctx, current.operation)
 	if err != nil {
-		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
+		return fail(err)
 	}
-	if operation.State != planned.state {
-		return moved()
+	current.state = operation.State
+	if current.operation != planned.operation || current.state != planned.state {
+		return fail(refuse(current))
 	}
 	frozen, err := store.ReadPlan(ctx, operation.ID)
 	if err != nil {
-		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
+		return fail(err)
 	}
 	states, err := store.BlockStates(ctx, operation.ID, frozen)
 	if err != nil {
-		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
+		return fail(err)
 	}
+	current.blocks = states
 	if !maps.Equal(states, planned.blocks) {
-		return moved()
+		return fail(refuse(current))
 	}
 	return operation, frozen, states, nil
+}
+
+// contextChanged refuses a continuation or a fresh apply whose basis moved
+// after it was presented and confirmed. It names what the command planned from
+// and what the context holds now, because repeating the command decides again
+// from the latter, which is the only plan it may register.
+func contextChanged(verb reconciliation.Verb, planned, current basis) error {
+	message := "the context changed after this command read it: it was planned from " + planned.describe() +
+		", and the context now holds " + current.describe()
+	switch {
+	case current.operation != planned.operation || current.state != planned.state:
+	case !maps.Equal(current.blocks, planned.blocks):
+		message += " with different block states"
+	case current.revision != planned.revision:
+		message += " at input revision " + current.revision + " rather than " + planned.revision
+	default:
+		message += " with different input content"
+	}
+	return failure("lifecycle.state", message, "repeat bootwright "+string(verb)+" to plan from what the context holds now")
 }
 
 // recordResolved publishes what the resolutions proved about the replaced
@@ -876,13 +931,14 @@ func pendingRemains(plan reconciliation.Plan, states map[string]reconciliation.B
 	return false
 }
 
+// register publishes the operation this transition runs, or re-opens the one
+// it continues, once the durable state it was planned from is proved unchanged.
+// A fresh removal proved that before it resolved anything, in this same
+// transaction, and its resolutions are what may have moved that state since.
 func (s Service) register(ctx context.Context, tx Transaction, store OperationStore, decided transition, binding string) (operationstore.Operation, reconciliation.Plan, error) {
+	changed := func(current basis) error { return contextChanged(decided.verb, decided.basis, current) }
 	if !decided.fresh {
-		operation, err := store.ReadOperation(ctx, decided.operation.ID)
-		if err != nil {
-			return operationstore.Operation{}, reconciliation.Plan{}, err
-		}
-		plan, err := store.ReadPlan(ctx, operation.ID)
+		operation, plan, _, err := s.verifyBasis(ctx, store, decided.basis, changed)
 		if err != nil {
 			return operationstore.Operation{}, reconciliation.Plan{}, err
 		}
@@ -899,8 +955,19 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 	}
 	// A fresh apply is where a context claims its controller host. Binding
 	// precedes every reservation and effect, so an operation never leaves work
-	// behind on a host the context is not recorded against.
+	// behind on a host the context is not recorded against. Its plan was
+	// compiled from the input the decision read, so the input this transaction
+	// holds must be that one too, or the operation would register a plan that
+	// its recorded revision and digest do not describe.
 	if decided.verb == reconciliation.Apply {
+		if _, _, _, err := s.verifyBasis(ctx, store, decided.basis, changed); err != nil {
+			return operationstore.Operation{}, reconciliation.Plan{}, err
+		}
+		current := decided.basis
+		current.revision, current.input = tx.Identity().Revision, inputDigest(tx)
+		if current.revision != decided.basis.revision || current.input != decided.basis.input {
+			return operationstore.Operation{}, reconciliation.Plan{}, changed(current)
+		}
 		if err := s.establishBinding(ctx, tx, decided.binding.controller); err != nil {
 			return operationstore.Operation{}, reconciliation.Plan{}, err
 		}

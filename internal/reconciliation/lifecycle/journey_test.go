@@ -188,6 +188,9 @@ type testWorkspace struct {
 	// beforeMutation runs as the exclusive lock is taken, so a test can advance
 	// durable state exactly between a decision and the effects it authorized.
 	beforeMutation func()
+	// revision names the input the context holds now. A test that publishes
+	// another revision replaces it together with inputs, as an import does.
+	revision string
 }
 
 func (w *testWorkspace) view() *testView {
@@ -223,7 +226,7 @@ func (w *testWorkspace) MutateLifecycle(ctx context.Context, name string, callba
 type testView struct{ workspace *testWorkspace }
 
 func (v *testView) Identity() ContextIdentity {
-	return ContextIdentity{Name: testContextName, Revision: testRevision}
+	return ContextIdentity{Name: testContextName, Revision: v.workspace.revision}
 }
 func (v *testView) Inputs() desiredstate.Sources          { return v.workspace.inputs }
 func (v *testView) Controller() prerequisites.StorageView { return v.workspace.controller }
@@ -680,7 +683,7 @@ func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinitio
 		t.Fatal(err)
 	}
 	workspace := &testWorkspace{
-		area: newArea(), runArea: newArea(), evidence: pristine,
+		area: newArea(), runArea: newArea(), evidence: pristine, revision: testRevision,
 		inputs: desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{
 			desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte("kind: Environment\n")),
 		}},
@@ -2111,6 +2114,150 @@ func TestDestroyRefusesWhenTheOperationItReplacesMoved(t *testing.T) {
 	}
 }
 
+// A continuation is decided under the shared lock too. A removal another
+// invocation completed in between supersedes the operation it would continue,
+// so it refuses rather than resume work that removal already took back.
+func TestContinuationRefusesWhenTheContextChangedBeforeMutation(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.capability.outcomeFor = map[string]Result{"artifact-server-lab": {Outcome: reconciliation.OutcomeFailed}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("a failed block reported success")
+	}
+	h.capability.outcomeFor = nil
+	continued := currentOperation(t, h)
+	h.workspace.beforeMutation = func() {
+		h.workspace.beforeMutation = nil
+		if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	superseding := currentOperation(t, h)
+	requireContextChanged(t, err, "apply", "it was planned from operation "+continued+" (failed), "+
+		"and the context now holds operation "+superseding+" (done)")
+	if len(h.capability.applies) != 1 {
+		t.Fatalf("a stale continuation performed an effect: %v", h.capability.applies)
+	}
+	if superseding == continued {
+		t.Fatal("the removal that superseded the operation is not the one the context holds")
+	}
+	operation, err := h.service.store(h.workspace.view()).ReadOperation(context.Background(), continued)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if operation.State != reconciliation.OperationFailed {
+		t.Fatalf("a stale continuation reopened the superseded operation: %s", operation.State)
+	}
+}
+
+// A fresh apply is decided under the shared lock as well. An apply another
+// invocation registered in between now holds the context, and registering this
+// one over it would leave that operation's effects owned by nothing.
+func TestFreshApplyRefusesWhenTheContextChangedBeforeMutation(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	applied := ""
+	h.workspace.beforeMutation = func() {
+		h.workspace.beforeMutation = nil
+		if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+			t.Fatal(err)
+		}
+		applied = currentOperation(t, h)
+	}
+	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	requireContextChanged(t, err, "apply", "it was planned from no operation, "+
+		"and the context now holds operation "+applied+" (done)")
+	if len(h.capability.applies) != 1 || h.workspace.binds != 1 {
+		t.Fatalf("a stale apply performed work: applies %v, binds %d", h.capability.applies, h.workspace.binds)
+	}
+	if current := currentOperation(t, h); applied == "" || current != applied {
+		t.Fatalf("current operation = %q, want the one the other invocation registered, %q", current, applied)
+	}
+	if h.workspace.area.written("op-" + strings.Repeat("02", 16)) {
+		t.Fatal("a stale apply registered an operation")
+	}
+	// Only the refused apply's own binding is released; the registered one
+	// keeps the binding its operation owns.
+	if !slices.Equal(h.binder.released, []string{"bind-1"}) {
+		t.Fatalf("released = %v", h.binder.released)
+	}
+}
+
+// A continuation re-proves the block states it was planned from, not only
+// which operation is current and its state. Another invocation that continued
+// the same operation in between leaves it failed again, but at another block,
+// so the retry this command presented is no longer the one it would run.
+func TestContinuationRefusesWhenTheBlockStatesChangedBeforeMutation(t *testing.T) {
+	h := newHarness(t, "alpha", "bravo")
+	h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeFailed}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("a failed block reported success")
+	}
+	continued := currentOperation(t, h)
+	h.workspace.beforeMutation = func() {
+		h.workspace.beforeMutation = nil
+		h.capability.outcomeFor = map[string]Result{"bravo": {Outcome: reconciliation.OutcomeFailed}}
+		if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+			t.Fatal("a failed block reported success")
+		}
+	}
+	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	requireContextChanged(t, err, "apply", "it was planned from operation "+continued+" (failed), "+
+		"and the context now holds operation "+continued+" (failed) with different block states")
+	if !slices.Equal(h.capability.applies, []string{"alpha", "alpha", "bravo"}) {
+		t.Fatalf("a stale continuation performed an effect: %v", h.capability.applies)
+	}
+	store := h.service.store(h.workspace.view())
+	frozen, err := store.ReadPlan(context.Background(), continued)
+	if err != nil {
+		t.Fatal(err)
+	}
+	states, err := store.BlockStates(context.Background(), continued, frozen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if states["alpha"] != reconciliation.BlockDone || states["bravo"] != reconciliation.BlockFailed {
+		t.Fatalf("a stale continuation changed the block states: %v", states)
+	}
+}
+
+// A fresh apply compiles its plan from the input the decision read. A revision
+// published in between is input that plan was never compiled from, so the
+// apply refuses rather than register it under the new revision and digest.
+func TestFreshApplyRefusesWhenTheInputChangedBeforeMutation(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	published := "rev-fedcba9876543210fedcba9876543210"
+	h.workspace.beforeMutation = func() {
+		h.workspace.beforeMutation = nil
+		h.workspace.revision = published
+		h.workspace.inputs = desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{
+			desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte("kind: Environment\nmetadata: {name: changed}\n")),
+		}}
+	}
+	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	requireContextChanged(t, err, "apply", "it was planned from no operation, "+
+		"and the context now holds no operation at input revision "+published+" rather than "+testRevision)
+	if len(h.capability.applies) != 0 || h.workspace.binds != 0 || len(h.workspace.reservations) != 0 {
+		t.Fatalf("a stale apply performed work: applies %v, binds %d, reservations %v",
+			h.capability.applies, h.workspace.binds, h.workspace.reservations)
+	}
+	if current := currentOperation(t, h); current != "" {
+		t.Fatalf("a stale apply registered operation %q", current)
+	}
+	if h.workspace.area.written("op-" + strings.Repeat("01", 16)) {
+		t.Fatal("a stale apply wrote operation records")
+	}
+	pristine, err := reconciliation.PristineEvidence().Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(h.workspace.evidence) != string(pristine) {
+		t.Fatalf("a stale apply projected evidence: %s", h.workspace.evidence)
+	}
+	if !slices.Equal(h.binder.released, []string{"bind-1"}) {
+		t.Fatalf("released = %v", h.binder.released)
+	}
+}
+
 // An incomplete removal is continued, never replaced by an apply.
 func TestApplyOverAnIncompleteDestroyStillRefuses(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
@@ -2133,6 +2280,21 @@ func TestApplyOverAnIncompleteDestroyStillRefuses(t *testing.T) {
 
 // currentOperation names the operation the context holds, read the way the
 // engine reads it.
+// requireContextChanged asserts the refusal a transition returns when the
+// context moved after the command read it, naming what it was planned from and
+// what the context holds now.
+func requireContextChanged(t *testing.T, err error, verb, moved string) {
+	t.Helper()
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+		reported[0].Remediation != "repeat bootwright "+verb+" to plan from what the context holds now" {
+		t.Fatalf("refusal = %+v", reported)
+	}
+	if want := "the context changed after this command read it: " + moved; reported[0].Message != want {
+		t.Fatalf("refusal message = %q, want %q", reported[0].Message, want)
+	}
+}
+
 func currentOperation(t *testing.T, h *harness) string {
 	t.Helper()
 	status, err := h.service.Status(context.Background(), StatusRequest{ContextName: "lab"})

@@ -15,9 +15,10 @@ func descriptorPath(fd int) string { return "/proc/self/fd/" + strconv.Itoa(fd) 
 // paths names where one invocation's material was placed for the client. An
 // absent descriptor is zero, which is never a material descriptor.
 type paths struct {
-	config     int
-	privateKey int
-	knownHosts int
+	config       int
+	identityFile int
+	privateKey   int
+	knownHosts   int
 }
 
 // fixedOptions are the client behaviors no session may vary. They remove every
@@ -39,8 +40,8 @@ var fixedOptions = []string{
 // pure so the vector a session runs is the vector a test can read.
 func arguments(session machine.Session, held paths) []string {
 	args := []string{"-F", descriptorPath(held.config)}
-	if session.IdentityFile != "" {
-		args = append(args, "-i", session.IdentityFile)
+	if held.identityFile != 0 {
+		args = append(args, "-i", descriptorPath(held.identityFile))
 	}
 	if held.privateKey != 0 {
 		args = append(args, "-i", descriptorPath(held.privateKey))

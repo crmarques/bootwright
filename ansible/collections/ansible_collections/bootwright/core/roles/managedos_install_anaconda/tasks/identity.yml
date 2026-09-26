@@ -2,7 +2,20 @@
 # The identity operation belongs to the substrate that realized the machine.
 # Both bindings are fixed role task files selected by the frozen request's own
 # substrate, so authored data can never choose which one runs, and every input
-# is passed explicitly rather than inherited from a shared fact.
+# is passed explicitly rather than inherited from a shared fact. A channel with
+# neither binding refuses here: falling through both would read as a machine
+# that never answered, which is what lets an installation proceed.
+- name: Refuse an identity channel this installation has no binding for
+  ansible.builtin.assert:
+    that:
+      - bootwright_os_install_request.target.channel in ['guest-agent', 'delivered-key']
+    fail_msg: >-
+      Machine {{ bootwright_os_install_request.identity.object }} names identity
+      channel {{ bootwright_os_install_request.target.channel }}, which this
+      installation has no binding to read, so its identity was not read;
+      plan the installation again with this release
+    quiet: true
+
 - name: Read the machine through its hypervisor's channel
   ansible.builtin.include_role:
     name: bootwright.core.substrate_libvirt_machine

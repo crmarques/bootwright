@@ -10,6 +10,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -137,21 +138,32 @@ func TestInstallPlanWaitsForItsMediaAndItsNodes(t *testing.T) {
 
 // Installing a cluster of virtual nodes acknowledges no loss, because each
 // node's disks are created by its realization and removed by its inverse.
-// Installing onto operator-owned hardware is the moment its content is lost.
-func TestOnlyAPhysicalInstallationConsumesTheLossItCauses(t *testing.T) {
+// Installing onto operator-owned hardware would be the moment its content is
+// lost, and nothing proves each node before it is booted, so a cluster of
+// physical nodes plans nothing for either verb.
+func TestAVirtualInstallationConsumesNothingAndAPhysicalOneRefuses(t *testing.T) {
 	virtual := installPlan(t, singleNodeCatalog(), reconciliation.Apply)
 	if len(virtual.Definitions[0].Consumes) != 0 {
 		t.Fatalf("a virtual cluster consumes %v", virtual.Definitions[0].Consumes)
 	}
-	physical := installPlan(t, physicalCatalog(), reconciliation.Apply)
-	if !slices.Equal(physical.Definitions[0].Consumes, []string{reconciliation.AuthorizationDataLoss}) {
-		t.Fatalf("a physical cluster consumes %v", physical.Definitions[0].Consumes)
-	}
 	// A removal takes back the media it opened and nothing the machines hold,
 	// so it acknowledges nothing of its own.
-	removal := installPlan(t, physicalCatalog(), reconciliation.Destroy)
+	removal := installPlan(t, singleNodeCatalog(), reconciliation.Destroy)
 	if len(removal.Definitions[0].Consumes) != 0 {
 		t.Fatalf("a removal consumes %v", removal.Definitions[0].Consumes)
+	}
+	catalog := physicalCatalog()
+	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
+		_, err := NewInstall(nil).Plan(context.Background(), lifecycle.PlanInput{
+			Verb: verb, State: compilation.NewState(catalog, catalog, nil),
+			Controller: "controller", Context: lifecycle.ContextIdentity{Name: testContext},
+		})
+		if err == nil {
+			t.Fatalf("a physical cluster planned a %s", verb)
+		}
+		if code := refusalCode(t, err); code != "lifecycle.state" {
+			t.Fatalf("refusal = %s", code)
+		}
 	}
 }
 
@@ -227,6 +239,53 @@ func TestAbsentClientsRefuseBeforeBooting(t *testing.T) {
 	}
 	if len(runner.requests) != 0 {
 		t.Fatal("the adapter was invoked without its clients")
+	}
+}
+
+// An operation registered before physical nodes were refused still carries one
+// in its frozen request. Its apply refuses before the adapter boots anything,
+// naming the node, while its destroy and its observation still run, because
+// they boot nothing and are how the operator leaves that operation.
+func TestAFrozenPhysicalNodeRefusesOnlyItsApply(t *testing.T) {
+	execution, request := installExecution(t, singleNodeCatalog(), testDigest)
+	request.Nodes[0].Physical = true
+	canonical, err := request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution.Block.Request = canonical
+	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: installEvidence(t, testDigest, nil)}}
+	result, err := NewInstall(runner).Apply(context.Background(), execution)
+	if err == nil {
+		t.Fatal("an apply booted a frozen physical node")
+	}
+	if result.Outcome != reconciliation.OutcomeFailed {
+		t.Fatalf("outcome = %q", result.Outcome)
+	}
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+		reported[0].Message != "this operation froze Machine/sno-01 as a physical node of ContainerCluster/sno, which this executable refuses" {
+		t.Fatalf("refusal = %#v", reported)
+	}
+	if reported[0].Remediation != "run bootwright destroy to end this operation, then plan it again under this executable" {
+		t.Fatalf("remediation = %q", reported[0].Remediation)
+	}
+	if len(runner.requests) != 0 {
+		t.Fatal("a refused apply reached the adapter")
+	}
+	runner = &fakeRunner{result: lifecycle.RunResult{
+		Outcome: "changed",
+		Evidence: installEvidence(t, testDigest, func(e *InstallEvidence) {
+			e.Absent, e.Postcondition, e.Media = true, true, []string{}
+		}),
+	}}
+	if _, err := NewInstall(runner).Destroy(context.Background(), execution); err != nil || len(runner.requests) != 1 {
+		t.Fatalf("destroy of a frozen physical node = %v after %d invocations", err, len(runner.requests))
+	}
+	runner = &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: installEvidence(t, testDigest, nil)}}
+	observation, err := NewInstall(runner).Observe(context.Background(), execution)
+	if err != nil || observation.Effect != reconciliation.EffectCompleted {
+		t.Fatalf("observation of a frozen physical node = %+v (%v)", observation, err)
 	}
 }
 

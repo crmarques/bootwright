@@ -76,7 +76,10 @@ func (t *transaction) Reserve(ctx context.Context, name, environment string, con
 		runtime, makeErr := t.store.newDirectory(ctx, dir, "state")
 		if makeErr == nil {
 			data, _ := encodeRecord(reservation{Version: ReservationVersion, Name: name}, maxRecord)
-			makeErr = t.store.writeExclusive(ctx, runtime, "reservation.json", data)
+			// The registry does not yet record this directory's identity, so
+			// only its reservation lets a retry attribute it and record the
+			// identity deletion requires: an interrupted write keeps it.
+			_, makeErr = t.store.writeExclusiveIdentity(ctx, runtime, "reservation.json", data, true)
 			runtime.file.Close()
 		}
 		if makeErr != nil {

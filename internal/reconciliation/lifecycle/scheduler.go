@@ -72,14 +72,20 @@ func (s Service) observe(ctx context.Context, tx Transaction, store OperationSto
 	return err
 }
 
-func (s Service) newScheduler(tx Transaction, store OperationStore, approved bundle, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.StageSelection) *scheduler {
-	bound := s.options.Concurrency
-	if bound <= 0 {
-		bound = MaxRunningBlocks
+// Concurrency reports how many of an operation's blocks this service runs at
+// once: the bound composition gave it, or MaxRunningBlocks when it gave none.
+// It is what every scheduler the service creates is bounded by.
+func (s Service) Concurrency() int {
+	if s.options.Concurrency <= 0 {
+		return MaxRunningBlocks
 	}
+	return s.options.Concurrency
+}
+
+func (s Service) newScheduler(tx Transaction, store OperationStore, approved bundle, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.StageSelection) *scheduler {
 	return &scheduler{
 		service: s, tx: tx, store: store, approved: approved, operation: operation,
-		plan: plan, material: material, selection: selection, bound: bound,
+		plan: plan, material: material, selection: selection, bound: s.Concurrency(),
 		states: states, running: map[string]bool{}, worked: map[string]bool{},
 		held: map[string]string{}, causes: map[string]error{},
 		results: make(chan step, len(plan.Blocks)),
@@ -121,9 +127,10 @@ func (c *scheduler) admit(ctx context.Context) {
 // observed before anything else and admits nothing beside another observation,
 // because no retry, dependent block or removal may start while an effect's
 // outcome is unproved. A failed block is then the only retry candidate and
-// runs alone, because what follows it depends on it succeeding. Otherwise the
-// first startable block in frozen order runs, provided nothing already running
-// holds a resource it needs to itself.
+// runs alone, because what follows it depends on it succeeding: it waits for
+// everything in flight and starts only within the stage selection. Otherwise
+// the first startable block in frozen order runs, provided nothing already
+// running holds a resource it needs to itself.
 func (c *scheduler) next() (reconciliation.Block, int, bool) {
 	for index, block := range c.plan.Blocks {
 		if unproved(c.states[block.ID]) && !c.running[block.ID] && !c.worked[block.ID] {
@@ -134,13 +141,12 @@ func (c *scheduler) next() (reconciliation.Block, int, bool) {
 		return reconciliation.Block{}, 0, false
 	}
 	failed := func(state reconciliation.BlockState) bool { return state == reconciliation.BlockFailed }
-	for index, block := range c.plan.Blocks {
-		if failed(c.states[block.ID]) && !c.running[block.ID] && !c.worked[block.ID] {
-			return block, index, true
-		}
-	}
 	if c.anyState(failed) {
-		return reconciliation.Block{}, 0, false
+		block, index, ok := retryCandidate(c.plan, c.states, c.selection, c.worked)
+		if !ok || len(c.running) != 0 || !c.free(block) {
+			return reconciliation.Block{}, 0, false
+		}
+		return block, index, true
 	}
 	startable := reconciliation.Startable(c.plan, c.states, c.selection)
 	for index, block := range c.plan.Blocks {
@@ -148,6 +154,20 @@ func (c *scheduler) next() (reconciliation.Block, int, bool) {
 			continue
 		}
 		if slices.ContainsFunc(startable, func(ready reconciliation.Block) bool { return ready.ID == block.ID }) {
+			return block, index, true
+		}
+	}
+	return reconciliation.Block{}, 0, false
+}
+
+// retryCandidate chooses the failed block a retry may start: the first in
+// frozen order whose stage the selection admits and that this invocation has
+// not already worked. Admission and the refusal before registration both ask
+// it, so an operation never registers for a retry its scheduler would not
+// start, and a failed block outside the selection is never retried.
+func retryCandidate(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.StageSelection, worked map[string]bool) (reconciliation.Block, int, bool) {
+	for index, block := range plan.Blocks {
+		if states[block.ID] == reconciliation.BlockFailed && selection.Selects(block.Stage) && !worked[block.ID] {
 			return block, index, true
 		}
 	}

@@ -203,6 +203,52 @@ func TestUnsupportedNamesEveryProfileArmThisContractRefuses(t *testing.T) {
 	}
 }
 
+// A physical installation erases the disk it names, so a Machine that names
+// none by path refuses before registration rather than leaving the installer
+// to clear every disk the server holds. A wwn alone is admitted as a selector
+// but not yet derived into a device, so it refuses the same way.
+func TestAPhysicalInstallationWithoutANamedRootDeviceRefuses(t *testing.T) {
+	for name, hints := range map[string]api.Value{
+		"wwn only":        api.MapValue(text("wwn", "0x5000c500a1b2c3d4")),
+		"predicates only": api.MapValue(text("model", "PERC H755"), number("minSizeGigabytes", "400")),
+	} {
+		t.Run(name, func(t *testing.T) {
+			catalog := labCatalog(metalProvider(), server(hints))
+			if unsupported := Unsupported(catalog); !slices.Equal(unsupported, []string{"Machine/metal-01"}) {
+				t.Fatalf("unsupported = %v", unsupported)
+			}
+			_, _, err := Requests(catalog, "controller", testContext)
+			expectRefusal(t, err, "lifecycle.state")
+			remediation := diagnostics.Of(err)[0].Remediation
+			if !strings.Contains(remediation, "spec.os.install.rootDeviceHints.deviceName on Machine/metal-01") ||
+				!strings.Contains(remediation, "wwn-only selection is not yet supported") {
+				t.Fatalf("remediation = %q", remediation)
+			}
+		})
+	}
+}
+
+// A physical installation delivers its host key at a tokenized URL the
+// Kickstart names, and the Kickstart is implanted in an installer image served
+// without authentication. Until that delivery is private, every physical
+// installation refuses before registration, even one naming its root device.
+func TestAPhysicalInstallationRefusesWhileItsHostKeyWouldBePublic(t *testing.T) {
+	catalog := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"))))
+	if unsupported := Unsupported(catalog); !slices.Equal(unsupported, []string{"Machine/metal-01"}) {
+		t.Fatalf("unsupported = %v", unsupported)
+	}
+	_, _, err := Requests(catalog, "controller", testContext)
+	expectRefusal(t, err, "lifecycle.state")
+	reported := diagnostics.Of(err)[0]
+	if reported.Message != "a delivered host key would be readable from the publicly served installer image" {
+		t.Fatalf("message = %q", reported.Message)
+	}
+	if !strings.Contains(reported.Remediation, "Machine/metal-01") ||
+		!strings.Contains(reported.Remediation, "physical managed-OS installation is disabled until private delivery is repaired") {
+		t.Fatalf("remediation = %q", reported.Remediation)
+	}
+}
+
 func TestSelectionRefusesWhatItCannotDerive(t *testing.T) {
 	noKey := api.NewObject(api.Environment, "lab-rhel", api.Value{}, api.MapValue(
 		field("controller", api.MapValue(text("machineRef", "controller"))),

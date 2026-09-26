@@ -74,7 +74,9 @@ These shapes carry secret bytes or effects this contract does not prove.
 Publicly served content remains secret-free by construction; the one thing an
 installation may deliver confidentially is the host key it installs, through
 the [private path](#physical-installation) below, and every other secret-bearing
-arm stays refused until it is separately specified.
+arm stays refused until it is separately specified. That path, and with it
+every physical target, refuses before registration today; see
+[physical installation](#physical-installation).
 
 **Derived installation.** Planning derives the complete Kickstart from
 effective state alone: text mode; the accepted license; the install source;
@@ -85,15 +87,15 @@ prefix, the default route and the selected DNS servers, with the Machine's
 effective `fqdn` as hostname; a locked root account; the `bootwright` account
 with the public half of `remoteMachinesAccessKey` authorized and passwordless
 sudo; the named root disk from `rootDeviceHints` cleared and partitioned, or
-automatic partitioning when the Machine names none; the `minimal` environment,
-the profile's packages, and `qemu-guest-agent` on a Machine whose identity
-channel is the guest agent; the profile's enabled and disabled services;
-SELinux and firewall as selected; the profile's configured repositories; and a
-`%post` that writes the install marker, establishes the host key its identity
-channel requires, writes the sudoers and SSH daemon drop-ins, and removes every
-retained copy of the Kickstart. The marker is bounded JSON naming the context,
-Machine, profile, image digest and the request digest, and its content is
-frozen with the plan.
+automatic partitioning when a Machine its substrate created names none; the
+`minimal` environment, the profile's packages, and `qemu-guest-agent` on a
+Machine whose identity channel is the guest agent; the profile's enabled and
+disabled services; SELinux and firewall as selected; the profile's configured
+repositories; and a `%post` that writes the install marker, establishes the
+host key its identity channel requires, writes the sudoers and SSH daemon
+drop-ins, and removes every retained copy of the Kickstart. The marker is
+bounded JSON naming the context, Machine, profile, image digest and the
+request digest, and its content is frozen with the plan.
 
 What the `%post` does about the host key follows the
 [identity channel](substrates.md#identity-and-power-operations). For the guest
@@ -129,9 +131,13 @@ off. The proof runs at that moment rather than at planning time, because a plan
 proves intent and only an observation taken before the effect proves the
 target. It fails closed, and no authorization relaxes it: `data-loss`
 acknowledges that an installation destroys data and never selects what to
-destroy. The block then inserts the published image URL as the controller's
-virtual media, sets a one-time boot from it, powers the Machine on, and polls
-the power state to on, all through the
+destroy. A machine found running refuses on either substrate, because the proof
+never powers a machine off to satisfy itself. A machine its substrate created is
+then powered off through its controller, which narrows the window in which it
+was started after the proof; an operator-owned physical machine is never
+powered off by an installation. The block then inserts the published image
+URL as the controller's virtual media, sets a one-time boot from it, powers
+the Machine on, and polls the power state to on, all through the
 [identity and power operations](substrates.md#identity-and-power-operations).
 Anaconda installs unattended and powers the machine off when it is done, which
 is what lets the block eject the media and boot the installed system from disk
@@ -191,6 +197,17 @@ marker.
 
 ### Physical installation
 
+Every physical installation refuses before registration, naming its Machine,
+because a delivered host key would be readable from the publicly served
+installer image. The Kickstart names the tokenized private URL the key is
+fetched from, and `mkksiso` implants that Kickstart in the image published at
+`os/<machine>/install.iso`, which is served without authentication. An
+operation registered before this refusal still froze a physical target or a
+private publication, so its apply refuses at execution, naming the Machine and
+directing the operator to destroy the operation and plan again, while its
+destroy and observation still run. The rest of this section is the contract
+that repairing delivery (backlog S3b) restores.
+
 Installing a physical server differs from installing a virtual one in three
 ways, each following from the machine existing before Bootwright and outliving
 this context.
@@ -202,7 +219,10 @@ whatever it held, and the `clearpart` this installation performs is the moment
 that content is lost, so the block consumes `data-loss` on **apply**. Its
 destroy consumes nothing, because removing the published media takes back
 nothing from the machine. The authorization acknowledges already-planned loss;
-it selects no target and relaxes no proof.
+it selects no target and relaxes no proof. The erasure is confined to the disk
+`rootDeviceHints.deviceName` names: an installation that names none, including
+one selecting by `wwn` alone, refuses before registration, and the Kickstart
+renderer refuses rather than clearing every disk.
 
 **The target is proved inside the installer as well.** The controller-side
 proof above closes before the machine boots, and a machine can be re-cabled or
@@ -222,10 +242,13 @@ the private publication below, and installed before the machine first boots, so
 completion is proved against a key that was known in advance. Nothing is
 trusted on first sight.
 
-**Private publication.** The Kickstart cannot carry the private half of that
-key, because the installer image is served to a controller over a network and
-is secret-free by construction. The block therefore publishes the key pair
-beneath the artifact server's served root under the
+**Private publication.** This path refuses today, as stated at the start of
+this section: the Kickstart that names the token is implanted in the publicly
+served image, so the token protects nothing until delivery is repaired
+(backlog S3b). The Kickstart cannot carry the private half of that key,
+because the installer image is served to a controller over a network and is
+secret-free by construction. The block therefore publishes the key pair beneath
+the artifact server's served root under the
 [private consumer publication contract](infrastructure-services.md#private-consumer-publication),
 at a path whose final segment is an unguessable token minted by the attempt
 rather than frozen in the plan, and the Kickstart fetches it once, verifying
@@ -248,8 +271,12 @@ Installation crosses the
 [Go/Ansible boundary](architecture.md#go-and-ansible-responsibility-boundary)
 through one fixed entrypoint per operation on the artifact server's placement
 Machine, composing the substrate's power and identity task files by fixed
-qualified name. The adapter renders the frozen Kickstart, invokes `mkksiso`
-and the archive tooling with exact argument vectors, and returns bounded
-structured evidence. The fleet key's public half reaches it as a value; no
-private key, password or other secret enters the Kickstart, the image, the
-tree, the evidence or the logs.
+qualified name. The frozen target's substrate and identity channel select
+those task files. A substrate or channel that selects none refuses as soon as
+the entrypoint has loaded, before the tree, the image or any private material
+is published and before the machine is read, given media or booted, and each
+task file refuses it again itself. The adapter renders the frozen Kickstart,
+invokes `mkksiso` and the archive tooling with exact argument vectors, and
+returns bounded structured evidence. The fleet key's public half reaches it as
+a value; no private key, password or other secret enters the Kickstart, the
+image, the tree, the evidence or the logs.

@@ -36,13 +36,17 @@ func TestTheKeyArmOffersExactlyTheResolvedCredential(t *testing.T) {
 }
 
 // An offered key is preferred, and the declared credential stays behind it as
-// the fallback rather than being dropped.
+// the fallback rather than being dropped. The client reads the offered key
+// through the descriptor it was proved on, never by the name it was offered as.
 func TestAnOfferedKeyPrecedesTheDeclaredCredential(t *testing.T) {
 	with := session(machine.IdentityKey)
 	with.IdentityFile = "/home/operator/.ssh/id_ed25519"
-	got := strings.Join(arguments(with, paths{config: 3, privateKey: 4, knownHosts: 5}), " ")
-	if !strings.Contains(got, "-i /home/operator/.ssh/id_ed25519 -i /proc/self/fd/4 -o IdentitiesOnly=yes") {
+	got := strings.Join(arguments(with, paths{config: 3, identityFile: 4, privateKey: 5, knownHosts: 6}), " ")
+	if !strings.Contains(got, "-i /proc/self/fd/4 -i /proc/self/fd/5 -o IdentitiesOnly=yes") {
 		t.Fatalf("arguments = %s", got)
+	}
+	if strings.Contains(got, with.IdentityFile) {
+		t.Fatalf("the client was handed the offered key by name: %s", got)
 	}
 }
 

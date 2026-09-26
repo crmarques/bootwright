@@ -36,7 +36,7 @@ type Requirements struct {
 func Unsupported(catalog api.Catalog) []string {
 	var found []string
 	for _, cluster := range catalog.OfKind(api.ContainerCluster) {
-		if reason := unsupportedReason(catalog, cluster); reason != "" {
+		if reason, _ := unsupportedReason(catalog, cluster); reason != "" {
 			found = append(found, cluster.Identity())
 		}
 	}
@@ -46,30 +46,32 @@ func Unsupported(catalog api.Catalog) []string {
 
 // unsupportedReason says why one cluster is not installable, or nothing when
 // it is. It is the one place the supported shape is stated, so the refusal and
-// the derivation can never disagree about what this contract installs.
-func unsupportedReason(catalog api.Catalog, cluster api.Object) string {
+// the derivation can never disagree about what this contract installs. The
+// remediation is empty when correcting the cluster itself is the remedy, and
+// names the bound Machine when that Machine is what an operator changes.
+func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remediation string) {
 	spec := cluster.Spec()
 	if spec.Get("distribution", "type").Text() != "openshift" {
-		return "this executable installs no OKD cluster"
+		return "this executable installs no OKD cluster", ""
 	}
 	if spec.Get("distribution", "release", "version").Text() == "" {
-		return "a cluster pinned to a release image alone names no version for its installer to match"
+		return "a cluster pinned to a release image alone names no version for its installer to match", ""
 	}
 	if method := spec.Get("install", "method").Text(); method != "" && method != "agent" {
-		return "this executable installs no cluster by the declared method"
+		return "this executable installs no cluster by the declared method", ""
 	}
 	if mode := spec.Get("install", "mode").Text(); mode != "" && mode != "connected" {
-		return "this executable installs no disconnected cluster"
+		return "this executable installs no disconnected cluster", ""
 	}
 	if spec.Get("security", "fips", "enabled").Bool() {
-		return "a FIPS cluster needs an installer this executable does not publish"
+		return "a FIPS cluster needs an installer this executable does not publish", ""
 	}
 	if !spec.Get("install", "proxy").Has("direct") {
-		return "this executable installs no cluster through a proxy"
+		return "this executable installs no cluster through a proxy", ""
 	}
 	for _, path := range unsupportedSelections {
 		if spec.Has(path...) {
-			return "this executable does not install " + strings.Join(path, ".")
+			return "this executable does not install " + strings.Join(path, "."), ""
 		}
 	}
 	controllerMachine := controllerMachineName(catalog)
@@ -78,15 +80,27 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) string {
 		if !found {
 			continue
 		}
+		// A node Bootwright also installs an operating system on would have
+		// its one disk written by two installations.
+		if machine.Installed(bound) {
+			return "a declared node selects an install profile, so two installations would write its disk",
+				"remove spec.os.installProfileRef from " + bound.Identity() + " or drop it from " + cluster.Identity()
+		}
 		target, err := substrate.TargetFor(catalog, bound, cluster.Name(), controllerMachine)
 		if err != nil {
-			return "a declared node is on a substrate this executable does not realize"
+			return "a declared node is on a substrate this executable does not realize", ""
+		}
+		// Booting a physical node erases what it holds, and nothing proves the
+		// node is the declared machine, powered off, before it is booted.
+		if target.Physical {
+			return "physical cluster nodes are not supported until the installer proves each node before booting it",
+				bound.Identity() + " is physical; declare " + cluster.Identity() + " on virtual nodes"
 		}
 		if target.Controller.VirtualMedia.Trust == substrate.TrustImportCertificate {
-			return "importing a certificate into a management controller is not implemented"
+			return "importing a certificate into a management controller is not implemented", ""
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // controllerMachineName is the Machine this Environment selects as its
@@ -128,8 +142,11 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 	if !substrate.SafeSegment(name) {
 		return empty(refusal("lifecycle.state", "the cluster name is not a safe host identifier", "rename "+cluster.Identity()))
 	}
-	if reason := unsupportedReason(catalog, cluster); reason != "" {
-		return empty(refusal("lifecycle.state", reason, "correct "+cluster.Identity()))
+	if reason, remediation := unsupportedReason(catalog, cluster); reason != "" {
+		if remediation == "" {
+			remediation = "correct " + cluster.Identity()
+		}
+		return empty(refusal("lifecycle.state", reason, remediation))
 	}
 	needs := Requirements{}
 	nodes, err := nodeProjections(catalog, cluster, contextName, controllerMachine, &needs)

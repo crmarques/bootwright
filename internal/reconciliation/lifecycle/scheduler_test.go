@@ -12,6 +12,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
 // overlap watches which blocks are in flight together, so a test proves what
@@ -383,6 +384,115 @@ func TestAFailedBlockIsRetriedAloneAndOnlyOncePerInvocation(t *testing.T) {
 	if !slices.Equal(h.capability.applies, []string{"alpha", "alpha", "bravo", "charlie"}) &&
 		!slices.Equal(h.capability.applies, []string{"alpha", "alpha", "charlie", "bravo"}) {
 		t.Fatalf("applied %v", h.capability.applies)
+	}
+}
+
+// Two failed blocks are retried one at a time in frozen order, however many
+// blocks the bound would admit: a retry waits for everything in flight.
+func TestFailedBlocksAreRetriedOneAtATime(t *testing.T) {
+	h := scheduled(t, 4, definition("alpha"), definition("bravo"))
+	h.capability.errorFor = map[string]error{
+		"alpha": errors.New("alpha could not be served"),
+		"bravo": errors.New("bravo could not be served"),
+	}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("a failed operation succeeded")
+	}
+	h.capability.errorFor = nil
+	watch := newOverlap(2)
+	h.capability.hold, h.capability.released = watch.enter, watch.leave
+	finished := make(chan error, 1)
+	go func() {
+		_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+		finished <- err
+	}()
+	if first := watch.gather(t, 1); !slices.Equal(first, []string{"alpha"}) {
+		t.Fatalf("the first retry was %v, want the first failed block in frozen order", first)
+	}
+	watch.admit()
+	if second := watch.gather(t, 1); !slices.Equal(second, []string{"bravo"}) {
+		t.Fatalf("the second retry was %v", second)
+	}
+	watch.open()
+	if err := <-finished; err != nil {
+		t.Fatal(err)
+	}
+	if watch.together("alpha", "bravo") || watch.highest() != 1 {
+		t.Fatalf("two failed blocks were retried together: %d in flight at once", watch.highest())
+	}
+}
+
+// A failed block outside the stage selection is never retried, even by an
+// invocation that retries a failed block the selection admits. A selection
+// that admits no failed block refuses before any effect and names the stage of
+// the first one.
+func TestAFailedBlockOutsideTheSelectionIsNeverRetried(t *testing.T) {
+	first := definition("alpha")
+	first.Stage = reconciliation.StageInfraComponents
+	second := definition("bravo")
+	second.Stage = reconciliation.StageMachines
+	h := scheduled(t, 4, first, second)
+	h.capability.errorFor = map[string]error{
+		"alpha": errors.New("alpha could not be served"),
+		"bravo": errors.New("bravo could not be served"),
+	}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("a failed operation succeeded")
+	}
+	h.capability.errorFor = nil
+	result, _ := h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", Stages: []string{"machines"}, SkipConfirmation: true,
+	})
+	if retried := h.capability.applies[2:]; !slices.Equal(retried, []string{"bravo"}) {
+		t.Fatalf("a selection of machines retried %v", retried)
+	}
+	if result == nil {
+		t.Fatal("the retry reported no state")
+	}
+	states := map[string]string{}
+	for _, block := range result.Blocks {
+		states[block.ID] = block.State
+	}
+	if states["alpha"] != "failed" || states["bravo"] != "done" {
+		t.Fatalf("states = %v", states)
+	}
+	_, err := h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", Stages: []string{"substrates"}, SkipConfirmation: true,
+	})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.stage" || !strings.Contains(reported[0].Remediation, "infra-components") {
+		t.Fatalf("retry refusal = %+v", reported)
+	}
+	if len(h.capability.applies) != 3 {
+		t.Fatalf("a refused selection performed an effect: %v", h.capability.applies)
+	}
+}
+
+// Two failed blocks that will not share a resource are never retried together
+// either. No run of the engine leaves both failed, since they never run at the
+// same time and a failure admits nothing further, so the states are given to
+// admission directly.
+func TestFailedBlocksNamingOneResourceAreRetriedOneAtATime(t *testing.T) {
+	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{
+		exclusive("alpha", "path:/srv/tree"), exclusive("bravo", "path:/srv/tree"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	states := map[string]reconciliation.BlockState{"alpha": reconciliation.BlockFailed, "bravo": reconciliation.BlockFailed}
+	run := Service{options: Options{Concurrency: 4}}.newScheduler(nil, nil, bundle{}, operationstore.Operation{}, plan, states, nil, nil)
+	retried, _, ok := run.next()
+	if !ok || retried.ID != "alpha" {
+		t.Fatalf("the first retry = %q (%t)", retried.ID, ok)
+	}
+	// In flight exactly as start leaves it, without an attempt behind it.
+	run.running[retried.ID], run.worked[retried.ID], run.held["path:/srv/tree"] = true, true, retried.ID
+	if beside, _, ok := run.next(); ok {
+		t.Fatalf("%s was retried beside %s, which holds the resource it needs", beside.ID, retried.ID)
+	}
+	run.settle(step{block: retried.ID, state: reconciliation.BlockDone})
+	if following, _, ok := run.next(); !ok || following.ID != "bravo" {
+		t.Fatalf("the second retry = %q (%t)", following.ID, ok)
 	}
 }
 

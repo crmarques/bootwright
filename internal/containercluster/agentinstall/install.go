@@ -158,7 +158,7 @@ func (c InstallCapability) Destroy(ctx context.Context, execution lifecycle.Exec
 
 func (c InstallCapability) mutate(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.Result, error) {
 	unknown := lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}
-	request, err := c.prepare(ctx, execution)
+	request, err := c.prepare(ctx, execution, operation)
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
@@ -194,7 +194,7 @@ func (c InstallCapability) mutate(ctx context.Context, execution lifecycle.Execu
 // positive partial realization the next attempt converges.
 func (c InstallCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
-	request, err := c.prepare(ctx, execution)
+	request, err := c.prepare(ctx, execution, "observe")
 	if err != nil {
 		return unknown, err
 	}
@@ -233,14 +233,40 @@ func (InstallCapability) Unsupported(state *compilation.State) []string {
 	return Unsupported(state.Effective())
 }
 
-func (c InstallCapability) prepare(ctx context.Context, execution lifecycle.Execution) (InstallRequest, error) {
+func (c InstallCapability) prepare(ctx context.Context, execution lifecycle.Execution, operation string) (InstallRequest, error) {
 	if err := ctx.Err(); err != nil {
 		return InstallRequest{}, err
 	}
 	if c.runner == nil {
 		return InstallRequest{}, refusal("lifecycle.state", "the installation adapter is not configured", "")
 	}
-	return DecodeInstallRequest(execution.Block.Request)
+	request, err := DecodeInstallRequest(execution.Block.Request)
+	if err != nil {
+		return InstallRequest{}, err
+	}
+	if operation == "apply" {
+		if err := refusedContinuation(request); err != nil {
+			return InstallRequest{}, err
+		}
+	}
+	return request, nil
+}
+
+// refusedContinuation says why this executable does not apply a request an
+// earlier executable froze, or nothing when it would plan that request itself.
+// Planning refuses a physical node before registration, but an operation
+// registered before that refusal still carries one, and an apply boots exactly
+// the nodes that were frozen. A destroy and an observation are never refused:
+// the one ejects media and the other reads.
+func refusedContinuation(request InstallRequest) error {
+	for _, node := range request.Nodes {
+		if node.Physical {
+			return refusal("lifecycle.state", "this operation froze Machine/"+node.Machine+" as a physical node of ContainerCluster/"+
+				request.Identity.Cluster+", which this executable refuses",
+				"run bootwright destroy to end this operation, then plan it again under this executable")
+		}
+	}
+	return nil
 }
 
 func (c InstallCapability) run(ctx context.Context, execution lifecycle.Execution, operation string, request InstallRequest) (lifecycle.RunResult, error) {

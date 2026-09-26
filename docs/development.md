@@ -263,7 +263,7 @@ because it is what proves the physical contract without hardware:
 
 | Acceptance | How it is run |
 | --- | --- |
-| The rehearsal in [`examples/lab-baremetal`](../examples/lab-baremetal/README.md): one context realizes a guest and its emulated controller, a second claims that guest as a physical Machine and installs it | by hand as root on a prepared libvirt host |
+| The rehearsal in [`examples/lab-baremetal`](../examples/lab-baremetal/README.md): one context realizes a guest and its emulated controller, a second claims that guest as a physical Machine and installs it. Physical installation [refuses before registration](../specs/managed-os.md#physical-installation) until private host-key delivery is repaired (backlog S3b), so the rehearsal cannot run until then | by hand as root on a prepared libvirt host |
 | Installation of a real server through its own controller | by hand against qualified firmware, after the client is driven by hand against that controller |
 
 ## M4a single-node OpenShift through the agent installer
@@ -272,9 +272,9 @@ The [M4a delivery](../specs/milestones.md#m4a--single-node-openshift-through-the
 installs one OpenShift cluster on the Machines a substrate realizes, through the
 release's own `openshift-install`. Its in-tree gates are unitary: they build no
 image, contact no controller and run no installer. The installer input
-projection is guarded by byte goldens for a single-node libvirt cluster, a
-multi-node libvirt cluster and a multi-node physical cluster, so a change to any
-part of what the installer reads is visible in a diff.
+projection is guarded by byte goldens for a single-node libvirt cluster and a
+multi-node libvirt cluster, so a change to any part of what the installer reads
+is visible in a diff.
 
 `openshift-install` itself is not qualified by any in-tree gate. The release it
 builds for is proved at execution instead: the attempt reads the version the
@@ -285,4 +285,4 @@ completed, read back through the client the same stage published.
 | Acceptance | How it is run |
 | --- | --- |
 | The complete journey in [`examples/lab-sno`](../examples/lab-sno/README.md): `apply --stage controller`, an apply that builds the image and installs the cluster, a repeated apply that settles, and a destroy that releases the media and takes back the image | by hand as root on a prepared libvirt host with a pull secret |
-| A cluster installed on operator-owned hardware through its own controllers | by hand against qualified firmware |
+| A cluster installed on operator-owned hardware through its own controllers | refused before registration until each node is proved before its boot (backlog S2b); then by hand against qualified firmware |

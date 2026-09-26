@@ -11,6 +11,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -310,6 +311,66 @@ func TestObservationMapsEvidenceToTheEffectItProves(t *testing.T) {
 			observation, err := New(test.runner).Observe(context.Background(), call)
 			if err != nil || observation.Effect != test.want {
 				t.Fatalf("observation = %+v (%v)", observation, err)
+			}
+		})
+	}
+}
+
+// An operation registered before a physical installation or a private
+// publication was refused still carries one in its frozen request. Its apply
+// refuses before the adapter boots or publishes anything, naming the Machine,
+// while its destroy and its observation still run, because they install
+// nothing and are how the operator leaves that operation.
+func TestAFrozenRefusedInstallationRefusesOnlyItsApply(t *testing.T) {
+	for name, test := range map[string]struct {
+		freeze  func(*Request)
+		message string
+	}{
+		"physical target": {
+			func(r *Request) { r.Target.Physical, r.Target.Hardware = true, &Hardware{RootDevice: "/dev/sda"} },
+			"this operation froze a physical installation of Machine/rhel-01, which this executable refuses",
+		},
+		"private publication": {
+			func(r *Request) {
+				r.Private = &Publication{Path: "private/os/rhel-01", URL: "https://artifacts.lab.example.test/private/os/rhel-01"}
+			},
+			"this operation froze a private publication for Machine/rhel-01 that the publicly served installer image would expose, which this executable refuses",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			call, request := execution(t, "digest")
+			test.freeze(&request)
+			canonical, err := request.Canonical()
+			if err != nil {
+				t.Fatal(err)
+			}
+			call.Block.Request = canonical
+			marker, _ := MarkerFor(request, "digest")
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: completeEvidence(request, "digest", string(marker))}}
+			result, err := New(runner).Apply(context.Background(), call)
+			if err == nil || result.Outcome != reconciliation.OutcomeFailed {
+				t.Fatalf("an apply of a frozen refused installation = %+v (%v)", result, err)
+			}
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != test.message {
+				t.Fatalf("refusal = %#v", reported)
+			}
+			if reported[0].Remediation != "run bootwright destroy to end this operation, then plan it again under this executable" {
+				t.Fatalf("remediation = %q", reported[0].Remediation)
+			}
+			if len(runner.requests) != 0 {
+				t.Fatal("a refused apply reached the adapter")
+			}
+			absent, _ := json.Marshal(Evidence{Absent: true, Postcondition: true, Request: "digest"})
+			runner = &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: absent}}
+			if _, err := New(runner).Destroy(context.Background(), call); err != nil || len(runner.requests) != 1 {
+				t.Fatalf("destroy of a frozen refused installation = %v after %d invocations", err, len(runner.requests))
+			}
+			fresh, _ := json.Marshal(Evidence{Power: "Off", Request: "digest"})
+			runner = &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: fresh}}
+			observation, err := New(runner).Observe(context.Background(), call)
+			if err != nil || observation.Effect != reconciliation.EffectNoEffect {
+				t.Fatalf("observation of a frozen refused installation = %+v (%v)", observation, err)
 			}
 		})
 	}

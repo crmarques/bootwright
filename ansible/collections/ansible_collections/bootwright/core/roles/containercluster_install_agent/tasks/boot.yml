@@ -2,7 +2,20 @@
 # Insert the image its own cluster published and boot the machine through the
 # substrate that realized it. How a boot is selected is that substrate's
 # answer, so this composes its fixed task file and carries no rule that is
-# true of only one of them.
+# true of only one of them. A substrate with neither task file refuses before
+# the media is inserted, rather than inserting it and booting nothing.
+- name: Refuse a substrate this installation has no boot binding for
+  ansible.builtin.assert:
+    that:
+      - containercluster_install_agent_node.substrate in ['libvirt', 'baremetal']
+    fail_msg: >-
+      node {{ containercluster_install_agent_node.name }} names substrate
+      {{ containercluster_install_agent_node.substrate }}, which this cluster
+      installation has no boot binding for, so no media was inserted into
+      Machine {{ containercluster_install_agent_node.machine }} and it was not
+      booted; plan the installation again with this release
+    quiet: true
+
 - name: Refuse to boot a node whose cluster published no image
   ansible.builtin.assert:
     that:

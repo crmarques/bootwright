@@ -291,8 +291,8 @@ Each device selector has exactly these fields:
 
 | Field | Type | Rule |
 | --- | --- | --- |
-| `paths` | array of strings | Literal clean absolute device paths beneath `/dev/`. |
-| `pathSpecs` | array of `{path, crushDeviceClass?}` | Expanded per-path CRUSH-class form; every path is clean, absolute, and beneath `/dev/`. |
+| `paths` | array of strings | Literal [device paths](machines.md#bmc-and-root-device-shape). |
+| `pathSpecs` | array of `{path, crushDeviceClass?}` | Expanded per-path CRUSH-class form; every path is a [device path](machines.md#bmc-and-root-device-shape). |
 | `all` | boolean | May be true only for `dataDevices`. |
 | `model` | string | Native device-model filter. |
 | `vendor` | string | Native vendor filter. |

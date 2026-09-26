@@ -100,6 +100,13 @@ type Installation struct {
 // the root account is locked, and the %post removes every retained copy of the
 // file so the installed system keeps none.
 func RenderKickstart(input Installation) (string, error) {
+	// Only a disk its substrate created may be left for the installer to
+	// choose. A physical machine already holds whatever it holds, so naming no
+	// disk there would clear every one it has.
+	if input.Physical && input.RootDevice == "" {
+		return "", refusal("lifecycle.state", "a physical installation names no root device to erase",
+			"set spec.os.install.rootDeviceHints.deviceName; a wwn-only selection is not yet supported")
+	}
 	network, err := networkLine(input)
 	if err != nil {
 		return "", err
@@ -190,7 +197,7 @@ func timezoneLine(input Installation) string {
 }
 
 // storageLines clear and partition exactly the named device, or leave the
-// installer to choose when the Machine names none.
+// installer to choose when a Machine its substrate created names none.
 func storageLines(input Installation) []string {
 	if input.RootDevice == "" {
 		return []string{"clearpart --all --initlabel", "autopart --type=lvm"}

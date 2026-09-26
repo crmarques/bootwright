@@ -18,6 +18,11 @@ var imageTagPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
 var cliVersionPattern = regexp.MustCompile(`^(?:latest|v?(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8}))$`)
 var packageVersionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+~^:-]{0,95}$`)
 
+// devicePathPattern confines a device path to characters that neither an
+// installer directive nor a shell word can reinterpret, because the path
+// reaches both verbatim.
+var devicePathPattern = regexp.MustCompile(`^/dev/[A-Za-z0-9._:+/-]+$`)
+
 func ValidLexical(rule, value string) bool {
 	if rule == "checksum" {
 		return digestPattern.MatchString(strings.TrimSpace(value))
@@ -67,7 +72,7 @@ func ValidLexical(rule, value string) bool {
 	case "absolute-path":
 		return strings.HasPrefix(value, "/") && path.Clean(value) == value && !strings.ContainsRune(value, 0)
 	case "device-path":
-		return strings.HasPrefix(value, "/dev/") && path.Clean(value) == value && !strings.ContainsRune(value, 0)
+		return devicePathPattern.MatchString(value) && path.Clean(value) == value
 	case "relative-path":
 		return !strings.HasPrefix(value, "/") && value != "." && path.Clean(value) == value && value != ".." && !strings.HasPrefix(value, "../") && !strings.ContainsRune(value, 0)
 	case "token":

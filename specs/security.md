@@ -118,6 +118,9 @@ descriptors. Ambient `PATH`, user configuration, proxy variables, inventory,
 plugins, roles, caches, SSH options, and privilege settings are not authority.
 A child process therefore receives no proxy variable of its own; where a
 command has an acquisition route, that route reaches the child as request data.
+An adapter that hands such a route to a native tool through its environment
+sets the upper- and lower-case spelling of each proxy variable to the same
+value, so a spelling the request did not set cannot supply a route of its own.
 The one environment value a privileged re-execution may carry is the
 [context-free route](controller.md#the-context-free-acquisition-route) the
 invoking process already admitted, forwarded under its own fixed names.
@@ -176,7 +179,9 @@ rebinding or alternate-address retries cannot expand scope.
 Managed probes and effects use the
 [Ansible boundary and locked runtime closure](architecture.md#go-and-ansible-responsibility-boundary),
 generated inventory/configuration, and pinned allowlisted `bootwright.core`
-entrypoints. Only operation-required facts and the least authorized local and
+entrypoints. An SSH connection they open neither creates, joins nor outlives a
+shared control connection, so no other process's authenticated channel carries
+it. Only operation-required facts and the least authorized local and
 remote privilege are available. No environment or adapter default grants
 privilege escalation.
 
@@ -204,7 +209,11 @@ no credential, proves nothing by itself, and is never the source of a record.
 Session material — the private key, the pinned host key and the client
 configuration — is passed as open descriptors the client inherits, never as
 named paths, arguments or environment values, and is released when the session
-ends. The configuration is Bootwright's own: it carries only allowlisted
+ends. An operator-offered key file joins that material: it is opened without
+following a link at its name, proved on the open handle to be a regular file
+the invoking account owns and no other account can read, and handed to the
+client as that same descriptor, so the file the client reads is the file that
+was proved. The configuration is Bootwright's own: it carries only allowlisted
 cryptographic directives from the host crypto-policy backend where that exists,
 so site and FIPS policy is retained, and it admits no identity, certificate,
 agent, command, forwarding or host rule from system or personal configuration.

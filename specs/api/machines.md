@@ -236,9 +236,16 @@ trust.
 
 `os.install.rootDeviceHints` admits only `deviceName`, `hctl`, `model`,
 `vendor`, `serialNumber`, `minSizeGigabytes`, `wwn`, and boolean `rotational`.
-`minSizeGigabytes` is non-negative. For a bare-metal install,
-`deviceName` or `wwn` is mandatory; predicate-only hints are not an adequate
-destructive target selector.
+`deviceName` is a device path: a clean absolute path beneath `/dev/` built
+only from ASCII letters, digits, `.`, `_`, `-`, `/`, `:` and `+`, so
+whitespace, control characters, quotes, other shell metacharacters and `.` or
+`..` segments are refused, because the path reaches installer directives and
+shell words verbatim. `minSizeGigabytes` is non-negative. For a bare-metal
+install, `deviceName` or `wwn` is mandatory; predicate-only hints are not an
+adequate destructive target selector. A
+[managed-OS installation](../managed-os.md#physical-installation) erases only
+a disk `deviceName` names, and refuses a `wwn`-only selection before
+registration until it derives a device from one.
 
 ### Network configuration
 

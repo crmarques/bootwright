@@ -52,6 +52,7 @@ type serviceDependencies struct {
 	Streams          machineaccess.Streams
 	Terminal         func() (bool, error)
 	Home             func() (string, error)
+	Owner            func() (int, error)
 	Trust            trustStore
 	SecretInput      material.InputReader
 	Resolver         secretstore.ImplementationResolver
@@ -79,6 +80,7 @@ func wireServices(process processDependencies) (cli.Services, func()) {
 		Streams:          process.Streams,
 		Terminal:         process.Terminal,
 		Home:             account.home,
+		Owner:            account.uid,
 		Selection:        account,
 		Operator:         account,
 		Confirmer:        process.Confirmer,
@@ -113,7 +115,8 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	machine := wireMachine(machineDependencies{
 		State: services.DesiredState, Lifecycle: reconciler, Trust: deps.Trust,
 		Confirmer: deps.Confirmer, Session: deps.SessionConfirmer, Reporter: deps.Reporter,
-		Selection: deps.Selection, Streams: deps.Streams, Terminal: deps.Terminal, Home: deps.Home,
+		Selection: deps.Selection, Streams: deps.Streams, Terminal: deps.Terminal,
+		Home: deps.Home, Owner: deps.Owner,
 	})
 	services.MachineInventory, services.MachineAccess = machine.MachineInventory, machine.MachineAccess
 	services.MachinePower, services.MachineTrust = machine.MachinePower, machine.MachineTrust

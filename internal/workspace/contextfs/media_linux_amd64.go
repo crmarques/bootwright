@@ -387,7 +387,7 @@ func (a *mediaArea) Publish(ctx context.Context, name string, staged media.Stage
 	if err := a.store.checkpoint(ctx, "before-media-record"); err != nil {
 		return err
 	}
-	if err := a.store.writeExclusiveAtomic(ctx, a.dir, name+".json", record); err != nil {
+	if err := a.store.writeExclusiveAtomic(ctx, a.dir, name+".json", record, false); err != nil {
 		return safeError(err)
 	}
 	return a.available(ctx, true)

@@ -33,6 +33,7 @@ type machineDependencies struct {
 	Streams   machineaccess.Streams
 	Terminal  func() (bool, error)
 	Home      func() (string, error)
+	Owner     func() (int, error)
 }
 
 // wireMachine binds Machine inspection, explicit access and power. Inspection
@@ -43,7 +44,7 @@ type machineDependencies struct {
 func wireMachine(deps machineDependencies) cli.Services {
 	selection := currentSelection(deps.Selection)
 	evidence := machineOwnership{reconciler: deps.Lifecycle}
-	client := sshlocal.New(deps.Home)
+	client := sshlocal.New(deps.Home, deps.Owner)
 	powered := power.New(deps.State, evidence, deps.Lifecycle, ansiblerunner.New(operationPlaybook()),
 		deps.Confirmer, deps.Reporter, selection)
 	return cli.Services{

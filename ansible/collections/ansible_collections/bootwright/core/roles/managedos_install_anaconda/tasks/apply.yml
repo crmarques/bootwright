@@ -15,6 +15,24 @@
     phase: loaded
   no_log: true
 
+# The boot and identity task files bind the frozen substrate and identity
+# channel only after the tree, the image and any private key are published. A
+# target neither of them binds refuses here, before the first of those effects,
+# and each of those files keeps its own refusal as well.
+- name: Refuse a target this installation has no boot or identity binding for
+  ansible.builtin.assert:
+    that:
+      - bootwright_os_install_request.target.substrate in ['libvirt', 'baremetal']
+      - bootwright_os_install_request.target.channel in ['guest-agent', 'delivered-key']
+    fail_msg: >-
+      Machine {{ bootwright_os_install_request.identity.object }} names substrate
+      {{ bootwright_os_install_request.target.substrate }} and identity channel
+      {{ bootwright_os_install_request.target.channel }}, but this installation
+      binds only the libvirt and baremetal substrates and the guest-agent and
+      delivered-key channels, so nothing was published or booted; plan the
+      installation again with this release
+    quiet: true
+
 - name: Report package tree publication
   bootwright.core.managedos_install_protocol:
     phase: group
@@ -284,7 +302,7 @@
     status: running
   no_log: true
 
-- name: Prove the media is ejected and the installed system is running
+- name: Eject any installer media still inserted and read the machine's power
   bootwright.core.redfish_boot:
     endpoint: '{{ managedos_install_anaconda_endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'

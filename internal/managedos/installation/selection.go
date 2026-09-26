@@ -9,6 +9,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/managedos"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -34,11 +35,21 @@ func refusedCustomization(spec api.Value) bool {
 }
 
 // Unsupported lists every installation this contract cannot realize. A profile
-// arm it refuses is named through the Machine that selects it, because that is
-// the object an operator removes or changes.
+// arm or a target it refuses is named through the Machine that selects it,
+// because that is the object an operator removes or changes.
 func Unsupported(catalog api.Catalog) []string {
+	// A graph naming no controller leaves a physical target underived, and the
+	// request builder refuses it for that reason instead.
+	controllerMachine, _ := lifecycle.ControllerMachine(catalog)
 	var found []string
 	for _, machine := range InstalledMachines(catalog) {
+		// Nothing a target is refused for depends on the context, so none is
+		// named here.
+		derived, err := substrate.TargetFor(catalog, machine, "", controllerMachine)
+		if err == nil && refusedTarget(machine, derived) != nil {
+			found = append(found, machine.Identity())
+			continue
+		}
 		profile, ok := catalog.Find(api.MachineInstallProfile, machine.Spec().Get("os", "installProfileRef").Text())
 		if !ok {
 			continue
@@ -273,6 +284,9 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 	if err != nil {
 		return Target{}, err
 	}
+	if err := refusedTarget(machine, derived); err != nil {
+		return Target{}, err
+	}
 	target := Target{
 		Channel: derived.Identity.Channel,
 		Controller: Controller{
@@ -307,6 +321,29 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 		target.Hardware = &hardware
 	}
 	return target, nil
+}
+
+// refusedTarget says why this contract cannot install onto a Machine's
+// realized target, or nothing when it can. It is the one statement of that
+// refusal, so Unsupported and the request builder never disagree about it.
+func refusedTarget(machine api.Object, target substrate.Target) error {
+	// A physical machine already holds whatever it holds, and an installation
+	// that names no disk leaves the installer to clear every one. A wwn is
+	// admitted as a selector but not yet derived into a device the installer
+	// and its own target proof can name.
+	if target.Physical && target.RootDevice == "" {
+		return refusal("lifecycle.state", "a physical installation erases only a root device named by path, and the Machine names none",
+			"set spec.os.install.rootDeviceHints.deviceName on "+machine.Identity()+"; a wwn-only selection is not yet supported")
+	}
+	// A delivered key reaches the installer at a tokenized URL the Kickstart
+	// names, and the Kickstart is implanted in an installer image served
+	// without authentication, so the token would protect nothing.
+	if target.Identity.Channel == substrate.ChannelDeliveredKey {
+		return refusal("lifecycle.state", "a delivered host key would be readable from the publicly served installer image",
+			"physical managed-OS installation is disabled until private delivery is repaired; remove "+machine.Identity()+
+				" from the selected Environment or install its operating system outside Bootwright")
+	}
+	return nil
 }
 
 func findNamed(values api.Value, key, name string) (api.Value, bool) {

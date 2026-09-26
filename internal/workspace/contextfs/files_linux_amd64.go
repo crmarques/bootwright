@@ -458,56 +458,97 @@ func (s *Store) syncDirectory(ctx context.Context, dir *directory) error {
 }
 
 func (s *Store) writeExclusive(ctx context.Context, parent *directory, name string, data []byte) error {
+	_, err := s.writeExclusiveIdentity(ctx, parent, name, data, false)
+	return err
+}
+
+// writeExclusiveIdentity reports the identity of the complete file it created,
+// so a caller staging it can later remove exactly that file. A failure after
+// creation removes the file it created: a partial or unpublished entry would
+// otherwise outlive the refusal and fail every later layout verification. A
+// caller sets retain when a retry relies on what an interrupted write leaves:
+// the secret area, whose backend attributes and recovers it, and a context
+// reservation, which alone attributes a directory the registry does not yet
+// record.
+func (s *Store) writeExclusiveIdentity(ctx context.Context, parent *directory, name string, data []byte, retain bool) (syscall.Stat_t, error) {
 	if err := s.checkpoint(ctx, "create-file"); err != nil {
-		return err
+		return syscall.Stat_t{}, err
 	}
 	if err := parent.verify(); err != nil {
-		return err
+		return syscall.Stat_t{}, err
 	}
 	file, err := openRelative(parent, name, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, 0600)
 	if err != nil {
-		return err
+		return syscall.Stat_t{}, err
 	}
 	defer file.Close()
+	complete := false
+	defer func() {
+		if complete || retain {
+			return
+		}
+		if created, err := statHandle(file); err == nil {
+			discardCreated(parent, name, created)
+		}
+	}()
 	before, err := statHandle(file)
 	if err != nil || !private(before, syscall.S_IFREG, parent.identity.Uid, parent.identity.Gid) || before.Mode&0777 != 0600 {
-		return state("new state file is unsafe")
+		return syscall.Stat_t{}, state("new state file is unsafe")
 	}
 	size := len(data)
 	for len(data) > 0 {
 		if err := s.checkpoint(ctx, "write-file"); err != nil {
-			return err
+			return syscall.Stat_t{}, err
 		}
 		n, err := file.Write(data[:min(len(data), 32768)])
 		if err != nil || n == 0 {
-			return state("state file could not be written")
+			return syscall.Stat_t{}, state("state file could not be written")
 		}
 		data = data[n:]
 	}
 	if err := s.checkpoint(ctx, "sync-file"); err != nil {
-		return err
+		return syscall.Stat_t{}, err
 	}
 	if err := file.Sync(); err != nil {
-		return state("state file durability could not be established")
+		return syscall.Stat_t{}, state("state file durability could not be established")
 	}
 	held, err := statHandle(file)
 	if err != nil || !sameIdentity(before, held) || !private(held, syscall.S_IFREG, parent.identity.Uid, parent.identity.Gid) || held.Size != int64(size) {
-		return state("new state file changed during publication")
+		return syscall.Stat_t{}, state("new state file changed during publication")
 	}
 	current, err := openRelative(parent, name, pathHandle, 0)
 	if err != nil {
-		return state("new state file was replaced")
+		return syscall.Stat_t{}, state("new state file was replaced")
 	}
 	after, statErr := statHandle(current)
 	current.Close()
 	if statErr != nil || !sameFile(held, after) {
-		return state("new state file was replaced")
+		return syscall.Stat_t{}, state("new state file was replaced")
 	}
-	return s.syncDirectory(ctx, parent)
+	if err := s.syncDirectory(ctx, parent); err != nil {
+		return syscall.Stat_t{}, err
+	}
+	complete = true
+	return after, nil
 }
 
-func (s *Store) writeExclusiveAtomic(ctx context.Context, parent *directory, name string, data []byte) error {
+// discardCreated removes a file this call created and then failed to publish.
+// It takes no context, so a cancelled caller still cleans up, and it unlinks
+// only the exact identity it was given, never an entry that has since been
+// replaced or a directory that no longer verifies. Its own failure is ignored:
+// the refusal that caused it is the one to report.
+func discardCreated(parent *directory, name string, identity syscall.Stat_t) {
+	if unlinkVerified(parent, name, identity, false) == nil {
+		_ = parent.file.Sync()
+	}
+}
+
+// writeExclusiveAtomic stages the bytes and renames them to name without
+// replacing it, so name appears only with complete, synchronized content. A
+// failure before the rename removes the stage unless retain is set.
+func (s *Store) writeExclusiveAtomic(ctx context.Context, parent *directory, name string, data []byte, retain bool) error {
 	var pending string
+	var created syscall.Stat_t
 	written := false
 	for range 16 {
 		candidate, err := s.candidate("pending-")
@@ -515,7 +556,7 @@ func (s *Store) writeExclusiveAtomic(ctx context.Context, parent *directory, nam
 			return err
 		}
 		pending = candidate
-		err = s.writeExclusive(ctx, parent, pending, data)
+		created, err = s.writeExclusiveIdentity(ctx, parent, pending, data, retain)
 		if errors.Is(err, syscall.EEXIST) {
 			continue
 		}
@@ -528,6 +569,12 @@ func (s *Store) writeExclusiveAtomic(ctx context.Context, parent *directory, nam
 	if !written {
 		return state("immutable state staging exhausted its collision limit")
 	}
+	renamed := false
+	defer func() {
+		if !renamed && !retain {
+			discardCreated(parent, pending, created)
+		}
+	}()
 	staged, stagedIdentity, err := readBoundedIdentity(ctx, parent, pending, len(data), true)
 	stagedMatches := bytes.Equal(staged, data)
 	clear(staged)
@@ -546,6 +593,7 @@ func (s *Store) writeExclusiveAtomic(ctx context.Context, parent *directory, nam
 	if err := renameNoReplaceAt(parent, pending, name); err != nil {
 		return err
 	}
+	renamed = true
 	published, publishedIdentity, err := readBoundedIdentity(ctx, parent, name, len(data), true)
 	publishedMatches := bytes.Equal(published, data)
 	clear(published)
