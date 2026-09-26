@@ -3,8 +3,7 @@
 Secrets owns runtime custody, materialization, generation, immutable binding and
 disclosure. Workspace owns context identity, private paths and atomic publication.
 The [Secret API](api/secrets.md) remains declarative. This contract covers local
-management without platform, entitlement or lifecycle effects; availability
-follows [milestones](milestones.md).
+management without platform, entitlement or lifecycle effects.
 
 ## Implementation selection
 
@@ -133,17 +132,19 @@ holds the same store lock.
 
 Canonical non-secret declaration fingerprints cover type/source/parameters and
 provenance. Changed declarations make retained values stale/orphaned, never
-automatically import/generate/delete. Final context deletion permanently removes
-the verified keyring only after positive disposal proof. Human-name reuse
-allocates a fresh identity and never exposes prior material. Protected contexts cannot be deleted or abandoned.
+automatically import/generate/delete. Context deletion permanently removes the
+verified keyring under [permanent deletion](contexts.md#permanent-deletion),
+including an orphan-acknowledged deletion, which abandons the context's realized
+objects but still removes its keyring. Recreating a name starts with a new
+keyring and never exposes prior material.
 
 ## Local keyring v3
 
 The `secrets/` subtree is initialized during context creation, independently
 of the enclosing registry format. Empty or absent means uninitialized.
-Nonempty state without `store.json` requires explicit initialization recovery;
-inspection never repairs it. Unknown and earlier formats refuse, and no
-conversion exists.
+Nonempty state without `store.json` resumes only from attributable
+initialization evidence, through `secret encryption init`; inspection never
+repairs it.
 
 The normal layout has one atomically replaced `store.json`, immutable
 `parts/<blob-id>.enc`, immutable 32-byte `keys/<key-id>.key`, independently
@@ -183,10 +184,9 @@ reached, so deleting a version never renumbers the ones that remain and an
 ordinal keeps naming the same material for as long as it exists. The ordinal is
 how a person names a version: human output shows `v<sequence>` and never the
 identifier. The identifier remains the only durable reference, so current
-mappings, bindings, and every JSON result continue to carry it. A version stored
-before ordinals existed has none; it is numbered on read, in identifier order,
-because its creation order was never recorded. An absent ordinal is omitted from
-the encoded record, so such a record still reopens byte for byte. Compute the declaration fingerprint from full canonical
+mappings, bindings, and every JSON result continue to carry it. `sequence` is
+required and at least 1; a version without it is corrupt and refuses with
+`secret.store.corrupt`. Compute the declaration fingerprint from full canonical
 parameters and provenance at acquisition, then authenticate the summary.
 Original paths, source fields and generation options are not copied into each
 version. Current mappings contain `name` and `version`; bindings contain `id`
@@ -240,7 +240,8 @@ Secret IDs use 128 random bits with 16 exclusive collision attempts. Limit
 failure never authorizes removal of referenced material or identity evidence.
 
 There is no conversion from an earlier keyring format. A `secrets/` subtree
-that is nonempty and holds no `store.json` this build can authenticate refuses
+that is nonempty and holds neither a `store.json` this build can authenticate
+nor attributable initialization evidence refuses with `secret.store.corrupt`
 before any session is acquired, and the remedy is a new context.
 
 Threat exclusions remain root, the same OS identity, process memory and theft
@@ -252,7 +253,7 @@ import/export or FIPS claims.
 
 ## Results and failures
 
-Check/list JSON has context (name/id/mode) and name-sorted secrets. Check rows:
+Check/list JSON has context (name/mode) and name-sorted secrets. Check rows:
 name/type/source/parts/status/nullable version; statuses available/missing/stale/
 invalid/unreadable. A complete negative check keeps its result and returns 1
 with safe diagnostics. List rows: name/type/source/parts/state/nullable

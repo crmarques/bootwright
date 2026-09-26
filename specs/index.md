@@ -2,30 +2,55 @@
 
 Start with [project intent](project.md) when scope matters. Read the
 [milestones](milestones.md) status header and the section of the authorized
-slice, then load only the contracts needed for the task.
-A specified capability is not necessarily implemented or authorized.
+slice, then open only the owning section below. A specified capability is not
+necessarily implemented or authorized.
 
-| Question | Owner |
+| Read when the task touches | Owner |
 | --- | --- |
-| Product purpose, scope and non-goals | [Project](project.md) |
-| Domain boundaries, Go/Ansible responsibilities and dependency policy | [Architecture](architecture.md) |
-| Which package and file implement a command, and which adapters it binds | [Command and package map](architecture.md#command-and-package-map), [communication graph](architecture.md#domain-communication-graph) |
-| Self-explanatory code, minimal comments and retained implementation knowledge | [Code clarity](architecture.md#self-explanatory-code-and-retained-knowledge), [knowledge catalog](../.agents/knowledge/index.md) |
-| Desired-state grammar, compilation and kind schemas | [API](api.md), with field tables under `api/` |
-| Command behavior, invocation and lifecycle journeys | [CLI](cli.md), [command catalog](cli/commands.md), [output](cli/output.md) |
-| Local host prerequisites, controller setup and readiness | [Controller](controller.md) |
-| Named contexts, immutable input, current selection and durable publication | [Contexts](contexts.md) |
-| Secret implementations, custody, immutable bindings and reveal | [Secrets](secrets.md) |
-| Apply, destroy, continuation, ownership and GitOps readiness | [State reconciliation](state-reconciliation.md) |
-| Managed shared-service placement, host claims, readiness and inverse | [Infrastructure services](infrastructure-services.md) |
-| Provider host realization, machine realization, emulated BMCs and identity operations | [Substrates](substrates.md) |
-| Installer media custody and managed operating-system installation | [Managed OS](managed-os.md) |
-| Container cluster installation, its boot media and the access it captures | [Container clusters](container-clusters.md) |
-| Trust, secrets, filesystem, process, network and supply-chain boundaries | [Security](security.md) |
-| Declarative add-on packages and driver contract | [Add-ons](add-ons.md) |
+| Product purpose, scope and non-goals | [project](project.md) |
+| Boundaries, package shapes, Go/Ansible split, dependencies, fitness checks | [architecture](architecture.md) |
+| Where a command's code lives | `internal/cli/catalog.go`, `cmd/bootwright/wiring_<domain>.go` and each package's `contracts.go` ([finding code](architecture.md#go-package-structure)) |
+| Desired-state grammar, compilation, defaults | [api](api.md); input discovery and ceilings: [input](api/input.md) |
+| One kind's fields | [environment](api/environment.md), [secrets](api/secrets.md), [machines](api/machines.md), [infrastructure services](api/infrastructure-services.md), [container clusters](api/container-clusters.md), [storage](api/storage.md), [add-ons](api/addons.md), [custom playbooks](api/custom-playbooks.md) |
+| Command behavior and journeys | [cli](cli.md); flags: [commands](cli/commands.md); streams, JSON, diagnostics: [output](cli/output.md) |
+| Host prerequisites, setup, the controller stage | [controller](controller.md) |
+| Contexts, frozen input, storage, locking, deletion | [contexts](contexts.md); controller record format: [controller record](contexts/controller-record.md) |
+| Secret custody, bindings and reveal | [secrets](secrets.md) |
+| Apply, destroy, continuation, ownership, mutation safety, GitOps readiness | [state reconciliation](state-reconciliation.md) |
+| Managed services, host reservations, publication | [infrastructure services](infrastructure-services.md) |
+| Provider hosts, machines, emulated BMCs, identity and power | [substrates](substrates.md) |
+| Media store and operating-system installation | [managed OS](managed-os.md) |
+| Container cluster installation | [container clusters](container-clusters.md) |
+| Trust, sensitive material, processes, network, supply chain | [security](security.md) |
+| The add-on boundary | [add-ons](add-ons.md) |
+| Delivery state, delivered history, deferred work | [milestones](milestones.md), [delivered](milestones/delivered.md), [backlog](milestones/backlog.md) |
+| Design for an unpromoted feature, only when reviving it | [deferred](deferred/) |
 
-Each requirement has one owner; other pages link to it. Keep specs focused on
-observable behavior and invariants. Add detail with its first requested feature
-or a demonstrated ambiguity; avoid speculative fields, mechanisms and duplicate
-checklists. Milestones own delivery state and deferred work, skills own the
-working procedure, and knowledge records observed lessons.
+## Conventions
+
+Each requirement has one owner; other pages link to it. Specs state target
+invariants in the present tense and claim no availability. A rule the code does
+not yet meet carries one line, "Not yet met: ...; tracked as backlog <ID>".
+Delivery state lives in milestones, observed lessons in
+[knowledge](../.agents/knowledge/index.md), and working procedure in skills. Add
+detail with its first requested feature or a demonstrated ambiguity; design for
+an unpromoted feature lives under `deferred/`.
+
+## Glossary
+
+- **Context**: a named, durable Bootwright workspace holding frozen input,
+  secrets and lifecycle state ([contexts](contexts.md)). It is not a Go
+  `context.Context` and not a bounded context of the architecture.
+- **Controller**: the host that runs Bootwright. A **management controller** is
+  a server's out-of-band Redfish endpoint, physical or emulated.
+- **Realized target**: what a substrate derives for a Machine: the management
+  controller it boots through, its identity channel, whether it is physical and
+  the block that realizes it ([substrates](substrates.md#selection-and-refusal)).
+- **Reservation**: a host-wide claim, such as a socket, BMC, media or machine,
+  that refuses a conflicting context
+  ([host reservations](infrastructure-services.md#host-reservations)).
+- **Bundle** and **binding**: setup publishes a sealed execution bundle; a
+  context binds the controller and bundle it uses; an operation binds the exact
+  secret material it froze ([secrets](secrets.md)).
+- **Acceptance**: an operator-run gate recorded in the
+  [ledger](../docs/acceptance.md); in-tree gates are tests.

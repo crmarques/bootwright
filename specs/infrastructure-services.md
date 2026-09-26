@@ -5,13 +5,10 @@ its selection from effective state, the exact implementation it deploys, the
 host resources it claims, the evidence that proves completion or absence, and
 its inverse. The [kind schemas](api/infrastructure-services.md) own declaration;
 [state reconciliation](state-reconciliation.md) owns operations, ordering and
-durable records; availability follows [milestones](milestones.md).
+durable records.
 
-A managed service is a [lifecycle capability](state-reconciliation.md#plan-and-execution):
-one block per service object, resolved to exactly one implementation whose
-identity, content digest and request digest freeze with the plan. The
-capability owns what its block means; it never schedules another block,
-allocates an operation identity or writes lifecycle state.
+A managed service is a [lifecycle capability](state-reconciliation.md#plan-and-execution)
+that plans one block per service object.
 
 ## Selection and refusal
 
@@ -24,8 +21,12 @@ exist: a service whose bind address is the host address of a
 placement Machine names that provider as a requirement, because the socket
 cannot bind before the bridge exists.
 
-Selection is pure and reads no host, endpoint or Secret material. An
-unsupported required capability refuses before operation registration, with one
+Not yet met: no service block names that requirement, so nothing orders a
+service bound to a managed bridge address after the block that creates the
+bridge; tracked as
+[backlog F8](milestones/backlog.md#audit-follow-ups-2026-09).
+
+An unsupported required capability refuses before operation registration, with one
 diagnostic naming every unsupported object, the reason, and a safe next action.
 Refusal never registers an operation, reserves a host resource, binds a Secret
 or creates a log.
@@ -113,9 +114,9 @@ except the private key's directory, which is `0700`; the private key is `0600`.
 The content root is outside the Bootwright state root, so serving never exposes
 context storage. Nothing else on the host is created, modified or removed.
 
-**TLS.** A serving certificate is required when any effective listener uses
-HTTPS and is forbidden otherwise. Its bound material is validated before
-effects: bounded PEM parsing, certificate and key agreement, validity at the
+**TLS.** The [schema](api/infrastructure-services.md#artifactserver) requires a
+serving certificate exactly when an effective listener uses HTTPS. Its bound
+material is validated before effects: bounded PEM parsing, certificate and key agreement, validity at the
 injected clock, server-authentication suitability, not a certificate authority,
 and subject-alternative-name coverage of every address an HTTPS endpoint
 serves. A failure refuses before connection or installation and names the
@@ -152,15 +153,10 @@ positive no effect; and any of the unit, container or content root present
 without the whole is a positive partial realization, which the next attempt
 converges. Only an observation that cannot be made remains unknown.
 
-**Cancellation.** Cancellation stops authorization of new effects and
-terminates the owned process tree. An attempt whose effect was already
-authorized becomes unknown unless positive evidence already proves its outcome.
-
-**Quiescence.** A managed service is quiescent whenever the
-[removal gate](state-reconciliation.md#quiescence-before-removal) asks. The
-gate proves the Machines are down and derives everything else from them, so a
-service is never observed for use of its own: refusing on its own listener
-would refuse a removal whose Machines are already stopped.
+**Quiescence.** A managed service's quiescence follows the Machines under the
+[removal gate](state-reconciliation.md#quiescence-before-removal); its own
+listener is never observed for use, because refusing on it would refuse a
+removal whose Machines are already stopped.
 
 ### Consumer publication
 
@@ -218,16 +214,12 @@ container under the host service manager with host networking, serving one
 declared port on its declared bind address. They differ only in the daemon they
 run, the configuration derived for it, and the answer readiness proves. Their
 plan blocks belong to the
-[`infra-components` stage](state-reconciliation.md#stages-and-the-pause-boundary)
-and declare no dependency, so the whole set applies in one pass.
+[`infra-components` stage](state-reconciliation.md#stages-and-the-pause-boundary).
 
-**Implementation.** One container image per kind, selected as
-`spec.image.local`, else `spec.image.public`, else the executable's compiled
-default. Every reference resolves to an immutable content digest before the
-plan freezes; a floating tag is refused. Image acquisition uses the placement
-Machine's normalized [proxy choice](api/machines.md#machine-proxy) and no
-ambient proxy variable. The unit never uses the image's own entrypoint: the
-frozen request alone decides what runs.
+**Implementation.** One container image per kind, selected, pinned and acquired
+exactly as the [artifact server's](#managed-artifact-serving) is. The unit
+never uses the image's own entrypoint: the frozen request alone decides what
+runs.
 
 **Owned host state.** Each service owns one content root, one daemon
 configuration inside it and one unit definition. Directories are `0755`. The
@@ -273,37 +265,16 @@ both UDP and TCP; a time service returns a server-mode reply, whose stratum may
 show it unsynchronized without being a failure. An address that never answers
 within the bounded readiness window is unknown, not failure.
 
-**Replay.** An apply whose frozen request already matches the live host reports
-`completed` with the same completion evidence and no change. The differences it
-converges are the configuration bytes, which restart the service when they
-differ and do not when they are identical, and any owned unit, container or
-content root that is missing, which is created again. Everything it owns
-carries the context in its name, so a same-name object it did not create cannot
-occur without a reservation conflict refusing first.
-
-**Inverse.** Destroy stops the service, removes the unit definition, removes
-the container, removes the owned content root and then reobserves. Positive
-absence requires the unit absent, the container absent, the content root absent
-and every reserved socket free. An already-absent service reports `completed`
-with that same absence evidence. Destroy removes no image from the host store
-and no unrelated file.
-
-**Unknown resolution and cancellation.** Both follow the artifact server's
-rules above: observation is read-only against the frozen request and exact
-identity, and cancellation terminates the owned process tree, leaving an
-already-authorized effect unknown unless positive evidence proves its outcome.
+**Replay, inverse and unknown resolution.** Each follows the
+[artifact server's](#managed-artifact-serving) rules above.
 
 ## Adapter boundary
 
 Every managed-service effect crosses the
 [Go/Ansible boundary](architecture.md#go-and-ansible-responsibility-boundary)
-through one fixed entrypoint per operation. Go freezes the request, authorizes
-each phase and validates the returned evidence strictly; the adapter returns
-bounded structured results and never chooses targets, implementations or
-workflow. Both placement arms use the same role, request and evidence contract,
-so local execution bypasses no authorization, privilege or validation.
-
-Secret material reaches the adapter only through operation-scoped `0600` files
-beneath a `0700` directory that is removed after the run, never through
-arguments, environment, inventory, evidence or logs. Raw adapter output is not
-a product result.
+through one fixed entrypoint per operation, under
+[the adapter result protocol](architecture.md#the-adapter-result-protocol) and
+the [process](security.md#process-boundary) and
+[Secret-material](security.md#sensitive-material) rules. Both placement arms
+use the same role, request and evidence contract, so local execution bypasses
+no authorization, privilege or validation.

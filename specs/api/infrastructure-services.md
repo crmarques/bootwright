@@ -168,12 +168,10 @@ A choice overrides the complete inherited choice, including bypass entries;
 defaults never combine two proxy selections. Unavailable proxies never cause
 fallback to direct access.
 
-Machine egress uses [Machine.spec.proxy](machines.md#machine-proxy), including
-the selected controller's egress. An OS-ready Machine may use managed or
-external Proxy services; Bootwright OS installation requires an external
-Proxy. Install-profile and container-installation choices retain their own
-consumer scopes. A container choice does not mutate Machine policy, and
-controller selection never follows from local access or proxy presence.
+Machine egress, including the selected controller's, follows
+[Machine.spec.proxy](machines.md#machine-proxy). Install-profile and
+container-installation choices retain their own consumer scopes, and a
+container choice does not mutate Machine policy.
 
 ### DNS and NTP selection lists
 
@@ -197,20 +195,19 @@ image-source mapping.
 
 ## Selection and bootstrap
 
-Resource-selected services remain desired roots even when unconsumed. Each
-managed service retains its placement Machine and the Machine's provider and
-provider-host closure under [Environment selection](environment.md#resource-and-cluster-selection).
+Resource-selected services remain desired roots even when unconsumed, and a
+managed service retains its placement closure under
+[Environment selection](environment.md#resource-and-cluster-selection).
 External services add no managed host or removal obligation. Managed service
 placement on the controller is explicit and obeys the same capability and
 endpoint rules as other hosts. Controller selection does not imply placement,
 create a service, or install its runtime.
 
-Reference resolution and executable readiness are different relationships.
-An endpoint's Machine address reference supplies a value; it does not by
-itself impose a readiness edge. A service's placement requires an OS-ready
-host before deployment, while an installation requires its serving artifact
-endpoint before consuming content. Admission rejects a proven self-hosted
-artifact bootstrap cycle at the consuming field when the service requires
-the very Machine OS installation it serves. It does not equate every
-declaration-reference cycle with an executable cycle or claim to prove live
-availability. Future plans retain the [dependency DAG contract](../state-reconciliation.md#plan-and-execution).
+Reference resolution is not a readiness edge; the runtime edges between a
+service, its host and its consumers belong to
+[infrastructure services](../infrastructure-services.md#selection-and-refusal)
+and the [dependency DAG](../state-reconciliation.md#plan-and-execution).
+Admission rejects a proven self-hosted artifact bootstrap cycle at the
+consuming field when the service requires the very Machine OS installation it
+serves. It does not equate every declaration-reference cycle with an executable
+cycle or claim to prove live availability.

@@ -6,8 +6,7 @@ completed. The [kind schemas](api/machines.md) own `MachineImage` and
 `MachineInstallProfile`; the [command catalog](cli/commands.md#setup-commands)
 owns the `media` invocations; [Workspace](contexts.md#storage-locking-and-publication)
 owns the store's layout and publication; [substrates](substrates.md) own the
-Machine being installed and the controller it is booted through; availability
-follows [milestones](milestones.md).
+Machine being installed and the controller it is booted through.
 
 ## Media store
 
@@ -57,26 +56,34 @@ when present, by its `hostedTree` endpoint, and every managed `DNSServer` and
 `NTPServer` the Machine's effective network and profile select, because the
 guest resolves names and time through them while installing.
 
-One installation contract covers every substrate. It never asks which one it
-is on: the [realized target](substrates.md#selection-and-refusal) supplies the
-management controller to boot through, the identity channel to prove
-completion with, and whether the machine is physical, and everything below
-that differs is a consequence of those three answers rather than a branch of
-its own. A substrate added later therefore inherits this installation whole.
+One installation contract covers every substrate. The
+[realized target](substrates.md#selection-and-refusal) supplies the substrate
+arm, the management controller to boot through, the identity channel to prove
+completion with, and whether the machine is physical. The installation
+dispatches on the frozen arm and channel through the substrate's fixed task
+files and fails closed on one it has no task file for, as the
+[adapter boundary](#adapter-boundary) states.
 
 **Supported shape.** The profile's `anaconda` arm, with `packageSource` absent
 so the boot media is a DVD installed from `cdrom`, or `hostedTree`, so a boot
 image installs from a package tree the artifact server publishes. `bootMedia`
 and `fromMedia` name entries of the media store. A profile selecting
-`initialPassword`, `diskEncryption`, `fromSubscription`, `mirror` or
-`templateClone` refuses before registration, as does a rescue declaration.
-These shapes carry secret bytes or effects this contract does not prove.
-Publicly served content remains secret-free by construction; the one thing an
-installation may deliver confidentially is the host key it installs, through
-the [private path](#physical-installation) below, and every other secret-bearing
-arm stays refused until it is separately specified. That path, and with it
-every physical target, refuses before registration today; see
-[physical installation](#physical-installation).
+`initialPassword`, `diskEncryption`, an enabled `fips`, a top-level
+`subscription`, `fromSubscription`, `mirror` or `templateClone` refuses before
+registration. These shapes carry secret bytes or effects this contract does not
+prove. A Machine whose management controller's virtual-media trust is
+`import-certificate` also refuses before registration, because importing a
+certificate into a management controller is not implemented. Publicly served
+content remains secret-free by construction; the one thing an installation
+may deliver confidentially is the host key it installs, through the
+[private path](#physical-installation) below, and every other secret-bearing
+arm stays refused until it is separately specified.
+
+The Environment's
+[rescue declaration](api/environment.md#lifecycle-rescue-declaration) is
+admitted and validated, and no lifecycle yet requires or consumes it. Whether
+it becomes a requirement, a refusal or is retired is an open owner decision,
+recorded in [backlog A6](milestones/backlog.md#audit-follow-ups-2026-09).
 
 **Derived installation.** Planning derives the complete Kickstart from
 effective state alone: text mode; the accepted license; the install source;
@@ -138,7 +145,9 @@ was started after the proof; an operator-owned physical machine is never
 powered off by an installation. The block then inserts the published image
 URL as the controller's virtual media, sets a one-time boot from it, powers
 the Machine on, and polls the power state to on, all through the
-[identity and power operations](substrates.md#identity-and-power-operations).
+[identity and power operations](substrates.md#identity-and-power-operations);
+it selects each boot device itself rather than through the substrate's
+boot-from-media operation.
 Anaconda installs unattended and powers the machine off when it is done, which
 is what lets the block eject the media and boot the installed system from disk
 deliberately rather than racing a reboot.
@@ -167,7 +176,7 @@ there is no reinstall path, and a fresh installation requires the Machine's
 realization to be destroyed and applied again. A powered-off Machine with no
 marker installs.
 
-**Inverse.** Destroy removes the published image, the private tree when one was
+**Inverse.** Destroy removes the published image, the private subtree when one was
 published, and, when no other block of the same operation still needs it, the
 published package tree, then proves each absent. The installed system leaves
 the host with the Machine's disks, so this block consumes no authorization of
@@ -184,29 +193,25 @@ stays unknown, including a guest answering with another marker and a powered-on
 guest with none, because the first belongs to another installation and the
 second may be running the installer now.
 
-**Quiescence.** This block owns published installer content, which an installed
-Machine no longer reads, so it is quiescent whenever the
-[removal gate](state-reconciliation.md#quiescence-before-removal) asks. A
-Machine still reading it is one that is running, and the same removal probes
-that Machine's own block.
-
-**Cancellation.** Cancellation stops authorization of new effects and
-terminates the owned process tree. An installer that was already booted keeps
-running on the guest; the attempt becomes unknown and is resolved from the
-marker.
+**Quiescence and cancellation.** This block owns published installer content,
+which an installed Machine no longer reads, so its quiescence follows the
+Machines under the
+[removal gate](state-reconciliation.md#quiescence-before-removal). An installer
+that was already booted keeps running on the guest after cancellation; the
+attempt becomes unknown and is resolved from the marker.
 
 ### Physical installation
 
-Every physical installation refuses before registration, naming its Machine,
-because a delivered host key would be readable from the publicly served
-installer image. The Kickstart names the tokenized private URL the key is
-fetched from, and `mkksiso` implants that Kickstart in the image published at
-`os/<machine>/install.iso`, which is served without authentication. An
-operation registered before this refusal still froze a physical target or a
-private publication, so its apply refuses at execution, naming the Machine and
-directing the operator to destroy the operation and plan again, while its
-destroy and observation still run. The rest of this section is the contract
-that repairing delivery (backlog S3b) restores.
+An installation whose delivered host key would be readable from publicly
+served content refuses before registration, naming its Machine. An operation
+that froze such a target or a private publication refuses its apply at
+execution, naming the Machine and directing the operator to destroy the
+operation and plan again, while its destroy and observation still run.
+
+Not yet met: private delivery, because the Kickstart that names the tokenized
+key URL is implanted in the unauthenticated `os/<machine>/install.iso`, so
+every physical installation refuses; tracked as
+[backlog S3b](milestones/backlog.md#audit-follow-ups-2026-09).
 
 Installing a physical server differs from installing a virtual one in three
 ways, each following from the machine existing before Bootwright and outliving
@@ -242,10 +247,7 @@ the private publication below, and installed before the machine first boots, so
 completion is proved against a key that was known in advance. Nothing is
 trusted on first sight.
 
-**Private publication.** This path refuses today, as stated at the start of
-this section: the Kickstart that names the token is implanted in the publicly
-served image, so the token protects nothing until delivery is repaired
-(backlog S3b). The Kickstart cannot carry the private half of that key,
+**Private publication.** The Kickstart cannot carry the private half of that key,
 because the installer image is served to a controller over a network and is
 secret-free by construction. The block therefore publishes the key pair beneath
 the artifact server's served root under the
@@ -253,7 +255,7 @@ the artifact server's served root under the
 at a path whose final segment is an unguessable token minted by the attempt
 rather than frozen in the plan, and the Kickstart fetches it once, verifying
 the artifact server's certificate against the bound public certificate rather
-than disabling verification. The private tree is removed when the installation
+than disabling verification. The private subtree is removed when the installation
 completes, when an observation finds it orphaned, and by the inverse, and its
 absence is part of completion evidence: material that only needed to exist for
 one boot does not outlive it. The token never appears in the plan, the
@@ -267,16 +269,20 @@ exists.
 
 ## Adapter boundary
 
-Installation crosses the
-[Go/Ansible boundary](architecture.md#go-and-ansible-responsibility-boundary)
-through one fixed entrypoint per operation on the artifact server's placement
-Machine, composing the substrate's power and identity task files by fixed
-qualified name. The frozen target's substrate and identity channel select
-those task files. A substrate or channel that selects none refuses as soon as
-the entrypoint has loaded, before the tree, the image or any private material
-is published and before the machine is read, given media or booted, and each
-task file refuses it again itself. The adapter renders the frozen Kickstart,
-invokes `mkksiso` and the archive tooling with exact argument vectors, and
-returns bounded structured evidence. The fleet key's public half reaches it as
-a value; no private key, password or other secret enters the Kickstart, the
-image, the tree, the evidence or the logs.
+Installation crosses the [Go/Ansible
+boundary](architecture.md#go-and-ansible-responsibility-boundary) through one
+fixed entrypoint per operation on the artifact server's placement Machine,
+under [the adapter result protocol](architecture.md#the-adapter-result-protocol)
+and the [process](security.md#process-boundary) and
+[Secret-material](security.md#sensitive-material) rules, composing the
+substrate's power and identity task files by fixed qualified name. The frozen
+target's substrate and identity channel select those task files. A substrate or
+channel that selects none refuses as soon as the entrypoint has loaded, before
+the tree, the image or any private material is published and before the machine
+is read, given media or booted, and each task file refuses it again itself. The
+adapter renders the frozen Kickstart, invokes `mkksiso` and the archive tooling
+with exact argument vectors, and returns bounded structured evidence. The fleet
+key's public half reaches it as a value; no private key, password or other
+secret enters the Kickstart, the image, the package tree, the evidence or the
+logs, and the delivered host key reaches the machine only through the private
+subtree.

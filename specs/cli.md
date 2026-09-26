@@ -11,7 +11,6 @@ receipt that follow it are ordered by the frozen plan whatever ran together.
 Read this page with the [command and flag catalog](cli/commands.md) and
 [output contract](cli/output.md). Together they define the CLI. Unlisted
 commands, aliases, flags, shorthands, modes and operands are usage errors.
-A declared command does not claim an available implementation.
 
 Choose CLI dependencies under the
 [dependency selection rule](architecture.md#dependency-selection-and-reuse).
@@ -195,24 +194,34 @@ payload, while `--name c --help` requests Bootwright help. The `--` separator
 is syntax only for these four payload-bearing commands and is a usage error on
 every other command.
 
-Standard input is read only for an ordinary confirmation, an explicitly
-requested sudo-password prompt, `secret set --password-stdin`, or
-`secret set --value-stdin`. The [Secrets contract](secrets.md) requires yes
+Standard input is read only for an ordinary confirmation, the host-key
+confirmation and the session of [`machine rsh` and `machine exec`](#machine-ssh-sessions),
+an explicitly requested sudo-password prompt, `secret set --password-stdin`,
+or `secret set --value-stdin`. The [Secrets contract](secrets.md) requires yes
 before stdin-backed replacement. No command reads an ambient desired-state configuration file. The invoking
 user's explicit current-context selection is defined by [Contexts](contexts.md).
 
 The fixed state root is defined by
 [Contexts](contexts.md#storage-locking-and-publication).
 
+### Ordinary confirmation
+
+Every command that confirms uses one prompt, after the plan it confirms and
+every safeguard it enforces. Only `y` or `yes`, case-insensitive with
+surrounding whitespace ignored, accepts. Read one answer of at most 64 bytes
+including LF without read-ahead. Decline, non-interactive input, cancellation
+or an I/O failure refuses, and the command performs none of the effects it
+asked about. The host-key confirmation of an [SSH session](#machine-ssh-sessions)
+reads its answer the same way. `--yes` suppresses only this prompt, under
+[its flag rule](cli/commands.md#flag-relationships-and-safeguards).
+
 ### Local privilege and user identity
 
 Classify and validate arguments before privilege effects. Help, completion,
-version, invalid invocations, unavailable commands and explicit-input validate
-never elevate. Context-free setup dry-run also never elevates. Available
-Controller setup/inspection may need private shared-host metadata or installation
-privilege even without a named context; their exact effects follow
-[Controller](controller.md#selection-and-command-journeys). Context-bound setup
-dry-run may elevate solely for private input/metadata reads.
+version, invalid invocations, unavailable commands, explicit-input validate and
+`setup --dry-run` never elevate. Available controller setup and inspection may
+need private shared-host metadata or installation privilege; their exact
+effects follow [Controller](controller.md#selection-and-command-journeys).
 Available commands requiring context state run as root; a
 non-root invocation keeps an unprivileged supervisor and launches one exact
 Bootwright child as UID 0 through the qualified absolute sudo executable. Pin
@@ -255,39 +264,18 @@ usage failure. Explicit help remains human under the precedence above.
 
 ## Context and setup behavior
 
-A context is a user-facing name for one self-contained lifecycle unit and its
-workspace-owned durable identity. Context names are lowercase DNS labels.
-[Contexts](contexts.md) defines storage, identity-preserving replacement,
-selection, ordinary confirmation and successful context command results.
-`context init --name <name>` creates default Context configuration and an
-initialized local keyring without requiring desired state. Optional `--file`
-reads Context configuration; `--input-dir` imports a complete desired-state
-directory. Publish readiness only after all required context files are durable,
-then update the invoking user's selection. Existing ready names require update.
-
-`context update` preserves omitted configuration or input. Equivalent
-configuration-only updates make no writes and need no confirmation. Backend
-changes refuse. Input replacement preserves identity, secrets and runtime
-state, and refuses when it would invalidate exact continuation.
-
-`context delete --purge` permanently removes the exact disposable context,
-including secrets and imported revisions. Require positive proof that no live
-resource, incomplete operation, ownership or necessary recovery state depends
-on it. Protected evidence refuses and names `destroy`; `--allow-orphans`
-acknowledges exactly what that refusal protects and deletes anyway, abandoning
-those objects. Unreadable evidence refuses either way, and there is no archive.
-Pending local creation/deletion and explicit retry follow
-[Contexts](contexts.md#storage-locking-and-publication).
+A context is one self-contained lifecycle unit, and its name, a lowercase DNS
+label, is its identity. [Contexts](contexts.md) defines storage, selection,
+initialization, input replacement, [permanent deletion](contexts.md#permanent-deletion)
+and successful context command results; `context init --name <name>` requires
+no desired state.
 
 Media, secret, add-on, and context writes use verified roots, safe
 single path segments, exclusive creation, restrictive permissions, bounded
 input, and atomic publication. A confirmation cannot authorize overwriting an
 unrelated path. Network media import follows the endpoint and supply-chain
-rules in [security](security.md), over the
-[context-free acquisition route](controller.md#the-context-free-acquisition-route).
-Like `setup`, the `media` commands select no
-context: they manage the host-wide [media store](managed-os.md#media-store),
-and an explicit `--context` changes nothing they do.
+rules in [security](security.md). The `media` commands manage the host-wide
+[media store](managed-os.md#media-store).
 
 ### Controller declaration and command applicability
 
@@ -300,22 +288,11 @@ never verifies the invoking host.
 
 `setup` and `preflight controller` follow the
 [Controller journeys](controller.md#selection-and-command-journeys), including
-preparation before context creation or Environment import. `setup` selects no
-context: it prepares what every context on the host shares, reads no
-Environment, and an explicit `--context` changes nothing it does. Because no
-Environment can name a route for work that precedes it, `setup`,
-`preflight controller` without a context, and `media add --from-url` take the
-[context-free acquisition route](controller.md#the-context-free-acquisition-route)
-from the invoking environment. No other command reads it. The
-prerequisites one context adds are installed by the
-[controller stage](state-reconciliation.md#stages-and-the-pause-boundary) of
-its own apply, which is also where the context claims its controller host.
-`preflight controller` consumes a context only when `--context` is explicit and
-nonempty; omission ignores current selection and reports host readiness alone.
-With a context it also reports that context's own prerequisites and binding,
-and publishes nothing. Controller selection alone does not cause setup, install
-a container runtime or start services. Commands retain their specified
-unavailable result until the corresponding delivery is implemented.
+preparation before context creation or Environment import and the context each
+consumes. Which commands read the invoking environment's proxy route is owned
+by the [context-free acquisition route](controller.md#the-context-free-acquisition-route).
+Controller selection alone does not cause setup, install a container runtime or
+start services.
 
 The local-access controller is not an SSH target. The SSH session and trust
 commands must not silently turn its selection into a local shell, privileged
@@ -335,10 +312,8 @@ input universe, discovery and Environment selection are defined by
 [the API contract](api.md).
 
 Preflight reports current readiness but grants no mutation authority and never
-replaces a fresh lifecycle operation's effect-boundary probes. `--dry-run`
-limits the result to deterministic local validation, renderability, dependency
-selection, and the checks that can be answered without process or network
-access. A live preflight may perform bounded read-only observation through
+replaces a fresh lifecycle operation's effect-boundary probes. A live
+preflight may perform bounded read-only observation through
 qualified adapters but allocates no lifecycle identity or log. Failed,
 unavailable, forbidden, malformed, or contradictory observation is an explicit
 failed or unknown check, never success or absence.
@@ -346,12 +321,10 @@ failed or unknown check, never success or absence.
 Any otherwise syntactically and semantically valid `render` invocation prints
 human render help and succeeds when neither `--input-dir` nor `--output-dir` is
 supplied. This includes an invocation with `--output json` or other valid render
-flags: it emits no JSON envelope and performs no command work. Context-free
-render requires both path flags and writes placeholder-bearing portable
-artifacts after loading and validating the desired-state file or directory
-named by `--input-dir`. Context-backed whole render requires `--output-dir` and
-`--sensitive`. `render installer` and `render storage` write to their
-context-owned artifact roots.
+flags: it emits no JSON envelope and performs no command work. The path flags
+otherwise follow their [relationships](cli/commands.md#flag-relationships-and-safeguards).
+What the artifact renderers write, and the Environment preflight families'
+dry-run and host-key detail, are [deferred](deferred/cli-access-and-rendering.md).
 `render effective` is the read-only exception: text mode emits canonical
 effective YAML and JSON mode places the complete canonical effective-state
 array in `result.effectiveState`, alongside admission `counts`; neither mode
@@ -365,44 +338,6 @@ artifacts only and are never executed by render.
 `plan`, `apply`, and `destroy` act on the complete selected lifecycle unit.
 They accept no positional operand, partial selector, range, mode,
 reconciliation, adoption, reclaim, force, or resource-specific subcommand.
-
-### Stage selection
-
-`plan` and `apply` accept `--stage`, a comma-separated list over exactly
-`infra-components`, `substrates`, `machines`, `clusters`, and `add-ons`.
-Omission selects every stage. `destroy` and `status` do not accept it.
-
-The selection never narrows the frozen plan or the lifecycle unit. It gates
-only which blocks an invocation starts, under the
-[stage contract](state-reconciliation.md#stages-and-the-pause-boundary): a
-selected block still waits for its dependencies, an unselected block stays
-pending, and the operation reports `paused` when nothing further can start.
-A later `apply` continues that same operation under any selection. An
-invocation whose selection admits no startable block, or that excludes the
-block an operation must retry, fails `lifecycle.stage` before registration and
-before any effect. `plan --stage` never fails for that reason: it previews
-which blocks the selection would start and which it would defer.
-
-### Staged apply without destroy
-
-When `apply` is operational under the staged-availability exception in
-[state reconciliation](state-reconciliation.md#lifecycle-unit) while
-`destroy` is unavailable, it emits exactly one
-`lifecycle.destroy-unavailable` warning on standard error after presenting the
-plan and before confirmation. With or without `--yes`, this pre-phase warning
-precedes fresh operation registration and any continuation attempt,
-unknown-outcome resolution observation, or effect. `--yes` suppresses only
-confirmation.
-
-Every trustworthy post-registration `apply` result in `running`, `failed`,
-`unknown`, or `done` emits the warning once again on standard error after the
-primary result. The warning states that this executable cannot invoke destroy,
-that update, another apply, and final purge remain locked, and that the safe
-next action is exact apply continuation when incomplete or installation of a
-compatible destroy-capable executable when done. It never changes or enters
-the standard-output lifecycle receipt. Human wording may evolve, but its code,
-two phases, stream, lock meaning, and safe-next-action content are stable. The
-public `destroy` invocation itself retains the `cli.not-implemented` behavior.
 
 `plan` is a pure text preview of the next legal full operation or frozen
 continuation point. With no operation it previews the fresh operation the
@@ -423,14 +358,14 @@ is never read as work this invocation performed.
 
 `apply` and `destroy` present the frozen plan, then any required
 authorizations, then the ordinary confirmation. During execution they report
-[progress](cli/output.md#long-running-progress) per block and
-[presentation group](cli/output.md#multi-machine-presentation), and they close
-with the ordered result, the safe log reference and the receipt below. A
-refusal before registration reports `refused` with no operation. An
-authorization token the frozen plan does not require fails
-`lifecycle.authorization` before registration. A root lock or context lease
-that cannot be acquired fails `lifecycle.lease`, naming the safe retry;
-Bootwright never takes a lease over.
+[progress](cli/output.md#long-running-progress) per block, with its
+[presentation groups](cli/output.md#multi-machine-presentation) as sub-steps,
+and they close with the ordered result, the safe log reference and the
+[receipt](#lifecycle-receipt). A refusal before registration reports its
+diagnostics and no receipt. An authorization token the frozen plan does not
+require fails `lifecycle.authorization` before registration. A root lock or
+context lease that cannot be acquired fails `lifecycle.lease`, naming the safe
+retry; Bootwright never takes a lease over.
 
 `apply` and `destroy` follow the state owner's
 [transitions](state-reconciliation.md#state-machine),
@@ -440,6 +375,16 @@ The CLI presents the frozen plan and required authorizations, then obtains
 ordinary confirmation unless `--yes` was supplied. A flag bypasses no state
 or safety gate.
 
+### Stage selection
+
+`plan` and `apply` accept the [`--stage` flag](cli/commands.md#flag-relationships-and-safeguards);
+what a selection gates, pauses and refuses is owned by the
+[stage contract](state-reconciliation.md#stages-and-the-pause-boundary).
+`plan --stage` never fails `lifecycle.stage`: it previews which blocks the
+selection would start and which it would defer.
+
+### Lifecycle receipt
+
 Every resolved `plan`, `apply`, or `destroy` invocation ends its text result
 with this stable machine-readable receipt unless no trustworthy lifecycle
 result exists:
@@ -447,18 +392,20 @@ result exists:
 ```text
 operation: <operation-id|none>
 verb: <plan|apply|destroy>
-state: <preview|refused|running|paused|failed|unknown|done>
+state: <preview|running|paused|failed|unknown|done>
 next: <apply|continue-apply|destroy|continue-destroy|resolve|none>
 ```
 
-The labels, order, enum values, escaping, and final LF are stable. `preview`
-is a CLI-only marker for a pure plan with no operation; `refused` is a CLI-only
-marker for a resolved request rejected before operation registration. Neither
-is persisted as an operation state. When `operation` is not `none`, `state` is
-exactly the durable `running`, `paused`, `failed`, `unknown`, or `done` value
-owned by state reconciliation. A `paused` apply is a successful result: it
-exits zero and its next action is `continue-apply`. The receipt and `status --output json` derive from the
-same trustworthy state.
+The labels, order, enum values, escaping, and final LF are stable. Every `plan`
+receipt has state `preview`, a CLI-only marker that is never persisted as an
+operation state. Its `operation` names the incomplete operation the plan would
+continue, or `none` when it previews a fresh operation, and its `next` names
+that continuation or the verb it previews. An `apply` or `destroy` receipt
+carries the exact durable `running`, `paused`, `failed`, `unknown`, or `done`
+state owned by state reconciliation. A refusal before registration has no
+trustworthy lifecycle result and emits no receipt. A `paused` apply is a
+successful result: it exits zero and its next action is `continue-apply`. The
+receipt and `status --output json` derive from the same trustworthy state.
 
 `next` names what the operation's own state calls for, so a `done` operation of
 either verb reports `none`. A settled verb reports `done` and `none` too, over
@@ -483,36 +430,10 @@ state calls for.
 
 List and info commands derive their result from validated desired state,
 context-owned artifacts, and durable ownership evidence. A name can locate an
-entry but never proves identity or ownership. `cluster info` omits secret values
-by default and presents the exact `secret show` or
-`cluster kubeconfig` command needed to retrieve them. `cluster list` identifies
-each cluster's API kind. `cluster info` presents each cluster's kind and the
-applicability and availability of its access commands under the
-[discovery output contract](cli/output.md#cluster-discovery).
-
-For an available cluster access or credential-export use case, load and validate
-the complete selected graph, resolve `--name` to one selected cluster, then check the
-[applicability table](cli/commands.md#cluster-command-applicability). An unknown
-or excluded name fails `access.target`; it never selects another cluster or
-searches outside the selected graph. An inapplicable command fails
-`cluster.not-applicable` with exit `1`, empty standard output, and one diagnostic
-on standard error naming the canonical command, selected cluster name and kind,
-applicable targets, and `bootwright cluster info --context <context> --name
-<cluster>` as the next discovery action. It reads no credential material,
-produces no descriptor or sensitive output, and performs no write, process,
-network, or remote access. This target check follows, and never bypasses, the
-[unavailable-command gate](#recognized-but-unavailable-commands).
-
-On an applicable target, resolve the exact node when required, then establish
-access readiness from local context-owned metadata and evidence. Missing access
-metadata or a required credential artifact fails `access.unavailable` with exit
-`1`, empty standard output, and a diagnostic identifying the missing prerequisite
-and its safe next action. Missing target or ownership evidence remains
-`access.target`; SSH identity and trust failures retain `trust.identity`, and
-unsafe descriptor encoding remains `access.handoff`.
-An access prerequisite failure never produces a partial descriptor or sensitive
-result and never falls back to ambient configuration. Applicability and
-prerequisite checks precede any permitted credential read.
+entry but never proves identity or ownership. The detailed contract of cluster
+inspection, access handoff and node selection is
+[deferred](deferred/cli-access-and-rendering.md) to a
+[C6](milestones/backlog.md#candidates) slice.
 
 `secret show` and `cluster kubeconfig` are raw sensitive-byte exports.
 They require an exact context and object, perform no implicit fallback, emit
@@ -523,22 +444,6 @@ names end in `Value`. Neither form copies a sensitive value to a diagnostic,
 log, history, cache, terminal title, or second stream. Callers are responsible
 for a restrictive destination if they redirect an explicit reveal. Help and
 completion never reveal.
-
-`cluster rsh`, `cluster exec`, `cluster oc`, and `cluster kubectl` are explicit
-access handoffs, not desired-state automation or lifecycle blocks. Bootwright
-resolves one exact target and emits a bounded, deterministically escaped
-descriptor for independent operator execution. It does not launch a client,
-connect to the target, open an interactive stream, or treat later execution as
-operation evidence. The descriptor names the pinned client identity, exact
-target, minimal non-sensitive configuration, and requested argument vector as
-data, never shell text; sensitive argument values have no supported transport.
-[`machine rsh` and `machine exec`](#machine-ssh-sessions) instead open the
-session themselves.
-
-`machine exec` and `cluster exec` preserve the command values as an argument
-vector, never shell text. `rsh` accepts no command tail. `oc` and `kubectl`
-preserve the payload argument vector but never inherit ambient kubeconfig,
-plugins, credentials, proxy settings, cache, or executable lookup.
 
 `machine list` reports two independent things about each selected Machine and
 never conflates them. Its lifecycle position is how far this context's own
@@ -652,33 +557,6 @@ direct execution on that host, and a Machine declaring no resolvable SSH
 access fails `access.unavailable`. Each is exit `1` with empty standard output,
 no connection attempt and no trust record.
 
-### Cluster node selection
-
-`cluster rsh` and `cluster exec` resolve `--node` only within the selected
-cluster's declared roster: `ContainerCluster.spec.nodes` or managed
-`StorageCluster.spec.ceph.topology.nodes`. Canonical node order is ascending
-bytewise order of node `name`, independent of declaration or map order.
-Omission selects the first node in that order. An explicitly empty value is a
-usage error under the scalar input rules.
-
-For a supplied value, use the first matching tier:
-
-1. exact declared node `name`;
-2. exact effective node FQDN, including an authored override; then
-3. `<role>-<ordinal>`, where the role is declared by the owning cluster schema
-   and the ordinal is a zero-based decimal integer spelled `0` or `[1-9][0-9]*`.
-   Filter nodes by that role, sort them in canonical node order, and select the
-   indexed node. Container nodes use their authored role, including `infra`;
-   a storage node participates once in each role listed in its `roles` set.
-
-A literal node name wins even if it looks like a role selector. Multiple
-matches in a tier, an unknown name or role, an absent role, an out-of-range
-ordinal, or a malformed selector fails `access.target` with exit `1`; resolution
-never falls through from an ambiguous tier or silently selects the default.
-The diagnostic names the requested selector and gives the safe next action of
-choosing one declared node name. Node selection changes no desired state,
-canonical serialization, or lifecycle scope.
-
 ### Machine power operations
 
 `machine start`, `machine stop` and `machine restart` converge one exact
@@ -702,13 +580,11 @@ A request is not evidence: the result reports the state the controller proved
 once the operation settled, together with the state before it and whether
 anything changed. A state that never arrived within the bounded window is
 `lifecycle.unknown` with exit `1`, never a success. What the adapter printed is
-[retained for the run](cli/output.md#bounded-run-output) and named as `Logs`
-before it runs and again in its result, because a power request that refuses
-reports a diagnostic rather than a result and that output is all there is to
-read. Stopping asks the operating
-system to shut down and polls it to off; `--force` cuts the power instead, and
-is a separate request rather than a fallback. Restarting proves the stop before
-it starts, so an interrupted restart is never reported as settled.
+[retained and named for the run](cli/output.md#bounded-run-output). Stopping
+asks the operating system to shut down and polls it to off; `--force` cuts the
+power instead, and is a separate request rather than a fallback. Restarting
+proves the stop before it starts, so an interrupted restart is never reported
+as settled.
 
 [`machine list --power-status`](#resource-inspection-and-explicit-access)
 reads the same controllers over the same boundary and under the same lock, and

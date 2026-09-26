@@ -23,7 +23,7 @@ output, target concurrency, redirects, retries, and wall-clock duration. Limit
 failures are explicit and deterministic; partial input is never accepted as
 complete. Enforce limits before proportional allocation or work except for
 the explicitly qualified desired-state
-[per-document parser boundary](api.md#parser-boundary): verified source-byte
+[per-document parser boundary](api/input.md#parser-boundary): verified source-byte
 limits precede parsing, while representation limits follow composition of one
 document. Cancellation stops admission of new work and releases bounded
 resources at the owning boundary's documented cancellation points.
@@ -49,18 +49,17 @@ desired-state hashes, and ownership identifiers are non-secret only when they
 embed no credential; private-estate identifiers still do not belong in public
 examples.
 
-`validate` and `render effective` validate only a secret source declaration and
-deterministic generation parameters. They do not stat or open a referenced
-secret file, contact a confidential store, or generate material. A
-context-backed invocation may read only the metadata required to resolve the
-selected context and its immutable desired-state input view; it reads no
-lifecycle or confidential state. An in-tree file source uses the reserved
-`secrets` path segment so API discovery never reads it as desired state.
+`validate` and `render effective` read no Secret material under the
+[compiler boundary](api.md#compiler-boundary), and an in-tree file source sits
+beneath the [reserved `secrets` segment](api/secrets.md#file-source) that
+discovery excludes. A context-backed invocation may read only the metadata
+required to resolve the selected context and its immutable desired-state input
+view; it reads no lifecycle or confidential state.
 
 The [durable context boundary](contexts.md#storage-locking-and-publication)
-adds held-root publication, strict bounded records, immutable reads protected by shared root locks
-and conservative corruption refusal. Its manifest freezes authored input only;
-source paths never authorize payload access during admission or inspection.
+owns publication, record bounds, locked reads and corruption refusal; its
+manifest freezes authored input only, and source paths never authorize payload
+access during admission or inspection.
 
 Secret materialization requires an explicit context-scoped authority and must
 not fall back to ambient credentials. Secret bytes stay in bounded memory, an
@@ -82,7 +81,7 @@ or log; [the output contract](cli/output.md#private-operation-logs) lists them.
 API discovery rejects a symlink root and discovered YAML symlinks, never
 descends through a symlink, and excludes the exact directory classes and
 payload roots defined in
-[the API contract](api.md#environment-directory-and-selected-state). Resource
+[API discovery](api/input.md#discovery). Resource
 selection cannot re-enter them. A selected regular file is opened relative to
 a held, verified directory handle with no-follow semantics; type, device,
 inode, link policy, size, and stability are verified on the opened handle.
@@ -93,10 +92,9 @@ All managed writes remain beneath an explicitly selected and verified root.
 Components are validated single path segments; traversal, absolute
 substitution, links, special files, alternate streams, and unexpected mount or
 device crossings are rejected. Directories use mode `0700` and private files
-use `0600`, with a restrictive creation mask. The only executable-file
-exception is the root-owned `0700` immutable Controller bundle entry defined
-by [Workspace](contexts.md#controller-relationship-and-host-binding); it grants
-no group or other access. Temporary and final files are
+use `0600`, with a restrictive creation mask; the one executable-file exception
+is [Workspace's](contexts/controller-record.md#location-and-file-modes)
+immutable controller bundle entry. Temporary and final files are
 created exclusively, written through held handles, bounded, flushed where
 durability is required, and atomically published without overwriting unrelated
 content. Parent directory durability is established when the owning state
@@ -116,14 +114,13 @@ become unreviewed native arguments. Invocation uses no shell, a fixed safe
 working directory, a minimal allowlisted environment, and only required file
 descriptors. Ambient `PATH`, user configuration, proxy variables, inventory,
 plugins, roles, caches, SSH options, and privilege settings are not authority.
-A child process therefore receives no proxy variable of its own; where a
-command has an acquisition route, that route reaches the child as request data.
-An adapter that hands such a route to a native tool through its environment
-sets the upper- and lower-case spelling of each proxy variable to the same
-value, so a spelling the request did not set cannot supply a route of its own.
-The one environment value a privileged re-execution may carry is the
-[context-free route](controller.md#the-context-free-acquisition-route) the
-invoking process already admitted, forwarded under its own fixed names.
+A child process therefore receives no proxy variable of its own; an
+acquisition route reaches it as request data. An adapter that hands such a
+route to a native tool through its environment sets the upper- and lower-case
+spelling of each proxy variable to the same value, so a spelling the request
+did not set cannot supply a route of its own. A privileged re-execution carries
+only the [context-free route](controller.md#the-context-free-acquisition-route)
+its invoker already admitted.
 
 The adapter bounds runtime, input, output, process count, and inherited
 resources. Cancellation terminates and reaps the whole owned process tree.
@@ -141,19 +138,21 @@ of generation.
 
 ## Local context privilege
 
-The [context store](contexts.md#storage-locking-and-publication) is always
-root:root and private beneath `/var/lib/bootwright`. Local sudo authentication
-and invocation-scoped credential refresh follow the
-[CLI boundary](cli.md#local-privilege-and-user-identity). No password enters
-Bootwright memory, argv, environment, durable state or output.
+The [context store](contexts.md#storage-locking-and-publication) owns
+root-only storage, and the [CLI boundary](cli.md#local-privilege-and-user-identity)
+owns sudo authentication and credential refresh. No password enters Bootwright
+memory, argv, environment, durable state or output. Per-user selection is
+non-authoritative input under [context identity](contexts.md#identity-and-selection),
+validated against the root registry and never written by root followed by
+chown.
 
-Per-user selection is non-authoritative input: validate its bounded name
-against the root registry. Perform user-file effects with that
-user's credentials, using no-follow handles, private modes and atomic
-publication. Never use an untrusted home or a root write followed by chown.
-Permanent context deletion requires positive disposal proof and an exact
-recorded deletion identity before any unlink; partial removal never restores
-ordinary usability or weakens identity checks.
+[Permanent context deletion](contexts.md#permanent-deletion) requires positive
+disposal proof and an exact recorded deletion identity before any unlink;
+partial removal never restores ordinary usability or weakens identity checks.
+The one exception to disposal proof is the explicit orphan acknowledgement of
+the [reconciliation guard](state-reconciliation.md#context-mutation-evidence):
+it abandons what recognized evidence attributes to the context instead of
+proving it gone, and waives nothing else.
 
 ## Network, remote systems, and privilege
 
@@ -176,6 +175,11 @@ effective intent, and incapable of becoming a global default. DNS resolution
 and every connection target are checked against the same authorization so
 rebinding or alternate-address retries cannot expand scope.
 
+Not yet met: the BMC-to-artifact-server virtual-media leg defaults to
+`disable-verification`, as a provider-wide and a Machine default, pending the
+owner decision on BMC TLS verification; tracked as
+[backlog S3b](milestones/backlog.md#audit-follow-ups-2026-09).
+
 Managed probes and effects use the
 [Ansible boundary and locked runtime closure](architecture.md#go-and-ansible-responsibility-boundary),
 generated inventory/configuration, and pinned allowlisted `bootwright.core`
@@ -189,10 +193,10 @@ The application request fixes exact targets and authorization before adapter
 execution. The adapter cannot widen targets, privileges, retries, or effects.
 Live remote identity, host-key or certificate identity, ownership, power state,
 and claimed absence are positively proved where required; probe failure is
-unknown. Secrets reach Ansible only through bounded memory, standard input, a
-descriptor, or a restrictive operation file. Every task, result, and diff that
-could carry one uses `no_log` and no-diff behavior and must not persist it in
-inventory, facts, caches, evidence, logs, or adapter results.
+unknown. Secrets reach Ansible only by the channels
+[sensitive material](#sensitive-material) permits. Every task, result, and diff
+that could carry one uses `no_log` and no-diff behavior and must not persist it
+in inventory, facts, caches, evidence, logs, or adapter results.
 
 ### Direct SSH sessions
 
@@ -243,20 +247,15 @@ content digest. Verify integrity and required publisher authenticity from
 separately trusted metadata before use. Repository-owned automation is
 content-digested as part of the selected implementation. Implicit upgrade,
 floating tags during execution, and ambient external tools are forbidden.
-Explicit controller setup without a serving retained resolution resolves latest or
-declared dependency versions before confirmation. It may acquire verified
-public resolver payloads and execute a
-maintained resolver within disposable, unprivileged staging. This exception
-permits only bounded scratch writes and explicit publisher/repository access;
-it grants no installed-host package, shared-state, Secret or target authority.
-Root invocation must establish an unprivileged, isolated execution boundary
-before downloaded resolver code runs. Freeze exact versions, source identities,
-publisher digests, resolver identities and the complete native transaction
-before presenting the installation plan. Each staging executable is verified
-before its own execution; the installation phase uses only the frozen result.
-Preflight, dry-run and pending-operation recovery never refresh this metadata.
-A frozen operation never substitutes an update silently; recovery
-follows [state reconciliation](state-reconciliation.md#dependency-safety-during-recovery).
+The one exception is [controller setup's](controller.md#selection-and-command-journeys)
+resolver staging. It runs downloaded resolver code, each staging executable
+verified before its own execution, in disposable unprivileged staging with no
+installed-host, shared-state, Secret or target authority, and freezes exact
+versions, sources, publisher digests, resolver identities and the complete
+native transaction before presenting the plan; the installation phase uses only
+that frozen result, and preflight, dry-run and recovery never refresh it. A
+frozen operation never substitutes an update silently; recovery follows
+[state reconciliation](state-reconciliation.md#dependency-safety-during-recovery).
 
 ## Logs, output, and diagnostics
 
@@ -268,14 +267,18 @@ credential-bearing values, environment dumps, and any field protected by
 structural and occurs before formatting or persistence. Truncation and dropped
 records are explicit.
 
-Required logs exist before effects or resolution observations. Creation, write,
-flush, and finalization failures follow the durable fault and unknown-outcome
-rules in [state reconciliation](state-reconciliation.md#plan-and-execution):
-stop new effects and observations, request cancellation of active work, and
-preserve the log fault until safe restoration, even after positive effect
-resolution. Logs are troubleshooting material, never authoritative evidence or a
-continuation cursor. Verbosity cannot weaken redaction, `no_log`, permissions,
-bounds, or stream separation.
+Retained adapter output is the one bounded exception to that rule. Each
+attempt's and bounded run's [retained output](cli/output.md#private-operation-logs)
+is raw, private, bounded and never presented, and nothing reads it back. Its
+secrecy depends on `no_log`: every task that receives bound material sets it,
+so the material never reaches the adapter's own streams.
+
+Required logs exist before effects or resolution observations, and a failure
+to create, write, flush or finalize one is a durable fault under
+[state reconciliation](state-reconciliation.md#converging-an-effect). Logs are
+troubleshooting material, never authoritative evidence or a continuation
+cursor. Verbosity cannot weaken redaction, `no_log`, permissions, bounds, or
+stream separation.
 
 Diagnostic codes and locations may identify a failed field, object, safe
 source, target identity, or private log reference. Messages must not
@@ -294,33 +297,29 @@ a driver may enter only its pinned embedded adapter and locked dependency
 closure under [architecture](architecture.md#go-and-ansible-responsibility-boundary).
 
 [`CustomPlaybook`](api/custom-playbooks.md) is a reserved, non-executable
-shape. Read-only commands strictly decode, validate, default, and render its
-declaration without reading a local source, fetching Git content, resolving
-credentials, or inspecting playbook bytes. An enabled object must be rejected
-before external content access, operation registration, or effects;
-`enabled: false` produces no work.
-
-An exit status, source revision, signature, or sandbox alone cannot prove the
-identity, ownership, reversibility, or absence of exfiltration for arbitrary
-remote effects. Executable custom automation requires a separately
-user-authorized typed schema with declared effects and inverse operations,
-immutable source and dependency identity, exact targets, bounded secret
-inputs, fail-closed evidence, and a qualified isolated runner. The broad
-`extraVars`, target, and source fields grant none of that authority.
+shape whose admission and refusal that page owns. An exit status, source
+revision, signature, or sandbox alone cannot prove the identity, ownership,
+reversibility, or absence of exfiltration for arbitrary remote effects.
+Executable custom automation therefore requires a separately user-authorized
+typed schema with declared effects and ownership-aware inverse operations;
+immutable source and dependency identity with bounded extraction or checkout;
+an exact Machine inventory; bounded secret materialization; authorization;
+failure and cancellation behavior; continuation; fail-closed durable evidence;
+and a qualified, isolated, pinned runner. The broad `extraVars`, target, and
+source fields grant none of that authority.
 
 ## Stateful mutation
 
 [State reconciliation](state-reconciliation.md) owns immutable authorization,
 leases, durable plans/evidence, exact identity and ownership, positive-absence
-proof, live revalidation, and unknown-outcome recovery. Each effect defines
-idempotence/replay, retries, timeout, cancellation, safe compensation where
-available, and success evidence before implementation. Recovery evidence
-survives cleanup and partial failure.
-
-Confirmation and irreversible authorization are separate typed decisions.
-Neither bypasses validation, identity, ownership, bounds, logging, or live
-probes. No force input exists. An unknown effect cannot produce success,
-non-idempotent replay, or dependent work.
+proof, live revalidation, unknown-outcome recovery and
+[confirmation and authorization](state-reconciliation.md#confirmation-and-authorization).
+Each effect defines idempotence/replay, retries, timeout, cancellation, safe
+compensation where available, and success evidence before implementation.
+Recovery evidence survives cleanup and partial failure. Confirmation and
+irreversible authorization are separate typed decisions, and neither bypasses
+validation, identity, ownership, bounds, logging, or live probes. No force
+input exists.
 
 ## Required security proof
 

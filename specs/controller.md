@@ -1,10 +1,9 @@
 # Controller prerequisites and setup
 
 Controller owns inspection and preparation of the local host on which
-Bootwright runs. This contract defines `setup` and `preflight controller`;
-[milestones](milestones/delivered.md#m1d--controller-setup) own delivery and qualification
-status. Setup never provisions an operating system or executes a managed
-service's lifecycle.
+Bootwright runs. This contract defines `setup`, `preflight controller` and the
+controller stage. Setup never provisions an operating system or executes a
+managed service's lifecycle.
 
 Prerequisites divide by what selects them. **Host prerequisites** are
 context-independent: every context on this host needs exactly the same ones, so
@@ -113,30 +112,33 @@ client closure without installing virtualization daemons. The public RHEL
 baseline source does not include that client; a selected RHEL libvirt requirement
 refuses before acquisition until an approved entitled source is defined.
 
-Python, Ansible and generic clients without exact desired-state versions resolve
-latest stable during explicit setup, before confirmation, and only when no
-retained resolution serves the selected platform, version intent, native
-requirements and target tools under the running executable. Native packages use
-the latest available build for the selected OS release and approved repository
-set. OpenShift/OKD installer and clients remain tied to the target release.
-A cluster pinned to a release image still selects its clients from the declared
-`release.version`; without that version setup refuses rather than inferring a
-client release from the image.
-`virtctl` uses upstream latest unless explicitly overridden; no remote target
-discovery or automatic compatibility inference is required. Freeze source URL,
-version, byte count and publisher SHA-256 in the plan and receipt. Mirrors
-change acquisition only. Dry-run and preflight do not discover versions. Setup
-never checks for newer releases: a serving retained resolution is reused as
-frozen, a ready controller reports unchanged without publisher or repository
-access, and a controller missing part of that closure installs only what is
-missing. Native packages are solved again only when a selected native root is
-not installed, because the frozen transaction binds the host's exact
-before-inventory; the retained Python, Ansible and target-tool resolution is
-kept. A retained resolution the running executable cannot use, or whose
-`latest` Ansible release falls below the collection minimum, is superseded by a
-fresh resolution; a declared release below that minimum refuses. An incomplete
-setup reuses its exact frozen resolution without metadata refresh. Moving a
-`latest` dependency to a newer release requires declaring that release in
+Setup resolves Python and Ansible to latest stable during explicit setup,
+before confirmation, and only when no retained resolution serves the selected
+platform and native requirements under the running executable. Native packages
+use the latest available build for the selected OS release and approved
+repository set. Freeze source URL, version, byte count and publisher SHA-256 in
+the plan and receipt. Mirrors change acquisition only. Dry-run and preflight do
+not discover versions. Setup never checks for newer releases: a serving
+retained resolution is reused as frozen, a ready controller reports unchanged
+without publisher or repository access, and a controller missing part of that
+closure installs only what is missing. Native packages are solved again only
+when a selected native root is not installed, because the frozen transaction
+binds the host's exact before-inventory; the retained Python and Ansible
+resolution is kept. A retained resolution the running executable cannot use,
+or whose `latest` Ansible release falls below the collection minimum, is
+superseded by a fresh resolution. An incomplete setup reuses its exact frozen
+resolution without metadata refresh.
+
+[The controller stage](#the-controller-stage) resolves target clients under the
+version intent the Environment's
+[`dependencyVersions`](api/environment.md#dependency-versions) declares, and
+retains them the same way. OpenShift/OKD installer and clients remain tied to
+the target release. A cluster pinned to a release image still selects its
+clients from the declared `release.version`; without that version the stage
+refuses rather than inferring a client release from the image. `virtctl` uses
+upstream latest unless explicitly overridden; no remote target discovery or
+automatic compatibility inference is required. Moving a retained `latest`
+client to a newer release requires declaring that release in
 `dependencyVersions`.
 
 A retained resolution that differs from the running executable only by the
@@ -216,10 +218,9 @@ import command. Every check carries the scope that owns it, so a negative
 report names the one command that settles it: `setup` for a host prerequisite,
 and that context's own `apply --stage controller` for anything its graph
 selects. An unmet host prerequisite always wins, because the prerequisites a
-context adds cannot be prepared on an unprepared host. Unavailable cluster or
-service lifecycle commands remain unavailable. A controller requirement outside
-the supported setup matrix does block setup before effects. Global SSH flags
-remain unconsumed.
+context adds cannot be prepared on an unprepared host. A controller
+requirement outside the supported setup matrix blocks setup before effects.
+Global SSH flags remain unconsumed.
 
 | Invocation | Required behavior |
 | --- | --- |
@@ -280,7 +281,7 @@ execution bundle the fixed automation is read from; the second is the only area
 the request may publish into, and its writability is the adapter's authority to
 change anything at all. Setup passes the same area for both, because it
 publishes into the bundle it executes; a controller stage passes a separate
-[client area](contexts.md#controller-relationship-and-host-binding), because
+[client area](contexts/controller-record.md#bundles-and-client-areas), because
 its execution bundle is sealed. The fixed controller setup playbook
 composes `bootwright.core.controller_prerequisites`. It validates the request,
 observes the before-inventory, and waits for Go to durably record preparation
@@ -302,9 +303,10 @@ Ansible returns bounded structured evidence through the runner protocol.
 Task output is not an application API. Read-only Go verification reconstructs
 installed bootstrap and target file inventories from approved retained sources.
 
-`--yes` suppresses ordinary confirmation only. Use the existing bounded
-yes/no confirmation semantics, with the plan before the prompt; decline,
-noninteractive input without `--yes`, or cancellation starts no setup mutation.
+`--yes` suppresses ordinary confirmation only. Use the
+[ordinary confirmation](cli.md#ordinary-confirmation), with the plan before
+the prompt; decline, noninteractive input without `--yes`, or cancellation
+starts no setup mutation.
 A verified no-op needs no prompt or installed-host/shared-state writes.
 Disposable resolution and local-probe scratch is removed after use. Setup
 changes neither current-context selection nor Environment input, and claims no
@@ -336,7 +338,7 @@ binds the host's exact before-inventory.
 Before acquiring a single byte it publishes the exact source identities it will
 fetch, and the native resolution a libvirt requirement needs, into the shared
 controller record. Target clients are published into a
-[client area](contexts.md#controller-relationship-and-host-binding) named by
+[client area](contexts/controller-record.md#bundles-and-client-areas) named by
 the digest of that exact closure, under the reservation, attribution and
 sealing rules the setup bundle has; the native transaction publishes its
 before-state into the running attempt before it is authorized. The block
@@ -364,14 +366,14 @@ never installs it, publishes a binding, or claims another context's resources.
 
 ## Egress and local effects
 
-With an explicit context, the controller Machine's normalized
-[proxy choice](api/machines.md#machine-proxy) is the sole route selection.
-Setup supports direct access and qualified unauthenticated external proxies using
-the qualified system trust store. A managed Proxy, `proxyAuthRef` or
-`trustBundleRef` is unsupported for setup and refuses before acquisition.
+With a context, the controller Machine's normalized
+[proxy choice](api/machines.md#machine-proxy) is the sole route selection: the
+controller stage and context preflight support direct access and qualified
+unauthenticated external proxies using the qualified system trust store. A
+managed Proxy, `proxyAuthRef` or `trustBundleRef` refuses before acquisition.
 Never fall back to direct access or read Secret material to probe an
-unsupported route. Authenticated/private-trust setup acquisition needs its
-own Secrets consumer and recovery definition before promotion.
+unsupported route; authenticated or private-trust acquisition needs its own
+Secrets consumer and recovery definition.
 
 ### The context-free acquisition route
 
@@ -381,7 +383,10 @@ three commands do: `setup`, `preflight controller` without `--context`, and
 `media add --from-url`. Every context-backed command, including
 `apply --stage controller`, `preflight controller --context <name>` and every
 lifecycle block, continues to take its Machine's normalized proxy choice alone,
-so one context never acquires over two routes.
+so one context never acquires over two routes. An invocation that is not
+admitted reads no route.
+
+Not yet met: the route is read by command path, so `preflight controller --context` and `media add --from-file` read it too; tracked as [backlog F2](milestones/backlog.md#audit-follow-ups-2026-09).
 
 The route is read from `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`, in either
 case. An unset environment is direct access. The two spellings of one name set
@@ -464,15 +469,18 @@ setup does not repair their permissions. These checks detect observable
 substitution and namespace contradictions, not hardware attestation. A complete
 clone preserving all three identity values and the relevant namespace view is
 indistinguishable; copied identity bytes alone are never a claim of clone
-resistance. Controller relocation and full-store restore remain separately
-defined work.
+resistance. Full-store restore follows the
+[restore boundary](contexts.md#format-and-restore-boundary); controller
+relocation waits on backlog [C14](milestones/backlog.md#candidates).
 
 [Workspace](contexts.md#controller-relationship-and-host-binding) persists the
 verified identity and context relationship. Setup prepares the host without
 claiming any context; the relationship is published by the first apply that
-uses the host, under the same verified identity. Later operations and context
-preflight verify that exact binding; they never silently rebind.
-follows [controller-host protection](state-reconciliation.md#controller-host-protection).
+uses the host, under the same verified identity, in the
+[controller record](contexts/controller-record.md). Later operations and context
+preflight verify that exact binding under
+[controller-host protection](state-reconciliation.md#controller-host-protection);
+they never silently rebind.
 
 Workspace serializes shared prerequisite mutation across every context in the
 fixed root using its exclusive root lock, acquired before a context lease.
@@ -494,9 +502,7 @@ establishes service ownership or authorizes another context's resources.
 Setup has a private durable receipt, separate from lifecycle operation state
 and logs. Before the first installation or bundle-publication effect, record
 the verified host, selected implementation and complete immutable local action
-plan. For a context-bound attempt, retain its context name, controller identity
-and input revision. Keep required input/binding evidence protected from update
-and purge until the attempt has a definitive terminal outcome.
+plan in the [controller record](contexts/controller-record.md#record-and-receipt).
 
 Each action has attributable before-state, fixed request, postcondition and
 outcome. Record intent durably before starting it; record success only after
@@ -534,22 +540,20 @@ Completed setup retains enough bounded host and bundle evidence for later
 inspection; no-op repetition revalidates without republishing. A later input
 or Bootwright automation revision may select a new bundle through a fresh setup.
 Preflight reports an incompatible retained bundle without resolving a replacement;
-an incomplete receipt still requires its original compatible executable.
-An input
-update may change controller prerequisite intent after setup recovery is
-complete, but cannot silently change an established controller Machine/host
-binding. Changes in readiness require another explicit setup. Deleting a
-disposable context removes its binding/receipt references, never shared host
-packages or bundles. Complete-store restore and relocation remain separately
-defined work.
+an incomplete receipt still requires its original compatible executable. An
+input update may change a context's controller prerequisite intent, which its
+next controller stage installs, but cannot silently change an established
+controller Machine/host binding. A host prerequisite that loses readiness is
+prepared again by `setup`. What deleting a context removes from shared host
+state follows the
+[host-binding rules](contexts.md#controller-relationship-and-host-binding).
 
 ## Results and qualification
 
-Both commands retain their existing text-only CLI surface. Order checks and
-actions by catalog dependency order, then stable prerequisite identity. Show
-the baseline or explicit context scope, the resolved acquisition route with
-what selected it, required/observed versions, planned
-changes, readiness and next safe command. Both commands stream
+Both commands are text-only. Order checks and actions by catalog dependency
+order, then stable prerequisite identity. Show the baseline or explicit context
+scope, the resolved acquisition route with what selected it, required/observed
+versions, planned changes, readiness and next safe command. Both commands stream
 [long-running progress](cli/output.md#long-running-progress): the scope, then
 one `Checks` row per host check as it is verified. Real setup adds one
 `Resolving` step per dependency family it resolves before the plan, and one
@@ -557,7 +561,10 @@ one `Checks` row per host check as it is verified. Real setup adds one
 transaction or target tool in flight as its detail and, while it acquires them,
 the share of its sources already published. Host fingerprints, private paths,
 credentials, environment dumps and raw native-tool output are not public
-results. No new JSON flag, lifecycle receipt or private operation log is added.
+results. Neither has JSON output, a lifecycle receipt or a private operation log.
+
+Each check reports `ready` or `not-ready`, or `unverified` where a dry run
+cannot verify it.
 
 The [diagnostic taxonomy](cli/output.md#diagnostic-taxonomy-and-order) owns
 `preflight.*` and `controller.*` failure codes; existing context, privilege,
@@ -573,7 +580,7 @@ outcomes. No setup failure may imply that already verified effects rolled back.
 
 RHEL 9 and Fedora share one set of host-independent request/result tests
 covering clean dependency installation, already-ready no-op, context-free
-preparation, explicit binding, read-only preflight and dry-run, unsupported
+preparation, read-only preflight and dry-run, unsupported
 combinations, dependency/identity substitution, multi-context contention,
 protected dependencies, cancellation, package failures, uncertain publication
 and exact retry. A fake adapter proves this contract and never proves an

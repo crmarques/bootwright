@@ -46,7 +46,8 @@ func SelectTools(catalog api.Catalog) ([]ToolRequest, error) {
 		kind, version := distribution.Get("type").Text(), distribution.Get("release", "version").Text()
 		// A pinned release image is the payload, not a client version. The
 		// declared release still selects the clients; without one there is
-		// nothing to match and setup refuses rather than inferring it.
+		// nothing to match and the controller stage refuses rather than
+		// inferring it.
 		if (kind != "openshift" && kind != "okd") || version == "" {
 			return nil, selectionFailure(cluster, "controller.unsupported", "$.spec.distribution.release", "target tools require an exact supported release version; declare release.version for a cluster pinned to a release image")
 		}

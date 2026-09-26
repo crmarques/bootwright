@@ -109,10 +109,16 @@ func TestControllerInvocationPrivilegeAndHelp(t *testing.T) {
 			t.Fatal("effectful invocation omitted privilege", args)
 		}
 	}
-	for _, args := range [][]string{{"setup", "--help"}, {"preflight", "controller", "--help"}} {
+	for _, testCase := range []struct {
+		args  []string
+		usage string
+	}{
+		{args: []string{"setup", "--help"}, usage: "Ignored: setup selects no context"},
+		{args: []string{"preflight", "controller", "--help"}, usage: "Select explicit Environment requirements (default: baseline)"},
+	} {
 		var out bytes.Buffer
-		code := New(Config{Out: &out}).Run(context.Background(), args)
-		if code != 0 || strings.Contains(out.String(), "default: current") || !strings.Contains(out.String(), "context") {
+		code := New(Config{Out: &out}).Run(context.Background(), testCase.args)
+		if code != 0 || strings.Contains(out.String(), "default: current") || !strings.Contains(out.String(), testCase.usage) {
 			t.Fatal(code, out.String())
 		}
 	}

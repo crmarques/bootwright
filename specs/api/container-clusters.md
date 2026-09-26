@@ -77,9 +77,10 @@ claims no renderer support for that release.
 | `spec.install.additionalTrustBundleRefs` | array of strings | no | `[]` | Ordered unique `caBundle` Secret references for this cluster's native installation trust. |
 | `spec.install.servingCertificates` | object | no | — | Typed API and ingress serving-certificate refs below. |
 
-Disconnected mode requires `spec.install.registries.mirror` and a managed
-agent boot-artifacts endpoint. Connected mode obtains boot artifacts from the
-release payload and does not use an authored boot-artifacts selection.
+Disconnected mode requires `spec.install.registries.mirror`, whose Registry
+declares `trustBundleRef`, and a managed agent boot-artifacts endpoint.
+Connected mode obtains boot artifacts from the release payload and does not
+use an authored boot-artifacts selection.
 
 Both consumers use the shared
 [artifact endpoint selection](infrastructure-services.md#artifactserver), and
@@ -93,13 +94,12 @@ separate selections even when one component provides both.
 
 `spec.install.proxy` uses the shared
 [proxy choice](infrastructure-services.md#proxy-choice), independently of
-Machine choices, including the selected controller's proxy. An omitted choice
-normalizes to `direct: {}` after kind defaults. `spec.install.ntp` uses the shared
-[NTP selection list](infrastructure-services.md#dns-and-ntp-selection-lists).
-Omission leaves the native OS default; an explicit empty list clears inherited
-selections without requesting that time synchronization be disabled. These
-fields describe the downstream installation and do not mutate or inherit
-Machine OS installation policy.
+Machine choices, including the selected controller's proxy. `spec.install.ntp`
+uses the shared
+[NTP selection list](infrastructure-services.md#dns-and-ntp-selection-lists),
+and its omission leaves the native OS default. These fields describe the
+downstream installation and do not mutate or inherit Machine OS installation
+policy.
 
 ### Registry policy
 
@@ -116,9 +116,7 @@ credentials and trust belong to that object.
 | `imageDigestSources[].sourcePolicy` | string | no | `NeverContactSource` or `AllowContactingSource`. |
 
 Source entries are unique by `source`. Registry locations contain no inline
-credentials. Disconnected installation requires a mirror selection whose
-Registry declares `trustBundleRef`, in addition to its managed boot-artifacts
-endpoint. Defaults can share complete cluster mirror policy; another cluster's
+credentials. Defaults can share complete cluster mirror policy; another cluster's
 choice never changes this cluster's route. A mirror selection and its image
 source mapping describe different facts and do not implicitly create each
 other.
@@ -171,8 +169,8 @@ Every endpoint has this exact shape:
 
 `openshift` and `external` may own an authored `address`; otherwise `dnsName`
 can satisfy a non-VIP slot. `loadBalancer` forbids an authored address: the
-LoadBalancer and optional bind-address ref resolve it. `bindAddressRef` may be
-omitted only when the selected load balancer has one bind address.
+LoadBalancer and optional
+[bind-address ref](infrastructure-services.md#loadbalancer) resolve it.
 
 `node` is valid only for a one-node cluster and also forbids an authored
 address. Effective normalization resolves that node Machine's
