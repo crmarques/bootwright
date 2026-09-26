@@ -29,22 +29,12 @@ func applicationValues() packageSymbols {
 		// PythonLaunch is the pinned launch descriptor an adapter reads and
 		// projects; it binds no replaceable service.
 		"internal/controller/prerequisites": {"SetupReceipt": true, "PythonLaunch": true},
-		// Immutable request and evidence values an adapter must construct and
-		// read; they bind no replaceable service.
-		"internal/infrastructureservices/artifactserver": {"Request": true, "Evidence": true},
-		"internal/infrastructureservices/managedservice": {
-			"Request": true, "Evidence": true, "Definition": true, "Identity": true,
-			"Egress": true, "Endpoint": true, "Record": true, "Answer": true,
-		},
-		"internal/reconciliation": {"Plan": true, "Evidence": true},
-		// The invocation every capability crosses: immutable request and
-		// placement values an adapter constructs and reads, binding no
-		// replaceable service. Probe and Quiescence are the same kind of value
-		// for the removal gate — what a capability is asked and what it answers.
-		"internal/reconciliation/lifecycle": {
-			"RunRequest": true, "RunResult": true, "MaterialFile": true, "Placement": true,
-			"Probe": true, "Quiescence": true,
-		},
+		// The immutable request and service definition other capabilities
+		// construct and read; they bind no replaceable service.
+		"internal/infrastructureservices/managedservice": {"Request": true, "Definition": true},
+		// The removal gate's values, what a capability is asked and what it
+		// answers; they bind no replaceable service.
+		"internal/reconciliation/lifecycle": {"Probe": true, "Quiescence": true},
 		// The two private records an operation opens and hands to the work it
 		// is recording. Each is an owned handle over the area it was opened
 		// from, not a replaceable service.
@@ -273,7 +263,18 @@ func compositionViolations(sources []sourceFile, roles map[string]packageRole, v
 }
 
 func TestApplicationImplementationsAreBoundAtComposition(t *testing.T) {
-	for _, violation := range compositionViolations(productionSources(t), packageRoles(), applicationValues()) {
+	sources, roles := productionSources(t), packageRoles()
+	violations := compositionViolations(sources, roles, applicationValues())
+	for _, violation := range violations {
 		t.Error(violation)
+	}
+	for _, owner := range sortedKeys(applicationValues()) {
+		for _, name := range sortedKeys(applicationValues()[owner]) {
+			values := applicationValues()
+			delete(values[owner], name)
+			if len(compositionViolations(sources, roles, values)) == len(violations) {
+				t.Errorf("applicationValues lists %s.%s, which no code outside composition needs as a value; remove it", owner, name)
+			}
+		}
 	}
 }

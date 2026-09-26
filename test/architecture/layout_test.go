@@ -76,6 +76,7 @@ func TestServicePackagesFollowTheFileConvention(t *testing.T) {
 	roles := packageRoles()
 	services := map[string]bool{}
 	serviceFiles := map[string]bool{}
+	contracts := map[string]bool{}
 	for _, source := range productionSources(t) {
 		role, known := roles[source.owner]
 		if !known {
@@ -90,13 +91,20 @@ func TestServicePackagesFollowTheFileConvention(t *testing.T) {
 		if role != applicationRole && !contractsPackages()[source.owner] {
 			continue
 		}
-		if names := exportedInterfaces(source.syntax); len(names) != 0 && filepath.Base(source.path) != "contracts.go" {
+		names := exportedInterfaces(source.syntax)
+		if len(names) != 0 && filepath.Base(source.path) != "contracts.go" {
 			t.Errorf("%s declares exported interfaces %v outside contracts.go", source.path, names)
 		}
+		contracts[source.owner] = contracts[source.owner] || len(names) != 0
 	}
 	for owner := range services {
 		if !serviceFiles[owner] {
 			t.Errorf("%s declares Service outside service.go", owner)
+		}
+	}
+	for _, owner := range sortedKeys(contractsPackages()) {
+		if roles[owner] == applicationRole || !contracts[owner] {
+			t.Errorf("contractsPackages lists %s, which is an application package or declares no exported interface; remove it", owner)
 		}
 	}
 }
@@ -113,11 +121,13 @@ func TestCLIImportsOnlyServicePackagesAndSharedValues(t *testing.T) {
 		"github.com/crmarques/bootwright/internal/secrets":      true,
 	}
 	const module = "github.com/crmarques/bootwright/"
+	imports := map[string]bool{}
 	for _, source := range productionSources(t) {
 		if !strings.HasPrefix(source.owner, "internal/cli") {
 			continue
 		}
 		for _, imported := range source.imports {
+			imports[imported.path] = true
 			if !strings.HasPrefix(imported.path, module) || allowed[imported.path] {
 				continue
 			}
@@ -125,6 +135,11 @@ func TestCLIImportsOnlyServicePackagesAndSharedValues(t *testing.T) {
 				continue
 			}
 			t.Errorf("%s imports %s, which is neither an application capability nor a shared value", source.path, imported.path)
+		}
+	}
+	for _, path := range sortedKeys(allowed) {
+		if !imports[path] || roles[strings.TrimPrefix(path, module)] == applicationRole {
+			t.Errorf("the CLI allows shared value %s, which it no longer imports or which is an application capability; remove it", path)
 		}
 	}
 }
@@ -159,6 +174,7 @@ func TestCompositionRootBuildsNoDiagnostics(t *testing.T) {
 func TestStubServicesRemainStubs(t *testing.T) {
 	stubs := stubCapabilities()
 	seen := map[string]bool{}
+	methods := map[string]int{}
 	for _, source := range productionSources(t) {
 		if !stubs[source.owner] {
 			continue
@@ -169,6 +185,7 @@ func TestStubServicesRemainStubs(t *testing.T) {
 			if !ok || function.Recv == nil || !function.Name.IsExported() {
 				continue
 			}
+			methods[source.owner]++
 			if length := len(function.Body.List); length != 2 {
 				t.Errorf("%s.%s has %d statements; a stub checks cancellation and returns the sentinel", source.path, function.Name.Name, length)
 				continue
@@ -181,9 +198,11 @@ func TestStubServicesRemainStubs(t *testing.T) {
 			}
 		}
 	}
-	for owner := range stubs {
+	for _, owner := range sortedKeys(stubs) {
 		if !seen[owner] {
 			t.Errorf("%s is listed as a stub capability but has no production source", owner)
+		} else if methods[owner] == 0 {
+			t.Errorf("%s is listed as a stub capability but declares no exported method; remove it", owner)
 		}
 	}
 }

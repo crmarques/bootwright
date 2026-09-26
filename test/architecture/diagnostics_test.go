@@ -32,8 +32,29 @@ func TestDiagnosticCodesMatchOutputSpec(t *testing.T) {
 			t.Errorf("specs/cli/output.md lists %s, which no production code emits", code)
 		}
 	}
+	for _, position := range sortedKeys(dynamicDiagnosticCodes) {
+		if !codes.dynamic[position] {
+			t.Errorf("dynamicDiagnosticCodes excuses %s, which no longer sets a diagnostic code; remove it", position)
+		}
+	}
 	if len(documented) < 50 || len(codes.emitted) < 50 {
 		t.Fatalf("read %d documented and %d emitted codes; the table or the emission shape has changed", len(documented), len(codes.emitted))
+	}
+}
+
+func TestDiagnosticCodesAreFoundInPackageVariables(t *testing.T) {
+	declaring := compositionSource(t, "internal/fixture", `package fixture
+type Diagnostic struct{ Code string }
+var refusal = Diagnostic{Code: "fixture.initializer"}
+var refuse = func() Diagnostic { return Diagnostic{Code: "fixture.literal"} }
+var emit = func(code string) Diagnostic { return Diagnostic{Code: code} }
+func use() Diagnostic { return emit("fixture.argument") }
+`)
+	calling := compositionSource(t, "internal/fixture", "package fixture\nfunc elsewhere() Diagnostic { return emit(\"fixture.elsewhere\") }\n")
+	calling.path = "internal/fixture/calling.go"
+	codes := emittedDiagnosticCodes([]sourceFile{declaring, calling})
+	if found := sortedKeys(codes.emitted); !slices.Equal(found, []string{"fixture.argument", "fixture.elsewhere", "fixture.initializer", "fixture.literal"}) || len(codes.unresolved) != 0 {
+		t.Fatalf("emitted = %v, unresolved = %v", found, codes.unresolved)
 	}
 }
 
@@ -73,6 +94,7 @@ func documentedDiagnosticCodes(t *testing.T) map[string]bool {
 type diagnosticCodes struct {
 	emitted    map[string][]codePlace
 	unresolved []codePlace
+	dynamic    map[string]bool
 }
 
 type codePlace struct {
@@ -133,7 +155,7 @@ func emittedDiagnosticCodes(sources []sourceFile) diagnosticCodes {
 	}
 	for {
 		before := len(flow.flowing) + len(flow.fields)
-		flow.codes = diagnosticCodes{emitted: map[string][]codePlace{}}
+		flow.codes = diagnosticCodes{emitted: map[string][]codePlace{}, dynamic: map[string]bool{}}
 		flow.seen, flow.active = map[codePlace]bool{}, map[*ast.Object]bool{}
 		for _, owner := range sortedKeys(flow.packages) {
 			for _, source := range flow.packages[owner].sources {
@@ -195,41 +217,53 @@ func (f *codeFlow) indexParameters(function *ast.FuncType) {
 	}
 }
 
-// visit finds every code store in one file: a code field set by a composite
-// literal or an assignment, and an argument bound to a flowing parameter.
+// visit finds every code store in one file's function bodies and package-level
+// variable initializers, function literals included: a code field set by a
+// composite literal or an assignment, and an argument bound to a flowing
+// parameter.
 func (f *codeFlow) visit(source *sourceFile) {
 	for _, declaration := range source.syntax.Decls {
-		function, ok := declaration.(*ast.FuncDecl)
-		if !ok || function.Body == nil {
-			continue
-		}
-		scope := codeScope{source: source, body: function.Body}
-		ast.Inspect(function.Body, func(node ast.Node) bool {
-			switch typed := node.(type) {
-			case *ast.CompositeLit:
-				f.visitLiteral(scope, typed)
-			case *ast.AssignStmt:
-				for position, target := range typed.Lhs {
-					selector, ok := target.(*ast.SelectorExpr)
-					if !ok || position >= len(typed.Rhs) {
-						continue
-					}
-					if prefix, found := f.codeField(source.owner, selector.Sel.Name); found {
-						f.store(scope, typed.Rhs[position], prefix)
-					}
+		switch declared := declaration.(type) {
+		case *ast.FuncDecl:
+			if declared.Body != nil {
+				f.visitScope(codeScope{source: source, body: declared.Body})
+			}
+		case *ast.GenDecl:
+			if declared.Tok == token.VAR {
+				for _, spec := range declared.Specs {
+					f.visitScope(codeScope{source: source, body: spec})
 				}
-			case *ast.CallExpr:
-				for _, callee := range f.callees(scope, typed.Fun) {
-					for position, argument := range typed.Args {
-						if prefix, flows := f.flowingParameter(callee, position); flows {
-							f.store(scope, argument, prefix)
-						}
+			}
+		}
+	}
+}
+
+func (f *codeFlow) visitScope(scope codeScope) {
+	ast.Inspect(scope.body, func(node ast.Node) bool {
+		switch typed := node.(type) {
+		case *ast.CompositeLit:
+			f.visitLiteral(scope, typed)
+		case *ast.AssignStmt:
+			for position, target := range typed.Lhs {
+				selector, ok := target.(*ast.SelectorExpr)
+				if !ok || position >= len(typed.Rhs) {
+					continue
+				}
+				if prefix, found := f.codeField(scope.source.owner, selector.Sel.Name); found {
+					f.store(scope, typed.Rhs[position], prefix)
+				}
+			}
+		case *ast.CallExpr:
+			for _, callee := range f.callees(scope, typed.Fun) {
+				for position, argument := range typed.Args {
+					if prefix, flows := f.flowingParameter(callee, position); flows {
+						f.store(scope, argument, prefix)
 					}
 				}
 			}
-			return true
-		})
-	}
+		}
+		return true
+	})
 }
 
 func (f *codeFlow) visitLiteral(scope codeScope, literal *ast.CompositeLit) {
@@ -363,6 +397,7 @@ func (f *codeFlow) storeIdentifier(scope codeScope, identifier *ast.Ident, prefi
 func (f *codeFlow) unresolved(scope codeScope, expression ast.Expr) {
 	if call, ok := expression.(*ast.CallExpr); ok {
 		if name, ok := call.Fun.(*ast.Ident); ok && dynamicDiagnosticCodes[scope.source.path+" "+name.Name] != "" {
+			f.codes.dynamic[scope.source.path+" "+name.Name] = true
 			return
 		}
 	}
@@ -375,16 +410,26 @@ func (f *codeFlow) unresolved(scope codeScope, expression ast.Expr) {
 
 // callees resolves a called expression to the functions it may name: a
 // package function, an imported function, a method of the same name in the
-// calling package, or a function literal bound to a local name.
+// calling package, or a function literal bound to a local or package variable.
 func (f *codeFlow) callees(scope codeScope, expression ast.Expr) []*ast.FuncType {
 	pkg := f.packages[scope.source.owner]
 	switch typed := expression.(type) {
 	case *ast.Ident:
-		if assignment, ok := declarationOf(typed).(*ast.AssignStmt); ok {
-			for position, target := range assignment.Lhs {
+		switch declaration := declarationOf(typed).(type) {
+		case *ast.AssignStmt:
+			for position, target := range declaration.Lhs {
 				name, ok := target.(*ast.Ident)
-				if ok && name.Obj == typed.Obj && position < len(assignment.Rhs) {
-					if literal, ok := assignment.Rhs[position].(*ast.FuncLit); ok {
+				if ok && name.Obj == typed.Obj && position < len(declaration.Rhs) {
+					if literal, ok := declaration.Rhs[position].(*ast.FuncLit); ok {
+						return []*ast.FuncType{literal.Type}
+					}
+				}
+			}
+			return nil
+		case *ast.ValueSpec:
+			for position, name := range declaration.Names {
+				if name.Obj == typed.Obj && position < len(declaration.Values) {
+					if literal, ok := declaration.Values[position].(*ast.FuncLit); ok {
 						return []*ast.FuncType{literal.Type}
 					}
 				}
@@ -393,6 +438,9 @@ func (f *codeFlow) callees(scope codeScope, expression ast.Expr) []*ast.FuncType
 		}
 		if function := pkg.functions[typed.Name]; function != nil {
 			return []*ast.FuncType{function.Type}
+		}
+		if literal, ok := pkg.values[typed.Name].(*ast.FuncLit); ok && typed.Obj == nil {
+			return []*ast.FuncType{literal.Type}
 		}
 	case *ast.SelectorExpr:
 		if imported := importPath(scope.source, typed.X); imported != "" {

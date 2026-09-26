@@ -389,7 +389,8 @@ Diagnostic codes are stable machine identifiers. Include an object identity
 only when its kind and name form a valid API identity; malformed names are
 reported through the source coordinates and `$.metadata.name` field without
 repeating unbounded authored text in every diagnostic. This table is the
-registry: it lists every code production code emits and nothing else
+registry: it lists every code production code emits, from a function body or a
+package-level variable initializer, and nothing else
 (`TestDiagnosticCodesMatchOutputSpec`).
 
 | Code | Meaning |
