@@ -99,7 +99,7 @@ class System:
         """Collect every exited child, including orphans this subreaper inherited."""
         while True:
             try:
-                descendant, _ = os.waitpid(-1, os.WNOHANG)
+                descendant, _status = os.waitpid(-1, os.WNOHANG)
             except ChildProcessError:
                 return
             if descendant == 0:
