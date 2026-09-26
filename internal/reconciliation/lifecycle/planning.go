@@ -106,14 +106,6 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 	return plan, binding, nil
 }
 
-func (s Service) freshPlan(ctx context.Context, view View, verb reconciliation.Verb) (reconciliation.Plan, capabilityBinding, error) {
-	state, err := s.compile(ctx, view)
-	if err != nil {
-		return reconciliation.Plan{}, capabilityBinding{}, err
-	}
-	return s.planFrom(ctx, view, state, verb)
-}
-
 // refuseUnsupported names every selected object whose realization this
 // executable cannot perform, before any registration or effect. A capability
 // reports what it cannot do within its own kinds; the engine reports every

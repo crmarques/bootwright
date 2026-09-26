@@ -345,7 +345,10 @@ reconciliation, adoption, reclaim, force, or resource-specific subcommand.
 `plan` is a pure text preview of the next legal full operation or frozen
 continuation point. With no operation it previews the fresh operation the
 current state would start, listing every block in frozen order with the
-description and impacts of the verb it previews. With an incomplete operation
+description and impacts of the verb it previews. That preview is the fresh
+`apply`'s own [decision](state-reconciliation.md#stages-and-the-pause-boundary),
+so wherever that decision refuses, it refuses with the same diagnostics and no
+receipt. With an incomplete operation
 it previews that exact continuation point instead, showing which blocks are
 already done and which block resumes, and never a re-planned alternative. With
 a completed apply it previews the destroy that the recorded ownership evidence
@@ -383,8 +386,10 @@ or safety gate.
 `plan` and `apply` accept the [`--stage` flag](cli/commands.md#flag-relationships-and-safeguards);
 what a selection gates, pauses and refuses is owned by the
 [stage contract](state-reconciliation.md#stages-and-the-pause-boundary).
-`plan --stage` never fails `lifecycle.stage`: it previews which blocks the
-selection would start and which it would defer.
+`plan --stage` previews which blocks the selection would start and which it
+would defer. Previewing a fresh operation, it fails `lifecycle.stage` exactly
+where the fresh `apply` it previews would; previewing a continuation, it never
+fails `lifecycle.stage`.
 
 ### Lifecycle receipt
 

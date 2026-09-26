@@ -306,6 +306,11 @@ func refuseStageBoundary(plan reconciliation.Plan, states map[string]reconciliat
 		"repeat the operation including --stage "+string(ready[0].Stage))
 }
 
+// freshApply is the one fresh-plan decision: apply registers the transition it
+// returns and plan previews that same transition, so each refusal it makes is
+// the one both verbs report before registration. It is pure, because a preview
+// takes it too: it compiles the frozen input and plans, and binds, reserves and
+// writes nothing.
 func (s Service) freshApply(ctx context.Context, view View, selection reconciliation.StageSelection) (transition, error) {
 	state, err := s.compile(ctx, view)
 	if err != nil {
