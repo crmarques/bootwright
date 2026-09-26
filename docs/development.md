@@ -79,7 +79,7 @@ sources and exercises the generated Bash script, and the other shells when they
 are selected. An unavailable selected runtime is missing verification evidence,
 not a pass.
 
-The current [M1d delivery](../specs/milestones.md#m1d--controller-setup) adds
+The current [M1d delivery](../specs/milestones/delivered.md#m1d--controller-setup) adds
 controller dependency preparation and preflight to the existing admission,
 context, rendering and Secret journeys. Go selects and freezes dependencies,
 owns confirmation/recovery and orchestrates the embedded Ansible collection.
@@ -115,7 +115,7 @@ interpreter on first use, so the gate does not depend on the host's Python. `mak
 unprivileged collection gate; it never installs controller packages.
 
 Controller tests are unitary and host-independent, following the
-[M1d verification model](../specs/milestones.md#m1d--controller-setup): no package
+[M1d verification model](../specs/milestones.md#completion-and-verification): no package
 manager, network, privilege or second operating system, and no virtual machines.
 End-to-end acceptance against a real controller is operator-run. Deferred
 lifecycle commands keep their unavailable result until their owning milestone.
@@ -138,7 +138,7 @@ Executed native installation is not covered by any of these; it is a manual
 
 ## M1f managed infrastructure components and staged apply
 
-The [M1f delivery](../specs/milestones.md#m1f--managed-controller-network-services)
+The [M1f delivery](../specs/milestones/delivered.md#m1f--managed-controller-network-services)
 completes the `infra-components` stage: managed `Proxy`, `DNSServer` and
 `NTPServer` join the managed `ArtifactServer` behind one capability port, and
 `plan` and `apply` accept `--stage`. Go owns plans, operation records, leases,
@@ -216,7 +216,7 @@ and are not selectable from a test runner:
 
 ## M1g controller prerequisites by selecting scope
 
-The [M1g delivery](../specs/milestones.md#m1g--controller-prerequisites-by-selecting-scope)
+The [M1g delivery](../specs/milestones/delivered.md#m1g--controller-prerequisites-by-selecting-scope)
 splits controller prerequisites by what selects them. `bootwright setup`
 prepares the host foundation every context shares and reads no desired state at
 all; the `controller` stage of a context's own `apply` installs the target

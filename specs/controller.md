@@ -2,7 +2,7 @@
 
 Controller owns inspection and preparation of the local host on which
 Bootwright runs. This contract defines `setup` and `preflight controller`;
-[milestones](milestones.md#m1d--controller-setup) own delivery and qualification
+[milestones](milestones/delivered.md#m1d--controller-setup) own delivery and qualification
 status. Setup never provisions an operating system or executes a managed
 service's lifecycle.
 
@@ -579,5 +579,5 @@ protected dependencies, cancellation, package failures, uncertain publication
 and exact retry. A fake adapter proves this contract and never proves an
 executed native installer. Collection syntax, pinned lint, sanity, unit and
 local integration checks qualify the shipped Ansible entrypoints as content.
-[Milestones](milestones.md#m1d--controller-setup) own the verification model and
+[Milestones](milestones.md#completion-and-verification) own the verification model and
 which acceptance remains operator-run.

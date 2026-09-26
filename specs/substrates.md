@@ -253,7 +253,7 @@ its firmware settings, its disks and whatever operating system is installed on
 it are retained exactly as they are, so the block's removal description says it
 retains the machine and lists no impact. It consumes no authorization, because
 it destroys nothing. Physical erasure is deliberately not part of this contract
-and remains [deferred](milestones.md#candidates).
+and remains [deferred](milestones/backlog.md#candidates).
 
 **Quiescence.** The removal takes back only a claim, which nothing reads, so
 this block is always quiescent under the
