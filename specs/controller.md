@@ -303,6 +303,15 @@ Ansible returns bounded structured evidence through the runner protocol.
 Task output is not an application API. Read-only Go verification reconstructs
 installed bootstrap and target file inventories from approved retained sources.
 
+The automation content digest covers every embedded automation file except
+documentation, the collection's root `README` and `CHANGELOG`, which stay in
+the bundle ([owner decision D14](milestones/backlog.md#pre-openshift-readiness-program-2026-09)).
+That exclusion has its own digest domain version, so no digest under one rule
+equals a digest under the other. A check of an approved bundle's automation
+compares only what the digest covers.
+
+Not yet met: the digest still covers documentation, because the lifecycle runner, the controller adapter and bundle inspection still compare every embedded file; dropping documentation from the digest before them would let a documentation-only change keep the digest while setup refuses the retained bundle as unattributable instead of carrying it forward; tracked as [backlog Z2](milestones/backlog.md#audit-follow-ups-2026-09).
+
 `--yes` suppresses ordinary confirmation only. Use the
 [ordinary confirmation](cli.md#ordinary-confirmation), with the plan before
 the prompt; decline, noninteractive input without `--yes`, or cancellation

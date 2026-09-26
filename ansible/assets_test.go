@@ -1,6 +1,7 @@
 package ansible
 
 import (
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -26,6 +27,35 @@ func TestConfigurationDeclaresNoEmptyValue(t *testing.T) {
 		}
 		if strings.TrimSpace(value) == "" {
 			t.Fatalf("ansible.cfg line %d assigns %q an empty value; omit the key instead", number+1, strings.TrimSpace(key))
+		}
+	}
+}
+
+// The automation digest names the approved bundle's automation, and the
+// lifecycle runner, the controller adapter and bundle inspection each compare
+// every embedded file against that bundle. A file the digest skipped could
+// differ under an equal digest: setup would then refuse the retained bundle as
+// unattributable instead of carrying it forward. Documentation leaves the
+// digest (backlog Z2) only together with those comparisons.
+func TestAutomationDigestCoversEveryEmbeddedFile(t *testing.T) {
+	files := Assets()
+	baseline := Digest()
+	if digestOf(files) != baseline {
+		t.Fatal("the automation digest does not cover exactly the embedded files")
+	}
+	for _, name := range []string{
+		"collections/ansible_collections/bootwright/core/README.md",
+		"collections/ansible_collections/bootwright/core/CHANGELOG.rst",
+	} {
+		if _, ok := files[name]; !ok {
+			t.Fatalf("the embedded automation no longer carries %s", name)
+		}
+	}
+	for name, data := range files {
+		changed := maps.Clone(files)
+		changed[name] = append(slices.Clone(data), '\n')
+		if digestOf(changed) == baseline {
+			t.Fatalf("changing %s leaves the automation digest unchanged", name)
 		}
 	}
 }

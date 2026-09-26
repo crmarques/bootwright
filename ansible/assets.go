@@ -33,8 +33,13 @@ func Assets() map[string][]byte {
 	return files
 }
 
-func Digest() string {
-	files := Assets()
+// Digest identifies the embedded automation. It covers every file Assets
+// returns, documentation included, because each check of an approved bundle's
+// automation compares every one of those files byte for byte: a file the digest
+// skipped could differ under an equal digest. specs/controller.md owns the rule.
+func Digest() string { return digestOf(Assets()) }
+
+func digestOf(files map[string][]byte) string {
 	names := make([]string, 0, len(files))
 	for name := range files {
 		names = append(names, name)
