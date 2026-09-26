@@ -15,10 +15,10 @@ the [unavailable result](cli.md#recognized-but-unavailable-commands).
 | [M1h](#m1h--managed-rhel-on-emulated-bare-metal) | Managed RHEL on emulated bare metal | Substrate, Managed OS | product | Specified | awaiting operator acceptance |
 | [M5a](#m5a--managed-rhel-on-physical-bare-metal) | Managed RHEL on physical bare metal | Substrate, Managed OS | product | Specified | blocked |
 | [M4a](#m4a--single-node-openshift-through-the-agent-installer) | Single-node OpenShift through the agent installer | Container cluster, Substrate | product | Specified | awaiting operator acceptance |
-| [X11](#x11--audit-phase-0-and-spec-restructure) | Audit Phase 0 and spec restructure | Architecture | safety | Specified | in progress |
+| [X12](#x12--audit-phase-1-context-and-guards) | Audit Phase 1: context and guards | Architecture | safety | Specified | in progress |
 
-- **Next for agents:** land X11 and record its landing commit as the M1h and M4a acceptance baseline; promote [audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09) only on request.
-- **Next for operator:** once X11 lands, run [lab-rhel](../examples/lab-rhel/README.md#run-it) and record it in the [acceptance ledger](../docs/acceptance.md) (M1h), then [lab-sno](../examples/lab-sno/README.md) (M4a); M5a's rehearsal waits for S3b.
+- **Next for agents:** deliver X12; promote [audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09) only on request.
+- **Next for operator:** on a clean build descending from `8aa4494`, run [lab-rhel](../examples/lab-rhel/README.md#run-it) and record it in the [acceptance ledger](../docs/acceptance.md) (M1h), then [lab-sno](../examples/lab-sno/README.md) (M4a); M5a's rehearsal waits for S3b.
 - **Next to define:** M1i, the [GitOps handoff gate](#next-ordered-outcomes).
 
 ## Scope rules
@@ -79,8 +79,8 @@ the [unavailable result](cli.md#recognized-but-unavailable-commands).
 **Owners:** Substrate and Managed OS, with Infrastructure services, Workspace
 (media store), Controller (stage closures) and State reconciliation.
 **Kind:** product. **Requires:** M1g. **Definition:** Specified.
-**Delivery:** awaiting operator acceptance. **Acceptance baseline:** recorded
-when X11 lands.
+**Delivery:** awaiting operator acceptance. **Acceptance baseline:** `8aa4494`,
+where X11 landed.
 
 One Bootwright-installed RHEL 9.8 Machine on a libvirt guest that boots its
 installer through an emulated Redfish BMC. Consumer:
@@ -183,7 +183,7 @@ hosts are not coordinated.
 Controller, Secrets and State reconciliation; using Machine. **Kind:**
 product. **Requires:** M1h, waived on explicit request on 2026-09-16.
 **Definition:** Specified. **Delivery:** awaiting operator acceptance.
-**Acceptance baseline:** recorded when X11 lands. The agent-installer half of
+**Acceptance baseline:** `8aa4494`, where X11 landed. The agent-installer half of
 M4, without M2a's `render installer`, C12 or C9.
 
 **Deviation.** A physical cluster node refuses before registration until the
@@ -231,16 +231,16 @@ not configured, so the operator routes the managed zone; disconnected
 installation waits for a managed `Registry` (C2); and a destroyed cluster's
 physical nodes keep running (C9).
 
-### X11 — audit Phase 0 and spec restructure
+### X12 — audit Phase 1: context and guards
 
-**Owner:** Architecture. **Kind:** safety, out of sequence. **Requires:** the
-owner decisions of 2026-09-25. **Definition:** Specified. **Delivery:** in
-progress. Items: S1, S2a, S3a, S4a, S5, S6a, S7 to S9 (first steps), O1 to O8,
-Z1, G1 to G9 and A1 to A8, less the backlog's follow-ups. It adds the M5a and
-M4a deviations and binds lifecycle concurrency to one until S4b. Remaining:
-landing on the default branch through its pull request; the landing commit
-becomes M1h's and M4a's acceptance baseline. Exit gates: `make check`,
-`make docs-check` and CI.
+**Owner:** Architecture, with State reconciliation, Workspace, Controller and
+CLI. **Kind:** safety, out of sequence, on explicit request on 2026-09-26.
+**Requires:** [X11](milestones/delivered.md#x11--audit-phase-0-and-spec-restructure).
+**Definition:** Specified. **Delivery:** in progress. Items, each with its
+bounded outcome and exit evidence in the
+[audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09): S10 (its
+Phase 1 part), F1, F2, F3 (the withdrawal), F4, R6 and G8 (rest). Exit gates:
+each item's exit evidence, `make check`, `make docs-check` and CI.
 
 ## Next ordered outcomes
 
