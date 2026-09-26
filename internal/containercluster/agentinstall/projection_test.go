@@ -103,7 +103,17 @@ func TestAMultiNodeClusterInstallsOnItsDeclaredPlatform(t *testing.T) {
 // A cluster whose endpoints something outside it answers declares its load
 // balancer user-managed, because the installer owns neither address.
 func TestExternallyAnsweredEndpointsDeclareAUserManagedLoadBalancer(t *testing.T) {
-	media, _, _ := onlyRequests(t, physicalCatalog())
+	objects := append(base(),
+		guest("ocp-01", "198.51.100.31/24"), guest("ocp-02", "198.51.100.32/24"), guest("ocp-03", "198.51.100.33/24"))
+	objects = append(objects, cluster("ocp",
+		installSelection(
+			endpoints("198.51.100.20", "198.51.100.20", "198.51.100.21", "external"),
+			field("platform", api.MapValue(text("type", "baremetal"))),
+		),
+		node("master-0", "master", "ocp-01", "master-0.ocp.lab.example.test"),
+		node("master-1", "master", "ocp-02", "master-1.ocp.lab.example.test"),
+		node("master-2", "master", "ocp-03", "master-2.ocp.lab.example.test")))
+	media, _, _ := onlyRequests(t, api.NewCatalog(objects))
 	platform, _ := media.InstallConfig["platform"].(map[string]any)
 	arm, _ := platform["baremetal"].(map[string]any)
 	balancer, ok := arm["loadBalancer"].(map[string]any)
@@ -114,9 +124,16 @@ func TestExternallyAnsweredEndpointsDeclareAUserManagedLoadBalancer(t *testing.T
 
 // Every node of a physical cluster is frozen as operator-owned hardware, which
 // is what makes its installation consume the authorization for the content it
-// erases.
+// erases. Selection refuses such a cluster today, so the freezing is exercised
+// directly beneath that refusal.
 func TestPhysicalNodesAreFrozenAsOperatorOwnedHardware(t *testing.T) {
-	_, install, _ := onlyRequests(t, physicalCatalog())
+	catalog := physicalCatalog()
+	declared, _ := catalog.Find(api.ContainerCluster, "metal")
+	nodes, err := nodeProjections(catalog, declared, testContext, "controller", &Requirements{})
+	if err != nil {
+		t.Fatalf("projecting: %v", diagnostics.Of(err))
+	}
+	install := InstallRequest{Nodes: frozenNodes(nodes)}
 	if len(install.Nodes) != 3 || !install.Physical() {
 		t.Fatalf("nodes = %+v", install.Nodes)
 	}
@@ -239,10 +256,58 @@ func TestUnsupportedNamesEveryClusterThisContractCannotInstall(t *testing.T) {
 	}
 }
 
+// A cluster with a physical node refuses, because booting that node erases
+// what it holds and nothing proves the node is the declared machine, powered
+// off, before it is booted. A node Bootwright also installs an operating
+// system on refuses too, because two installations would write its one disk.
+// Either refusal names the bound Machine, because that is what an operator
+// changes.
+func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.T) {
+	installed := guest("sno-01", "198.51.100.21/24")
+	installed = installed.WithSpec(installed.Spec().WithPath(api.StringValue("rhel-9-8"), "os", "installProfileRef"))
+	for name, test := range map[string]struct {
+		catalog     api.Catalog
+		cluster     string
+		reason      string
+		remediation string
+	}{
+		"physical nodes": {
+			physicalCatalog(), "ContainerCluster/metal",
+			"physical cluster nodes are not supported until the installer proves each node before booting it",
+			"Machine/metal-01 is physical; declare ContainerCluster/metal on virtual nodes",
+		},
+		"installed node": {
+			api.NewCatalog(append(base(), installed, cluster("sno",
+				installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
+				node("master-0", "master", "sno-01", "master-0.sno.lab.example.test")))),
+			"ContainerCluster/sno",
+			"a declared node selects an install profile, so two installations would write its disk",
+			"remove spec.os.installProfileRef from Machine/sno-01 or drop it from ContainerCluster/sno",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if unsupported := Unsupported(test.catalog); len(unsupported) != 1 || unsupported[0] != test.cluster {
+				t.Fatalf("unsupported = %v", unsupported)
+			}
+			_, _, _, err := Requests(test.catalog, "controller", testContext)
+			if err == nil {
+				t.Fatal("a cluster this contract cannot boot was derived anyway")
+			}
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != test.reason {
+				t.Fatalf("refusal = %#v", reported)
+			}
+			if reported[0].Remediation != test.remediation {
+				t.Fatalf("remediation = %q", reported[0].Remediation)
+			}
+		})
+	}
+}
+
 // A supported cluster is named by nothing, so an operation registers.
 func TestASupportedClusterIsNotRefused(t *testing.T) {
 	for name, catalog := range map[string]api.Catalog{
-		"single node": singleNodeCatalog(), "compact": compactCatalog(), "physical": physicalCatalog(),
+		"single node": singleNodeCatalog(), "compact": compactCatalog(),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if unsupported := Unsupported(catalog); len(unsupported) != 0 {

@@ -779,10 +779,12 @@ func (a *secretArea) writeExclusive(ctx context.Context, path string, data []byt
 		return secretCorruption(ctx, "secret storage parent directory is unsafe", err)
 	}
 	defer close()
+	// The backend attributes and recovers what an interrupted write leaves, so
+	// this area retains it rather than removing it.
 	if atomic {
-		err = a.store.writeExclusiveAtomic(ctx, parent, name, data)
+		err = a.store.writeExclusiveAtomic(ctx, parent, name, data, true)
 	} else {
-		err = a.store.writeExclusive(ctx, parent, name, data)
+		_, err = a.store.writeExclusiveIdentity(ctx, parent, name, data, true)
 	}
 	if err != nil {
 		return secretEffectFailure(ctx, "exclusive secret state could not be published safely", err)
@@ -841,7 +843,7 @@ func (a *secretArea) Replace(ctx context.Context, path string, data, expected []
 			return secretstore.NotCommitted, err
 		}
 		pending = candidate
-		err = a.store.writeExclusive(ctx, parent, pending, data)
+		_, err = a.store.writeExclusiveIdentity(ctx, parent, pending, data, true)
 		if errors.Is(err, syscall.EEXIST) {
 			continue
 		}

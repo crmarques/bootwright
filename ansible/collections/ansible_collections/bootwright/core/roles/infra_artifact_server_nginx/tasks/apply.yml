@@ -34,6 +34,9 @@
   failed_when: false
   changed_when: false
 
+# The frozen egress route is the only one this pull may take. A native tool
+# may read either spelling of a proxy variable, and an empty one lets the
+# other win, so both spellings carry the same route and none is ambient.
 - name: Acquire the pinned server image
   ansible.builtin.command:
     argv:
@@ -44,6 +47,9 @@
     HTTP_PROXY: '{{ bootwright_artifact_server_request.egress.httpProxy | default("") }}'
     HTTPS_PROXY: '{{ bootwright_artifact_server_request.egress.httpsProxy | default("") }}'
     NO_PROXY: '{{ bootwright_artifact_server_request.egress.noProxy | default([]) | join(",") }}'
+    http_proxy: '{{ bootwright_artifact_server_request.egress.httpProxy | default("") }}'
+    https_proxy: '{{ bootwright_artifact_server_request.egress.httpsProxy | default("") }}'
+    no_proxy: '{{ bootwright_artifact_server_request.egress.noProxy | default([]) | join(",") }}'
   register: infra_artifact_server_nginx_pull
   when: infra_artifact_server_nginx_image_present.rc != 0
   changed_when: infra_artifact_server_nginx_image_present.rc != 0

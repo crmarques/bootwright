@@ -24,7 +24,7 @@ to the [`clusters` stage](state-reconciliation.md#stages-and-the-pause-boundary)
 
 **Supported shape.** An OpenShift cluster declaring an exact
 `distribution.release.version`, installed by the `agent` method in `connected`
-mode through direct access, whose nodes are all Machines on a realized
+mode through direct access, whose nodes are all virtual Machines on a realized
 substrate with `os.provided: false` and no install profile. A single-node
 cluster resolves its three endpoint slots from that node; a multi-node cluster
 resolves them from authored or load-balancer addresses. Every other declaration
@@ -32,10 +32,15 @@ refuses before operation registration with one diagnostic naming the cluster:
 `okd`, `disconnected` mode, a release pinned by image alone, an installation
 proxy, `security.fips`, `security.diskEncryption`,
 `install.servingCertificates`, `install.registries`, a node on a substrate this
-executable does not realize, and a node whose management controller would have
-to be taught a new certificate. Node `labels` and `taints` are accepted and reach no installer input,
-because they are post-installation placement intent rather than install
-configuration.
+executable does not realize, a node whose management controller would have
+to be taught a new certificate, a node that selects an install profile,
+because managed OS and the cluster installer would both write its disk, and a
+node whose realized target is physical, because nothing proves each such node
+is the declared machine, powered off, before its boot erases it. Those last two
+refusals name the bound Machine in the remediation `bootwright plan` reports,
+because it is what the operator changes. Node `labels` and `taints` are accepted and reach no
+installer input, because they are post-installation placement intent rather
+than install configuration.
 
 Selection is pure and reads no host, endpoint or Secret material.
 
@@ -137,11 +142,17 @@ The block `cluster-install-<cluster>` boots the nodes from that image and
 watches the cluster install. It depends on the media block, and requires every
 node `Machine` and the same name and time services.
 
-A node whose realized target is [physical](substrates.md#physical-machine-realization)
-makes this block consume `data-loss` on **apply**: the agent installer writes
-the release image to that node's disk, and that is the moment its existing
-content is lost. A cluster of virtual nodes consumes nothing here, because
-their disks are created by their realization and removed by its inverse.
+A physical node refuses before registration, as
+[selection](#selection-and-refusal) states, until the pre-boot target proof for
+each node exists (backlog S2b). An operation registered before that refusal
+still froze its physical nodes, so its apply refuses at execution, naming the
+node and directing the operator to destroy the operation and plan again, while
+its destroy and observation still run. Once that proof exists, a node whose
+realized target is [physical](substrates.md#physical-machine-realization) makes
+this block consume `data-loss` on **apply**: the agent installer writes the
+release image to that node's disk, and that is the moment its existing content
+is lost. A cluster of virtual nodes consumes nothing here, because their disks
+are created by their realization and removed by its inverse.
 
 **Resolution before boot.** The installer polls the cluster API from the
 controller, so before anything is booted the block proves that the controller
@@ -205,8 +216,10 @@ again requires this cluster's nodes to be destroyed and applied again.
 is left. The work area and the published image leave with the media block's own
 inverse, which the plan orders after this one. The installed cluster leaves with its nodes' disks, so this block
 removes nothing from a node and consumes no authorization of its own on
-removal. A cluster whose nodes are physical therefore keeps running after its
-context is destroyed, exactly as a physically installed operating system does.
+removal. Physical nodes refuse before registration until the pre-boot target
+proof exists (backlog S2b), so what follows applies once it does: a cluster
+whose nodes are physical keeps running after its context is destroyed, exactly
+as a physically installed operating system does.
 
 **Unknown resolution.** Observation is read-only against the frozen request. A
 cluster answering with this operation's identity at the declared release, whole

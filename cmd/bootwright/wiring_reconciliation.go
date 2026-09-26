@@ -172,7 +172,9 @@ func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies
 	return lifecycle.New(deps.Workspace, deps.Inputs, compiler, binder, deps.Host, automationDigest{}, deps.Guard, capabilities, lifecycle.Options{
 		Confirmer: deps.Confirmer, Presenter: deps.Presenter, Progress: deps.Progress,
 		Clock: clock, Entropy: rand.Read, Selection: currentSelection(deps.Selection),
-		Executable: deps.Executable,
+		// One block at a time: roles still share fixed host-global scratch paths.
+		Concurrency: 1,
+		Executable:  deps.Executable,
 		Operations: func(area operationstore.Area) lifecycle.OperationStore {
 			return operationstore.New(area, clock.Now)
 		},

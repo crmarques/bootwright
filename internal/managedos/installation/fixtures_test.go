@@ -150,6 +150,41 @@ func guest(fields ...api.FieldValue) api.Object {
 	return api.NewObject(api.Machine, "rhel-01", api.Value{}, spec)
 }
 
+func metalProvider() api.Object {
+	return api.NewObject(api.InfraProvider, "lab-metal", api.Value{}, api.MapValue(
+		field("baremetal", api.MapValue(field("defaults", api.MapValue(
+			field("bmc", api.MapValue(text("credentialsRef", "lab-bmc-credentials"))),
+		)))),
+	))
+}
+
+// server is one operator-owned Machine on the bare-metal provider, selecting
+// its root device by the hints given.
+func server(hints api.Value) api.Object {
+	return api.NewObject(api.Machine, "metal-01", api.Value{}, api.MapValue(
+		field("substrate", api.MapValue(text("providerRef", "lab-metal"))),
+		field("os", api.MapValue(
+			field("provided", api.BoolValue(false)), text("installProfileRef", "rhel-9-8"),
+			field("install", api.MapValue(text("hostKeyRef", "metal-01-host-key"), field("rootDeviceHints", hints))),
+		)),
+		field("hardware", api.MapValue(
+			field("nics", api.ListValue(api.MapValue(text("name", "enp1s0"), text("macAddress", "52:54:00:9a:1b:01")))),
+			field("boot", api.MapValue(text("nicRef", "enp1s0"))),
+			field("management", api.MapValue(field("bmc", api.MapValue(
+				text("address", "https://bmc-01.lab.example.test/redfish/v1/Systems/1"),
+				text("credentialsRef", "lab-bmc-credentials"),
+			)))),
+		)),
+		field("network", api.MapValue(
+			text("configRef", "lab-guests"), text("installAddressRef", "ip"),
+			field("addresses", api.ListValue(
+				api.MapValue(text("name", "fqdn"), text("address", "metal-01.lab.example.test")),
+				api.MapValue(text("name", "ip"), text("address", "198.51.100.41/24"), text("interface", "enp1s0")),
+			)),
+		)),
+	))
+}
+
 func catalogOf(objects ...api.Object) api.Catalog { return api.NewCatalog(objects) }
 
 func labCatalog(overrides ...api.Object) api.Catalog {

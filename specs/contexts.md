@@ -441,7 +441,18 @@ and containing directories, then atomically replaces and syncs the registry.
 The selected revision changes at that registry commit point. Readers observe
 a complete old or new input; interrupted unpublished revisions are never
 adopted by scanning. Small temporary files for atomic record replacement stay
-inside existing directories; they do not introduce a staging tree.
+inside existing directories; they do not introduce a staging tree. A write
+that fails after creating its file removes exactly that file, and a mutation
+evidence or operation record publication that fails before its rename removes
+its temporary file, even when the command was cancelled: a temporary file left
+directly in the context's `state/` directory would refuse every later mutation
+of the context. Removal happens only while the containing directory still
+verifies; otherwise the file stays and the original failure is reported. The
+[secret store](secrets.md#local-keyring-v3) instead retains what an
+interrupted write leaves for its own recovery, and so does the context
+reservation write: until the registry records the context directory's
+identity, the reservation alone lets an init retry attribute that directory
+and record the identity that deletion requires.
 
 After durable registry publication, a pristine context may collect verified
 unselected revisions while holding the root lock and context lease. Pristine

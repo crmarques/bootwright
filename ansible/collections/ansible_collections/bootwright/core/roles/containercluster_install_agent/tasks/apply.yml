@@ -13,6 +13,25 @@
     phase: loaded
   no_log: true
 
+# The boot task file binds each node's substrate only inside the boot loop,
+# after the nodes before it were booted. A node no task file binds refuses
+# here, before any node is touched, and the boot file keeps its own refusal as
+# well.
+- name: Refuse a node substrate this installation has no boot binding for
+  ansible.builtin.assert:
+    that:
+      - containercluster_install_agent_node.substrate in ['libvirt', 'baremetal']
+    fail_msg: >-
+      node {{ containercluster_install_agent_node.name }} names substrate
+      {{ containercluster_install_agent_node.substrate }}, which this cluster
+      installation has no boot binding for, so no node's Machine was booted;
+      plan the installation again with this release
+    quiet: true
+  loop: '{{ bootwright_cluster_install_request.nodes }}'
+  loop_control:
+    loop_var: containercluster_install_agent_node
+    label: '{{ containercluster_install_agent_node.machine }}'
+
 - name: Report name resolution
   bootwright.core.containercluster_install_protocol:
     phase: group

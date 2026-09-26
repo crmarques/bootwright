@@ -343,13 +343,14 @@ func (t *lifecycleTransaction) PublishEvidence(ctx context.Context, data []byte)
 		return err
 	}
 	var pending string
+	var created syscall.Stat_t
 	for range 16 {
 		candidate, err := t.base.store.candidate("pending-")
 		if err != nil {
 			return err
 		}
 		pending = candidate + ".json"
-		err = t.base.store.writeExclusive(ctx, runtime, pending, data)
+		created, err = t.base.store.writeExclusiveIdentity(ctx, runtime, pending, data, false)
 		if errors.Is(err, syscall.EEXIST) {
 			pending = ""
 			continue
@@ -362,12 +363,21 @@ func (t *lifecycleTransaction) PublishEvidence(ctx context.Context, data []byte)
 	if pending == "" {
 		return state("context mutation evidence exhausted its collision limit")
 	}
+	// The state directory admits no staging entry, so a stage left behind
+	// would refuse every later mutation of this context.
+	renamed := false
+	defer func() {
+		if !renamed {
+			discardCreated(runtime, pending, created)
+		}
+	}()
 	if err := runtime.verify(); err != nil {
 		return err
 	}
 	if err := syscall.Renameat(int(runtime.file.Fd()), pending, int(runtime.file.Fd()), "mutation.json"); err != nil {
 		return state("context mutation evidence could not be atomically published")
 	}
+	renamed = true
 	published, err := readBounded(ctx, runtime, "mutation.json", maxRecord, true)
 	if err != nil || !bytes.Equal(published, data) {
 		return state("published context mutation evidence is unsafe")

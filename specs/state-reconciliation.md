@@ -202,7 +202,9 @@ or plan record is at most 1 MiB, an attempt or resolution record at most
 noncanonical encodings and unsupported versions refuse; there is no repair,
 migration or scan-based adoption of an unpublished record. An attempt record
 is created exclusively, so a reused attempt number refuses rather than
-overwriting durable evidence.
+overwriting durable evidence. An exclusively created record is staged and then
+renamed without replacement, so its name appears only with complete,
+synchronized bytes.
 
 ## State machine
 
@@ -331,7 +333,9 @@ plan permits, so it belongs to the executable and is never frozen with the
 plan, never named by desired state, and never a public flag: what may run
 together is the graph's answer and does not change between invocations. A
 continuation of an operation frozen by another build therefore runs under this
-build's bound, which changes no effect, no order and no evidence.
+build's bound, which changes no effect, no order and no evidence. Two blocks of
+one operation never run together while roles share host scratch paths (S4a
+binds the bound to one until S4b).
 
 An operation is `paused` when execution stops because no block is startable,
 nothing is still running, no block is failed or unknown, and pending blocks
@@ -345,8 +349,11 @@ anything else whatever stages are selected, because resolution is a read-only
 observation; several unproved effects may be observed together, and nothing
 starts, retries or is removed beside them. A failed block remains the only
 retry candidate and runs alone, because what follows it depends on it
-succeeding; when its stage is not selected the operation refuses
-`lifecycle.stage` before any effect. A selection that admits no startable block also refuses
+succeeding: a retry starts only while no other block is running and only when
+its stage is selected, so failed blocks are retried one at a time in frozen
+plan order and one outside the selection is never retried. When no failed
+block's stage is selected the operation refuses `lifecycle.stage` before any
+effect, naming the stage of the first. A selection that admits no startable block also refuses
 `lifecycle.stage` before registration, naming a stage that would unblock work.
 Objects whose kind no capability in the executable can realize refuse before
 registration regardless of the selection, because a frozen plan requires a
@@ -563,13 +570,20 @@ resolved by repeating itself. Replacement is the only road out of a repaired
 adapter, because a continuation is frozen to the automation its operation
 registered under while a fresh operation runs under the current one.
 
-A removal is decided from durable state read under the shared lock and performs
-its effects under the exclusive one. Before it resolves, proves quiescence or
-registers, it re-proves that the context still holds the exact operation it was
-planned from, in the same state and with the same block states. Anything else
-means another invocation advanced the context in between, so the frozen plan
-waiting to register may no longer describe what the context owns, and the
-removal refuses rather than applying it.
+Every transition is decided from durable state read under the shared lock and
+performs its effects under the exclusive one. Under the exclusive lock, before
+it does anything, it re-proves that the context still holds exactly the state
+it was planned from: the same current operation, or still none, in the same
+state and with the same block states. Anything else means another invocation
+advanced the context in between, so the plan that was presented and confirmed
+may no longer describe what the context owns, and the transition refuses
+`lifecycle.state` rather than applying it. A removal re-proves it before it
+resolves, proves quiescence or registers; a continuation and a fresh apply
+re-prove it before they register, claim a controller host or reserve anything,
+together with the input revision and input digest the context holds: a
+continuation against those its operation froze, and a fresh apply against those
+its plan was compiled from, so it never registers a plan under an input it was
+not compiled from.
 
 Destroy retains evidence until positive removal or positive absence is durable.
 It accepts no stage selection.

@@ -64,6 +64,18 @@ func (a invokingAccount) home() (string, error) {
 	return account.Home, nil
 }
 
+// uid resolves the invoking account's user ID from the account database. A
+// session calls it only when an offered key file must be proved that
+// account's own, so an invocation that offers none acquires no account
+// capability.
+func (a invokingAccount) uid() (int, error) {
+	account, err := a.resolver.Resolve(context.Background())
+	if err != nil {
+		return 0, contexts.StateError("invoking account cannot be verified")
+	}
+	return account.UID, nil
+}
+
 func (a invokingAccount) FileIdentity(ctx context.Context) (material.FileIdentity, error) {
 	account, err := a.resolver.Resolve(ctx)
 	if err != nil {

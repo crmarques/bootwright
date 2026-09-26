@@ -326,6 +326,72 @@ func TestInitializationInterruptionReservesExactIdentity(t *testing.T) {
 	}
 }
 
+// The registry records the context directory's identity only after its
+// reservation is written, so until then the reservation alone attributes the
+// directory. A reservation write interrupted once its bytes are complete,
+// whether refused or cancelled, must therefore leave it for the retry.
+func TestInterruptedReservationWriteRemainsResumable(t *testing.T) {
+	for _, point := range []string{"sync-file", "sync-directory"} {
+		for _, cancelled := range []bool{false, true} {
+			mode := "refused"
+			if cancelled {
+				mode = "cancelled"
+			}
+			t.Run(point+"/"+mode, func(t *testing.T) {
+				store, _ := fixture(t)
+				config := contexts.DefaultConfiguration("pending").Canonical()
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				// The first file created after the context directory is its
+				// reservation, so the interruption counts from there.
+				directory, reservation, fired := false, false, false
+				store.fail = func(name string) error {
+					switch {
+					case fired:
+					case name == "after-context-directory":
+						directory = true
+					case directory && name == "create-file":
+						reservation = true
+					case reservation && name == point:
+						fired = true
+						if cancelled {
+							cancel()
+							return ctx.Err()
+						}
+						return errors.New("synthetic reservation interruption")
+					}
+					return nil
+				}
+				err := store.Transact(ctx, true, nil, func(tx contexts.Transaction) error {
+					_, err := tx.Reserve(ctx, "pending", "", config)
+					return err
+				})
+				if !fired || err == nil {
+					t.Fatalf("the reservation write was not interrupted at %s (%v)", point, err)
+				}
+				store.fail = nil
+				var resumed contexts.Record
+				err = store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
+					var err error
+					resumed, err = tx.Reserve(context.Background(), "pending", "", config)
+					return err
+				})
+				if err != nil {
+					t.Fatalf("the retry refused the interrupted reservation: %#v", diagnostics.Of(err))
+				}
+				registry, err := store.View(context.Background())
+				if err != nil {
+					t.Fatal(err)
+				}
+				index := slices.IndexFunc(registry.Contexts, func(record contexts.Record) bool { return record.Name == "pending" })
+				if index < 0 || registry.Contexts[index] != resumed || resumed.Mode != contexts.Initializing || resumed.DirectoryInode == 0 {
+					t.Fatalf("the retry did not attribute the context directory: %+v", resumed)
+				}
+			})
+		}
+	}
+}
+
 func TestEagerSecretInitializationNeedsNoDesiredInput(t *testing.T) {
 	store, _ := fixture(t)
 	var ready contexts.Record

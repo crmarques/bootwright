@@ -15,6 +15,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/trust"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -36,19 +37,22 @@ var terminalEnvironment = []string{"TERM", "COLORTERM", "NO_COLOR"}
 
 // Launcher runs the pinned SSH client. Home resolves the invoking account's
 // home directory, so an operator-supplied key path expands from the account
-// database rather than an ambient HOME; it is called only when a path needs
-// it, because an invocation that offers no key acquires no account capability.
-// Scratch parents the short-lived directory an observation records into.
+// database rather than an ambient HOME, and Owner resolves that account's user
+// ID, which an offered key file must be owned by. Each is called only when a
+// key is offered, because an invocation that offers none acquires no account
+// capability. Scratch parents the short-lived directory an observation records
+// into.
 type Launcher struct {
 	Client     string
 	Home       func() (string, error)
+	Owner      func() (int, error)
 	PolicyPath string
 	Scratch    string
 	Environ    func() []string
 }
 
-func New(home func() (string, error)) Launcher {
-	return Launcher{Client: Client, Home: home, PolicyPath: PolicyPath, Scratch: "/run", Environ: os.Environ}
+func New(home func() (string, error), owner func() (int, error)) Launcher {
+	return Launcher{Client: Client, Home: home, Owner: owner, PolicyPath: PolicyPath, Scratch: "/run", Environ: os.Environ}
 }
 
 // Run opens one session and returns the client's own exit status. The streams
@@ -152,8 +156,9 @@ func preferred(recorded string) string {
 }
 
 // IdentityFile resolves an operator-supplied key path. A leading tilde comes
-// from the invoking account database rather than an ambient HOME, and a file
-// any other account can read is refused before it is offered to anything.
+// from the invoking account database rather than an ambient HOME. The file is
+// proved here, so a refusal comes before any host key is sought, and proved
+// again on the descriptor a session hands the client.
 func (l Launcher) IdentityFile(path string) (string, error) {
 	raw := strings.TrimSpace(path)
 	if raw == "" {
@@ -179,18 +184,59 @@ func (l Launcher) IdentityFile(path string) (string, error) {
 	if err != nil {
 		return "", failure("--ssh-id-file is not a resolvable path", "")
 	}
-	info, err := os.Stat(resolved)
+	file, err := l.openIdentity(resolved)
 	if err != nil {
-		return "", failure("--ssh-id-file cannot be opened", "")
+		return "", err
 	}
-	if !info.Mode().IsRegular() {
-		return "", failure("--ssh-id-file is not a regular file", "")
-	}
-	if info.Mode().Perm()&0o077 != 0 {
-		return "", failure("--ssh-id-file is readable by group or other",
-			"remove those permissions with chmod 600 "+resolved)
-	}
+	_ = file.Close()
 	return resolved, nil
+}
+
+// openIdentity resolves an offered key to a path-only descriptor and proves
+// what that descriptor names. Resolving a name this way neither follows a link
+// at its last component nor runs a device's or FIFO's open routine, so nothing
+// the name reaches is opened for reading before its type is known. Every check
+// reads that descriptor rather than the name, and the client opens the key
+// through the same descriptor, so the file it reads is the file that was
+// proved.
+func (l Launcher) openIdentity(path string) (*os.File, error) {
+	owner := -1
+	if l.Owner != nil {
+		if resolved, err := l.Owner(); err == nil {
+			owner = resolved
+		}
+	}
+	if owner < 0 {
+		return nil, failure("--ssh-id-file "+path+" cannot be offered, because the invoking account cannot be verified",
+			"omit --ssh-id-file to use the Machine's own identity")
+	}
+	held, err := unix.Open(path, unix.O_PATH|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, failure("--ssh-id-file "+path+" cannot be opened", "name an existing private key file")
+	}
+	var stat unix.Stat_t
+	if err := unix.Fstat(held, &stat); err != nil {
+		_ = unix.Close(held)
+		return nil, failure("--ssh-id-file "+path+" cannot be opened", "name an existing private key file")
+	}
+	var refusal error
+	switch {
+	case stat.Mode&unix.S_IFMT == unix.S_IFLNK:
+		refusal = failure("--ssh-id-file "+path+" is a symbolic link", "name the key file itself rather than a link to it")
+	case stat.Mode&unix.S_IFMT != unix.S_IFREG:
+		refusal = failure("--ssh-id-file "+path+" is not a regular file", "name the private key file itself")
+	case int(stat.Uid) != owner:
+		refusal = failure("--ssh-id-file "+path+" is not owned by the invoking account",
+			"offer a key file that account owns")
+	case stat.Mode&0o077 != 0:
+		refusal = failure("--ssh-id-file is readable by group or other",
+			"remove those permissions with chmod 600 "+path)
+	}
+	if refusal != nil {
+		_ = unix.Close(held)
+		return nil, refusal
+	}
+	return os.NewFile(uintptr(held), path), nil
 }
 
 // executable refuses anything but the pinned regular executable, so a session
@@ -247,6 +293,14 @@ func (l Launcher) materialize(policy []byte, session machine.Session) (paths, []
 	}
 	files = append(files, config)
 	held.config = 2 + len(files)
+	if session.IdentityFile != "" {
+		offered, err := l.openIdentity(session.IdentityFile)
+		if err != nil {
+			return paths{}, files, err
+		}
+		files = append(files, offered)
+		held.identityFile = 2 + len(files)
+	}
 	if session.Kind == machine.IdentityKey {
 		if len(session.PrivateKey) == 0 {
 			return paths{}, files, failure("the resolved identity carries no private key", "")

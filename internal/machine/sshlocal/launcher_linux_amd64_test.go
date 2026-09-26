@@ -5,13 +5,17 @@ package sshlocal
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
+	"golang.org/x/sys/unix"
 )
 
 // stubClient stands in for the pinned SSH client. It is a real executable, so
@@ -30,7 +34,8 @@ func launcher(t *testing.T, client string) Launcher {
 	t.Helper()
 	home := t.TempDir()
 	return Launcher{
-		Client: client, Home: func() (string, error) { return home, nil }, PolicyPath: "", Scratch: t.TempDir(),
+		Client: client, Home: func() (string, error) { return home, nil },
+		Owner: func() (int, error) { return os.Getuid(), nil }, PolicyPath: "", Scratch: t.TempDir(),
 		Environ: func() []string {
 			return []string{"TERM=xterm-256color", "SSH_AUTH_SOCK=/run/agent", "LD_PRELOAD=/evil.so"}
 		},
@@ -165,11 +170,182 @@ func TestAnOfferedIdentityFileIsResolvedAgainstTheInvokingAccount(t *testing.T) 
 	if _, err := l.IdentityFile(key); err == nil {
 		t.Fatal("a key readable by group or other was offered")
 	}
-	if _, err := l.IdentityFile(filepath.Join(home, "absent")); err == nil {
-		t.Fatal("an absent key was offered")
+	absent := filepath.Join(home, "absent")
+	_, err = l.IdentityFile(absent)
+	refusedAccess(t, err, "an absent key")
+	namesTheFile(t, err, "cannot be opened", absent)
+	_, err = l.IdentityFile(home)
+	refusedAccess(t, err, "a directory")
+	namesTheFile(t, err, "is not a regular file", home)
+}
+
+// offeredKey writes one private key file the invoking account owns.
+func offeredKey(t *testing.T, content string) string {
+	t.Helper()
+	key := filepath.Join(t.TempDir(), "id_ed25519")
+	if err := os.WriteFile(key, []byte(content), 0600); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := l.IdentityFile(home); err == nil {
-		t.Fatal("a directory was offered as a key")
+	return key
+}
+
+// refusedAccess requires the refusal every unusable offered key reports.
+func refusedAccess(t *testing.T, err error, reason string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal(reason + " was offered")
+	}
+	if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "access.unavailable" {
+		t.Fatalf("diagnostic = %+v", reported)
+	}
+}
+
+// namesTheFile requires a refusal to name the offered file and what to offer
+// instead, so the operator can tell which file was refused and why.
+func namesTheFile(t *testing.T, err error, reason, path string) {
+	t.Helper()
+	reported := diagnostics.Of(err)
+	if len(reported) == 0 || !strings.Contains(reported[0].Message, reason) ||
+		!strings.Contains(reported[0].Message, path) || reported[0].Remediation == "" {
+		t.Fatalf("diagnostic = %+v", reported)
+	}
+}
+
+// A link at the offered name is refused rather than followed, so the name the
+// operator passed cannot be redirected to a file they did not name, including
+// one the invoking account could not otherwise have offered.
+func TestAnOfferedIdentityFileThatIsALinkIsRefused(t *testing.T) {
+	l := launcher(t, stubClient(t, `exit 0`))
+	key := offeredKey(t, "material")
+	link := filepath.Join(t.TempDir(), "id_link")
+	if err := os.Symlink(key, link); err != nil {
+		t.Fatal(err)
+	}
+	_, err := l.IdentityFile(link)
+	refusedAccess(t, err, "a link to a key")
+	if reported := diagnostics.Of(err); !strings.Contains(reported[0].Message, "symbolic link") ||
+		!strings.Contains(reported[0].Message, link) || reported[0].Remediation == "" {
+		t.Fatalf("diagnostic = %+v", reported)
+	}
+}
+
+// A FIFO is not a key. Resolving it does not wait for a writer, so the refusal
+// comes at once rather than after a session that never starts.
+func TestAnOfferedIdentityFileThatIsNotARegularFileIsRefused(t *testing.T) {
+	l := launcher(t, stubClient(t, `exit 0`))
+	fifo := filepath.Join(t.TempDir(), "id_fifo")
+	if err := syscall.Mkfifo(fifo, 0600); err != nil {
+		t.Fatal(err)
+	}
+	refused := make(chan error, 1)
+	go func() {
+		_, err := l.IdentityFile(fifo)
+		refused <- err
+	}()
+	select {
+	case err := <-refused:
+		refusedAccess(t, err, "a FIFO")
+		namesTheFile(t, err, "is not a regular file", fifo)
+	case <-time.After(5 * time.Second):
+		t.Fatal("opening an offered FIFO waited for a writer")
+	}
+}
+
+// unopenableDevice creates a character device node that no driver answers, so
+// every open of it for reading fails at once. It skips where this account
+// cannot create device nodes.
+func unopenableDevice(t *testing.T) string {
+	t.Helper()
+	device := filepath.Join(t.TempDir(), "id_device")
+	// The major numbers Linux reserves for local and experimental use.
+	for _, major := range []uint32{60, 61, 62, 63, 120, 121, 122, 123, 124, 125, 126, 127} {
+		if err := unix.Mknod(device, unix.S_IFCHR|0600, int(unix.Mkdev(major, 0))); err != nil {
+			t.Skipf("this account cannot create a device node: %v", err)
+		}
+		file, err := os.OpenFile(device, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+		if err != nil {
+			return device
+		}
+		_ = file.Close()
+		if err := os.Remove(device); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Skip("a driver answers every major number reserved for local use")
+	return ""
+}
+
+// A device is not a key, and its driver is never asked to open it: a device
+// such as a watchdog acts on being opened, whatever is read. The device here
+// fails every open for reading, so a refusal naming its type rather than an
+// unopenable file proves the type was read without such an open.
+func TestAnOfferedIdentityFileThatIsADeviceIsRefusedWithoutBeingOpened(t *testing.T) {
+	l := launcher(t, stubClient(t, `exit 0`))
+	device := unopenableDevice(t)
+	_, err := l.IdentityFile(device)
+	refusedAccess(t, err, "a character device")
+	namesTheFile(t, err, "is not a regular file", device)
+}
+
+// A key another account owns is not the invoking account's to offer, even to a
+// process privileged enough to read it.
+func TestAnOfferedIdentityFileOwnedByAnotherAccountIsRefused(t *testing.T) {
+	key := offeredKey(t, "material")
+	other := launcher(t, stubClient(t, `exit 0`))
+	other.Owner = func() (int, error) { return os.Getuid() + 1, nil }
+	_, err := other.IdentityFile(key)
+	refusedAccess(t, err, "a key another account owns")
+	if reported := diagnostics.Of(err); !strings.Contains(reported[0].Message, "not owned by the invoking account") {
+		t.Fatalf("diagnostic = %+v", reported)
+	}
+	unverified := launcher(t, stubClient(t, `exit 0`))
+	unverified.Owner = func() (int, error) { return 0, errors.New("account") }
+	_, err = unverified.IdentityFile(key)
+	refusedAccess(t, err, "a key whose owner could not be verified")
+	namesTheFile(t, err, "invoking account cannot be verified", key)
+	unverified.Owner = nil
+	_, err = unverified.IdentityFile(key)
+	refusedAccess(t, err, "a key with no owner to verify it against")
+	namesTheFile(t, err, "invoking account cannot be verified", key)
+}
+
+// The client reads the offered key through the descriptor it was proved on,
+// never through its name, so replacing the name after the key was resolved
+// changes nothing the client can read.
+func TestTheClientReadsTheOfferedKeyThroughTheDescriptorItWasProvedOn(t *testing.T) {
+	client := stubClient(t, `echo "$@"; cat /proc/self/fd/4; exit 0`)
+	l := launcher(t, client)
+	key := offeredKey(t, "OFFERED KEY\n")
+	resolved, err := l.IdentityFile(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	offered := session(machine.IdentityOperator)
+	offered.IdentityFile = resolved
+	var out bytes.Buffer
+	if _, err := l.Run(context.Background(), offered, nil, &out, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "-i /proc/self/fd/4 ") || strings.Contains(out.String(), key) {
+		t.Fatalf("the client was not handed the held key: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "OFFERED KEY") {
+		t.Fatalf("the client could not read the offered key: %q", out.String())
+	}
+	// A name swapped for a link between resolution and the session is refused
+	// when the session opens it, rather than followed to what it now names.
+	elsewhere := offeredKey(t, "ANOTHER KEY\n")
+	if err := os.Remove(key); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(elsewhere, key); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	_, err = l.Run(context.Background(), offered, nil, &out, &out)
+	refusedAccess(t, err, "a key swapped for a link after it was resolved")
+	if strings.Contains(out.String(), "ANOTHER KEY") {
+		t.Fatalf("the client read the file a swapped link names: %q", out.String())
 	}
 }
 

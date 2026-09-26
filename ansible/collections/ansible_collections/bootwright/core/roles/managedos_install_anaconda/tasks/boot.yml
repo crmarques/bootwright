@@ -5,7 +5,19 @@
 # The proof runs here rather than at planning time, because a plan proves
 # intent and only an observation taken before the effect proves the target.
 # Both bindings are fixed role task files selected by the frozen request's own
-# substrate, so authored data can never choose which one runs.
+# substrate, so authored data can never choose which one runs, and a substrate
+# with neither binding refuses before anything is inserted or booted.
+- name: Refuse a substrate this installation has no boot binding for
+  ansible.builtin.assert:
+    that:
+      - bootwright_os_install_request.target.substrate in ['libvirt', 'baremetal']
+    fail_msg: >-
+      Machine {{ bootwright_os_install_request.identity.object }} names substrate
+      {{ bootwright_os_install_request.target.substrate }}, which this
+      installation has no boot binding for, so nothing was inserted or booted;
+      plan the installation again with this release
+    quiet: true
+
 - name: Prove the exact target through the substrate that realized it
   ansible.builtin.include_role:
     name: bootwright.core.substrate_libvirt_machine
@@ -29,7 +41,11 @@
     substrate_baremetal_machine_target_password: '{{ bootwright_os_install_material.controllerPassword }}'
   when: bootwright_os_install_request.target.substrate == 'baremetal'
 
-- name: Prove the machine is powered off before inserting anything
+# Either proof refuses a running machine. A machine the libvirt substrate
+# created is Bootwright's own, so it is also powered off through its controller,
+# which narrows the window in which it was started after that proof. An
+# operator-owned physical machine is never powered off by an installation.
+- name: Power off the emulated machine Bootwright created before inserting anything
   bootwright.core.redfish_boot:
     endpoint: '{{ managedos_install_anaconda_endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
@@ -37,6 +53,7 @@
     verify: '{{ managedos_install_anaconda_verify }}'
     operation: power-off
   no_log: true
+  when: bootwright_os_install_request.target.substrate == 'libvirt'
 
 - name: Insert the published installer image as virtual media
   bootwright.core.redfish_boot:

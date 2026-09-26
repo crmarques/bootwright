@@ -258,7 +258,8 @@ func TestAdmissionEffectBoundary(t *testing.T) {
 		controllerEffects := controllerBundle || controllerPackages || controllerNative
 		lifecycleRunner := source.owner == "internal/reconciliation/ansiblerunner"
 		// The SSH session adapter runs the one pinned client as a child and
-		// hands it the operator's streams and its material descriptors.
+		// hands it the operator's streams and its material descriptors, and
+		// resolves an offered key to a path-only descriptor before trusting it.
 		sshSession := source.owner == "internal/machine/sshlocal"
 		// Machine access names those streams to hand them on; it opens nothing.
 		sessionStreams := source.owner == "internal/machine/access"
@@ -270,7 +271,7 @@ func TestAdmissionEffectBoundary(t *testing.T) {
 		codec := source.owner == "internal/desiredstate/yamlstream" || source.owner == "internal/desiredstate/encoding"
 		for _, imported := range source.imports {
 			name := imported.path
-			forbidden := (strings.HasPrefix(name, "os/") && !(localProcess && name == "os/exec" || invocation && name == "os/signal")) || strings.HasPrefix(name, "net/") && name != "net/url" && name != "net/netip" && !controllerEffects && !mediaSource || !storage && !selection && !secretMaterial && !secretStore && name == "crypto/rand" || strings.HasPrefix(name, "math/rand") || !storage && !secretMaterial && name == "unsafe" || strings.HasPrefix(name, "golang.org/x/sys") && !controllerHost && !controllerEffects || !input && !storage && !secretMaterial && !localProcess && !controllerHost && !mediaSource && (name == "os" || name == "syscall")
+			forbidden := (strings.HasPrefix(name, "os/") && !(localProcess && name == "os/exec" || invocation && name == "os/signal")) || strings.HasPrefix(name, "net/") && name != "net/url" && name != "net/netip" && !controllerEffects && !mediaSource || !storage && !selection && !secretMaterial && !secretStore && name == "crypto/rand" || strings.HasPrefix(name, "math/rand") || !storage && !secretMaterial && name == "unsafe" || strings.HasPrefix(name, "golang.org/x/sys") && !controllerHost && !controllerEffects && !sshSession || !input && !storage && !secretMaterial && !localProcess && !controllerHost && !mediaSource && (name == "os" || name == "syscall")
 			if forbidden {
 				t.Errorf("%s imports unauthorized effect capability %s", source.path, name)
 			}

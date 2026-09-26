@@ -5,6 +5,13 @@ controller. It is the smallest complete shape M5a supports: a controller
 Machine running the managed services, a bare-metal `InfraProvider`, and one
 Machine that declares the hardware it must be proved to be.
 
+**Physical installation is refused today.** Until private host-key delivery is
+repaired (backlog S3b), the installation of `Machine/metal-01`
+[refuses before registration](../../specs/managed-os.md#physical-installation),
+because the delivered host key would be readable from the publicly served
+installer image, so an apply of this example registers nothing. The rest of
+this page describes the run that repair restores.
+
 What differs from [lab-rhel](../lab-rhel/README.md), which installs the same
 operating system on a libvirt guest, follows from the machine existing before
 Bootwright and outliving this context:
@@ -27,10 +34,11 @@ Bootwright and outliving this context:
 
 ## Rehearsing it without hardware
 
-The physical path can be driven end to end on one workstation, because the
-emulated controller `lab-rhel` uses implements the same Redfish surface this
-one drives, including the `EthernetInterfaces` collection the target proof
-reads.
+The rehearsal stops at the installation refusal above until private host-key
+delivery is repaired (backlog S3b). Once it is, the physical path can be driven
+end to end on one workstation, because the emulated controller `lab-rhel` uses
+implements the same Redfish surface this one drives, including the
+`EthernetInterfaces` collection the target proof reads.
 
 Apply a libvirt context whose Machine is installer-provisioned — `os.provided:
 false` with no `installProfileRef`, so the substrate realizes the domain and

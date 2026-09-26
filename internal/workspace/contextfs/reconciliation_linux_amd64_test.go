@@ -428,6 +428,193 @@ func TestLifecyclePublicationCheckpointsFireAndFailClosed(t *testing.T) {
 	}
 }
 
+// A publication interrupted at any of its checkpoints, whether refused there or
+// cancelled, must leave nothing behind that a later mutation refuses: the state
+// directory admits no staging entry, so one left there refuses every later
+// mutation of the context, and a record name may appear only with its complete
+// bytes.
+func TestPublicationLeavesNoStageOnFailure(t *testing.T) {
+	evidence := func(operation reconciliation.MutationOperation) []byte {
+		data, err := reconciliation.Evidence{Operation: operation, Ownership: reconciliation.OwnershipRetained}.Bytes()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	// Larger than one write, so an interruption can fall between two of them.
+	record := []byte(strings.Repeat("x", 40000) + "\n")
+	previous := []byte("{\"version\":1}\n")
+	for _, publication := range []struct {
+		name string
+		// target is the operation record the publication creates or replaces,
+		// and accepted what it may hold after an interruption.
+		target   string
+		accepted [][]byte
+		prepare  func(context.Context, lifecycle.Transaction) error
+		publish  func(context.Context, lifecycle.Transaction) error
+	}{
+		{
+			name: "evidence",
+			publish: func(ctx context.Context, tx lifecycle.Transaction) error {
+				return tx.PublishEvidence(ctx, evidence(reconciliation.MutationPending))
+			},
+		},
+		{
+			name: "exclusive-record", target: "index.json", accepted: [][]byte{nil, record},
+			publish: func(ctx context.Context, tx lifecycle.Transaction) error {
+				return tx.Operations().WriteExclusive(ctx, "index.json", record)
+			},
+		},
+		{
+			name: "absent-record", target: "index.json", accepted: [][]byte{nil, record},
+			publish: func(ctx context.Context, tx lifecycle.Transaction) error {
+				return tx.Operations().Replace(ctx, "index.json", record, nil)
+			},
+		},
+		{
+			name: "replaced-record", target: "index.json", accepted: [][]byte{previous, record},
+			prepare: func(ctx context.Context, tx lifecycle.Transaction) error {
+				return tx.Operations().WriteExclusive(ctx, "index.json", previous)
+			},
+			publish: func(ctx context.Context, tx lifecycle.Transaction) error {
+				return tx.Operations().Replace(ctx, "index.json", record, previous)
+			},
+		},
+	} {
+		t.Run(publication.name, func(t *testing.T) {
+			// interrupt stops the publication at its failAt-th checkpoint, or
+			// lets it complete when failAt is zero, and reports every checkpoint
+			// it reached. A cancelled interruption also cancels the context the
+			// publication runs under, so its cleanup cannot rely on it.
+			interrupt := func(store *Store, failAt int, cancelled bool) ([]string, error) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				var reached []string
+				armed := false
+				store.fail = func(point string) error {
+					if !armed {
+						return nil
+					}
+					reached = append(reached, point)
+					if len(reached) != failAt {
+						return nil
+					}
+					if cancelled {
+						cancel()
+						return ctx.Err()
+					}
+					return errors.New("interrupted at " + point)
+				}
+				defer func() { store.fail = nil }()
+				err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+					if publication.prepare != nil {
+						if err := publication.prepare(ctx, tx); err != nil {
+							return err
+						}
+					}
+					armed = true
+					defer func() { armed = false }()
+					return publication.publish(ctx, tx)
+				})
+				return reached, err
+			}
+			store, _ := lifecycleFixture(t)
+			checkpoints, err := interrupt(store, 0, false)
+			if err != nil {
+				t.Fatalf("the uninterrupted publication failed: %#v", diagnostics.Of(err))
+			}
+			if len(checkpoints) == 0 {
+				t.Fatal("the publication reached no checkpoint")
+			}
+			for index, checkpoint := range checkpoints {
+				for _, cancelled := range []bool{false, true} {
+					mode := "refused"
+					if cancelled {
+						mode = "cancelled"
+					}
+					t.Run(checkpoint+"/"+mode, func(t *testing.T) {
+						ctx := context.Background()
+						store, record := lifecycleFixture(t)
+						if _, err := interrupt(store, index+1, cancelled); err == nil {
+							t.Fatalf("checkpoint %s did not stop the publication", checkpoint)
+						}
+						runtime := filepath.Join(store.options.Root, "contexts", record.Name, "state")
+						if err := filepath.WalkDir(runtime, func(path string, entry os.DirEntry, err error) error {
+							if err == nil && strings.HasPrefix(entry.Name(), "pending-") {
+								t.Errorf("an interrupted publication left its stage: %s", path)
+							}
+							return err
+						}); err != nil {
+							t.Fatal(err)
+						}
+						if publication.target != "" {
+							stored, err := os.ReadFile(filepath.Join(runtime, "operations", publication.target))
+							if errors.Is(err, os.ErrNotExist) {
+								stored, err = nil, nil
+							}
+							if err != nil || !slices.ContainsFunc(publication.accepted, func(want []byte) bool { return string(want) == string(stored) }) {
+								t.Fatalf("an interrupted publication left %d partial record bytes (%v)", len(stored), err)
+							}
+						}
+						if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+							if err := tx.PublishEvidence(ctx, evidence(reconciliation.MutationApplied)); err != nil {
+								return err
+							}
+							return tx.Operations().WriteExclusive(ctx, "retry.json", previous)
+						}); err != nil {
+							t.Fatalf("the context refused a mutation after the interruption: %#v", diagnostics.Of(err))
+						}
+					})
+				}
+			}
+		})
+	}
+}
+
+// A mutation-evidence rename that fails after its stage is complete must still
+// remove the stage: no checkpoint separates the two, so only a rename refused
+// by the filesystem reaches that path.
+func TestFailedEvidenceRenameLeavesNoStage(t *testing.T) {
+	ctx := context.Background()
+	store, record := lifecycleFixture(t)
+	runtime := filepath.Join(store.options.Root, "contexts", record.Name, "state")
+	mutation := filepath.Join(runtime, "mutation.json")
+	data, err := reconciliation.Evidence{Operation: reconciliation.MutationPending, Ownership: reconciliation.OwnershipRetained}.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	armed := false
+	store.fail = func(point string) error {
+		if !armed || point != "sync-directory" {
+			return nil
+		}
+		armed = false
+		// A regular file cannot be renamed over a directory.
+		if err := os.Remove(mutation); err != nil {
+			return err
+		}
+		return os.Mkdir(mutation, 0700)
+	}
+	defer func() { store.fail = nil }()
+	err = store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		armed = true
+		return tx.PublishEvidence(ctx, data)
+	})
+	failures := diagnostics.Of(err)
+	if len(failures) != 1 || failures[0].Message != "context mutation evidence could not be atomically published" {
+		t.Fatalf("the evidence rename was not refused: %#v", failures)
+	}
+	entries, err := os.ReadDir(runtime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "pending-") {
+			t.Errorf("a refused evidence rename left its stage: %s", entry.Name())
+		}
+	}
+}
+
 // Acquiring confidential material inside a lifecycle transaction must refuse
 // rather than block: both take the same exclusive root lock, so a lifecycle
 // operation binds its Secrets before it opens the transaction.

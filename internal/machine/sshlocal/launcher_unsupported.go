@@ -14,10 +14,13 @@ import (
 type Launcher struct {
 	Client  string
 	Home    func() (string, error)
+	Owner   func() (int, error)
 	Scratch string
 }
 
-func New(home func() (string, error)) Launcher { return Launcher{Home: home} }
+func New(home func() (string, error), owner func() (int, error)) Launcher {
+	return Launcher{Home: home, Owner: owner}
+}
 
 func (Launcher) Run(context.Context, machine.Session, io.Reader, io.Writer, io.Writer) (int, error) {
 	return 0, availability.ErrNotImplemented

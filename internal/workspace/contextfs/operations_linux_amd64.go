@@ -376,7 +376,7 @@ func (a *operationArea) WriteExclusive(ctx context.Context, target string, data 
 	if err := a.capacity(ctx, len(data)); err != nil {
 		return err
 	}
-	return a.store.writeExclusive(ctx, parent, name, data)
+	return a.store.writeExclusiveAtomic(ctx, parent, name, data, false)
 }
 
 // Replace publishes atomically after proving the destination still holds
@@ -402,16 +402,17 @@ func (a *operationArea) Replace(ctx context.Context, target string, data, expect
 		return err
 	}
 	if expected == nil {
-		return a.store.writeExclusive(ctx, parent, name, data)
+		return a.store.writeExclusiveAtomic(ctx, parent, name, data, false)
 	}
 	var pending string
+	var created syscall.Stat_t
 	for range 16 {
 		candidate, err := a.store.candidate("pending-")
 		if err != nil {
 			return err
 		}
 		pending = candidate + ".json"
-		err = a.store.writeExclusive(ctx, parent, pending, data)
+		created, err = a.store.writeExclusiveIdentity(ctx, parent, pending, data, false)
 		if errors.Is(err, syscall.EEXIST) {
 			pending = ""
 			continue
@@ -424,6 +425,12 @@ func (a *operationArea) Replace(ctx context.Context, target string, data, expect
 	if pending == "" {
 		return state("lifecycle operation publication exhausted its collision limit")
 	}
+	renamed := false
+	defer func() {
+		if !renamed {
+			discardCreated(parent, pending, created)
+		}
+	}()
 	staged, stagedIdentity, err := readBoundedIdentity(ctx, parent, pending, maxOperationRecord, true)
 	if err != nil || !bytes.Equal(staged, data) {
 		return state("staged lifecycle record changed before publication")
@@ -445,6 +452,7 @@ func (a *operationArea) Replace(ctx context.Context, target string, data, expect
 	if err := syscall.Renameat(int(parent.file.Fd()), pending, int(parent.file.Fd()), name); err != nil {
 		return state("lifecycle record could not be atomically published")
 	}
+	renamed = true
 	if err := a.store.checkpoint(ctx, "after-operation-rename"); err != nil {
 		return err
 	}
