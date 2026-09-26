@@ -3,9 +3,18 @@
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 import sys
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
+
+
+def cache_root(root: Path) -> Path:
+    """Return the shared check cache that scripts/cache-dir names."""
+    completed = subprocess.run(
+        [str(root / "scripts/cache-dir")], check=True, capture_output=True, text=True
+    )
+    return Path(completed.stdout.strip())
 
 
 class PublisherRedirect(HTTPRedirectHandler):
@@ -32,7 +41,7 @@ def main() -> None:
     destination = (
         Path(sys.argv[1])
         if len(sys.argv) == 2
-        else root / ".cache/ansible-test-artifacts"
+        else cache_root(root) / "ansible-test-artifacts"
     )
     destination.mkdir(parents=True, exist_ok=True)
     artifacts = json.loads(

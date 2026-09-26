@@ -16,6 +16,14 @@ from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
 
 
+def cache_root(root: Path) -> Path:
+    """Return the shared check cache that scripts/cache-dir names."""
+    completed = subprocess.run(
+        [str(root / "scripts/cache-dir")], check=True, capture_output=True, text=True
+    )
+    return Path(completed.stdout.strip())
+
+
 class PublisherRedirect(HTTPRedirectHandler):
     """Keep the interpreter acquisition within its declared HTTPS publisher."""
 
@@ -62,7 +70,7 @@ def main() -> int:
 
     root = Path(__file__).resolve().parents[2]
     tools = root / "scripts/tools"
-    area = root / ".cache/ansible-check"
+    area = cache_root(root) / "ansible-check"
     interpreter = area / "venv/bin/python"
     lock = json.loads((tools / "ansible-check-interpreter.json").read_text())
 

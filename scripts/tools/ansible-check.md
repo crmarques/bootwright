@@ -8,14 +8,17 @@ acquires the pinned sanity artifacts. That lock qualifies Linux amd64 wheels
 separately from the product runtime.
 
 First use needs network access and takes a few minutes; later runs reuse the
-prepared environment. Run the bootstrap on its own with:
+prepared environment. The environment lives in the directory `scripts/cache-dir`
+prints, which every worktree of one clone shares, so a new worktree does not
+bootstrap again. Run the bootstrap on its own with:
 
 ```sh
 python3 scripts/tools/ansible_check_bootstrap.py
 ```
 
-Any host CPython 3.12 or newer can perform the bootstrap. Set
-`BOOTWRIGHT_ANSIBLE_BOOTSTRAP_PYTHON` to choose it, or
+Any host CPython 3.12 or newer can perform the bootstrap; the script takes the
+first of `python3`, `python3.14`, `python3.13` and `python3.12` that qualifies.
+Set `BOOTWRIGHT_ANSIBLE_BOOTSTRAP_PYTHON` to choose it, or
 `BOOTWRIGHT_ANSIBLE_CHECK_PYTHON` to supply a prepared interpreter and skip the
 bootstrap entirely. Keep the environment outside tracked content. The gate checks all locked tool
 versions, supplies isolated inventory/configuration/cache paths, runs every
@@ -23,6 +26,10 @@ shipped playbook through syntax checking, and runs Ansible Lint offline. It then
 copies the collection into a temporary area and runs all applicable Ansible
 sanity checks, collection unit tests, and the synthetic controller tool and
 supervisor integration targets.
+
+`./scripts/ansible-check --suite syntax|lint|sanity|units|integration` runs
+one of those suites for a local inner loop. It is never a substitute for the
+argument-free gate, which `make check` and CI run.
 
 Two targets are excluded by default because they need a qualified native
 backend on the running host: `controller_native` builds a fixture RPM and drives

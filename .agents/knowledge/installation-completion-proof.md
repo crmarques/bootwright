@@ -1,7 +1,7 @@
 # Proving a managed installation finished
 
 Diagnosed 2026-09-17 on `lab-rhel`, after three aborted applies of the same
-machine. [Managed OS](../../specs/managed-os.md#completion) owns the required
+machine. [Managed OS](../../specs/managed-os.md#installation) owns the required
 behavior; this page records why the implementation did not meet it and what a
 progress row has to say for an operator to trust it.
 

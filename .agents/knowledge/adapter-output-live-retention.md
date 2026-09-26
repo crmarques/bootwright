@@ -15,7 +15,7 @@ invisible, which is exactly when an operator wants to read it.
 
 Two buffers of about eight kilobytes each, in series.
 
-- **The Ansible child.** `ansible/utils/display.py` writes the callback line and
+- **The Ansible child.** ansible-core's `lib/ansible/utils/display.py` writes the callback line and
   deliberately does not flush it. The flush is present but commented out, with a
   note that `TaskQueueManager.cleanup` performs a final flush at shutdown. With
   standard output on a pipe rather than a terminal, CPython block-buffers, so

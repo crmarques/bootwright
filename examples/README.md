@@ -35,6 +35,12 @@ managed proxy, DNS, NTP and artifact-server set, one libvirt Machine the
 substrate realizes and the agent installer supplies the operating system of,
 and the cluster that installs onto it. Its README walks the journey.
 
+[`lab-baremetal/`](lab-baremetal/) is the physical counterpart of `lab-rhel`:
+one operator-owned server that RHEL is installed on through its own Redfish
+management controller. Its README describes the rehearsal against an emulated
+controller; physical installation is refused until private host-key delivery
+is repaired, so the example validates and plans only as far as that refusal.
+
 ## Local work in progress
 
 `examples/wip/` is intentionally ignored. It is the place for complete

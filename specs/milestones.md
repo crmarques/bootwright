@@ -684,7 +684,7 @@ Guarded by the reconciliation domain suite, the `reconciliation/lifecycle`
 journey suite, the `operationstore` record and log tests, the `contextfs`
 checkpoint tests, the capability and adapter suites under
 `internal/infrastructureservices`, the CLI lifecycle goldens, and the example
-acceptance in `cmd/bootwright/lab_artifacts_example_test.go`.
+acceptance in `cmd/bootwright/lab_rhel_example_test.go`, which inherited it when M1h retired the artifact-only example.
 
 Constraints left for later work: content publication into a served root is C20;
 ISO construction is C12; neither may append to a frozen plan. SSH placement has
@@ -747,8 +747,8 @@ operator-run.
 
 Not covered by any in-tree gate: executed service effects, the process and
 cancellation boundary of the service adapter, and SSH placement against a real
-host. The named consumer was `examples/managed-infra-components`, which M1h replaced
-with [`examples/lab-rhel`](../examples/lab-rhel); the larger `examples/lab-ocp`
+host. The named consumer was the former managed-infra-components example, which M1h replaced
+with [`examples/lab-rhel`](../examples/lab-rhel); the larger lab-ocp
 fixture it carried was retired with it.
 
 ### M1g — controller prerequisites by selecting scope
@@ -835,9 +835,9 @@ stages gain their first capabilities; `media add`, `media list` and
 `media delete` become available over one host-wide media store; and a managed
 `ArtifactServer` serves the per-machine installer ISO and the DVD package tree
 derived from that store, for installation and for package updates afterwards.
-The named consumer is `examples/lab-rhel`, which replaces
-`examples/managed-infra-components`; `examples/lab-artifacts` and
-`examples/lab-ocp` are removed with it, and the controller-selection and
+The named consumer is `examples/lab-rhel`, which replaces the former
+managed-infra-components example; the lab-artifacts and lab-ocp examples
+are removed with it, and the controller-selection and
 context-journey tests they carried move to the new example and to
 `examples/multidc-platform`.
 

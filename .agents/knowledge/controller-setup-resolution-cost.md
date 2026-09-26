@@ -110,7 +110,6 @@ why each removed step was expensive, which is the reason those rules matter.
   controller, a retry after a terminal failure and a missing native root contact
   no bootstrap or tool publisher
   (`TestLatestSetupResolvesOnceAndReusesRetainedNoop`,
-  `TestTargetToolsResolveBeforeConfirmationAndInstallEvenWithReadyRuntime`,
   `TestDefiniteRefusalRetriesFromRetainedClosure`), the sealed-bundle presence
   test in `internal/controller/bundlelocal` (`TestSealedBundleReadinessIsPresenceOnly`),
   the presence evidence test in `internal/controller/nativelocal`, and the
@@ -127,8 +126,8 @@ why each removed step was expensive, which is the reason those rules matter.
   `TestRebaseRefusesRetainedSourcesThatAreNotTheirApprovedBytes` and
   `TestPreparationRecoversRetainedSourcesInsteadOfAcquiringThem` in
   `internal/controller/bundlelocal`. For staging and the snapshot:
-  `TestSolverMetadataNamesOnlyWhatTheProvidedSolverLoads`,
-  `TestStagingSkipsAdvertisedMembersTheSolverNeverOpens` and
+  `TestStagingRequiresTheMembersEveryPlanDependsOn` in
+  `internal/controller/nativelocal` and
   `TestRetainedDatabaseServesOnlyTheStateItWasCopiedFrom`.
 
 Applies to the Linux/amd64 `bundlelocal` and `nativelocal` adapters. Revisit if
