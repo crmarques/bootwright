@@ -170,17 +170,11 @@
     status: ok
   no_log: true
 
+# The identity is the trust anchor the image was built with, so the
+# observation taken before any effect already names it, and the read back
+# below answers with it only when the installed cluster accepts that anchor.
 - name: Read the installed cluster and its nodes back
   ansible.builtin.import_tasks: state.yml
-
-# The identity is read again here rather than reused: the installer records it
-# while it works, so an attempt that has just installed a cluster learns it now
-# and not before.
-- name: Read the identity this installation recorded
-  bootwright.core.containercluster_install_inspect:
-    request: '{{ bootwright_cluster_install_request }}'
-  register: containercluster_install_agent_after
-  no_log: true
 
 - name: Publish bounded installation completion evidence
   bootwright.core.containercluster_install_protocol:
@@ -188,6 +182,6 @@
     outcome: >-
       {{ 'unchanged' if containercluster_install_agent_settled | bool else 'changed' }}
     digest: '{{ bootwright_cluster_install_digest }}'
-    identity: '{{ containercluster_install_agent_after.observation.identity }}'
+    identity: '{{ containercluster_install_agent_before.observation.identity }}'
     state: '{{ containercluster_install_agent_state }}'
   no_log: true
