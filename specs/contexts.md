@@ -352,7 +352,8 @@ Secrets limits additionally bound their trees.
 | One lifecycle adapter invocation | 2 hours | `invocationTimeout` in `internal/reconciliation/ansiblerunner/process_linux_amd64.go` |
 | One controller Ansible run: setup, its recovery or a controller-stage client installation | 10 minutes | `runTimeout` in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
 
-`TestDocumentedBoundsMatchCode` compares each value with its code.
+`TestDocumentedBoundsMatchCode` compares each value with its code, and each
+deadline with the one its runner passes to `context.WithTimeout`.
 
 Missing registry in a nonempty root is
 corruption, except that explicit init may finish publication when the root's

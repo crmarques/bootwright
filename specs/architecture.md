@@ -353,8 +353,9 @@ case, and implementing a stub removes it from `stubCapabilities`.
    every method of `Capability` in
    `internal/reconciliation/lifecycle/contracts.go`.
 2. In `test/architecture/boundaries_test.go`, add it to the capability list in
-   `packageRoles` and give it an `applicationDependencies` entry, normally
-   `capabilityDependencies()`, with the reason for any other edge.
+   `packageRoles` and give it an `applicationDependencies` entry naming exactly
+   the application packages it imports, normally `capabilityDependencies()`,
+   with the reason for any other edge.
 3. In `test/architecture/composition_test.go`, list in `applicationValues` each
    exported type with methods that an adapter constructs as a value rather than
    receives as a service.
@@ -760,6 +761,11 @@ reviewers retain semantic judgments that source checks cannot prove.
   replay, interruption, and structured failure/evidence.
 - Cover public serialization, artifacts, commands, streams, help, exit codes,
   and graph composition with applicable golden and end-to-end tests.
+- Keep every allowlist and registry a fitness check reads exact: an entry that
+  is no longer needed, or names what no longer exists, fails, so each list only
+  shrinks. A production function, in Go or in the collection's plugins, stays
+  within 100 lines; the ones already longer are listed awaiting their split
+  ([backlog C29](milestones/backlog.md#candidates)).
 
 Unit or fake-adapter success never qualifies a remote implementation. Every
 supported substrate/component/product/version combination needs its named

@@ -87,8 +87,10 @@ func TestProductionFunctionsStayWithinTheLineLimit(t *testing.T) {
 			}
 		}
 	}
-	for _, name := range known {
-		if !slices.Contains(seen, name) {
+	for index, name := range known {
+		if slices.Contains(known[:index], name) {
+			t.Errorf("%s is listed twice in longFunctionsAwaitingSplit; remove the copy", name)
+		} else if !slices.Contains(seen, name) {
 			t.Errorf("%s is no longer over the limit; remove it from longFunctionsAwaitingSplit", name)
 		}
 	}
