@@ -40,10 +40,17 @@ def names(values):
 
 
 def evidence(arguments, request_digest, removed):
+    """The bounded evidence one completion phase publishes.
+
+    `completed` is the cluster's own report, resolved by the role's state read:
+    only a real boolean true counts, so a string or a missing key is an
+    installation not yet done rather than one the cluster finished.
+    """
     state = arguments.get("state") or {}
     found = {
         "absent": bool(removed),
         "cluster": bounded(state.get("cluster")),
+        "completed": state.get("completed") is True,
         "identity": bounded(arguments.get("identity")),
         "media": names(state.get("media")),
         "missing": names(state.get("missing")),
@@ -57,7 +64,8 @@ def evidence(arguments, request_digest, removed):
         return found
     found["postcondition"] = bool(
         found["identity"] and found["cluster"] == found["identity"]
-        and found["release"] and not found["missing"] and not found["media"]
+        and found["release"] and found["completed"]
+        and not found["missing"] and not found["media"]
     )
     return found
 
@@ -75,6 +83,8 @@ def unproved(found):
         unmet.append("the cluster answering is not the one this operation installed")
     if not found["release"]:
         unmet.append("the cluster reports no release")
+    if not found["completed"]:
+        unmet.append("the cluster does not report its installation completed at the declared release")
     if found["missing"]:
         unmet.append("nodes missing: " + ", ".join(found["missing"]))
     if found["media"]:

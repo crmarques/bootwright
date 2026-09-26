@@ -198,11 +198,11 @@ func TestInstallEvidenceMatchesItsGoldens(t *testing.T) {
 		evidence InstallEvidence
 		validate func([]byte) error
 	}{
-		// The cluster answers through this build's anchor, whole, at the
-		// declared release, with its media ejected.
+		// The cluster answers through this build's anchor, whole, reporting its
+		// installation completed at the declared release, with its media ejected.
 		"completed": {
 			InstallEvidence{
-				Cluster: anchorIdentity, Identity: anchorIdentity, Media: []string{}, Missing: []string{},
+				Cluster: anchorIdentity, Completed: true, Identity: anchorIdentity, Media: []string{}, Missing: []string{},
 				Postcondition: true, Powered: []string{"sno-01"}, Release: "4.21.15", Request: testDigest,
 			},
 			func(data []byte) error { return ValidateInstallPresence(data, install, testDigest) },
@@ -210,12 +210,15 @@ func TestInstallEvidenceMatchesItsGoldens(t *testing.T) {
 		// A removal ejects the media and retains the cluster, which still answers.
 		"removed": {
 			InstallEvidence{
-				Absent: true, Cluster: anchorIdentity, Identity: anchorIdentity, Media: []string{}, Missing: []string{},
-				Postcondition: true, Powered: []string{"sno-01"}, Release: "4.21.15", Request: testDigest,
+				Absent: true, Cluster: anchorIdentity, Completed: true, Identity: anchorIdentity,
+				Media: []string{}, Missing: []string{}, Postcondition: true, Powered: []string{"sno-01"},
+				Release: "4.21.15", Request: testDigest,
 			},
 			func(data []byte) error { return ValidateInstallAbsence(data, testDigest) },
 		},
-		// This build's cluster answers while its node still presents the media.
+		// This build's cluster answers, at the declared release and whole, while
+		// it is still installing and its node still presents the media: an
+		// apply interrupted during the installation wait.
 		"partial": {
 			InstallEvidence{
 				Cluster: anchorIdentity, Identity: anchorIdentity, Media: []string{"sno-01"}, Missing: []string{},

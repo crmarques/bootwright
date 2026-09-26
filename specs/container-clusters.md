@@ -208,8 +208,15 @@ each node's virtual media is ejected and its controller is pointed at the
 installed disk, in node-name order.
 
 **Completion.** Completion requires the cluster answering with this build's
-identity, reporting the release it was installed for, holding every declared
-node, with no node's controller still presenting the media it booted from. The
+identity, reporting the release it was installed for and its installation
+completed at that release, holding every declared node, with no node's
+controller still presenting the media it booted from. The cluster reports its
+installation completed only when its `ClusterVersion` condition `Available` is
+`True` and the newest entry of its update history, `status.history[0]`, is
+`Completed` at the declared release. The cluster opens that entry `Partial` when
+it starts and marks it `Completed` once the whole release is applied, so a
+cluster still installing reports no completion, and neither does an installer
+that exited or an answer that lacks either field. The
 identity is the SHA-256 of the certificate authority and the client certificate
 in the administrator kubeconfig, both minted when the image was built, so it
 names the cluster that image installs and no other; the agent installer records
@@ -223,14 +230,18 @@ recorded as a fixed marker that never equals an identity, and an API that does
 not answer is recorded as none. The cluster is read through its own API with the
 client the controller stage published, so completion is what the cluster says
 about itself rather than what the installer said before it exited. The evidence
-records the identity, what answered, the release, the declared nodes still
-missing and the nodes still presenting media; it records no credential and no
-path.
+records the identity, what answered, the release, whether the cluster reported
+its installation completed, the declared nodes still missing and the nodes
+still presenting media; it records no credential and no path.
 
 **Replay.** A cluster already answering with this operation's identity, at the
-declared release and holding every declared node, reports `completed` with the
-same evidence, boots nothing and waits for nothing. The only difference it
-converges is media it did not finish releasing. A foreign answer is not
+declared release, reporting its installation completed and holding every
+declared node, reports `completed` with the same evidence, boots nothing and
+waits for nothing. The only difference it converges is media it did not finish
+releasing. The same cluster answering while it does not report its installation
+completed, as an attempt interrupted during the installation wait leaves it, is
+not installed: the next attempt waits for bootstrap and installation completion
+again before it releases any media. A foreign answer is not
 converged: there is no reinstall path, and installing again requires this
 cluster's nodes to be destroyed and applied again.
 
@@ -242,8 +253,9 @@ removal. A cluster whose nodes are physical keeps running after its context is
 destroyed, exactly as a physically installed operating system does.
 
 **Unknown resolution.** Observation is read-only against the frozen request. A
-cluster answering with this operation's identity at the declared release, whole
-and with its media released, is positive completion. Nothing answering, no node
+cluster answering with this operation's identity at the declared release,
+reporting its installation completed, whole and with its media released, is
+positive completion. Nothing answering, no node
 running and no media inserted is positive no effect. That same cluster
 answering while the completion is not yet true is a positive partial
 realization the next attempt converges. Anything else stays unknown, including

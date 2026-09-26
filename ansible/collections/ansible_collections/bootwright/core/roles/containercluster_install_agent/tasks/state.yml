@@ -35,6 +35,28 @@
   changed_when: false
   failed_when: false
 
+# ClusterVersion's own report that the installation finished, one field per
+# line: the status of its Available condition, then the state and version of
+# the newest entry of its update history. The cluster version operator opens
+# that entry Partial at the desired release when the cluster starts, and marks
+# it Completed once the whole release has been applied. A history that is
+# absent or empty answers no state: oc's JSONPath prints nothing for an absent
+# key and refuses the first entry of an empty list as out of bounds.
+- name: Read whether the cluster reports its installation completed
+  ansible.builtin.command:
+    argv:
+      - '{{ containercluster_install_agent_client }}'
+      - --kubeconfig
+      - '{{ containercluster_install_agent_kubeconfig }}'
+      - get
+      - clusterversion
+      - version
+      - --output
+      - 'jsonpath={.status.conditions[?(@.type=="Available")].status}{"\n"}{.status.history[0].state}{"\n"}{.status.history[0].version}'
+  register: containercluster_install_agent_completion
+  changed_when: false
+  failed_when: false
+
 - name: Read the nodes the cluster holds
   ansible.builtin.command:
     argv:
@@ -74,7 +96,10 @@
 # success through a kubeconfig whose anchor the inspection could not name is
 # foreign too, because it proves no cluster of this build. The rejections are
 # matched in the form oc prints them, through kubectl's StandardErrorMessage,
-# and the marker is no SHA-256, so it never equals an identity.
+# and the marker is no SHA-256, so it never equals an identity. The
+# installation is completed only when the completion read succeeded and
+# answered exactly Available True and a newest history entry Completed at the
+# declared release; any other answer, or none, is an installation not yet done.
 - name: Resolve what the cluster and its nodes answered
   ansible.builtin.set_fact:
     containercluster_install_agent_state:
@@ -86,6 +111,10 @@
                     is search(containercluster_install_agent_rejected)
                  else '') }}
       release: '{{ containercluster_install_agent_release.stdout | default("") | trim }}'
+      completed: >-
+        {{ (containercluster_install_agent_completion.rc | default(1)) == 0
+           and (containercluster_install_agent_completion.stdout | default('')).splitlines()
+               == ['True', 'Completed', bootwright_cluster_install_request.release.version] }}
       missing: >-
         {{ bootwright_cluster_install_request.nodes | map(attribute='name') | list
            | difference((containercluster_install_agent_nodes.stdout | default('')).split()) }}

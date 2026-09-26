@@ -1,6 +1,7 @@
 {
   "absent": false,
   "cluster": "4245f5e001d445663c189f04c0a614168ed3c05a522d38680d1aa1ca248d6049",
+  "completed": false,
   "identity": "4245f5e001d445663c189f04c0a614168ed3c05a522d38680d1aa1ca248d6049",
   "media": [
     "sno-01"

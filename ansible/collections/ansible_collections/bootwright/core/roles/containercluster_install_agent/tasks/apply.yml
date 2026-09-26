@@ -59,14 +59,19 @@
   ansible.builtin.import_tasks: state.yml
 
 # Decided once, before any effect. Every later guard reads this fact rather
-# than the live state, which this attempt is about to change.
+# than the live state, which this attempt is about to change. A cluster that
+# answers with this build's identity, at the declared release and whole, may
+# still be installing: an attempt interrupted during the installation wait
+# leaves exactly that. Only the cluster's own report that its installation
+# completed lets a retry skip the waits and release the media.
 - name: Decide whether this cluster is already installed
   ansible.builtin.set_fact:
     containercluster_install_agent_settled: >-
       {{ (containercluster_install_agent_before.observation.identity | default('')) | length > 0
          and containercluster_install_agent_state.cluster == containercluster_install_agent_before.observation.identity
          and containercluster_install_agent_state.release == bootwright_cluster_install_request.release.version
-         and containercluster_install_agent_state.missing | length == 0 }}
+         and containercluster_install_agent_state.missing | length == 0
+         and containercluster_install_agent_state.completed is sameas true }}
   changed_when: false
 
 - name: Report node boot
