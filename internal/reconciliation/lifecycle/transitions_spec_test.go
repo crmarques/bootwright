@@ -122,7 +122,7 @@ var precedenceConditions = map[string]struct {
 	"done": {"every block is `done`", func(states []reconciliation.BlockState, _ bool) bool {
 		return !slices.ContainsFunc(states, func(state reconciliation.BlockState) bool { return state != reconciliation.BlockDone })
 	}},
-	"paused": {"its execution stopped uncancelled with work left", func(_ []reconciliation.BlockState, boundary bool) bool {
+	"paused": {"its execution paused: it stopped uncancelled with work left, no log fault and every start recorded", func(_ []reconciliation.BlockState, boundary bool) bool {
 		return boundary
 	}},
 	"running": {"otherwise", func([]reconciliation.BlockState, bool) bool { return true }},
