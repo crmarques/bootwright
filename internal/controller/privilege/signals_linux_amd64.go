@@ -16,10 +16,17 @@ func (s signalCause) Error() string { return "invocation interrupted" }
 
 // Begin derives cancellation only for the already-classified privileged
 // operation. Its owner must finish, stopping subscriptions and joining the waiter.
+// A hangup is relayed like SIGTERM, since by default it would end this
+// supervisor without relaying anything to the elevated child; one ignored at
+// start, as nohup leaves it, stays ignored (os/signal).
 func Begin(parent context.Context) (context.Context, func()) {
 	ctx, cancel := context.WithCancelCause(parent)
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	received := []os.Signal{os.Interrupt, syscall.SIGTERM}
+	if !signal.Ignored(syscall.SIGHUP) {
+		received = append(received, syscall.SIGHUP)
+	}
+	signal.Notify(signals, received...)
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
