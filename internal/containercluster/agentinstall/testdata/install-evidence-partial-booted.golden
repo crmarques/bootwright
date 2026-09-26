@@ -3,13 +3,19 @@
   "cluster": "",
   "completed": false,
   "identity": "4245f5e001d445663c189f04c0a614168ed3c05a522d38680d1aa1ca248d6049",
-  "media": [],
+  "media": [
+    "sno-01"
+  ],
   "missing": [
     "master-0"
   ],
-  "ownMedia": [],
+  "ownMedia": [
+    "sno-01"
+  ],
   "postcondition": false,
-  "powered": [],
+  "powered": [
+    "sno-01"
+  ],
   "release": "",
   "request": "1111111111111111111111111111111111111111111111111111111111111111"
 }

@@ -3,6 +3,7 @@ package agentinstall
 import (
 	"bytes"
 	"encoding/json"
+	"slices"
 )
 
 const maxEvidenceBytes = 64 << 10
@@ -132,11 +133,16 @@ type InstallEvidence struct {
 	// answers while it is still installing, reports false.
 	Completed bool   `json:"completed"`
 	Identity  string `json:"identity"`
-	// Media names every node whose controller still presents boot media, and
-	// Missing every declared node the cluster does not hold. Both are node
-	// names, so a refusal can say which.
-	Media         []string `json:"media"`
-	Missing       []string `json:"missing"`
+	// Media names every node whose controller still presents boot media, by
+	// its Machine, and Missing every declared node the cluster does not hold,
+	// by its node name, so a refusal can say which.
+	Media   []string `json:"media"`
+	Missing []string `json:"missing"`
+	// OwnMedia names the nodes among Media whose controller presents the image
+	// this cluster's media block published: the scheme, host and path of what
+	// the controller reports equal those of the published address, each
+	// exactly. Any other image is foreign, and no name here is outside Media.
+	OwnMedia      []string `json:"ownMedia"`
 	Postcondition bool     `json:"postcondition"`
 	// Powered names every node reported running, which is what tells a node
 	// that was never booted from one that may be installing now.
@@ -210,11 +216,15 @@ func ValidateInstallNoEffect(data []byte, digest string) error {
 }
 
 // ValidateInstallPartial accepts evidence only when it positively proves this
-// installation is part way through: the cluster this operation installed
-// answers while something the completion requires is not yet true. A cluster
-// answering with another identity is another installation and is never
-// converged; a node powered on while nothing answers may be installing now, so
-// neither is partial.
+// installation is part way through. Either the cluster this operation
+// installed answers while something the completion requires is not yet true,
+// or nothing answers yet while every node presenting media presents the image
+// this cluster published: an attempt stopped during boot or the bootstrap
+// wait, whose nodes the next attempt waits for rather than boots again. A
+// cluster answering with another identity is another installation and is
+// never converged; a node presenting any other image, or a node powered on
+// while nothing answers and no node presents this cluster's image, may belong
+// to another installation or be installing now, so neither is partial.
 func ValidateInstallPartial(data []byte, digest string) error {
 	evidence, err := decodeInstallEvidence(data, digest)
 	if err != nil {
@@ -223,8 +233,22 @@ func ValidateInstallPartial(data []byte, digest string) error {
 	if evidence.Postcondition || evidence.Absent {
 		return refusal("lifecycle.state", "the installation evidence proves a settled state, not a partial one", "")
 	}
-	if evidence.Identity == "" || evidence.Cluster != evidence.Identity {
+	if evidence.Identity == "" {
+		return refusal("lifecycle.state", "this operation recorded no cluster identity", "")
+	}
+	if evidence.Cluster == evidence.Identity {
+		return nil
+	}
+	if evidence.Cluster != "" {
 		return refusal("lifecycle.state", "the cluster answering is not the cluster this operation installed", "")
+	}
+	if len(evidence.OwnMedia) == 0 {
+		return refusal("lifecycle.state", "nothing answers and no node presents the image this cluster published", "")
+	}
+	for _, node := range evidence.Media {
+		if !slices.Contains(evidence.OwnMedia, node) {
+			return refusal("lifecycle.state", "a node presents an image this cluster did not publish", "")
+		}
 	}
 	return nil
 }
@@ -244,6 +268,11 @@ func decodeInstallEvidence(data []byte, digest string) (InstallEvidence, error) 
 	}
 	if evidence.Request != digest {
 		return InstallEvidence{}, refusal("lifecycle.state", "the installation evidence names another request", "")
+	}
+	for _, node := range evidence.OwnMedia {
+		if !slices.Contains(evidence.Media, node) {
+			return InstallEvidence{}, refusal("lifecycle.state", "the installation evidence names own media on a node presenting none", "")
+		}
 	}
 	return evidence, nil
 }

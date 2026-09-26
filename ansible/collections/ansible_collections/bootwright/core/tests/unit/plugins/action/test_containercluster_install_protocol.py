@@ -41,6 +41,7 @@ def state(**overrides):
         "completed": True,
         "media": [],
         "missing": [],
+        "ownMedia": [],
         "powered": ["sno-01"],
         "release": RELEASE,
     }
@@ -234,3 +235,151 @@ def test_the_settled_decision_and_the_completion_evidence_agree():
     for completed in (True, False):
         found = protocol.evidence(arguments(state=state(completed=completed)), DIGEST, False)
         assert settled(completed) is found["postcondition"] is completed
+
+
+# The state read separates the nodes presenting the image this cluster's media
+# block published from those presenting any other. The published address is
+# the frozen base, the 64 hexadecimal digits `openssl rand -hex 32` minted for
+# the attempt, and the image name (containercluster_media_agent/tasks/build.yml;
+# containercluster_install_inspect.published). Each controller result is what
+# redfish_boot's read returns, `media` the image the controller presents or the
+# empty string and `power` its power state (plugins/modules/redfish_boot.py,
+# RETURN), beside the loop item it read.
+TOKEN = "3f" * 32
+BASE = "https://192.0.2.1:8443/private/clusters/sno/"
+PUBLISHED = BASE + TOKEN + "/agent.iso"
+
+
+def controller(machine, media, power="On"):
+    return {"changed": False, "item": {"machine": machine}, "media": media, "power": power}
+
+
+def resolved_media(results, published=PUBLISHED):
+    """The `media` and `ownMedia` the state read resolves from its controller reads."""
+    task = resolve()
+    scope = dict(task.get("vars") or {})
+    scope["containercluster_install_agent_controllers"] = {"results": results}
+    scope["containercluster_install_agent_before"] = {"observation": {"identity": IDENTITY, "url": published}}
+    templar = Templar(loader=LOADER, variables=scope)
+    fields = task["ansible.builtin.set_fact"]["containercluster_install_agent_state"]
+    return list(templar.template(fields["media"])), list(templar.template(fields["ownMedia"]))
+
+
+def test_a_node_presenting_the_published_image_presents_its_own():
+    assert resolved_media([controller("sno-01", PUBLISHED)]) == (["sno-01"], ["sno-01"])
+
+
+# Some controllers echo an inserted image back without its default port
+# (.agents/knowledge/redfish-physical-bmc.md), and the insert's own read-back
+# compares scheme and host without case (redfish_discovery.image_matches).
+@pytest.mark.parametrize("published, presented", [
+    ("https://192.0.2.1:443/private/clusters/sno/" + TOKEN + "/agent.iso",
+     "https://192.0.2.1/private/clusters/sno/" + TOKEN + "/agent.iso"),
+    ("https://artifacts.example:8443/private/clusters/sno/" + TOKEN + "/agent.iso",
+     "HTTPS://Artifacts.Example:8443/private/clusters/sno/" + TOKEN + "/agent.iso"),
+], ids=["default port dropped", "scheme and host in another case"])
+def test_scheme_host_and_path_are_what_is_compared(published, presented):
+    assert resolved_media([controller("sno-01", presented)], published) == (["sno-01"], ["sno-01"])
+
+
+@pytest.mark.parametrize("presented", [
+    BASE + "e0" * 32 + "/agent.iso",
+    PUBLISHED + ".old",
+    BASE + TOKEN + "/",
+    BASE + TOKEN,
+    "https://192.0.2.2:8443/private/clusters/sno/" + TOKEN + "/agent.iso",
+    "http://192.0.2.1:8443/private/clusters/sno/" + TOKEN + "/agent.iso",
+    "https://192.0.2.1:8443/private/clusters/SNO/" + TOKEN + "/agent.iso",
+    # urllib.parse.urlsplit refuses both of these, which a read must survive.
+    "https://[192.0.2.1:8443/private/clusters/sno/" + TOKEN + "/agent.iso",
+    "https://192.0.2.9:port/private/clusters/sno/" + TOKEN + "/agent.iso",
+], ids=["another attempt's token", "a path the published one prefixes", "its directory",
+        "its directory without a separator", "another server", "another scheme", "a path in another case",
+        "an unclosed address literal", "a port that is no number"])
+def test_any_other_image_is_foreign(presented):
+    assert resolved_media([controller("sno-01", presented)]) == (["sno-01"], [])
+
+
+def test_one_foreign_image_is_told_apart_from_its_own():
+    results = [controller("sno-01", PUBLISHED), controller("sno-02", BASE + "e0" * 32 + "/agent.iso", "Off")]
+    assert resolved_media(results) == (["sno-01", "sno-02"], ["sno-01"])
+
+
+# An image with no scheme, host or path splits exactly as the empty address
+# does, so only the guard keeps it from comparing equal.
+@pytest.mark.parametrize("presented", [PUBLISHED, "?", "#"], ids=["the image", "a bare query", "a bare fragment"])
+def test_nothing_is_own_while_nothing_is_published(presented):
+    assert resolved_media([controller("sno-01", presented)], "") == (["sno-01"], [])
+
+
+def test_a_node_presenting_nothing_or_not_answering_presents_nothing():
+    results = [controller("sno-01", ""), {"changed": False, "failed": True, "item": {"machine": "sno-02"}}]
+    assert resolved_media(results) == ([], [])
+
+
+# A node presenting nothing, or whose read failed, ahead of the nodes that do
+# present must not shift an image onto another node's name: a retry would then
+# skip the idle node and boot the live one again.
+def test_each_image_is_named_by_the_node_presenting_it():
+    results = [
+        controller("sno-01", ""),
+        {"changed": False, "failed": True, "item": {"machine": "sno-02"}},
+        controller("sno-03", PUBLISHED),
+        controller("sno-04", BASE + "e0" * 32 + "/agent.iso"),
+    ]
+    assert resolved_media(results) == (["sno-03", "sno-04"], ["sno-03"])
+
+
+def test_the_evidence_publishes_own_media_as_bounded_names():
+    found = protocol.evidence(arguments(state=state(
+        completed=False, media=["sno-02", "sno-01"], ownMedia=["sno-02", "sno-01"])), DIGEST, False)
+    assert found["ownMedia"] == ["sno-01", "sno-02"]
+    assert found["postcondition"] is False
+    without = state()
+    del without["ownMedia"]
+    assert protocol.evidence(arguments(state=without), DIGEST, False)["ownMedia"] == []
+    with pytest.raises(ValueError):
+        protocol.evidence(arguments(state=state(ownMedia=["sno"] * (protocol.MAX_NAMES + 1))), DIGEST, False)
+
+
+# A retry never boots a node already running from this cluster's image: it
+# neither inserts media into it nor sets a boot override on it.
+def boot_skip():
+    return one("boot.yml", lambda task: "block" in task)
+
+
+def test_every_boot_effect_sits_under_the_skip():
+    boot = tasks("boot.yml")
+    skip = boot_skip()
+    assert boot[-1] == skip
+    assert all("ansible.builtin.assert" in task for task in boot[:-1])
+    inside = skip["block"]
+    assert [task.get("bootwright.core.redfish_boot", {}).get("operation") for task in inside] == [
+        "insert", None, None]
+    assert [(task.get("ansible.builtin.include_role") or {}).get("name") for task in inside] == [
+        None, "bootwright.core.substrate_libvirt_machine", "bootwright.core.substrate_baremetal_machine"]
+
+
+def boots(powered, own, media=None):
+    """Whether the boot file inserts and boots node sno-01 given the state read."""
+    return Templar(loader=LOADER, variables={
+        "containercluster_install_agent_node": {"machine": "sno-01", "name": "master-0"},
+        "containercluster_install_agent_state": state(
+            completed=False, powered=powered, ownMedia=own, media=own if media is None else media),
+    }).evaluate_conditional(boot_skip()["when"])
+
+
+def test_a_node_running_from_its_own_image_is_not_booted_again():
+    assert boots(["sno-01"], ["sno-01"]) is False
+
+
+@pytest.mark.parametrize("powered, own, media", [
+    ([], ["sno-01"], None),
+    (["sno-01"], [], ["sno-01"]),
+    (["sno-01"], [], []),
+    ([], [], []),
+    (["sno-02"], ["sno-02"], None),
+], ids=["its own image, not running", "running a foreign image", "running without media", "neither",
+        "another node running from its own image"])
+def test_every_other_node_is_booted(powered, own, media):
+    assert boots(powered, own, media) is True

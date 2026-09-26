@@ -7,6 +7,9 @@
     "sno-01"
   ],
   "missing": [],
+  "ownMedia": [
+    "sno-01"
+  ],
   "postcondition": false,
   "powered": [
     "sno-01"

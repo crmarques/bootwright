@@ -103,7 +103,7 @@ func installEvidence(t *testing.T, digest string, mutate func(*InstallEvidence))
 	t.Helper()
 	evidence := InstallEvidence{
 		Cluster: anchorIdentity, Completed: true, Identity: anchorIdentity, Media: []string{}, Missing: []string{},
-		Postcondition: true, Powered: []string{"sno-01"}, Release: "4.21.15", Request: digest,
+		OwnMedia: []string{}, Postcondition: true, Powered: []string{"sno-01"}, Release: "4.21.15", Request: digest,
 	}
 	if mutate != nil {
 		mutate(&evidence)
@@ -311,7 +311,11 @@ func TestEvidenceThatProvesAnotherClusterIsRefused(t *testing.T) {
 		"not reported completed":    func(e *InstallEvidence) { e.Completed = false },
 		"a node is missing":         func(e *InstallEvidence) { e.Missing = []string{"master-0"} },
 		"media still inserted":      func(e *InstallEvidence) { e.Media = []string{"sno-01"} },
-		"no postcondition":          func(e *InstallEvidence) { e.Postcondition = false },
+		"own media still inserted": func(e *InstallEvidence) {
+			e.Media, e.OwnMedia = []string{"sno-01"}, []string{"sno-01"}
+		},
+		"own media on a node presenting none": func(e *InstallEvidence) { e.OwnMedia = []string{"sno-01"} },
+		"no postcondition":                    func(e *InstallEvidence) { e.Postcondition = false },
 	} {
 		t.Run(name, func(t *testing.T) {
 			execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
@@ -341,10 +345,10 @@ func TestInstallObservationClassifiesWhatItFound(t *testing.T) {
 			*e = InstallEvidence{Request: testDigest, Media: []string{}, Missing: []string{}, Powered: []string{}}
 		}, reconciliation.EffectNoEffect},
 		"ours, media not released": {func(e *InstallEvidence) {
-			e.Postcondition, e.Media = false, []string{"sno-01"}
+			e.Postcondition, e.Media, e.OwnMedia = false, []string{"sno-01"}, []string{"sno-01"}
 		}, reconciliation.EffectPartial},
 		"ours, still installing": {func(e *InstallEvidence) {
-			e.Postcondition, e.Completed, e.Media = false, false, []string{"sno-01"}
+			e.Postcondition, e.Completed, e.Media, e.OwnMedia = false, false, []string{"sno-01"}, []string{"sno-01"}
 		}, reconciliation.EffectPartial},
 		"ours, not reported completed, claiming its postcondition": {func(e *InstallEvidence) {
 			e.Completed = false
@@ -361,6 +365,74 @@ func TestInstallObservationClassifiesWhatItFound(t *testing.T) {
 		"powered with nothing answering": {func(e *InstallEvidence) {
 			e.Postcondition, e.Cluster, e.Identity, e.Release = false, "", "", ""
 		}, reconciliation.EffectUnknown},
+	} {
+		t.Run(name, func(t *testing.T) {
+			execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
+			runner := &fakeRunner{result: lifecycle.RunResult{
+				Outcome: "unchanged", Evidence: installEvidence(t, testDigest, expectation.mutate),
+			}}
+			observation, err := NewInstall(runner).Observe(context.Background(), execution)
+			if err != nil {
+				t.Fatalf("observe: %v", err)
+			}
+			if observation.Effect != expectation.effect {
+				t.Fatalf("effect = %q, want %q", observation.Effect, expectation.effect)
+			}
+		})
+	}
+}
+
+// An attempt stopped during boot or the bootstrap wait, before the API
+// answers, leaves this build's identity recorded, nothing answering and its
+// nodes presenting the image this cluster published. That is a partial
+// installation the next attempt waits for rather than boots again. Any other
+// image keeps the block unknown, and so does a running node with no image,
+// because either may belong to another installation.
+func TestAnInstallStoppedBeforeTheAPIAnswersIsPartialOnlyOnItsOwnImage(t *testing.T) {
+	booted := func(e *InstallEvidence) {
+		*e = InstallEvidence{
+			Identity: anchorIdentity, Media: []string{"sno-01"}, Missing: []string{"master-0"},
+			OwnMedia: []string{"sno-01"}, Powered: []string{"sno-01"}, Request: testDigest,
+		}
+	}
+	then := func(change func(*InstallEvidence)) func(*InstallEvidence) {
+		return func(e *InstallEvidence) {
+			booted(e)
+			change(e)
+		}
+	}
+	for name, expectation := range map[string]struct {
+		mutate func(*InstallEvidence)
+		effect reconciliation.EffectState
+	}{
+		"its own image, running": {booted, reconciliation.EffectPartial},
+		"its own image, not yet running": {then(func(e *InstallEvidence) {
+			e.Powered = []string{}
+		}), reconciliation.EffectPartial},
+		"its own image on every node presenting one": {then(func(e *InstallEvidence) {
+			e.Media, e.OwnMedia, e.Powered = []string{"sno-01", "sno-02"}, []string{"sno-01", "sno-02"}, []string{"sno-01"}
+		}), reconciliation.EffectPartial},
+		"a foreign image": {then(func(e *InstallEvidence) {
+			e.OwnMedia = []string{}
+		}), reconciliation.EffectUnknown},
+		"one foreign image beside its own": {then(func(e *InstallEvidence) {
+			e.Media, e.Powered = []string{"sno-01", "sno-02"}, []string{"sno-01", "sno-02"}
+		}), reconciliation.EffectUnknown},
+		"no image, running": {then(func(e *InstallEvidence) {
+			e.Media, e.OwnMedia = []string{}, []string{}
+		}), reconciliation.EffectUnknown},
+		"no image, nothing running": {then(func(e *InstallEvidence) {
+			e.Media, e.OwnMedia, e.Powered = []string{}, []string{}, []string{}
+		}), reconciliation.EffectNoEffect},
+		"its own image, no identity recorded": {then(func(e *InstallEvidence) {
+			e.Identity = ""
+		}), reconciliation.EffectUnknown},
+		"its own image while an API rejects the anchor": {then(func(e *InstallEvidence) {
+			e.Cluster = foreignAnswer
+		}), reconciliation.EffectUnknown},
+		"own media named on a node presenting none": {then(func(e *InstallEvidence) {
+			e.Media = []string{}
+		}), reconciliation.EffectUnknown},
 	} {
 		t.Run(name, func(t *testing.T) {
 			execution, _ := installExecution(t, singleNodeCatalog(), testDigest)

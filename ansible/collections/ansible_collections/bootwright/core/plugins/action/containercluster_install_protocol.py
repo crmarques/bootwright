@@ -45,6 +45,10 @@ def evidence(arguments, request_digest, removed):
     `completed` is the cluster's own report, resolved by the role's state read:
     only a real boolean true counts, so a string or a missing key is an
     installation not yet done rather than one the cluster finished.
+
+    `ownMedia` names the nodes among `media` whose controller presents the
+    image this cluster published, as the state read compared it. It carries
+    names only, never the address, whose last segment is the unguessable one.
     """
     state = arguments.get("state") or {}
     found = {
@@ -54,6 +58,7 @@ def evidence(arguments, request_digest, removed):
         "identity": bounded(arguments.get("identity")),
         "media": names(state.get("media")),
         "missing": names(state.get("missing")),
+        "ownMedia": names(state.get("ownMedia")),
         "postcondition": False,
         "powered": names(state.get("powered")),
         "release": bounded(state.get("release")),

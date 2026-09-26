@@ -100,6 +100,16 @@
 # installation is completed only when the completion read succeeded and
 # answered exactly Available True and a newest history entry Completed at the
 # declared release; any other answer, or none, is an installation not yet done.
+#
+# Media names every node presenting any image, and ownMedia those of them
+# presenting the image this cluster's media block published, at the address
+# the inspection read. A controller may echo an inserted image back normalized,
+# most often without its default port, so its scheme, host and path are what is
+# compared, each exactly and never as a prefix: another directory under the
+# same served root, or the same path on another server, is a foreign image.
+# The parts are split by the parsing expression of RFC 3986 appendix B, which
+# matches every string, so a malformed image is foreign rather than a failed
+# read. Nothing is own while nothing is published.
 - name: Resolve what the cluster and its nodes answered
   ansible.builtin.set_fact:
     containercluster_install_agent_state:
@@ -119,9 +129,19 @@
         {{ bootwright_cluster_install_request.nodes | map(attribute='name') | list
            | difference((containercluster_install_agent_nodes.stdout | default('')).split()) }}
       media: >-
-        {{ containercluster_install_agent_controllers.results | default([])
-           | selectattr('media', 'defined') | selectattr('media', 'ne', '')
-           | map(attribute='item.machine') | list }}
+        {{ containercluster_install_agent_presenting | map(attribute='item.machine') | list }}
+      ownMedia: >-
+        {{ (containercluster_install_agent_presenting | map(attribute='item.machine')
+            | zip(containercluster_install_agent_presenting | map(attribute='media')
+                  | map('regex_replace', containercluster_install_agent_uri, '\1://\2') | map('lower'),
+                  containercluster_install_agent_presenting | map(attribute='media')
+                  | map('regex_replace', containercluster_install_agent_uri, '\3'))
+            | selectattr('1', 'equalto', containercluster_install_agent_published
+                         | regex_replace(containercluster_install_agent_uri, '\1://\2') | lower)
+            | selectattr('2', 'equalto', containercluster_install_agent_published
+                         | regex_replace(containercluster_install_agent_uri, '\3'))
+            | map(attribute='0') | list)
+           if containercluster_install_agent_published | length > 0 else [] }}
       powered: >-
         {{ containercluster_install_agent_controllers.results | default([])
            | selectattr('power', 'defined') | selectattr('power', 'equalto', 'On')
@@ -130,6 +150,13 @@
     containercluster_install_agent_identity: >-
       {{ containercluster_install_agent_before.observation.identity | default('') }}
     containercluster_install_agent_foreign: foreign
+    containercluster_install_agent_presenting: >-
+      {{ containercluster_install_agent_controllers.results | default([])
+         | selectattr('media', 'defined') | selectattr('media', 'ne', '') | list }}
+    containercluster_install_agent_published: >-
+      {{ containercluster_install_agent_before.observation.url | default('') }}
+    # Scheme, then host without user information or port, then path.
+    containercluster_install_agent_uri: '(?s)^(?:([^:/?#]+):)?(?://(?:[^/?#]*@)?(\[[^/?#\]]*\]|[^/?#:]*)(?::[^/?#]*)?)?([^?#]*).*$'
     containercluster_install_agent_rejected: >-
       x509: |You must be logged in to the server|Error from server \(Forbidden\)
   changed_when: false

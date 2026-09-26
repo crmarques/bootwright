@@ -231,8 +231,13 @@ not answer is recorded as none. The cluster is read through its own API with the
 client the controller stage published, so completion is what the cluster says
 about itself rather than what the installer said before it exited. The evidence
 records the identity, what answered, the release, whether the cluster reported
-its installation completed, the declared nodes still missing and the nodes
-still presenting media; it records no credential and no path.
+its installation completed, the declared nodes still missing, the nodes still
+presenting media and which of them present this cluster's own image; it records
+no credential and no path. A node presents its own image when the scheme, host
+and path of the image its controller reports equal those of the address the
+media block published, each compared exactly and never as a prefix, because a
+controller may echo an image back without its default port; any other image,
+including another attempt's under the same reserved path, is foreign.
 
 **Replay.** A cluster already answering with this operation's identity, at the
 declared release, reporting its installation completed and holding every
@@ -241,7 +246,13 @@ waits for nothing. The only difference it converges is media it did not finish
 releasing. The same cluster answering while it does not report its installation
 completed, as an attempt interrupted during the installation wait leaves it, is
 not installed: the next attempt waits for bootstrap and installation completion
-again before it releases any media. A foreign answer is not
+again before it releases any media. An attempt interrupted during boot or the
+bootstrap wait, before the API answers, leaves nodes running from this
+cluster's own image. The next attempt boots only the nodes that are not both
+running and presenting that image: it inserts no media into such a node, which
+would swap the image its installer is still reading, and sets no boot override
+on it, which its installer's own reboot would obey, and then waits for
+bootstrap and installation completion. A foreign answer is not
 converged: there is no reinstall path, and installing again requires this
 cluster's nodes to be destroyed and applied again.
 
@@ -258,9 +269,13 @@ reporting its installation completed, whole and with its media released, is
 positive completion. Nothing answering, no node
 running and no media inserted is positive no effect. That same cluster
 answering while the completion is not yet true is a positive partial
-realization the next attempt converges. Anything else stays unknown, including
-a foreign answer and a node running while nothing answers, because the first
-belongs to another installation and the second may be installing now.
+realization the next attempt converges. So is nothing answering yet while this
+operation recorded its identity, at least one node presents this cluster's own
+image and no node presents any other, which an attempt interrupted during boot
+or the bootstrap wait leaves. Anything else stays unknown, including a foreign
+answer, a foreign image while nothing answers, and a node running while nothing
+answers and no node presents this cluster's own image, because the first two
+may belong to another installation and the last may be installing now.
 
 **Quiescence and cancellation.** This block owns published boot media and
 controller-side state that a running cluster does not read, so its quiescence
