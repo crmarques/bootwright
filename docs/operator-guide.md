@@ -71,6 +71,21 @@ sequence exactly as run: the ledger records it. After each operation, `status`
 reports its final state; that state and every refusal met on the way are the
 run's outcome.
 
+An apply that installs a cluster or an operating system can run for most of an
+hour, and it lives only as long as the command that started it. Closing its
+terminal or losing the SSH session it runs in interrupts it as Ctrl-C does, and
+a command killed outright takes its running lifecycle adapter with it
+([process boundary](../specs/security.md#process-boundary)). Run a long apply
+where it outlives your connection: inside a `tmux` session, or as a transient
+systemd unit whose output `journalctl` follows. A unit runs as root rather than
+through `sudo`, so it reads root's context selection, not yours; name the
+context:
+
+```sh
+sudo systemd-run --unit=bootwright-apply --collect "$PWD/bin/bootwright" apply --context lab-sno --yes
+sudo journalctl -f -u bootwright-apply
+```
+
 SSH placement of a managed service on a second OS-ready host, with that host's
 authored access and bound host key, is operator-run too and has no example.
 Real hardware is not a gate for any open slice: for M5a its tier is an open

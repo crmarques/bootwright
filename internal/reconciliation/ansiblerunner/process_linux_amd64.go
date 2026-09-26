@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"syscall"
 	"time"
@@ -144,8 +145,10 @@ func (r Runner) execute(ctx context.Context, job, scratch, playbook string, requ
 	// going. Ansible writes its callback output and lets the system flush it,
 	// so a child whose stdout is a pipe holds roughly eight kilobytes back
 	// until it exits. -E is implied by -I, so PYTHONUNBUFFERED cannot do this.
+	// The supervisor consumes the lifecycle marker, which ties it to this
+	// invocation; a controller run never passes it.
 	arguments := append(slices.Clone(request.Launch.Arguments), "-u", "-I", "-B", "-S", "-c", entrypoint,
-		filepath.Join(collection, "plugins/module_utils/controller_supervisor.py"),
+		filepath.Join(collection, "plugins/module_utils/controller_supervisor.py"), "--lifecycle",
 		"-i", filepath.Join(job, "inventory.json"), "--extra-vars", "@"+filepath.Join(job, "request.json"),
 		filepath.Join(collection, "playbooks", playbook))
 	command := r.command(request.Launch.Loader, arguments...)
@@ -172,20 +175,46 @@ func (r Runner) execute(ctx context.Context, job, scratch, playbook string, requ
 	// The adapter's own streams are retained as they are produced, so a run
 	// that completes is as readable afterwards as one that failed.
 	command.Stdout, command.Stderr = request.Output, request.Output
-	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	if err := command.Start(); err != nil {
+	// The adapter dies with this invocation: its supervisor ends the whole tree
+	// it owns on the parent-death signal.
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: parentDeath}
+	started, waited := start(command)
+	if err := <-started; err != nil {
 		return lifecycle.RunResult{}, failure("lifecycle.state", "the qualified adapter process could not start", setupRemediation)
 	}
 	childOutput.Close()
 	childInput.Close()
-	return r.consume(ctx, command, output, input, grace, request)
+	return r.consume(ctx, command, waited, output, input, grace, request)
+}
+
+// parentDeath is the signal the kernel sends the adapter when the thread that
+// started it dies. The supervisor arms the same signal for itself and ends its
+// whole process tree on it.
+const parentDeath = syscall.SIGTERM
+
+// start forks the adapter from a goroutine locked to its OS thread until the
+// adapter is reaped. The kernel sends Pdeathsig when the creating thread dies,
+// not the process (syscall.SysProcAttr, https://go.dev/issue/27505), and the
+// runtime ends a thread whose locked goroutine exits, so an adapter forked from
+// a shared thread could be signaled while its invocation still runs.
+func start(command *exec.Cmd) (<-chan error, <-chan error) {
+	started, waited := make(chan error, 1), make(chan error, 1)
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		if err := command.Start(); err != nil {
+			started <- err
+			return
+		}
+		started <- nil
+		waited <- command.Wait()
+	}()
+	return started, waited
 }
 
 // consume drives the protocol. No adapter effect is ever authorized to outlive
-// cancellation, so cancellation always terminates the owned process group.
-func (r Runner) consume(ctx context.Context, command *exec.Cmd, output, input *os.File, grace time.Duration, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
-	waited := make(chan error, 1)
-	go func() { waited <- command.Wait() }()
+// cancellation, so cancellation always terminates the owned process tree.
+func (r Runner) consume(ctx context.Context, command *exec.Cmd, waited <-chan error, output, input *os.File, grace time.Duration, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
 	messages := make(chan protocolMessage, 8)
 	readResult := make(chan error, 1)
 	go func() {
@@ -208,16 +237,34 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, output, input *o
 			drain = timer.C
 		}
 	}
-	// A refused or unreadable record ends the protocol at once. Closing the
-	// authorization channel releases whatever waits on it, and no lifecycle
-	// effect outlives the protocol, so the process group goes too. A group
-	// already seen to exit or killed by cancellation is left alone.
-	killed := false
-	refuse := func() {
-		input.Close()
-		if !killed && !canceled && waited != nil {
-			killed = true
+	// Cancellation and a refused or unreadable record end the protocol at
+	// once. Closing the authorization channel releases whatever waits on it,
+	// and no lifecycle effect outlives the protocol, so the whole tree goes
+	// too. The adapter is signaled first: its supervisor ends every
+	// descendant on the parent-death signal, including an Ansible worker in a
+	// session of its own that a group kill never reaches, and a group kill
+	// first would end the supervisor before it could. The group is killed once
+	// the adapter is reaped or the drain passes, whichever comes first, which
+	// ends what the adapter left in it or an adapter that ignored the signal.
+	stopping, groupKilled := false, false
+	killGroup := func() {
+		if stopping && !groupKilled {
+			groupKilled = true
 			_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+		}
+	}
+	stop := func() {
+		input.Close()
+		if stopping {
+			return
+		}
+		stopping = true
+		// A reaped adapter refuses the signal, so it never reaches a reused
+		// process ID.
+		_ = command.Process.Signal(parentDeath)
+		arm()
+		if waited == nil {
+			killGroup()
 		}
 	}
 	cancelled := ctx.Done()
@@ -226,17 +273,17 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, output, input *o
 		case <-cancelled:
 			cancelled = nil
 			canceled = true
-			input.Close()
-			_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
-			arm()
+			stop()
 		case <-drain:
 			drain = nil
+			killGroup()
 			output.Close()
 			if operationErr == nil {
 				operationErr = failure("lifecycle.unknown", "adapter descendants retained the result channel after completion", outputRemediation)
 			}
 		case waitErr := <-waited:
 			waited = nil
+			killGroup()
 			arm()
 			if waitErr != nil && operationErr == nil {
 				operationErr = failure("lifecycle.state", "the adapter operation did not complete", outputRemediation)
@@ -248,7 +295,7 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, output, input *o
 					if operationErr == nil {
 						operationErr = failure("lifecycle.unknown", "the adapter structured result was incomplete", outputRemediation)
 					}
-					refuse()
+					stop()
 				}
 				continue
 			}
@@ -280,7 +327,7 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, output, input *o
 				operationErr = failure("lifecycle.unknown", "the adapter capability protocol was invalid", outputRemediation)
 			}
 			if operationErr != nil || canceled {
-				refuse()
+				stop()
 				continue
 			}
 			if message.Phase == "loaded" {

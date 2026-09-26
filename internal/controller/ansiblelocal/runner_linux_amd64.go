@@ -141,6 +141,10 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 	if retain != nil {
 		command.Stdout, command.Stderr = retain, retain
 	}
+	// No parent-death signal, unlike a lifecycle adapter: an authorized native
+	// transaction must outlive this invocation. The adapter stops at its next
+	// acknowledgement instead, which fails once this process's ends of both
+	// channels have closed.
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := ctx.Err(); err != nil {
 		return result, err
