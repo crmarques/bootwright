@@ -14,11 +14,11 @@ the [unavailable result](cli.md#recognized-but-unavailable-commands).
 | --- | --- | --- | --- | --- | --- |
 | [M1h](#m1h--managed-rhel-on-emulated-bare-metal) | Managed RHEL on emulated bare metal | Substrate, Managed OS | product | Specified | awaiting operator acceptance |
 | [M5a](#m5a--managed-rhel-on-physical-bare-metal) | Managed RHEL on physical bare metal | Substrate, Managed OS | product | Specified | blocked |
-| [M4a](#m4a--single-node-openshift-through-the-agent-installer) | Single-node OpenShift through the agent installer | Container cluster, Substrate | product | Specified | awaiting operator acceptance |
-| [X13](#x13--scheduler-liveness-and-completed-removal-proof) | Scheduler liveness and completed-removal proof | State reconciliation | safety | Specified | in progress |
+| [M4a](#m4a--single-node-openshift-through-the-agent-installer) | Single-node OpenShift through the agent installer | Container cluster, Substrate | product | Specified | blocked |
+| [X14](#x14--adapters-serving-and-cluster-identity) | Adapters, serving and cluster identity | Architecture, Container cluster | safety | Specified | in progress |
 
-- **Next for agents:** land X13; promote [audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09) only on request.
-- **Next for operator:** on a clean build descending from `8aa4494`, run [lab-rhel](../examples/lab-rhel/README.md#run-it) and record it in the [acceptance ledger](../docs/acceptance.md) as the [operator guide](../docs/operator-guide.md) describes (M1h), then [lab-sno](../examples/lab-sno/README.md) (M4a); M5a's rehearsal waits for S3b.
+- **Next for agents:** deliver X14, then the [pre-OpenShift program](milestones/backlog.md#pre-openshift-readiness-program-2026-09) in order; promote [audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09) only on request.
+- **Next for operator:** on a clean build descending from `8aa4494`, run [lab-rhel](../examples/lab-rhel/README.md#run-it) and record it in the [acceptance ledger](../docs/acceptance.md) as the [operator guide](../docs/operator-guide.md) describes (M1h), run [lab-sno](../examples/lab-sno/README.md) (M4a) once X16 lands; M5a's rehearsal waits for S3b.
 - **Next to define:** M1i, the [GitOps handoff gate](#next-ordered-outcomes).
 
 ## Scope rules
@@ -182,18 +182,21 @@ hosts are not coordinated.
 **Owners:** Container cluster and Substrate, with Infrastructure services,
 Controller, Secrets and State reconciliation; using Machine. **Kind:**
 product. **Requires:** M1h, waived on explicit request on 2026-09-16.
-**Definition:** Specified. **Delivery:** awaiting operator acceptance.
+**Definition:** Specified. **Delivery:** blocked.
 **Acceptance baseline:** `8aa4494`, where X11 landed. The agent-installer half of
 M4, without M2a's `render installer`, C12 or C9.
 
 **Deviation.** A physical cluster node refuses before registration until the
-pre-boot target proof is repaired (backlog S2b).
+pre-boot target proof is repaired (backlog S2b). Since 2026-09-26 its operator
+gate cannot pass: the install identity comes from a `metadata.json` the agent
+installer never writes, and the served image is unreadable by the artifact
+server (backlog S17, S18); it resumes when X14 to X16 land.
 
 **Descoped:** the administrator-access custody contract moves to C6.
 
 **Supported shape.** Nodes that are virtual Machines on a realized substrate;
 single-node is the rehearsed topology and multi-node libvirt stays admitted
-pending the owner decision (plan Part VI). The rest is
+(owner decision D9, 2026-09-26) under backlog F14's topology checks. The rest is
 [selection and refusal](container-clusters.md#selection-and-refusal): a release
 declared by version, the `agent` method, `connected` mode. OKD, disconnected
 mode, FIPS, disk encryption, serving certificates, registry policy and a
@@ -231,20 +234,15 @@ not configured, so the operator routes the managed zone; disconnected
 installation waits for a managed `Registry` (C2); and a destroyed cluster's
 physical nodes keep running (C9).
 
-### X13 — scheduler liveness and completed-removal proof
+### X14 — adapters, serving and cluster identity
 
-**Owner:** State reconciliation. **Kind:** safety, out of sequence, on explicit
-request on 2026-09-26. **Requires:**
-[X12](milestones/delivered.md#x12--audit-phase-1-context-and-guards).
-**Definition:** Specified. **Delivery:** in progress. Items, each with its
-bounded outcome and exit evidence in the
-[audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09): F12 (a
-failed attempt start stops admission instead of re-admitting its block) and S12
-(a destroy after a completed apply refuses when a block record is not `done`),
-both found while X12 was delivered. Exit gates: each item's exit evidence,
-`make check`, `make docs-check` and CI. Both items are implemented; what they
-left is backlog S12 (rest), and they surfaced the pre-existing S13. Remaining:
-landing through its pull request.
+**Owner:** Architecture, with State reconciliation and Container cluster.
+**Kind:** safety, out of sequence, on explicit request on 2026-09-26.
+**Requires:** [X13](milestones/delivered.md#x13--scheduler-liveness-and-completed-removal-proof).
+**Definition:** Specified. **Delivery:** in progress. Items S14 to S18 and F13
+of the
+[pre-OpenShift program](milestones/backlog.md#pre-openshift-readiness-program-2026-09).
+Exit gates: each item's exit evidence, `make check`, `make docs-check` and CI.
 
 ## Next ordered outcomes
 

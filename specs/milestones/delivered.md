@@ -688,3 +688,23 @@ journey is indexed (G8, rest).
 **Constraints left behind:** backlog S10 (rest), F1 (rest), F4 (rest) and
 R6 (rest); the pre-existing F12 and S12 it surfaced became X13; and
 `ansible-check --suite units` and `vulncheck` ran only in CI.
+
+### X13 — scheduler liveness and completed-removal proof
+
+**Owner:** State reconciliation. Landed on `main` at `da960b1` through pull
+request 3 on 2026-09-26, on explicit request.
+
+**Outcome:** a block whose attempt cannot start stops admission instead of
+being re-admitted without end under the root lock, keeps its state, and the
+invocation reports the start failure; `cause()` keeps an error without a
+diagnostic as `runtime.internal` (F12). A destroy after a completed apply
+refuses before it registers when any block of that apply is not `done`, so a
+lost block record can no longer leave an effect unremoved (S12).
+
+**Guard tests:** the journeys and unit tests in
+`internal/reconciliation/lifecycle/scheduler_liveness_test.go` and
+`internal/reconciliation/lifecycle/completed_removal_test.go`, and
+`TestTransitionTablesMatchSpec` for the narrowed `paused` row.
+
+**Constraints left behind:** backlog S12 (rest) and the pre-existing S13 it
+surfaced.
