@@ -8,39 +8,35 @@ description: Design or review Bootwright specs and technical guidance, component
 Use [code-implementation](../code-implementation/SKILL.md) for tracked edits.
 [Architecture](../../../specs/architecture.md) owns component boundaries and
 dependency policy; [state reconciliation](../../../specs/state-reconciliation.md)
-owns lifecycle and durable state. Load the affected domain contracts from the
+owns lifecycle and durable state. Load the affected contracts from the
 [spec index](../../../specs/index.md).
 
 ## Place and scope the decision
 
-- Keep required behavior in its owning spec, delivery scope and deferred work
-  in [milestones](../../../specs/milestones.md), and observed constraints in
-  indexed [knowledge](../../knowledge/index.md). Retain one authoritative
-  statement and link to it. Preserve rationale only when it changes a future
-  decision; omit generic tutorials and speculative detail.
-- Describe the smallest complete authorized slice through its observable
-  outcome, semantic owner, changed boundary, and failure behavior. Introduce
-  interfaces or variation only at their first concrete consumer. Accepted
-  future schema is not a claim of implemented behavior.
-- Follow the [dependency selection rule](../../../specs/architecture.md#dependency-selection-and-reuse)
-  when choosing libraries or tools.
+- Required behavior lives in its owning spec, delivery state and deferred work in
+  [milestones](../../../specs/milestones.md), and observed constraints in indexed
+  [knowledge](../../knowledge/index.md). Keep one statement and link to it.
+- Specs state target invariants. A rule the code does not yet meet links the
+  milestone row that will close it; nothing else in a spec claims availability.
+- The code owns inventories. Do not hand-copy command lists, package maps or
+  interface catalogs into prose; point at the code, or add a test that holds a
+  table to it. A rule a tool can check becomes a test, and its prose goes.
+- Describe the smallest authorized slice through its observable outcome, owner,
+  changed boundary and failure behavior. Add an interface or variation only at
+  its first concrete consumer. Follow the
+  [dependency selection rule](../../../specs/architecture.md#dependency-selection-and-reuse).
 
 ## Review boundaries
 
-- Identify policy, data, interface, and translation owners. Keep domain
-  vocabulary independent of vendor types and application sequencing separate
-  from adapter effects. Check that Go/Ansible responsibilities follow the
-  architecture contract, including who authorizes and records an operation.
-- Define the port's complete request, result/evidence, typed failures,
-  cancellation, and replay semantics before adding an implementation. Reuse
-  a port only when every implementation preserves that contract.
-- Give mutable state one owner. For a durable-format or implementation-identity
-  change, resolve canonical form, compatibility, crash boundary, and exact
-  continuation or safe refusal before changing storage.
-- Compare alternatives when they affect maintained code, safety, operational
-  cost, or future variation. Keep necessary rationale with the owning contract.
+- Identify the policy, data, interface and translation owners, and keep Go and
+  Ansible responsibilities on their sides of the boundary.
+- Define a port's complete request, result, typed failures, cancellation and
+  replay semantics before implementing it, and share one implementation of a
+  shared protocol rather than copying it per capability.
+- Give mutable state one owner. For a durable-format or identity change, resolve
+  canonical form, crash boundary, and exact continuation or safe refusal first.
 
 Verify changed invariants with boundary tests, dependency-direction checks,
-determinism, and failure injection as applicable. For reviews, report the
-violated contract, evidence, impact, smallest correction, and verification;
-distinguish confirmed defects from optional improvements.
+determinism and failure injection. Report the violated contract, evidence,
+impact, smallest correction and verification, and separate confirmed defects
+from optional improvements.

@@ -6,35 +6,32 @@ description: Design or review Bootwright public schemas, CLI journeys, help, dia
 # UX And APIs
 
 Use [code-implementation](../code-implementation/SKILL.md) for tracked edits.
-Load [CLI](../../../specs/cli.md) for command behavior,
-[API](../../../specs/api.md) and the owning kind page for schemas,
-[state reconciliation](../../../specs/state-reconciliation.md) for lifecycle
-journeys, and [security](../../../specs/security.md) for sensitive surfaces.
+[CLI](../../../specs/cli.md), the [command catalog](../../../specs/cli/commands.md)
+and [output](../../../specs/cli/output.md) own command behavior;
+[API](../../../specs/api.md) and the owning kind page own schemas;
+[state reconciliation](../../../specs/state-reconciliation.md) owns lifecycle
+journeys.
 
-- Start with the user's outcome and trace discovery, input, success, mistakes,
-  failure, and recovery for an operator and an automation consumer. Add the
-  smallest complete surface needed by the authorized slice; avoid speculative
-  flags, fields, aliases, and success-producing placeholders.
-- For each changed input, resolve grammar, cardinality, omission/null/empty/zero
-  semantics, defaults, precedence, and provenance. Check every source of
-  ambient context. Reuse established vocabulary and preserve declarative
-  intent rather than exposing adapter controls.
-- For each changed result, resolve stdout/stderr, machine envelope, exit code,
-  ordering, and safe diagnostic content. Identify which bytes are canonical
-  and which presentation may evolve. Ensure progress cannot corrupt machine
-  output and that recovery guidance matches actual operation state.
-- Check the selected framework's defaults against the public catalog: implicit
-  commands and flags, inheritance, aliases, suggestions, completion, sorting,
-  usage-on-error, and TTY styling can expose unintended behavior.
-- Review compatibility in both directions: accepted input and emitted output.
-  Optional fields, enum additions, defaults, warnings, and stricter validation
-  can break strict consumers. Apply the owning version or migration policy;
-  update affected specs, examples, and executable tests together.
+## Rules this repository has already broken once
 
-Exercise changed journeys through the command runner, including invalid input,
-help, stream separation, exit codes, cancellation, and promised effect bounds.
-Use goldens for contractual bytes and semantic assertions otherwise. Use
-property, round-trip, or fuzz tests for broad grammars when examples are
-insufficient. Keep examples minimal, valid, synthetic, and accurate about
-implementation availability. Contract conformance alone does not prove that
-the journey is understandable; walk it through to recovery.
+- The command catalog in `internal/cli` and the catalog spec agree; documented
+  command lines are checked by `TestDocsCommandLinesMatchTheCatalog`.
+- JSON mode writes exactly one document to stdout; progress and log locations
+  never reach it. Machine output uses CLI-owned, tagged presentation types.
+- Every emitted diagnostic code appears in the output taxonomy, and a refusal
+  names the object, the reason and the next step.
+- `validate` rejects a value the only implementation refuses; no default always
+  refuses at plan time.
+- A declared flag is read; an unimplemented one is refused, never ignored.
+- A runbook in `examples/` runs as written against the current build.
+
+## Design and review
+
+Start from the operator's outcome and walk discovery, input, success, mistakes,
+failure and recovery, for a person and for automation. Add the smallest surface
+the authorized slice needs. For each input resolve grammar, omission, null,
+empty and zero, defaults and precedence; for each result resolve streams, exit
+code, ordering and which bytes are contractual. Review compatibility of accepted
+input and emitted output together, and update specs, examples and executable
+tests in the same change. Use goldens for contractual bytes and semantic
+assertions otherwise.
