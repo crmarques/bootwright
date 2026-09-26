@@ -94,7 +94,7 @@ disposable.
 
 ## Audit follow-ups (2026-09)
 
-The items of the 2026-09 audit plan that [X11](../milestones.md#x11--audit-phase-0-and-spec-restructure)
+The items of the 2026-09 audit plan that [X11](delivered.md#x11--audit-phase-0-and-spec-restructure)
 does not execute; this table is their record in the repository. Each is
 promoted as a slice under the WIP limit. Every row's definition status is
 **Candidate**, and each is deferred to its plan phase. Phases order them: 1

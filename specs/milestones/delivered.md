@@ -397,7 +397,7 @@ the exclusive root lock for its whole duration, so a concurrent reader waits
 they settle as a single check row; the bound is one number for every kind
 of block, so a host that cannot carry several image builds at once is served by
 narrowing the bound rather than by a per-resource limit; and
-[X11](../milestones.md#x11--audit-phase-0-and-spec-restructure)'s S4a binds
+[X11](#x11--audit-phase-0-and-spec-restructure)'s S4a binds
 that bound to one block until S4b gives every role private scratch, so no
 operation runs blocks together yet. See
 [concurrency knowledge](../../.agents/knowledge/concurrent-block-execution.md).
@@ -609,4 +609,41 @@ error and reports the abandonment in its result
 **Constraints left behind:** abandonment recovers nothing, so it is the only
 local exit for C23's unresolvable block; and [secrets](../secrets.md) still
 forbids abandoning a protected context while [security](../security.md) does not
-name the waiver, which X11 reconciles.
+name the waiver, which X11 reconciled.
+
+### X11 — audit Phase 0 and spec restructure
+
+**Owner:** Architecture, with every context the 2026-09 audit's Phase 0
+touched. Landed on `main` at `8aa4494` through pull request 1 on 2026-09-26.
+
+**Outcome:** the audit's Phase 0 items S1, S2a, S3a, S4a, S5, S6a, S7 to S9
+(first steps), O1 to O8, Z1, G1 to G9 and A1 to A8, and the F3 decision.
+Destructive paths the code cannot prove refuse: a physical installation
+without a named root device or while its host key would be public, a physical
+or install-profiled cluster node, and a device path outside `/dev/` or its safe
+character set. Lifecycle concurrency is one, a failed block retries alone and
+only inside the selection, registration re-proves the basis it decided on, and
+contextfs publications are atomic and leave no stage. Verification is tiered
+(`make quick`, `make docs-check`, `make race`, `make check-offline`) and CI runs
+`make check`; guidance routes to one owner per fact; unpromoted designs live
+under [deferred](../deferred/); and the spec tables that code must match are
+tests.
+
+**Guard tests:** `TestAPhysicalInstallationWithoutANamedRootDeviceRefuses`,
+`TestAPhysicalInstallationRefusesWhileItsHostKeyWouldBePublic`,
+`TestAPhysicalKickstartNeverClearsADiskItDidNotName`,
+`TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot`,
+`TestDevicePathRejectsNewline`, `TestLifecycleConcurrencyBound`,
+`TestFailedBlocksAreRetriedOneAtATime`,
+`TestContinuationRefusesWhenTheContextChangedBeforeMutation`,
+`TestPublicationLeavesNoStageOnFailure`, `TestTransitionTablesMatchSpec`,
+`TestDiagnosticCodesMatchOutputSpec`, `TestDocumentedBoundsMatchCode`,
+`TestCommandCatalogMatchesSpec` and the docs gate in
+`test/architecture/docs_test.go`.
+
+**Constraints left behind:** M5a stays blocked on S3b and M4a's physical nodes
+refuse until S2b; concurrency stays one until S4b and a real-host run;
+`vulncheck` and the networked `ansible-test` suites run only in CI where a
+session's egress refuses their hosts; architecture.md stays near 50 KB; and
+every item not executed is an
+[audit follow-up](backlog.md#audit-follow-ups-2026-09).
