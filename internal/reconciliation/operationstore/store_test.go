@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -268,6 +270,183 @@ func TestAttemptLifecycleIsDurableAndExclusive(t *testing.T) {
 	area.files[operation.ID+"/blocks/alpha/attempt-000003.json"] = []byte("{}\n")
 	if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err == nil {
 		t.Fatal("an attempt overwrote an existing record")
+	}
+}
+
+// A start creates the attempt record and then publishes the block record that
+// counts it. One interrupted between the two used to leave a running attempt
+// record the block record never counted, so every later start computed the
+// same number, the exclusive write refused it, and the block never started
+// again in any invocation. Nothing ran under that record, because an effect
+// begins only once a start returns, so the next start adopts it as its own.
+func TestAStartInterruptedBetweenItsWritesIsAdoptedByTheNext(t *testing.T) {
+	for name, retry := range map[string]bool{"a first attempt": false, "a retry": true} {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			store, area := newStore(t)
+			plan := testPlan(t, "alpha")
+			operation := testOperation(t, plan)
+			if _, err := store.Index(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.Register(ctx, operation, plan); err != nil {
+				t.Fatal(err)
+			}
+			want := 1
+			if retry {
+				if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err != nil {
+					t.Fatal(err)
+				}
+				if err := store.CompleteAttempt(ctx, operation.ID, "alpha", 1, reconciliation.OutcomeFailed, reconciliation.EffectUnknown, reconciliation.BlockFailed, nil); err != nil {
+					t.Fatal(err)
+				}
+				want = 2
+			}
+			before, err := store.Block(ctx, operation.ID, "alpha")
+			if err != nil {
+				t.Fatal(err)
+			}
+			number, _ := reconciliation.FormatNumber(want)
+			attemptPath := operation.ID + "/blocks/alpha/attempt-" + number + ".json"
+			statePath := operation.ID + "/blocks/alpha/state.json"
+			area.landed = func(call, target string) {
+				if call == "write" && target == attemptPath {
+					area.fail["replace "+statePath] = errors.New("interrupted")
+				}
+			}
+			if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err == nil {
+				t.Fatal("a start whose block record was never published succeeded")
+			}
+			area.landed = nil
+			delete(area.fail, "replace "+statePath)
+			orphan, exists := area.files[attemptPath]
+			if !exists {
+				t.Fatal("the interruption did not fall between the two writes")
+			}
+			if reread, err := New(area, fixedClock()).Block(ctx, operation.ID, "alpha"); err != nil || reread != before {
+				t.Fatalf("the interrupted start moved the block record from %+v to %+v (%v)", before, reread, err)
+			}
+
+			next := New(area, fixedClock())
+			started, err := next.StartAttempt(ctx, operation.ID, "alpha")
+			if err != nil || started != want {
+				t.Fatalf("the start after the interruption = %d (%v), want %d", started, err, want)
+			}
+			record, err := next.Block(ctx, operation.ID, "alpha")
+			if err != nil || record.State != reconciliation.BlockRunning || record.Attempts != want {
+				t.Fatalf("block record after the adopting start = %+v (%v)", record, err)
+			}
+			if !bytes.Equal(area.files[attemptPath], orphan) {
+				t.Fatal("the adopted attempt record was rewritten")
+			}
+			if err := next.CompleteAttempt(ctx, operation.ID, "alpha", want, reconciliation.OutcomeFailed, reconciliation.EffectUnknown, reconciliation.BlockFailed, nil); err != nil {
+				t.Fatal(err)
+			}
+			if following, err := next.StartAttempt(ctx, operation.ID, "alpha"); err != nil || following != want+1 {
+				t.Fatalf("the start after the adopted attempt = %d (%v), want %d", following, err, want+1)
+			}
+		})
+	}
+}
+
+// Only a record that can be nothing but an interrupted start is adopted. An
+// attempt record beside no block record is how a lost block record reads, and
+// one that is observed, published its before-state or was resolved may have
+// run its effect or been reasoned from. Starting over any of them would skip
+// the observation an unproved effect needs or reuse a number, so each refuses
+// and writes nothing.
+func TestAStartAdoptsNothingButAnInterruptedStart(t *testing.T) {
+	ctx := context.Background()
+	plan := testPlan(t, "alpha")
+	operation := testOperation(t, plan)
+	directory := operation.ID + "/blocks/alpha/"
+	put := func(t *testing.T, area *memoryArea, target string, value any) {
+		t.Helper()
+		encoded, err := encode(value, MaxAttemptBytes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		area.files[directory+target] = encoded
+	}
+	pending := BlockRecord{Version: 1, Block: "alpha", State: reconciliation.BlockPending}
+	running := Attempt{Version: 1, Block: "alpha", Number: 1, Phase: "running", Started: "2026-09-11T12:00:00Z", Updated: "2026-09-11T12:00:00Z"}
+	for name, arrange := range map[string]func(*testing.T, *Store, *memoryArea){
+		"an attempt whose block record was lost": func(t *testing.T, store *Store, area *memoryArea) {
+			if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err != nil {
+				t.Fatal(err)
+			}
+			delete(area.files, directory+"state.json")
+		},
+		"an observed attempt": func(t *testing.T, _ *Store, area *memoryArea) {
+			observed := running
+			observed.Phase, observed.Outcome, observed.Effect = "observed", reconciliation.OutcomeFailed, reconciliation.EffectUnknown
+			put(t, area, "state.json", pending)
+			put(t, area, "attempt-000001.json", observed)
+		},
+		"an attempt that published its before-state": func(t *testing.T, _ *Store, area *memoryArea) {
+			prepared := running
+			prepared.Preparation = json.RawMessage(`{"inventorySHA256":"` + strings.Repeat("a", 64) + `"}`)
+			put(t, area, "state.json", pending)
+			put(t, area, "attempt-000001.json", prepared)
+		},
+		"an attempt with a resolution allocated against it": func(t *testing.T, _ *Store, area *memoryArea) {
+			resolution := running
+			resolution.Resolution = 1
+			put(t, area, "state.json", pending)
+			put(t, area, "attempt-000001.json", running)
+			put(t, area, "attempt-000001-resolution-000001.json", resolution)
+		},
+		"an attempt of another block": func(t *testing.T, _ *Store, area *memoryArea) {
+			foreign := running
+			foreign.Block = "bravo"
+			put(t, area, "state.json", pending)
+			put(t, area, "attempt-000001.json", foreign)
+		},
+		"an attempt naming another number": func(t *testing.T, _ *Store, area *memoryArea) {
+			other := running
+			other.Number = 2
+			put(t, area, "state.json", pending)
+			put(t, area, "attempt-000001.json", other)
+		},
+		"a resolution record at the attempt's path": func(t *testing.T, _ *Store, area *memoryArea) {
+			misplaced := running
+			misplaced.Resolution = 1
+			put(t, area, "state.json", pending)
+			put(t, area, "attempt-000001.json", misplaced)
+		},
+		"an unsupported attempt version": func(t *testing.T, _ *Store, area *memoryArea) {
+			future := running
+			future.Version = 2
+			put(t, area, "state.json", pending)
+			put(t, area, "attempt-000001.json", future)
+		},
+		"a noncanonical attempt record": func(t *testing.T, _ *Store, area *memoryArea) {
+			put(t, area, "state.json", pending)
+			put(t, area, "attempt-000001.json", running)
+			target := directory + "attempt-000001.json"
+			area.files[target] = bytes.Replace(area.files[target], []byte(`{"version":1,`), []byte(`{"version": 1,`), 1)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store, area := newStore(t)
+			if _, err := store.Index(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.Register(ctx, operation, plan); err != nil {
+				t.Fatal(err)
+			}
+			arrange(t, store, area)
+			snapshot := map[string][]byte{}
+			for target, data := range area.files {
+				snapshot[target] = slices.Clone(data)
+			}
+			if number, err := New(area, fixedClock()).StartAttempt(ctx, operation.ID, "alpha"); err == nil {
+				t.Fatalf("a start adopted a record no interrupted start left, as attempt %d", number)
+			}
+			if !maps.EqualFunc(area.files, snapshot, bytes.Equal) {
+				t.Fatal("a refused start changed a record")
+			}
+		})
 	}
 }
 

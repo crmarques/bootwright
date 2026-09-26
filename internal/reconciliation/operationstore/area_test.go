@@ -23,6 +23,10 @@ type memoryArea struct {
 	appends     int
 	syncs       []string
 	location    string
+	// landed, when set, runs once a write or replacement has landed and
+	// before the call returns, still holding the area, so a test can fail the
+	// next write exactly where a kill between the two would fall.
+	landed func(operation, target string)
 }
 
 func newArea() *memoryArea {
@@ -109,6 +113,7 @@ func (a *memoryArea) WriteExclusive(ctx context.Context, target string, data []b
 		return errors.New("exists")
 	}
 	a.files[target] = slices.Clone(data)
+	a.land("write", target)
 	return nil
 }
 
@@ -127,7 +132,14 @@ func (a *memoryArea) Replace(ctx context.Context, target string, data, expected 
 		return errors.New("expectation")
 	}
 	a.files[target] = slices.Clone(data)
+	a.land("replace", target)
 	return nil
+}
+
+func (a *memoryArea) land(operation, target string) {
+	if a.landed != nil {
+		a.landed(operation, target)
+	}
 }
 
 func (a *memoryArea) Append(ctx context.Context, target string, data []byte) error {

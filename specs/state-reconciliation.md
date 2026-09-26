@@ -494,6 +494,29 @@ with positive `no-effect` is a typed failure and never success. An idempotent
 already-complete apply reports `completed` with completion evidence, and an
 already-absent destroy reports `completed` with positive absence evidence.
 
+Starting an attempt is one publication although it writes two records. The
+store creates the attempt record exclusively and only then publishes the block
+record that counts it and says `running`, so a block record never counts an
+attempt that has no record. A block with no record first gains one that reads
+exactly as its absence did, `pending` with no attempts, so no start leaves an
+attempt record beside no block record. A start interrupted between the two
+writes has performed nothing, because the executor begins an effect only once
+its start returns. It leaves the block record as it was, as an
+[attempt that cannot start](#block-transitions) does, beside a `running`
+attempt record of the next number, and the next start of that block adopts that
+record: it publishes the block record that counts it, and neither rewrites the
+record nor allocates another number, so numbering stays monotonic and no path
+is reused. The start reads only the one path its block record's count names, so
+this is not the scan-based adoption [operation records](#operation-records)
+forbid, and it adopts only a record that can be nothing but an interrupted
+start: the block record exists, and the record is a canonical attempt record of
+a supported version, is `running`, names that block and number and no
+resolution, has published no `preparation`, and has no resolution allocated
+against it. Anything else at that number refuses `lifecycle.state` and writes
+nothing, including an attempt record beside no block record, which is how a
+lost block record reads: starting over an effect that may have begun would skip
+the observation an unproved effect requires.
+
 ### Converging an effect
 
 Every attempt converges rather than acts: it observes the target, proves what
