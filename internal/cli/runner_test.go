@@ -48,7 +48,7 @@ func TestHelpPrecedenceAndClosedSyntax(t *testing.T) {
 		code int
 	}{
 		{"", 0}, {"help", 0}, {"completion", 0}, {"context", 2}, {"secret encryption", 2}, {"context --help", 0}, {"--help context init", 0}, {"help context init", 0},
-		{"context init --name= --help", 0}, {"context init -f a -f b --help", 0}, {"secret show --part invalid --help", 0}, {"status --watch-interval invalid --help", 0}, {"machine list --silent --output json --help", 0}, {"machine list --help --output invalid", 0},
+		{"context init --name= --help", 0}, {"context init -f a -f b --help", 0}, {"secret show --part invalid --help", 0}, {"status --output invalid --help", 0}, {"machine list --silent --output json --help", 0}, {"machine list --help --output invalid", 0},
 		{"render --output json", 0}, {"render --clusters one --output json", 0}, {"render --output invalid", 2}, {"render --input-dir= --help", 0},
 		{"version --help=false", 0}, {"version --help=invalid", 2}, {"machine --output json list", 2}, {"render --output json effective", 2}, {"render effective --input-dir input", 2},
 		{"example --help", 2}, {"help example", 2}, {"container-cluster --help", 2}, {"help container-cluster", 2}, {"clu list", 2}, {"VERSION", 2}, {"--version", 2}, {"version --format json", 2}, {"__complete", 2}, {"__completeNoDesc", 2}, {"help __bootwright_complete", 2},
@@ -110,6 +110,35 @@ func TestResolutionFailuresExplainOnlyTrustedReasons(t *testing.T) {
 		if got := trustedResolutionMessage(err); got != "invalid command or flag syntax" {
 			t.Fatalf("untrusted resolution error became diagnostic: %q", got)
 		}
+	}
+}
+
+// TestWithdrawnFlagsAreUsageErrors keeps the withdrawn status --watch and
+// --watch-interval, and -v, --verbose, out of every command that accepted them:
+// each is now an unlisted flag, so it fails resolution as cli.usage with exit 2
+// before explicit help and reaches no use case.
+func TestWithdrawnFlagsAreUsageErrors(t *testing.T) {
+	for _, args := range [][]string{
+		{"status", "--watch"}, {"status", "--watch=false"}, {"status", "--watch-interval", "5s"}, {"status", "--watch", "--help"},
+		{"apply", "--verbose"}, {"apply", "-v"}, {"apply", "--yes", "--verbose=false"}, {"destroy", "--verbose"}, {"destroy", "-v", "--help"},
+		{"preflight", "infra", "--verbose"}, {"preflight", "clusters", "-v"}, {"preflight", "container-cluster", "--verbose"}, {"preflight", "storage-cluster", "--verbose"}, {"preflight", "all", "-v"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			code, out, errOut, record := runRecorded(args)
+			if code != 2 || out != "" || record.calls != 0 || !strings.HasPrefix(errOut, "[FAIL] cli.usage: flag is not accepted at this position\n") {
+				t.Fatalf("code=%d out=%q stderr=%q calls=%d", code, out, errOut, record.calls)
+			}
+		})
+	}
+	code, out, errOut, record := runRecorded([]string{"status", "--output", "json", "--watch"})
+	var envelope struct {
+		Command     string
+		OK          bool
+		ExitCode    int
+		Diagnostics []struct{ Code string }
+	}
+	if err := json.Unmarshal([]byte(out), &envelope); err != nil || code != 2 || errOut != "" || record.calls != 0 || envelope.Command != "status" || envelope.OK || envelope.ExitCode != 2 || len(envelope.Diagnostics) != 1 || envelope.Diagnostics[0].Code != "cli.usage" {
+		t.Fatalf("JSON usage: code=%d out=%q err=%q calls=%d decode=%v", code, out, errOut, record.calls, err)
 	}
 }
 

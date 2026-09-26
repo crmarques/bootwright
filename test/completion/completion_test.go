@@ -95,6 +95,8 @@ func TestGeneratedIntegrations(t *testing.T) {
 						{"attached enum", []string{"validate", "--output=j"}, []string{"--output=json"}},
 						{"no removed backend flag", []string{"secret", "encryption", "init", "--type", ""}, nil},
 						{"no attached removed backend flag", []string{"secret", "encryption", "init", "--type=loc"}, nil},
+						{"no withdrawn watch flag", []string{"status", "--w"}, nil},
+						{"no withdrawn verbose flag", []string{"apply", "--v"}, nil},
 						{"input directory flag", []string{"context", "init", "--input"}, []string{"--input-dir"}},
 						{"directory paths", []string{"context", "init", "--input-dir", "fixture"}, []string{"fixture-alpha/", "fixture-beta/"}},
 						{"directory paths exclude files", []string{"context", "init", "--input-dir", "fixture-alpha/"}, []string{"fixture-alpha/nested/"}},

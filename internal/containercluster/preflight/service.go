@@ -14,7 +14,6 @@ type PreflightRequest struct {
 	Clusters        []string
 	DryRun          bool
 	TrustOnFirstUse bool
-	Verbose         bool
 	SSH             machine.SSHOptions
 }
 

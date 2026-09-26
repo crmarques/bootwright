@@ -135,12 +135,6 @@ func dryRunFlag() flagSpec {
 	return boolFlag("dry-run", "Limit work to the command's dry-run boundary")
 }
 
-func verboseFlag() flagSpec {
-	flag := boolFlag("verbose", "Include safe progress details")
-	flag.short = "v"
-	return flag
-}
-
 func sensitiveFlag() flagSpec {
 	return boolFlag("sensitive", "Authorize sensitive artifact materialization")
 }
@@ -170,7 +164,7 @@ func trustFlag() flagSpec {
 }
 
 func preflightFlags() []flagSpec {
-	return []flagSpec{clustersFlag(), dryRunFlag(), outputFlag(), trustFlag(), verboseFlag()}
+	return []flagSpec{clustersFlag(), dryRunFlag(), outputFlag(), trustFlag()}
 }
 
 // sessionCommand describes one command that opens an SSH session. Its help

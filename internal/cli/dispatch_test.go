@@ -5,7 +5,6 @@ import (
 	"errors"
 	"reflect"
 	"testing"
-	"time"
 
 	addoncatalog "github.com/crmarques/bootwright/internal/addons/catalog"
 	addonpreflight "github.com/crmarques/bootwright/internal/addons/preflight"
@@ -64,20 +63,20 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"render effective", compilation.EffectiveRequest{ContextName: "example"}},
 		{"preflight controller", prerequisites.CheckRequest{ContextName: "example"}},
 		{"setup", prerequisites.SetupRequest{DryRun: true, SkipConfirmation: true, PurgeOldBundles: true}},
-		{"preflight infra", environmentpreflight.InfrastructurePreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, Verbose: true, SSH: ssh}},
-		{"preflight clusters", environmentpreflight.ClustersPreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, Verbose: true, SSH: ssh}},
-		{"preflight all", environmentpreflight.AllPreflightRequest{ContextName: "example", DryRun: true, TrustOnFirstUse: true, Verbose: true, SSH: ssh}},
+		{"preflight infra", environmentpreflight.InfrastructurePreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
+		{"preflight clusters", environmentpreflight.ClustersPreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
+		{"preflight all", environmentpreflight.AllPreflightRequest{ContextName: "example", DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
 		{"cluster list", inspection.ListClustersRequest{ContextName: "example"}},
 		{"cluster info", inspection.ClusterInfoRequest{ContextName: "example", Name: "demo", Secrets: true}},
 		{"cluster rsh", environmentaccess.ClusterRshRequest{ContextName: "example", Name: "demo", Node: "node-a", SSH: ssh}},
 		{"cluster exec", environmentaccess.ClusterExecRequest{ContextName: "example", Name: "demo", Node: "node-a", SSH: ssh, Command: []string{"get", "--help", ""}}},
-		{"preflight container-cluster", containerpreflight.PreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, Verbose: true, SSH: ssh}},
-		{"preflight storage-cluster", storagepreflight.PreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, Verbose: true, SSH: ssh}},
+		{"preflight container-cluster", containerpreflight.PreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
+		{"preflight storage-cluster", storagepreflight.PreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
 		{"preflight add-ons", addonpreflight.PreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, SSH: ssh}},
 		{"plan", lifecycle.PlanRequest{ContextName: "example", Stages: []string{"infra-components", "substrates"}}},
-		{"status", lifecycle.StatusRequest{ContextName: "example", Watch: true, WatchInterval: 7 * time.Second}},
-		{"apply", lifecycle.ApplyRequest{ContextName: "example", Stages: []string{"infra-components", "substrates"}, Authorizations: []string{"data-loss"}, SkipConfirmation: true, Verbose: true, SSH: ssh}},
-		{"destroy", lifecycle.DestroyRequest{ContextName: "example", Authorizations: []string{"data-loss"}, SkipConfirmation: true, Verbose: true, SSH: ssh}},
+		{"status", lifecycle.StatusRequest{ContextName: "example"}},
+		{"apply", lifecycle.ApplyRequest{ContextName: "example", Stages: []string{"infra-components", "substrates"}, Authorizations: []string{"data-loss"}, SkipConfirmation: true, SSH: ssh}},
+		{"destroy", lifecycle.DestroyRequest{ContextName: "example", Authorizations: []string{"data-loss"}, SkipConfirmation: true, SSH: ssh}},
 		{"render", artifactrendering.RenderRequest{ContextName: "example", InputPath: "inputs", OutputDirectory: "artifacts", Clusters: []string{"first", "second"}, Sensitive: true}},
 		{"render installer", installation.RenderInstallerRequest{ContextName: "example", Clusters: []string{"first", "second"}, Sensitive: true}},
 		{"render storage", storagerendering.RenderArtifactsRequest{ContextName: "example", Clusters: []string{"first", "second"}}},

@@ -17,8 +17,8 @@ func TestPublicCatalog(t *testing.T) {
 		"secret set": "certificate-file name password-file password-stdin private-key-file public-key-file username value-file value-stdin yes", "secret generate": "name renew", "secret check": "output", "secret list": "output", "secret show": "name part", "secret delete": "name yes",
 		"secret encryption init": "", "secret encryption status": "output", "secret encryption rotate": "yes",
 		"media add": "from-file from-url name sha256 yes", "media list": "checksums output", "media delete": "name yes",
-		"validate": "file output", "preflight controller": "", "preflight infra": "clusters dry-run output trust-on-first-use verbose", "preflight clusters": "clusters dry-run output trust-on-first-use verbose", "preflight container-cluster": "clusters dry-run output trust-on-first-use verbose", "preflight storage-cluster": "clusters dry-run output trust-on-first-use verbose", "preflight add-ons": "clusters output", "preflight all": "dry-run output trust-on-first-use verbose",
-		"plan": "stage", "status": "output watch watch-interval", "render": "clusters input-dir output output-dir sensitive", "render effective": "output", "render installer": "clusters output sensitive", "render storage": "clusters output", "apply": "authorize stage verbose yes", "destroy": "authorize verbose yes",
+		"validate": "file output", "preflight controller": "", "preflight infra": "clusters dry-run output trust-on-first-use", "preflight clusters": "clusters dry-run output trust-on-first-use", "preflight container-cluster": "clusters dry-run output trust-on-first-use", "preflight storage-cluster": "clusters dry-run output trust-on-first-use", "preflight add-ons": "clusters output", "preflight all": "dry-run output trust-on-first-use",
+		"plan": "stage", "status": "output", "render": "clusters input-dir output output-dir sensitive", "render effective": "output", "render installer": "clusters output sensitive", "render storage": "clusters output", "apply": "authorize stage yes", "destroy": "authorize yes",
 		"machine list": "clusters output power-status silent", "machine rsh": "name", "machine exec": "name", "machine start": "name output", "machine stop": "force name output yes", "machine restart": "force name output yes", "machine trust": "dry-run machines output replace yes", "setup": "dry-run purge-old-bundles yes",
 		"cluster list": "output", "cluster info": "name output secrets", "cluster rsh": "name node", "cluster exec": "name node", "cluster oc": "name", "cluster kubectl": "name", "cluster kubeconfig": "name",
 		"version": "", "help": "", "completion bash": "no-descriptions", "completion zsh": "no-descriptions", "completion fish": "no-descriptions", "completion powershell": "no-descriptions",
@@ -41,9 +41,6 @@ func TestPublicCatalog(t *testing.T) {
 				wantShort := ""
 				if flag.Name == "file" {
 					wantShort = "f"
-				}
-				if flag.Name == "verbose" {
-					wantShort = "v"
 				}
 				if flag.Shorthand != wantShort {
 					t.Errorf("%s --%s shorthand %q", path, flag.Name, flag.Shorthand)

@@ -51,7 +51,6 @@ func (s Services) invokeContainerPreflight(ctx context.Context, path string, val
 			Clusters:        values.names("clusters"),
 			DryRun:          values.boolean("dry-run"),
 			TrustOnFirstUse: values.boolean("trust-on-first-use"),
-			Verbose:         values.boolean("verbose"),
 			SSH:             values.ssh(),
 		}, s.ContainerPreflight.Check)
 	default:

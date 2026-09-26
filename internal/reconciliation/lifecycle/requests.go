@@ -1,10 +1,6 @@
 package lifecycle
 
-import (
-	"time"
-
-	"github.com/crmarques/bootwright/internal/machine"
-)
+import "github.com/crmarques/bootwright/internal/machine"
 
 type PlanRequest struct {
 	ContextName string
@@ -12,9 +8,7 @@ type PlanRequest struct {
 }
 
 type StatusRequest struct {
-	ContextName   string
-	Watch         bool
-	WatchInterval time.Duration
+	ContextName string
 }
 
 type ApplyRequest struct {
@@ -22,7 +16,6 @@ type ApplyRequest struct {
 	Stages           []string
 	Authorizations   []string
 	SkipConfirmation bool
-	Verbose          bool
 	SSH              machine.SSHOptions
 }
 
@@ -30,7 +23,6 @@ type DestroyRequest struct {
 	ContextName      string
 	Authorizations   []string
 	SkipConfirmation bool
-	Verbose          bool
 	SSH              machine.SSHOptions
 }
 

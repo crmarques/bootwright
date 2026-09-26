@@ -19,7 +19,6 @@ func TestFlagRelationshipsAndFormats(t *testing.T) {
 		{"secret show --name demo", false}, {"secret show --name demo --part value", true}, {"secret show --name demo --part username", true}, {"secret show --name demo --part password", true}, {"secret show --name demo --part certificate", true}, {"secret show --name demo --part private-key", true}, {"secret show --name demo --part public-key", true}, {"secret show --name demo --part primary", false},
 		{"secret encryption init", true}, {"secret encryption init --type local-keyring", false}, {"secret encryption init --type future-store", false}, {"secret encryption init --type LOCAL", false}, {"secret encryption init --type local/keyring", false}, {"secret encryption init --type -local", false},
 		{"media add --name image.iso --from-file image.iso --sha256=", true}, {"media add --name image.iso --from-url https://example.invalid/image.iso", false}, {"media add --name image.iso --from-file image.iso --from-url https://example.invalid/image.iso", false}, {"media add --name image.iso --from-file image.iso --sha256 invalid", false},
-		{"status --watch-interval=invalid", false}, {"status --watch-interval=-5s", true}, {"status --watch --watch-interval=0s", true}, {"status --watch --output=json", false}, {"status --watch=false --output=json", true},
 		{"render --input-dir input", false}, {"render --input-dir input --output-dir output", true}, {"render --input-dir input --output-dir output --sensitive", false}, {"render --input-dir input --output-dir output --context demo", false}, {"render --input-dir input --output-dir output --context=", true}, {"render --output-dir output", false}, {"render --output-dir output --sensitive", true},
 		{"machine start --name demo", true}, {"machine start --name demo --output json", true}, {"machine start", false}, {"machine start --name demo --force", false},
 		{"machine stop --name demo", true}, {"machine stop --name demo --force --yes", true}, {"machine stop --name demo --output json", false}, {"machine stop --name demo --output json --yes", true},
@@ -29,7 +28,7 @@ func TestFlagRelationshipsAndFormats(t *testing.T) {
 		{"preflight infra --clusters=", true}, {"preflight infra --clusters=,", false}, {"render storage --clusters=,", false}, {"machine list --clusters=,", true}, {"machine trust --machines=, --replace=,", true},
 		{"machine list --power-status", true}, {"machine list --power-status --output json", true}, {"machine list --power-status --silent", false}, {"machine list --power-status --silent=false", true},
 		{"version --context=", true}, {"version --context=bad.name", false}, {"version --ssh-user=account", true}, {"version --ssh-user=Account", false}, {"version --ssh-user-for-provisioned", false}, {"version --ssh-user=account --ssh-user-for-provisioned", true}, {"status --ssh-ask-sudo-password --output=json", false}, {"status --ssh-ask-sudo-password=false --output=json", true},
-		{"context use --name= --name=demo", false}, {"context use --name=INVALID --name=demo", true}, {"status --output=invalid --output=text", true}, {"status --output= --output=text", false}, {"status --watch-interval=invalid --watch-interval=5s", true}, {"version --ssh-user= --ssh-user=account", false}, {"version --context= --context=demo", true},
+		{"context use --name= --name=demo", false}, {"context use --name=INVALID --name=demo", true}, {"status --output=invalid --output=text", true}, {"status --output= --output=text", false}, {"version --ssh-user= --ssh-user=account", false}, {"version --context= --context=demo", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.args, func(t *testing.T) {
@@ -78,14 +77,6 @@ func TestResolvedValuesAndDefaults(t *testing.T) {
 	if stringValue(command.Flags(), "clusters") != "" {
 		t.Fatal("blank selection should mean all")
 	}
-	command = parsedCommand(t, []string{"status", "--watch", "--watch-interval=-1s"})
-	if stringValue(command.Flags(), "watch-interval") != "5s" {
-		t.Fatal("non-positive watch interval default")
-	}
-	command = parsedCommand(t, []string{"status", "--watch-interval=-1s"})
-	if stringValue(command.Flags(), "watch-interval") != "-1s" {
-		t.Fatal("unused valid interval was changed")
-	}
 	command = parsedCommand(t, []string{"media", "add", "--name", "image.iso", "--from-url", "https://example.invalid/image.iso", "--sha256", "sha256:" + strings.Repeat("AB", 32)})
 	if stringValue(command.Flags(), "sha256") != strings.Repeat("ab", 32) {
 		t.Fatal("digest normalization")
@@ -118,15 +109,21 @@ func TestMediaNameAndURLBoundaries(t *testing.T) {
 
 func TestBooleanSpellings(t *testing.T) {
 	for _, value := range []string{"1", "t", "T", "TRUE", "true", "True", "0", "f", "F", "FALSE", "false", "False"} {
-		code, _, errOut, record := runRecorded([]string{"apply", "-v=" + value})
+		code, _, errOut, record := runRecorded([]string{"apply", "--yes=" + value})
 		if code != 1 || record.calls != 1 {
 			t.Errorf("valid bool %q rejected: %s", value, errOut)
 		}
+		if code, _, errOut, _ := runRecorded([]string{"version", "-h=" + value}); code != 0 {
+			t.Errorf("valid shorthand bool %q rejected: %s", value, errOut)
+		}
 	}
 	for _, value := range []string{"yes", "no", "TrUe", ""} {
-		code, _, _, record := runRecorded([]string{"apply", "--verbose=" + value, "--help"})
+		code, _, _, record := runRecorded([]string{"apply", "--yes=" + value, "--help"})
 		if code != 2 || record.calls != 0 {
 			t.Errorf("invalid bool %q bypassed syntax", value)
+		}
+		if code, _, _, _ := runRecorded([]string{"version", "-h=" + value}); code != 2 {
+			t.Errorf("invalid shorthand bool %q bypassed syntax", value)
 		}
 	}
 }

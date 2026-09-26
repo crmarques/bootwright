@@ -25,18 +25,16 @@ Not yet met: `machine start`, `machine stop` and `machine restart` with `--outpu
 
 An operating-system interrupt reports `runtime.interrupted` and exits `130` for
 a Bootwright-owned operation. Another canceled context or expired deadline
-reports `runtime.canceled` or `runtime.deadline` and exits `1`. An interrupted
-watch reports `runtime.interrupted`, preserves no partial structured result,
-and exits `130`.
+reports `runtime.canceled` or `runtime.deadline` and exits `1`.
 
 A write or flush failure on standard output exits `1` with best-effort cleanup
 and never recursively emits a second representation or fallback on standard
 error. If any sensitive bytes were written, it emits no diagnostic that could
 be mistaken for part of that value. Structured text, JSON, help, and completion
 are UTF-8 with LF line endings; explicit sensitive results remain exact byte
-streams. Terminal detection may select a watch redraw, the in-place redraw of a
-running [progress row](#long-running-progress) or an interactive prompt only
-where defined; it never changes the bytes of a non-interactive structured
+streams. Terminal detection may select the in-place redraw of a running
+[progress row](#long-running-progress) or an interactive prompt only where
+defined; it never changes the bytes of a non-interactive structured
 result. Color, cursor control, locale, and attacker-chosen styling are absent
 from deterministic output.
 
@@ -383,10 +381,7 @@ Not yet met: nested status objects carry Go field names and another shape, and s
 
 Rows sort by their documented key: checks and blocks in frozen order,
 everything else in ascending bytewise name order. Human `status` presents the
-same membership and order, omitting empty sections. `--watch` repeats the read
-at its interval and preserves no partial structured result across an interrupt.
-
-Not yet met: `status --watch` is accepted but reads once; tracked as [backlog F3](../milestones/backlog.md#audit-follow-ups-2026-09).
+same membership and order, omitting empty sections.
 
 ## Diagnostic taxonomy and order
 

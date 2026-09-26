@@ -25,7 +25,7 @@ func completionFixture(t *testing.T) *cobra.Command {
 	cluster.AddCommand(list, &cobra.Command{Use: "info", Short: "Inspect cluster details"})
 	validate := &cobra.Command{Use: "validate", Short: "Validate input"}
 	validate.Flags().StringArrayP("file", "f", nil, "Read input")
-	validate.Flags().Bool("watch", false, "Watch state")
+	validate.Flags().Bool("strict", false, "Check strictly")
 	root.AddCommand(cluster, validate, &cobra.Command{Use: "help"})
 	if err := configureCompletion(root, completionCatalog{}); err != nil {
 		t.Fatal(err)
@@ -49,8 +49,8 @@ func TestCompletionCandidates(t *testing.T) {
 		{"inherited value", []string{"--context", "sample", "cluster", ""}, []string{"info", "list"}},
 		{"enum", []string{"cluster", "list", "--output", ""}, []string{"json", "text"}},
 		{"attached enum", []string{"cluster", "list", "--output=j"}, []string{"--output=json"}},
-		{"flags", []string{"validate", "-"}, []string{"--context", "--file", "--help", "--watch", "-f", "-h"}},
-		{"boolean", []string{"validate", "--watch=tr"}, []string{"--watch=true"}},
+		{"flags", []string{"validate", "-"}, []string{"--context", "--file", "--help", "--strict", "-f", "-h"}},
+		{"boolean", []string{"validate", "--strict=tr"}, []string{"--strict=true"}},
 		{"free context", []string{"--context", ""}, nil},
 		{"free path", []string{"validate", "--file", ""}, nil},
 		{"free shorthand path", []string{"validate", "-f/tmp/"}, nil},

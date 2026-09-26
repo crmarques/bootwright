@@ -82,20 +82,20 @@ The three `media` commands follow the host-wide
 | --- | --- | --- | --- |
 | `bootwright validate` | repeatable `-f, --file <file-or-dir>`; `--output text\|json` default `text` | validation summary with admission counts, exclusions and advisories | read the supplied input, or the selected context's input when `-f` is omitted; no write |
 | `bootwright preflight controller` | none | [baseline or explicit-context controller readiness](../controller.md#selection-and-command-journeys), including the acquisition route it resolved | bounded local observation; no state publication |
-| `bootwright preflight infra` | `--clusters <list>` default all; `--dry-run` false; `--output text\|json` default `text`; `--trust-on-first-use=<bool>` default `true`; `-v, --verbose` false | infrastructure readiness checks | observe unless `--dry-run`, which is local-only |
+| `bootwright preflight infra` | `--clusters <list>` default all; `--dry-run` false; `--output text\|json` default `text`; `--trust-on-first-use=<bool>` default `true` | infrastructure readiness checks | observe unless `--dry-run`, which is local-only |
 | `bootwright preflight clusters` | same flags as `preflight infra` | all selected cluster readiness checks | observe unless `--dry-run` |
 | `bootwright preflight container-cluster` | same flags as `preflight infra`, with ContainerCluster-only selection | container-cluster readiness checks | observe unless `--dry-run` |
 | `bootwright preflight storage-cluster` | same flags as `preflight infra`, with StorageCluster-only selection | storage-cluster readiness checks | observe unless `--dry-run` |
 | `bootwright preflight add-ons` | `--clusters <list>` default all ContainerClusters; `--output text\|json` default `text` | add-on prerequisite checks | bounded observation |
-| `bootwright preflight all` | `--dry-run` false; `--output text\|json` default `text`; `--trust-on-first-use=<bool>` default `true`; `-v, --verbose` false | all controller, infrastructure, cluster, storage, and add-on checks | observe unless `--dry-run` |
+| `bootwright preflight all` | `--dry-run` false; `--output text\|json` default `text`; `--trust-on-first-use=<bool>` default `true` | all controller, infrastructure, cluster, storage, and add-on checks | observe unless `--dry-run` |
 | `bootwright plan` | `--stage <list>` default all stages | next legal full-context plan or exact continuation point, with the steps each block waits for, how much of it can run at once, and the blocks a stage selection would start | none |
-| `bootwright status` | `--output text\|json` default `text`; `--watch` false; `--watch-interval <duration>` default `5s` | context readiness, lifecycle state, and next safe commands | read local state; watch repeats reads |
+| `bootwright status` | `--output text\|json` default `text` | context readiness, lifecycle state, and next safe commands | read local state |
 | `bootwright render` | `--input-dir <file-or-dir>`; `--output-dir <dir>`; `--clusters <list>` default all; `--sensitive` false; `--output text\|json` default `text` | whole external-tool artifact manifest, or render help when neither path flag is supplied | local artifact writes only |
 | `bootwright render effective` | `--output text\|json` default `text` | normalized effective desired state and object counts | none |
 | `bootwright render installer` | `--clusters <list>` default all ContainerClusters; `--sensitive` false; `--output text\|json` default `text` | installer artifact manifest | local placeholder files and optional sensitive files |
 | `bootwright render storage` | `--clusters <list>` default all StorageClusters; `--output text\|json` default `text` | storage artifact manifest | local native files or scripts only; never execution |
-| `bootwright apply` | repeatable `--authorize <token>[,<token>...]`; `--stage <list>` default all stages; `--yes` false; `-v, --verbose` false | completed full apply, a pause at the selected stage boundary, exact continued state, or a settled result when the declared state is already realized | complete planned mutation, or none when it settles |
-| `bootwright destroy` | repeatable `--authorize <token>[,<token>...]`; `--yes` false; `-v, --verbose` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles; over an apply that did not complete, it first proves the outcome of every effect it takes back |
+| `bootwright apply` | repeatable `--authorize <token>[,<token>...]`; `--stage <list>` default all stages; `--yes` false | completed full apply, a pause at the selected stage boundary, exact continued state, or a settled result when the declared state is already realized | complete planned mutation, or none when it settles |
+| `bootwright destroy` | repeatable `--authorize <token>[,<token>...]`; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles; over an apply that did not complete, it first proves the outcome of every effect it takes back |
 
 ### Resource, access, and general commands
 
@@ -275,14 +275,6 @@ requires the token, what it acknowledges and the refusal of a token it does not
 require are owned by
 [state reconciliation](../state-reconciliation.md#confirmation-and-authorization).
 
-`--verbose` adds safe structured progress and troubleshooting detail. It never
-reveals secret values or digests, disables redaction or `no_log`, forwards raw
-adapter output, changes a decision, or weakens a log bound. Lifecycle verbose
-detail remains in the private attempt log; preflight verbose detail may be
-presented only after structural redaction.
-
-Not yet met: `--verbose` is accepted but changes nothing; tracked as [backlog F3](../milestones/backlog.md#audit-follow-ups-2026-09).
-
 A changed SSH host key always fails. `machine trust --replace` is the only
 interface for a deliberately changed key, and every replacement name must also
 be in that command's selected Machine set. The preflight `--trust-on-first-use`
@@ -315,10 +307,7 @@ and takes neither. A `stop` or `restart` with a resolved `--output json`
 requires `--yes`; without it the invocation is `cli.usage` with exit `2` and
 acts on nothing.
 
-`status --watch` is text-only and conflicts with JSON. A valid
-`--watch-interval` without `--watch` is accepted but has no effect; with watch,
-a zero or negative duration resolves to the `5s` default. A
-`machine trust --output json` invocation with pending trust-store writes
+A `machine trust --output json` invocation with pending trust-store writes
 requires `--yes`; without it the invocation must use `--dry-run` or fails
 without writing.
 
@@ -333,9 +322,8 @@ alphanumeric character and otherwise contains only ASCII alphanumerics, `.`,
 `_`, or `-`. A case-insensitive stem equal to `CON`, `PRN`, `AUX`, `NUL`,
 `COM1` through `COM9`, or `LPT1` through `LPT9` is invalid.
 
-`--watch-interval` uses Go `time.ParseDuration` syntax. A non-empty
-`--sha256` is 64 case-insensitive hexadecimal digits, optionally prefixed by
-exact lowercase `sha256:`, and normalizes to lowercase hexadecimal.
+A non-empty `--sha256` is 64 case-insensitive hexadecimal digits, optionally
+prefixed by exact lowercase `sha256:`, and normalizes to lowercase hexadecimal.
 
 `add-ons add --name <name>:<version>` conflicts with a non-empty `--version`.
 An explicitly empty `--version=` is absence. Omission of both version forms

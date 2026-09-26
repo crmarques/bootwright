@@ -3,14 +3,17 @@
 `bootwright` exposes the [desired-state API](api.md) to operators and automation.
 Equivalent logical input produces the same ordered output regardless of TTY,
 locale, map iteration or discovery order. Prompts, explicit sensitive exports,
-watch displays, and the elapsed times, terminal redraw and interleaving of
-concurrent steps' [progress rows](cli/output.md#long-running-progress) are the
-named exceptions. Progress is presentation: the plan, the result rows and the
-receipt that follow it are ordered by the frozen plan whatever ran together.
+and the elapsed times, terminal redraw and interleaving of concurrent steps'
+[progress rows](cli/output.md#long-running-progress) are the named exceptions.
+Progress is presentation: the plan, the result rows and the receipt that follow
+it are ordered by the frozen plan whatever ran together.
 
 Read this page with the [command and flag catalog](cli/commands.md) and
 [output contract](cli/output.md). Together they define the CLI. Unlisted
-commands, aliases, flags, shorthands, modes and operands are usage errors.
+commands, aliases, flags, shorthands, modes and operands are usage errors. An
+available command reads every flag it lists, in its request or its
+presentation, and never accepts one only to ignore it;
+`TestEveryRequestFieldIsRead` refuses a request field no production code reads.
 
 Choose CLI dependencies under the
 [dependency selection rule](architecture.md#dependency-selection-and-reuse).
@@ -108,11 +111,10 @@ process, network, or remote I/O.
 Command and flag names are case-sensitive and may not be abbreviated. A long
 value flag accepts `--flag <value>` or `--flag=<value>`; `-f` additionally
 accepts `-f<value>`. A Boolean flag accepts its bare form as `true` or an
-attached value such as `--watch=false` or `-v=false`; a separated token is a
+attached value such as `--yes=false` or `-h=false`; a separated token is a
 positional operand, not its value. Boolean values use Go's case-sensitive
 `strconv.ParseBool` spellings: `1`, `t`, `T`, `TRUE`, `true`, `True`, `0`, `f`,
-`F`, `FALSE`, `false`, and `False`. The only shorthands are `-h`, `-f`, and
-`-v`.
+`F`, `FALSE`, `false`, and `False`. The only shorthands are `-h` and `-f`.
 
 A command-local flag is recognized only after its complete owning command path
 has been resolved and is not inherited by descendants. Before the complete
