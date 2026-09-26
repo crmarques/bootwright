@@ -15,9 +15,9 @@ the [unavailable result](cli.md#recognized-but-unavailable-commands).
 | [M1h](#m1h--managed-rhel-on-emulated-bare-metal) | Managed RHEL on emulated bare metal | Substrate, Managed OS | product | Specified | awaiting operator acceptance |
 | [M5a](#m5a--managed-rhel-on-physical-bare-metal) | Managed RHEL on physical bare metal | Substrate, Managed OS | product | Specified | blocked |
 | [M4a](#m4a--single-node-openshift-through-the-agent-installer) | Single-node OpenShift through the agent installer | Container cluster, Substrate | product | Specified | blocked |
-| [X14](#x14--adapters-serving-and-cluster-identity) | Adapters, serving and cluster identity | Architecture, Container cluster | safety | Specified | in progress |
+| [X15](#x15--installs-that-neither-strand-nor-over-report) | Installs that neither strand nor over-report | Container cluster | safety | Specified | in progress |
 
-- **Next for agents:** deliver X14, then the [pre-OpenShift program](milestones/backlog.md#pre-openshift-readiness-program-2026-09) in order; promote [audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09) only on request.
+- **Next for agents:** deliver X15, then the [pre-OpenShift program](milestones/backlog.md#pre-openshift-readiness-program-2026-09) in order; promote [audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09) only on request.
 - **Next for operator:** on a clean build descending from `8aa4494`, run [lab-rhel](../examples/lab-rhel/README.md#run-it) and record it in the [acceptance ledger](../docs/acceptance.md) as the [operator guide](../docs/operator-guide.md) describes (M1h), run [lab-sno](../examples/lab-sno/README.md) (M4a) once X16 lands; M5a's rehearsal waits for S3b.
 - **Next to define:** M1i, the [GitOps handoff gate](#next-ordered-outcomes).
 
@@ -234,17 +234,15 @@ not configured, so the operator routes the managed zone; disconnected
 installation waits for a managed `Registry` (C2); and a destroyed cluster's
 physical nodes keep running (C9).
 
-### X14 — adapters, serving and cluster identity
+### X15 — installs that neither strand nor over-report
 
-**Owner:** Architecture, with State reconciliation and Container cluster.
+**Owner:** Container cluster, with State reconciliation and Controller.
 **Kind:** safety, out of sequence, on explicit request on 2026-09-26.
-**Requires:** [X13](milestones/delivered.md#x13--scheduler-liveness-and-completed-removal-proof).
-**Definition:** Specified. **Delivery:** in progress. Items S14 to S18 and F13
-of the
+**Requires:** [X14](milestones/delivered.md#x14--adapters-serving-and-cluster-identity).
+**Definition:** Specified. **Delivery:** in progress. Items T1 (cluster
+goldens), S19 to S21, S13 and Z2 (digest) of the
 [pre-OpenShift program](milestones/backlog.md#pre-openshift-readiness-program-2026-09).
 Exit gates: each item's exit evidence, `make check`, `make docs-check` and CI.
-Every item is implemented; what they left is backlog S15 (rest), S16 (rest)
-and S17 (rest). Remaining: landing through its pull request.
 
 ## Next ordered outcomes
 

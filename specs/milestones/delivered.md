@@ -708,3 +708,42 @@ lost block record can no longer leave an effect unremoved (S12).
 
 **Constraints left behind:** backlog S12 (rest) and the pre-existing S13 it
 surfaced.
+
+### X14 — adapters, serving and cluster identity
+
+**Owner:** Architecture, with State reconciliation and Container cluster.
+Landed on `main` at `732f99b` through pull request 4 on 2026-09-26, on
+explicit request.
+
+**Outcome:** a refused adapter record closes the acknowledgement channel and
+ends a lifecycle adapter's process group at once, while the controller runner
+releases a waiting adapter without killing an authorized native transaction
+(S14). A lifecycle adapter dies with its invocation through a parent-death
+signal and a subreaper walk in the supervisor, and a hangup cancels like a
+terminate, relayed through the sudo supervisor (S15). A still-running earlier
+adapter refuses the next run, and stale run directories are removed with the
+secret files they hold, never through a link (S16). Private published files
+are readable by the serving worker and nothing broader, and a published agent
+image is fetched through the listener with its certificate verified (S17). The
+install identity is the build's kubeconfig trust anchor instead of a
+`metadata.json` the agent installer never writes (S18). A node off the artifact
+server's host and a multi-node cluster on another platform refuse before
+registration (F13).
+
+**Guard tests:** `TestAProtocolRefusalEndsTheAdapterPromptly`,
+`TestAProtocolRefusalReleasesAWaitingAdapter`,
+`TestHangupCancelsTheOperationLikeTerminate`,
+`TestHangupIsRelayedToThePrivilegedOperation`,
+`TestAnAdapterStillRunningRefusesTheNextRun`,
+`TestAStaleRunDirectoryIsRemovedWithItsSecretFiles`,
+`TestTheSweepNeverFollowsALinkOrTouchesWhatIsNotItsOwn`,
+`TestANodeOffTheArtifactServersHostRefusesBeforeRegistration`,
+`TestAMultiNodeClusterOnAnotherPlatformRefusesBeforeRegistration`, and the
+collection tests
+`test_every_file_beneath_a_served_root_is_readable_by_the_worker_and_nothing_broader`,
+`test_the_identity_is_the_anchor_the_image_build_wrote_and_needs_no_metadata`
+and `test_a_lifecycle_playbook_dies_with_its_killed_supervisor`.
+
+**Constraints left behind:** backlog S15 (rest), S16 (rest), S17 (rest), the
+S14 edges recorded in C28 and the per-object reasons in F7; the M4a operator
+gate still waits for X16.
