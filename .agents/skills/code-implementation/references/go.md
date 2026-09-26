@@ -49,14 +49,15 @@ same port contract suite against every production adapter. Use varied input
 ordering for determinism/non-mutation and bounded fuzz/property tests for broad
 byte grammars; retain minimized failures.
 
-Use pinned repository entrypoints; never install an unreviewed latest tool to
-make a gate available. Run [formatting](formatting.md#verification),
-`go test ./...`, `go vet ./...`, and affected repository checks. Run the race gate
-when changed paths may execute concurrently or affect shared state, cancellation,
-or goroutine lifetime; retain full/scheduled race coverage where supported.
+Use pinned repository entrypoints, always `./scripts/go` and never a bare `go`;
+never install an unreviewed latest tool to make a gate available. Run
+`make quick` (formatting, vet, the architecture suite and the changed packages
+with their dependents) and the affected repository checks. Run `make race` when
+changed paths may execute concurrently or affect shared state, cancellation, or
+goroutine lifetime; CI runs it nightly.
 
-For module/import/toolchain changes, run `go mod tidy` with the selected
-toolchain and `go mod verify`, and review the complete `go.mod`/`go.sum` and selected module graph diff. Run the pinned
-vulnerability check (normally `govulncheck ./...`); it establishes only the absence
+For module/import/toolchain changes, run `./scripts/go mod tidy`, then
+`make tidy-check modules-check`, and review the complete `go.mod`/`go.sum` and
+selected module graph diff. Run `make vulncheck`; it establishes only the absence
 of known reachable findings. Review official release notes when pins change.
 Report failed, skipped, flaky, or unavailable gates under the shared workflow.

@@ -1,0 +1,55 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./scripts/go test *)",
+      "Bash(./scripts/go vet *)",
+      "Bash(./scripts/go build *)",
+      "Bash(./scripts/go list *)",
+      "Bash(./scripts/go env *)",
+      "Bash(./scripts/ansible-check *)",
+      "Bash(./scripts/quick-test)",
+      "Bash(make quick)",
+      "Bash(make docs-check)",
+      "Bash(make fmt-check)",
+      "Bash(make vet)",
+      "Bash(make test)",
+      "Bash(make build)",
+      "Bash(make check-offline)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(git clean *)",
+      "Bash(git rebase *)",
+      "Bash(./bin/bootwright apply *)",
+      "Bash(./bin/bootwright destroy *)",
+      "Bash(bootwright apply *)",
+      "Bash(bootwright destroy *)",
+      "Bash(sudo *)",
+      "Bash(ansible-playbook *)"
+    ],
+    "deny": [
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(git reset --hard *)",
+      "Bash(git tag *)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git diff --quiet HEAD -- 2>/dev/null && test -z \"$(git ls-files --others --exclude-standard)\" || make quick >&2",
+            "timeout": 300,
+            "statusMessage": "make quick"
+          }
+        ]
+      }
+    ]
+  }
+}

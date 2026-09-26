@@ -21,7 +21,7 @@ func docsByteBudgets() map[string]int {
 		"CLAUDE.md":           64,
 		"specs/index.md":      5120,
 		"specs/milestones.md": 16800,
-		".agents/skills/code-implementation/SKILL.md": 8500,
+		".agents/skills/code-implementation/SKILL.md": 3072,
 	}
 }
 
@@ -326,7 +326,16 @@ func TestDocsExamplesAreIndexed(t *testing.T) {
 
 func TestDocsStayWithinByteBudgets(t *testing.T) {
 	root := filepath.Join("..", "..")
-	for path, budget := range docsByteBudgets() {
+	budgets := docsByteBudgets()
+	rules, err := filepath.Glob(filepath.Join(root, ".claude", "rules", "*.md"))
+	if err != nil {
+		t.Fatalf("find rules: %v", err)
+	}
+	for _, rule := range rules {
+		relative, _ := filepath.Rel(root, rule)
+		budgets[filepath.ToSlash(relative)] = 1024
+	}
+	for path, budget := range budgets {
 		info, err := os.Stat(filepath.Join(root, path))
 		if err != nil {
 			t.Errorf("budgeted file %s: %v", path, err)

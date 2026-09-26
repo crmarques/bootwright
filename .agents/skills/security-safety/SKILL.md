@@ -6,37 +6,40 @@ description: Review or implement Bootwright trust and effect boundaries, includi
 # Security And Safety
 
 Use [code-implementation](../code-implementation/SKILL.md) for tracked edits.
-[Security](../../../specs/security.md) owns trust and effect requirements;
+[Security](../../../specs/security.md) owns trust and effect requirements and
+lists the [proof each invariant needs](../../../specs/security.md#required-security-proof);
 [state reconciliation](../../../specs/state-reconciliation.md) owns mutation
 proofs and recovery. This skill guides review without granting effect authority.
 
-- For the affected operation, identify protected data, untrusted inputs and
-  outputs, exact target and identity, authority, permitted effects, resource
-  bounds, and failure/cancellation states. Resolve missing mutation boundaries
-  before implementing effects; confirmation cannot supply missing proof.
-- Trace sensitive data through every consumer, including tool output, error
-  wrapping, logs, evidence, temporary artifacts, and cleanup. Verify redaction
-  before formatting or persistence, and inspect failure paths as well as normal
-  output. Use synthetic fixtures and examples.
-- Review paths at the actual open/publish boundary, process arguments and
-  environment at invocation, and endpoints and trust at connection. Test
-  substitution and ambient-authority injection; validation at an earlier layer
-  alone does not prove containment at the effect edge.
-- Treat an unsuccessful or ambiguous probe as unknown. For mutation, trace
-  identity, ownership/absence, authorization, and time-sensitive revalidation
-  into the selected operation. Define the interruption and recovery evidence
-  before implementing cleanup or retries.
-- Check dependency use against the operation's effect and integrity boundaries.
-  For frozen recovery, apply the state contract without silently substituting
-  a dependency.
-- Load [Go](../code-implementation/references/go.md) for Go trust edges and
-  [Ansible](../code-implementation/references/ansible.md) for managed remote
-  operations. For bare-metal install, root-disk selection, or erase, also read
-  [the disk-safety finding](../../knowledge/openshift-agent-disk-safety.md).
+## Rules this repository has already broken once
 
-Prove both the intended effect and absence of prohibited writes, network
-calls, processes, secret reads, and disclosures. Include applicable traversal,
-substitution, bounds, unknown probes, wrong identity, interruption, and cleanup
-failures. Report findings with the violated contract, evidence, impact,
-smallest correction, and verification. Distinguish a missing test from a
-proven safety failure and never report unavailable evidence as a pass.
+Each is, or must become, an executable guard. Check every one a change touches.
+
+- A destructive physical path proves the exact target (system identity, complete
+  MAC set, powered off) immediately before it inserts media, and again inside
+  the installer. A root disk is named by a device path; an empty or wwn-only
+  selector refuses. Read [the disk-safety finding](../../knowledge/openshift-agent-disk-safety.md).
+- Consumer roles dispatch on the frozen substrate and fail closed on an unknown
+  arm, and a task named for a proof never mutates. The structural tests live in
+  `ansible/collections/ansible_collections/bootwright/core/tests/unit/test_role_task_order.py`.
+- No secret or capability-bearing value (a token, a private URL, a key) enters a
+  publicly served artifact. Private material travels only over verified TLS.
+- Concurrent blocks share no mutable file: roles use the runner's per-invocation
+  scratch, never a fixed host path.
+- A durable write stages and renames, and removes its own stage when it fails; no
+  refusal leaves state that blocks the next command.
+- A decision taken under a shared lock is re-proved under the exclusive lock
+  before it mutates.
+- An operator-supplied file is opened once, without following links, and passed
+  on as a descriptor; SSH configuration and ambient environment are isolated.
+
+## Review
+
+Trace sensitive data through outputs, logs, errors, evidence, temporary files
+and cleanup. Check paths at the open boundary, arguments and environment at
+invocation, and endpoints and trust at connection. Treat an unsuccessful or
+ambiguous probe as unknown; confirmation never supplies missing proof. Prove the
+intended effect and the absence of prohibited writes, network calls, processes,
+secret reads and disclosures. Report the violated contract, evidence, impact,
+smallest correction and verification. A missing test is not a proven failure,
+and unavailable evidence is never a pass.

@@ -1,7 +1,8 @@
 # Specification Index
 
-Start with [project intent](project.md). Read [milestones](milestones.md) for the
-current implementation slice, then load only the contracts needed for the task.
+Start with [project intent](project.md) when scope matters. Read the
+[milestones](milestones.md) status header and the section of the authorized
+slice, then load only the contracts needed for the task.
 A specified capability is not necessarily implemented or authorized.
 
 | Question | Owner |

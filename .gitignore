@@ -9,7 +9,8 @@
 /out/
 /rendered/
 /.cache/
-/.claude/
+/.claude/settings.local.json
+/.claude/worktrees/
 /.codex/
 /site/
 /.state/
