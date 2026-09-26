@@ -33,10 +33,6 @@ An enabled `CustomPlaybook` is an object no capability realizes, so a fresh
 before content access or operation registration, with no authorization bypass.
 A disabled declaration plans no work.
 
-Not yet met: the fresh `plan` preview does not run this refusal, so only
-`apply` refuses; tracked as
-[backlog F1](../milestones/backlog.md#audit-follow-ups-2026-09).
-
 Executable custom automation requires a separately authorized replacement
 schema that meets every prerequisite of the
 [custom-code boundary](../security.md#custom-code).

@@ -76,10 +76,8 @@ Machine receives.
 
 Not yet met: admission neither refuses a wildcard `bindAddress` nor stops
 defaulting it to `0.0.0.0`, so a provider that omits it validates and then
-refuses at apply, before registration, while the `plan` preview accepts it;
-tracked as [backlog F6](../milestones/backlog.md#audit-follow-ups-2026-09),
-with the preview gap as
-[backlog F1](../milestones/backlog.md#audit-follow-ups-2026-09).
+refuses at `plan` and `apply`, before registration; tracked as
+[backlog F6](../milestones/backlog.md#audit-follow-ups-2026-09).
 
 ### Refused arms
 

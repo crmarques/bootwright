@@ -428,8 +428,15 @@ shape a capability reports unsupported. A frozen plan requires a resolved
 implementation for every block; a removal planned from a frozen plan is never
 refused this way.
 
-Not yet met: the fresh `plan` preview does not run this refusal, so only
-`apply` refuses; tracked as [backlog F1](milestones/backlog.md#audit-follow-ups-2026-09).
+A fresh `plan` previews exactly the decision a fresh `apply` registers, and one
+path takes it: it compiles the frozen input, refuses what this executable
+cannot realize, plans, refuses `lifecycle.state` for a plan with no block, and
+refuses a selection that admits no startable block. Both verbs report a refusal
+of that decision with the same code, message and remedy, and a preview that
+succeeds shows the plan `apply` then registers. The preview stops at the
+decision: it binds no secret, claims neither the controller host nor a host
+reservation, takes no exclusive lock and registers nothing, so a refusal from
+those steps, like the authorization and confirmation gates, stays `apply`'s.
 
 A domain capability may define ordered presentation groups within its block for
 one operation performed across one or more Machines. The capability owns each

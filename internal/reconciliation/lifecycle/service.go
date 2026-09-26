@@ -118,18 +118,20 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 	if err != nil {
 		return nil, err
 	}
-	fresh := func(verb reconciliation.Verb, next string) (*PlanResult, error) {
-		plan, _, err := s.freshPlan(ctx, view, verb)
+	// A fresh preview is the fresh apply's own decision, so it refuses exactly
+	// what that apply would refuse before it registers anything.
+	fresh := func() (*PlanResult, error) {
+		decided, err := s.freshApply(ctx, view, selection)
 		if err != nil {
 			return nil, err
 		}
-		result := planPreview(plan, nil, selection)
-		result.Context, result.Verb = view.Identity(), string(verb)
-		result.Receipt = Receipt{Operation: "none", Verb: "plan", State: "preview", Next: next}
+		result := planPreview(decided.plan, nil, selection)
+		result.Context, result.Verb = view.Identity(), string(decided.verb)
+		result.Receipt = Receipt{Operation: "none", Verb: "plan", State: "preview", Next: string(decided.verb)}
 		return &result, nil
 	}
 	if index.Current == "" {
-		return fresh(reconciliation.Apply, "apply")
+		return fresh()
 	}
 	operation, err := store.ReadOperation(ctx, index.Current)
 	if err != nil {
@@ -157,7 +159,7 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 		return &result, nil
 	}
 	if operation.Verb == reconciliation.Destroy && operation.State == reconciliation.OperationDone {
-		return fresh(reconciliation.Apply, "apply")
+		return fresh()
 	}
 	result := planPreview(frozen, states, selection)
 	result.Context, result.Verb, result.Continuation = view.Identity(), string(operation.Verb), true
