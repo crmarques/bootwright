@@ -542,9 +542,11 @@ func contractEvidence(t *testing.T, row contractRow, example contractExample, bl
 // resolved done. A binding whose removal retains what its apply realized
 // leaves that absence unknown instead, and is held to the no-effect evidence
 // its spec names, when it names one, as absence is held elsewhere; an
-// indivisible one leaves partial evidence unknown, as its spec says. The
-// presence and absence fixtures are those contractEvidenceControls proves the
-// other operation accepts, so refusing them is the kind check's alone. The blocks are an apply's, so an
+// indivisible one leaves partial evidence unknown, as its spec says. Neither
+// operation accepts that no-effect evidence, since a direct result with
+// positive no effect is never success. The presence and absence fixtures are
+// those contractEvidenceControls proves the other operation accepts, so
+// refusing them is the kind check's alone. The blocks are an apply's, so an
 // observation here is an apply's resolution; how a destroy's resolution reads
 // presence is S27's to settle.
 func contractEvidenceKinds(t *testing.T, row contractRow, block reconciliation.Block, capability lifecycle.Capability, execution lifecycle.Execution, runner *contractRunner, findings *contractFindings) {
@@ -564,6 +566,7 @@ func contractEvidenceKinds(t *testing.T, row contractRow, block reconciliation.B
 	if row.noEffect != nil {
 		noEffect = contractNoEffect(t, row, block.RequestDigest)
 		attempts[0].evidence = append(attempts[0].evidence, noEffect)
+		attempts[1].evidence = append(attempts[1].evidence, noEffect)
 	}
 	for _, attempt := range attempts {
 		for _, outcome := range []string{"changed", "unchanged"} {
