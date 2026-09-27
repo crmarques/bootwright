@@ -97,14 +97,18 @@ func lineDiff(want, got string) string {
 // compared with its golden and still decodes as the version this build writes.
 // The checksummed case declares its boot media digest in the prefixed,
 // uppercase form admission accepts, so its golden pins the canonical form the
-// request freezes; a hosted tree declares no digest.
+// request freezes; a hosted tree declares no digest. The SSH-placed case puts
+// the artifact server on a host declaring every SSH access field, so its golden
+// pins each key of the placement's SSH arm.
 func TestTheFrozenRequestsMatchTheirGoldens(t *testing.T) {
 	checksummed := api.NewObject(api.MachineImage, "rhel-9-8-boot", api.Value{}, api.MapValue(
 		text("bootMedia", "local-media:rhel-9.8-x86_64-boot.iso"),
 		text("checksum", "SHA256:"+strings.ToUpper(strings.Repeat("0123456789abcdef", 4))),
 	))
+	sshPlaced := artifactServer(text("machineRef", "services"), text("bindAddress", "192.0.2.2"))
 	for name, catalog := range map[string]api.Catalog{
 		"lab-rhel": labCatalog(), "lab-rhel-checksummed": labCatalog(checksummed),
+		"lab-rhel-ssh-placed": labCatalog(servicesHost(), sshPlaced),
 	} {
 		t.Run(name, func(t *testing.T) {
 			request, _ := onlyRequest(t, catalog)
