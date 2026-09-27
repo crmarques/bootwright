@@ -88,14 +88,14 @@ func installExecution(t *testing.T, catalog api.Catalog, digest string) (lifecyc
 	}, requests[0]
 }
 
-// anchorIdentity is how the inspection names this build: the SHA-256 of the
-// certificate authority and client certificate in the kubeconfig its installer
-// wrote with the image, here the digest of the upstream-faithful work area in
-// test_containercluster_install_inspect.py. foreignAnswer is what the state
-// read records when an API answers but rejects that anchor
+// anchorIdentity is how the inspection names this build: the domain-separated
+// SHA-256 of the administrator client certificate in the kubeconfig its
+// installer wrote with the image, here the digest of the upstream-faithful work
+// area in test_containercluster_install_inspect.py. foreignAnswer is what the
+// state read records when an API answers but rejects that kubeconfig
 // (roles/containercluster_install_agent/tasks/state.yml).
 const (
-	anchorIdentity = "4245f5e001d445663c189f04c0a614168ed3c05a522d38680d1aa1ca248d6049"
+	anchorIdentity = "d21b91799c1b2d06e949151732b30343fc42b122f785c10685fad98570b00a02"
 	foreignAnswer  = "foreign"
 )
 

@@ -1,4 +1,4 @@
-"""How the install role reads the cluster through the build's trust anchor.
+"""How the install role reads the cluster through the build's own kubeconfig.
 
 Rendering the role's task files needs Ansible's controller (DataLoader and
 Templar), which ansible-test does not offer to unit tests under
@@ -8,6 +8,7 @@ own tests stay beside its module.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import os
 import pathlib
@@ -16,7 +17,8 @@ import pytest
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 
-from ansible_collections.bootwright.core.plugins.modules.containercluster_install_inspect import KUBECONFIG
+from ansible_collections.bootwright.core.plugins.action import containercluster_install_protocol as protocol
+from ansible_collections.bootwright.core.plugins.modules.containercluster_install_inspect import KUBECONFIG, observe
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "containercluster_install_agent"
 LOADER = DataLoader()
@@ -29,10 +31,49 @@ def pem(kind, body):
 # The same placeholder bodies as the inspection's tests: only their digest matters.
 AUTHORITY = pem("CERTIFICATE", "bG9hZGJhbGFuY2Vy") + pem("CERTIFICATE", "bG9jYWxob3N0") + pem("CERTIFICATE", "c2VydmljZQ==")
 CLIENT = pem("CERTIFICATE", "YWRtaW4=")
+KEY = pem("RSA PRIVATE KEY", "a2V5")
+# The router CA bundle, the wildcard serving certificate then the ingress
+# operator's CA, as the inspection's tests take it from the default-ingress-cert
+# ConfigMap.
+ROUTER = pem("CERTIFICATE", "d2lsZGNhcmQ=") + pem("CERTIFICATE", "aW5ncmVzcy1vcGVyYXRvcg==")
 
 
-def anchor(authority=AUTHORITY, client=CLIENT):
-    return hashlib.sha256(authority + b"\0" + client).hexdigest()
+def anchor(client=CLIENT):
+    return hashlib.sha256(b"bootwright/containercluster/identity/v2\0" + client).hexdigest()
+
+
+def encoded(data):
+    return base64.b64encode(data).decode()
+
+
+# auth/kubeconfig once `agent wait-for install-complete` ran:
+# addRouterCAToClusterCA prepended the router CA bundle to the authority
+# AgentAdminClient wrote and clientcmd.WriteToFile wrote the file back, adding
+# apiVersion and kind in their sorted places and the client certificate and key
+# unchanged (cmd/openshift-install/command/waitfor.go:65-84 and :291-334 in
+# openshift/installer release-4.21, with the vendored client-go v0.34.1
+# tools/clientcmd loader.go:448-465 and :495-497). The layout is the one
+# rewritten() in the inspection's tests builds.
+REWRITTEN = (
+    "apiVersion: v1\n"
+    "clusters:\n"
+    "- cluster:\n"
+    "    certificate-authority-data: %s\n"
+    "    server: https://api.sno.lab.example:6443\n"
+    "  name: sno\n"
+    "contexts:\n"
+    "- context:\n"
+    "    cluster: sno\n"
+    "    user: admin\n"
+    "  name: admin\n"
+    "current-context: admin\n"
+    "kind: Config\n"
+    "users:\n"
+    "- name: admin\n"
+    "  user:\n"
+    "    client-certificate-data: %s\n"
+    "    client-key-data: %s\n"
+) % (encoded(ROUTER + AUTHORITY), encoded(CLIENT), encoded(KEY))
 
 
 def trusted(path):
@@ -130,12 +171,17 @@ def test_the_foreign_marker_can_never_equal_an_identity():
     assert len(marker) != 64 or set(marker) - set("0123456789abcdef")
 
 
-def completion(name):
-    """The identity argument of the evidence one task file publishes."""
+def publication(name):
+    """The arguments of the completion evidence one task file publishes."""
     def publishes(task):
         arguments = task.get("bootwright.core.containercluster_install_protocol")
         return isinstance(arguments, dict) and arguments.get("phase") == "completed"
-    return one(name, publishes)["bootwright.core.containercluster_install_protocol"]["identity"]
+    return one(name, publishes)["bootwright.core.containercluster_install_protocol"]
+
+
+def completion(name):
+    """The identity argument of the evidence one task file publishes."""
+    return publication(name)["identity"]
 
 
 # The evidence names the identity the inspection took before any effect, never
@@ -170,3 +216,70 @@ def test_the_completion_publishes_the_identity_the_settled_decision_compared(bef
     })
     assert templar.template(decide["ansible.builtin.set_fact"]["containercluster_install_agent_settled"]) is settled
     assert templar.template(completion("apply.yml")) == before
+
+
+RELEASE = "4.21.15"
+DIGEST = "1" * 64
+
+
+def inspected(root, config):
+    """What the inspection names over a work area holding one kubeconfig."""
+    (root / "auth").mkdir(parents=True)
+    (root / KUBECONFIG).write_text(config)
+    return observe({"workRoot": str(root), "image": {"path": str(root / "served"), "url": "https://192.0.2.1:8443"}})
+
+
+def resolved(observation):
+    """The state the state file resolves for a whole cluster reporting its installation completed.
+
+    Each register is what the command module returns for one of the role's
+    reads, and the controller read is what redfish_boot returns
+    (plugins/modules/redfish_boot.py, RETURN) for a node running with its media
+    released.
+    """
+    task = state_task(lambda task: "ansible.builtin.set_fact" in task and "vars" in task)
+    scope = dict(task["vars"])
+    scope.update({
+        "bootwright_cluster_install_request": {"release": {"version": RELEASE},
+                                               "nodes": [{"name": "master-0", "machine": "sno-01"}]},
+        "containercluster_install_agent_before": {"observation": observation},
+        "containercluster_install_agent_cluster": {"rc": 0, "stdout": "", "stderr": ""},
+        "containercluster_install_agent_release": {"rc": 0, "stdout": RELEASE, "stderr": ""},
+        "containercluster_install_agent_completion": {"rc": 0, "stdout": "True\nCompleted\n" + RELEASE, "stderr": ""},
+        "containercluster_install_agent_nodes": {"rc": 0, "stdout": "master-0", "stderr": ""},
+        "containercluster_install_agent_controllers": {"results": [
+            {"changed": False, "item": {"machine": "sno-01"}, "media": "", "power": "On"}]},
+    })
+    return Templar(loader=LOADER, variables=scope).template(
+        task["ansible.builtin.set_fact"]["containercluster_install_agent_state"])
+
+
+# A retry, or the resolution of an attempt interrupted after `agent wait-for
+# install-complete` rewrote the kubeconfig, inspects the rewritten file before
+# any effect. It still names this build's identity, so a read that succeeds
+# through it answers that identity rather than the foreign marker, the settled
+# decision holds for a completed cluster, and the evidence proves completion.
+def test_after_the_install_complete_rewrite_a_completed_cluster_still_proves_this_build(tmp_path):
+    observation = inspected(tmp_path / "work", REWRITTEN)
+    assert observation["identity"] == IDENTITY
+    assert answered(observation["identity"], 0) == IDENTITY != foreign()
+    state = resolved(observation)
+    assert state["cluster"] == IDENTITY
+    decide = one("apply.yml", lambda task: "containercluster_install_agent_settled" in (
+        task.get("ansible.builtin.set_fact") or {}))
+    scope = {
+        "bootwright_cluster_install_request": {"release": {"version": RELEASE}},
+        "bootwright_cluster_install_digest": DIGEST,
+        "containercluster_install_agent_before": {"observation": observation},
+        "containercluster_install_agent_state": state,
+    }
+    settled = Templar(loader=LOADER, variables=scope).template(
+        decide["ansible.builtin.set_fact"]["containercluster_install_agent_settled"])
+    assert settled is True
+    scope["containercluster_install_agent_settled"] = settled
+    arguments = Templar(loader=LOADER, variables=scope).template(publication("apply.yml"))
+    assert arguments["outcome"] == "unchanged"
+    found = protocol.evidence(arguments, DIGEST, False)
+    assert found["identity"] == found["cluster"] == IDENTITY
+    assert found["postcondition"] is True
+    assert protocol.unproved(found) == []

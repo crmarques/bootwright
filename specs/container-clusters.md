@@ -239,17 +239,27 @@ installation completed only when its `ClusterVersion` condition `Available` is
 it starts and marks it `Completed` once the whole release is applied, so a
 cluster still installing reports no completion, and neither does an installer
 that exited or an answer that lacks either field. The
-identity is the SHA-256 of the certificate authority and the client certificate
-in the administrator kubeconfig, both minted when the image was built, so it
-names the cluster that image installs and no other; the agent installer records
-no other identity, and a work area without that kubeconfig, or with one the
-installer would not write, names none. The cluster answers with the identity
-only when its `ClusterVersion` is read through that kubeconfig with the serving
-certificate verified against that authority and the request authenticated by
-that client certificate. An API that answers but rejects the anchor, with a
-certificate the authority does not verify or a 401 or 403, is a foreign answer,
-recorded as a fixed marker that never equals an identity, and an API that does
-not answer is recorded as none. The cluster is read through its own API with the
+identity is a domain-separated SHA-256 of the client certificate in the
+administrator kubeconfig. That certificate is signed by a signer minted when the
+image was built, so it names the cluster that image installs and no other.
+`agent wait-for install-complete` rewrites the kubeconfig once the cluster
+initializes, and again on each later run, prepending the router CA bundle to its
+certificate authority and adding `apiVersion` and `kind`, but leaves the client
+certificate unchanged, so each rewrite leaves the identity unchanged while the
+file stays within the 64 KiB the inspection reads. Each run grows the file by
+the encoded bundle, about 3 KiB when it is the ingress operator's RSA-2048
+wildcard certificate and CA, so the bound holds for roughly 18 rewrites. The
+agent installer records no other identity. A work area without that kubeconfig
+names none, and so does one whose kubeconfig exceeds that bound, is in neither
+form the installer writes, lacks an embedded certificate authority, disables
+verification or authenticates any other way. The cluster answers with the
+identity only when its `ClusterVersion` is read through that kubeconfig with the
+serving certificate verified against its certificate authority and the request
+authenticated by that client certificate. An API that answers but rejects that
+kubeconfig, with a certificate the authority does not verify or a 401 or 403,
+is a foreign answer, recorded as a fixed marker that never equals an identity,
+and an API that does not answer is recorded as none.
+The cluster is read through its own API with the
 client the controller stage published, so completion is what the cluster says
 about itself rather than what the installer said before it exited. The evidence
 records the identity, what answered, the release, whether the cluster reported
@@ -298,13 +308,6 @@ or the bootstrap wait leaves. Anything else stays unknown, including a foreign
 answer, a foreign image while nothing answers, and a node running while nothing
 answers and no node presents this cluster's own image, because the first two
 may belong to another installation and the last may be installing now.
-
-Not yet met: `agent wait-for install-complete` rewrites the work area's
-`auth/kubeconfig` once the cluster initializes, prepending the router CA to
-its authority and adding `apiVersion` and `kind`, and the inspection then reads
-no identity, so an attempt after that rewrite, or the resolution of one
-interrupted after it, cannot prove this cluster and does not converge; tracked
-as [backlog S26](milestones/backlog.md#pre-openshift-readiness-program-2026-09).
 
 **Quiescence and cancellation.** This block owns published boot media and
 controller-side state that a running cluster does not read, so its quiescence
