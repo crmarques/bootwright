@@ -9,6 +9,7 @@ import (
 	"go/types"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -17,30 +18,44 @@ import (
 // documentedBound ties one bound a spec states to the Go code that enforces
 // it. The phrase is the spec text around the value, with %s where the value
 // appears, and it must occur exactly once. The constant names a package-level
-// constant. A duration is a deadline, and runner names the function in the
-// same source that passes the constant itself to context.WithTimeout.
+// constant of source. A duration is a deadline, and applied says where it
+// takes effect; a count names nothing there.
 type documentedBound struct {
-	spec, phrase, source, constant, runner string
+	spec, phrase, source, constant string
+	applied                        *application
+}
+
+// application names the function that passes a deadline to
+// context.WithTimeout, in the source that declares it when that is not the
+// bound's own. The function passes the constant itself, or a call to a
+// function of that source which returns the constant for a request that states
+// no deadline of its own. A ceiling is instead what that function clamps a
+// stated deadline to with min, so no request's deadline passes it.
+type application struct {
+	runner, source string
+	ceiling        bool
 }
 
 func documentedBounds() []documentedBound {
 	const (
-		contexts     = "specs/contexts.md"
-		store        = "internal/workspace/contextfs/store.go"
-		bundles      = "internal/workspace/contextfs/controller_bundles_linux_amd64.go"
-		operations   = "internal/reconciliation/operationstore/records.go"
-		lifecycleRun = "internal/reconciliation/ansiblerunner/process_linux_amd64.go"
-		setupRun     = "internal/controller/ansiblelocal/runner_linux_amd64.go"
+		contexts         = "specs/contexts.md"
+		store            = "internal/workspace/contextfs/store.go"
+		bundles          = "internal/workspace/contextfs/controller_bundles_linux_amd64.go"
+		operations       = "internal/reconciliation/operationstore/records.go"
+		lifecycleRun     = "internal/reconciliation/ansiblerunner/process_linux_amd64.go"
+		lifecycleRequest = "internal/reconciliation/lifecycle/invocation.go"
+		setupRun         = "internal/controller/ansiblelocal/runner_linux_amd64.go"
 	)
 	return []documentedBound{
-		{contexts, "| Active or reserved context names | %s |", store, "maxContexts", ""},
-		{contexts, "The %s-name bound applies", store, "maxContexts", ""},
-		{contexts, "| Revisions per context | %s |", store, "maxRevisions", ""},
-		{contexts, "| Retained [controller bundle namespaces](contexts/controller-record.md#bounds) | %s |", bundles, "maxControllerBundles", ""},
-		{"specs/contexts/controller-record.md", "There are at most %s retained bundle", bundles, "maxControllerBundles", ""},
-		{contexts, "| Lifecycle operations one context retains | %s |", operations, "MaxOperations", ""},
-		{contexts, "| One lifecycle adapter invocation | %s |", lifecycleRun, "invocationTimeout", "execute"},
-		{contexts, "| One controller Ansible run: setup, its recovery or a controller-stage client installation | %s |", setupRun, "runTimeout", "runProcess"},
+		{contexts, "| Active or reserved context names | %s |", store, "maxContexts", nil},
+		{contexts, "The %s-name bound applies", store, "maxContexts", nil},
+		{contexts, "| Revisions per context | %s |", store, "maxRevisions", nil},
+		{contexts, "| Retained [controller bundle namespaces](contexts/controller-record.md#bounds) | %s |", bundles, "maxControllerBundles", nil},
+		{"specs/contexts/controller-record.md", "There are at most %s retained bundle", bundles, "maxControllerBundles", nil},
+		{contexts, "| Lifecycle operations one context retains | %s |", operations, "MaxOperations", nil},
+		{contexts, "| One lifecycle adapter invocation whose request states no deadline | %s |", lifecycleRun, "invocationTimeout", &application{runner: "execute"}},
+		{contexts, "| The longest deadline a lifecycle adapter request may state | %s |", lifecycleRequest, "MaxDeadline", &application{runner: "execute", source: lifecycleRun, ceiling: true}},
+		{contexts, "| One controller Ansible run: setup, its recovery or a controller-stage client installation | %s |", setupRun, "runTimeout", &application{runner: "runProcess"}},
 	}
 }
 
@@ -61,16 +76,159 @@ func TestDocumentedBoundsMatchCode(t *testing.T) {
 			if count := strings.Count(string(spec), phrase); count != 1 {
 				t.Errorf("%s states %q %d times, want once: %s in %s changed, or the spec did", bound.spec, phrase, count, bound.constant, bound.source)
 			}
-			if duration != (bound.runner != "") {
-				t.Fatalf("%s names runner %q; a duration names the function that applies it, and a count names none", bound.constant, bound.runner)
+			if duration != (bound.applied != nil) {
+				t.Fatalf("%s: a duration names the function that applies it, and a count names none", bound.constant)
 			}
-			if bound.runner != "" {
-				if deadline := runnerDeadline(t, syntax, bound.source, bound.runner); types.ExprString(deadline) != bound.constant {
-					t.Errorf("%s in %s passes %s to context.WithTimeout, want %s", bound.runner, bound.source, types.ExprString(deadline), bound.constant)
+			if bound.applied != nil {
+				if problem := appliedDeadline(t, root, bound, syntax); problem != "" {
+					t.Error(problem)
 				}
 			}
 		})
 	}
+}
+
+// appliedDeadline reports how the runner fails to apply a deadline bound, or
+// nothing when it applies it as the bound says.
+func appliedDeadline(t *testing.T, root string, bound documentedBound, declared *ast.File) string {
+	t.Helper()
+	source, syntax, name := bound.source, declared, bound.constant
+	if bound.applied.source != "" && bound.applied.source != bound.source {
+		source = bound.applied.source
+		parsed, err := parser.ParseFile(token.NewFileSet(), filepath.Join(root, source), nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		syntax, name = parsed, importedName(t, parsed, source, bound.source)+"."+bound.constant
+	}
+	runner := bound.applied.runner
+	deadline := runnerDeadline(t, syntax, source, runner)
+	if !bound.applied.ceiling && types.ExprString(deadline) == name {
+		return ""
+	}
+	var function *ast.Ident
+	if call, ok := deadline.(*ast.CallExpr); ok {
+		function, _ = call.Fun.(*ast.Ident)
+	}
+	if function == nil {
+		return fmt.Sprintf("%s in %s passes %s to context.WithTimeout, want %s or a call to a function of that source applying it", runner, source, types.ExprString(deadline), name)
+	}
+	for _, returned := range returnedExpressions(t, syntax, source, function.Name) {
+		if !bound.applied.ceiling && types.ExprString(returned) == name {
+			return ""
+		}
+		if clamp, ok := returned.(*ast.CallExpr); ok && bound.applied.ceiling && types.ExprString(clamp.Fun) == "min" {
+			for _, argument := range clamp.Args {
+				if types.ExprString(argument) == name {
+					return ""
+				}
+			}
+		}
+	}
+	if bound.applied.ceiling {
+		return fmt.Sprintf("%s in %s never clamps the deadline %s passes to context.WithTimeout to %s with min", function.Name, source, runner, name)
+	}
+	return fmt.Sprintf("%s in %s never returns %s for the deadline %s passes to context.WithTimeout", function.Name, source, name, runner)
+}
+
+// deadlineProof is the test each capability that states its run's deadline
+// declares in its own package: the deadline covers every budget its frozen
+// request carries and stays within the ceiling the runner holds it to.
+const deadlineProof = "TestEveryCapabilityDeadlineCoversItsFrozenBudgets"
+
+// A capability states its run's deadline through the Deadline of the
+// invocation it builds. Each package that does declares deadlineProof, so a
+// capability cannot start stating a deadline without proving it covers what
+// its request waits for; this suite reads sources and imports none of them.
+func TestEveryCapabilityStatingADeadlineProvesIt(t *testing.T) {
+	const invocation = "github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	stating := map[string]bool{}
+	for _, source := range productionSources(t) {
+		for _, imported := range source.imports {
+			if imported.path != invocation {
+				continue
+			}
+			ast.Inspect(source.syntax, func(node ast.Node) bool {
+				literal, ok := node.(*ast.CompositeLit)
+				if !ok || !isSelector(literal.Type, imported.alias, "Invocation") {
+					return true
+				}
+				for _, element := range literal.Elts {
+					if field, ok := element.(*ast.KeyValueExpr); ok && types.ExprString(field.Key) == "Deadline" {
+						stating[source.owner] = true
+					}
+				}
+				return true
+			})
+		}
+	}
+	if !stating["internal/managedos/installation"] {
+		t.Fatalf("no invocation states a deadline in internal/managedos/installation; found %v, so the walk stopped seeing them", stating)
+	}
+	for owner := range stating {
+		tests, err := filepath.Glob(filepath.Join("..", "..", owner, "*_test.go"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		declared := false
+		for _, path := range tests {
+			syntax, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, declaration := range syntax.Decls {
+				if function, ok := declaration.(*ast.FuncDecl); ok && function.Recv == nil && function.Name.Name == deadlineProof {
+					declared = true
+				}
+			}
+		}
+		if !declared {
+			t.Errorf("%s states its run's deadline but declares no %s", owner, deadlineProof)
+		}
+	}
+}
+
+// importedName is the name a source refers to the package declaring a bound by.
+func importedName(t *testing.T, syntax *ast.File, source, declaring string) string {
+	t.Helper()
+	want := "github.com/crmarques/bootwright/" + filepath.ToSlash(filepath.Dir(declaring))
+	for _, imported := range syntax.Imports {
+		if path, err := strconv.Unquote(imported.Path.Value); err == nil && path == want {
+			if imported.Name != nil {
+				return imported.Name.Name
+			}
+			return filepath.Base(path)
+		}
+	}
+	t.Fatalf("%s does not import %s, which declares the bound it applies", source, want)
+	return ""
+}
+
+// returnedExpressions lists every expression one function of a source returns.
+func returnedExpressions(t *testing.T, syntax *ast.File, source, function string) []ast.Expr {
+	t.Helper()
+	var found []ast.Expr
+	declared := false
+	for _, declaration := range syntax.Decls {
+		candidate, ok := declaration.(*ast.FuncDecl)
+		if !ok || candidate.Recv != nil || candidate.Name.Name != function || candidate.Body == nil {
+			continue
+		}
+		declared = true
+		ast.Inspect(candidate.Body, func(node ast.Node) bool {
+			if _, literal := node.(*ast.FuncLit); literal {
+				return false
+			}
+			if statement, ok := node.(*ast.ReturnStmt); ok {
+				found = append(found, statement.Results...)
+			}
+			return true
+		})
+	}
+	if !declared {
+		t.Fatalf("%s declares no function %s", source, function)
+	}
+	return found
 }
 
 // boundExpression finds the value of the package-level constant that defines a

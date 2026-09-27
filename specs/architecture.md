@@ -663,11 +663,15 @@ acknowledgement channel, so an adapter waiting for one fails instead of waiting
 out the deadline, and the lifecycle runner kills the adapter's process group.
 The controller runner kills nothing on a refusal: the adapter fails at its next
 acknowledgement, and an authorized native transaction first runs to its end. A
-deadline (2 hours for a lifecycle run, 10 minutes for the controller runner) or
-a cancellation kills the adapter's process group, sparing only an authorized
-native transaction. A descendant still holding the channel after the adapter
-exits is drained for 5 seconds, or 60 once a controller run is prepared or
-cancelled, and the result is lost.
+deadline or a cancellation kills the adapter's process group, sparing only an
+authorized native transaction. A controller run's deadline is 10 minutes. A
+lifecycle run's is the one its request states, which its capability derives
+from the wait budgets that request froze plus a margin for the rest of the run,
+held to a ceiling of 6 hours; a request that states none keeps 2 hours, and the
+[bounds table](contexts.md#storage-locking-and-publication) names each
+constant. A descendant still holding the channel after the adapter exits is
+drained for 5 seconds, or 60 once a controller run is prepared or cancelled,
+and the result is lost.
 
 A lifecycle attempt is then `unknown` after a refusal, a deadline, a lost result
 or a zero exit without `completed`; `failed` after a non-zero exit that broke no

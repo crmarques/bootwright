@@ -349,11 +349,14 @@ Secrets limits additionally bound their trees.
 | Revisions per context | 4096 | `maxRevisions` in `internal/workspace/contextfs/store.go` |
 | Retained [controller bundle namespaces](contexts/controller-record.md#bounds) | 16 | `maxControllerBundles` in `internal/workspace/contextfs/controller_bundles_linux_amd64.go` |
 | Lifecycle operations one context retains | 4096 | `MaxOperations` in `internal/reconciliation/operationstore/records.go` |
-| One lifecycle adapter invocation | 2 hours | `invocationTimeout` in `internal/reconciliation/ansiblerunner/process_linux_amd64.go` |
+| One lifecycle adapter invocation whose request states no deadline | 2 hours | `invocationTimeout` in `internal/reconciliation/ansiblerunner/process_linux_amd64.go` |
+| The longest deadline a lifecycle adapter request may state | 6 hours | `MaxDeadline` in `internal/reconciliation/lifecycle/invocation.go` |
 | One controller Ansible run: setup, its recovery or a controller-stage client installation | 10 minutes | `runTimeout` in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
 
 `TestDocumentedBoundsMatchCode` compares each value with its code, and each
-deadline with the one its runner passes to `context.WithTimeout`.
+deadline with the one its runner passes to `context.WithTimeout`: the lifecycle
+runner passes a request's own deadline clamped to the longest one, or the
+default for a request that states none.
 
 Missing registry in a nonempty root is
 corruption, except that explicit init may finish publication when the root's

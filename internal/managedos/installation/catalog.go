@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
+	"time"
 )
 
 // Implementation is the frozen identity of this capability. A plan records it,
@@ -14,7 +15,28 @@ const Implementation = "os-install-anaconda-v1"
 // same kind through another implementation, so a block resolves by both.
 const Kind = "Machine"
 
-const requestVersion = "os-install-anaconda-v3"
+const requestVersion = "os-install-anaconda-v4"
+
+// installationBudgets are the waits every installation this build plans
+// freezes. The installer takes minutes to write a disk; a physical server adds
+// its own power-on self test before it answers; and its fleet account answers
+// once sshd has started, after the identity channel already does. Each is
+// generous and bounded rather than open-ended.
+var installationBudgets = Budgets{
+	Installer:    Budget{Attempts: 180, DelaySeconds: 20},
+	Identity:     Budget{Attempts: 120, DelaySeconds: 30},
+	Reachability: Budget{Attempts: 30, DelaySeconds: 10},
+}
+
+// mediaMargin is what a run's deadline allows beyond its budgets: publishing
+// the package tree, building the installer image, booting it, the controller's
+// own power and media polls, which the adapter bounds with fixed counts rather
+// than budgets, and each read's own time between the budgets' pauses. A
+// recorded lab-rhel installation took 1h10m7s, a flat hour of it the identity
+// poll, so everything else, the installer's own wait included, took about ten
+// minutes (.agents/knowledge/installation-completion-proof.md); an hour is six
+// times that.
+const mediaMargin = time.Hour
 
 // consumerPrefix is the subtree this capability owns beneath a managed artifact
 // server's served root. The server owns the root; this block owns exactly

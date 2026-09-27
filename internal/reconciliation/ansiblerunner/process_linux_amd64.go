@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	// invocationTimeout covers the longest block this build runs: an unattended
-	// operating-system installation with its media extraction and image build.
+	// invocationTimeout bounds a run whose request states no deadline of its
+	// own: every block but the ones whose requests freeze the waits they
+	// perform, which derive a deadline from those budgets instead.
 	invocationTimeout = 2 * time.Hour
 	resultDrain       = 5 * time.Second
 	maxVariableBytes  = 4 << 20
@@ -153,7 +154,7 @@ func writeJSON(job, name string, value any) error {
 }
 
 func (r Runner) execute(ctx context.Context, job, scratch string, lock *os.File, playbook string, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
-	ctx, cancel := context.WithTimeout(ctx, invocationTimeout)
+	ctx, cancel := context.WithTimeout(ctx, runDeadline(request.Deadline))
 	defer cancel()
 	grace := r.drain
 	if grace <= 0 {
@@ -208,6 +209,17 @@ func (r Runner) execute(ctx context.Context, job, scratch string, lock *os.File,
 	childOutput.Close()
 	childInput.Close()
 	return r.consume(ctx, command, waited, output, input, grace, request)
+}
+
+// runDeadline is how long one run may take: the deadline its request states,
+// which the capability derived from the waits that request froze, held to the
+// ceiling every request shares; or the default for a request that states none.
+// A fixed deadline cut short a block whose budgets alone outlast it.
+func runDeadline(requested time.Duration) time.Duration {
+	if requested <= 0 {
+		return invocationTimeout
+	}
+	return min(requested, lifecycle.MaxDeadline)
 }
 
 // parentDeath is the signal the kernel sends the adapter when the thread that

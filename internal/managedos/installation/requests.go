@@ -2,6 +2,7 @@ package installation
 
 import (
 	"encoding/json"
+	"time"
 
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -89,6 +90,34 @@ type Target struct {
 	URI       string `json:"uri,omitempty"`
 }
 
+// Budget is one wait the installation performs: at most Attempts retries of
+// one read after the first, DelaySeconds apart.
+type Budget struct {
+	Attempts     int `json:"attempts"`
+	DelaySeconds int `json:"delaySeconds"`
+}
+
+// duration is the longest this wait pauses between its reads.
+func (b Budget) duration() time.Duration {
+	return time.Duration(b.Attempts) * time.Duration(b.DelaySeconds) * time.Second
+}
+
+// Budgets are the waits an apply performs, frozen with the request so the
+// adapter waits exactly what the run's deadline was derived to allow: for the
+// installer to power the machine off, for the installed machine to answer
+// through its identity channel, and for its fleet account to accept the key
+// that channel reported.
+type Budgets struct {
+	Identity     Budget `json:"identity"`
+	Installer    Budget `json:"installer"`
+	Reachability Budget `json:"reachability"`
+}
+
+// total is every pause the budgets allow, back to back.
+func (b Budgets) total() time.Duration {
+	return b.Installer.duration() + b.Identity.duration() + b.Reachability.duration()
+}
+
 // Request is the complete frozen intent for one Anaconda installation. It
 // carries the derived Kickstart, so the plan digest covers exactly the
 // installation this operation would perform, and no secret value: the fleet
@@ -96,6 +125,9 @@ type Target struct {
 type Request struct {
 	Address   string `json:"address"`
 	BootMedia Media  `json:"bootMedia"`
+	// Budgets are the waits the adapter performs, which the run's deadline
+	// is derived from.
+	Budgets Budgets `json:"budgets"`
 	// FleetKeyRef names the Secret whose public half the installation
 	// authorizes for the product-owned account. Only that half ever leaves the
 	// binding, and it reaches the adapter at execution rather than in the plan.
@@ -120,6 +152,12 @@ type Request struct {
 	TreeMedia         *Media       `json:"treeMedia,omitempty"`
 	User              string       `json:"user"`
 	Version           string       `json:"version"`
+}
+
+// Deadline bounds every run of this request: its budgets back to back, and
+// the margin for everything else an apply does.
+func (r Request) Deadline() time.Duration {
+	return r.Budgets.total() + mediaMargin
 }
 
 // Canonical encodes the request exactly as the plan digest and the adapter both

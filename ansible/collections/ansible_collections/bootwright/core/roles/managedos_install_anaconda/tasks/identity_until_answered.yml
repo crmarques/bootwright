@@ -11,7 +11,7 @@
 - name: Wait for the installed machine to answer with its marker
   ansible.builtin.include_tasks: identity.yml
   vars:
-    managedos_install_anaconda_identity_retries: '{{ managedos_install_anaconda_identity_attempts | int }}'
+    managedos_install_anaconda_identity_retries: '{{ bootwright_os_install_request.budgets.identity.attempts | int }}'
 
 - name: Refuse an installation the machine never proved
   ansible.builtin.assert:
@@ -21,8 +21,8 @@
     fail_msg: >-
       the machine never answered with an install marker through its own
       identity channel within
-      {{ managedos_install_anaconda_identity_attempts }} attempts over
-      {{ (managedos_install_anaconda_identity_attempts | int)
-         * (managedos_install_anaconda_identity_delay | int) }} seconds, so this
+      {{ bootwright_os_install_request.budgets.identity.attempts }} attempts over
+      {{ (bootwright_os_install_request.budgets.identity.attempts | int)
+         * (bootwright_os_install_request.budgets.identity.delaySeconds | int) }} seconds, so this
       installation is unproved
     quiet: true
