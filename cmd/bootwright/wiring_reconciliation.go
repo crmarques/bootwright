@@ -125,7 +125,18 @@ func operationPlaybook() map[string]string {
 // buildCapabilities lists what this executable can realize, in the API's own
 // kind order, so a plan's block order never depends on wiring order.
 func buildCapabilities(clock systemClock, controller controllerDependencies) capabilityResolver {
-	runner := ansiblerunner.New(operationPlaybook())
+	return buildCapabilitiesWith(clock, controller, ansiblerunner.New(operationPlaybook()))
+}
+
+// capabilityRunner is the port every runner-driven capability declares, so
+// the one runner composition builds reaches each of them unchanged.
+type capabilityRunner interface {
+	Run(context.Context, lifecycle.RunRequest) (lifecycle.RunResult, error)
+}
+
+// buildCapabilitiesWith binds every capability over one runner. Production
+// passes the Ansible runner; the capability contract suite passes its own.
+func buildCapabilitiesWith(clock systemClock, controller controllerDependencies, runner capabilityRunner) capabilityResolver {
 	resolver := capabilityResolver{{
 		kind: clients.Kind, implementation: clients.Implementation,
 		capability: clients.New(controller.Tools, controller.Native, controller.NativeInspector, controller.ClientInstaller),

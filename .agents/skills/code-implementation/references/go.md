@@ -89,3 +89,14 @@ For module/import/toolchain changes, run `./scripts/go mod tidy`, then
 selected module graph diff. Run `make vulncheck`; it establishes only the absence
 of known reachable findings. Review official release notes when pins change.
 Report failed, skipped, flaky, or unavailable gates under the shared workflow.
+
+For lifecycle capabilities, the shared port contract suite is
+`cmd/bootwright/capability_contract_test.go`: a new binding joins it with a
+row, which `TestEveryBindingJoinsTheCapabilityContractSuite` requires. A new
+contextfs checkpoint is a catalogued constant that the checkpoint harness
+reaches, and a new publication protocol or lifecycle journey joins its harness
+with the retry its spec names; lifecycle journeys are killed at every durable
+write in `internal/reconciliation/lifecycle/kill_harness_test.go`. The
+harnesses' ledgers and the suite's known deviations are exact lists under
+[architecture verification](../../../../specs/architecture.md#architecture-verification),
+so they only shrink: an entry leaves with the fix that makes it pass.
