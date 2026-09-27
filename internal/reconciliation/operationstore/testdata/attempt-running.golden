@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "block": "server-lab",
+  "number": 1,
+  "resolution": 0,
+  "phase": "running",
+  "outcome": "",
+  "effect": "",
+  "evidence": null,
+  "started": "2026-09-11T12:00:01Z",
+  "updated": "2026-09-11T12:00:01Z"
+}

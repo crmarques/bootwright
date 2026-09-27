@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "context": "lab",
+  "revision": "rev-0123456789abcdef0123456789abcdef",
+  "inputDirectory": "/home/operator/platform",
+  "environmentDirectory": "/home/operator/platform/environments/lab",
+  "files": [
+    {
+      "path": "add-ons/_store/example/.bootwright-addon",
+      "category": "marker",
+      "size": 8,
+      "sha256": "13550350a8681c84c861aac2e5b440161c2b33a3e4f302ac680ca5b686de48de"
+    },
+    {
+      "path": "environments/lab/environment.yaml",
+      "category": "yaml",
+      "size": 18,
+      "sha256": "40261c59d3a5545e3eb7e367ab8cab0effb6e4fffef74529d59f06ff015ec753"
+    }
+  ]
+}

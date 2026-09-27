@@ -1,0 +1,838 @@
+{
+  "version": 2,
+  "host": {
+    "provider": "linux-installed-v1",
+    "machineID": "0123456789abcdef0123456789abcdef",
+    "productUUID": "12345678-1234-5678-9abc-def012345678",
+    "filesystemUUID": "fedcba98-7654-3210-fedc-ba9876543210"
+  },
+  "receipt": {
+    "id": "setup-11111111111111111111111111111111",
+    "catalogDigest": "ac95e7788338e669db5924cbf862b7474204ae8217d40beec41cfd77a50275e7",
+    "planDigest": "4522f2a0a459cc23cb8051bd41e4dfd4b9f3ba90b8097eadd5ee1a9e57235771",
+    "context": {
+      "name": "",
+      "revision": "",
+      "machine": ""
+    },
+    "egress": {
+      "httpProxy": "http://proxy.example.test:3128",
+      "httpsProxy": "http://proxy.example.test:3128",
+      "noProxy": [
+        "localhost",
+        ".example.test"
+      ]
+    },
+    "sources": [
+      {
+        "id": "ansible",
+        "url": "https://files.pythonhosted.org/packages/ansible_core-2.21.4-py3-none-any.whl",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bytes": 64
+      },
+      {
+        "id": "nmstate",
+        "url": "https://packages.example.test/fedora/nmstate.rpm",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bytes": 64
+      },
+      {
+        "id": "openssh-clients",
+        "url": "https://packages.example.test/fedora/openssh-clients.rpm",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bytes": 64
+      },
+      {
+        "id": "podman",
+        "url": "https://packages.example.test/fedora/podman.rpm",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bytes": 64
+      },
+      {
+        "id": "python",
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.14.7%2B20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bytes": 64
+      },
+      {
+        "id": "urllib3",
+        "url": "https://files.pythonhosted.org/packages/urllib3-2.7.0-py3-none-any.whl",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bytes": 64
+      }
+    ],
+    "definition": {
+      "platform": {
+        "os": "fedora",
+        "release": "43",
+        "architecture": "amd64"
+      },
+      "versions": {
+        "python": "latest",
+        "ansible": "latest",
+        "podman": "latest",
+        "openssh": "latest",
+        "nmstate": "latest",
+        "libvirt": "latest",
+        "installerMedia": "latest",
+        "helm": "latest",
+        "govc": "latest",
+        "virtctl": "latest"
+      },
+      "toolRequests": [],
+      "native": {
+        "format": "bootwright.native-plan-v1",
+        "platform": {
+          "os": "fedora",
+          "release": "43",
+          "architecture": "amd64"
+        },
+        "solver": "dnf5",
+        "solverVersion": "5.2.0",
+        "requests": {
+          "python": "latest",
+          "ansible": "latest",
+          "podman": "latest",
+          "openssh": "latest",
+          "nmstate": "latest",
+          "libvirt": "latest",
+          "installerMedia": "latest",
+          "helm": "latest",
+          "govc": "latest",
+          "virtctl": "latest"
+        },
+        "requirements": {
+          "containerRuntime": true,
+          "hypervisor": false,
+          "installerMedia": false,
+          "libvirtClient": false
+        },
+        "roots": [
+          {
+            "key": "nmstate",
+            "requested": "latest",
+            "package": {
+              "name": "nmstate",
+              "epoch": 0,
+              "version": "1.2.3",
+              "release": "1.fc43",
+              "architecture": "x86_64"
+            }
+          },
+          {
+            "key": "openssh",
+            "requested": "latest",
+            "package": {
+              "name": "openssh-clients",
+              "epoch": 0,
+              "version": "1.2.3",
+              "release": "1.fc43",
+              "architecture": "x86_64"
+            }
+          },
+          {
+            "key": "podman",
+            "requested": "latest",
+            "package": {
+              "name": "podman",
+              "epoch": 0,
+              "version": "1.2.3",
+              "release": "1.fc43",
+              "architecture": "x86_64"
+            }
+          }
+        ],
+        "repositories": [
+          {
+            "id": "base",
+            "baseURL": "https://packages.example.test/fedora",
+            "metadataSHA256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        ],
+        "packages": [
+          {
+            "name": "nmstate",
+            "epoch": 0,
+            "version": "1.2.3",
+            "release": "1.fc43",
+            "architecture": "x86_64",
+            "signer": "ffffffffffffffffffffffffffffffffffffffff",
+            "source": {
+              "id": "nmstate",
+              "url": "https://packages.example.test/fedora/nmstate.rpm",
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "bytes": 64
+            }
+          },
+          {
+            "name": "openssh-clients",
+            "epoch": 0,
+            "version": "1.2.3",
+            "release": "1.fc43",
+            "architecture": "x86_64",
+            "signer": "ffffffffffffffffffffffffffffffffffffffff",
+            "source": {
+              "id": "openssh-clients",
+              "url": "https://packages.example.test/fedora/openssh-clients.rpm",
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "bytes": 64
+            }
+          },
+          {
+            "name": "podman",
+            "epoch": 0,
+            "version": "1.2.3",
+            "release": "1.fc43",
+            "architecture": "x86_64",
+            "signer": "ffffffffffffffffffffffffffffffffffffffff",
+            "source": {
+              "id": "podman",
+              "url": "https://packages.example.test/fedora/podman.rpm",
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "bytes": 64
+            }
+          }
+        ],
+        "actions": [
+          {
+            "kind": "install",
+            "after": {
+              "name": "openssh-clients",
+              "epoch": 0,
+              "version": "1.2.3",
+              "release": "1.fc43",
+              "architecture": "x86_64"
+            },
+            "sourceID": "openssh-clients",
+            "reason": "root"
+          },
+          {
+            "kind": "upgrade",
+            "before": {
+              "name": "podman",
+              "epoch": 0,
+              "version": "1.2.2",
+              "release": "1.fc43",
+              "architecture": "x86_64"
+            },
+            "after": {
+              "name": "podman",
+              "epoch": 0,
+              "version": "1.2.3",
+              "release": "1.fc43",
+              "architecture": "x86_64"
+            },
+            "sourceID": "podman",
+            "reason": "root"
+          }
+        ],
+        "beforeSHA256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "afterSHA256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "digest": "d4fb2117f60f111eb4c8e6328d927fd2eb1cda7e15bb94bb6739b37945f7d2e5"
+      },
+      "bootstrap": {
+        "format": "bootwright.controller.bootstrap-v1",
+        "platform": {
+          "os": "fedora",
+          "release": "43",
+          "architecture": "amd64"
+        },
+        "pythonIntent": "latest",
+        "ansibleIntent": "latest",
+        "pythonVersion": "3.14.7",
+        "ansibleVersion": "2.21.4",
+        "pythonExecutable": "python/bin/python3.14",
+        "sitePackages": "python/lib/python3.14/site-packages/",
+        "sources": [
+          {
+            "id": "python",
+            "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.14.7%2B20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bytes": 64
+          },
+          {
+            "id": "ansible",
+            "url": "https://files.pythonhosted.org/packages/ansible_core-2.21.4-py3-none-any.whl",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bytes": 64
+          },
+          {
+            "id": "urllib3",
+            "url": "https://files.pythonhosted.org/packages/urllib3-2.7.0-py3-none-any.whl",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bytes": 64
+          }
+        ],
+        "wheels": [
+          {
+            "name": "ansible-core",
+            "version": "2.21.4",
+            "sourceID": "ansible"
+          },
+          {
+            "name": "urllib3",
+            "version": "2.7.0",
+            "sourceID": "urllib3"
+          }
+        ],
+        "metadata": [
+          {
+            "id": "python-metadata",
+            "url": "https://raw.githubusercontent.com/astral-sh/uv/main/crates/uv-python/download-metadata.json",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bytes": 64
+          },
+          {
+            "id": "ansible-metadata",
+            "url": "https://pypi.org/pypi/ansible-core/json",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bytes": 64
+          }
+        ],
+        "projectionSHA256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "fileCount": 10,
+        "expandedBytes": 100,
+        "execution": {
+          "pythonExecutable": "python/bin/python3.14",
+          "loader": "/usr/lib64/ld-linux-x86-64.so.2",
+          "lockPath": "/usr/lib/sysimage/rpm/.rpm.lock",
+          "files": [
+            {
+              "path": "/usr/lib64/libc.so.6",
+              "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            }
+          ],
+          "links": [
+            {
+              "path": "/usr/lib64/libgcc_s.so.1",
+              "target": "libgcc_s-15.so.1"
+            }
+          ],
+          "preload": [
+            "/usr/lib64/libgcc_s.so.1"
+          ]
+        },
+        "executionPackages": [
+          "glibc",
+          "libgcc"
+        ],
+        "automationDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "digest": "1ea3305dc90e1f04505f3c5ab0326f5f15c2d4b8616317762eb3a37df2eeb2b3"
+      },
+      "catalogDigest": "ac95e7788338e669db5924cbf862b7474204ae8217d40beec41cfd77a50275e7",
+      "resolutionDigest": "4af3fb90e918c3e2230389a526d34d9d120565576f8b8a950183588cc51ce5f4",
+      "baseCatalogDigest": "",
+      "nativeRequirements": {
+        "containerRuntime": true,
+        "hypervisor": false,
+        "installerMedia": false,
+        "libvirtClient": false
+      },
+      "tools": [],
+      "pythonVersion": "3.14.7",
+      "ansibleVersion": "2.21.4",
+      "sources": [
+        {
+          "id": "ansible",
+          "url": "https://files.pythonhosted.org/packages/ansible_core-2.21.4-py3-none-any.whl",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bytes": 64
+        },
+        {
+          "id": "nmstate",
+          "url": "https://packages.example.test/fedora/nmstate.rpm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bytes": 64
+        },
+        {
+          "id": "openssh-clients",
+          "url": "https://packages.example.test/fedora/openssh-clients.rpm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bytes": 64
+        },
+        {
+          "id": "podman",
+          "url": "https://packages.example.test/fedora/podman.rpm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bytes": 64
+        },
+        {
+          "id": "python",
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.14.7%2B20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bytes": 64
+        },
+        {
+          "id": "urllib3",
+          "url": "https://files.pythonhosted.org/packages/urllib3-2.7.0-py3-none-any.whl",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bytes": 64
+        }
+      ],
+      "execution": {
+        "pythonExecutable": "python/bin/python3.14",
+        "loader": "/usr/lib64/ld-linux-x86-64.so.2",
+        "lockPath": "/usr/lib/sysimage/rpm/.rpm.lock",
+        "files": [
+          {
+            "path": "/usr/lib64/libc.so.6",
+            "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        ],
+        "links": [
+          {
+            "path": "/usr/lib64/libgcc_s.so.1",
+            "target": "libgcc_s-15.so.1"
+          }
+        ],
+        "preload": [
+          "/usr/lib64/libgcc_s.so.1"
+        ]
+      },
+      "runtime": {
+        "version": "1.2.3-1.fc43",
+        "files": [],
+        "lockPath": "",
+        "links": [],
+        "selinuxMode": ""
+      }
+    },
+    "actions": [
+      {
+        "id": "baseline-bundle",
+        "request": {
+          "dependency": "synthetic-python"
+        },
+        "phase": "observed",
+        "outcome": "unchanged",
+        "evidence": {
+          "ready": true
+        },
+        "preparation": {
+          "addedSources": [
+            "synthetic-runtime"
+          ],
+          "inventorySHA256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    ],
+    "status": "complete"
+  },
+  "bindings": [
+    {
+      "context": "lab",
+      "machine": "controller",
+      "hostDigest": "8d6561ab072ca22aae72a2d77563e702b430fde64f332c2fa726341902bef81c"
+    }
+  ],
+  "retainedSources": [
+    {
+      "id": "ansible",
+      "url": "https://files.pythonhosted.org/packages/ansible_core-2.21.4-py3-none-any.whl",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bytes": 64
+    },
+    {
+      "id": "nmstate",
+      "url": "https://packages.example.test/fedora/nmstate.rpm",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bytes": 64
+    },
+    {
+      "id": "openssh-clients",
+      "url": "https://packages.example.test/fedora/openssh-clients.rpm",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bytes": 64
+    },
+    {
+      "id": "podman",
+      "url": "https://packages.example.test/fedora/podman.rpm",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bytes": 64
+    },
+    {
+      "id": "python",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.14.7%2B20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bytes": 64
+    },
+    {
+      "id": "urllib3",
+      "url": "https://files.pythonhosted.org/packages/urllib3-2.7.0-py3-none-any.whl",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bytes": 64
+    }
+  ],
+  "retainedDefinitions": [
+    {
+      "platform": {
+        "os": "fedora",
+        "release": "43",
+        "architecture": "amd64"
+      },
+      "versions": {
+        "python": "latest",
+        "ansible": "latest",
+        "podman": "latest",
+        "openssh": "latest",
+        "nmstate": "latest",
+        "libvirt": "latest",
+        "installerMedia": "latest",
+        "helm": "latest",
+        "govc": "latest",
+        "virtctl": "latest"
+      },
+      "toolRequests": [],
+      "native": {
+        "format": "bootwright.native-plan-v1",
+        "platform": {
+          "os": "fedora",
+          "release": "43",
+          "architecture": "amd64"
+        },
+        "solver": "dnf5",
+        "solverVersion": "5.2.0",
+        "requests": {
+          "python": "latest",
+          "ansible": "latest",
+          "podman": "latest",
+          "openssh": "latest",
+          "nmstate": "latest",
+          "libvirt": "latest",
+          "installerMedia": "latest",
+          "helm": "latest",
+          "govc": "latest",
+          "virtctl": "latest"
+        },
+        "requirements": {
+          "containerRuntime": true,
+          "hypervisor": false,
+          "installerMedia": false,
+          "libvirtClient": false
+        },
+        "roots": [
+          {
+            "key": "nmstate",
+            "requested": "latest",
+            "package": {
+              "name": "nmstate",
+              "epoch": 0,
+              "version": "1.2.3",
+              "release": "1.fc43",
+              "architecture": "x86_64"
+            }
+          },
+          {
+            "key": "openssh",
+            "requested": "latest",
+            "package": {
+              "name": "openssh-clients",
+              "epoch": 0,
+              "version": "1.2.3",
+              "release": "1.fc43",
+              "architecture": "x86_64"
+            }
+          },
+          {
+            "key": "podman",
+            "requested": "latest",
+            "package": {
+              "name": "podman",
+              "epoch": 0,
+              "version": "1.2.3",
+              "release": "1.fc43",
+              "architecture": "x86_64"
+            }
+          }
+        ],
+        "repositories": [
+          {
+            "id": "base",
+            "baseURL": "https://packages.example.test/fedora",
+            "metadataSHA256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        ],
+        "packages": [
+          {
+            "name": "nmstate",
+            "epoch": 0,
+            "version": "1.2.3",
+            "release": "1.fc43",
+            "architecture": "x86_64",
+            "signer": "ffffffffffffffffffffffffffffffffffffffff",
+            "source": {
+              "id": "nmstate",
+              "url": "https://packages.example.test/fedora/nmstate.rpm",
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "bytes": 64
+            }
+          },
+          {
+            "name": "openssh-clients",
+            "epoch": 0,
+            "version": "1.2.3",
+            "release": "1.fc43",
+            "architecture": "x86_64",
+            "signer": "ffffffffffffffffffffffffffffffffffffffff",
+            "source": {
+              "id": "openssh-clients",
+              "url": "https://packages.example.test/fedora/openssh-clients.rpm",
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "bytes": 64
+            }
+          },
+          {
+            "name": "podman",
+            "epoch": 0,
+            "version": "1.2.3",
+            "release": "1.fc43",
+            "architecture": "x86_64",
+            "signer": "ffffffffffffffffffffffffffffffffffffffff",
+            "source": {
+              "id": "podman",
+              "url": "https://packages.example.test/fedora/podman.rpm",
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "bytes": 64
+            }
+          }
+        ],
+        "actions": [
+          {
+            "kind": "install",
+            "after": {
+              "name": "openssh-clients",
+              "epoch": 0,
+              "version": "1.2.3",
+              "release": "1.fc43",
+              "architecture": "x86_64"
+            },
+            "sourceID": "openssh-clients",
+            "reason": "root"
+          },
+          {
+            "kind": "upgrade",
+            "before": {
+              "name": "podman",
+              "epoch": 0,
+              "version": "1.2.2",
+              "release": "1.fc43",
+              "architecture": "x86_64"
+            },
+            "after": {
+              "name": "podman",
+              "epoch": 0,
+              "version": "1.2.3",
+              "release": "1.fc43",
+              "architecture": "x86_64"
+            },
+            "sourceID": "podman",
+            "reason": "root"
+          }
+        ],
+        "beforeSHA256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "afterSHA256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "digest": "d4fb2117f60f111eb4c8e6328d927fd2eb1cda7e15bb94bb6739b37945f7d2e5"
+      },
+      "bootstrap": {
+        "format": "bootwright.controller.bootstrap-v1",
+        "platform": {
+          "os": "fedora",
+          "release": "43",
+          "architecture": "amd64"
+        },
+        "pythonIntent": "latest",
+        "ansibleIntent": "latest",
+        "pythonVersion": "3.14.7",
+        "ansibleVersion": "2.21.4",
+        "pythonExecutable": "python/bin/python3.14",
+        "sitePackages": "python/lib/python3.14/site-packages/",
+        "sources": [
+          {
+            "id": "python",
+            "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.14.7%2B20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bytes": 64
+          },
+          {
+            "id": "ansible",
+            "url": "https://files.pythonhosted.org/packages/ansible_core-2.21.4-py3-none-any.whl",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bytes": 64
+          },
+          {
+            "id": "urllib3",
+            "url": "https://files.pythonhosted.org/packages/urllib3-2.7.0-py3-none-any.whl",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bytes": 64
+          }
+        ],
+        "wheels": [
+          {
+            "name": "ansible-core",
+            "version": "2.21.4",
+            "sourceID": "ansible"
+          },
+          {
+            "name": "urllib3",
+            "version": "2.7.0",
+            "sourceID": "urllib3"
+          }
+        ],
+        "metadata": [
+          {
+            "id": "python-metadata",
+            "url": "https://raw.githubusercontent.com/astral-sh/uv/main/crates/uv-python/download-metadata.json",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bytes": 64
+          },
+          {
+            "id": "ansible-metadata",
+            "url": "https://pypi.org/pypi/ansible-core/json",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bytes": 64
+          }
+        ],
+        "projectionSHA256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "fileCount": 10,
+        "expandedBytes": 100,
+        "execution": {
+          "pythonExecutable": "python/bin/python3.14",
+          "loader": "/usr/lib64/ld-linux-x86-64.so.2",
+          "lockPath": "/usr/lib/sysimage/rpm/.rpm.lock",
+          "files": [
+            {
+              "path": "/usr/lib64/libc.so.6",
+              "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            }
+          ],
+          "links": [
+            {
+              "path": "/usr/lib64/libgcc_s.so.1",
+              "target": "libgcc_s-15.so.1"
+            }
+          ],
+          "preload": [
+            "/usr/lib64/libgcc_s.so.1"
+          ]
+        },
+        "executionPackages": [
+          "glibc",
+          "libgcc"
+        ],
+        "automationDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "digest": "1ea3305dc90e1f04505f3c5ab0326f5f15c2d4b8616317762eb3a37df2eeb2b3"
+      },
+      "catalogDigest": "ac95e7788338e669db5924cbf862b7474204ae8217d40beec41cfd77a50275e7",
+      "resolutionDigest": "4af3fb90e918c3e2230389a526d34d9d120565576f8b8a950183588cc51ce5f4",
+      "baseCatalogDigest": "",
+      "nativeRequirements": {
+        "containerRuntime": true,
+        "hypervisor": false,
+        "installerMedia": false,
+        "libvirtClient": false
+      },
+      "tools": [],
+      "pythonVersion": "3.14.7",
+      "ansibleVersion": "2.21.4",
+      "sources": [
+        {
+          "id": "ansible",
+          "url": "https://files.pythonhosted.org/packages/ansible_core-2.21.4-py3-none-any.whl",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bytes": 64
+        },
+        {
+          "id": "nmstate",
+          "url": "https://packages.example.test/fedora/nmstate.rpm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bytes": 64
+        },
+        {
+          "id": "openssh-clients",
+          "url": "https://packages.example.test/fedora/openssh-clients.rpm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bytes": 64
+        },
+        {
+          "id": "podman",
+          "url": "https://packages.example.test/fedora/podman.rpm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bytes": 64
+        },
+        {
+          "id": "python",
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.14.7%2B20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bytes": 64
+        },
+        {
+          "id": "urllib3",
+          "url": "https://files.pythonhosted.org/packages/urllib3-2.7.0-py3-none-any.whl",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bytes": 64
+        }
+      ],
+      "execution": {
+        "pythonExecutable": "python/bin/python3.14",
+        "loader": "/usr/lib64/ld-linux-x86-64.so.2",
+        "lockPath": "/usr/lib/sysimage/rpm/.rpm.lock",
+        "files": [
+          {
+            "path": "/usr/lib64/libc.so.6",
+            "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        ],
+        "links": [
+          {
+            "path": "/usr/lib64/libgcc_s.so.1",
+            "target": "libgcc_s-15.so.1"
+          }
+        ],
+        "preload": [
+          "/usr/lib64/libgcc_s.so.1"
+        ]
+      },
+      "runtime": {
+        "version": "1.2.3-1.fc43",
+        "files": [],
+        "lockPath": "",
+        "links": [],
+        "selinuxMode": ""
+      }
+    }
+  ],
+  "bundles": [
+    {
+      "id": "0000000000000000000000000000000000000000000000000000000000000001",
+      "mode": "reserved",
+      "directoryDevice": 0,
+      "directoryInode": 0
+    },
+    {
+      "id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "mode": "sealed",
+      "directoryDevice": 2049,
+      "directoryInode": 131080
+    }
+  ],
+  "reservations": [
+    {
+      "context": "lab",
+      "kind": "media",
+      "service": "media",
+      "keys": [
+        "media:rhel-9.6-x86_64-boot.iso"
+      ],
+      "shared": true
+    },
+    {
+      "context": "lab",
+      "kind": "os-install",
+      "service": "node-01",
+      "keys": [
+        "path:/srv/lab/node-01.iso",
+        "path:/srv/lab/rhel"
+      ]
+    }
+  ]
+}

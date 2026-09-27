@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "block": "install-node-01",
+  "number": 1,
+  "resolution": 1,
+  "phase": "observed",
+  "outcome": "changed",
+  "effect": "completed",
+  "evidence": {
+    "installed": true
+  },
+  "started": "2026-09-11T12:00:06Z",
+  "updated": "2026-09-11T12:00:07Z"
+}

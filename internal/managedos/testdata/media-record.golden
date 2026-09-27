@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "name": "rhel-9.7-x86_64-boot.iso",
+  "size": 1388429312,
+  "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "source": "file:///images/rhel-9.7-x86_64-boot.iso",
+  "added": "2026-09-15T09:00:00Z"
+}

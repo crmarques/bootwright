@@ -50,17 +50,32 @@ ordering for determinism/non-mutation and bounded fuzz/property tests for broad
 byte grammars; retain minimized failures.
 
 Pin a format's exact bytes (a frozen request, a persisted record, published
-evidence) with a golden in its own package: `testdata/<name>.golden` holds the
-canonical JSON indented by `json.Indent`, which is lossless, and a helper in
-the package's `golden_test.go` compares it byte for byte, reports a line diff
-and the first differing byte, and rewrites it under the package's `-update`
-flag; no shared golden package exists. Between them, a format's goldens
-populate every field a supported declaration can reach, because no golden
-catches a change to an `omitempty` key it omits. Put `Golden` in the test's
-name and regenerate one package at a time with
-`./scripts/go test ./internal/<package> -run Golden -update`, then review the
-golden diff as code. A format's golden lands before or with its first change;
-`internal/containercluster/agentinstall/golden_test.go` is the model.
+evidence, a digest) with a golden in its own package, through helpers in the
+package's `golden_test.go`; no shared golden package exists, and a package
+declares only the helpers it uses. `matchesGolden(t, name, data, terminated)`
+takes one JSON document. A terminated format must end in exactly one LF, which
+is stripped, and any other in no whitespace; the body must then equal its
+`json.Compact` form, because `json.Indent`
+[drops insignificant space inside its input](https://github.com/golang/go/blob/go1.26.7/src/encoding/json/indent.go#L137-L138),
+so an indented golden is lossless only for compact input.
+`testdata/<name>.golden` holds that body indented by two spaces with one final
+LF; a digest is pinned as a one-key JSON object.
+`matchesTextGolden(t, name, data)` holds everything else byte for byte (JSON
+Lines, YAML, indented JSON) and fails on a line ending in a space or tab or on
+a blank last line, because `git diff --check` refuses trailing whitespace and a
+blank line at the end of a file, and a copied helper that appended its LF to a
+format already ending in one would write exactly that. Both report a line diff
+and the first differing byte and rewrite the golden under the package's
+`-update` flag. Read every golden's bytes back through the package's own
+reader. Between them, a format's goldens populate every field a supported
+declaration can reach, because no golden catches a change to an `omitempty`
+key it omits; where a catalog exists, a completeness test ties the goldens to
+it. A golden test that reuses platform-bound fixtures carries their constraint
+in its file name, as `golden_linux_amd64_test.go` does. Put `Golden` in the
+test's name and regenerate one package at a time with
+`./scripts/go test ./<package> -run Golden -update`, then review the golden
+diff as code. A format's golden lands before or with its first change;
+`internal/reconciliation/operationstore/golden_test.go` is the model.
 
 Use pinned repository entrypoints, always `./scripts/go` and never a bare `go`;
 never install an unreviewed latest tool to make a gate available. Run

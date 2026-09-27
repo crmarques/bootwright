@@ -1,0 +1,77 @@
+{
+  "verb": "destroy",
+  "blocks": [
+    {
+      "id": "install-node-01",
+      "description": "install the operating system on node-01",
+      "stage": "machines",
+      "dependencies": null,
+      "exclusive": [
+        "path:/srv/lab/rhel"
+      ],
+      "impacts": [
+        "install-operating-system node-01",
+        "power-on node-01",
+        "publish-content /srv/lab/rhel"
+      ],
+      "consumes": [
+        "data-loss"
+      ],
+      "groups": [
+        {
+          "id": "publish-tree",
+          "description": "publish the package tree the installer fetches",
+          "machines": [
+            "controller"
+          ]
+        },
+        {
+          "id": "install",
+          "description": "install the operating system",
+          "machines": [
+            "node-01",
+            "node-02"
+          ]
+        }
+      ],
+      "kind": "Machine",
+      "object": "node-01",
+      "implementation": "os-install-anaconda-v1",
+      "contentDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "request": {
+        "machine": "node-01",
+        "release": "9.6"
+      },
+      "requestDigest": "e5d17ebbdb261bba90b6ac6bed1515fcef82451553e90a19b571e0ab6ab8d117"
+    },
+    {
+      "id": "server-lab",
+      "description": "serve artifacts for lab",
+      "stage": "infra-components",
+      "dependencies": [
+        "install-node-01"
+      ],
+      "impacts": [
+        "create-container-unit lab"
+      ],
+      "consumes": null,
+      "groups": [
+        {
+          "id": "start-service",
+          "description": "start the service",
+          "machines": [
+            "controller"
+          ]
+        }
+      ],
+      "kind": "ArtifactServer",
+      "object": "lab",
+      "implementation": "artifact-server-nginx-v1",
+      "contentDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "request": {
+        "name": "lab"
+      },
+      "requestDigest": "3de9e0e72c29b8efe28cf27ea601b18bc96b29af7f7916fedbe2060bda665772"
+    }
+  ]
+}

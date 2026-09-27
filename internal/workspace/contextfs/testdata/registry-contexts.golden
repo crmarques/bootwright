@@ -1,0 +1,32 @@
+{
+  "version": 5,
+  "contexts": [
+    {
+      "name": "edge",
+      "environmentDirectory": "",
+      "revision": "",
+      "mode": "initializing",
+      "secretStoreType": "local-keyring",
+      "directoryDevice": 0,
+      "directoryInode": 0
+    },
+    {
+      "name": "lab",
+      "environmentDirectory": "/home/operator/platform/environments/lab",
+      "revision": "rev-0123456789abcdef0123456789abcdef",
+      "mode": "ready",
+      "secretStoreType": "local-keyring",
+      "directoryDevice": 2049,
+      "directoryInode": 131074
+    },
+    {
+      "name": "retired",
+      "environmentDirectory": "/home/operator/platform/environments/lab",
+      "revision": "rev-fedcba9876543210fedcba9876543210",
+      "mode": "deleting",
+      "secretStoreType": "local-keyring",
+      "directoryDevice": 2049,
+      "directoryInode": 131075
+    }
+  ]
+}
