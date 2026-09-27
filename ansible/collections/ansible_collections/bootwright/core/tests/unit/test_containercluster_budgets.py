@@ -222,13 +222,22 @@ def test_the_budget_spent_is_told_apart_from_the_installers_own_give_ups():
 
 
 class Clock:
-    """The now() the rendered templates read, so a simulated wait takes no time."""
+    """The now() the rendered templates read, so a simulated wait takes no time.
 
-    def __init__(self):
-        self.seconds = 1_000_000
+    It answers as ansible-core's own now() does (_now in
+    _internal/_templating/_jinja_plugins.py): a naive datetime, in UTC when utc
+    is true and in the controller's local time otherwise, so a template that
+    reads a naive value as local time is caught here as it would fail there.
+    """
+
+    def __init__(self, seconds=1_000_000):
+        self.seconds = seconds
 
     def __call__(self, utc=False, fmt=None):
-        moment = datetime.datetime.fromtimestamp(self.seconds, datetime.timezone.utc)
+        if utc:
+            moment = datetime.datetime.fromtimestamp(self.seconds, datetime.timezone.utc).replace(tzinfo=None)
+        else:
+            moment = datetime.datetime.fromtimestamp(self.seconds)
         return moment.strftime(fmt) if fmt else moment
 
 
@@ -527,3 +536,40 @@ def test_a_node_the_skip_leaves_alone_takes_none_of_the_boot_budget(left):
         # budget neither stops it nor is spent on it.
         assert rendering.evaluate_conditional(skip()["when"]) is boots
         assert (boots and rendering.evaluate_conditional(guard["when"])) is (boots and left < 0)
+
+
+@pytest.fixture(name="lisbon")
+def fixture_lisbon(monkeypatch):
+    """A controller whose local time observes daylight saving (Europe/Lisbon)."""
+    monkeypatch.setenv("TZ", "Europe/Lisbon")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
+def test_every_budget_clock_counts_true_seconds_across_a_daylight_saving_change(lisbon):
+    """Lisbon leaves summer time at 2026-10-25T01:00Z; a clock read as local time jumps an hour there."""
+    assert lisbon is None
+    start = int(datetime.datetime(2026, 10, 25, 0, 30, tzinfo=datetime.timezone.utc).timestamp())
+    clock = Clock(start)
+    wait = found(INSTALL, "wait.yml",
+                 lambda task: "containercluster_install_agent_deadline" in (task.get("ansible.builtin.set_fact") or {}))
+    deadline = int(scope(INSTALL, now=clock, containercluster_install_agent_budget=5400).template(
+        wait["ansible.builtin.set_fact"]["containercluster_install_agent_deadline"]))
+    assert deadline == start + 5400
+    boot = found(INSTALL, "apply.yml",
+                 lambda task: "containercluster_install_agent_boot_deadline" in (task.get("ansible.builtin.set_fact") or {}))
+    assert int(scope(INSTALL, now=clock).template(
+        boot["ansible.builtin.set_fact"]["containercluster_install_agent_boot_deadline"])) == start + INSTALL_BUDGETS["bootSeconds"]
+    taking = found(INSTALL, "wait_attempt.yml",
+                   lambda task: "containercluster_install_agent_remaining" in (task.get("ansible.builtin.set_fact") or {}))
+    stepping = found(INSTALL, "boot.yml", lambda task: "timeout" in task and "block" in task)
+    for elapsed in (1799, 1800, 1801, 3600):
+        clock.seconds = start + elapsed
+        remaining = int(scope(INSTALL, now=clock, containercluster_install_agent_deadline=deadline).template(
+            taking["ansible.builtin.set_fact"]["containercluster_install_agent_remaining"]))
+        assert remaining == 5400 - elapsed
+        step = int(scope(INSTALL, now=clock, containercluster_install_agent_boot_deadline=start + 7200).template(
+            stepping["timeout"]))
+        assert step == 7200 - elapsed

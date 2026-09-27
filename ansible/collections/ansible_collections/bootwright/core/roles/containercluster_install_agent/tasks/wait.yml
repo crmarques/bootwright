@@ -17,7 +17,7 @@
 - name: Set the moment this wait's budget is spent
   ansible.builtin.set_fact:
     containercluster_install_agent_deadline: >-
-      {{ (now(utc=true).timestamp() | int) + (containercluster_install_agent_budget | int) }}
+      {{ (((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int)) + (containercluster_install_agent_budget | int) }}
     containercluster_install_agent_waiting: true
     containercluster_install_agent_wait:
       rc: null
