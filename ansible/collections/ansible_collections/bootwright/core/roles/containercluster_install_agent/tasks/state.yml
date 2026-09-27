@@ -4,7 +4,8 @@
 # request, so the evidence says what is true rather than what was asked for.
 # The cluster is read through the kubeconfig the installer wrote with the
 # image, so a read that succeeds has verified the serving certificate against
-# that build's authority and been authenticated by its client certificate.
+# the authority that file carries and been authenticated by its client
+# certificate, which only this build's cluster accepts.
 # Every read passes --request-timeout, so an API that accepts the connection
 # and never answers ends each request oc makes rather than holding the read.
 - name: Read ClusterVersion through this build's own trust anchor
@@ -97,10 +98,10 @@
 
 # The cluster answers with this build's identity only when the read above
 # succeeded, and with the foreign marker when an API answered but refused the
-# anchor: a serving certificate the authority does not verify, or a client
+# read: a serving certificate the authority does not verify, or a client
 # certificate it rejects (401 or 403). Anything else is nothing answering. A
-# success through a kubeconfig whose anchor the inspection could not name is
-# foreign too, because it proves no cluster of this build. The rejections are
+# success through a kubeconfig in which the inspection could name no identity
+# is foreign too, because it proves no cluster of this build. The rejections are
 # matched in the form oc prints them, through kubectl's StandardErrorMessage,
 # and the marker is no SHA-256, so it never equals an identity. The
 # installation is completed only when the completion read succeeded and

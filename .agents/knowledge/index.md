@@ -9,6 +9,7 @@ investigating or designing, then open only the relevant page.
 | Desired-state API, `v1alpha1`, 26-kind service update, controller Machine and proxy, historical 27-to-21-kind alignment | [api-alignment.md](api-alignment.md) |
 | Admission parser composition, YAML directives/tags, exact integers, effective inspection, offline vulnerability database | [desired-state-admission.md](desired-state-admission.md) |
 | CLI, Cobra, completion effects, `BASH_COMP_DEBUG_FILE`, `ExecuteContext`, local `--output`, nil/empty cluster selection, Zsh `compadd`, PowerShell `-File` | [cli-adapter-constraints.md](cli-adapter-constraints.md) |
+| ansible-core `until` retries templated once, task `timeout` leaves the module running, GNU `timeout --kill-after` rc `-9` | [ansible-core-retries-and-timeouts.md](ansible-core-retries-and-timeouts.md) |
 | Go toolchain pin, `GOTOOLCHAIN`, `govulncheck`, release version metadata, `-ldflags -X`, Go 1.26 crypto Reader injection | [build-toolchain.md](build-toolchain.md) |
 | OpenShift agent installer, bare-metal disk identity, pre-wipe proof, Redfish-to-installer race | [openshift-agent-disk-safety.md](openshift-agent-disk-safety.md) |
 | `openshift-install agent create image` work area, no `metadata.json`, cluster identity, admin client certificate, `.openshift_install_state.json`, install-complete kubeconfig rewrite, `addRouterCAToClusterCA`, router CA, `clientcmd.WriteToFile` `apiVersion` and `kind`, kubeconfig growth per rewrite, 64 KiB read bound | [openshift-agent-work-area.md](openshift-agent-work-area.md) |

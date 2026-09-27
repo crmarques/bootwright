@@ -198,9 +198,10 @@
     status: ok
   no_log: true
 
-# The identity is the trust anchor the image was built with, so the
-# observation taken before any effect already names it, and the read back
-# below answers with it only when the installed cluster accepts that anchor.
+# The identity is the admin client certificate the image was built with, so
+# the observation taken before any effect already names it, and the read back
+# below answers with it only when the installed cluster accepts that
+# certificate.
 - name: Read the installed cluster and its nodes back
   ansible.builtin.import_tasks: state.yml
 
