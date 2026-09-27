@@ -255,12 +255,62 @@ func goldenResolution(t *testing.T) prerequisites.Definition {
 	return definition
 }
 
+// goldenSetupActions are the actions setup plans for definition on a fresh
+// host, with the request objects newReceipt builds, once prepare has observed
+// each one. Setup selects no context, so newReceipt appends no
+// controller-binding action. The container-runtime action retains the native
+// before-state its runtime published through EncodeNativePreparation, and its
+// evidence is that runtime's completion proof, which the record keeps without
+// interpreting.
+func goldenSetupActions(t *testing.T, definition prerequisites.Definition) ([]prerequisites.SetupAction, prerequisites.NativePreparation) {
+	t.Helper()
+	object := func(value map[string]any) json.RawMessage {
+		data, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	native := definition.Native
+	transitions, err := prerequisites.NativeTransitionsDigest(native.Actions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	added := []string{}
+	for _, action := range native.Actions {
+		added = append(added, action.SourceID)
+	}
+	slices.Sort(added)
+	added = slices.Compact(added)
+	preparation := prerequisites.NativePreparation{
+		InventorySHA256: native.BeforeSHA256, AfterInventorySHA256: native.AfterSHA256,
+		PlanDigest: native.Digest, TransitionsSHA256: transitions, AddedSources: added,
+	}
+	return []prerequisites.SetupAction{
+		{
+			ID: "execution-bundle", Request: object(map[string]any{"catalogDigest": definition.CatalogDigest, "readyBefore": false}),
+			Phase: "observed", Outcome: "changed", Evidence: object(map[string]any{"postcondition": "verified"}),
+		},
+		{
+			ID: "container-runtime", Request: object(map[string]any{"readyBefore": false, "version": definition.Runtime.Version}),
+			Phase: "observed", Outcome: "changed", Preparation: prerequisites.EncodeNativePreparation(preparation),
+			Evidence: object(map[string]any{
+				"added": added, "after": native.AfterSHA256, "before": native.BeforeSHA256, "planDigest": native.Digest,
+				"postcondition": true, "request": definition.CatalogDigest, "tools": []string{},
+			}),
+		},
+	}, preparation
+}
+
 // The controller record is private shared-host evidence proved canonical by
-// re-encoding, so its golden holds a completed setup through a proxy with its
-// resolved definition, a recorded before-state, a binding, retained sources
-// and definitions, both bundle reservation shapes and both a shared and an
-// exclusive host reservation. The receipt's context member is always empty and
-// is pinned as it encodes today (backlog F10).
+// re-encoding, so its golden holds a setup through a proxy completed with its
+// resolved definition, the actions setup plans for it, the native before-state
+// its container-runtime action retained, a binding, retained sources and
+// definitions, both bundle reservation shapes and both a shared and an
+// exclusive host reservation. The retained before-state is read back as setup
+// and recovery read it, so the golden cannot hold one the product refuses. The
+// receipt's context member is always empty and is pinned as it encodes today
+// (backlog F10).
 func TestControllerRecordMatchesItsGolden(t *testing.T) {
 	definition := goldenResolution(t)
 	value := syntheticControllerState(t, prerequisites.SetupContext{})
@@ -271,12 +321,12 @@ func TestControllerRecordMatchesItsGolden(t *testing.T) {
 		HTTPProxy: "http://proxy.example.test:3128", HTTPSProxy: "http://proxy.example.test:3128",
 		NoProxy: []string{"localhost", ".example.test"},
 	}
+	actions, preparation := goldenSetupActions(t, definition)
+	value.Receipt.Actions, value.Receipt.Status = actions, "complete"
 	var err error
 	if value.Receipt.PlanDigest, err = prerequisites.SetupPlanDigest(value.Host, value.Receipt); err != nil {
 		t.Fatal(err)
 	}
-	value = completeControllerState(value)
-	value.Receipt.Actions[0].Preparation = []byte(`{"addedSources":["synthetic-runtime"],"inventorySHA256":"` + strings.Repeat("a", 64) + `"}`)
 	hostDigest, err := value.Host.PrivateDigest()
 	if err != nil {
 		t.Fatal(err)
@@ -308,5 +358,16 @@ func TestControllerRecordMatchesItsGolden(t *testing.T) {
 	again, err := encodeRecord(controllerRecord(read, readBundles), maxControllerState)
 	if err != nil || !bytes.Equal(again, data) {
 		t.Fatalf("the controller record read back as different bytes (%v)", err)
+	}
+	runtime := slices.IndexFunc(read.Receipt.Actions, func(action prerequisites.SetupAction) bool { return action.ID == "container-runtime" })
+	if runtime < 0 || read.Receipt.Definition == nil {
+		t.Fatal("the controller record lost its container-runtime action or its definition")
+	}
+	retained, err := prerequisites.ReadNativePreparation(read.Receipt.Actions[runtime].Preparation, *read.Receipt.Definition)
+	if err != nil {
+		t.Fatalf("setup refuses the retained native before-state: %v", diagnostics.Of(err))
+	}
+	if !reflect.DeepEqual(retained, preparation) {
+		t.Fatalf("the retained native before-state read back as %+v, not %+v", retained, preparation)
 	}
 }

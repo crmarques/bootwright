@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -181,9 +182,16 @@ func checkpointKey(scenario string, mode checkpointMode, trace []string, index i
 	return fmt.Sprintf("%s/%s/%s#%d", scenario, mode, trace[index], occurrence)
 }
 
+// checkpointRestore prefixes a ledger value whose cited rule leaves the
+// interrupted store unchanged and directs the operator to restore the complete
+// store, so no read admits it and its retry refuses as a read does.
+const checkpointRestore = "restore:"
+
 // checkpointAnchor reports whether a ledger value cites the specification that
 // permits the refusal rather than naming a defect.
-func checkpointAnchor(entry string) bool { return strings.HasPrefix(entry, "specs/") }
+func checkpointAnchor(entry string) bool {
+	return strings.HasPrefix(strings.TrimPrefix(entry, checkpointRestore), "specs/")
+}
 
 func TestAnInterruptedPublicationLeavesAUsableStoreAndItsRetryConverges(t *testing.T) {
 	executable, err := os.Executable()
@@ -217,7 +225,11 @@ func TestAnInterruptedPublicationLeavesAUsableStoreAndItsRetryConverges(t *testi
 							ctx := context.Background()
 							switch {
 							case ledgered && checkpointAnchor(entry):
-								if err := checkpointPermitted(t, ctx, scenario, store); err != nil {
+								permitted := checkpointPermitted
+								if strings.HasPrefix(entry, checkpointRestore) {
+									permitted = checkpointRestoreRefused
+								}
+								if err := permitted(t, ctx, scenario, store); err != nil {
 									t.Errorf("%s is ledgered as a refusal %s permits, but %v", key, entry, err)
 								}
 							case ledgered:
@@ -384,6 +396,30 @@ func checkpointPermitted(t *testing.T, ctx context.Context, scenario checkpointS
 	}
 	if err := checkpointReads(t, ctx, scenario, store); err != nil {
 		return fmt.Errorf("the refused retry left a store that does not read: %w", err)
+	}
+	return nil
+}
+
+// checkpointRestoreRefused asserts the refusal specs/contexts.md, Storage,
+// locking and publication, requires of a missing registry that init may not
+// recover: a read and the retry each refuse with the one diagnostic that
+// directs the operator to restore the complete store from a matching backup or
+// move it aside, and neither changes an entry of the root.
+func checkpointRestoreRefused(t *testing.T, ctx context.Context, scenario checkpointScenario, store *Store) error {
+	t.Helper()
+	before := snapshotRootEntries(t, store.options.Root)
+	guided := func(err error) bool {
+		reported := diagnostics.Of(err)
+		return len(reported) == 1 && reported[0].Code == "context.state" && reported[0].Message == missingRegistryMessage && reported[0].Remediation == storeRecoveryRemediation
+	}
+	if _, err := store.View(ctx); !guided(err) {
+		return fmt.Errorf("the view did not refuse with the complete-store restore guidance: %v %#v", err, diagnostics.Of(err))
+	}
+	if err := scenario.retry(t, ctx, store); !guided(err) {
+		return fmt.Errorf("the retry did not refuse with the complete-store restore guidance: %v %#v", err, diagnostics.Of(err))
+	}
+	if after := snapshotRootEntries(t, store.options.Root); !reflect.DeepEqual(before, after) {
+		return fmt.Errorf("the refusals changed the root:\nbefore: %#v\nafter:  %#v", before, after)
 	}
 	return nil
 }
@@ -2238,7 +2274,8 @@ func checkpointSecretInitializationScenario() checkpointScenario {
 // "<scenario>/<mode>/<checkpoint>#<occurrence>". A value naming a backlog row,
 // or candidate:<slug> for a defect no row names, marks a case that must fail;
 // a value citing the specification marks a refusal it permits, whose retry
-// must refuse with a diagnosed context.state failure while the store reads.
+// must refuse with a diagnosed context.state failure while the store reads,
+// and one prefixed restore: marks a refusal whose store no read admits.
 //
 //   - S8: a stage no collector removes. The controller record keeps its stage
 //     after any interruption before its rename, and a kill leaves the stage of
@@ -2248,9 +2285,11 @@ func checkpointSecretInitializationScenario() checkpointScenario {
 //     keeps the stage an interrupted keyring initialization write leaves, and
 //     the keyring's recovery then refuses it as not attributable, so neither
 //     init nor secret encryption init can complete.
-//   - candidate:torn-initial-registry-stage: a kill while the first registry
-//     is written leaves a torn stage in an otherwise empty root, which neither
-//     reads nor recovers.
+//   - restore:specs/contexts.md#storage-locking-and-publication: a kill while
+//     the first registry is written leaves the root's only entry a pending
+//     file whose bytes are not the canonical empty registry, which init may
+//     not recover, so the store is left unchanged and every read and init
+//     direct the operator to restore the complete store.
 //   - specs/contexts.md#storage-locking-and-publication: an init interrupted
 //     between creating the context directory and completing its reservation
 //     is not automatically resumable.
@@ -2318,7 +2357,7 @@ func checkpointLedger() map[string]string {
 		"init/cancelled/sync-directory#6":                             "specs/contexts.md#storage-locking-and-publication",
 		"init/refused/sync-directory#7":                               "specs/contexts.md#storage-locking-and-publication",
 		"init/cancelled/sync-directory#7":                             "specs/contexts.md#storage-locking-and-publication",
-		"init/killed/write-file#1":                                    "candidate:torn-initial-registry-stage",
+		"init/killed/write-file#1":                                    "restore:specs/contexts.md#storage-locking-and-publication",
 		"init/refused/write-file#3":                                   "specs/contexts.md#storage-locking-and-publication",
 		"init/cancelled/write-file#3":                                 "specs/contexts.md#storage-locking-and-publication",
 		"init/refused/write-file#7":                                   "candidate:unattributable-secret-initialization-stage",
