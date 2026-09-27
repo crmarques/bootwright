@@ -1,0 +1,20 @@
+{
+  "absent": false,
+  "answered": false,
+  "controller": "quay.io/metal3-io/sushy-tools@sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e",
+  "disks": [
+    {
+      "name": "root",
+      "present": true,
+      "sizeGiB": 60
+    }
+  ],
+  "domain": "",
+  "owned": false,
+  "postcondition": false,
+  "power": "On",
+  "request": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "state": "",
+  "system": "",
+  "unit": "active"
+}

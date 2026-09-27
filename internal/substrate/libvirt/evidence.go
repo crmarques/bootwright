@@ -44,7 +44,13 @@ type NetworkEvidence struct {
 // proves the domain, its disks, the controller unit and the controller's own
 // answer; a power state it did not read is empty, never assumed.
 type MachineEvidence struct {
-	Absent        bool           `json:"absent"`
+	Absent bool `json:"absent"`
+	// Answered is whether the hypervisor answered for the domain: it returned
+	// the definition, or said it defines no such domain. A silent hypervisor
+	// reports an empty Domain and State too, and neither then proves anything,
+	// so an empty Domain means absent only while Answered is true. Evidence
+	// without the field decodes as silent.
+	Answered      bool           `json:"answered"`
 	Controller    string         `json:"controller"`
 	Disks         []DiskEvidence `json:"disks"`
 	Domain        string         `json:"domain"`
@@ -252,7 +258,8 @@ func matchDisks(observed []DiskEvidence, frozen []Disk) error {
 }
 
 // ValidateMachineAbsence accepts evidence only when it positively proves the
-// domain, its disks and the controller are gone.
+// domain, its disks and the controller are gone. An empty domain proves the
+// domain gone only when the hypervisor answered for it.
 func ValidateMachineAbsence(data []byte, digest string) error {
 	evidence, err := decodeMachineEvidence(data, digest)
 	if err != nil {
@@ -260,6 +267,9 @@ func ValidateMachineAbsence(data []byte, digest string) error {
 	}
 	if !evidence.Postcondition || !evidence.Absent {
 		return refusal("lifecycle.state", "the machine adapter did not prove removal", "")
+	}
+	if !evidence.Answered {
+		return refusal("lifecycle.state", "the hypervisor did not answer for the machine's domain, so its removal is not proved", "")
 	}
 	if evidence.Domain != "" || evidence.Unit != "" || evidence.Controller != "" || evidence.System != "" || evidence.Power != "" || evidence.State != "" {
 		return refusal("lifecycle.state", "the machine removal evidence still reports an owned resource", "")

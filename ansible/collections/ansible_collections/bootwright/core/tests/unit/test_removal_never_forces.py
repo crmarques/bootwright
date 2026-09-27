@@ -48,3 +48,23 @@ def test_a_machine_removal_refuses_a_domain_that_is_not_shut_off():
         for condition in task["ansible.builtin.assert"].get("that") or []
     )
     assert "shut off" in conditions
+
+
+# A hypervisor that did not answer reports no domain, which every other guard
+# reads as a domain that is not defined, so its refusal has to come before the
+# first task that takes anything away, the controller's stop included.
+def test_a_machine_removal_refuses_a_silent_hypervisor_before_it_stops_anything():
+    destroy = tasks("substrate_libvirt_machine", "destroy.yml")
+
+    def first(predicate):
+        return next((index for index, task in enumerate(destroy) if predicate(task)), None)
+
+    refusal = first(lambda task: any(
+        str(condition).strip() == "substrate_libvirt_machine_before.observation.answered"
+        for condition in (task.get("ansible.builtin.assert") or {}).get("that") or []
+    ))
+    stop = first(lambda task: argv_of(task)[:2] == ["/usr/bin/systemctl", "stop"])
+    effect = first(lambda task: "ansible.builtin.command" in task or "ansible.builtin.file" in task)
+    assert refusal is not None, "the removal no longer refuses a hypervisor that did not answer"
+    assert stop is not None, "the removal no longer stops the management controller"
+    assert refusal < effect <= stop

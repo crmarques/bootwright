@@ -10,6 +10,7 @@ from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt 
     invoke,
     network_state,
     observe_host,
+    observe_machine,
     packages_present,
     unit_enabled,
     unit_state,
@@ -150,10 +151,10 @@ def test_an_observed_network_carries_the_identity_libvirt_assigned_it():
 def test_a_domain_reports_its_identity_and_ownership():
     owned = runner_for({"dumpxml bootwright-lab-rhel-01": (0, OWNED_DOMAIN, "")})
     assert domain_metadata(owned, "qemu:///system", "bootwright-lab-rhel-01") == {
-        "present": True, "owned": True, "uuid": "1ab52b3c-0000-8000-8000-000000000000",
+        "answered": True, "present": True, "owned": True, "uuid": "1ab52b3c-0000-8000-8000-000000000000",
     }
     assert domain_metadata(runner_for({}), "qemu:///system", "gone") == {
-        "present": False, "owned": False, "uuid": "",
+        "answered": False, "present": False, "owned": False, "uuid": "",
     }
 
 
@@ -205,3 +206,57 @@ def test_only_a_shut_off_domain_reports_itself_idle():
     assert domain_state(unreadable, "qemu:///system", "bootwright-lab-rhel-01") == ""
     invented = runner_for({"domstate bootwright-lab-rhel-01": (0, "bananas\n", "")})
     assert domain_state(invented, "qemu:///system", "bootwright-lab-rhel-01") == ""
+
+
+# virsh resolves every domain argument through virshLookupDomainInternal, which
+# discards libvirt's reason and exits 1 with `error: failed to get domain
+# '<name>'`; a connection that never opened reports `failed to connect to the
+# hypervisor` instead (libvirt tools/virsh-util.c and tools/virsh.c). `virsh
+# list --name` prints one name per line and exits 0 only once every domain is
+# listed (tools/virsh-domain-monitor.c).
+LOOKUP_REFUSED = (1, "", "error: failed to get domain 'bootwright-lab-rhel-01'\n")
+CONNECTION_REFUSED = (1, "", "error: failed to connect to the hypervisor\n"
+                      "error: Failed to connect socket to '/var/run/libvirt/virtqemud-sock': No such file or directory\n")
+OTHER_DOMAINS = (0, "bootwright-lab-rhel-02\n\n", "")
+
+
+def test_a_domain_the_hypervisor_does_not_define_is_told_apart_from_no_answer():
+    undefined = runner_for({"dumpxml bootwright-lab-rhel-01": LOOKUP_REFUSED, "list --all --name": OTHER_DOMAINS})
+    assert domain_metadata(undefined, "qemu:///system", "bootwright-lab-rhel-01") == {
+        "answered": True, "present": False, "owned": False, "uuid": "",
+    }
+    for name, answers in {
+        "connection refused": {"dumpxml bootwright-lab-rhel-01": CONNECTION_REFUSED, "list --all --name": OTHER_DOMAINS},
+        "listing refused": {"dumpxml bootwright-lab-rhel-01": LOOKUP_REFUSED, "list --all --name": (1, "", "error: Failed to list domains\n")},
+        "listed after all": {"dumpxml bootwright-lab-rhel-01": LOOKUP_REFUSED, "list --all --name": (0, "bootwright-lab-rhel-01\n\n", "")},
+        "listing truncated": {"dumpxml bootwright-lab-rhel-01": LOOKUP_REFUSED, "list --all --name": (0, "x" * (1 << 20), "")},
+        "another failure": {"dumpxml bootwright-lab-rhel-01": (1, "", "error: internal error\n"), "list --all --name": OTHER_DOMAINS},
+    }.items():
+        metadata = domain_metadata(runner_for(answers), "qemu:///system", "bootwright-lab-rhel-01")
+        assert metadata == {"answered": False, "present": False, "owned": False, "uuid": ""}, name
+
+
+def machine_request():
+    return {
+        "controller": {"unit": "bootwright-lab-bmc-rhel-01"},
+        "disks": [],
+        "domain": "bootwright-lab-rhel-01",
+        "uri": "qemu:///system",
+    }
+
+
+# Both a domain that is not defined and a hypervisor that did not answer report
+# no domain; only `answered` says which, and only the first proves absence.
+def test_a_machine_observation_reports_whether_the_hypervisor_answered():
+    undefined = runner_for({"dumpxml bootwright-lab-rhel-01": LOOKUP_REFUSED, "list --all --name": OTHER_DOMAINS})
+    observation = observe_machine(undefined, machine_request())
+    assert (observation["answered"], observation["domain"], observation["state"]) == (True, "", "")
+    silent = runner_for({"dumpxml bootwright-lab-rhel-01": CONNECTION_REFUSED})
+    observation = observe_machine(silent, machine_request())
+    assert (observation["answered"], observation["domain"], observation["state"]) == (False, "", "")
+    defined = runner_for({
+        "dumpxml bootwright-lab-rhel-01": (0, OWNED_DOMAIN, ""),
+        "domstate bootwright-lab-rhel-01": (0, "running\n", ""),
+    })
+    observation = observe_machine(defined, machine_request())
+    assert (observation["answered"], observation["domain"], observation["state"]) == (True, "bootwright-lab-rhel-01", "running")

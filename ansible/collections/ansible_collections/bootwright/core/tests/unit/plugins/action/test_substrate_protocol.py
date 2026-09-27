@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from ansible_collections.bootwright.core.plugins.action import (
@@ -107,6 +109,7 @@ def test_a_networks_identity_is_observed_but_never_reported_as_evidence():
 
 def machine_observation(**overrides):
     observation = {
+        "answered": True,
         "controller": "quay.io/x@sha256:" + "0" * 64,
         "disks": [{"name": "root", "present": True, "sizeGiB": 60}],
         "domain": "bootwright-lab-rhel-01",
@@ -248,3 +251,50 @@ def test_a_machine_carries_the_state_its_hypervisor_reports():
     assert substrate_machine_protocol.absence(machine_observation(), DIGEST)["state"] == ""
     with pytest.raises(ValueError):
         substrate_machine_protocol.presence(machine_observation(state="bananas"), "Off", "uuid", DIGEST)
+
+
+GONE = {"answered": True, "controller": "", "disks": [], "domain": "", "owned": False, "state": "", "unit": ""}
+
+
+# A silent hypervisor reports no domain either, so whether it answered travels
+# with the evidence, and only an answer proves the domain gone.
+def test_a_machine_removal_is_proved_only_when_the_hypervisor_answered():
+    removed = substrate_machine_protocol.absence(GONE, DIGEST)
+    assert removed["answered"] is True
+    assert removed["postcondition"] is True
+    silent = substrate_machine_protocol.absence(dict(GONE, answered=False), DIGEST)
+    assert silent["answered"] is False
+    assert silent["postcondition"] is False
+    unreported = {key: value for key, value in GONE.items() if key != "answered"}
+    assert substrate_machine_protocol.absence(unreported, DIGEST)["postcondition"] is False
+
+
+def test_a_machine_observation_carries_whether_the_hypervisor_answered():
+    answered = substrate_machine_protocol.presence(machine_observation(), "Off", "uuid", DIGEST)
+    assert answered["answered"] is True
+    silent = substrate_machine_protocol.presence(
+        machine_observation(answered=False, domain="", owned=False, state=""), "On", "", DIGEST,
+    )
+    assert silent["answered"] is False
+    assert silent["domain"] == ""
+    # The controller's power state is what the engine reads instead.
+    assert silent["power"] == "On"
+
+
+def machine_action(args):
+    module = substrate_machine_protocol.ActionModule.__new__(substrate_machine_protocol.ActionModule)
+    module._task = SimpleNamespace(args=args)
+    return module
+
+
+def test_a_removal_the_hypervisor_did_not_answer_for_publishes_nothing(monkeypatch):
+    published = []
+    monkeypatch.setattr(substrate_machine_protocol, "emit", lambda message, **kwargs: published.append(message))
+    arguments = {"phase": "completed", "outcome": "changed", "digest": DIGEST, "removed": True}
+    result = machine_action(dict(arguments, observation=dict(GONE, answered=False))).run(task_vars={})
+    assert result["failed"] is True
+    assert result["msg"].endswith("the hypervisor did not answer for: domain")
+    assert published == []
+    assert machine_action(dict(arguments, observation=GONE)).run(task_vars={}) == {"changed": False}
+    assert published[0]["evidence"]["answered"] is True
+    assert published[0]["evidence"]["postcondition"] is True

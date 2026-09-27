@@ -476,7 +476,9 @@ func (HostCapability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Qui
 // reports shut off is idle: paused, suspended and crashed domains still hold
 // the memory and disks the removal would delete. A hypervisor that will not
 // answer leaves the management controller's power state as the second opinion,
-// and when neither answers the machine is treated as live.
+// and when neither answers the machine is treated as live. Silence is never
+// read as a domain that is not defined, so without an answer the domain fields
+// are not consulted at all.
 func (c MachineCapability) Quiescent(ctx context.Context, probe lifecycle.Probe) (lifecycle.Quiescence, error) {
 	execution := probe.Execution()
 	request, err := c.prepare(ctx, execution)
@@ -492,6 +494,9 @@ func (c MachineCapability) Quiescent(ctx context.Context, probe lifecycle.Probe)
 	if err != nil {
 		return unprovedStop("its power state could not be read", stop), nil
 	}
+	if !evidence.Answered {
+		return silentHypervisor(evidence.Power, stop), nil
+	}
 	switch {
 	case evidence.State == domainOff:
 		return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its domain is shut off"}, nil
@@ -505,6 +510,18 @@ func (c MachineCapability) Quiescent(ctx context.Context, probe lifecycle.Probe)
 		return lifecycle.Quiescence{State: lifecycle.Live, Reason: "its controller reports it on", Stop: stop}, nil
 	}
 	return unprovedStop("its power state could not be read", stop), nil
+}
+
+// silentHypervisor decides a machine whose hypervisor did not answer from the
+// management controller's power state alone.
+func silentHypervisor(power, stop string) lifecycle.Quiescence {
+	switch power {
+	case "Off":
+		return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its hypervisor did not answer and its controller reports it off"}
+	case "On":
+		return lifecycle.Quiescence{State: lifecycle.Live, Reason: "its hypervisor did not answer and its controller reports it on", Stop: stop}
+	}
+	return unprovedStop("neither its hypervisor nor its controller answered", stop)
 }
 
 func unprovedStop(reason, stop string) lifecycle.Quiescence {

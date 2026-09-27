@@ -30,6 +30,17 @@ DOMAIN_STATES = ("running", "idle", "paused", "in shutdown", "shut off", "crashe
 # object without it is foreign and is never changed or removed.
 OWNERSHIP = "https://bootwright.io/substrate/v1"
 
+# LOOKUP_REFUSED is how virsh reports that the connection opened and the name
+# lookup failed. Every domain command resolves its argument through
+# virshLookupDomainInternal, which discards libvirt's own reason and exits 1
+# with `error: failed to get domain '<name>'`, while a connection that never
+# opened reports `failed to connect to the hypervisor` instead
+# (https://gitlab.com/libvirt/libvirt/-/blob/master/tools/virsh-util.c and
+# tools/virsh.c). The message therefore proves the hypervisor was reached, not
+# why the lookup failed, so a domain is only ever undefined when a listing the
+# hypervisor completed does not name it either.
+LOOKUP_REFUSED = "failed to get domain"
+
 
 def invoke(runner, argv, limit=MAX_OUTPUT):
     """Run one pinned executable with an exact argument vector and no shell."""
@@ -133,20 +144,44 @@ def pool_state(runner, uri, name):
     return "active" if "State:          running" in output else "inactive"
 
 
+def domain_listed(runner, uri, name):
+    """Report whether the hypervisor lists the domain, or None when it is silent.
+
+    `virsh list` exits 0 only after it has collected and printed every domain,
+    one name per line, so its answer is complete or it is no answer at all. An
+    output the bound truncated could have dropped the name, so it is none.
+    """
+    code, output = virsh(runner, uri, "list", "--all", "--name")
+    if code != 0 or len(output) >= MAX_OUTPUT:
+        return None
+    return name in [line.strip() for line in output.splitlines()]
+
+
 def domain_metadata(runner, uri, name):
-    """Report one domain's ownership and identity without changing it."""
-    code, output = virsh(runner, uri, "dumpxml", name)
+    """Report one domain's ownership and identity without changing it.
+
+    `answered` separates a hypervisor that says it defines no such domain from
+    one that did not answer, because only the first proves the domain absent.
+    A domain that is not present and not answered for may be running.
+    """
+    code, output, err = virsh_reason(runner, uri, "dumpxml", name)
     if code != 0:
-        return {"present": False, "owned": False, "uuid": ""}
+        undefined = LOOKUP_REFUSED in err and domain_listed(runner, uri, name) is False
+        return {"answered": undefined, "present": False, "owned": False, "uuid": ""}
     try:
         root = ElementTree.fromstring(output)
     except ElementTree.ParseError:
-        return {"present": True, "owned": False, "uuid": ""}
+        return {"answered": True, "present": True, "owned": False, "uuid": ""}
     owned = False
     for metadata in root.findall("./metadata/"):
         owned = owned or metadata.tag.startswith("{" + OWNERSHIP + "}")
     element = root.find("./uuid")
-    return {"present": True, "owned": owned, "uuid": (element.text or "").strip() if element is not None else ""}
+    return {
+        "answered": True,
+        "present": True,
+        "owned": owned,
+        "uuid": (element.text or "").strip() if element is not None else "",
+    }
 
 
 def domain_state(runner, uri, name):
@@ -213,7 +248,11 @@ def observe_host(runner, request):
 
 
 def observe_machine(runner, request):
-    """Bounded read-only observation of everything the machine block owns."""
+    """Bounded read-only observation of everything the machine block owns.
+
+    An empty `domain` means no such domain only while `answered` is true; with
+    a silent hypervisor it means nothing, and no reader may take it for absence.
+    """
     controller = request["controller"]
     metadata = domain_metadata(runner, request["uri"], request["domain"])
     disks = []
@@ -221,6 +260,7 @@ def observe_machine(runner, request):
         size = disk_size_gib(runner, disk["path"])
         disks.append({"name": disk["name"], "present": size > 0, "sizeGiB": size})
     return {
+        "answered": metadata["answered"],
         "controller": container_image(runner, controller["unit"]),
         "disks": disks,
         "domain": request["domain"] if metadata["present"] else "",
