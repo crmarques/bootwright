@@ -126,7 +126,8 @@ access is kept in context custody with `cluster kubeconfig`; D5 every node
 presenting this block's own tokenized image proves a partial install; D6 the
 first proved UUID and serial are pinned and a mismatch refuses; D7 non-root SSH
 accounts refuse at admission for now; D8 the cluster identity is the build's
-kubeconfig trust anchor; D9 multi-node libvirt stays admitted under F14; D10
+kubeconfig trust anchor, refined on 2026-09-27 (S26) to its admin client
+certificate, which the installer's install-complete rewrite keeps; D9 multi-node libvirt stays admitted under F14; D10
 ansible-core is the latest patch of the qualified 2.21 minor; D11 postcondition
 decisions stay in Go; D12 media completion claims the inputs digest and
 installer version, not an image digest; D14 documentation stays in the bundle
