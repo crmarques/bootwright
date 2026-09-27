@@ -49,12 +49,12 @@ func New(options Options) *Store {
 	return &Store{options: options, random: rand.Reader}
 }
 
-func (s *Store) checkpoint(ctx context.Context, name string) error {
+func (s *Store) checkpoint(ctx context.Context, point checkpoint) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if s.fail != nil {
-		return s.fail(name)
+		return s.fail(string(point))
 	}
 	return nil
 }

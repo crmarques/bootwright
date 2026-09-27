@@ -314,7 +314,7 @@ func (s *Store) syncPendingInitialRegistry(ctx context.Context, root *directory,
 	if err != nil || !sameFile(expected, before) {
 		return syscall.Stat_t{}, initialRegistryRecoveryError("pending initial registry changed during recovery")
 	}
-	if err := s.checkpoint(ctx, "sync-initial-registry-file"); err != nil {
+	if err := s.checkpoint(ctx, checkpointSyncInitialRegistryFile); err != nil {
 		return syscall.Stat_t{}, err
 	}
 	if err := file.Sync(); err != nil {
@@ -345,7 +345,7 @@ func (s *Store) recoverInitialRegistry(ctx context.Context, root *directory) (bo
 	if err != nil {
 		return false, err
 	}
-	if err := s.checkpoint(ctx, "before-initial-registry-recovery"); err != nil {
+	if err := s.checkpoint(ctx, checkpointBeforeInitialRegistryRecovery); err != nil {
 		return false, err
 	}
 	currentName, currentIdentity, recoverable, err := inspectInitialRegistry(ctx, root)
@@ -369,7 +369,7 @@ func (s *Store) recoverInitialRegistry(ctx context.Context, root *directory) (bo
 	if err != nil || !bytes.Equal(published, want) || !sameIdentity(currentIdentity, publishedIdentity) {
 		return false, uncertainInitialRegistryRecovery()
 	}
-	if err := s.checkpoint(ctx, "after-initial-registry-recovery"); err != nil {
+	if err := s.checkpoint(ctx, checkpointAfterInitialRegistryRecovery); err != nil {
 		return false, uncertainInitialRegistryRecovery()
 	}
 	entry, sole, err := soleRootEntry(root)
@@ -830,7 +830,7 @@ func (s *Store) writeRegistry(ctx context.Context, root *directory, registry con
 	if err != nil {
 		return err
 	}
-	if err := s.checkpoint(ctx, "before-registry-rename"); err != nil {
+	if err := s.checkpoint(ctx, checkpointBeforeRegistryRename); err != nil {
 		return err
 	}
 	if err := root.verify(); err != nil {
@@ -887,7 +887,7 @@ func (s *Store) writeRegistry(ctx context.Context, root *directory, registry con
 	if err != nil || !sameIdentity(currentPending, publishedIdentity) {
 		return uncertainRegistryPublication(expected == nil)
 	}
-	if err := s.checkpoint(ctx, "after-registry-rename"); err != nil {
+	if err := s.checkpoint(ctx, checkpointAfterRegistryRename); err != nil {
 		return uncertainRegistryPublication(expected == nil)
 	}
 	if expected == nil {
@@ -976,7 +976,7 @@ func (t *transaction) Commit(ctx context.Context, registry contexts.Registry) er
 		}
 		if next != prior {
 			if prior.Mode == contexts.Initializing {
-				if err := t.store.checkpoint(ctx, "before-context-ready"); err != nil {
+				if err := t.store.checkpoint(ctx, checkpointBeforeContextReady); err != nil {
 					return err
 				}
 			}

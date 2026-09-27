@@ -52,7 +52,7 @@ func (t *transaction) Reserve(ctx context.Context, name, environment string, con
 		if err := t.save(ctx, registry); err != nil {
 			return contexts.Record{}, err
 		}
-		if err := t.store.checkpoint(ctx, "after-context-reservation"); err != nil {
+		if err := t.store.checkpoint(ctx, checkpointAfterContextReservation); err != nil {
 			return contexts.Record{}, err
 		}
 	}
@@ -69,7 +69,7 @@ func (t *transaction) Reserve(ctx context.Context, name, environment string, con
 		if err != nil {
 			return contexts.Record{}, err
 		}
-		if err := t.store.checkpoint(ctx, "after-context-directory"); err != nil {
+		if err := t.store.checkpoint(ctx, checkpointAfterContextDirectory); err != nil {
 			dir.file.Close()
 			return contexts.Record{}, err
 		}

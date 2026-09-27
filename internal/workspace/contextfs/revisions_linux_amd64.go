@@ -51,7 +51,7 @@ func (t *transaction) collectRevisions(ctx context.Context, id string) error {
 		if name == record.Revision {
 			continue
 		}
-		if err := t.store.checkpoint(ctx, "before-revision-cleanup"); err != nil {
+		if err := t.store.checkpoint(ctx, checkpointBeforeRevisionCleanup); err != nil {
 			return err
 		}
 		if err := t.collectRevision(ctx, dir, revisions, name, id); err != nil {
@@ -72,7 +72,7 @@ func (t *transaction) collectRevision(ctx context.Context, owner, revisions *dir
 	if err := t.store.walkContextTree(ctx, dir, path, inspectContextTree, &remaining); err != nil {
 		return err
 	}
-	if err := t.store.checkpoint(ctx, "before-revision-remove"); err != nil {
+	if err := t.store.checkpoint(ctx, checkpointBeforeRevisionRemove); err != nil {
 		return err
 	}
 	guard := func(ctx context.Context) error { return t.verifyRevisionCollection(ctx, owner, id) }
@@ -83,7 +83,7 @@ func (t *transaction) collectRevision(ctx context.Context, owner, revisions *dir
 	if err := t.store.walkContextTreeWithRemovalGuard(ctx, dir, path, removeContextTree, &remaining, guard); err != nil {
 		return err
 	}
-	if err := t.store.checkpoint(ctx, "before-revision-rmdir"); err != nil {
+	if err := t.store.checkpoint(ctx, checkpointBeforeRevisionRmdir); err != nil {
 		return err
 	}
 	if err := guard(ctx); err != nil {

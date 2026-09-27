@@ -99,7 +99,7 @@ func (a *operationArea) resolveEntry(ctx context.Context, dir *directory, name s
 			return stat, false, err
 		}
 		time.Sleep(time.Millisecond << attempt)
-		if err := a.store.checkpoint(ctx, "confirm-operation-entry"); err != nil {
+		if err := a.store.checkpoint(ctx, checkpointConfirmOperationEntry); err != nil {
 			return stat, false, err
 		}
 	}
@@ -114,7 +114,7 @@ func (a *operationArea) confirmDirectory(ctx context.Context, parent *directory,
 			return nested, err
 		}
 		time.Sleep(time.Millisecond << attempt)
-		if err := a.store.checkpoint(ctx, "confirm-operation-entry"); err != nil {
+		if err := a.store.checkpoint(ctx, checkpointConfirmOperationEntry); err != nil {
 			return nil, err
 		}
 	}
@@ -435,7 +435,7 @@ func (a *operationArea) Replace(ctx context.Context, target string, data, expect
 	if err != nil || !bytes.Equal(staged, data) {
 		return state("staged lifecycle record changed before publication")
 	}
-	if err := a.store.checkpoint(ctx, "before-operation-rename"); err != nil {
+	if err := a.store.checkpoint(ctx, checkpointBeforeOperationRename); err != nil {
 		return err
 	}
 	current, _, err := readBoundedIdentity(ctx, parent, name, maxOperationRecord, false)
@@ -453,7 +453,7 @@ func (a *operationArea) Replace(ctx context.Context, target string, data, expect
 		return state("lifecycle record could not be atomically published")
 	}
 	renamed = true
-	if err := a.store.checkpoint(ctx, "after-operation-rename"); err != nil {
+	if err := a.store.checkpoint(ctx, checkpointAfterOperationRename); err != nil {
 		return err
 	}
 	published, _, err := readBoundedIdentity(ctx, parent, name, maxOperationRecord, false)
@@ -481,7 +481,7 @@ func (a *operationArea) Append(ctx context.Context, target string, data []byte) 
 	if err := a.capacity(ctx, len(data)); err != nil {
 		return err
 	}
-	if err := a.store.checkpoint(ctx, "append-operation-log"); err != nil {
+	if err := a.store.checkpoint(ctx, checkpointAppendOperationLog); err != nil {
 		return err
 	}
 	file, err := openRelative(parent, name, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_APPEND, 0600)
@@ -561,7 +561,7 @@ func (a *operationArea) scan(ctx context.Context, dir *directory, depth int) (in
 	}
 	entries, total := 0, int64(0)
 	for _, name := range names {
-		if err := a.store.checkpoint(ctx, "measure-operation-entry"); err != nil {
+		if err := a.store.checkpoint(ctx, checkpointMeasureOperationEntry); err != nil {
 			return 0, 0, err
 		}
 		stat, present, err := a.resolveEntry(ctx, dir, name)

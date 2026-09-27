@@ -870,7 +870,7 @@ func (a *secretArea) Replace(ctx context.Context, path string, data, expected []
 	if err != nil {
 		return secretstore.NotCommitted, err
 	}
-	if err := a.store.checkpoint(ctx, "before-secret-rename"); err != nil {
+	if err := a.store.checkpoint(ctx, checkpointBeforeSecretRename); err != nil {
 		return secretstore.NotCommitted, err
 	}
 	if err := a.verifyExpectedContext(ctx); err != nil {
@@ -895,7 +895,7 @@ func (a *secretArea) Replace(ctx context.Context, path string, data, expected []
 	if path == secretstore.RecordPath {
 		a.phase = secretUncertain
 	}
-	if err := a.store.checkpoint(ctx, "after-secret-rename"); err != nil {
+	if err := a.store.checkpoint(ctx, checkpointAfterSecretRename); err != nil {
 		return secretstore.Uncertain, state("secret state publication has uncertain durability; inspect it before retrying")
 	}
 	if err := a.store.syncDirectory(ctx, parent); err != nil {
