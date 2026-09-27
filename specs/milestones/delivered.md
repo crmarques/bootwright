@@ -748,3 +748,37 @@ and `test_a_lifecycle_playbook_dies_with_its_killed_supervisor`.
 S14 edges recorded in C28 and the per-object reasons in F7; S26, which X15's
 review found: the identity does not survive the installer's install-complete
 rewrite of the kubeconfig; the M4a operator gate still waits for X16.
+
+### X15 — installs that neither strand nor over-report
+
+**Owner:** Container cluster, with State reconciliation and Controller. Landed
+on `main` at `580de0a` through pull request 5 on 2026-09-27, on explicit
+request.
+
+**Outcome:** completion and the settled decision require ClusterVersion
+`Available` and a completed newest history entry at the declared release, so an
+install interrupted during its completion wait is waited for again rather than
+recorded done (S19). Nodes presenting this block's own tokenized image prove a
+partial install while the API is silent, and a retry neither re-inserts media
+into nor re-arms a boot override on such a node (S20). The install marks its
+work area before any node is handed the image, a media rebuild over a marked
+area refuses before any effect, and a replay that skips the build still serves
+and probes the image (S21). A start interrupted between its two writes is
+adopted by the next (S13). Byte goldens pin the cluster requests and evidence
+and the managed-OS request (T1). The automation digest stays over every
+embedded file, pinned by a test, because documentation can leave it only with
+the bundle attribution checks (Z2, digest).
+
+**Guard tests:** `TestFrozenRequestsMatchTheirGoldens`,
+`TestTheFrozenRequestsMatchTheirGoldens`, `TestInstallEvidenceMatchesItsGoldens`,
+`TestMediaEvidenceMatchesItsGoldens`,
+`TestAnInstallStoppedBeforeTheAPIAnswersIsPartialOnlyOnItsOwnImage`,
+`TestAStartInterruptedBetweenItsWritesIsAdoptedByTheNext`,
+`TestAStartAdoptsNothingButAnInterruptedStart`,
+`TestAutomationDigestCoversEveryEmbeddedFile`, and the collection tests
+`test_available_and_a_completed_history_at_the_declared_release_is_completed`,
+`test_a_node_running_from_its_own_image_is_not_booted_again` and
+`test_a_marked_area_that_would_be_rebuilt_refuses_naming_why_and_the_remedy`.
+
+**Constraints left behind:** backlog Z2 (digest attribution) in X22, and S26,
+which its review found, in X16.
