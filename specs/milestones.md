@@ -244,6 +244,7 @@ Substrate. **Kind:** safety, out of sequence, on explicit request on
 deadline and cluster budgets), S22, F14 and S6b (quiescence) of the
 [pre-OpenShift program](milestones/backlog.md#pre-openshift-readiness-program-2026-09).
 Exit gates: each item's exit evidence, `make check`, `make docs-check` and CI.
+Implemented; remaining: landing through its pull request.
 
 ## Next ordered outcomes
 
