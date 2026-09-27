@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "status",
+  "ok": false,
+  "exitCode": 1,
+  "result": null,
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "cli.not-implemented",
+      "message": "bootwright status is not implemented"
+    }
+  ],
+  "logs": []
+}

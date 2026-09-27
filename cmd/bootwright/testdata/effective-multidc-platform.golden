@@ -1,0 +1,3441 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: multidc
+spec:
+  domains:
+    base: example.com
+    machines: example.com
+    clusters: clusters.example.com
+    containerClusters: clusters.example.com
+    storageClusters: clusters.example.com
+  sites:
+    - name: site-a
+    - name: site-b
+    - name: site-c
+  remoteMachinesAccessKey:
+    keyRef: bootwright-machine-key
+  defaults:
+    MachineInstallProfile:
+      proxy:
+        proxyRef: default
+        noProxy:
+          - .example.com
+          - 192.0.2.0/24
+          - 198.51.100.0/24
+          - 203.0.113.0/24
+      ntp:
+        - serverRef: default-01
+        - serverRef: default-02
+        - serverRef: default-03
+    ContainerCluster:
+      install:
+        proxy:
+          proxyRef: default
+          noProxy:
+            - .example.com
+            - 192.0.2.0/24
+            - 198.51.100.0/24
+            - 203.0.113.0/24
+        ntp:
+          - serverRef: default-01
+          - serverRef: default-02
+          - serverRef: default-03
+        pullSecretRef: openshift-pull-secret
+  controller:
+    machineRef: controller
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Entitlement
+metadata:
+  name: ceph-entitlement
+spec:
+  type: ibm-storage-ceph
+  registry:
+    url: cp.icr.io/cp
+    credentialsRef: ceph-registry-credentials
+  license:
+    accept: true
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Entitlement
+metadata:
+  name: rhel-satellite
+spec:
+  type: redhat-rhel
+  rhsm:
+    management: managed
+    organizationRef: satellite-org
+    activationKeyRef: satellite-activation-key
+    connectToInsights: false
+    satellite:
+      hostname: subscription.example.com
+      trustBundleRef: satellite-ca-bundle
+      contentBaseURL: https://subscription.example.com/pulp/content
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: controller
+spec:
+  capabilities:
+    - container-runtime
+  os:
+    provided: true
+  proxy:
+    proxyRef: default
+    noProxy:
+      - .example.com
+      - 192.0.2.0/24
+      - 198.51.100.0/24
+      - 203.0.113.0/24
+  network:
+    addresses:
+      - name: fqdn
+        address: utility-01.example.com
+      - name: dns-alias
+        address: utility-01.example.com
+      - name: ip
+        address: 192.0.2.127
+  access:
+    local: true
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: edge-a-01
+  labels:
+    datacenter: site-a
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-a
+  substrate:
+    providerRef: bare-metal
+  hardware:
+    nics:
+      - name: eth0
+        macAddress: 02:00:00:00:00:18
+      - name: eth2
+        macAddress: 02:00:00:00:00:19
+    boot:
+      nicRef: eth0
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc-edge-a-01.example.com/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: ocp-bmc-credentials
+        tls:
+          verify: true
+        virtualMedia:
+          tls:
+            trust: established
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+  network:
+    configRef: ocp-bare-metal-network
+    attachmentRef: ocp-bare-metal-network
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: edge-a-01.example.com
+      - name: ip
+        address: 192.0.2.3/24
+        interface: bond0.100
+      - name: ceph-public
+        address: 198.51.100.21/25
+        interface: ceph-public
+    interfaceBinding:
+      - nicRef: eth0
+        interfaceName: eth0
+      - nicRef: eth2
+        interfaceName: eth2
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: edge-a-02
+  labels:
+    datacenter: site-a
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-a
+  substrate:
+    providerRef: bare-metal
+  hardware:
+    nics:
+      - name: eth0
+        macAddress: 02:00:00:00:00:1a
+      - name: eth2
+        macAddress: 02:00:00:00:00:1b
+    boot:
+      nicRef: eth0
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc-edge-a-02.example.com/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: ocp-bmc-credentials
+        tls:
+          verify: true
+        virtualMedia:
+          tls:
+            trust: established
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+  network:
+    configRef: ocp-bare-metal-network
+    attachmentRef: ocp-bare-metal-network
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: edge-a-02.example.com
+      - name: ip
+        address: 192.0.2.4/24
+        interface: bond0.100
+      - name: ceph-public
+        address: 198.51.100.22/25
+        interface: ceph-public
+    interfaceBinding:
+      - nicRef: eth0
+        interfaceName: eth0
+      - nicRef: eth2
+        interfaceName: eth2
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: edge-a-03
+  labels:
+    datacenter: site-a
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-a
+  substrate:
+    providerRef: bare-metal
+  hardware:
+    nics:
+      - name: eth0
+        macAddress: 02:00:00:00:00:1c
+      - name: eth2
+        macAddress: 02:00:00:00:00:1d
+    boot:
+      nicRef: eth0
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc-edge-a-03.example.com/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: ocp-bmc-credentials
+        tls:
+          verify: true
+        virtualMedia:
+          tls:
+            trust: established
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+  network:
+    configRef: ocp-bare-metal-network
+    attachmentRef: ocp-bare-metal-network
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: edge-a-03.example.com
+      - name: ip
+        address: 192.0.2.5/24
+        interface: bond0.100
+      - name: ceph-public
+        address: 198.51.100.23/25
+        interface: ceph-public
+    interfaceBinding:
+      - nicRef: eth0
+        interfaceName: eth0
+      - nicRef: eth2
+        interfaceName: eth2
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: edge-b-01
+  labels:
+    datacenter: site-b
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-b
+  substrate:
+    providerRef: bare-metal
+  hardware:
+    nics:
+      - name: eth0
+        macAddress: 02:00:00:00:00:1e
+      - name: eth2
+        macAddress: 02:00:00:00:00:1f
+    boot:
+      nicRef: eth0
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc-edge-b-01.example.com/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: ocp-bmc-credentials
+        tls:
+          verify: true
+        virtualMedia:
+          tls:
+            trust: established
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+  network:
+    configRef: ocp-bare-metal-network
+    attachmentRef: ocp-bare-metal-network
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: edge-b-01.example.com
+      - name: ip
+        address: 192.0.2.133/24
+        interface: bond0.100
+      - name: ceph-public
+        address: 198.51.100.24/25
+        interface: ceph-public
+    interfaceBinding:
+      - nicRef: eth0
+        interfaceName: eth0
+      - nicRef: eth2
+        interfaceName: eth2
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: edge-b-02
+  labels:
+    datacenter: site-b
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-b
+  substrate:
+    providerRef: bare-metal
+  hardware:
+    nics:
+      - name: eth0
+        macAddress: 02:00:00:00:00:20
+      - name: eth2
+        macAddress: 02:00:00:00:00:21
+    boot:
+      nicRef: eth0
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc-edge-b-02.example.com/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: ocp-bmc-credentials
+        tls:
+          verify: true
+        virtualMedia:
+          tls:
+            trust: established
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+  network:
+    configRef: ocp-bare-metal-network
+    attachmentRef: ocp-bare-metal-network
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: edge-b-02.example.com
+      - name: ip
+        address: 192.0.2.134/24
+        interface: bond0.100
+      - name: ceph-public
+        address: 198.51.100.25/25
+        interface: ceph-public
+    interfaceBinding:
+      - nicRef: eth0
+        interfaceName: eth0
+      - nicRef: eth2
+        interfaceName: eth2
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: edge-b-03
+  labels:
+    datacenter: site-b
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-b
+  substrate:
+    providerRef: bare-metal
+  hardware:
+    nics:
+      - name: eth0
+        macAddress: 02:00:00:00:00:22
+      - name: eth2
+        macAddress: 02:00:00:00:00:23
+    boot:
+      nicRef: eth0
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc-edge-b-03.example.com/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: ocp-bmc-credentials
+        tls:
+          verify: true
+        virtualMedia:
+          tls:
+            trust: established
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+  network:
+    configRef: ocp-bare-metal-network
+    attachmentRef: ocp-bare-metal-network
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: edge-b-03.example.com
+      - name: ip
+        address: 192.0.2.135/24
+        interface: bond0.100
+      - name: ceph-public
+        address: 198.51.100.26/25
+        interface: ceph-public
+    interfaceBinding:
+      - nicRef: eth0
+        interfaceName: eth0
+      - nicRef: eth2
+        interfaceName: eth2
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: hub-multidc-01-infra-01
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-a
+  substrate:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: large
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: hub-multidc-01-infra-01.example.com
+      - name: ip
+        address: 192.0.2.19/24
+        interface: primary
+      - name: ceph-public
+        address: 198.51.100.37/25
+        interface: ceph-public
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: hub-multidc-01-infra-02
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-a
+  substrate:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: large
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: hub-multidc-01-infra-02.example.com
+      - name: ip
+        address: 192.0.2.20/24
+        interface: primary
+      - name: ceph-public
+        address: 198.51.100.38/25
+        interface: ceph-public
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: hub-multidc-01-infra-03
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-a
+  substrate:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: large
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: hub-multidc-01-infra-03.example.com
+      - name: ip
+        address: 192.0.2.21/24
+        interface: primary
+      - name: ceph-public
+        address: 198.51.100.39/25
+        interface: ceph-public
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: hub-multidc-01-master-01
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-a
+  substrate:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: general
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: hub-multidc-01-master-01.example.com
+      - name: ip
+        address: 192.0.2.13/24
+        interface: primary
+      - name: ceph-public
+        address: 198.51.100.31/25
+        interface: ceph-public
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: hub-multidc-01-master-02
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-a
+  substrate:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: general
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: hub-multidc-01-master-02.example.com
+      - name: ip
+        address: 192.0.2.14/24
+        interface: primary
+      - name: ceph-public
+        address: 198.51.100.32/25
+        interface: ceph-public
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: hub-multidc-01-master-03
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-a
+  substrate:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: general
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: hub-multidc-01-master-03.example.com
+      - name: ip
+        address: 192.0.2.15/24
+        interface: primary
+      - name: ceph-public
+        address: 198.51.100.33/25
+        interface: ceph-public
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: hub-multidc-01-worker-01
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-a
+  substrate:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: general
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: hub-multidc-01-worker-01.example.com
+      - name: ip
+        address: 192.0.2.16/24
+        interface: primary
+      - name: ceph-public
+        address: 198.51.100.34/25
+        interface: ceph-public
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: hub-multidc-01-worker-02
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-a
+  substrate:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: general
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: hub-multidc-01-worker-02.example.com
+      - name: ip
+        address: 192.0.2.17/24
+        interface: primary
+      - name: ceph-public
+        address: 198.51.100.35/25
+        interface: ceph-public
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: hub-multidc-01-worker-03
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-a
+  substrate:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: general
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: hub-multidc-01-worker-03.example.com
+      - name: ip
+        address: 192.0.2.18/24
+        interface: primary
+      - name: ceph-public
+        address: 198.51.100.36/25
+        interface: ceph-public
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: hub-multidc-02-infra-01
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-b
+  substrate:
+    providerRef: kubevirt-ocp-multidc-02
+    profileRef: large
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: hub-multidc-02-infra-01.example.com
+      - name: ip
+        address: 192.0.2.149/24
+        interface: primary
+      - name: ceph-public
+        address: 198.51.100.47/25
+        interface: ceph-public
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: hub-multidc-02-infra-02
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-b
+  substrate:
+    providerRef: kubevirt-ocp-multidc-02
+    profileRef: large
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: hub-multidc-02-infra-02.example.com
+      - name: ip
+        address: 192.0.2.150/24
+        interface: primary
+      - name: ceph-public
+        address: 198.51.100.48/25
+        interface: ceph-public
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: hub-multidc-02-infra-03
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-b
+  substrate:
+    providerRef: kubevirt-ocp-multidc-02
+    profileRef: large
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: hub-multidc-02-infra-03.example.com
+      - name: ip
+        address: 192.0.2.151/24
+        interface: primary
+      - name: ceph-public
+        address: 198.51.100.49/25
+        interface: ceph-public
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: hub-multidc-02-master-01
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-b
+  substrate:
+    providerRef: kubevirt-ocp-multidc-02
+    profileRef: general
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: hub-multidc-02-master-01.example.com
+      - name: ip
+        address: 192.0.2.143/24
+        interface: primary
+      - name: ceph-public
+        address: 198.51.100.41/25
+        interface: ceph-public
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: hub-multidc-02-master-02
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-b
+  substrate:
+    providerRef: kubevirt-ocp-multidc-02
+    profileRef: general
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: hub-multidc-02-master-02.example.com
+      - name: ip
+        address: 192.0.2.144/24
+        interface: primary
+      - name: ceph-public
+        address: 198.51.100.42/25
+        interface: ceph-public
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: hub-multidc-02-master-03
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-b
+  substrate:
+    providerRef: kubevirt-ocp-multidc-02
+    profileRef: general
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: hub-multidc-02-master-03.example.com
+      - name: ip
+        address: 192.0.2.145/24
+        interface: primary
+      - name: ceph-public
+        address: 198.51.100.43/25
+        interface: ceph-public
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: hub-multidc-02-worker-01
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-b
+  substrate:
+    providerRef: kubevirt-ocp-multidc-02
+    profileRef: general
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: hub-multidc-02-worker-01.example.com
+      - name: ip
+        address: 192.0.2.146/24
+        interface: primary
+      - name: ceph-public
+        address: 198.51.100.44/25
+        interface: ceph-public
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: hub-multidc-02-worker-02
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-b
+  substrate:
+    providerRef: kubevirt-ocp-multidc-02
+    profileRef: general
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: hub-multidc-02-worker-02.example.com
+      - name: ip
+        address: 192.0.2.147/24
+        interface: primary
+      - name: ceph-public
+        address: 198.51.100.45/25
+        interface: ceph-public
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: hub-multidc-02-worker-03
+spec:
+  capabilities:
+    - openshift-node
+  placement:
+    site: site-b
+  substrate:
+    providerRef: kubevirt-ocp-multidc-02
+    profileRef: general
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: hub-multidc-02-worker-03.example.com
+      - name: ip
+        address: 192.0.2.148/24
+        interface: primary
+      - name: ceph-public
+        address: 198.51.100.46/25
+        interface: ceph-public
+    overrides: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: storage-a-01
+spec:
+  capabilities:
+    - ceph-node
+  placement:
+    site: site-a
+  substrate:
+    providerRef: bare-metal
+  hardware:
+    nics:
+      - name: eth0
+        macAddress: 02:00:00:00:00:00
+      - name: eth1
+        macAddress: 02:00:00:00:00:01
+      - name: eth2
+        macAddress: 02:00:00:00:00:02
+      - name: eth3
+        macAddress: 02:00:00:00:00:03
+    boot:
+      nicRef: eth0
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc-storage-a-01.example.com/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: ceph-bmc-credentials
+        tls:
+          verify: true
+        virtualMedia:
+          tls:
+            trust: established
+  os:
+    provided: false
+    installProfileRef: rhel-ceph-node
+    install:
+      hostKeyRef: storage-a-01-host-key
+      ntp:
+        - serverRef: default-01
+        - serverRef: default-02
+        - serverRef: default-03
+      rootDeviceHints:
+        deviceName: /dev/sda
+  proxy:
+    proxyRef: default
+    noProxy:
+      - .example.com
+      - 192.0.2.0/24
+      - 198.51.100.0/24
+      - 203.0.113.0/24
+  network:
+    configRef: ceph-network
+    attachmentRef: ceph-network
+    installAddressRef: ssh
+    addresses:
+      - name: fqdn
+        address: storage-a-01.example.com
+      - name: ssh
+        address: 198.51.100.1/25
+        interface: bond0.200
+      - name: cluster
+        address: 203.0.113.1/24
+        interface: bond0.300
+    interfaceBinding:
+      - nicRef: eth0
+        interfaceName: eth0
+      - nicRef: eth1
+        interfaceName: eth1
+      - nicRef: eth2
+        interfaceName: eth2
+      - nicRef: eth3
+        interfaceName: eth3
+    overrides: {}
+  access:
+    ssh:
+      addressRef: ssh
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: storage-a-02
+spec:
+  capabilities:
+    - ceph-node
+  placement:
+    site: site-a
+  substrate:
+    providerRef: bare-metal
+  hardware:
+    nics:
+      - name: eth0
+        macAddress: 02:00:00:00:00:04
+      - name: eth1
+        macAddress: 02:00:00:00:00:05
+      - name: eth2
+        macAddress: 02:00:00:00:00:06
+      - name: eth3
+        macAddress: 02:00:00:00:00:07
+    boot:
+      nicRef: eth0
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc-storage-a-02.example.com/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: ceph-bmc-credentials
+        tls:
+          verify: true
+        virtualMedia:
+          tls:
+            trust: established
+  os:
+    provided: false
+    installProfileRef: rhel-ceph-node
+    install:
+      hostKeyRef: storage-a-02-host-key
+      ntp:
+        - serverRef: default-01
+        - serverRef: default-02
+        - serverRef: default-03
+      rootDeviceHints:
+        deviceName: /dev/sda
+  proxy:
+    proxyRef: default
+    noProxy:
+      - .example.com
+      - 192.0.2.0/24
+      - 198.51.100.0/24
+      - 203.0.113.0/24
+  network:
+    configRef: ceph-network
+    attachmentRef: ceph-network
+    installAddressRef: ssh
+    addresses:
+      - name: fqdn
+        address: storage-a-02.example.com
+      - name: ssh
+        address: 198.51.100.2/25
+        interface: bond0.200
+      - name: cluster
+        address: 203.0.113.2/24
+        interface: bond0.300
+    interfaceBinding:
+      - nicRef: eth0
+        interfaceName: eth0
+      - nicRef: eth1
+        interfaceName: eth1
+      - nicRef: eth2
+        interfaceName: eth2
+      - nicRef: eth3
+        interfaceName: eth3
+    overrides: {}
+  access:
+    ssh:
+      addressRef: ssh
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: storage-a-03
+spec:
+  capabilities:
+    - ceph-node
+  placement:
+    site: site-a
+  substrate:
+    providerRef: bare-metal
+  hardware:
+    nics:
+      - name: eth0
+        macAddress: 02:00:00:00:00:08
+      - name: eth1
+        macAddress: 02:00:00:00:00:09
+      - name: eth2
+        macAddress: 02:00:00:00:00:0a
+      - name: eth3
+        macAddress: 02:00:00:00:00:0b
+    boot:
+      nicRef: eth0
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc-storage-a-03.example.com/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: ceph-bmc-credentials
+        tls:
+          verify: true
+        virtualMedia:
+          tls:
+            trust: established
+  os:
+    provided: false
+    installProfileRef: rhel-ceph-node
+    install:
+      hostKeyRef: storage-a-03-host-key
+      ntp:
+        - serverRef: default-01
+        - serverRef: default-02
+        - serverRef: default-03
+      rootDeviceHints:
+        deviceName: /dev/sda
+  proxy:
+    proxyRef: default
+    noProxy:
+      - .example.com
+      - 192.0.2.0/24
+      - 198.51.100.0/24
+      - 203.0.113.0/24
+  network:
+    configRef: ceph-network
+    attachmentRef: ceph-network
+    installAddressRef: ssh
+    addresses:
+      - name: fqdn
+        address: storage-a-03.example.com
+      - name: ssh
+        address: 198.51.100.3/25
+        interface: bond0.200
+      - name: cluster
+        address: 203.0.113.3/24
+        interface: bond0.300
+    interfaceBinding:
+      - nicRef: eth0
+        interfaceName: eth0
+      - nicRef: eth1
+        interfaceName: eth1
+      - nicRef: eth2
+        interfaceName: eth2
+      - nicRef: eth3
+        interfaceName: eth3
+    overrides: {}
+  access:
+    ssh:
+      addressRef: ssh
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: storage-b-01
+spec:
+  capabilities:
+    - ceph-node
+  placement:
+    site: site-b
+  substrate:
+    providerRef: bare-metal
+  hardware:
+    nics:
+      - name: eth0
+        macAddress: 02:00:00:00:00:0c
+      - name: eth1
+        macAddress: 02:00:00:00:00:0d
+      - name: eth2
+        macAddress: 02:00:00:00:00:0e
+      - name: eth3
+        macAddress: 02:00:00:00:00:0f
+    boot:
+      nicRef: eth0
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc-storage-b-01.example.com/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: ceph-bmc-credentials
+        tls:
+          verify: true
+        virtualMedia:
+          tls:
+            trust: established
+  os:
+    provided: false
+    installProfileRef: rhel-ceph-node
+    install:
+      hostKeyRef: storage-b-01-host-key
+      ntp:
+        - serverRef: default-01
+        - serverRef: default-02
+        - serverRef: default-03
+      rootDeviceHints:
+        deviceName: /dev/sda
+  proxy:
+    proxyRef: default
+    noProxy:
+      - .example.com
+      - 192.0.2.0/24
+      - 198.51.100.0/24
+      - 203.0.113.0/24
+  network:
+    configRef: ceph-network
+    attachmentRef: ceph-network
+    installAddressRef: ssh
+    addresses:
+      - name: fqdn
+        address: storage-b-01.example.com
+      - name: ssh
+        address: 198.51.100.64/25
+        interface: bond0.200
+      - name: cluster
+        address: 203.0.113.4/24
+        interface: bond0.300
+    interfaceBinding:
+      - nicRef: eth0
+        interfaceName: eth0
+      - nicRef: eth1
+        interfaceName: eth1
+      - nicRef: eth2
+        interfaceName: eth2
+      - nicRef: eth3
+        interfaceName: eth3
+    overrides: {}
+  access:
+    ssh:
+      addressRef: ssh
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: storage-b-02
+spec:
+  capabilities:
+    - ceph-node
+  placement:
+    site: site-b
+  substrate:
+    providerRef: bare-metal
+  hardware:
+    nics:
+      - name: eth0
+        macAddress: 02:00:00:00:00:10
+      - name: eth1
+        macAddress: 02:00:00:00:00:11
+      - name: eth2
+        macAddress: 02:00:00:00:00:12
+      - name: eth3
+        macAddress: 02:00:00:00:00:13
+    boot:
+      nicRef: eth0
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc-storage-b-02.example.com/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: ceph-bmc-credentials
+        tls:
+          verify: true
+        virtualMedia:
+          tls:
+            trust: established
+  os:
+    provided: false
+    installProfileRef: rhel-ceph-node
+    install:
+      hostKeyRef: storage-b-02-host-key
+      ntp:
+        - serverRef: default-01
+        - serverRef: default-02
+        - serverRef: default-03
+      rootDeviceHints:
+        deviceName: /dev/sda
+  proxy:
+    proxyRef: default
+    noProxy:
+      - .example.com
+      - 192.0.2.0/24
+      - 198.51.100.0/24
+      - 203.0.113.0/24
+  network:
+    configRef: ceph-network
+    attachmentRef: ceph-network
+    installAddressRef: ssh
+    addresses:
+      - name: fqdn
+        address: storage-b-02.example.com
+      - name: ssh
+        address: 198.51.100.65/25
+        interface: bond0.200
+      - name: cluster
+        address: 203.0.113.5/24
+        interface: bond0.300
+    interfaceBinding:
+      - nicRef: eth0
+        interfaceName: eth0
+      - nicRef: eth1
+        interfaceName: eth1
+      - nicRef: eth2
+        interfaceName: eth2
+      - nicRef: eth3
+        interfaceName: eth3
+    overrides: {}
+  access:
+    ssh:
+      addressRef: ssh
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: storage-b-03
+spec:
+  capabilities:
+    - ceph-node
+  placement:
+    site: site-b
+  substrate:
+    providerRef: bare-metal
+  hardware:
+    nics:
+      - name: eth0
+        macAddress: 02:00:00:00:00:14
+      - name: eth1
+        macAddress: 02:00:00:00:00:15
+      - name: eth2
+        macAddress: 02:00:00:00:00:16
+      - name: eth3
+        macAddress: 02:00:00:00:00:17
+    boot:
+      nicRef: eth0
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc-storage-b-03.example.com/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: ceph-bmc-credentials
+        tls:
+          verify: true
+        virtualMedia:
+          tls:
+            trust: established
+  os:
+    provided: false
+    installProfileRef: rhel-ceph-node
+    install:
+      hostKeyRef: storage-b-03-host-key
+      ntp:
+        - serverRef: default-01
+        - serverRef: default-02
+        - serverRef: default-03
+      rootDeviceHints:
+        deviceName: /dev/sda
+  proxy:
+    proxyRef: default
+    noProxy:
+      - .example.com
+      - 192.0.2.0/24
+      - 198.51.100.0/24
+      - 203.0.113.0/24
+  network:
+    configRef: ceph-network
+    attachmentRef: ceph-network
+    installAddressRef: ssh
+    addresses:
+      - name: fqdn
+        address: storage-b-03.example.com
+      - name: ssh
+        address: 198.51.100.66/25
+        interface: bond0.200
+      - name: cluster
+        address: 203.0.113.6/24
+        interface: bond0.300
+    interfaceBinding:
+      - nicRef: eth0
+        interfaceName: eth0
+      - nicRef: eth1
+        interfaceName: eth1
+      - nicRef: eth2
+        interfaceName: eth2
+      - nicRef: eth3
+        interfaceName: eth3
+    overrides: {}
+  access:
+    ssh:
+      addressRef: ssh
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: storage-witness-01
+spec:
+  capabilities:
+    - ceph-node
+    - ceph-arbiter
+  placement:
+    site: site-c
+  os:
+    provided: true
+  proxy:
+    direct: {}
+  network:
+    addresses:
+      - name: fqdn
+        address: storage-witness-01.example.com
+      - name: ssh
+        address: 198.51.100.133
+  access:
+    ssh:
+      addressRef: ssh
+      port: 22
+      auth:
+        operatorIdentity: {}
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineImage
+metadata:
+  name: rhel-boot
+spec:
+  bootMedia: local-media:rhel-9.99-x86_64-boot.iso
+  checksum: "0000000000000000000000000000000000000000000000000000000000000000"
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-ceph-node
+spec:
+  os:
+    family: rhel
+    version: "9.99"
+    architecture: x86_64
+  installer:
+    anaconda:
+      imageRef: rhel-boot
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: artifact-server
+          endpointRef: ip-https
+      packageSource:
+        hostedTree:
+          fromMedia: local-media:rhel-9.99-x86_64-dvd.iso
+          artifactServerEndpoint:
+            serverRef: artifact-server
+            endpointRef: ip-http
+  subscription:
+    entitlementRef: rhel-satellite
+  customizations:
+    localization:
+      language: en_US.UTF-8
+      formats: en_US.UTF-8
+      keyboard: us
+      timezone: Etc/UTC
+      additionalLocales: []
+    ssh:
+      passwordAuthentication: false
+    storage:
+      rootDevice:
+        source: machineRootDeviceHints
+    packages:
+      environment: minimal
+      install:
+        - podman
+        - lvm2
+        - chrony
+        - firewalld
+      excludeDocs: true
+      installWeakDeps: false
+    repositories:
+      configure: []
+      subscription:
+        enable:
+          - example-ceph-9-for-rhel-9-x86_64-rpms
+          - rhel-9-for-x86_64-appstream-rpms
+          - rhel-9-for-x86_64-baseos-rpms
+        disable: []
+    services:
+      enabled:
+        - sshd
+        - chronyd
+        - firewalld
+      disabled:
+        - cockpit.socket
+        - kdump
+    security:
+      selinux:
+        mode: enforcing
+      firewall:
+        enabled: true
+      fips:
+        enabled: true
+      diskEncryption:
+        unlock:
+          tpm2: {}
+        recoveryPassphraseRef: rhel-luks-recovery
+  proxy:
+    proxyRef: default
+    noProxy:
+      - .example.com
+      - 192.0.2.0/24
+      - 198.51.100.0/24
+      - 203.0.113.0/24
+  ntp:
+    - serverRef: default-01
+    - serverRef: default-02
+    - serverRef: default-03
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: ceph-network
+spec:
+  machineNetwork:
+    - cidr: 198.51.100.0/25
+    - cidr: 203.0.113.0/24
+  dns:
+    - serverRef: default-01
+    - serverRef: default-02
+    - serverRef: default-03
+  nmstate:
+    dns-resolver:
+      config:
+        search:
+          - example.com
+    interfaces:
+      - controller: bond0
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: eth0
+        state: up
+        type: ethernet
+      - controller: bond0
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: eth1
+        state: up
+        type: ethernet
+      - controller: bond0
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: eth2
+        state: up
+        type: ethernet
+      - controller: bond0
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: eth3
+        state: up
+        type: ethernet
+      - ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        link-aggregation:
+          mode: active-backup
+          options:
+            miimon: "100"
+          port:
+            - eth0
+            - eth1
+            - eth2
+            - eth3
+        mtu: 1500
+        name: bond0
+        state: up
+        type: bond
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: bond0.200
+        profile-name: vlan200-public
+        state: up
+        type: vlan
+        vlan:
+          base-iface: bond0
+          id: 200
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: bond0.300
+        profile-name: vlan300-cluster
+        state: up
+        type: vlan
+        vlan:
+          base-iface: bond0
+          id: 300
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          next-hop-address: 198.51.100.124
+          next-hop-interface: bond0.200
+          table-id: 254
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: hub-vm-network
+spec:
+  machineNetwork:
+    - cidr: 192.0.2.0/24
+  dns:
+    - serverRef: default-01
+    - serverRef: default-02
+    - serverRef: default-03
+  nmstate:
+    dns-resolver:
+      config:
+        search:
+          - example.com
+    interfaces:
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: primary
+        state: up
+        type: ethernet
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: ceph-public
+        state: up
+        type: ethernet
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          metric: 100
+          next-hop-address: 192.0.2.252
+          next-hop-interface: primary
+          table-id: 254
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: ocp-bare-metal-network
+spec:
+  machineNetwork:
+    - cidr: 192.0.2.0/24
+  dns:
+    - serverRef: default-01
+    - serverRef: default-02
+    - serverRef: default-03
+  nmstate:
+    dns-resolver:
+      config:
+        search:
+          - example.com
+    interfaces:
+      - controller: bond0
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: eth0
+        profile-name: bond0-eth0
+        state: up
+        type: ethernet
+      - controller: bond0
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: eth2
+        profile-name: bond0-eth2
+        state: up
+        type: ethernet
+      - ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        link-aggregation:
+          mode: 802.3ad
+          options:
+            lacp_rate: fast
+            miimon: "100"
+          port:
+            - eth0
+            - eth2
+        mtu: 1500
+        name: bond0
+        state: up
+        type: bond
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: bond0.100
+        profile-name: vlan100
+        state: up
+        type: vlan
+        vlan:
+          base-iface: bond0
+          id: 100
+      - ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: bond0.200
+        profile-name: vlan200-ceph-public
+        state: up
+        type: vlan
+        vlan:
+          base-iface: bond0
+          id: 200
+      - bridge:
+          allow-extra-patch-ports: true
+          options:
+            stp: false
+          port:
+            - name: bond0.200
+            - name: ceph-public
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: br-ceph-public
+        state: up
+        type: ovs-bridge
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: ceph-public
+        state: up
+        type: ovs-interface
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          metric: 100
+          next-hop-address: 192.0.2.252
+          next-hop-interface: bond0.100
+          table-id: 254
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: bare-metal
+spec:
+  baremetal:
+    boot:
+      method: redfishVirtualMedia
+    defaults:
+      bmc:
+        credentialsRef: ocp-bmc-credentials
+        tls:
+          verify: true
+        virtualMedia:
+          tls:
+            trust: established
+  networkAttachments:
+    - name: ocp-bare-metal-network
+      baremetal:
+        vlan: 100
+    - name: ceph-network
+      baremetal:
+        vlan: 200
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: kubevirt-ocp-multidc-01
+spec:
+  kubevirt:
+    hostClusterRef: ocp-multidc-01
+    namespace: bootwright-multidc-virtual-clusters
+    storageClassRef: ocs-external-storagecluster-ceph-rbd
+    machineProfiles:
+      - name: general
+        cpu: 4
+        memoryMiB: 16384
+        diskGiB: 100
+        tpm:
+          persistent: true
+      - name: large
+        cpu: 8
+        memoryMiB: 32768
+        diskGiB: 160
+        tpm:
+          persistent: true
+  networkAttachments:
+    - name: hub-vm-machine
+      kubevirt:
+        networkRef:
+          apiGroup: k8s.ovn.org
+          kind: ClusterUserDefinedNetwork
+          name: multidc-virtual-cluster-machine
+    - name: hub-vm-ceph-public
+      kubevirt:
+        networkRef:
+          apiGroup: k8s.ovn.org
+          kind: ClusterUserDefinedNetwork
+          name: multidc-virtual-cluster-ceph-public
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: kubevirt-ocp-multidc-02
+spec:
+  kubevirt:
+    hostClusterRef: ocp-multidc-02
+    namespace: bootwright-multidc-virtual-clusters
+    storageClassRef: ocs-external-storagecluster-ceph-rbd
+    machineProfiles:
+      - name: general
+        cpu: 4
+        memoryMiB: 16384
+        diskGiB: 100
+        tpm:
+          persistent: true
+      - name: large
+        cpu: 8
+        memoryMiB: 32768
+        diskGiB: 160
+        tpm:
+          persistent: true
+  networkAttachments:
+    - name: hub-vm-machine
+      kubevirt:
+        networkRef:
+          apiGroup: k8s.ovn.org
+          kind: ClusterUserDefinedNetwork
+          name: multidc-virtual-cluster-machine
+    - name: hub-vm-ceph-public
+      kubevirt:
+        networkRef:
+          apiGroup: k8s.ovn.org
+          kind: ClusterUserDefinedNetwork
+          name: multidc-virtual-cluster-ceph-public
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Proxy
+metadata:
+  name: default
+spec:
+  management: external
+  connection:
+    httpProxy: http://proxy.example.com:8080
+    httpsProxy: http://proxy.example.com:8080
+    trustBundleRef: custom-ca-bundle
+---
+apiVersion: bootwright.io/v1alpha1
+kind: DNSServer
+metadata:
+  name: default-01
+spec:
+  management: external
+  address: 192.0.2.53
+---
+apiVersion: bootwright.io/v1alpha1
+kind: DNSServer
+metadata:
+  name: default-02
+spec:
+  management: external
+  address: 198.51.100.53
+---
+apiVersion: bootwright.io/v1alpha1
+kind: DNSServer
+metadata:
+  name: default-03
+spec:
+  management: external
+  address: 203.0.113.53
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NTPServer
+metadata:
+  name: default-01
+spec:
+  management: external
+  address: time1.example.com
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NTPServer
+metadata:
+  name: default-02
+spec:
+  management: external
+  address: time2.example.com
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NTPServer
+metadata:
+  name: default-03
+spec:
+  management: external
+  address: time3.example.com
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ArtifactServer
+metadata:
+  name: artifact-server
+spec:
+  management: managed
+  machineRef: controller
+  bindAddress: 0.0.0.0
+  retention: persistent
+  tls:
+    secretRef: artifact-server-tls
+    minVersion: TLSv1.2
+  listeners:
+    - name: https
+      protocol: https
+      port: 9443
+    - name: http
+      protocol: http
+      port: 9080
+  endpoints:
+    - name: ip-https
+      listenerRef: https
+      addressRef: ip
+    - name: ip-http
+      listenerRef: http
+      addressRef: ip
+    - name: server-name-https
+      listenerRef: https
+      addressRef: dns-alias
+    - name: server-name-http
+      listenerRef: http
+      addressRef: dns-alias
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: hub-multidc-01
+spec:
+  distribution:
+    type: openshift
+    release:
+      version: 4.21.15
+      channel: stable-4.21
+  install:
+    method: agent
+    mode: connected
+    platform:
+      type: none
+    proxy:
+      proxyRef: default
+      noProxy:
+        - .example.com
+        - 192.0.2.0/24
+        - 198.51.100.0/24
+        - 203.0.113.0/24
+    ntp:
+      - serverRef: default-01
+      - serverRef: default-02
+      - serverRef: default-03
+    endpoints:
+      api:
+        address: 192.0.2.11
+        interfaceNetworks: []
+        source:
+          type: external
+      api-int:
+        address: 192.0.2.11
+        interfaceNetworks: []
+        source:
+          type: external
+      ingress:
+        address: 192.0.2.12
+        interfaceNetworks: []
+        source:
+          type: external
+    pullSecretRef: openshift-pull-secret
+    nodeSSH:
+      keyPairRef: hub-multidc-01-cluster-admin-ssh-key
+    additionalTrustBundleRefs:
+      - custom-ca-bundle
+  networking:
+    clusterNetwork:
+      - cidr: 10.132.0.0/14
+        hostPrefix: 23
+    serviceNetwork:
+      - 10.97.0.0/16
+  security:
+    fips:
+      enabled: true
+    diskEncryption:
+      unlock:
+        tpm2: {}
+      roles:
+        - master
+        - worker
+        - infra
+  nodes:
+    - name: master-01
+      fqdn: master-01.hub-multidc-01.clusters.example.com
+      role: master
+      machineRef: hub-multidc-01-master-01
+    - name: master-02
+      fqdn: master-02.hub-multidc-01.clusters.example.com
+      role: master
+      machineRef: hub-multidc-01-master-02
+    - name: master-03
+      fqdn: master-03.hub-multidc-01.clusters.example.com
+      role: master
+      machineRef: hub-multidc-01-master-03
+    - name: worker-01
+      fqdn: worker-01.hub-multidc-01.clusters.example.com
+      role: worker
+      machineRef: hub-multidc-01-worker-01
+    - name: worker-02
+      fqdn: worker-02.hub-multidc-01.clusters.example.com
+      role: worker
+      machineRef: hub-multidc-01-worker-02
+    - name: worker-03
+      fqdn: worker-03.hub-multidc-01.clusters.example.com
+      role: worker
+      machineRef: hub-multidc-01-worker-03
+    - name: infra-01
+      fqdn: infra-01.hub-multidc-01.clusters.example.com
+      role: infra
+      machineRef: hub-multidc-01-infra-01
+    - name: infra-02
+      fqdn: infra-02.hub-multidc-01.clusters.example.com
+      role: infra
+      machineRef: hub-multidc-01-infra-02
+    - name: infra-03
+      fqdn: infra-03.hub-multidc-01.clusters.example.com
+      role: infra
+      machineRef: hub-multidc-01-infra-03
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: hub-multidc-02
+spec:
+  distribution:
+    type: openshift
+    release:
+      version: 4.21.15
+      channel: stable-4.21
+  install:
+    method: agent
+    mode: connected
+    platform:
+      type: none
+    proxy:
+      proxyRef: default
+      noProxy:
+        - .example.com
+        - 192.0.2.0/24
+        - 198.51.100.0/24
+        - 203.0.113.0/24
+    ntp:
+      - serverRef: default-01
+      - serverRef: default-02
+      - serverRef: default-03
+    endpoints:
+      api:
+        address: 192.0.2.141
+        interfaceNetworks: []
+        source:
+          type: external
+      api-int:
+        address: 192.0.2.141
+        interfaceNetworks: []
+        source:
+          type: external
+      ingress:
+        address: 192.0.2.142
+        interfaceNetworks: []
+        source:
+          type: external
+    pullSecretRef: openshift-pull-secret
+    nodeSSH:
+      keyPairRef: hub-multidc-02-cluster-admin-ssh-key
+    additionalTrustBundleRefs:
+      - custom-ca-bundle
+  networking:
+    clusterNetwork:
+      - cidr: 10.132.0.0/14
+        hostPrefix: 23
+    serviceNetwork:
+      - 10.97.0.0/16
+  security:
+    fips:
+      enabled: true
+    diskEncryption:
+      unlock:
+        tpm2: {}
+      roles:
+        - master
+        - worker
+        - infra
+  nodes:
+    - name: master-01
+      fqdn: master-01.hub-multidc-02.clusters.example.com
+      role: master
+      machineRef: hub-multidc-02-master-01
+    - name: master-02
+      fqdn: master-02.hub-multidc-02.clusters.example.com
+      role: master
+      machineRef: hub-multidc-02-master-02
+    - name: master-03
+      fqdn: master-03.hub-multidc-02.clusters.example.com
+      role: master
+      machineRef: hub-multidc-02-master-03
+    - name: worker-01
+      fqdn: worker-01.hub-multidc-02.clusters.example.com
+      role: worker
+      machineRef: hub-multidc-02-worker-01
+    - name: worker-02
+      fqdn: worker-02.hub-multidc-02.clusters.example.com
+      role: worker
+      machineRef: hub-multidc-02-worker-02
+    - name: worker-03
+      fqdn: worker-03.hub-multidc-02.clusters.example.com
+      role: worker
+      machineRef: hub-multidc-02-worker-03
+    - name: infra-01
+      fqdn: infra-01.hub-multidc-02.clusters.example.com
+      role: infra
+      machineRef: hub-multidc-02-infra-01
+    - name: infra-02
+      fqdn: infra-02.hub-multidc-02.clusters.example.com
+      role: infra
+      machineRef: hub-multidc-02-infra-02
+    - name: infra-03
+      fqdn: infra-03.hub-multidc-02.clusters.example.com
+      role: infra
+      machineRef: hub-multidc-02-infra-03
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: ocp-multidc-01
+spec:
+  distribution:
+    type: openshift
+    release:
+      version: 4.21.15
+      channel: stable-4.21
+  install:
+    method: agent
+    mode: connected
+    platform:
+      type: baremetal
+      baremetal:
+        provisioningNetwork: disabled
+    proxy:
+      proxyRef: default
+      noProxy:
+        - .example.com
+        - 192.0.2.0/24
+        - 198.51.100.0/24
+        - 203.0.113.0/24
+    ntp:
+      - serverRef: default-01
+      - serverRef: default-02
+      - serverRef: default-03
+    endpoints:
+      api:
+        address: 192.0.2.1
+        interfaceNetworks: []
+        source:
+          type: external
+      api-int:
+        address: 192.0.2.1
+        interfaceNetworks: []
+        source:
+          type: external
+      ingress:
+        address: 192.0.2.2
+        interfaceNetworks: []
+        source:
+          type: external
+    agent:
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: artifact-server
+          endpointRef: ip-https
+    pullSecretRef: openshift-pull-secret
+    nodeSSH:
+      keyPairRef: ocp-multidc-01-cluster-admin-ssh-key
+    additionalTrustBundleRefs:
+      - custom-ca-bundle
+  networking:
+    clusterNetwork:
+      - cidr: 10.128.0.0/14
+        hostPrefix: 23
+    serviceNetwork:
+      - 10.96.0.0/16
+  security:
+    fips:
+      enabled: true
+    diskEncryption:
+      unlock:
+        tpm2: {}
+      roles:
+        - master
+  nodes:
+    - name: master-01
+      fqdn: master-01.ocp-multidc-01.clusters.example.com
+      role: master
+      machineRef: edge-a-01
+    - name: master-02
+      fqdn: master-02.ocp-multidc-01.clusters.example.com
+      role: master
+      machineRef: edge-a-02
+    - name: master-03
+      fqdn: master-03.ocp-multidc-01.clusters.example.com
+      role: master
+      machineRef: edge-a-03
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: ocp-multidc-02
+spec:
+  distribution:
+    type: openshift
+    release:
+      version: 4.21.15
+      channel: stable-4.21
+  install:
+    method: agent
+    mode: connected
+    platform:
+      type: baremetal
+      baremetal:
+        provisioningNetwork: disabled
+    proxy:
+      proxyRef: default
+      noProxy:
+        - .example.com
+        - 192.0.2.0/24
+        - 198.51.100.0/24
+        - 203.0.113.0/24
+    ntp:
+      - serverRef: default-01
+      - serverRef: default-02
+      - serverRef: default-03
+    endpoints:
+      api:
+        address: 192.0.2.131
+        interfaceNetworks: []
+        source:
+          type: external
+      api-int:
+        address: 192.0.2.131
+        interfaceNetworks: []
+        source:
+          type: external
+      ingress:
+        address: 192.0.2.132
+        interfaceNetworks: []
+        source:
+          type: external
+    agent:
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: artifact-server
+          endpointRef: ip-https
+    pullSecretRef: openshift-pull-secret
+    nodeSSH:
+      keyPairRef: ocp-multidc-02-cluster-admin-ssh-key
+    additionalTrustBundleRefs:
+      - custom-ca-bundle
+  networking:
+    clusterNetwork:
+      - cidr: 10.128.0.0/14
+        hostPrefix: 23
+    serviceNetwork:
+      - 10.96.0.0/16
+  security:
+    fips:
+      enabled: true
+    diskEncryption:
+      unlock:
+        tpm2: {}
+      roles:
+        - master
+  nodes:
+    - name: master-01
+      fqdn: master-01.ocp-multidc-02.clusters.example.com
+      role: master
+      machineRef: edge-b-01
+    - name: master-02
+      fqdn: master-02.ocp-multidc-02.clusters.example.com
+      role: master
+      machineRef: edge-b-02
+    - name: master-03
+      fqdn: master-03.ocp-multidc-02.clusters.example.com
+      role: master
+      machineRef: edge-b-03
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: ceph-multidc-01
+spec:
+  type: ceph
+  management: managed
+  ceph:
+    distribution: ibm
+    release: 9.0.0.0
+    packageVersion: 20.1.0-1.el9cp
+    image:
+      base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9
+      version: sha256:1111111111111111111111111111111111111111111111111111111111111111
+    ibm:
+      callHome: disabled
+      packages:
+        source: subscription
+        subscriptionRepos:
+          - example-ceph-9-for-rhel-9-x86_64-rpms
+    entitlementRef: ceph-entitlement
+    cephadm:
+      addressRef: ssh
+      workarounds:
+        - mgmt-gateway-spec-dependency-recording
+      ansible:
+        packageVersion: 5.0.0-1.el9cp
+      clusterSSH:
+        user: cephadm
+        keyRef: ceph-multidc-01-cephadm-ssh-key
+      bootstrap:
+        node: node-01
+        addressRef: ssh
+        singleHostDefaults: false
+    networks:
+      publicCIDRs:
+        - 198.51.100.0/25
+        - 198.51.100.128/25
+      clusterCIDRs:
+        - 203.0.113.0/24
+    security:
+      fips:
+        enabled: true
+      cephx:
+        keyType: aes
+    config:
+      global:
+        mon_osd_down_out_subtree_limit: host
+        osd_pool_default_pg_autoscale_mode: on
+      mgr:
+        mgr/balancer/mode: upmap
+    mgrModules:
+      - balancer
+      - pg_autoscaler
+      - devicehealth
+    services: []
+    monitoring:
+      enabled: true
+      prometheus:
+        placement:
+          hosts:
+            - node-01
+            - node-02
+            - node-04
+            - node-05
+        retentionTime: 14d
+        retentionSize: 5GB
+        networks: []
+      grafana:
+        placement:
+          hosts:
+            - node-01
+            - node-02
+            - node-04
+            - node-05
+        networks: []
+        initialAdminPasswordRef: ceph-multidc-01-grafana-admin
+    mgmtGateway:
+      dnsLabel: mgr
+      port: 10443
+      exposure: http
+      enableAuth: false
+      ingress:
+        name: mgmt
+        address: 198.51.100.58
+        prefixLength: 25
+        virtualInterfaceNetworks:
+          - 198.51.100.0/25
+        placement:
+          hosts:
+            - node-01
+            - node-02
+            - node-03
+            - node-04
+            - node-05
+            - node-06
+        firstVirtualRouterID: 42
+    topology:
+      nodes:
+        - name: node-01
+          fqdn: node-01.ceph-multidc-01.clusters.example.com
+          machineRef: storage-a-01
+          site: site-a
+          roles:
+            - mon
+            - mgr
+            - osd
+            - mds
+            - rgw
+            - ingress
+            - prometheus
+            - grafana
+            - alertmanager
+          labels:
+            - _admin
+        - name: node-02
+          fqdn: node-02.ceph-multidc-01.clusters.example.com
+          machineRef: storage-a-02
+          site: site-a
+          roles:
+            - mon
+            - mgr
+            - osd
+            - mds
+            - rgw
+            - ingress
+            - prometheus
+            - grafana
+            - alertmanager
+          labels:
+            - _admin
+        - name: node-03
+          fqdn: node-03.ceph-multidc-01.clusters.example.com
+          machineRef: storage-a-03
+          site: site-a
+          roles:
+            - osd
+            - mds
+            - rgw
+            - ingress
+          labels: []
+        - name: node-04
+          fqdn: node-04.ceph-multidc-01.clusters.example.com
+          machineRef: storage-b-01
+          site: site-b
+          roles:
+            - mon
+            - mgr
+            - osd
+            - mds
+            - rgw
+            - ingress
+            - prometheus
+            - grafana
+            - alertmanager
+          labels:
+            - _admin
+        - name: node-05
+          fqdn: node-05.ceph-multidc-01.clusters.example.com
+          machineRef: storage-b-02
+          site: site-b
+          roles:
+            - mon
+            - mgr
+            - osd
+            - mds
+            - rgw
+            - ingress
+            - prometheus
+            - grafana
+            - alertmanager
+          labels:
+            - _admin
+        - name: node-06
+          fqdn: node-06.ceph-multidc-01.clusters.example.com
+          machineRef: storage-b-03
+          site: site-b
+          roles:
+            - osd
+            - mds
+            - rgw
+            - ingress
+          labels: []
+        - name: node-07
+          fqdn: node-07.ceph-multidc-01.clusters.example.com
+          machineRef: storage-witness-01
+          site: site-c
+          roles:
+            - mon
+          labels: []
+      osdDrivegroups:
+        - serviceID: data
+          placement:
+            hosts:
+              - node-01
+              - node-02
+              - node-03
+              - node-04
+              - node-05
+              - node-06
+          osd:
+            dataDevices:
+              paths:
+                - /dev/disk/by-id/nvme-example-data-01
+                - /dev/disk/by-id/nvme-example-data-02
+                - /dev/disk/by-id/nvme-example-data-03
+                - /dev/disk/by-id/nvme-example-data-04
+                - /dev/disk/by-id/nvme-example-data-05
+            encrypted: true
+            filterLogic: AND
+            dataAllocateFraction: !!float 1
+            tpm2: true
+            unmanaged: false
+      stretch:
+        failureDomain: datacenter
+        dataSites:
+          - site-a
+          - site-b
+        tiebreaker:
+          node: node-07
+          site: site-c
+        ruleName: stretch-rule
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePlacementPolicy
+metadata:
+  name: stretch-datacenter
+spec:
+  clusterRef: ceph-multidc-01
+  failureDomain: datacenter
+  ruleName: stretch-rule
+  replicated:
+    size: 4
+    minSize: 2
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: odf-cephfs-data
+spec:
+  clusterRef: ceph-multidc-01
+  placementPolicyRef: stretch-datacenter
+  type: replicated
+  role: cephfs-data
+  application: cephfs
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: odf-cephfs-metadata
+spec:
+  clusterRef: ceph-multidc-01
+  placementPolicyRef: stretch-datacenter
+  type: replicated
+  role: cephfs-metadata
+  application: cephfs
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: odf-hub-multidc-01-rbd
+spec:
+  clusterRef: ceph-multidc-01
+  placementPolicyRef: stretch-datacenter
+  type: replicated
+  role: rbd
+  application: rbd
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: odf-hub-multidc-02-rbd
+spec:
+  clusterRef: ceph-multidc-01
+  placementPolicyRef: stretch-datacenter
+  type: replicated
+  role: rbd
+  application: rbd
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: odf-ocp-multidc-01-rbd
+spec:
+  clusterRef: ceph-multidc-01
+  placementPolicyRef: stretch-datacenter
+  type: replicated
+  role: rbd
+  application: rbd
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: odf-ocp-multidc-02-rbd
+spec:
+  clusterRef: ceph-multidc-01
+  placementPolicyRef: stretch-datacenter
+  type: replicated
+  role: rbd
+  application: rbd
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: odf-rgw
+spec:
+  clusterRef: ceph-multidc-01
+  placementPolicyRef: stretch-datacenter
+  type: replicated
+  role: rgw
+  application: rgw
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageFilesystem
+metadata:
+  name: odf-cephfs
+spec:
+  clusterRef: ceph-multidc-01
+  metadataPoolRef: odf-cephfs-metadata
+  dataPoolRefs:
+    - name: odf-cephfs-data
+      default: true
+  mds:
+    activeCount: 2
+    standbyReplay: false
+    placement:
+      hosts:
+        - node-01
+        - node-02
+        - node-03
+        - node-04
+        - node-05
+        - node-06
+  subvolumeGroups: []
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageObjectGateway
+metadata:
+  name: odf-rgw-all
+spec:
+  clusterRef: ceph-multidc-01
+  serviceID: odf.all
+  placement:
+    hosts:
+      - node-01
+      - node-02
+      - node-03
+      - node-04
+      - node-05
+      - node-06
+    countPerHost: 1
+  frontendPort: 8080
+  config: {}
+  endpoint:
+    dnsLabel: rgw
+    scheme: https
+    port: 443
+    tls:
+      secretRef: ceph-multidc-01-rgw-all-tls
+    ingresses:
+      - name: ha
+        address: 198.51.100.59
+        prefixLength: 25
+        virtualInterfaceNetworks:
+          - 198.51.100.0/25
+        placement:
+          hosts:
+            - node-01
+            - node-02
+            - node-03
+            - node-04
+            - node-05
+            - node-06
+        firstVirtualRouterID: 43
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageExport
+metadata:
+  name: ceph-multidc-01-odf-hub-multidc-01
+spec:
+  type: dataFoundation
+  clusterRef: ceph-multidc-01
+  dataFoundation:
+    rbdPoolRef: odf-hub-multidc-01-rbd
+    filesystemRef: odf-cephfs
+    objectGatewayRef: odf-rgw-all
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageExport
+metadata:
+  name: ceph-multidc-01-odf-hub-multidc-02
+spec:
+  type: dataFoundation
+  clusterRef: ceph-multidc-01
+  dataFoundation:
+    rbdPoolRef: odf-hub-multidc-02-rbd
+    filesystemRef: odf-cephfs
+    objectGatewayRef: odf-rgw-all
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageExport
+metadata:
+  name: ceph-multidc-01-odf-ocp-multidc-01
+spec:
+  type: dataFoundation
+  clusterRef: ceph-multidc-01
+  dataFoundation:
+    rbdPoolRef: odf-ocp-multidc-01-rbd
+    filesystemRef: odf-cephfs
+    objectGatewayRef: odf-rgw-all
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageExport
+metadata:
+  name: ceph-multidc-01-odf-ocp-multidc-02
+spec:
+  type: dataFoundation
+  clusterRef: ceph-multidc-01
+  dataFoundation:
+    rbdPoolRef: odf-ocp-multidc-02-rbd
+    filesystemRef: odf-cephfs
+    objectGatewayRef: odf-rgw-all
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: fusion-data-foundation
+spec:
+  provides:
+    - dataFoundation
+  requires: []
+  inputs:
+    - name: external-storage
+      resourceKind: StorageExport
+      required: true
+      effects:
+        - storageExportAttachment: {}
+    - name: ibm-entitlement
+      secretType: token
+      required: true
+      effects:
+        - globalPullSecretMerge:
+            registry: cp.icr.io
+            username: cp
+  olm:
+    namespace:
+      name: openshift-storage
+      management: managed
+      labels:
+        openshift.io/cluster-monitoring: "true"
+    operatorGroup:
+      name: openshift-storage
+      targetNamespaces:
+        - openshift-storage
+    catalogSource:
+      name: isf-data-foundation-catalog
+      image: icr.io/cpopen/isf-data-foundation-catalog@sha256:2222222222222222222222222222222222222222222222222222222222222222
+      displayName: IBM Fusion Data Foundation Catalog
+      publisher: IBM
+      grpcPodConfig:
+        securityContextConfig: restricted
+    subscription:
+      name: odf-operator
+      package: odf-operator
+      channel: stable-4.99
+      source: isf-data-foundation-catalog
+      sourceNamespace: openshift-marketplace
+      installPlanApproval: Automatic
+    customResources: []
+  readiness:
+    timeout: 45m
+    checks:
+      - csvSucceeded:
+          namespace: openshift-storage
+          subscription: odf-operator
+      - condition:
+          apiVersion: ocs.openshift.io/v1
+          kind: CephCluster
+          name: ocs-external-storagecluster
+          namespace: openshift-storage
+          condition:
+            type: Available
+            status: "True"
+  steps: []
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: nmstate
+spec:
+  provides:
+    - nmstate
+  requires: []
+  inputs: []
+  olm:
+    namespace:
+      name: openshift-nmstate
+      management: managed
+      labels: {}
+    operatorGroup:
+      name: openshift-nmstate
+      targetNamespaces:
+        - openshift-nmstate
+    subscription:
+      name: kubernetes-nmstate-operator
+      package: kubernetes-nmstate-operator
+      channel: stable
+      source: redhat-operators
+      sourceNamespace: openshift-marketplace
+      installPlanApproval: Automatic
+    customResources:
+      - apiVersion: nmstate.io/v1
+        kind: NMState
+        metadata:
+          name: nmstate
+  readiness:
+    timeout: 30m
+    checks:
+      - csvSucceeded:
+          namespace: openshift-nmstate
+          subscription: kubernetes-nmstate-operator
+      - resourceExists:
+          apiVersion: nmstate.io/v1
+          kind: NMState
+          name: nmstate
+      - condition:
+          apiVersion: apps/v1
+          kind: Deployment
+          name: nmstate-webhook
+          namespace: openshift-nmstate
+          condition:
+            type: Available
+            status: "True"
+  steps: []
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: openshift-virtualization
+spec:
+  provides:
+    - kubevirt
+  requires: []
+  inputs: []
+  olm:
+    namespace:
+      name: openshift-cnv
+      management: managed
+      labels:
+        openshift.io/cluster-monitoring: "true"
+    operatorGroup:
+      name: kubevirt-hyperconverged-group
+      targetNamespaces:
+        - openshift-cnv
+    subscription:
+      name: hco-operatorhub
+      package: kubevirt-hyperconverged
+      channel: stable
+      source: redhat-operators
+      sourceNamespace: openshift-marketplace
+      installPlanApproval: Automatic
+    customResources:
+      - apiVersion: hco.kubevirt.io/v1beta1
+        kind: HyperConverged
+        metadata:
+          name: kubevirt-hyperconverged
+          namespace: openshift-cnv
+  readiness:
+    timeout: 30m
+    checks:
+      - csvSucceeded:
+          namespace: openshift-cnv
+          subscription: hco-operatorhub
+      - condition:
+          apiVersion: hco.kubevirt.io/v1beta1
+          kind: HyperConverged
+          name: kubevirt-hyperconverged
+          namespace: openshift-cnv
+          condition:
+            type: Available
+            status: "True"
+  steps: []
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: virtual-cluster-network
+spec:
+  provides: []
+  requires:
+    - nmstate
+  inputs: []
+  manifestSet:
+    manifests:
+      - path: manifests/virtual-cluster-network-namespace.yaml
+      - path: manifests/virtual-cluster-network-nncp.yaml
+      - path: manifests/virtual-cluster-machine-cudn.yaml
+      - path: manifests/virtual-cluster-ceph-public-cudn.yaml
+  readiness:
+    timeout: 5m
+    checks:
+      - condition:
+          apiVersion: nmstate.io/v1
+          kind: NodeNetworkConfigurationPolicy
+          name: multidc-virtual-cluster-localnet
+          condition:
+            type: Available
+            status: "True"
+      - resourceExists:
+          apiVersion: k8s.ovn.org/v1
+          kind: ClusterUserDefinedNetwork
+          name: multidc-virtual-cluster-machine
+      - resourceExists:
+          apiVersion: k8s.cni.cncf.io/v1
+          kind: NetworkAttachmentDefinition
+          name: multidc-virtual-cluster-machine
+          namespace: bootwright-multidc-virtual-clusters
+      - resourceExists:
+          apiVersion: k8s.ovn.org/v1
+          kind: ClusterUserDefinedNetwork
+          name: multidc-virtual-cluster-ceph-public
+      - resourceExists:
+          apiVersion: k8s.cni.cncf.io/v1
+          kind: NetworkAttachmentDefinition
+          name: multidc-virtual-cluster-ceph-public
+          namespace: bootwright-multidc-virtual-clusters
+  steps: []
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonProfile
+metadata:
+  name: hub-cluster-addons
+spec:
+  profileRefs: []
+  addonRefs:
+    - fusion-data-foundation
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonProfile
+metadata:
+  name: physical-cluster-addons
+spec:
+  profileRefs: []
+  addonRefs:
+    - fusion-data-foundation
+    - openshift-virtualization
+    - nmstate
+    - virtual-cluster-network
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: hub-multidc-01-addons
+spec:
+  clusterRef: hub-multidc-01
+  profileRefs:
+    - hub-cluster-addons
+  addonRefs: []
+  addonConfigs:
+    - addonRef: fusion-data-foundation
+      inputs:
+        - name: external-storage
+          value: ceph-multidc-01-odf-hub-multidc-01
+        - name: ibm-entitlement
+          value: ibm-entitlement-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: hub-multidc-02-addons
+spec:
+  clusterRef: hub-multidc-02
+  profileRefs:
+    - hub-cluster-addons
+  addonRefs: []
+  addonConfigs:
+    - addonRef: fusion-data-foundation
+      inputs:
+        - name: external-storage
+          value: ceph-multidc-01-odf-hub-multidc-02
+        - name: ibm-entitlement
+          value: ibm-entitlement-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: ocp-multidc-01-addons
+spec:
+  clusterRef: ocp-multidc-01
+  profileRefs:
+    - physical-cluster-addons
+  addonRefs: []
+  addonConfigs:
+    - addonRef: fusion-data-foundation
+      inputs:
+        - name: external-storage
+          value: ceph-multidc-01-odf-ocp-multidc-01
+        - name: ibm-entitlement
+          value: ibm-entitlement-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: ocp-multidc-02-addons
+spec:
+  clusterRef: ocp-multidc-02
+  profileRefs:
+    - physical-cluster-addons
+  addonRefs: []
+  addonConfigs:
+    - addonRef: fusion-data-foundation
+      inputs:
+        - name: external-storage
+          value: ceph-multidc-01-odf-ocp-multidc-02
+        - name: ibm-entitlement
+          value: ibm-entitlement-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: artifact-server-tls
+spec:
+  type: tlsCertificate
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: bootwright-machine-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: rsa
+      comment: bootwright-machine-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ceph-bmc-credentials
+spec:
+  type: usernamePassword
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ceph-known-hosts
+spec:
+  type: opaque
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ceph-multidc-01-cephadm-ssh-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: rsa
+      comment: bootwright-ceph-multidc-01-cephadm
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ceph-multidc-01-grafana-admin
+spec:
+  type: opaque
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ceph-multidc-01-rgw-all-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: rgw.ceph-multidc-01.clusters.example.com
+      dnsNames:
+        - rgw.ceph-multidc-01.clusters.example.com
+      validityDays: 3650
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ceph-registry-credentials
+spec:
+  type: usernamePassword
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: custom-ca-bundle
+spec:
+  type: caBundle
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: hub-multidc-01-cluster-admin-ssh-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: rsa
+      comment: bootwright-hub-multidc-01-cluster-admin
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: hub-multidc-02-cluster-admin-ssh-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: rsa
+      comment: bootwright-hub-multidc-02-cluster-admin
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ibm-entitlement-key
+spec:
+  type: token
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ocp-bmc-credentials
+spec:
+  type: usernamePassword
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ocp-multidc-01-cluster-admin-ssh-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: rsa
+      comment: bootwright-ocp-multidc-01-cluster-admin
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ocp-multidc-02-cluster-admin-ssh-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: rsa
+      comment: bootwright-ocp-multidc-02-cluster-admin
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: openshift-pull-secret
+spec:
+  type: dockerConfigJson
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: rhel-luks-recovery
+spec:
+  type: token
+  source:
+    generated:
+      bytes: 32
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: satellite-activation-key
+spec:
+  type: opaque
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: satellite-ca-bundle
+spec:
+  type: caBundle
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: satellite-org
+spec:
+  type: opaque
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: storage-a-01-host-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: storage-a-01-host-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: storage-a-02-host-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: storage-a-02-host-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: storage-a-03-host-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: storage-a-03-host-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: storage-b-01-host-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: storage-b-01-host-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: storage-b-02-host-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: storage-b-02-host-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: storage-b-03-host-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: storage-b-03-host-key

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "machine trust",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "lab",
+    "dryRun": false,
+    "pending": 2,
+    "recorded": 2,
+    "hosts": [
+      {
+        "machine": "bastion",
+        "address": "192.0.2.5",
+        "port": 22,
+        "action": "add",
+        "keyType": "ssh-ed25519",
+        "fingerprint": "SHA256:Xq3v9LmP2rT8wY5zB1nK4cH7dF0gJ6sA9eU2iO3pQ1M"
+      },
+      {
+        "machine": "db-01",
+        "address": "198.51.100.21",
+        "port": 2222,
+        "action": "replace",
+        "keyType": "ssh-ed25519",
+        "fingerprint": "SHA256:b7R2kN9xW4pL1vC8mT5qZ3hG6jD0fS2aY9uE4iK7oP1",
+        "previousFingerprint": "SHA256:M4tH8cQ1zV6nB3xR9wL2pK7dJ5fG0sA8eY1uT4iO6rN"
+      },
+      {
+        "machine": "rhel-01",
+        "action": "skip",
+        "reason": "host key comes from its installation evidence"
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

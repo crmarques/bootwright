@@ -1,0 +1,6 @@
+[SKIPPED] Machine is off
+
+  Machine   rhel-01
+  Power     off
+  Previous  off
+  Logs      /var/lib/bootwright/contexts/lab/state/runs/run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9a

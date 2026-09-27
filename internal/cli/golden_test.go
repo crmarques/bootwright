@@ -1,0 +1,685 @@
+package cli
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+	"testing"
+
+	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/availability"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	stateencoding "github.com/crmarques/bootwright/internal/desiredstate/encoding"
+	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/machine/inventory"
+	"github.com/crmarques/bootwright/internal/machine/power"
+	"github.com/crmarques/bootwright/internal/managedos/media"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/secrets/custody"
+	"github.com/crmarques/bootwright/internal/secrets/encryption"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
+	"github.com/crmarques/bootwright/internal/trust/enrollment"
+	"github.com/crmarques/bootwright/internal/workspace/contexts"
+)
+
+// update rewrites each golden this package compares instead of comparing it:
+// ./scripts/go test ./internal/cli -run Golden -update
+var update = flag.Bool("update", false, "rewrite testdata/*.golden from the current output")
+
+// matchesGolden compares one JSON document with testdata/<name>.golden, which
+// holds it indented for review. A terminated document is a stream's whole
+// output, which the output contract ends with exactly one LF and no other. The
+// document must then be compact: indenting compact JSON is lossless, so
+// comparing the indented form byte for byte compares the bytes written.
+func matchesGolden(t *testing.T, name string, data []byte, terminated bool) {
+	t.Helper()
+	if terminated {
+		if bytes.Count(data, []byte("\n")) != 1 || !bytes.HasSuffix(data, []byte("\n")) {
+			t.Fatalf("%s: a JSON document must be followed by exactly one LF and hold no other: %q", name, data)
+		}
+		data = data[:len(data)-1]
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, data); err != nil {
+		t.Fatalf("%s: the output is not one JSON document: %v", name, err)
+	}
+	if !bytes.Equal(compact.Bytes(), data) {
+		t.Fatalf("%s: the JSON is not compact, so no indented golden can prove its bytes; %s",
+			name, firstDifference(compact.String(), string(data)))
+	}
+	var indented bytes.Buffer
+	if err := json.Indent(&indented, data, "", "  "); err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	indented.WriteByte('\n')
+	path := filepath.Join("testdata", name+".golden")
+	if *update {
+		if err := os.MkdirAll("testdata", 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, indented.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("%v; run with -update to write it", err)
+	}
+	if !bytes.Equal(want, indented.Bytes()) {
+		t.Errorf("%s differs (-golden +got); rerun with -update if the change is intended:\n%s%s",
+			path, lineDiff(string(want), indented.String()), firstDifference(string(want), indented.String()))
+	}
+}
+
+// matchesTextGolden compares text output with testdata/<name>.golden, which
+// holds the same bytes. A golden is reviewed and kept as a text file, so the
+// output must be one: nonempty, LF-terminated, with no trailing whitespace and
+// no blank last line, any of which an editor or git diff --check would change.
+func matchesTextGolden(t *testing.T, name string, text []byte) {
+	t.Helper()
+	switch {
+	case len(text) == 0 || text[len(text)-1] != '\n':
+		t.Fatalf("%s: the text does not end with its LF: %q", name, text)
+	case bytes.HasSuffix(text, []byte("\n\n")):
+		t.Fatalf("%s: the text ends with a blank line, which a golden cannot hold as itself", name)
+	case bytes.Contains(text, []byte(" \n")) || bytes.Contains(text, []byte("\t\n")) || bytes.Contains(text, []byte("\r\n")):
+		t.Fatalf("%s: a line ends with whitespace, which a golden cannot hold as itself", name)
+	}
+	path := filepath.Join("testdata", name+".golden")
+	if *update {
+		if err := os.MkdirAll("testdata", 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, text, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("%v; run with -update to write it", err)
+	}
+	if !bytes.Equal(want, text) {
+		t.Errorf("%s differs (-golden +got); rerun with -update if the change is intended:\n%s%s",
+			path, lineDiff(string(want), string(text)), firstDifference(string(want), string(text)))
+	}
+}
+
+// firstDifference quotes both texts around the first byte they differ at,
+// which locates a change inside one long line such as a JSON document.
+func firstDifference(want, got string) string {
+	at := 0
+	for at < len(want) && at < len(got) && want[at] == got[at] {
+		at++
+	}
+	excerpt := func(text string) string { return text[max(0, at-40):min(len(text), at+40)] }
+	return fmt.Sprintf("first difference at byte %d: golden %q, got %q", at, excerpt(want), excerpt(got))
+}
+
+// lineDiff lists the lines only the golden holds (-) and only the output holds
+// (+), each numbered in its own text, along a longest common subsequence.
+func lineDiff(want, got string) string {
+	w, g := strings.Split(want, "\n"), strings.Split(got, "\n")
+	common := make([][]int, len(w)+1)
+	for i := range common {
+		common[i] = make([]int, len(g)+1)
+	}
+	for i := len(w) - 1; i >= 0; i-- {
+		for j := len(g) - 1; j >= 0; j-- {
+			if w[i] == g[j] {
+				common[i][j] = common[i+1][j+1] + 1
+			} else {
+				common[i][j] = max(common[i+1][j], common[i][j+1])
+			}
+		}
+	}
+	var out strings.Builder
+	for i, j := 0, 0; i < len(w) || j < len(g); {
+		switch {
+		case i < len(w) && j < len(g) && w[i] == g[j]:
+			i, j = i+1, j+1
+		case i < len(w) && (j == len(g) || common[i+1][j] >= common[i][j+1]):
+			fmt.Fprintf(&out, "-%d: %s\n", i+1, w[i])
+			i++
+		default:
+			fmt.Fprintf(&out, "+%d: %s\n", j+1, g[j])
+			j++
+		}
+	}
+	return out.String()
+}
+
+// cliGolden is one Runner invocation over fixed application results. Standard
+// output is compared with testdata/<golden>.golden, and a case without a golden
+// must write nothing there. The exit status and standard error are asserted
+// inline, beside the invocation they belong to.
+type cliGolden struct {
+	golden string
+	args   string
+	record func(*dispatchRecord)
+	code   int
+	stderr string
+	// quoted holds standard output as its strconv.Quote form, for bytes a text
+	// golden cannot hold as themselves.
+	quoted bool
+}
+
+// path is the command path the invocation selects: its words before the first
+// flag.
+func (c cliGolden) path() string {
+	var words []string
+	for _, word := range strings.Fields(c.args) {
+		if strings.HasPrefix(word, "-") {
+			break
+		}
+		words = append(words, word)
+	}
+	return strings.Join(words, " ")
+}
+
+// json reports whether the invocation selects the JSON output mode.
+func (c cliGolden) json() bool {
+	words := strings.Fields(c.args)
+	for i, word := range words {
+		if word == "--output=json" || word == "--output" && i+1 < len(words) && words[i+1] == "json" {
+			return true
+		}
+	}
+	return false
+}
+
+// cliGoldens holds every case. Each record function builds its results afresh,
+// because the Runner clears revealed material after every invocation.
+func cliGoldens() []cliGolden {
+	const (
+		operationID = "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a"
+		revision    = "rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f"
+		runID       = "run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9a"
+		retiredKey  = "key-fixture-1"
+		activeKey   = "key-fixture-2"
+		logs        = "/var/lib/bootwright/contexts/lab/state/operations/" + operationID + "/logs"
+	)
+	platform := prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}
+	ready := func(id, observed string) prerequisites.Check {
+		return prerequisites.Check{ID: id, Required: "qualified " + id, Observed: observed, Status: "ready"}
+	}
+	lab := contexts.Summary{Name: "lab", Mode: contexts.Ready, Current: true, Configured: true}
+	secretContext := secretstore.Context{Name: "lab", Mode: "ready"}
+	version := func(id string) *string { return &id }
+	selection := secretstore.Selection{
+		Type:       "local-keyring",
+		Store:      secretstore.ComponentRef{ID: "local-v3", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1},
+		KeyCustody: secretstore.ComponentRef{ID: "local-keyfile-v1", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1},
+	}
+	deferred := diagnostic{
+		Severity: "warning", Code: "api.deferred", Message: "CustomPlaybook is a reserved declaration and cannot execute.",
+		Source: &diagnostics.SourceLocation{Path: "playbooks/reserved.yaml", Document: 1, Line: 5, Column: 1},
+		Object: &diagnostics.ObjectIdentity{APIVersion: "bootwright.io/v1alpha1", Kind: "CustomPlaybook", Name: "reserved"},
+		Field:  "$.spec",
+	}
+	excluded := diagnostic{
+		Severity: "warning", Code: "api.selection", Message: "cluster root is excluded by the Environment selection",
+		Source: &diagnostics.SourceLocation{Path: "clusters/ocp-02/cluster.yaml", Document: 1, Line: 4, Column: 9},
+		Object: &diagnostics.ObjectIdentity{APIVersion: "bootwright.io/v1alpha1", Kind: "ContainerCluster", Name: "ocp-02"},
+		Field:  "$.metadata.name", Remediation: "include the cluster in the matching Environment root selection",
+	}
+	blocks := func(last string) []lifecycle.BlockResult {
+		return []lifecycle.BlockResult{
+			{ID: "artifact-server-lab-artifacts", Description: "serve artifacts for lab-artifacts on controller", Stage: "infra-components", State: "done"},
+			{ID: "substrate-host-lab-libvirt", Description: "realize the libvirt host of lab-libvirt on controller", Stage: "substrates", State: "done"},
+			{ID: "machine-rhel-01", Description: "realize the virtual machine rhel-01 and its controller", Stage: "machines", State: last},
+			{ID: "os-install-rhel-01", Description: "install the operating system of rhel-01", Stage: "machines", State: "pending"},
+		}
+	}
+	operation := func(state string) *lifecycle.OperationResult {
+		result := &lifecycle.OperationResult{
+			Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply", Blocks: blocks(state),
+			Logs: []string{operationID + "/logs/operation.jsonl"}, LogLocation: logs,
+			Receipt: lifecycle.Receipt{Operation: operationID, Verb: "apply", State: state, Next: "continue-apply"},
+		}
+		if state == "done" {
+			result.Blocks[3].State, result.Receipt.Next = "done", "none"
+		}
+		return result
+	}
+	status := func() *lifecycle.StatusResult {
+		return &lifecycle.StatusResult{
+			Context:         lifecycle.ContextIdentity{Name: "lab", Revision: revision},
+			SetupChecks:     []lifecycle.SetupCheck{{ID: "controller-binding", Status: "ready"}, {ID: "dependency-bundle", Status: "ready"}},
+			Desired:         lifecycle.DesiredSummary{Revision: revision, Environment: "lab-rhel", Files: 14, Objects: 14},
+			Clusters:        []lifecycle.ClusterSummary{},
+			StorageClusters: []lifecycle.ClusterSummary{},
+			Shared: []lifecycle.ServiceSummary{
+				{Kind: "ArtifactServer", Name: "lab-artifacts", Machine: "controller", Status: "done"},
+				{Kind: "DNSServer", Name: "lab-dns", Machine: "controller", Status: "unsupported"},
+			},
+			Secrets:   lifecycle.SecretSummary{Declared: 3, Bound: 3},
+			NextSteps: []string{"bootwright apply", "bootwright destroy"},
+			Lifecycle: &lifecycle.LifecycleSummary{
+				Operation: operationID, Verb: "apply", State: "failed", Next: "continue-apply", Blocks: blocks("failed"),
+				Logs: []string{operationID + "/logs/operation.jsonl"}, Executable: "1.4.0 (9f2c1ab)",
+			},
+			LogLocation: logs,
+		}
+	}
+	validation := func() *compilation.Report {
+		return &compilation.Report{
+			Counts:                    compilation.Counts{FilesSeen: 15, ObjectsDecoded: 15},
+			ExcludedContainerClusters: []string{"ocp-02"}, ExcludedStorageClusters: []string{},
+			ExcludedResourceFiles: []string{"clusters/ocp-02/cluster.yaml"},
+			Advisories:            []diagnostic{deferred}, Diagnostics: []diagnostic{deferred, excluded},
+		}
+	}
+	invalid := &diagnostics.Failure{Diagnostics: []diagnostic{
+		{
+			Severity: "error", Code: "api.required", Message: "required field is absent",
+			Source: &diagnostics.SourceLocation{Path: "environment.yaml", Document: 1, Line: 6, Column: 3},
+			Object: &diagnostics.ObjectIdentity{APIVersion: "bootwright.io/v1alpha1", Kind: "Environment", Name: "lab-rhel"},
+			Field:  "$.spec.domains.base",
+		},
+		{
+			Severity: "error", Code: "api.field", Message: "field is not permitted by this schema",
+			Source: &diagnostics.SourceLocation{Path: "infra/machines/rhel-01.yaml", Document: 1, Line: 12, Column: 5},
+			Object: &diagnostics.ObjectIdentity{APIVersion: "bootwright.io/v1alpha1", Kind: "Machine", Name: "rhel-01"},
+			Field:  "$.spec.network.adresses",
+		},
+	}}
+	// Secret check and list JSON carry sequence and currentSequence 0 even
+	// where a version applies, because their presentation drops the ordinal
+	// (displaySecretCheck and displaySecretList in output_secrets.go), while
+	// specs/cli/output.md asks for it. These goldens pin that deviation, which
+	// is reported rather than fixed here, so its fix shows as a golden change.
+	checked := func() *custody.CheckResult {
+		return &custody.CheckResult{Context: secretContext, Secrets: []custody.CheckRow{
+			{Name: "lab-bmc-credentials", Type: "usernamePassword", Source: "generated", Parts: []secrets.Part{secrets.UsernamePart, secrets.PasswordPart}, Status: "available", Version: version("ver-4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d"), Sequence: 1},
+			{Name: "artifact-server-tls", Type: "tlsCertificate", Source: "generated", Parts: []secrets.Part{secrets.PrivateKeyPart, secrets.CertificatePart}, Status: "available", Version: version("ver-1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f"), Sequence: 1},
+			{Name: "bootwright-machine-key", Type: "sshKeyPair", Source: "generated", Parts: []secrets.Part{secrets.PublicKeyPart, secrets.PrivateKeyPart}, Status: "available", Version: version("ver-7e6d5c4b3a291807f6e5d4c3b2a19080"), Sequence: 2},
+		}}
+	}
+	missing := func() *custody.CheckResult {
+		return &custody.CheckResult{Context: secretContext, Secrets: []custody.CheckRow{
+			{Name: "artifact-server-tls", Type: "tlsCertificate", Source: "generated", Parts: []secrets.Part{secrets.CertificatePart, secrets.PrivateKeyPart}, Status: "available", Version: version("ver-1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f"), Sequence: 1},
+			{Name: "registry-pull-secret", Type: "dockerConfigJson", Source: "contextStore", Parts: []secrets.Part{secrets.ValuePart}, Status: "missing"},
+		}}
+	}
+	listed := func() *custody.ListResult {
+		return &custody.ListResult{Context: secretContext, Secrets: []custody.ListRow{
+			{Name: "registry-pull-secret", Type: "dockerConfigJson", Source: "contextStore", Parts: []secrets.Part{secrets.ValuePart}, State: "orphaned", BoundVersions: 1},
+			{Name: "lab-bmc-credentials", Type: "usernamePassword", Source: "generated", Parts: []secrets.Part{secrets.UsernamePart, secrets.PasswordPart}, State: "stale", CurrentVersion: version("ver-4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d"), CurrentSequence: 2, BoundVersions: 2},
+			{Name: "artifact-server-tls", Type: "tlsCertificate", Source: "generated", Parts: []secrets.Part{secrets.CertificatePart, secrets.PrivateKeyPart}, State: "current", CurrentVersion: version("ver-1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f"), CurrentSequence: 1, BoundVersions: 1},
+		}}
+	}
+	encryptionStatus := func() *encryption.StatusResult {
+		key := activeKey
+		return &encryption.StatusResult{
+			Initialized: true,
+			Implementation: &encryption.ImplementationStatus{
+				Type: "local-keyring", State: "ready",
+				Store:      encryption.ComponentStatus{ID: "local-v3", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1},
+				KeyCustody: encryption.ComponentStatus{ID: "local-keyfile-v1", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1},
+			},
+			ActiveKey: &key,
+			Keys:      []secretstore.Key{{ID: activeKey, State: "active", Seals: 3}, {ID: retiredKey, State: "retired", Seals: 12}},
+			Items:     encryption.ItemStatus{CurrentVersions: 3, BoundVersions: 3, MaterialParts: 6},
+		}
+	}
+	stored := func() *media.ListResult {
+		return &media.ListResult{Media: []media.MediaRow{
+			{
+				Name: "rhel-9.8-x86_64-boot.iso", Size: 1045430272, SHA256: "e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82",
+				Source: "file:///srv/images/rhel-9.8-x86_64-boot.iso", Added: "2026-09-20T08:15:00Z", Frozen: true, Verified: "ok",
+			},
+			{
+				Name: "rhel-9.8-x86_64-dvd.iso", Size: 13123217408, SHA256: "4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f",
+				Source: "https://images.example.test/rhel-9.8-x86_64-dvd.iso", Added: "2026-09-21T10:02:41Z", Verified: "ok",
+			},
+		}}
+	}
+	// Rows arrive in name order, as inventory.Rows derives them.
+	machines := func(powerRead bool) *inventory.ListResult {
+		result := &inventory.ListResult{Context: "lab", PowerRead: powerRead, Machines: []inventory.MachineRow{
+			{Name: "controller", Address: "controller.lab.example.test", IPs: []string{"192.0.2.1"}, OS: "provided", Clusters: []string{}, Lifecycle: "not-applied"},
+			{Name: "rhel-01", Address: "rhel-01.lab.example.test", IPs: []string{"198.51.100.11"}, OS: "installed", Provider: "lab-libvirt", Clusters: []string{}, Lifecycle: "applied"},
+			{Name: "sno-01", IPs: []string{}, OS: "provided", Clusters: []string{"sno"}, Lifecycle: "not-applied"},
+		}}
+		if powerRead {
+			result.Machines[0].Power, result.Machines[1].Power = "unknown", "on"
+		}
+		return result
+	}
+	powered := func(verb, now, previous string, changed bool) *power.Result {
+		return &power.Result{
+			Context: "lab", Machine: "rhel-01", Verb: verb, Power: now, Previous: previous, Changed: changed,
+			LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/" + runID, Logs: []string{runID + "/run.output"},
+		}
+	}
+	trusted := func() *enrollment.Report {
+		return &enrollment.Report{Context: "lab", Pending: 2, Recorded: 2, Hosts: []enrollment.HostReport{
+			{Machine: "bastion", Address: "192.0.2.5", Port: 22, Action: enrollment.ActionAdd, KeyType: "ssh-ed25519", Fingerprint: "SHA256:Xq3v9LmP2rT8wY5zB1nK4cH7dF0gJ6sA9eU2iO3pQ1M"},
+			{Machine: "db-01", Address: "198.51.100.21", Port: 2222, Action: enrollment.ActionReplace, KeyType: "ssh-ed25519", Fingerprint: "SHA256:b7R2kN9xW4pL1vC8mT5qZ3hG6jD0fS2aY9uE4iK7oP1", PreviousFingerprint: "SHA256:M4tH8cQ1zV6nB3xR9wL2pK7dJ5fG0sA8eY1uT4iO6rN"},
+			{Machine: "rhel-01", Action: enrollment.ActionSkip, Reason: "host key comes from its installation evidence"},
+		}}
+	}
+	effective := func() *compilation.EffectiveResult {
+		environment := api.NewObject(api.Environment, "lab-rhel", api.Value{}, api.MapValue(
+			api.FieldValue{Name: "domains", Value: api.MapValue(api.FieldValue{Name: "base", Value: api.StringValue("lab.example.test")})},
+			api.FieldValue{Name: "controller", Value: api.MapValue(api.FieldValue{Name: "machineRef", Value: api.StringValue("controller")})},
+		))
+		controller := api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
+			api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "provided", Value: api.BoolValue(true)})},
+		))
+		return &compilation.EffectiveResult{Counts: compilation.Counts{FilesSeen: 2, ObjectsDecoded: 2}, Effective: api.NewCatalog([]api.Object{controller, environment})}
+	}
+	unauthorized := diagnostics.NewFailureWithRemediation("lifecycle.authorization",
+		"this plan has data-loss consequences that are not authorized: os-install-rhel-01", "",
+		"review the plan's impacts and repeat the command with --authorize data-loss")
+	noInput := diagnostics.NewFailure("context.input", "context has no desired state; run context update --name lab --input-dir <dir>", "")
+	return []cliGolden{
+		// Controller reports: an unpresented dry-run plan, a presented setup
+		// that retired bundles, and a context's readiness.
+		{golden: "cli-setup-plan", args: "setup --dry-run", record: func(r *dispatchRecord) {
+			r.result.controller = &prerequisites.Report{
+				Platform: platform, Route: "direct", DryRun: true, Outcome: "planned",
+				Checks: []prerequisites.Check{
+					{ID: "execution-bundle", Required: "qualified Python and Ansible", Observed: "unverified", Status: "unverified"},
+					{ID: "container-runtime", Required: "podman", Observed: "unverified", Status: "unverified"},
+				},
+				Actions:      []string{"Prepare the qualified execution bundle", "Install the baseline native packages"},
+				Dependencies: []string{"qualified-source.tar.gz"},
+			}
+		}},
+		{golden: "cli-setup-changed", args: "setup --yes --purge-old-bundles", record: func(r *dispatchRecord) {
+			r.result.controller = &prerequisites.Report{
+				Platform: platform, Route: "direct", Outcome: "changed", PlanPresented: true,
+				Checks:         []prerequisites.Check{ready("execution-bundle", "qualified"), ready("container-runtime", "podman 5.6.1")},
+				Actions:        []string{"Prepare the qualified execution bundle"},
+				RetiredBundles: []string{"bundle-2026-08", "bundle-2026-09"},
+			}
+		}},
+		{golden: "cli-preflight-controller", args: "preflight controller --context lab", record: func(r *dispatchRecord) {
+			r.result.controller = &prerequisites.Report{
+				ContextName: "lab", Machine: "controller", Platform: platform, Route: "direct", Outcome: "ready",
+				Checks: []prerequisites.Check{ready("host", "fedora 43/amd64"), ready("execution-bundle", "qualified"), ready("target-tools", "qualified"), ready("controller-binding", "bound to lab")},
+			}
+		}},
+
+		// Lifecycle: a staged preview, a completed apply, a settled destroy,
+		// an apply that ran and failed, and a refusal that registered nothing.
+		{golden: "cli-plan", args: "plan --stage infra-components,substrates", record: func(r *dispatchRecord) {
+			r.result.lifecyclePlan = &lifecycle.PlanResult{
+				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply",
+				Steps: []lifecycle.PlanStep{
+					{ID: "artifact-server-lab-artifacts", Description: "serve artifacts for lab-artifacts on controller", Stage: "infra-components", Impacts: []string{"create-container-unit", "open-listener 192.0.2.1:8443"}, State: "pending", Selection: lifecycle.StepStart, Wave: 1},
+					{ID: "substrate-host-lab-libvirt", Description: "realize the libvirt host of lab-libvirt on controller", Stage: "substrates", Impacts: []string{"create-libvirt-pool lab-libvirt", "create-libvirt-network lab"}, State: "pending", Selection: lifecycle.StepStart, After: []int{1}, Wave: 2},
+					{ID: "machine-rhel-01", Description: "realize the virtual machine rhel-01 and its controller", Stage: "machines", Impacts: []string{"create-libvirt-domain rhel-01"}, State: "pending", Selection: lifecycle.StepNotSelected, After: []int{2}, Wave: 3},
+					{ID: "os-install-rhel-01", Description: "install the operating system of rhel-01", Stage: "machines", Impacts: []string{"power-on rhel-01"}, State: "pending", Selection: lifecycle.StepWaiting, WaitsOn: "machine-rhel-01", After: []int{3}, Wave: 4},
+				},
+				Stages: []string{"infra-components", "substrates"}, Waves: 4, Widest: 1, Startable: 2, Deferred: 2,
+				Receipt: lifecycle.Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "apply"},
+			}
+		}},
+		{golden: "cli-apply", args: "apply --yes", record: func(r *dispatchRecord) { r.result.lifecycleOperation = operation("done") }},
+		{golden: "cli-destroy", args: "destroy --yes", record: func(r *dispatchRecord) {
+			r.result.lifecycleOperation = &lifecycle.OperationResult{
+				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "destroy", Settled: true,
+				Receipt: lifecycle.Receipt{Operation: "none", Verb: "destroy", State: "done", Next: "none"},
+			}
+		}},
+		{
+			golden: "cli-apply-failed", args: "apply --yes", code: 1,
+			record: func(r *dispatchRecord) {
+				r.result.lifecycleOperation = operation("failed")
+				r.err = diagnostics.NewFailureWithRemediation("lifecycle.state", "the operation did not complete", "", "repeat the operation to continue it")
+			},
+			stderr: "[FAIL] lifecycle.state: the operation did not complete; next: repeat the operation to continue it\n",
+		},
+		{
+			args: "apply --yes --authorize data-loss --stage machines", code: 1, record: func(r *dispatchRecord) { r.err = unauthorized },
+			stderr: "[FAIL] lifecycle.authorization: this plan has data-loss consequences that are not authorized: os-install-rhel-01; next: review the plan's impacts and repeat the command with --authorize data-loss\n",
+		},
+		// Status JSON still carries Go field names in its nested objects, a
+		// deviation specs/cli/output.md records as backlog F5; this golden is
+		// what F5's tagged DTOs will visibly change.
+		{golden: "cli-status", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = status() }},
+		{golden: "cli-status-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = status() }},
+
+		// Desired state: warnings reach standard error in text and the
+		// envelope's diagnostics in JSON; a failed validate has no result.
+		{
+			golden: "cli-validate", args: "validate -f inputs", record: func(r *dispatchRecord) { r.report = validation() },
+			stderr: "[WARN] api.selection clusters/ocp-02/cluster.yaml:4:9: cluster root is excluded by the Environment selection [ContainerCluster/ocp-02] ($.metadata.name); next: include the cluster in the matching Environment root selection\n" +
+				"[WARN] api.deferred playbooks/reserved.yaml:5:1: CustomPlaybook is a reserved declaration and cannot execute. [CustomPlaybook/reserved] ($.spec)\n",
+		},
+		{golden: "cli-validate-json", args: "validate -f inputs --output json", record: func(r *dispatchRecord) { r.report = validation() }},
+		{
+			args: "validate -f inputs", code: 1, record: func(r *dispatchRecord) { r.report, r.err = validation(), invalid },
+			stderr: "[FAIL] api.required environment.yaml:6:3: required field is absent [Environment/lab-rhel] ($.spec.domains.base)\n" +
+				"[FAIL] api.field infra/machines/rhel-01.yaml:12:5: field is not permitted by this schema [Machine/rhel-01] ($.spec.network.adresses)\n",
+		},
+		{golden: "cli-validate-failed-json", args: "validate -f inputs --output json", code: 1, record: func(r *dispatchRecord) { r.report, r.err = validation(), invalid }},
+		{golden: "cli-render-effective", args: "render effective", record: func(r *dispatchRecord) { r.result.effective = effective() }},
+		{golden: "cli-render-effective-json", args: "render effective --output json", record: func(r *dispatchRecord) { r.result.effective = effective() }},
+
+		// Contexts.
+		{
+			golden: "cli-context-init", args: "context init --name lab -f context.yaml --input-dir inputs",
+			record: func(r *dispatchRecord) {
+				r.result.admission = &contexts.AdmissionResult{Context: lab, Counts: compilation.Counts{FilesSeen: 14, ObjectsDecoded: 14}, FilesCopied: 14, InputChanged: true, Diagnostics: []diagnostic{deferred}}
+			},
+			stderr: "[WARN] api.deferred playbooks/reserved.yaml:5:1: CustomPlaybook is a reserved declaration and cannot execute. [CustomPlaybook/reserved] ($.spec)\n",
+		},
+		{golden: "cli-context-update", args: "context update --name lab --input-dir inputs --yes", record: func(r *dispatchRecord) {
+			r.result.admission = &contexts.AdmissionResult{Context: lab, Counts: compilation.Counts{FilesSeen: 14, ObjectsDecoded: 14}}
+		}},
+		{golden: "cli-context-use", args: "context use --name lab", record: func(r *dispatchRecord) { r.result.use = &contexts.UseResult{Context: lab} }},
+		{golden: "cli-context-list", args: "context list", record: func(r *dispatchRecord) {
+			r.result.list = &contexts.ListResult{Contexts: []contexts.Summary{
+				{Name: "retired", Mode: contexts.Deleting, Configured: true}, lab, {Name: "edge", Mode: contexts.Initializing},
+			}}
+		}},
+		{golden: "cli-context-current", args: "context current", record: func(r *dispatchRecord) { r.result.current = &contexts.CurrentResult{Context: lab} }},
+		{golden: "cli-context-current-short", args: "context current --short", record: func(r *dispatchRecord) { r.result.current = &contexts.CurrentResult{Context: lab} }},
+		{
+			golden: "cli-context-delete", args: "context delete --name retired --purge --allow-orphans --yes",
+			record: func(r *dispatchRecord) {
+				r.result.deletion = &contexts.DeleteResult{Name: "retired", Outcome: "deleted", OrphansAbandoned: true}
+			},
+			stderr: "[WARN] context.unsafe-delete: the objects this context owned were abandoned and are no longer managed\n",
+		},
+
+		// Secrets. A negative check keeps its complete result on standard
+		// output and exits 1; a refusal has no result at all.
+		{golden: "cli-secret-set", args: "secret set --name registry-pull-secret --value-file pull-secret.json", record: func(r *dispatchRecord) {
+			r.result.secretMutation = &custody.MutationResult{Context: secretContext, Name: "registry-pull-secret", Changed: 1, Parts: []secrets.Part{secrets.ValuePart}}
+		}},
+		{golden: "cli-secret-generate", args: "secret generate", record: func(r *dispatchRecord) {
+			r.result.secretMutation = &custody.MutationResult{Context: secretContext, Changed: 2, Unchanged: 1, Parts: []secrets.Part{secrets.PublicKeyPart, secrets.CertificatePart, secrets.PrivateKeyPart}}
+		}},
+		{golden: "cli-secret-delete", args: "secret delete --name registry-pull-secret --yes", record: func(r *dispatchRecord) {
+			r.result.secretMutation = &custody.MutationResult{Context: secretContext, Name: "registry-pull-secret", Changed: 1, Parts: []secrets.Part{secrets.ValuePart}}
+		}},
+		{golden: "cli-secret-check", args: "secret check", record: func(r *dispatchRecord) { r.result.secretCheck = checked() }},
+		{golden: "cli-secret-check-json", args: "secret check --output json", record: func(r *dispatchRecord) { r.result.secretCheck = checked() }},
+		{
+			golden: "cli-secret-check-negative", args: "secret check", code: 1,
+			record: func(r *dispatchRecord) {
+				r.result.secretCheck = missing()
+				r.err = diagnostics.NewFailure("secret.input", "secret registry-pull-secret is missing", "")
+			},
+			stderr: "[FAIL] secret.input: secret registry-pull-secret is missing\n",
+		},
+		{golden: "cli-secret-check-negative-json", args: "secret check --output json", code: 1, record: func(r *dispatchRecord) {
+			r.result.secretCheck = missing()
+			r.err = diagnostics.NewFailure("secret.input", "secret registry-pull-secret is missing", "")
+		}},
+		{golden: "cli-secret-list", args: "secret list", record: func(r *dispatchRecord) { r.result.secretList = listed() }},
+		{golden: "cli-secret-list-json", args: "secret list --output json", record: func(r *dispatchRecord) { r.result.secretList = listed() }},
+		{
+			args: "secret list --context lab", code: 1, record: func(r *dispatchRecord) { r.err = noInput },
+			stderr: "[FAIL] context.input: context has no desired state; run context update --name lab --input-dir <dir>\n",
+		},
+		{golden: "cli-secret-list-refused-json", args: "secret list --context lab --output json", code: 1, record: func(r *dispatchRecord) { r.err = noInput }},
+		// An explicit sensitive result is the requested bytes with no added
+		// LF (specs/cli/output.md, streams), which a text golden cannot hold
+		// as itself, so its golden holds the quoted form.
+		{golden: "cli-secret-show", args: "secret show --name lab-bmc-credentials --part username", quoted: true, record: func(r *dispatchRecord) {
+			r.result.secretReveal = &custody.RevealResult{Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.UsernamePart: []byte("admin"), secrets.PasswordPart: []byte("unused")}), Part: secrets.UsernamePart}
+		}},
+		{golden: "cli-secret-encryption-init", args: "secret encryption init", record: func(r *dispatchRecord) {
+			r.result.encryptionMutation = &encryption.MutationResult{Context: secretContext, Implementation: selection, ActiveKey: retiredKey, Changed: true}
+		}},
+		{golden: "cli-secret-encryption-rotate", args: "secret encryption rotate --yes", record: func(r *dispatchRecord) {
+			r.result.encryptionMutation = &encryption.MutationResult{Context: secretContext, Implementation: selection, ActiveKey: activeKey, Changed: true}
+		}},
+		{golden: "cli-secret-encryption-status", args: "secret encryption status", record: func(r *dispatchRecord) { r.result.encryptionStatus = encryptionStatus() }},
+		{golden: "cli-secret-encryption-status-json", args: "secret encryption status --output json", record: func(r *dispatchRecord) { r.result.encryptionStatus = encryptionStatus() }},
+
+		// Media.
+		{golden: "cli-media-add", args: "media add --name rhel-9.8-x86_64-dvd.iso --from-file rhel-9.8-x86_64-dvd.iso", record: func(r *dispatchRecord) {
+			r.result.mediaMutation = &media.MutationResult{Name: "rhel-9.8-x86_64-dvd.iso", Size: 13123217408, SHA256: "4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f", Outcome: "stored"}
+		}},
+		{golden: "cli-media-delete", args: "media delete --name rhel-9.8-x86_64-dvd.iso --yes", record: func(r *dispatchRecord) {
+			r.result.mediaMutation = &media.MutationResult{Name: "rhel-9.8-x86_64-dvd.iso", Outcome: "deleted"}
+		}},
+		{golden: "cli-media-list", args: "media list --checksums", record: func(r *dispatchRecord) { r.result.mediaList = stored() }},
+		{golden: "cli-media-list-json", args: "media list --checksums --output json", record: func(r *dispatchRecord) { r.result.mediaList = stored() }},
+
+		// Machines. A power verb's service also reports where its run's
+		// output is kept, through a reporter outside this boundary: that Logs
+		// line precedes the JSON document in the real executable
+		// (specs/cli/output.md, backlog F5), so F5 adds its own wiring-level
+		// test and these goldens hold what the Runner writes.
+		{golden: "cli-machine-list", args: "machine list --power-status", record: func(r *dispatchRecord) { r.result.machines = machines(true) }},
+		{golden: "cli-machine-list-json", args: "machine list --power-status --output json", record: func(r *dispatchRecord) { r.result.machines = machines(true) }},
+		{golden: "cli-machine-list-silent", args: "machine list --silent", record: func(r *dispatchRecord) { r.result.machines = machines(false) }},
+		{golden: "cli-machine-start", args: "machine start --name rhel-01", record: func(r *dispatchRecord) { r.result.power = powered("start", "on", "off", true) }},
+		{golden: "cli-machine-start-json", args: "machine start --name rhel-01 --output json", record: func(r *dispatchRecord) { r.result.power = powered("start", "on", "off", true) }},
+		{golden: "cli-machine-stop", args: "machine stop --name rhel-01 --yes", record: func(r *dispatchRecord) { r.result.power = powered("stop", "off", "off", false) }},
+		{golden: "cli-machine-stop-json", args: "machine stop --name rhel-01 --yes --output json", record: func(r *dispatchRecord) { r.result.power = powered("stop", "off", "off", false) }},
+		{golden: "cli-machine-restart", args: "machine restart --name rhel-01 --force --yes", record: func(r *dispatchRecord) { r.result.power = powered("restart", "on", "on", true) }},
+		{golden: "cli-machine-restart-json", args: "machine restart --name rhel-01 --force --yes --output json", record: func(r *dispatchRecord) { r.result.power = powered("restart", "on", "on", true) }},
+		{golden: "cli-machine-trust", args: "machine trust --replace db-01 --yes", record: func(r *dispatchRecord) { r.result.trust = trusted() }},
+		{golden: "cli-machine-trust-json", args: "machine trust --replace db-01 --yes --output json", record: func(r *dispatchRecord) { r.result.trust = trusted() }},
+
+		// Envelopes: a usage error, which never dispatches, and a command
+		// whose use case this build does not provide.
+		{
+			args: "status --output yaml", code: 2,
+			stderr: "[FAIL] cli.usage: --output has an unsupported value\nUsage: bootwright status [flags]\nRun 'bootwright help' for available commands.\n",
+		},
+		{golden: "cli-usage-json", args: "status --output json --verbose", code: 2},
+		{
+			args: "status", code: 1, record: func(r *dispatchRecord) { r.err = availability.ErrNotImplemented },
+			stderr: "[FAIL] cli.not-implemented: bootwright status is not implemented\n",
+		},
+		{golden: "cli-not-implemented-json", args: "status --output json", code: 1, record: func(r *dispatchRecord) { r.err = availability.ErrNotImplemented }},
+	}
+}
+
+// Every byte a command writes is contract (specs/cli/output.md), so each
+// result arm, each output mode and each envelope is taken at the Runner, over
+// fixed application results and the production effective-state encoders, and
+// compared whole: standard output with its golden, and the exit status and
+// standard error inline.
+func TestCommandOutputMatchesItsGoldens(t *testing.T) {
+	for _, test := range cliGoldens() {
+		name := test.golden
+		if name == "" {
+			name = test.args
+		}
+		t.Run(name, func(t *testing.T) {
+			record := &dispatchRecord{}
+			if test.record != nil {
+				test.record(record)
+			}
+			var out, errOut bytes.Buffer
+			code := New(Config{
+				Out: &out, ErrOut: &errOut, Services: dispatchSpies(record),
+				EncodeEffectiveYAML: stateencoding.YAML, EncodeEffectiveJSON: stateencoding.JSON,
+			}).Run(context.Background(), strings.Fields(test.args))
+			if code != test.code {
+				t.Errorf("exit status %d, want %d", code, test.code)
+			}
+			if errOut.String() != test.stderr {
+				t.Errorf("standard error differs:\n got %q\nwant %q", errOut.String(), test.stderr)
+			}
+			switch {
+			case test.golden == "":
+				if out.Len() != 0 {
+					t.Errorf("standard output %q, want none", out.String())
+				}
+			case test.quoted:
+				matchesTextGolden(t, test.golden, []byte(strconv.Quote(out.String())+"\n"))
+			case test.json():
+				matchesGolden(t, test.golden, out.Bytes(), true)
+			default:
+				matchesTextGolden(t, test.golden, out.Bytes())
+			}
+		})
+	}
+}
+
+// A command becomes available by a catalog edit alone, so the catalog decides
+// what must be pinned: every available command needs a successful case with a
+// golden, and one in JSON when it accepts --output. A golden no case writes is
+// stale and fails rather than lingering.
+func TestEveryAvailableCommandHasAGolden(t *testing.T) {
+	// A session's standard output is the remote process's own bytes
+	// (specs/cli/output.md, streams), so Bootwright writes nothing to pin.
+	sessions := []string{"machine rsh", "machine exec"}
+	covered, coveredJSON, written := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	for _, test := range cliGoldens() {
+		if test.golden == "" {
+			continue
+		}
+		if written[test.golden] {
+			t.Errorf("two cases write %s", test.golden)
+		}
+		written[test.golden] = true
+		if test.code == 0 {
+			covered[test.path()] = true
+			coveredJSON[test.path()] = coveredJSON[test.path()] || test.json()
+		}
+	}
+	implemented := map[string]bool{}
+	for _, spec := range commandCatalog() {
+		if !spec.implemented {
+			continue
+		}
+		implemented[spec.path] = true
+		if slices.Contains(sessions, spec.path) {
+			continue
+		}
+		if !covered[spec.path] {
+			t.Errorf("available command %q has no successful golden case", spec.path)
+		}
+		acceptsOutput := slices.ContainsFunc(spec.flags, func(flag flagSpec) bool { return flag.name == "output" })
+		if acceptsOutput && !coveredJSON[spec.path] {
+			t.Errorf("available command %q accepts --output but has no successful JSON golden case", spec.path)
+		}
+	}
+	for _, path := range sessions {
+		if !implemented[path] {
+			t.Errorf("%q is exempt as a session but is no longer an available command", path)
+		}
+	}
+	files, err := filepath.Glob(filepath.Join("testdata", "cli-*.golden"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range files {
+		if name := strings.TrimSuffix(filepath.Base(file), ".golden"); !written[name] {
+			t.Errorf("%s is written by no case; delete it with the case that wrote it", file)
+		}
+	}
+}

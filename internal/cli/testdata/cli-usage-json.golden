@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "status",
+  "ok": false,
+  "exitCode": 2,
+  "result": null,
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "cli.usage",
+      "message": "flag is not accepted at this position"
+    }
+  ],
+  "logs": []
+}

@@ -1,0 +1,21 @@
+Apply plan
+
+Plan
+  1. serve artifacts for lab-artifacts on controller [infra-components] [start]
+       create-container-unit
+       open-listener 192.0.2.1:8443
+  2. realize the libvirt host of lab-libvirt on controller [substrates] [start] [after 1]
+       create-libvirt-pool lab-libvirt
+       create-libvirt-network lab
+  3. realize the virtual machine rhel-01 and its controller [machines] [not selected] [after 2]
+       create-libvirt-domain rhel-01
+  4. install the operating system of rhel-01 [machines] [deferred: waits on machine-rhel-01] [after 3]
+       power-on rhel-01
+
+  Stages       infra-components, substrates
+  Starts       2 of 4 blocks, 2 deferred
+  Concurrency  4 waves, up to 1 step at once
+operation: none
+verb: plan
+state: preview
+next: apply

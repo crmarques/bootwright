@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "validate",
+  "ok": false,
+  "exitCode": 1,
+  "result": null,
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "api.required",
+      "message": "required field is absent",
+      "source": {
+        "path": "environment.yaml",
+        "document": 1,
+        "line": 6,
+        "column": 3
+      },
+      "object": {
+        "apiVersion": "bootwright.io/v1alpha1",
+        "kind": "Environment",
+        "name": "lab-rhel"
+      },
+      "field": "$.spec.domains.base"
+    },
+    {
+      "severity": "error",
+      "code": "api.field",
+      "message": "field is not permitted by this schema",
+      "source": {
+        "path": "infra/machines/rhel-01.yaml",
+        "document": 1,
+        "line": 12,
+        "column": 5
+      },
+      "object": {
+        "apiVersion": "bootwright.io/v1alpha1",
+        "kind": "Machine",
+        "name": "rhel-01"
+      },
+      "field": "$.spec.network.adresses"
+    }
+  ],
+  "logs": []
+}

@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "validate",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "counts": {
+      "filesSeen": 15,
+      "objectsDecoded": 15
+    },
+    "excludedContainerClusters": [
+      "ocp-02"
+    ],
+    "excludedStorageClusters": [],
+    "excludedResourceFiles": [
+      "clusters/ocp-02/cluster.yaml"
+    ],
+    "advisories": [
+      {
+        "severity": "warning",
+        "code": "api.deferred",
+        "message": "CustomPlaybook is a reserved declaration and cannot execute.",
+        "source": {
+          "path": "playbooks/reserved.yaml",
+          "document": 1,
+          "line": 5,
+          "column": 1
+        },
+        "object": {
+          "apiVersion": "bootwright.io/v1alpha1",
+          "kind": "CustomPlaybook",
+          "name": "reserved"
+        },
+        "field": "$.spec"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "api.selection",
+      "message": "cluster root is excluded by the Environment selection",
+      "source": {
+        "path": "clusters/ocp-02/cluster.yaml",
+        "document": 1,
+        "line": 4,
+        "column": 9
+      },
+      "object": {
+        "apiVersion": "bootwright.io/v1alpha1",
+        "kind": "ContainerCluster",
+        "name": "ocp-02"
+      },
+      "field": "$.metadata.name",
+      "remediation": "include the cluster in the matching Environment root selection"
+    },
+    {
+      "severity": "warning",
+      "code": "api.deferred",
+      "message": "CustomPlaybook is a reserved declaration and cannot execute.",
+      "source": {
+        "path": "playbooks/reserved.yaml",
+        "document": 1,
+        "line": 5,
+        "column": 1
+      },
+      "object": {
+        "apiVersion": "bootwright.io/v1alpha1",
+        "kind": "CustomPlaybook",
+        "name": "reserved"
+      },
+      "field": "$.spec"
+    }
+  ],
+  "logs": []
+}

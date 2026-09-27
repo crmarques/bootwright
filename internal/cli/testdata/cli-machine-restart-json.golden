@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "machine restart",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "lab",
+    "machine": "rhel-01",
+    "verb": "restart",
+    "power": "on",
+    "previous": "on",
+    "changed": true
+  },
+  "diagnostics": [],
+  "logs": [
+    "run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9a/run.output"
+  ]
+}
