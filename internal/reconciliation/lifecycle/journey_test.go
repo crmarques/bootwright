@@ -572,9 +572,18 @@ type testBinder struct {
 	issued   int
 	material map[string]secrets.Material
 	bindErr  error
+	// kill runs first in every Bind and Release, named by the point it would
+	// publish, so a test can stop an invocation there; an error it returns
+	// fails it before anything is bound or released.
+	kill func(point string) error
 }
 
 func (b *testBinder) Bind(_ context.Context, request custody.BindRequest) (secretstore.Binding, error) {
+	if b.kill != nil {
+		if err := b.kill("publish secret binding"); err != nil {
+			return secretstore.Binding{}, err
+		}
+	}
 	if b.bindErr != nil {
 		return secretstore.Binding{}, b.bindErr
 	}
@@ -600,6 +609,11 @@ func (b *testBinder) Reopen(_ context.Context, request custody.BindingRequest) (
 }
 
 func (b *testBinder) Release(_ context.Context, request custody.BindingRequest) (bool, error) {
+	if b.kill != nil {
+		if err := b.kill("release secret binding"); err != nil {
+			return false, err
+		}
+	}
 	b.released = append(b.released, request.BindingID)
 	return true, nil
 }

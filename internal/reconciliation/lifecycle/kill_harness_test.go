@@ -76,29 +76,39 @@ func killLedger() map[string]string {
 		// then refuses lifecycle.stage because nothing is left to start.
 		"a/replace <op>/operation.json#1": "S10 (rest)",
 		"c/replace <op>/operation.json#2": "S10 (rest)",
-		// A kill after the completed record and before its projection leaves the
-		// operation settled, and repeating its verb settles without projecting
-		// it or releasing what a completed removal no longer holds.
-		"a/publish evidence#2":     "S10 (rest)",
-		"b/release reservations#1": "S10 (rest)",
-		"b/publish evidence#2":     "S10 (rest)",
-		"c/publish evidence#1":     "S10 (rest)",
-		"e/publish evidence#2":     "S10 (rest)",
+		// A kill after the completed record and before the invocation's last
+		// write leaves the operation settled, and repeating its verb settles
+		// without projecting it or releasing the reservations and Secret binding
+		// a completed removal no longer holds.
+		"a/publish evidence#2":       "S10 (rest)",
+		"b/release reservations#1":   "S10 (rest)",
+		"b/publish evidence#2":       "S10 (rest)",
+		"b/release secret binding#1": "S10 (rest)",
+		"c/publish evidence#1":       "S10 (rest)",
+		"e/publish evidence#2":       "S10 (rest)",
 		// A kill after a removal's running record and before its effect leaves
 		// the target present; the resolution reads that presence as completion,
 		// so the removal completes with pristine evidence over what it kept.
-		"b/append <op>/logs/blocks/a/attempt-000001.jsonl#1": "candidate:destroy-resolution-reads-presence",
-		"b/append <op>/logs/blocks/a/attempt-000001.jsonl#2": "candidate:destroy-resolution-reads-presence",
-		"b/append <op>/logs/blocks/b/attempt-000001.jsonl#1": "candidate:destroy-resolution-reads-presence",
-		"b/append <op>/logs/blocks/b/attempt-000001.jsonl#2": "candidate:destroy-resolution-reads-presence",
-		"b/append <op>/logs/blocks/c/attempt-000001.jsonl#1": "candidate:destroy-resolution-reads-presence",
-		"b/append <op>/logs/blocks/c/attempt-000001.jsonl#2": "candidate:destroy-resolution-reads-presence",
-		// A kill after an apply's reservations landed and before the index names
-		// its operation leaves them held by a context with no operation, over
-		// which a destroy has nothing to remove and so releases nothing.
-		"d/write <op>/plan.json#1":      "candidate:reservation-outlives-unregistered-apply",
-		"d/write <op>/operation.json#1": "candidate:reservation-outlives-unregistered-apply",
-		"d/replace index.json#1":        "candidate:reservation-outlives-unregistered-apply",
+		"b/append <op>/logs/blocks/a/attempt-000001.jsonl#1": "S27",
+		"b/append <op>/logs/blocks/a/attempt-000001.jsonl#2": "S27",
+		"b/append <op>/logs/blocks/b/attempt-000001.jsonl#1": "S27",
+		"b/append <op>/logs/blocks/b/attempt-000001.jsonl#2": "S27",
+		"b/append <op>/logs/blocks/c/attempt-000001.jsonl#1": "S27",
+		"b/append <op>/logs/blocks/c/attempt-000001.jsonl#2": "S27",
+		// A kill after a fresh apply bound its Secrets and before the index names
+		// its operation leaves that binding held by no operation: an apply
+		// retried over it binds another, and a destroy, which has nothing to
+		// remove, releases neither it nor the reservations that already landed.
+		"a/publish binding#1":           "S10 (rest)",
+		"a/publish reservations#1":      "S10 (rest)",
+		"a/write <op>/plan.json#1":      "S10 (rest)",
+		"a/write <op>/operation.json#1": "S10 (rest)",
+		"a/replace index.json#1":        "S10 (rest)",
+		"d/publish binding#1":           "S10 (rest)",
+		"d/publish reservations#1":      "S10 (rest)",
+		"d/write <op>/plan.json#1":      "S10 (rest)",
+		"d/write <op>/operation.json#1": "S10 (rest)",
+		"d/replace index.json#1":        "S10 (rest)",
 	}
 }
 
@@ -363,8 +373,9 @@ func (k *killPoints) keep(snapshot *killSnapshot) {
 	k.snapshot = snapshot
 }
 
-// arm names every durable write of the rig's workspace to points: each write
-// to either operation area and each publication outside them.
+// arm names every durable write of the rig to points: each write to either
+// operation area, each publication outside them and each Secret binding the
+// custody store issues or releases.
 func (r *killRig) arm(points *killPoints) {
 	w := r.harness.workspace
 	for _, area := range []*memoryArea{w.area, w.runArea} {
@@ -389,6 +400,7 @@ func (r *killRig) arm(points *killPoints) {
 		}
 		return nil
 	}
+	r.harness.binder.kill = w.kill
 }
 
 // killElide replaces the operation identity a target starts with, so a point's
@@ -423,19 +435,36 @@ func killPristine(t *testing.T) []byte {
 
 // killState is what a journey leaves that an operator can observe: whether the
 // context rests applied, removed or holds an incomplete operation, its
-// evidence, its reservations and controller binding, and what the host holds.
+// evidence, its reservations and controller binding, how many Secret bindings
+// the custody store still holds for it, and what the host holds.
 type killState struct {
 	rest, evidence, reservations, bindings, realized string
+	// secretBindings is a count rather than the identities, because every run
+	// issues its own.
+	secretBindings int
 }
 
-func killStateOf(w *testWorkspace, host *killHost) killState {
+func killStateOf(w *testWorkspace, binder *testBinder, host *killHost) killState {
 	return killState{
-		rest:         killRest(w),
-		evidence:     strings.TrimSpace(string(w.evidence)),
-		reservations: fmt.Sprintf("%v", w.reservations),
-		bindings:     fmt.Sprintf("%v", w.controller.State.Bindings),
-		realized:     fmt.Sprintf("%v", host.realizedBlocks()),
+		rest:           killRest(w),
+		evidence:       strings.TrimSpace(string(w.evidence)),
+		reservations:   fmt.Sprintf("%v", w.reservations),
+		bindings:       fmt.Sprintf("%v", w.controller.State.Bindings),
+		realized:       fmt.Sprintf("%v", host.realizedBlocks()),
+		secretBindings: killUnreleased(binder),
 	}
+}
+
+// killUnreleased counts the Secret bindings the binder issued and has not
+// released, each once however often it was released.
+func killUnreleased(binder *testBinder) int {
+	unreleased := 0
+	for issued := 1; issued <= binder.issued; issued++ {
+		if !slices.Contains(binder.released, fmt.Sprintf("bind-%d", issued)) {
+			unreleased++
+		}
+	}
+	return unreleased
 }
 
 // killRest reads whether the context is at rest: applied, removed (no
@@ -691,12 +720,13 @@ func killJourneyOutcomes(ctx context.Context, t *testing.T, journey killJourney,
 		t.Fatalf("the uninterrupted journey failed: %v", err)
 	}
 	rig.harness.workspace.area.landing, rig.harness.workspace.runArea.landing, rig.harness.workspace.kill = nil, nil, nil
+	rig.harness.binder.kill = nil
 	if journey.finish != "" {
 		if err := killInvoke(ctx, rig.harness.service, journey.finish); err != nil {
 			t.Fatalf("the uninterrupted journey's %s failed: %v", journey.finish, err)
 		}
 	}
-	end := killStateOf(rig.harness.workspace, rig.host)
+	end := killStateOf(rig.harness.workspace, rig.harness.binder, rig.host)
 	if len(names.keys) == 0 {
 		t.Fatal("the journey performed no durable write")
 	}
@@ -745,12 +775,12 @@ func killEvaluate(ctx context.Context, journey killJourney, rig *killRig, snapsh
 		return nil
 	}
 	outcome.needed = journey.bound + 1
-	state := killStateOf(snapshot.workspace, snapshot.host)
+	state := killStateOf(snapshot.workspace, snapshot.binder, snapshot.host)
 	for retry := 0; retry <= journey.bound; retry++ {
 		if retry != 0 {
 			_ = killInvoke(ctx, service, journey.retry)
 			outcome.failures = append(outcome.failures, killInvariants(snapshot, pristine)...)
-			state = killStateOf(snapshot.workspace, snapshot.host)
+			state = killStateOf(snapshot.workspace, snapshot.binder, snapshot.host)
 		}
 		if state == end {
 			outcome.needed = retry
