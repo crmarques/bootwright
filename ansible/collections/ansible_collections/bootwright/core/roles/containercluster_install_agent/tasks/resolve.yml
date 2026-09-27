@@ -1,37 +1,76 @@
 ---
-# The installer polls the cluster API from this host, so every name the cluster
-# answers at is proved to resolve here before any node is booted. A name that
-# does not resolve fails the block with the answers it found, and nothing is
-# booted.
+# The installer polls the cluster API from this host, so before any node is
+# booted every endpoint name the plan froze an address for is proved to resolve
+# here to that address and to nothing else: any other answer is one the
+# installer may poll instead of the cluster. A slot with no address freezes no
+# name, so nothing here resolves it. The applications name is a wildcard, so a
+# second name beneath it, derived from the cluster name and cut to one DNS
+# label, proves the wildcard rather than a record written for the console
+# alone. A name that fails fails the block with its answers and the address it
+# must answer with, and nothing is booted.
+- name: Collect every name to resolve and the one address each must answer with
+  ansible.builtin.set_fact:
+    containercluster_install_agent_probes: >-
+      {{ bootwright_cluster_install_request.endpoints
+         + ([{'address': (containercluster_install_agent_applications | first).address,
+              'name': containercluster_install_agent_wildcard_label ~ '.'
+                      ~ (containercluster_install_agent_applications | first).name.split('.', 1)[1],
+              'wildcard': '*.' ~ (containercluster_install_agent_applications | first).name.split('.', 1)[1]}]
+            if containercluster_install_agent_applications | length > 0 else []) }}
+  vars:
+    containercluster_install_agent_applications: >-
+      {{ bootwright_cluster_install_request.endpoints
+         | selectattr('name', 'match', 'console-openshift-console[.]apps[.]') | list }}
+    containercluster_install_agent_wildcard_label: >-
+      {{ ('bootwright-' ~ bootwright_cluster_install_request.identity.cluster)[:63]
+         | regex_replace('-+$', '') }}
+
+# getent ahosts asks getaddrinfo for every address family this host is
+# configured for and prints one line per answer and socket type, the address
+# first; getent hosts would print only the IPv6 answers of a name that has
+# both (the resolution tests record both outputs). An answer is compared as
+# the text getent prints, which is the canonical form effective state freezes
+# for every address outside the deprecated IPv4-compatible range ::/96, which
+# glibc prints with a dotted quad.
 - name: Resolve every name this cluster answers at
   ansible.builtin.command:
     argv:
       - getent
-      - hosts
+      - ahosts
       - '{{ item.name }}'
-  loop: '{{ bootwright_cluster_install_request.endpoints }}'
+  loop: '{{ containercluster_install_agent_probes }}'
   loop_control:
     label: '{{ item.name }}'
   register: containercluster_install_agent_resolution
   changed_when: false
   failed_when: false
 
-- name: Collect the names this host cannot resolve
+- name: Collect every name that does not answer with its frozen address alone
   ansible.builtin.set_fact:
-    containercluster_install_agent_unresolved: >-
-      {{ containercluster_install_agent_resolution.results
-         | rejectattr('rc', 'equalto', 0) | map(attribute='item.name') | list
-         + (containercluster_install_agent_resolution.results
-            | selectattr('rc', 'equalto', 0)
-            | rejectattr('stdout', 'search', '^[^ ]+')
-            | map(attribute='item.name') | list) }}
+    containercluster_install_agent_misresolved: >-
+      {%- set found = namespace(names=[]) -%}
+      {%- for result in containercluster_install_agent_resolution.results -%}
+      {%-   set answers = (result.stdout_lines | default([]) if result.rc | default(-1) == 0 else [])
+                          | map('regex_search', '^[^ ]+') | select | unique | list -%}
+      {%-   if answers != [result.item.address] -%}
+      {%-     set found.names = found.names + [
+                result.item.name
+                ~ (', which proves the ' ~ result.item.wildcard ~ ' wildcard,' if result.item.wildcard is defined else '')
+                ~ ' must resolve to ' ~ result.item.address ~ ' alone and resolves to '
+                ~ (answers | join(', ') if answers else 'no address')
+                ~ (' (getent ahosts exited ' ~ (result.rc | default(-1)) ~ ')' if result.rc | default(-1) not in [0, 2] else '')] -%}
+      {%-   endif -%}
+      {%- endfor -%}
+      {{ found.names }}
   changed_when: false
 
-- name: Refuse to boot a cluster this host cannot reach by name
+- name: Refuse to boot a cluster this host does not resolve to its frozen addresses
   ansible.builtin.fail:
     msg: >-
-      this host does not resolve {{ containercluster_install_agent_unresolved | join(', ') }},
-      and the installer polls the cluster from here; route the cluster's zone to
-      the resolver this graph declares, then repeat the apply. No node was
+      this host must resolve every name this cluster answers at to the address
+      the plan froze for it and to nothing else, because the installer polls the
+      cluster from here: {{ containercluster_install_agent_misresolved | join('; ') }}.
+      Route the cluster's zone to the resolver this graph declares and remove
+      every other answer for these names, then repeat the apply. No node was
       booted.
-  when: containercluster_install_agent_unresolved | length > 0
+  when: containercluster_install_agent_misresolved | length > 0
