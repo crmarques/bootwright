@@ -62,9 +62,21 @@ type contractRow struct {
 	// presence is every field but the request digest of evidence that proves
 	// the attempt's frozen block realized, built from that block's own request
 	// and the material the attempt binds. Every runner-driven row has one, so
-	// a digest check is held to the contract on evidence that passes every
-	// other check.
+	// the digest and kind checks are held to the contract on evidence that
+	// passes every other check. With its postcondition unproved it is the
+	// row's partial realization.
 	presence func(*testing.T, lifecycle.Execution) map[string]any
+	// retains marks a binding whose own spec has its removal retain what its
+	// apply realized, so its absence evidence proves that removal and not that
+	// the apply had no effect, and an observation leaves it unknown:
+	// specs/managed-os.md keeps the installed system with the Machine's disks,
+	// and specs/substrates.md retains a claimed physical machine.
+	retains bool
+	// indivisible marks a binding whose block realizes nothing it could leave
+	// part way, as specs/substrates.md says of a physical machine, whose
+	// replay finds nothing realized that could drift, so an observation leaves
+	// partial evidence unknown.
+	indivisible bool
 }
 
 func (r contractRow) binding() lifecycle.CapabilityBinding {
@@ -76,8 +88,9 @@ func contractRows() []contractRow {
 		{kind: clients.Kind, implementation: clients.Implementation, example: "lab-rhel"},
 		{kind: libvirt.MachineKind, implementation: libvirt.MachineImplementation, example: "lab-rhel", probes: true,
 			absence: map[string]any{"answered": true}, presence: contractMachinePresence},
-		{kind: baremetal.Kind, implementation: baremetal.Implementation, example: "lab-baremetal", presence: contractBareMetalPresence},
-		{kind: installation.Kind, implementation: installation.Implementation, example: "lab-rhel", presence: contractInstallationPresence},
+		{kind: baremetal.Kind, implementation: baremetal.Implementation, example: "lab-baremetal", presence: contractBareMetalPresence,
+			retains: true, indivisible: true},
+		{kind: installation.Kind, implementation: installation.Implementation, example: "lab-rhel", presence: contractInstallationPresence, retains: true},
 		{kind: libvirt.HostKind, implementation: libvirt.HostImplementation, example: "lab-rhel", presence: contractHostPresence},
 		{kind: agentinstall.Kind, implementation: agentinstall.MediaImplementation, example: "lab-sno", presence: contractMediaPresence},
 		{kind: agentinstall.Kind, implementation: agentinstall.InstallImplementation, example: "lab-sno", presence: contractClusterPresence},
@@ -112,6 +125,8 @@ var contractProperties = []string{
 	"apply-request", "observe-request", "destroy-request",
 	"apply-outcome-of-runner-error", "destroy-outcome-of-runner-error",
 	"apply-evidence-proves-request", "destroy-evidence-proves-request", "observe-evidence-proves-request",
+	"apply-evidence-proves-presence", "destroy-evidence-proves-absence",
+	"observe-absence-proves-no-effect", "observe-partial-proves-partial",
 	"observe-unproved", "quiescence-unproved",
 }
 
@@ -213,7 +228,11 @@ func (f *contractFindings) record(row contractRow, property, message string) {
 // failure unknown, accepts no outcome whose evidence does not prove this very
 // request, and never reads a failed or empty observation, or one of another
 // request, as proof. Evidence naming another request is the binding's own
-// proof with only its digest swapped, so the digest check alone refuses it. A
+// proof with only its digest swapped, so the digest check alone refuses it.
+// Evidence is held to its kind as well: under this very request an apply
+// accepts only presence and a removal only absence, and an observation never
+// reads absence or a partial realization as completion but as positive no
+// effect and partial, unless the binding's own spec leaves them unproved. A
 // failed or empty probe never reads as quiescent.
 func TestEveryCapabilityHonoursTheCapabilityContract(t *testing.T) {
 	runner := &contractRunner{}
@@ -451,10 +470,12 @@ func contractRunnerFailures(row contractRow, block reconciliation.Block, capabil
 // contractEvidence proves no changed or unchanged outcome is accepted, and no
 // observation proves anything, on evidence that is empty or names another
 // request: only positive evidence for this very request leaves unknown. The
-// foreign evidence is this block's own presence and absence fixtures with only
-// the request digest swapped, and contractEvidenceControls proves each fixture
-// naming this block's digest proves its operation, so every refusal here is
-// the digest check's alone.
+// foreign evidence is this block's own presence, absence and partial fixtures
+// with only the request digest swapped, and contractEvidenceControls proves
+// the presence and absence fixtures naming this block's digest prove their
+// operations, so a refusal of either by that operation is the digest check's
+// alone. It then holds the same fixtures under this block's digest to their
+// kind through contractEvidenceKinds.
 func contractEvidence(t *testing.T, row contractRow, example contractExample, block reconciliation.Block, capability lifecycle.Capability, execution lifecycle.Execution, runner *contractRunner, findings *contractFindings) {
 	t.Helper()
 	other := ""
@@ -465,7 +486,9 @@ func contractEvidence(t *testing.T, row contractRow, example contractExample, bl
 		}
 	}
 	contractEvidenceControls(t, row, block, capability, execution, runner)
-	foreign := []json.RawMessage{contractPresence(t, row, execution, other), contractAbsence(t, row, other)}
+	foreign := []json.RawMessage{
+		contractPresence(t, row, execution, other), contractAbsence(t, row, other), contractPartial(t, row, execution, other),
+	}
 	for _, operation := range []string{"apply", "destroy"} {
 		for _, outcome := range []string{"changed", "unchanged"} {
 			for _, evidence := range append([]json.RawMessage{json.RawMessage(`{}`)}, foreign...) {
@@ -485,13 +508,79 @@ func contractEvidence(t *testing.T, row contractRow, example contractExample, bl
 				fmt.Sprintf("%s: an observation of %s proved %q", block.ID, evidence, observation.Effect))
 		}
 	}
+	contractEvidenceKinds(t, row, block, capability, execution, runner, findings)
+}
+
+// contractEvidenceKinds holds each operation to the kind of its evidence under
+// this block's own digest, since only positive evidence of what an operation
+// proves may justify its effect state (specs/state-reconciliation.md, attempts
+// and resolution outcomes). An apply reporting either outcome on absence or a
+// partial realization is neither changed nor unchanged, so nothing absent is
+// recorded realized, and a removal reporting either on presence or a partial
+// realization is neither, so nothing still running is recorded removed. An
+// observation proves positive no effect from absence and partial from a
+// partial realization, never completion, so nothing absent or half built is
+// resolved done. A binding whose removal retains what its apply realized
+// leaves absence unknown instead, and an indivisible one partial evidence, as
+// their own specs say. The presence and absence fixtures are those
+// contractEvidenceControls proves the other operation accepts, so refusing
+// them is the kind check's alone. The blocks are an apply's, so an
+// observation here is an apply's resolution; how a destroy's resolution reads
+// presence is S27's to settle.
+func contractEvidenceKinds(t *testing.T, row contractRow, block reconciliation.Block, capability lifecycle.Capability, execution lifecycle.Execution, runner *contractRunner, findings *contractFindings) {
+	t.Helper()
+	presence := contractPresence(t, row, execution, block.RequestDigest)
+	absence := contractAbsence(t, row, block.RequestDigest)
+	partial := contractPartial(t, row, execution, block.RequestDigest)
+	attempts := []struct {
+		operation string
+		property  string
+		evidence  []json.RawMessage
+	}{
+		{"apply", "apply-evidence-proves-presence", []json.RawMessage{absence, partial}},
+		{"destroy", "destroy-evidence-proves-absence", []json.RawMessage{presence, partial}},
+	}
+	for _, attempt := range attempts {
+		for _, outcome := range []string{"changed", "unchanged"} {
+			for _, evidence := range attempt.evidence {
+				runner.script(lifecycle.RunResult{Outcome: outcome, Evidence: evidence}, nil)
+				result, _, _ := contractCall(capability, attempt.operation, execution)
+				if result.Outcome == reconciliation.OutcomeChanged || result.Outcome == reconciliation.OutcomeUnchanged {
+					findings.record(row, attempt.property, fmt.Sprintf("%s: %s on %s gave %q", block.ID, outcome, evidence, result.Outcome))
+				}
+			}
+		}
+	}
+	observations := []struct {
+		property string
+		evidence json.RawMessage
+		want     reconciliation.EffectState
+		unproved bool
+	}{
+		{"observe-absence-proves-no-effect", absence, reconciliation.EffectNoEffect, row.retains},
+		{"observe-partial-proves-partial", partial, reconciliation.EffectPartial, row.indivisible},
+	}
+	for _, observed := range observations {
+		want := observed.want
+		if observed.unproved {
+			want = reconciliation.EffectUnknown
+		}
+		runner.script(lifecycle.RunResult{Outcome: "unchanged", Evidence: observed.evidence}, nil)
+		if _, observation, _ := contractCall(capability, "observe", execution); observation.Effect != want {
+			findings.record(row, observed.property,
+				fmt.Sprintf("%s: an observation of %s proved %q, want %q", block.ID, observed.evidence, observation.Effect, want))
+		}
+	}
 }
 
 // contractEvidenceControls proves the evidence fixtures sound: presence naming
 // this block's digest is accepted by an apply reporting either outcome and
 // observed as completion, and absence naming it proves the removal. A fixture
 // a binding no longer accepts fails the suite itself, because a refusal of its
-// foreign copy would then prove nothing about the digest.
+// foreign copy would then prove nothing about the digest, nor a refusal of it
+// by the other operation anything about the kind. The partial fixture is
+// presence with its postcondition unproved; the observe-partial-proves-partial
+// property is its control.
 func contractEvidenceControls(t *testing.T, row contractRow, block reconciliation.Block, capability lifecycle.Capability, execution lifecycle.Execution, runner *contractRunner) {
 	t.Helper()
 	presence := contractPresence(t, row, execution, block.RequestDigest)
@@ -526,6 +615,22 @@ func contractPresence(t *testing.T, row contractRow, execution lifecycle.Executi
 	t.Helper()
 	fields := row.presence(t, execution)
 	fields["request"] = digest
+	data, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+// contractPartial is the row's partial realization of the attempt's block,
+// naming one request digest: its presence evidence with the postcondition
+// unproved, so everything the frozen request names is reported present while
+// the adapter proved no settled state, which every binding that is not
+// indivisible reads as this context's work part way through.
+func contractPartial(t *testing.T, row contractRow, execution lifecycle.Execution, digest string) json.RawMessage {
+	t.Helper()
+	fields := row.presence(t, execution)
+	fields["request"], fields["postcondition"] = digest, false
 	data, err := json.Marshal(fields)
 	if err != nil {
 		t.Fatal(err)
