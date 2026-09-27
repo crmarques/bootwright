@@ -26,7 +26,7 @@
     substrate_libvirt_machine_identity_marker_path: '{{ bootwright_os_install_request.markerPath }}'
     substrate_libvirt_machine_identity_host_key_path: '{{ bootwright_os_install_request.hostKeyPath }}'
     substrate_libvirt_machine_identity_retries: '{{ managedos_install_anaconda_identity_retries | default(0) | int }}'
-    substrate_libvirt_machine_identity_delay: '{{ managedos_install_anaconda_identity_delay | int }}'
+    substrate_libvirt_machine_identity_delay: '{{ bootwright_os_install_request.budgets.identity.delaySeconds | int }}'
   when: bootwright_os_install_request.target.channel == 'guest-agent'
 
 - name: Read the machine over the key this installation delivered
@@ -41,7 +41,7 @@
     substrate_baremetal_machine_identity_marker_path: '{{ bootwright_os_install_request.markerPath }}'
     substrate_baremetal_machine_identity_work: '{{ managedos_install_anaconda_work }}'
     substrate_baremetal_machine_identity_retries: '{{ managedos_install_anaconda_identity_retries | default(0) | int }}'
-    substrate_baremetal_machine_identity_delay: '{{ managedos_install_anaconda_identity_delay | int }}'
+    substrate_baremetal_machine_identity_delay: '{{ bootwright_os_install_request.budgets.identity.delaySeconds | int }}'
   when: bootwright_os_install_request.target.channel == 'delivered-key'
 
 # Whichever channel answered, the installation reads one answer under its own

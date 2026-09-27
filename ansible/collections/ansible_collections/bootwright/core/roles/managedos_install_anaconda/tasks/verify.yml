@@ -2,8 +2,8 @@
 - name: Wait for the fleet account to answer on the key the machine reported
   ansible.builtin.include_tasks: reachable.yml
   vars:
-    managedos_install_anaconda_reachable_retries: '{{ managedos_install_anaconda_reachable_attempts | int }}'
-    managedos_install_anaconda_reachable_pause: '{{ managedos_install_anaconda_reachable_delay | int }}'
+    managedos_install_anaconda_reachable_retries: '{{ bootwright_os_install_request.budgets.reachability.attempts | int }}'
+    managedos_install_anaconda_reachable_pause: '{{ bootwright_os_install_request.budgets.reachability.delaySeconds | int }}'
 
 # The attempt itself is censored, because its command line names the fleet
 # identity and its output is the machine's own. The refusal is not: an exit
@@ -14,9 +14,9 @@
     msg: >-
       {{ bootwright_os_install_request.user }}@{{ bootwright_os_install_request.address }}
       did not answer on the host key the machine reported, after
-      {{ managedos_install_anaconda_reachable_attempts }} attempts over
-      {{ (managedos_install_anaconda_reachable_attempts | int)
-         * (managedos_install_anaconda_reachable_delay | int) }} seconds; the last
+      {{ bootwright_os_install_request.budgets.reachability.attempts }} attempts over
+      {{ (bootwright_os_install_request.budgets.reachability.attempts | int)
+         * (bootwright_os_install_request.budgets.reachability.delaySeconds | int) }} seconds; the last
       ssh exit status was
       {{ managedos_install_anaconda_reachable.rc | default('none') }}
   when: managedos_install_anaconda_reachable.rc | default(1) != 0

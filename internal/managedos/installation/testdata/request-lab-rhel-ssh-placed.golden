@@ -3,6 +3,20 @@
   "bootMedia": {
     "name": "rhel-9.8-x86_64-boot.iso"
   },
+  "budgets": {
+    "identity": {
+      "attempts": 120,
+      "delaySeconds": 30
+    },
+    "installer": {
+      "attempts": 180,
+      "delaySeconds": 20
+    },
+    "reachability": {
+      "attempts": 30,
+      "delaySeconds": 10
+    }
+  },
   "fleetKeyRef": "bootwright-machine-key",
   "hostKeyPath": "/etc/bootwright/host-key.pub",
   "hostname": "rhel-01.lab.example.test",
@@ -53,5 +67,5 @@
     "name": "rhel-9.8-x86_64-dvd.iso"
   },
   "user": "bootwright",
-  "version": "os-install-anaconda-v3"
+  "version": "os-install-anaconda-v4"
 }

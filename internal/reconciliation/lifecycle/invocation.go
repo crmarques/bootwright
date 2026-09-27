@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -47,7 +48,20 @@ type RunRequest struct {
 	Progress       func(context.Context, string, string)
 	// Output receives the adapter process's own standard output and error.
 	Output prerequisites.RunOutput
+	// Deadline bounds the run: the capability derives it from the waits its
+	// frozen request budgets, and the runner holds it to MaxDeadline. Zero
+	// keeps the runner's default.
+	Deadline time.Duration
 }
+
+// MaxDeadline is the longest any adapter run may take, whatever deadline its
+// request states. It is about twice the longest deadline this build derives,
+// the managed operating-system installation's 3 hours 5 minutes, so budgets
+// can grow without any run becoming unbounded. An operation runs one block at
+// a time, so this is also the longest one block holds back the rest of its
+// operation; a budget that needs more is one to shorten, not a reason to raise
+// this.
+const MaxDeadline = 6 * time.Hour
 
 type RunResult struct {
 	Outcome  string
@@ -66,6 +80,9 @@ type Invocation struct {
 	Placement      machineref.Placement
 	Materials      []MaterialFile
 	Values         map[string]string
+	// Deadline is the run's own deadline, derived from the budgets the frozen
+	// request carries; zero keeps the runner's default.
+	Deadline time.Duration
 }
 
 // RunFor builds the adapter request one attempt authorizes. A capability never
@@ -89,6 +106,7 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 		Log:            execution.Log,
 		Progress:       execution.Progress,
 		Output:         execution.Output,
+		Deadline:       invocation.Deadline,
 	}
 }
 

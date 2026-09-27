@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v3'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v4'
       - bootwright_os_install_request.image.path.startswith('/var/lib/bootwright-services/')
       - bootwright_os_install_digest is match('[0-9a-f]{64}')
     quiet: true

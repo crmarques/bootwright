@@ -3,7 +3,8 @@
 # signal that the disk is written. That wait is the longest in the whole
 # lifecycle and it is reported under its own group, because an operator reading
 # a progress row cannot otherwise tell a machine that is installing from one
-# that is wedged.
+# that is wedged. Its budget is the request's own, which the run's deadline
+# covers.
 - name: Wait for the installer to power the machine off when it is done
   bootwright.core.redfish_boot:
     endpoint: '{{ managedos_install_anaconda_endpoint }}'
@@ -12,8 +13,8 @@
     verify: '{{ managedos_install_anaconda_verify }}'
     operation: read
   register: managedos_install_anaconda_installer
-  retries: 180
-  delay: 20
+  retries: '{{ bootwright_os_install_request.budgets.installer.attempts | int }}'
+  delay: '{{ bootwright_os_install_request.budgets.installer.delaySeconds | int }}'
   until: managedos_install_anaconda_installer.power == 'Off'
   no_log: true
 

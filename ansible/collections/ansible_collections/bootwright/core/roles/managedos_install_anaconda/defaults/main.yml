@@ -55,13 +55,8 @@ managedos_install_anaconda_certificate: >-
   {{ lookup('ansible.builtin.file', bootwright_os_install_material.artifactCertificate)
      if managedos_install_anaconda_delivers_key | bool else '' }}
 
-# A machine answers when its installer has written the disk and it has booted.
-# A physical server adds its own power-on self test to that, so the budget is
-# generous and bounded rather than open-ended.
-managedos_install_anaconda_identity_attempts: 120
-managedos_install_anaconda_identity_delay: 30
-
-# The fleet account answers once the installed system has finished starting
-# sshd, which is after the machine already answers on its identity channel.
-managedos_install_anaconda_reachable_attempts: 30
-managedos_install_anaconda_reachable_delay: 10
+# The installer's power-off, the identity answer and the fleet account's
+# reachability, the waits an apply performs while the machine installs and
+# starts, are budgets the request froze, never values of this role: the run's
+# deadline is derived from those budgets, so a wait this role chose could
+# outlast the deadline and be killed as a hang.

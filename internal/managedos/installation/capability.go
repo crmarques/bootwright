@@ -342,9 +342,11 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 			lifecycle.MaterialFile{Name: "host-key.pub", Part: secrets.PublicKeyPart, Secret: request.Target.HostKeyRef, Variable: "hostIdentityPublic"},
 			lifecycle.MaterialFile{Name: "artifact-ca", Part: secrets.CertificatePart, Secret: request.TLSCertificateRef, Variable: "artifactCertificate"})
 	}
+	// The deadline follows the budgets this request froze, not this build's.
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: Implementation, Operation: operation, Variable: variablePrefix,
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
+		Deadline: request.Deadline(),
 	}))
 }
 

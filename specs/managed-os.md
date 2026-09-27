@@ -160,6 +160,23 @@ Anaconda installs unattended and powers the machine off when it is done, which
 is what lets the block eject the media and boot the installed system from disk
 deliberately rather than racing a reboot.
 
+**Budgets.** Each of the three waits an apply performs while the machine
+installs and starts is a budget its request freezes, as a number of retries and
+the seconds between them, never a value the adapter chooses: the installer
+powering the machine off (180 retries 20 seconds apart), the installed machine
+answering through its identity channel (120 retries 30 seconds apart) and its
+fleet account accepting the reported key (30 retries 10 seconds apart), 7,500
+seconds of pauses in all. Every run of the block is bounded by a
+[deadline](architecture.md#the-adapter-result-protocol) derived from the
+budgets it froze: their pauses back to back plus one hour for the media work,
+the boot and each read's own time, which is 3 hours 5 minutes for these budgets
+and within the runner's ceiling. A run that reaches its deadline is killed, and
+the attempt becomes unknown and is resolved from the marker, as after a
+cancellation. The controller's own power and media polls, which the adapter
+bounds with fixed counts, and the single retry, one second later, of an
+observation's reachability check are not budgets: they are part of the media
+work, the boot and the reads that hour allows for.
+
 **Completion.** Completion requires the identity channel answering, the install
 marker it returns matching the frozen marker byte for byte, the machine's SSH
 host public key established through that same channel, an SSH connection to the

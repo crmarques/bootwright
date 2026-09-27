@@ -155,6 +155,7 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	request := Request{
 		Address:     "",
 		BootMedia:   boot,
+		Budgets:     installationBudgets,
 		FleetKeyRef: fleetKeyRef(catalog),
 		HostKeyPath: HostKeyPath,
 		Identity:    Identity{Block: BlockID(name), Context: contextName, Object: name, Profile: profile.Name()},

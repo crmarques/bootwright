@@ -12,6 +12,23 @@ argument_specs:
           bootMedia:
             type: dict
             required: true
+          # The waits an apply performs, which the run's deadline covers.
+          budgets:
+            type: dict
+            required: true
+            options:
+              identity: &budget
+                type: dict
+                required: true
+                options:
+                  attempts:
+                    type: int
+                    required: true
+                  delaySeconds:
+                    type: int
+                    required: true
+              installer: *budget
+              reachability: *budget
           fleetKeyRef:
             type: str
             required: true
@@ -57,7 +74,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [os-install-anaconda-v3]
+            choices: [os-install-anaconda-v4]
       bootwright_os_install_material:
         type: dict
         required: true
