@@ -185,12 +185,27 @@ the domain, its controller unit or one of its disks present without the whole
 is a positive partial realization the next attempt converges; and a same-name
 domain without this context's ownership is foreign and stays unknown.
 
+**Hypervisor answer.** The observation and its evidence report whether the
+hypervisor answered for the domain, because a hypervisor that does not answer
+reports no domain either. It answered when virsh returned the domain's
+definition, or when it said no such domain exists: the lookup exits non-zero
+with virsh's `failed to get domain` refusal and a complete
+`virsh list --all --name` does not name the domain. The listing is needed
+because virsh discards libvirt's reason for a failed lookup, so the refusal
+alone proves only that the connection opened
+([virsh-util.c](https://gitlab.com/libvirt/libvirt/-/blob/master/tools/virsh-util.c)).
+Any other failure is no answer, and then an empty domain proves nothing: it is
+never positive no effect or positive absence, removal evidence requires the
+answer, and the inverse refuses before it stops the BMC unit. Evidence without
+the field reads as no answer.
+
 **Quiescence.** A Machine is quiescent only when the hypervisor reports its
-domain `shut off`, or when no domain is defined at all. Every other state,
-including paused and suspended, still holds the memory and disks a removal
-would delete. A hypervisor that will not answer leaves the management
-controller's power state as the second opinion, and a Machine neither can
-account for is treated as in use. The refusal names
+domain `shut off`, or answers that no domain is defined at all. Every other
+state, including paused and suspended, still holds the memory and disks a
+removal would delete. A hypervisor that will not answer is never read as a
+domain that is not defined: the management controller's power state is then
+the second opinion, `Off` quiescent, `On` in use and anything else unproved,
+and a Machine neither can account for is treated as in use. The refusal names
 `bootwright machine stop --name <machine>`, and the inverse refuses a domain
 that is not shut off rather than forcing it, under the
 [removal gate](state-reconciliation.md#quiescence-before-removal).

@@ -131,7 +131,7 @@ func machineEvidence(request MachineRequest, digest string) json.RawMessage {
 		disks = append(disks, DiskEvidence{Name: disk.Name, Present: true, SizeGiB: disk.SizeGiB})
 	}
 	data, _ := json.Marshal(MachineEvidence{
-		Controller: request.Controller.Image, Disks: disks, Domain: request.Domain, Owned: true,
+		Answered: true, Controller: request.Controller.Image, Disks: disks, Domain: request.Domain, Owned: true,
 		Postcondition: true, Power: "Off", Request: digest, System: request.UUID, Unit: "active",
 	})
 	return data
@@ -193,7 +193,7 @@ func TestObservationMapsEvidenceToTheEffectItProves(t *testing.T) {
 		BlockDefinition: reconciliation.BlockDefinition{ID: "machine-rhel-01", Request: canonical},
 		RequestDigest:   "digest",
 	}}
-	absent, _ := json.Marshal(MachineEvidence{Absent: true, Postcondition: true, Request: "digest"})
+	absent, _ := json.Marshal(MachineEvidence{Absent: true, Answered: true, Postcondition: true, Request: "digest"})
 	partial, _ := json.Marshal(MachineEvidence{Domain: requests[0].Domain, Owned: true, Postcondition: true, Request: "digest"})
 	for name, test := range map[string]struct {
 		runner *fakeRunner
@@ -235,7 +235,9 @@ func TestUnsupportedReadsTheCompiledStateOrNothing(t *testing.T) {
 
 // Removing a machine takes its memory and disks out from under whatever is
 // using them, so only a domain the hypervisor reports shut off admits removal.
-// A paused or suspended domain still holds both.
+// A paused or suspended domain still holds both. A hypervisor that did not
+// answer reports no domain either, so then only the controller's power state
+// decides, whatever the domain fields say.
 func TestMachineQuiescenceAdmitsOnlyAShutOffDomain(t *testing.T) {
 	requests, _ := MachineRequests(labCatalog(), "controller", testContext)
 	request := requests[0]
@@ -251,14 +253,18 @@ func TestMachineQuiescenceAdmitsOnlyAShutOffDomain(t *testing.T) {
 		evidence MachineEvidence
 		want     string
 	}{
-		"shut off":         {MachineEvidence{Request: "digest", Domain: request.Domain, State: "shut off"}, lifecycle.Quiescent},
-		"never defined":    {MachineEvidence{Request: "digest"}, lifecycle.Quiescent},
-		"controller off":   {MachineEvidence{Request: "digest", Domain: request.Domain, Power: "Off"}, lifecycle.Quiescent},
-		"running":          {MachineEvidence{Request: "digest", Domain: request.Domain, State: "running"}, lifecycle.Live},
-		"paused":           {MachineEvidence{Request: "digest", Domain: request.Domain, State: "paused"}, lifecycle.Live},
-		"suspended":        {MachineEvidence{Request: "digest", Domain: request.Domain, State: "pmsuspended"}, lifecycle.Live},
-		"controller on":    {MachineEvidence{Request: "digest", Domain: request.Domain, Power: "On"}, lifecycle.Live},
-		"nothing readable": {MachineEvidence{Request: "digest", Domain: request.Domain}, lifecycle.Unproved},
+		"shut off":         {MachineEvidence{Request: "digest", Answered: true, Domain: request.Domain, State: "shut off"}, lifecycle.Quiescent},
+		"never defined":    {MachineEvidence{Request: "digest", Answered: true}, lifecycle.Quiescent},
+		"controller off":   {MachineEvidence{Request: "digest", Answered: true, Domain: request.Domain, Power: "Off"}, lifecycle.Quiescent},
+		"running":          {MachineEvidence{Request: "digest", Answered: true, Domain: request.Domain, State: "running"}, lifecycle.Live},
+		"paused":           {MachineEvidence{Request: "digest", Answered: true, Domain: request.Domain, State: "paused"}, lifecycle.Live},
+		"suspended":        {MachineEvidence{Request: "digest", Answered: true, Domain: request.Domain, State: "pmsuspended"}, lifecycle.Live},
+		"controller on":    {MachineEvidence{Request: "digest", Answered: true, Domain: request.Domain, Power: "On"}, lifecycle.Live},
+		"nothing readable": {MachineEvidence{Request: "digest", Answered: true, Domain: request.Domain}, lifecycle.Unproved},
+		"silent, off":      {MachineEvidence{Request: "digest", Power: "Off"}, lifecycle.Quiescent},
+		"silent, on":       {MachineEvidence{Request: "digest", Power: "On"}, lifecycle.Live},
+		"silent, unknown":  {MachineEvidence{Request: "digest"}, lifecycle.Unproved},
+		"silent, shut off": {MachineEvidence{Request: "digest", Domain: request.Domain, State: "shut off", Power: "On"}, lifecycle.Live},
 	} {
 		t.Run(name, func(t *testing.T) {
 			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, tc.evidence)}}

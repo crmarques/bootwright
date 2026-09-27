@@ -25,6 +25,19 @@
     request: '{{ bootwright_substrate_machine_request }}'
   register: substrate_libvirt_machine_before
 
+# A hypervisor that did not answer reports no domain too, and every guard below
+# reads an empty domain as one that is not defined. Nothing then proves the
+# machine is not running, so the removal refuses before it stops anything.
+- name: Refuse to remove a machine its hypervisor did not answer for
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_machine_before.observation.answered
+    fail_msg: >-
+      the hypervisor at {{ bootwright_substrate_machine_request.uri }} did not
+      answer for the machine's domain, so nothing proves it is not in use;
+      restore that connection and repeat the removal
+    quiet: true
+
 - name: Refuse to remove a same-named domain this context does not own
   ansible.builtin.assert:
     that:

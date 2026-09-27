@@ -10,6 +10,10 @@ version_added: "0.1.0"
 description:
   - Reports whether the domain is defined, whether it carries this context's
     ownership, the size of every owned disk, and the controller unit and image.
+  - Reports whether the hypervisor answered for the domain. A domain is not
+    defined only when virsh fails to look it up and a complete listing of
+    every domain omits it; any other failure is no answer, and then an empty
+    domain proves nothing.
   - Performs no change and is safe to repeat.
 options:
   request:
@@ -28,7 +32,10 @@ EXAMPLES = r"""
 
 RETURN = r"""
 observation:
-  description: The owned domain, disks and controller with their observed state.
+  description:
+    - The owned domain, disks and controller with their observed state.
+    - The answered key is false when the hypervisor did not answer, and the
+      domain and state keys are then empty without proving the domain absent.
   returned: always
   type: dict
 """

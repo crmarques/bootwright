@@ -128,16 +128,19 @@ func TestMachinePresenceRequiresEveryProof(t *testing.T) {
 	}
 }
 
+// A hypervisor that did not answer reports no domain either, so only evidence
+// that says it answered proves the domain gone.
 func TestMachineAbsenceRequiresPositiveRemoval(t *testing.T) {
-	gone := MachineEvidence{Absent: true, Postcondition: true, Request: "digest"}
+	gone := MachineEvidence{Absent: true, Answered: true, Postcondition: true, Request: "digest"}
 	if err := ValidateMachineAbsence(encode(t, gone), "digest"); err != nil {
 		t.Fatalf("removal evidence was refused: %v", err)
 	}
 	for name, evidence := range map[string]MachineEvidence{
-		"domain remains": {Absent: true, Postcondition: true, Domain: "bootwright-lab-rhel-01", Request: "digest"},
-		"unit remains":   {Absent: true, Postcondition: true, Unit: "active", Request: "digest"},
-		"power reported": {Absent: true, Postcondition: true, Power: "Off", Request: "digest"},
-		"disk remains":   {Absent: true, Postcondition: true, Request: "digest", Disks: []DiskEvidence{{Name: "root", Present: true}}},
+		"domain remains":    {Absent: true, Answered: true, Postcondition: true, Domain: "bootwright-lab-rhel-01", Request: "digest"},
+		"unit remains":      {Absent: true, Answered: true, Postcondition: true, Unit: "active", Request: "digest"},
+		"power reported":    {Absent: true, Answered: true, Postcondition: true, Power: "Off", Request: "digest"},
+		"disk remains":      {Absent: true, Answered: true, Postcondition: true, Request: "digest", Disks: []DiskEvidence{{Name: "root", Present: true}}},
+		"hypervisor silent": {Absent: true, Postcondition: true, Request: "digest"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := ValidateMachineAbsence(encode(t, evidence), "digest"); err == nil {
@@ -229,5 +232,15 @@ func TestEvidenceIsBoundedAndStrictlyShaped(t *testing.T) {
 	}
 	if err := ValidateMachineAbsence(oversized, "digest"); err == nil {
 		t.Fatal("unbounded evidence was accepted")
+	}
+}
+
+// Evidence an adapter published before it reported whether its hypervisor
+// answered has no such key. It decodes as silent, so it never proves removal.
+func TestMachineEvidenceWithoutAnAnswerDecodesAsSilent(t *testing.T) {
+	recorded := []byte(`{"absent":true,"controller":"","disks":[],"domain":"","owned":false,"postcondition":true,` +
+		`"power":"","request":"digest","state":"","system":"","unit":""}`)
+	if err := ValidateMachineAbsence(recorded, "digest"); err == nil {
+		t.Fatal("removal evidence that never said the hypervisor answered was accepted")
 	}
 }

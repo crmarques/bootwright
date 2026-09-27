@@ -17,7 +17,8 @@ OUTCOMES = ("changed", "unchanged")
 POWER_STATES = ("", "On", "Off")
 # The domain's own state, in libvirt's vocabulary. It is what a removal reads
 # to prove the machine is not in use; the controller's power state is the
-# second opinion for a host whose hypervisor will not answer.
+# second opinion for a host whose hypervisor will not answer, which `answered`
+# reports, because an empty domain from a silent hypervisor proves nothing.
 DOMAIN_STATES = ("", "running", "idle", "paused", "in shutdown", "shut off", "crashed", "pmsuspended")
 MAX_DISKS = 32
 HEX = set("0123456789abcdef")
@@ -53,6 +54,7 @@ def presence(observation, power, system, request_digest):
         raise ValueError("power state")
     evidence = {
         "absent": False,
+        "answered": bool(observation.get("answered")),
         "controller": str(observation.get("controller", "")),
         "disks": [disk_evidence(entry) for entry in disks],
         "domain": str(observation.get("domain", "")),
@@ -106,13 +108,20 @@ def unproved(evidence):
 
 
 def absence(observation, request_digest):
+    """Removal evidence, proved only when the hypervisor answered for the domain.
+
+    A silent hypervisor reports no domain too, so its absence is never proved
+    by an empty field alone.
+    """
     disks = [disk_evidence(entry) for entry in observation.get("disks") or []]
+    answered = bool(observation.get("answered"))
     gone = (
-        not observation.get("domain") and not observation.get("unit")
+        answered and not observation.get("domain") and not observation.get("unit")
         and not observation.get("controller") and not any(entry["present"] for entry in disks)
     )
     return {
         "absent": True,
+        "answered": answered,
         "controller": "",
         "disks": [],
         "domain": "",
@@ -164,6 +173,8 @@ class ActionModule(ActionBase):
             if arguments.get("removed"):
                 evidence = absence(observation, request_digest)
                 unmet, verb = remaining(observation), "still present"
+                if not evidence["answered"]:
+                    unmet, verb = ["domain"], "the hypervisor did not answer for"
             else:
                 evidence = presence(observation, arguments.get("power"), arguments.get("system"), request_digest)
                 unmet, verb = unproved(evidence), "not proved"
