@@ -43,6 +43,11 @@ type memoryArea struct {
 	mutex sync.Mutex
 	files map[string][]byte
 	fail  map[string]error
+	// landing, when set, runs as each write is about to land: after the area
+	// is held and before anything changes, with the live files. It may copy
+	// them but must not take the area again, and an error it returns fails
+	// that write, so a test can stop an invocation exactly at a durable write.
+	landing func(operation, target string, files map[string][]byte) error
 }
 
 func newArea() *memoryArea { return &memoryArea{files: map[string][]byte{}, fail: map[string]error{}} }
@@ -118,6 +123,11 @@ func (a *memoryArea) WriteExclusive(ctx context.Context, target string, data []b
 	}
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
+	if a.landing != nil {
+		if err := a.landing("write", target, a.files); err != nil {
+			return err
+		}
+	}
 	if err := a.fail["write "+target]; err != nil {
 		return err
 	}
@@ -134,6 +144,11 @@ func (a *memoryArea) Replace(ctx context.Context, target string, data, expected 
 	}
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
+	if a.landing != nil {
+		if err := a.landing("replace", target, a.files); err != nil {
+			return err
+		}
+	}
 	if err := a.fail["replace "+target]; err != nil {
 		return err
 	}
@@ -155,6 +170,11 @@ func (a *memoryArea) Append(ctx context.Context, target string, data []byte) err
 	}
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
+	if a.landing != nil {
+		if err := a.landing("append", target, a.files); err != nil {
+			return err
+		}
+	}
 	if err := a.fail["append "+target]; err != nil {
 		return err
 	}
@@ -191,6 +211,10 @@ type testWorkspace struct {
 	// revision names the input the context holds now. A test that publishes
 	// another revision replaces it together with inputs, as an import does.
 	revision string
+	// kill runs first in every durable publication this workspace performs
+	// outside its operation area, named by the point it would publish, so a
+	// test can stop an invocation there; an error it returns fails it.
+	kill func(point string) error
 }
 
 func (w *testWorkspace) view() *testView {
@@ -235,6 +259,9 @@ func (v *testView) Operations() operationstore.Area       { return v.workspace.a
 func (v *testView) Runs() operationstore.Area             { return v.workspace.runArea }
 
 func (v *testView) PublishEvidence(_ context.Context, data []byte) error {
+	if err := v.killed("publish evidence"); err != nil {
+		return err
+	}
 	if v.workspace.failPublish != nil {
 		return v.workspace.failPublish
 	}
@@ -246,6 +273,9 @@ func (v *testView) PublishEvidence(_ context.Context, data []byte) error {
 // establishes it, a later one revalidates exactly it, and a different Machine
 // or host refuses instead of replacing it.
 func (v *testView) Bind(_ context.Context, machine string, host controller.InstalledHostIdentity) error {
+	if err := v.killed("publish binding"); err != nil {
+		return err
+	}
 	digest, err := host.PrivateDigest()
 	if err != nil {
 		return err
@@ -266,13 +296,27 @@ func (v *testView) Bind(_ context.Context, machine string, host controller.Insta
 }
 
 func (v *testView) Reserve(_ context.Context, reservations []prerequisites.HostReservation) error {
+	if err := v.killed("publish reservations"); err != nil {
+		return err
+	}
 	v.workspace.reservations = slices.Clone(reservations)
 	return nil
 }
 
 func (v *testView) ReleaseReservations(context.Context) error {
+	if err := v.killed("release reservations"); err != nil {
+		return err
+	}
 	v.workspace.reservations = nil
 	return nil
+}
+
+// killed asks the workspace's kill hook whether this publication may land.
+func (v *testView) killed(point string) error {
+	if v.workspace.kill == nil {
+		return nil
+	}
+	return v.workspace.kill(point)
 }
 
 // ClientArea models the shared host area the controller stage publishes into:
