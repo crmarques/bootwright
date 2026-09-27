@@ -506,9 +506,11 @@ its start returns. It leaves the block record as it was, as an
 attempt record of the next number, and the next start of that block adopts that
 record: it publishes the block record that counts it, and neither rewrites the
 record nor allocates another number, so numbering stays monotonic and no path
-is reused. The start reads only the one path its block record's count names, so
-this is not the scan-based adoption [operation records](#operation-records)
-forbid, and it adopts only a record that can be nothing but an interrupted
+is reused. The start takes its record only from the one path its block
+record's count names, and lists the block's records only to refuse a
+resolution allocated against that number, so this is not the scan-based
+adoption [operation records](#operation-records) forbid, and it adopts only a
+record that can be nothing but an interrupted
 start: the block record exists, and the record is a canonical attempt record of
 a supported version, is `running`, names that block and number and no
 resolution, has published no `preparation`, and has no resolution allocated
