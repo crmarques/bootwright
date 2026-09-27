@@ -243,6 +243,7 @@ request on 2026-09-27.
 workspace records, CLI) and T2 (checkpoint harness, capability suite) of the
 [pre-OpenShift program](milestones/backlog.md#pre-openshift-readiness-program-2026-09).
 Exit gates: each item's exit evidence, `make check`, `make docs-check` and CI.
+Implemented; remaining: its adversarial review and its pull request.
 
 ## Next ordered outcomes
 
