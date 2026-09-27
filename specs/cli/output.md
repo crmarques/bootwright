@@ -383,6 +383,9 @@ Rows sort by their documented key: checks and blocks in frozen order,
 everything else in ascending bytewise name order. Human `status` presents the
 same membership and order, omitting empty sections.
 
+Not yet met: human `status` renders no cluster or storage cluster rows and
+shows only the first next step; tracked as [backlog F5](../milestones/backlog.md#audit-follow-ups-2026-09).
+
 ## Diagnostic taxonomy and order
 
 Diagnostic codes are stable machine identifiers. Include an object identity
