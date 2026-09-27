@@ -451,8 +451,9 @@ func cliGoldens() []cliGolden {
 		// deviation specs/cli/output.md records as backlog F5; this golden is
 		// what F5's tagged DTOs will visibly change. Human status departs from
 		// the JSON membership that spec asks it to present, and the text golden
-		// pins both F5 deviations: cluster and storage cluster rows are not
-		// rendered, and only the first of the next steps is shown.
+		// pins every omission its F5 line lists: the fixture fills the context
+		// mode, desired state, cluster rows, secrets and lifecycle operation,
+		// none of which is rendered, and only the first next step is shown.
 		{golden: "cli-status", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = status() }},
 		{golden: "cli-status-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = status() }},
 
