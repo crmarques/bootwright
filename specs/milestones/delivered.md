@@ -782,3 +782,41 @@ the bundle attribution checks (Z2, digest).
 
 **Constraints left behind:** backlog Z2 (digest attribution) in X22, and S26,
 which its review found, in X16.
+
+### X16 — budgets that bound the run
+
+**Owner:** Controller and Container cluster, with State reconciliation and
+Substrate. Landed on `main` at `0e9e6d5` through pull request 6 on
+2026-09-27, on explicit request.
+
+**Outcome:** the install identity is a domain-separated digest of the build's
+admin client certificate, so it survives the installer's install-complete
+rewrite of the kubeconfig (S26, D8 as refined). Every adapter run is bounded
+by a deadline its frozen budgets derive, clamped to a 6-hour ceiling; the
+managed-OS request freezes its wait budgets (Z2, runner deadline, D16). Every
+installer wait, image build and boot phase is bounded in wall-clock time by its
+budget, counted in true seconds whatever the controller's time zone, every
+`oc` read has a request timeout, and a cluster whose deadline would pass the
+ceiling refuses at planning (Z2, cluster budgets). Resolution before boot
+proves each frozen name answers its own address and nothing else (S22).
+Topology admission accepts only the control-plane counts the release's agent
+installer accepts (F14, D9). A silent hypervisor is never read as a stopped
+machine (S6b, quiescence).
+
+**Guard tests:** `TestARunIsBoundedByItsRequestsDeadlineUpToTheCeiling`,
+`TestEveryCapabilityDeadlineCoversItsFrozenBudgets`,
+`TestAClusterWhoseDeadlinePassesTheCeilingRefusesBeforeRegistration`,
+`TestTopologyAdmitsOnlyTheControlPlaneCountsItsReleaseAccepts`,
+`TestEveryExampleReleaseHasATopologyRow`,
+`TestMachineEvidenceWithoutAnAnswerDecodesAsSilent`, and the collection tests
+`test_after_the_install_complete_rewrite_a_completed_cluster_still_proves_this_build`,
+`test_each_installer_wait_runs_every_attempt_under_what_its_budget_has_left`,
+`test_every_budget_clock_counts_true_seconds_across_a_daylight_saving_change`,
+`test_every_name_answering_with_its_frozen_address_alone_boots` and
+`test_a_machine_removal_refuses_a_silent_hypervisor_before_it_stops_anything`.
+
+**Constraints left behind:** backlog C6 (kubeconfig growth and a truncating
+kill), F6 (`::/96` addresses and name-only slots), S6b (rest), F7 (refusal
+reasons, including the deadline ceiling's) and Z2 (digest attribution) in X22.
+Request versions changed (managed OS v4, cluster media and install v2), so a
+machine or marked work area from an earlier build refuses until destroyed.
