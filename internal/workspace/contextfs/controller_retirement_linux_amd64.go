@@ -34,7 +34,7 @@ func (t *controllerTransaction) RetireBundles(ctx context.Context, ids []string)
 	if _, err := t.publishValue(ctx, value, next); err != nil {
 		return err
 	}
-	if err := t.base.store.checkpoint(ctx, "after-controller-bundle-retiring"); err != nil {
+	if err := t.base.store.checkpoint(ctx, checkpointAfterControllerBundleRetiring); err != nil {
 		return err
 	}
 	for _, reservation := range retiring {
@@ -182,7 +182,7 @@ func (s *Store) removeBundleTree(ctx context.Context, dir *directory, depth int,
 		} else if !privateBundleFile(identity, dir) {
 			return state("retired controller bundle file type, ownership or mode is unsafe")
 		}
-		if err := s.checkpoint(ctx, "before-controller-bundle-unlink"); err != nil {
+		if err := s.checkpoint(ctx, checkpointBeforeControllerBundleUnlink); err != nil {
 			return err
 		}
 		if err := unlinkVerified(dir, name, identity, kind == syscall.S_IFDIR); err != nil {

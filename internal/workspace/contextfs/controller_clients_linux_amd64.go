@@ -73,7 +73,7 @@ func (t *lifecycleTransaction) attributeClientArea(ctx context.Context, id strin
 		}
 		next := append(slices.Clone(t.stored.bundles), controllerBundleReservation{ID: id, Mode: "reserved"})
 		slices.SortFunc(next, func(x, y controllerBundleReservation) int { return strings.Compare(x.ID, y.ID) })
-		if err := t.publishControllerState(ctx, cloneControllerState(t.stored.value), next, "before-client-area-reservation"); err != nil {
+		if err := t.publishControllerState(ctx, cloneControllerState(t.stored.value), next, checkpointBeforeClientAreaReservation); err != nil {
 			return err
 		}
 	}
@@ -108,7 +108,7 @@ func (t *lifecycleTransaction) attributeClientArea(ctx context.Context, id strin
 		}
 		defer dir.file.Close()
 		identity = dir.identity
-		if err := t.base.store.checkpoint(ctx, "after-client-area-directory"); err != nil {
+		if err := t.base.store.checkpoint(ctx, checkpointAfterClientAreaDirectory); err != nil {
 			return err
 		}
 	}
@@ -118,7 +118,7 @@ func (t *lifecycleTransaction) attributeClientArea(ctx context.Context, id strin
 		return state("controller client area reservation was lost before attribution")
 	}
 	next[index] = controllerBundleReservation{ID: id, Mode: "attributed", DirectoryDevice: uint64(identity.Dev), DirectoryInode: identity.Ino}
-	return t.publishControllerState(ctx, cloneControllerState(t.stored.value), next, "before-client-area-attribution")
+	return t.publishControllerState(ctx, cloneControllerState(t.stored.value), next, checkpointBeforeClientAreaAttribution)
 }
 
 // SealClientArea makes the published closure immutable. Sealing verifies and
@@ -144,7 +144,7 @@ func (t *lifecycleTransaction) SealClientArea(ctx context.Context, id string) er
 	}
 	next := slices.Clone(t.stored.bundles)
 	next[index].Mode = "sealed"
-	return t.publishControllerState(ctx, cloneControllerState(t.stored.value), next, "before-client-area-sealing")
+	return t.publishControllerState(ctx, cloneControllerState(t.stored.value), next, checkpointBeforeClientAreaSealing)
 }
 
 func (t *lifecycleTransaction) openArea(id string) *controllerBundleArea {
@@ -167,7 +167,7 @@ func (t *lifecycleTransaction) RetainDependencies(ctx context.Context, definitio
 	if err != nil {
 		return err
 	}
-	return t.publishControllerState(ctx, value, t.stored.bundles, "before-retained-dependencies")
+	return t.publishControllerState(ctx, value, t.stored.bundles, checkpointBeforeRetainedDependencies)
 }
 
 func retainDependencies(value prerequisites.HostState, definition *prerequisites.Definition, sources []prerequisites.DependencySource) (prerequisites.HostState, error) {

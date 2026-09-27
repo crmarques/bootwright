@@ -414,7 +414,7 @@ func readBoundedIdentity(ctx context.Context, parent *directory, name string, ma
 }
 
 func (s *Store) newDirectory(ctx context.Context, parent *directory, name string) (*directory, error) {
-	if err := s.checkpoint(ctx, "mkdir"); err != nil {
+	if err := s.checkpoint(ctx, checkpointMkdir); err != nil {
 		return nil, err
 	}
 	if err := parent.verify(); err != nil {
@@ -447,7 +447,7 @@ func (s *Store) ensureDirectory(ctx context.Context, parent *directory, name str
 }
 
 func (s *Store) syncDirectory(ctx context.Context, dir *directory) error {
-	if err := s.checkpoint(ctx, "sync-directory"); err != nil {
+	if err := s.checkpoint(ctx, checkpointSyncDirectory); err != nil {
 		return err
 	}
 	if err := dir.verify(); err != nil {
@@ -473,7 +473,7 @@ func (s *Store) writeExclusive(ctx context.Context, parent *directory, name stri
 // reservation, which alone attributes a directory the registry does not yet
 // record.
 func (s *Store) writeExclusiveIdentity(ctx context.Context, parent *directory, name string, data []byte, retain bool) (syscall.Stat_t, error) {
-	if err := s.checkpoint(ctx, "create-file"); err != nil {
+	if err := s.checkpoint(ctx, checkpointCreateFile); err != nil {
 		return syscall.Stat_t{}, err
 	}
 	if err := parent.verify(); err != nil {
@@ -499,7 +499,7 @@ func (s *Store) writeExclusiveIdentity(ctx context.Context, parent *directory, n
 	}
 	size := len(data)
 	for len(data) > 0 {
-		if err := s.checkpoint(ctx, "write-file"); err != nil {
+		if err := s.checkpoint(ctx, checkpointWriteFile); err != nil {
 			return syscall.Stat_t{}, err
 		}
 		n, err := file.Write(data[:min(len(data), 32768)])
@@ -508,7 +508,7 @@ func (s *Store) writeExclusiveIdentity(ctx context.Context, parent *directory, n
 		}
 		data = data[n:]
 	}
-	if err := s.checkpoint(ctx, "sync-file"); err != nil {
+	if err := s.checkpoint(ctx, checkpointSyncFile); err != nil {
 		return syscall.Stat_t{}, err
 	}
 	if err := file.Sync(); err != nil {
@@ -583,7 +583,7 @@ func (s *Store) writeExclusiveAtomic(ctx context.Context, parent *directory, nam
 	if err != nil || !stagedMatches {
 		return state("staged immutable state changed before publication")
 	}
-	if err := s.checkpoint(ctx, "before-secret-immutable-rename"); err != nil {
+	if err := s.checkpoint(ctx, checkpointBeforeSecretImmutableRename); err != nil {
 		return err
 	}
 	current, currentIdentity, err := readBoundedIdentity(ctx, parent, pending, len(data), true)
@@ -602,7 +602,7 @@ func (s *Store) writeExclusiveAtomic(ctx context.Context, parent *directory, nam
 	if err != nil || !publishedMatches || !sameIdentity(stagedIdentity, publishedIdentity) {
 		return state("published immutable state is unsafe")
 	}
-	if err := s.checkpoint(ctx, "after-secret-immutable-rename"); err != nil {
+	if err := s.checkpoint(ctx, checkpointAfterSecretImmutableRename); err != nil {
 		return err
 	}
 	return s.syncDirectory(ctx, parent)

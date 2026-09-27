@@ -312,7 +312,7 @@ func (a *mediaArea) pruneStaging(ctx context.Context) error {
 		if !pendingMediaName(entry) && !stagedMediaName(entry) {
 			continue
 		}
-		if err := a.store.checkpoint(ctx, "before-media-staging-prune"); err != nil {
+		if err := a.store.checkpoint(ctx, checkpointBeforeMediaStagingPrune); err != nil {
 			return err
 		}
 		if stagedMediaName(entry) {
@@ -395,7 +395,7 @@ func (a *mediaArea) Stage(ctx context.Context, name string) (media.Stage, error)
 	if err != nil {
 		return nil, err
 	}
-	if err := a.store.checkpoint(ctx, "before-media-staging"); err != nil {
+	if err := a.store.checkpoint(ctx, checkpointBeforeMediaStaging); err != nil {
 		stage.release()
 		return nil, err
 	}
@@ -478,7 +478,7 @@ func (s *mediaStage) Fill(ctx context.Context, source media.Payload, limit int64
 	if err != nil {
 		return media.Staged{}, err
 	}
-	if err := s.store.checkpoint(ctx, "before-media-staging-sync"); err != nil {
+	if err := s.store.checkpoint(ctx, checkpointBeforeMediaStagingSync); err != nil {
 		return media.Staged{}, err
 	}
 	if err := s.file.Sync(); err != nil {
@@ -565,7 +565,7 @@ func (a *mediaArea) Publish(ctx context.Context, name string, published media.St
 			return err
 		}
 	}
-	if err := a.store.checkpoint(ctx, "before-media-rename"); err != nil {
+	if err := a.store.checkpoint(ctx, checkpointBeforeMediaRename); err != nil {
 		return err
 	}
 	if err := renameNoReplaceAt(a.dir, stage.name, name); err != nil {
@@ -578,7 +578,7 @@ func (a *mediaArea) Publish(ctx context.Context, name string, published media.St
 	if err := a.store.syncDirectory(ctx, a.dir); err != nil {
 		return err
 	}
-	if err := a.store.checkpoint(ctx, "before-media-record"); err != nil {
+	if err := a.store.checkpoint(ctx, checkpointBeforeMediaRecord); err != nil {
 		return err
 	}
 	if err := a.store.writeExclusiveAtomic(ctx, a.dir, name+".json", record, false); err != nil {
@@ -603,7 +603,7 @@ func (a *mediaArea) Delete(ctx context.Context, name string) error {
 // remove drops the record before the bytes, so an interruption leaves an
 // occupied name with no record rather than a record describing absent bytes.
 func (a *mediaArea) remove(ctx context.Context, name string) error {
-	if err := a.store.checkpoint(ctx, "before-media-record-removal"); err != nil {
+	if err := a.store.checkpoint(ctx, checkpointBeforeMediaRecordRemoval); err != nil {
 		return err
 	}
 	if err := a.dir.verify(); err != nil {
@@ -615,7 +615,7 @@ func (a *mediaArea) remove(ctx context.Context, name string) error {
 	if err := a.store.syncDirectory(ctx, a.dir); err != nil {
 		return err
 	}
-	if err := a.store.checkpoint(ctx, "before-media-image-removal"); err != nil {
+	if err := a.store.checkpoint(ctx, checkpointBeforeMediaImageRemoval); err != nil {
 		return err
 	}
 	if err := syscall.Unlinkat(int(a.dir.file.Fd()), name); err != nil && !errors.Is(err, syscall.ENOENT) {

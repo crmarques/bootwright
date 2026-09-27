@@ -339,7 +339,7 @@ func (t *lifecycleTransaction) PublishEvidence(ctx context.Context, data []byte)
 	if bytes.Equal(current, data) {
 		return nil
 	}
-	if err := t.base.store.checkpoint(ctx, "before-evidence"); err != nil {
+	if err := t.base.store.checkpoint(ctx, checkpointBeforeEvidence); err != nil {
 		return err
 	}
 	var pending string
@@ -457,7 +457,7 @@ func (t *lifecycleTransaction) Bind(ctx context.Context, machine string, host co
 	slices.SortFunc(bindings, func(x, y prerequisites.ControllerBinding) int { return strings.Compare(x.Context, y.Context) })
 	value := cloneControllerState(t.stored.value)
 	value.Bindings = bindings
-	return t.publishControllerState(ctx, value, t.stored.bundles, "before-binding")
+	return t.publishControllerState(ctx, value, t.stored.bundles, checkpointBeforeBinding)
 }
 
 func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []prerequisites.HostReservation) error {
@@ -506,14 +506,14 @@ func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []p
 	}
 	value := cloneControllerState(t.stored.value)
 	value.Reservations = combined
-	return t.publishControllerState(ctx, value, t.stored.bundles, "before-reservation")
+	return t.publishControllerState(ctx, value, t.stored.bundles, checkpointBeforeReservation)
 }
 
 // publishControllerState replaces the shared record atomically under the held
 // root lock, then re-reads it so the transaction keeps working from exactly
 // what is durable.
-func (t *lifecycleTransaction) publishControllerState(ctx context.Context, value prerequisites.HostState, bundles []controllerBundleReservation, checkpoint string) error {
-	if err := t.base.store.checkpoint(ctx, checkpoint); err != nil {
+func (t *lifecycleTransaction) publishControllerState(ctx context.Context, value prerequisites.HostState, bundles []controllerBundleReservation, point checkpoint) error {
+	if err := t.base.store.checkpoint(ctx, point); err != nil {
 		return err
 	}
 	dir, err := openControllerDirectory(t.base.root, t.base.registry)

@@ -182,7 +182,7 @@ func (s *Store) walkContextTreeWithRemovalGuard(ctx context.Context, dir *direct
 			return state("context traversal contains unknown or unsafe state")
 		}
 		if kind == syscall.S_IFDIR {
-			if err := s.checkpoint(ctx, "before-context-subtree"); err != nil {
+			if err := s.checkpoint(ctx, checkpointBeforeContextSubtree); err != nil {
 				return err
 			}
 			child, err := openDirectory(dir, name)
@@ -208,7 +208,7 @@ func (s *Store) walkContextTreeWithRemovalGuard(ctx context.Context, dir *direct
 			}
 		}
 		if action == removeContextTree {
-			if err := s.checkpoint(ctx, "before-context-unlink"); err != nil {
+			if err := s.checkpoint(ctx, checkpointBeforeContextUnlink); err != nil {
 				return err
 			}
 			if beforeRemove != nil {
@@ -240,7 +240,7 @@ func (s *Store) syncVerifiedFile(ctx context.Context, parent *directory, name st
 	if err != nil || !sameFile(expected, before) {
 		return state("context durability target was substituted")
 	}
-	if err := s.checkpoint(ctx, "sync-context-file"); err != nil {
+	if err := s.checkpoint(ctx, checkpointSyncContextFile); err != nil {
 		return err
 	}
 	if err := file.Sync(); err != nil {
@@ -362,7 +362,7 @@ func (t *transaction) Delete(ctx context.Context, requested contexts.Record) err
 		if err := t.store.walkContextTreeWithRemovalGuard(ctx, dir, "", removeContextTree, &remaining, func(ctx context.Context) error { return t.checkControllerRecovery(ctx, record.Name) }); err != nil {
 			return err
 		}
-		if err := t.store.checkpoint(ctx, "before-context-rmdir"); err != nil {
+		if err := t.store.checkpoint(ctx, checkpointBeforeContextRmdir); err != nil {
 			return err
 		}
 		if err := t.checkControllerRecovery(ctx, record.Name); err != nil {

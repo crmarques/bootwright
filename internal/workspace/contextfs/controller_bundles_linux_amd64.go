@@ -205,7 +205,7 @@ func (t *controllerTransaction) Bundle(ctx context.Context, id string) (prerequi
 			}
 			defer dir.file.Close()
 			identity = dir.identity
-			if err := t.base.store.checkpoint(ctx, "after-controller-bundle-directory"); err != nil {
+			if err := t.base.store.checkpoint(ctx, checkpointAfterControllerBundleDirectory); err != nil {
 				return nil, err
 			}
 		}
@@ -424,7 +424,7 @@ func (a *controllerBundleArea) Write(ctx context.Context, path string, data []by
 		return err
 	}
 	defer close()
-	if err := a.store.checkpoint(ctx, "before-controller-bundle-write"); err != nil {
+	if err := a.store.checkpoint(ctx, checkpointBeforeControllerBundleWrite); err != nil {
 		return err
 	}
 	if err := a.available(ctx, true); err != nil {
@@ -596,7 +596,7 @@ func (a *controllerBundleArea) sync(ctx context.Context) error {
 			err = state("controller bundle file changed before durable sealing")
 		}
 		if err == nil {
-			err = a.store.checkpoint(ctx, "before-controller-bundle-sync")
+			err = a.store.checkpoint(ctx, checkpointBeforeControllerBundleSync)
 		}
 		if err == nil {
 			err = file.Sync()

@@ -507,7 +507,7 @@ func (t *controllerTransaction) ensureController(ctx context.Context) error {
 		return err
 	}
 	defer dir.file.Close()
-	if err := t.base.store.checkpoint(ctx, "after-controller-directory"); err != nil {
+	if err := t.base.store.checkpoint(ctx, checkpointAfterControllerDirectory); err != nil {
 		return err
 	}
 	registry = cloneRegistry(t.base.registry)
@@ -589,7 +589,7 @@ func (s *Store) replaceControllerRecord(ctx context.Context, dir *directory, exp
 	if err != nil || !bytes.Equal(staged, data) {
 		return prerequisites.NotCommitted, state("staged controller receipt changed")
 	}
-	if err := s.checkpoint(ctx, "before-controller-rename"); err != nil {
+	if err := s.checkpoint(ctx, checkpointBeforeControllerRename); err != nil {
 		return prerequisites.NotCommitted, err
 	}
 	current, identity, err := readBoundedIdentity(ctx, dir, "state.json", maxControllerState, true)
@@ -617,7 +617,7 @@ func (s *Store) replaceControllerRecord(ctx context.Context, dir *directory, exp
 	unknown := func() (prerequisites.Publication, error) {
 		return prerequisites.Unknown, controllerFailure("controller.unknown", "controller receipt publication may have completed; preserve all verified progress")
 	}
-	if err := s.checkpoint(ctx, "after-controller-rename"); err != nil {
+	if err := s.checkpoint(ctx, checkpointAfterControllerRename); err != nil {
 		return unknown()
 	}
 	published, publishedIdentity, err := readBoundedIdentity(ctx, dir, "state.json", maxControllerState, true)

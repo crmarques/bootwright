@@ -46,7 +46,7 @@ func (a *secretArea) SyncFile(ctx context.Context, path string) error {
 	if !exists || !expected.exists || !expected.parentKnown || expected.identity.Mode&syscall.S_IFMT != syscall.S_IFREG {
 		return secretConflict(ctx, "secret file synchronization lacks an exact prior observation", nil)
 	}
-	if err := a.store.checkpoint(ctx, "before-secret-file-sync"); err != nil {
+	if err := a.store.checkpoint(ctx, checkpointBeforeSecretFileSync); err != nil {
 		return secretEffectFailure(ctx, "secret file durability could not be established", err)
 	}
 	if err := a.verifyExpectedContext(ctx); err != nil {
@@ -96,7 +96,7 @@ func (a *secretArea) Prune(ctx context.Context, expectedStore []byte, paths []st
 	if err := verifySecretExpectation(ctx, a.secrets, "store.json", expected); err != nil {
 		return secretConflict(ctx, "secret store changed before cleanup", err)
 	}
-	if err := a.store.checkpoint(ctx, "before-secret-prune"); err != nil {
+	if err := a.store.checkpoint(ctx, checkpointBeforeSecretPrune); err != nil {
 		return secretEffectFailure(ctx, "secret cleanup durability could not be established", err)
 	}
 	if err := a.store.syncVerifiedFile(ctx, a.secrets, "store.json", expected.identity); err != nil {
@@ -209,7 +209,7 @@ func (a *secretArea) cleanupTargets(paths []string) ([]secretCleanupTarget, erro
 }
 
 func (a *secretArea) removeObserved(ctx context.Context, target secretCleanupTarget, verifyPublication func() error) error {
-	if err := a.store.checkpoint(ctx, "before-secret-unlink"); err != nil {
+	if err := a.store.checkpoint(ctx, checkpointBeforeSecretUnlink); err != nil {
 		return secretEffectFailure(ctx, "secret cleanup stopped before removal", err)
 	}
 	if err := a.available(ctx, false); err != nil {
@@ -235,7 +235,7 @@ func (a *secretArea) removeObserved(ctx context.Context, target secretCleanupTar
 	}
 	delete(a.observed, target.path)
 	a.forgetExpectation(target.path)
-	if err := a.store.checkpoint(ctx, "after-secret-unlink"); err != nil {
+	if err := a.store.checkpoint(ctx, checkpointAfterSecretUnlink); err != nil {
 		return secretEffectFailure(ctx, "secret cleanup removal durability is uncertain; inspect before retrying", err)
 	}
 	if err := a.store.syncDirectory(ctx, parent); err != nil {
