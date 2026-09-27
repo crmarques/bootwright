@@ -1,0 +1,69 @@
+---
+# One attempt of an installer wait (wait.yml). It runs only while the attempt
+# before it left the wait unfinished, and it takes the time it may run from
+# what the budget has left when it starts, never from what the first attempt
+# was given.
+- name: Attempt the wait while the budget lasts and the installer can resume
+  when: containercluster_install_agent_waiting | bool
+  block:
+    - name: Pause before re-invoking the installer, within what the budget has left
+      ansible.builtin.wait_for:
+        timeout: >-
+          {{ [containercluster_install_agent_wait_delay | int,
+              (containercluster_install_agent_deadline | int) - (now(utc=true).timestamp() | int)] | min }}
+      when:
+        - containercluster_install_agent_attempt | int > 0
+        - (containercluster_install_agent_deadline | int) > (now(utc=true).timestamp() | int)
+
+    - name: Take what this wait's budget has left
+      ansible.builtin.set_fact:
+        containercluster_install_agent_remaining: >-
+          {{ (containercluster_install_agent_deadline | int) - (now(utc=true).timestamp() | int) }}
+      changed_when: false
+
+    - name: Wait for the installer to report this milestone within what is left
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/timeout
+          - --kill-after={{ containercluster_install_agent_kill_grace | int }}s
+          - '{{ containercluster_install_agent_remaining | int }}s'
+          - '{{ containercluster_install_agent_installer }}'
+          - agent
+          - wait-for
+          - '{{ containercluster_install_agent_milestone }}'
+          - --dir
+          - '{{ containercluster_install_agent_work }}'
+          - --log-level
+          - info
+      register: containercluster_install_agent_attempted
+      changed_when: containercluster_install_agent_attempted.rc == 0
+      failed_when: false
+      when: containercluster_install_agent_remaining | int > 0
+
+    # A skipped attempt leaves the last one it ran as the wait's result. The
+    # wait goes on only after a give-up the installer can be resumed after:
+    # never after success, an attempt the budget stopped, a host in error, or
+    # a give-up it cannot resume from. Whether the installer's own last
+    # give-up was a stall is kept apart from the result: an attempt the budget
+    # stopped carries no give-up of its own, so it keeps the stall the one
+    # before it proved rather than replacing it (wait.yml).
+    - name: Record this attempt and whether another may follow it
+      ansible.builtin.set_fact:
+        containercluster_install_agent_wait: >-
+          {{ containercluster_install_agent_wait if containercluster_install_agent_attempted is skipped
+             else containercluster_install_agent_attempted }}
+        containercluster_install_agent_stalled: >-
+          {{ (containercluster_install_agent_stalled | bool)
+             if containercluster_install_agent_attempted is skipped
+                or containercluster_install_agent_attempted.rc in containercluster_install_agent_budget_spent_codes
+             else (containercluster_install_agent_attempted.stderr | default('')
+                   is search(containercluster_install_agent_stalled_pattern)) }}
+        containercluster_install_agent_waiting: >-
+          {{ containercluster_install_agent_attempted is not skipped
+             and containercluster_install_agent_attempted.rc != 0
+             and containercluster_install_agent_attempted.rc not in containercluster_install_agent_budget_spent_codes
+             and not (containercluster_install_agent_attempted.stderr | default('')
+                      is search(containercluster_install_agent_host_error_pattern))
+             and (containercluster_install_agent_attempted.stderr | default('')
+                  is search(containercluster_install_agent_resumable_pattern)) }}
+      changed_when: false

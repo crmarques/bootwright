@@ -3,6 +3,7 @@ package agentinstall
 import (
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -10,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -77,6 +79,9 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 	if spec.Get("nodes").Len() > 1 && !multiNodePlatform(spec.Get("install", "platform", "type").Text()) {
 		return "this executable installs no multi-node cluster on the declared platform", ""
 	}
+	if reason, remediation := pastTheCeiling(cluster); reason != "" {
+		return reason, remediation
+	}
 	controllerMachine := controllerMachineName(catalog)
 	server, serverHost, served := mediaServer(catalog, cluster)
 	for _, node := range spec.Get("nodes").Items() {
@@ -115,6 +120,23 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 		}
 	}
 	return "", ""
+}
+
+// pastTheCeiling says why a cluster's installation could not finish within the
+// deadline its runs are held to, or nothing when it can. The deadline grows with
+// the nodes the installation reads and releases, and the runner cuts
+// every run short at its ceiling rather than honoring a longer one, so a
+// cluster too large for it refuses here instead of being killed mid-install.
+func pastTheCeiling(cluster api.Object) (reason, remediation string) {
+	nodes := cluster.Spec().Get("nodes").Len()
+	deadline := installDeadline(installBudgets, nodes)
+	if deadline <= lifecycle.MaxDeadline {
+		return "", ""
+	}
+	largest := int((lifecycle.MaxDeadline - installDeadline(installBudgets, 0)) / nodeMargin)
+	return "installing " + strconv.Itoa(nodes) + " nodes needs a run deadline of " + deadline.String() +
+			", past the " + lifecycle.MaxDeadline.String() + " every adapter run is held to",
+		"declare at most " + strconv.Itoa(largest) + " nodes on " + cluster.Identity()
 }
 
 // mediaServer is the artifact server the cluster's boot image is published
@@ -237,14 +259,14 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 	needs.DNSServers, needs.NTPServers = sortedUnique(needs.DNSServers), sortedUnique(needs.NTPServers)
 	needs.Machines = sortedUnique(needs.Machines)
 	mediaRequest := MediaRequest{
-		AgentConfig: agent, Identity: identity(MediaBlockID(name)), Image: image,
+		AgentConfig: agent, Budgets: mediaBudgets, Identity: identity(MediaBlockID(name)), Image: image,
 		InstallConfig: install, Placement: placement, PullSecretRef: pullSecret,
 		Release: release, SSHKeyRef: sshKey, Tool: tool,
 		TrustBundleRefs: cluster.Spec().Get("install", "additionalTrustBundleRefs").Strings(),
 		Version:         mediaRequestVersion, WorkRoot: WorkRoot(contextName, name),
 	}
 	installRequest := InstallRequest{
-		Budgets: DefaultBudgets(), Endpoints: endpointNames(catalog, cluster),
+		Budgets: installBudgets, Endpoints: endpointNames(catalog, cluster),
 		Identity: identity(InstallBlockID(name)), Image: image, Nodes: frozenNodes(nodes),
 		Placement: placement, Release: release, Tool: tool,
 		Version: installRequestVersion, WorkRoot: WorkRoot(contextName, name),

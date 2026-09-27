@@ -5,6 +5,8 @@
 # The cluster is read through the kubeconfig the installer wrote with the
 # image, so a read that succeeds has verified the serving certificate against
 # that build's authority and been authenticated by its client certificate.
+# Every read passes --request-timeout, so an API that accepts the connection
+# and never answers ends each request oc makes rather than holding the read.
 - name: Read ClusterVersion through this build's own trust anchor
   ansible.builtin.command:
     argv:
@@ -16,6 +18,7 @@
       - version
       - --output
       - name
+      - --request-timeout={{ containercluster_install_agent_request_timeout }}
   register: containercluster_install_agent_cluster
   changed_when: false
   failed_when: false
@@ -31,6 +34,7 @@
       - version
       - --output
       - jsonpath={.status.desired.version}
+      - --request-timeout={{ containercluster_install_agent_request_timeout }}
   register: containercluster_install_agent_release
   changed_when: false
   failed_when: false
@@ -53,6 +57,7 @@
       - version
       - --output
       - 'jsonpath={.status.conditions[?(@.type=="Available")].status}{"\n"}{.status.history[0].state}{"\n"}{.status.history[0].version}'
+      - --request-timeout={{ containercluster_install_agent_request_timeout }}
   register: containercluster_install_agent_completion
   changed_when: false
   failed_when: false
@@ -67,6 +72,7 @@
       - nodes
       - --output
       - jsonpath={.items[*].metadata.name}
+      - --request-timeout={{ containercluster_install_agent_request_timeout }}
   register: containercluster_install_agent_nodes
   changed_when: false
   failed_when: false

@@ -9,6 +9,16 @@
 # apply refused before this when the cluster's installation marked the area.
 - name: Build the image from the frozen inputs
   when: not (containercluster_media_agent_published | bool)
+  vars:
+    # Once the build budget is spent, timeout sends the installer SIGTERM, and
+    # SIGKILL to its process group this many seconds later if it is still
+    # running.
+    containercluster_media_agent_kill_grace: 30
+    # How a build its budget stopped exits: 124 is timeout's own status once it
+    # sent SIGTERM, and a kill after the grace reaches timeout's own process
+    # group too, which a shell reports as 137 (128 + 9) and the command module,
+    # reading the process's return code, as -9.
+    containercluster_media_agent_budget_spent_codes: [124, 137, -9]
   block:
     - name: Discard the installer work area a previous build left
       ansible.builtin.file:
@@ -52,9 +62,15 @@
         mode: '0600'
       changed_when: true
 
+    # The build runs under timeout with the budget the request froze, so it
+    # returns within that budget and one kill-after grace. Any other failure
+    # is the installer's own and fails here as before.
     - name: Build the image this cluster's nodes boot
       ansible.builtin.command:
         argv:
+          - /usr/bin/timeout
+          - --kill-after={{ containercluster_media_agent_kill_grace | int }}s
+          - '{{ bootwright_cluster_media_request.budgets.buildSeconds | int }}s'
           - '{{ containercluster_media_agent_installer }}'
           - agent
           - create
@@ -65,6 +81,20 @@
           - info
       register: containercluster_media_agent_built
       changed_when: true
+      failed_when:
+        - containercluster_media_agent_built.rc != 0
+        - containercluster_media_agent_built.rc not in containercluster_media_agent_budget_spent_codes
+
+    - name: Refuse a build its budget stopped
+      ansible.builtin.fail:
+        msg: >-
+          the installer was still building the boot image of cluster
+          {{ bootwright_cluster_media_request.identity.cluster }} when its build
+          budget of {{ bootwright_cluster_media_request.budgets.buildSeconds }}
+          seconds was spent, so timeout stopped it: the installer did not fail
+          on its own. Nothing was published, and a repeated apply discards the
+          work area and builds the image again.
+      when: containercluster_media_agent_built.rc in containercluster_media_agent_budget_spent_codes
 
     - name: Find the image the installer produced
       ansible.builtin.find:

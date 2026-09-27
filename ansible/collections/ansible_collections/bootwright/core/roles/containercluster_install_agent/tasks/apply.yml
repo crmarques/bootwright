@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_cluster_install_request.version == 'cluster-install-agent-v1'
+      - bootwright_cluster_install_request.version == 'cluster-install-agent-v2'
       - bootwright_cluster_install_request.workRoot.startswith('/var/lib/bootwright-clusters/')
       - bootwright_cluster_install_digest is match('[0-9a-f]{64}')
     quiet: true
@@ -94,6 +94,15 @@
     owner: root
     group: root
     mode: '0600'
+
+# One budget bounds booting every node, so its deadline is set once, here, and
+# each node boots within what is left of it (boot.yml).
+- name: Set the moment the boot phase's budget is spent
+  ansible.builtin.set_fact:
+    containercluster_install_agent_boot_deadline: >-
+      {{ (now(utc=true).timestamp() | int) + (bootwright_cluster_install_request.budgets.bootSeconds | int) }}
+  changed_when: false
+  when: not (containercluster_install_agent_settled | bool)
 
 - name: Boot each node from the image its cluster published
   ansible.builtin.include_tasks: boot.yml

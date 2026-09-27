@@ -2,7 +2,6 @@
   "budgets": {
     "bootSeconds": 900,
     "bootstrapSeconds": 5400,
-    "buildSeconds": 1800,
     "installSeconds": 5400
   },
   "endpoints": [
@@ -94,6 +93,6 @@
     "kind": "openshift-install",
     "version": "4.21.15"
   },
-  "version": "cluster-install-agent-v1",
+  "version": "cluster-install-agent-v2",
   "workRoot": "/var/lib/bootwright-clusters/lab/ocp"
 }

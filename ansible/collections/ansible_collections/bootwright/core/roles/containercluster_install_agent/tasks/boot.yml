@@ -38,34 +38,70 @@
     not (containercluster_install_agent_node.machine in containercluster_install_agent_state.powered
          and containercluster_install_agent_node.machine in containercluster_install_agent_state.ownMedia)
   block:
-    - name: Insert the published image as virtual media
-      bootwright.core.redfish_boot:
-        endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
-        user: '{{ lookup("ansible.builtin.file", containercluster_install_agent_user) }}'
-        password: '{{ lookup("ansible.builtin.file", containercluster_install_agent_password) }}'
-        verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
-        operation: insert
-        image: '{{ containercluster_install_agent_url }}'
-      no_log: true
+    # The boot phase's deadline was set once, before the first node
+    # (apply.yml), so each node boots within what is left of one budget rather
+    # than a budget of its own, and a node skipped above takes none of it.
+    - name: Refuse to boot a node once the boot phase's budget is spent
+      ansible.builtin.fail:
+        msg: >-
+          {{ containercluster_install_agent_boot_spent_hint }} Machine
+          {{ containercluster_install_agent_node.machine }} was not booted.
+      when: (containercluster_install_agent_boot_deadline | int) <= (now(utc=true).timestamp() | int)
 
-    - name: Boot a machine this substrate created
-      ansible.builtin.include_role:
-        name: bootwright.core.substrate_libvirt_machine
-        tasks_from: boot_media.yml
-      vars:
-        substrate_libvirt_machine_boot_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
-        substrate_libvirt_machine_boot_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
-        substrate_libvirt_machine_boot_user: '{{ containercluster_install_agent_user }}'
-        substrate_libvirt_machine_boot_password: '{{ containercluster_install_agent_password }}'
-      when: containercluster_install_agent_node.substrate == 'libvirt'
+    # ansible-core's timeout keyword is templated as each task starts and is
+    # inherited by the substrate's own tasks through this block, so every boot
+    # step gets only what the phase has left and one still running at the
+    # deadline is stopped there (playbook/base.py timeout, executor/task_executor.py).
+    # A value of 0 would mean no timeout at all, so the floor is one second.
+    - name: Boot the node within what the boot phase's budget has left
+      timeout: >-
+        {{ [(containercluster_install_agent_boot_deadline | int) - (now(utc=true).timestamp() | int), 1] | max }}
+      block:
+        - name: Insert the published image as virtual media
+          bootwright.core.redfish_boot:
+            endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+            user: '{{ lookup("ansible.builtin.file", containercluster_install_agent_user) }}'
+            password: '{{ lookup("ansible.builtin.file", containercluster_install_agent_password) }}'
+            verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+            operation: insert
+            image: '{{ containercluster_install_agent_url }}'
+          no_log: true
 
-    - name: Boot an operator-owned machine through its own controller
-      ansible.builtin.include_role:
-        name: bootwright.core.substrate_baremetal_machine
-        tasks_from: boot_media.yml
-      vars:
-        substrate_baremetal_machine_boot_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
-        substrate_baremetal_machine_boot_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
-        substrate_baremetal_machine_boot_user: '{{ containercluster_install_agent_user }}'
-        substrate_baremetal_machine_boot_password: '{{ containercluster_install_agent_password }}'
-      when: containercluster_install_agent_node.substrate == 'baremetal'
+        - name: Boot a machine this substrate created
+          ansible.builtin.include_role:
+            name: bootwright.core.substrate_libvirt_machine
+            tasks_from: boot_media.yml
+          vars:
+            substrate_libvirt_machine_boot_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+            substrate_libvirt_machine_boot_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+            substrate_libvirt_machine_boot_user: '{{ containercluster_install_agent_user }}'
+            substrate_libvirt_machine_boot_password: '{{ containercluster_install_agent_password }}'
+          when: containercluster_install_agent_node.substrate == 'libvirt'
+
+        - name: Boot an operator-owned machine through its own controller
+          ansible.builtin.include_role:
+            name: bootwright.core.substrate_baremetal_machine
+            tasks_from: boot_media.yml
+          vars:
+            substrate_baremetal_machine_boot_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+            substrate_baremetal_machine_boot_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+            substrate_baremetal_machine_boot_user: '{{ containercluster_install_agent_user }}'
+            substrate_baremetal_machine_boot_password: '{{ containercluster_install_agent_password }}'
+          when: containercluster_install_agent_node.substrate == 'baremetal'
+
+      # A step the timeout stopped fails with ansible-core's own message, so the
+      # budget is named here; any other failure stays a failure, and its own
+      # step above, not this one, says what refused.
+      rescue:
+        - name: Report the boot the boot phase's budget stopped
+          ansible.builtin.fail:
+            msg: >-
+              {{ containercluster_install_agent_boot_spent_hint }} Machine
+              {{ containercluster_install_agent_node.machine }} was being booted when it was spent.
+          when: ansible_failed_result.timedout is defined
+
+        - name: Keep any other boot failure a failure
+          ansible.builtin.fail:
+            msg: >-
+              Machine {{ containercluster_install_agent_node.machine }} was not booted from
+              this cluster's image; the failed step above names what refused.
