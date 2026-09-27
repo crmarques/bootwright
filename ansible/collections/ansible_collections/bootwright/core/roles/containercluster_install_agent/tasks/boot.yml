@@ -46,16 +46,22 @@
         msg: >-
           {{ containercluster_install_agent_boot_spent_hint }} Machine
           {{ containercluster_install_agent_node.machine }} was not booted.
-      when: (containercluster_install_agent_boot_deadline | int) <= (now(utc=true).timestamp() | int)
+      when: (containercluster_install_agent_boot_deadline | int) <= (((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int))
 
     # ansible-core's timeout keyword is templated as each task starts and is
     # inherited by the substrate's own tasks through this block, so every boot
-    # step gets only what the phase has left and one still running at the
-    # deadline is stopped there (playbook/base.py timeout, executor/task_executor.py).
-    # A value of 0 would mean no timeout at all, so the floor is one second.
+    # step gets only what the phase has left, and the step still running at the
+    # deadline fails there (playbook/base.py timeout, executor/task_executor.py).
+    # The timeout ends the task, not its module's process: a Redfish request
+    # already in flight finishes on its own, and the supervisor waits for it
+    # before the run ends, so no retry overlaps it. A value of 0 would mean no
+    # timeout at all, so the floor is one second. The clock is the epoch taken
+    # from naive UTC, never now().timestamp(), which reads a naive value as
+    # local time and jumps at a daylight-saving change.
     - name: Boot the node within what the boot phase's budget has left
       timeout: >-
-        {{ [(containercluster_install_agent_boot_deadline | int) - (now(utc=true).timestamp() | int), 1] | max }}
+        {{ [(containercluster_install_agent_boot_deadline | int)
+            - (((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int)), 1] | max }}
       block:
         - name: Insert the published image as virtual media
           bootwright.core.redfish_boot:

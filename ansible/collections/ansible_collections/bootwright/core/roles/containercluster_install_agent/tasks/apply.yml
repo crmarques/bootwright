@@ -100,7 +100,7 @@
 - name: Set the moment the boot phase's budget is spent
   ansible.builtin.set_fact:
     containercluster_install_agent_boot_deadline: >-
-      {{ (now(utc=true).timestamp() | int) + (bootwright_cluster_install_request.budgets.bootSeconds | int) }}
+      {{ (((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int)) + (bootwright_cluster_install_request.budgets.bootSeconds | int) }}
   changed_when: false
   when: not (containercluster_install_agent_settled | bool)
 

@@ -10,15 +10,15 @@
       ansible.builtin.wait_for:
         timeout: >-
           {{ [containercluster_install_agent_wait_delay | int,
-              (containercluster_install_agent_deadline | int) - (now(utc=true).timestamp() | int)] | min }}
+              (containercluster_install_agent_deadline | int) - (((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int))] | min }}
       when:
         - containercluster_install_agent_attempt | int > 0
-        - (containercluster_install_agent_deadline | int) > (now(utc=true).timestamp() | int)
+        - (containercluster_install_agent_deadline | int) > (((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int))
 
     - name: Take what this wait's budget has left
       ansible.builtin.set_fact:
         containercluster_install_agent_remaining: >-
-          {{ (containercluster_install_agent_deadline | int) - (now(utc=true).timestamp() | int) }}
+          {{ (containercluster_install_agent_deadline | int) - (((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int)) }}
       changed_when: false
 
     - name: Wait for the installer to report this milestone within what is left
