@@ -53,8 +53,8 @@ func provider() api.Object {
 	))
 }
 
-func artifactServer() api.Object {
-	return api.NewObject(api.ArtifactServer, "lab-artifacts", api.Value{}, api.MapValue(
+func artifactServer(fields ...api.FieldValue) api.Object {
+	spec := api.MapValue(
 		text("management", "managed"), text("machineRef", "controller"), text("bindAddress", "192.0.2.1"),
 		field("listeners", api.ListValue(
 			api.MapValue(text("name", "https"), text("protocol", "https"), number("port", "8443")),
@@ -64,6 +64,29 @@ func artifactServer() api.Object {
 			api.MapValue(text("name", "ip-https"), text("listenerRef", "https"), text("addressRef", "ip")),
 			api.MapValue(text("name", "ip-http"), text("listenerRef", "http"), text("addressRef", "ip")),
 		)),
+	)
+	for _, extra := range fields {
+		spec = spec.With(extra.Name, extra.Value)
+	}
+	return api.NewObject(api.ArtifactServer, "lab-artifacts", api.Value{}, spec)
+}
+
+// servicesHost is an operator-provided Machine reached over SSH. It declares
+// every access field a lifecycle placement freezes, so a server placed on it
+// populates the whole SSH arm.
+func servicesHost() api.Object {
+	return api.NewObject(api.Machine, "services", api.Value{}, api.MapValue(
+		field("capabilities", api.StringList("container-runtime")),
+		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("network", api.MapValue(field("addresses", api.ListValue(
+			api.MapValue(text("name", "fqdn"), text("address", "services.lab.example.test")),
+			api.MapValue(text("name", "ip"), text("address", "192.0.2.2")),
+		)))),
+		field("access", api.MapValue(field("ssh", api.MapValue(
+			text("addressRef", "ip"), number("port", "2222"), text("user", "operator"),
+			field("auth", api.MapValue(text("privateKeyRef", "services-ssh-key"))),
+			text("sudoPasswordRef", "services-sudo-password"), text("knownHostsRef", "services-known-hosts"),
+		)))),
 	))
 }
 

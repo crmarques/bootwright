@@ -228,11 +228,13 @@ func compactCatalog() api.Catalog {
 // externalCatalog is the compact topology with endpoints something outside the
 // cluster answers, so its load balancer is user-managed. It also trusts two
 // additional CA bundles, declared out of name order so the order the media
-// request freezes them in is visible.
+// request freezes them in is visible. It declares its networking too: the
+// optional network type, and cluster and service networks other than the
+// defaults, so its media request freezes the declared networking.
 func externalCatalog() api.Catalog {
 	objects := append(base(),
 		guest("ocp-01", "198.51.100.31/24"), guest("ocp-02", "198.51.100.32/24"), guest("ocp-03", "198.51.100.33/24"))
-	objects = append(objects, cluster("ocp",
+	declared := cluster("ocp",
 		installSelection(
 			endpoints("198.51.100.20", "198.51.100.20", "198.51.100.21", "external"),
 			field("platform", api.MapValue(text("type", "baremetal"))),
@@ -240,8 +242,13 @@ func externalCatalog() api.Catalog {
 		),
 		node("master-0", "master", "ocp-01", "master-0.ocp.lab.example.test"),
 		node("master-1", "master", "ocp-02", "master-1.ocp.lab.example.test"),
-		node("master-2", "master", "ocp-03", "master-2.ocp.lab.example.test")))
-	return api.NewCatalog(objects)
+		node("master-2", "master", "ocp-03", "master-2.ocp.lab.example.test"))
+	declared = declared.WithSpec(declared.Spec().With("networking", api.MapValue(
+		text("networkType", "OVNKubernetes"),
+		field("clusterNetwork", api.ListValue(api.MapValue(text("cidr", "10.132.0.0/14"), number("hostPrefix", "23")))),
+		field("serviceNetwork", api.StringList("172.31.0.0/16")),
+	)))
+	return api.NewCatalog(append(objects, declared))
 }
 
 // physicalCatalog is the same topology on operator-owned hardware, reached at
