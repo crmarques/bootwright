@@ -1,0 +1,310 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: lab-baremetal
+spec:
+  domains:
+    base: metal.example.test
+    machines: metal.example.test
+    clusters: metal.example.test
+    containerClusters: metal.example.test
+    storageClusters: metal.example.test
+  remoteMachinesAccessKey:
+    keyRef: bootwright-machine-key
+  controller:
+    machineRef: controller
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: controller
+spec:
+  capabilities:
+    - container-runtime
+  os:
+    provided: true
+  proxy:
+    direct: {}
+  network:
+    addresses:
+      - name: fqdn
+        address: controller.metal.example.test
+      - name: ip
+        address: 192.0.2.1
+  access:
+    local: true
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: metal-01
+spec:
+  capabilities: []
+  substrate:
+    providerRef: lab-metal
+  hardware:
+    nics:
+      - name: eno1
+        macAddress: 52:54:00:9a:1b:01
+    boot:
+      nicRef: eno1
+    management:
+      bmc:
+        address: https://bmc-01.metal.example.test/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: lab-bmc-credentials
+        tls:
+          verify: false
+        virtualMedia:
+          tls:
+            trust: disable-verification
+            restoreVerificationAfterBoot: true
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+    install:
+      hostKeyRef: metal-01-host-key
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+      rootDeviceHints:
+        deviceName: /dev/sda
+  proxy:
+    direct: {}
+  network:
+    configRef: lab-metal
+    attachmentRef: lab-metal
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: metal-01.metal.example.test
+      - name: ip
+        address: 198.51.100.11/24
+        interface: eno1
+    interfaceBinding:
+      - nicRef: eno1
+        interfaceName: eno1
+  access:
+    ssh:
+      addressRef: fqdn
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineImage
+metadata:
+  name: rhel-9-8-boot
+spec:
+  bootMedia: local-media:rhel-9.8-x86_64-boot.iso
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-9-8
+spec:
+  os:
+    family: rhel
+    version: "9.8"
+    architecture: x86_64
+  installer:
+    anaconda:
+      imageRef: rhel-9-8-boot
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+      packageSource:
+        hostedTree:
+          fromMedia: local-media:rhel-9.8-x86_64-dvd.iso
+          artifactServerEndpoint:
+            serverRef: lab-artifacts
+            endpointRef: ip-http
+  customizations:
+    hostname:
+      source: machineName
+    localization:
+      language: en_US.UTF-8
+      formats: en_US.UTF-8
+      keyboard: us
+      timezone: Etc/UTC
+    ssh:
+      passwordAuthentication: false
+    storage:
+      rootDevice:
+        source: machineRootDeviceHints
+    packages:
+      environment: minimal
+      install:
+        - chrony
+      excludeDocs: true
+      installWeakDeps: false
+    services:
+      enabled:
+        - chronyd
+        - sshd
+    security:
+      selinux:
+        mode: enforcing
+  proxy:
+    direct: {}
+  ntp:
+    - serverRef: lab-ntp
+      endpointRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: lab-metal
+spec:
+  machineNetwork:
+    - cidr: 198.51.100.0/24
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+  nmstate:
+    interfaces:
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        name: eno1
+        state: up
+        type: ethernet
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          next-hop-address: 198.51.100.1
+          next-hop-interface: eno1
+          table-id: 254
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-metal
+spec:
+  baremetal:
+    boot:
+      method: redfishVirtualMedia
+    defaults:
+      bmc:
+        credentialsRef: lab-bmc-credentials
+        tls:
+          verify: false
+        virtualMedia:
+          tls:
+            trust: disable-verification
+            restoreVerificationAfterBoot: true
+  networkAttachments:
+    - name: lab-metal
+      baremetal:
+        vlan: 0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: DNSServer
+metadata:
+  name: lab-dns
+spec:
+  management: managed
+  machineRef: controller
+  implementation: dnsmasq
+  bindAddress: 192.0.2.1
+  port: 53
+  endpoints:
+    - name: ip
+      addressRef: ip
+  forwarders:
+    - 192.0.2.53
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NTPServer
+metadata:
+  name: lab-ntp
+spec:
+  management: managed
+  machineRef: controller
+  implementation: chrony
+  bindAddress: 192.0.2.1
+  port: 123
+  endpoints:
+    - name: ip
+      addressRef: ip
+  upstreamSources:
+    - 192.0.2.123
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ArtifactServer
+metadata:
+  name: lab-artifacts
+spec:
+  management: managed
+  machineRef: controller
+  bindAddress: 192.0.2.1
+  retention: persistent
+  tls:
+    secretRef: artifact-server-tls
+    minVersion: TLSv1.2
+  listeners:
+    - name: https
+      protocol: https
+      port: 8443
+    - name: http
+      protocol: http
+      port: 8080
+  endpoints:
+    - name: ip-https
+      listenerRef: https
+      addressRef: ip
+    - name: ip-http
+      listenerRef: http
+      addressRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: artifact-server-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: controller.metal.example.test
+      dnsNames:
+        - controller.metal.example.test
+      ipAddresses:
+        - 192.0.2.1
+      validityDays: 3650
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: bootwright-machine-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: bootwright-machine-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-credentials
+spec:
+  type: usernamePassword
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: metal-01-host-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: metal-01-host-key

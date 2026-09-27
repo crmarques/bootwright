@@ -139,15 +139,15 @@ func (s encryptionSpy) Rotate(ctx context.Context, request encryption.Encryption
 type mediaSpy struct{ record *dispatchRecord }
 
 func (s mediaSpy) Add(ctx context.Context, request media.AddMediaRequest) (*media.MutationResult, error) {
-	return nil, s.record.called(ctx, "media add", request)
+	return s.record.result.mediaMutation, s.record.called(ctx, "media add", request)
 }
 
 func (s mediaSpy) List(ctx context.Context, request media.ListMediaRequest) (*media.ListResult, error) {
-	return nil, s.record.called(ctx, "media list", request)
+	return s.record.result.mediaList, s.record.called(ctx, "media list", request)
 }
 
 func (s mediaSpy) Delete(ctx context.Context, request media.DeleteMediaRequest) (*media.MutationResult, error) {
-	return nil, s.record.called(ctx, "media delete", request)
+	return s.record.result.mediaMutation, s.record.called(ctx, "media delete", request)
 }
 
 type desiredStateSpy struct{ record *dispatchRecord }
@@ -221,11 +221,11 @@ func (s addOnPreflightSpy) Check(ctx context.Context, request addonpreflight.Pre
 type lifecycleSpy struct{ record *dispatchRecord }
 
 func (s lifecycleSpy) Plan(ctx context.Context, request lifecycle.PlanRequest) (*lifecycle.PlanResult, error) {
-	return nil, s.record.called(ctx, "plan", request)
+	return s.record.result.lifecyclePlan, s.record.called(ctx, "plan", request)
 }
 
 func (s lifecycleSpy) Status(ctx context.Context, request lifecycle.StatusRequest) (*lifecycle.StatusResult, error) {
-	return nil, s.record.called(ctx, "status", request)
+	return s.record.result.lifecycleStatus, s.record.called(ctx, "status", request)
 }
 
 func (s lifecycleSpy) Apply(ctx context.Context, request lifecycle.ApplyRequest) (*lifecycle.OperationResult, error) {
@@ -257,7 +257,7 @@ func (s storageArtifactsSpy) Render(ctx context.Context, request storagerenderin
 type machineInventorySpy struct{ record *dispatchRecord }
 
 func (s machineInventorySpy) List(ctx context.Context, request inventory.ListRequest) (*inventory.ListResult, error) {
-	return nil, s.record.called(ctx, "machine list", request)
+	return s.record.result.machines, s.record.called(ctx, "machine list", request)
 }
 
 type machineAccessSpy struct{ record *dispatchRecord }
@@ -273,15 +273,15 @@ func (s machineAccessSpy) Exec(ctx context.Context, request machineaccess.ExecRe
 type machinePowerSpy struct{ record *dispatchRecord }
 
 func (s machinePowerSpy) Start(ctx context.Context, request power.PowerRequest) (*power.Result, error) {
-	return nil, s.record.called(ctx, "machine start", request)
+	return s.record.result.power, s.record.called(ctx, "machine start", request)
 }
 
 func (s machinePowerSpy) Stop(ctx context.Context, request power.PowerRequest) (*power.Result, error) {
-	return nil, s.record.called(ctx, "machine stop", request)
+	return s.record.result.power, s.record.called(ctx, "machine stop", request)
 }
 
 func (s machinePowerSpy) Restart(ctx context.Context, request power.PowerRequest) (*power.Result, error) {
-	return nil, s.record.called(ctx, "machine restart", request)
+	return s.record.result.power, s.record.called(ctx, "machine restart", request)
 }
 
 type machineTrustSpy struct{ record *dispatchRecord }

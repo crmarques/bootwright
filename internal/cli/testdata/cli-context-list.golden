@@ -1,0 +1,4 @@
+NAME     MODE          CURRENT  INPUT
+edge     initializing  false    false
+lab      ready         true     true
+retired  deleting      false    true

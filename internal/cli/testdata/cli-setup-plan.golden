@@ -1,0 +1,19 @@
+Controller setup plan
+
+  Scope     baseline
+  Platform  fedora 43/amd64
+  Route     direct
+
+Checks
+  [UNKNOWN]  Execution bundle   required qualified Python and Ansible; observed unverified
+  [UNKNOWN]  Container runtime  required podman; observed unverified
+
+Dependencies
+  qualified-source.tar.gz
+
+Planned changes
+  1. Prepare the qualified execution bundle
+  2. Install the baseline native packages
+
+  Outcome  planned (dry run)
+  Next     bootwright setup

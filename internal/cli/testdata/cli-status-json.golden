@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "status",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": {
+      "Name": "lab",
+      "Revision": "rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f"
+    },
+    "setupChecks": [
+      {
+        "ID": "controller-binding",
+        "Status": "ready"
+      },
+      {
+        "ID": "dependency-bundle",
+        "Status": "ready"
+      }
+    ],
+    "desired": {
+      "Revision": "rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f",
+      "Environment": "lab-rhel",
+      "Files": 14,
+      "Objects": 14
+    },
+    "clusters": [],
+    "storageClusters": [],
+    "shared": [
+      {
+        "Kind": "ArtifactServer",
+        "Name": "lab-artifacts",
+        "Machine": "controller",
+        "Status": "done"
+      },
+      {
+        "Kind": "DNSServer",
+        "Name": "lab-dns",
+        "Machine": "controller",
+        "Status": "unsupported"
+      }
+    ],
+    "secrets": {
+      "Declared": 3,
+      "Bound": 3
+    },
+    "nextSteps": [
+      "bootwright apply",
+      "bootwright destroy"
+    ],
+    "lifecycle": {
+      "Operation": "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a",
+      "Verb": "apply",
+      "State": "failed",
+      "Next": "continue-apply",
+      "Blocks": [
+        {
+          "ID": "artifact-server-lab-artifacts",
+          "Description": "serve artifacts for lab-artifacts on controller",
+          "Stage": "infra-components",
+          "State": "done",
+          "Outcome": "",
+          "Attempts": 0,
+          "Groups": null
+        },
+        {
+          "ID": "substrate-host-lab-libvirt",
+          "Description": "realize the libvirt host of lab-libvirt on controller",
+          "Stage": "substrates",
+          "State": "done",
+          "Outcome": "",
+          "Attempts": 0,
+          "Groups": null
+        },
+        {
+          "ID": "machine-rhel-01",
+          "Description": "realize the virtual machine rhel-01 and its controller",
+          "Stage": "machines",
+          "State": "failed",
+          "Outcome": "",
+          "Attempts": 0,
+          "Groups": null
+        },
+        {
+          "ID": "os-install-rhel-01",
+          "Description": "install the operating system of rhel-01",
+          "Stage": "machines",
+          "State": "pending",
+          "Outcome": "",
+          "Attempts": 0,
+          "Groups": null
+        }
+      ],
+      "Logs": [
+        "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/logs/operation.jsonl"
+      ],
+      "Executable": "1.4.0 (9f2c1ab)"
+    }
+  },
+  "diagnostics": [],
+  "logs": []
+}

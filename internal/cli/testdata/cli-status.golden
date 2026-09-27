@@ -1,0 +1,19 @@
+[OK] Context lab
+
+Setup
+  [OK]  controller-binding
+  [OK]  dependency-bundle
+
+Shared services
+  [OK]       ArtifactServer/lab-artifacts
+  [SKIPPED]  DNSServer/lab-dns
+
+Lifecycle
+  [DONE]     serve artifacts for lab-artifacts on controller
+  [DONE]     realize the libvirt host of lab-libvirt on controller
+  [FAIL]     realize the virtual machine rhel-01 and its controller
+  [PENDING]  install the operating system of rhel-01
+
+  Registered by  1.4.0 (9f2c1ab)
+  Logs           /var/lib/bootwright/contexts/lab/state/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/logs
+  Next           bootwright apply

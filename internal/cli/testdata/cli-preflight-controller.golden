@@ -1,0 +1,17 @@
+Controller readiness
+
+  Scope       context lab
+  Controller  controller
+  Platform    fedora 43/amd64
+  Route       direct
+
+Checks
+  [OK]  Host                fedora 43/amd64
+  [OK]  Execution bundle    qualified
+  [OK]  Target tools        qualified
+  [OK]  Controller binding  bound to lab
+
+Planned changes
+  none
+
+  Outcome  ready
