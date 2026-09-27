@@ -72,6 +72,11 @@ type contractRow struct {
 	// specs/managed-os.md keeps the installed system with the Machine's disks,
 	// and specs/substrates.md retains a claimed physical machine.
 	retains bool
+	// noEffect is what this binding's positive no-effect evidence carries
+	// beyond its request digest, when its removal's absence does not prove
+	// it: specs/managed-os.md proves an installation had no effect from a
+	// powered-off Machine with no marker and no published content.
+	noEffect map[string]any
 	// indivisible marks a binding whose block realizes nothing it could leave
 	// part way, as specs/substrates.md says of a physical machine, whose
 	// replay finds nothing realized that could drift, so an observation leaves
@@ -90,7 +95,8 @@ func contractRows() []contractRow {
 			absence: map[string]any{"answered": true}, presence: contractMachinePresence},
 		{kind: baremetal.Kind, implementation: baremetal.Implementation, example: "lab-baremetal", presence: contractBareMetalPresence,
 			retains: true, indivisible: true},
-		{kind: installation.Kind, implementation: installation.Implementation, example: "lab-rhel", presence: contractInstallationPresence, retains: true},
+		{kind: installation.Kind, implementation: installation.Implementation, example: "lab-rhel", presence: contractInstallationPresence, retains: true,
+			noEffect: map[string]any{"power": "Off"}},
 		{kind: libvirt.HostKind, implementation: libvirt.HostImplementation, example: "lab-rhel", presence: contractHostPresence},
 		{kind: agentinstall.Kind, implementation: agentinstall.MediaImplementation, example: "lab-sno", presence: contractMediaPresence},
 		{kind: agentinstall.Kind, implementation: agentinstall.InstallImplementation, example: "lab-sno", presence: contractClusterPresence},
@@ -232,7 +238,9 @@ func (f *contractFindings) record(row contractRow, property, message string) {
 // Evidence is held to its kind as well: under this very request an apply
 // accepts only presence and a removal only absence, and an observation never
 // reads absence or a partial realization as completion but as positive no
-// effect and partial, unless the binding's own spec leaves them unproved. A
+// effect and partial; a binding whose removal's absence proves only that
+// removal is held to its own no-effect evidence instead, and one its spec
+// leaves with no partial state reads a partial realization as unknown. A
 // failed or empty probe never reads as quiescent.
 func TestEveryCapabilityHonoursTheCapabilityContract(t *testing.T) {
 	runner := &contractRunner{}
@@ -521,8 +529,9 @@ func contractEvidence(t *testing.T, row contractRow, example contractExample, bl
 // observation proves positive no effect from absence and partial from a
 // partial realization, never completion, so nothing absent or half built is
 // resolved done. A binding whose removal retains what its apply realized
-// leaves absence unknown instead, and an indivisible one partial evidence, as
-// their own specs say. The presence and absence fixtures are those
+// leaves that absence unknown instead, and is held to the no-effect evidence
+// its spec names, when it names one, as absence is held elsewhere; an
+// indivisible one leaves partial evidence unknown, as its spec says. The presence and absence fixtures are those
 // contractEvidenceControls proves the other operation accepts, so refusing
 // them is the kind check's alone. The blocks are an apply's, so an
 // observation here is an apply's resolution; how a destroy's resolution reads
@@ -540,6 +549,11 @@ func contractEvidenceKinds(t *testing.T, row contractRow, block reconciliation.B
 		{"apply", "apply-evidence-proves-presence", []json.RawMessage{absence, partial}},
 		{"destroy", "destroy-evidence-proves-absence", []json.RawMessage{presence, partial}},
 	}
+	var noEffect json.RawMessage
+	if row.noEffect != nil {
+		noEffect = contractNoEffect(t, row, block.RequestDigest)
+		attempts[0].evidence = append(attempts[0].evidence, noEffect)
+	}
 	for _, attempt := range attempts {
 		for _, outcome := range []string{"changed", "unchanged"} {
 			for _, evidence := range attempt.evidence {
@@ -551,14 +565,18 @@ func contractEvidenceKinds(t *testing.T, row contractRow, block reconciliation.B
 			}
 		}
 	}
-	observations := []struct {
+	type observationRule struct {
 		property string
 		evidence json.RawMessage
 		want     reconciliation.EffectState
 		unproved bool
-	}{
+	}
+	observations := []observationRule{
 		{"observe-absence-proves-no-effect", absence, reconciliation.EffectNoEffect, row.retains},
 		{"observe-partial-proves-partial", partial, reconciliation.EffectPartial, row.indivisible},
+	}
+	if noEffect != nil {
+		observations = append(observations, observationRule{"observe-absence-proves-no-effect", noEffect, reconciliation.EffectNoEffect, false})
 	}
 	for _, observed := range observations {
 		want := observed.want
@@ -631,6 +649,20 @@ func contractPartial(t *testing.T, row contractRow, execution lifecycle.Executio
 	t.Helper()
 	fields := row.presence(t, execution)
 	fields["request"], fields["postcondition"] = digest, false
+	data, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+// contractNoEffect is the row's positive no-effect evidence for one request
+// digest: nothing the apply would realize reported, and what the binding's own
+// spec requires to prove it.
+func contractNoEffect(t *testing.T, row contractRow, digest string) json.RawMessage {
+	t.Helper()
+	fields := map[string]any{"request": digest}
+	maps.Copy(fields, row.noEffect)
 	data, err := json.Marshal(fields)
 	if err != nil {
 		t.Fatal(err)
