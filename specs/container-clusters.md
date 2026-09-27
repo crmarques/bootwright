@@ -299,6 +299,13 @@ answer, a foreign image while nothing answers, and a node running while nothing
 answers and no node presents this cluster's own image, because the first two
 may belong to another installation and the last may be installing now.
 
+Not yet met: `agent wait-for install-complete` rewrites the work area's
+`auth/kubeconfig` once the cluster initializes, prepending the router CA to
+its authority and adding `apiVersion` and `kind`, and the inspection then reads
+no identity, so an attempt after that rewrite, or the resolution of one
+interrupted after it, cannot prove this cluster and does not converge; tracked
+as [backlog S26](milestones/backlog.md#pre-openshift-readiness-program-2026-09).
+
 **Quiescence and cancellation.** This block owns published boot media and
 controller-side state that a running cluster does not read, so its quiescence
 follows the Machines under the

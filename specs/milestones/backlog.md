@@ -106,7 +106,7 @@ stays M4 work.
 | --- | --- | --- |
 | X14 | S14, S15, S16, S17, S18, F13 | D8, D12 |
 | X15 | T1 (cluster goldens) first, then S19, S20, S21, S13, Z2 (digest) | D5, D14 |
-| X16 | Z2 (runner deadline) first, then Z2 (cluster budgets), S22, F14, S6b (quiescence) | D9, D16 |
+| X16 | S26 and Z2 (runner deadline) first, then Z2 (cluster budgets), S22, F14, S6b (quiescence) | D8, D9, D16 |
 | X17 | T1 (lifecycle and workspace records, CLI), T2 (checkpoint harness, capability suite) | none |
 | X18 | S12 (rest), S10 (rest), S9 (full), S8 (collector, primitive) with R3 | none |
 | X19 | S23, S24, S11, S25 | D6 |
@@ -152,6 +152,7 @@ Redfish effect path changes.
 | S23 | Substrate | Redfish effects go through the vendor-neutral client: media discovery, transfer protocol, task polling, `If-Match` and read-back. | X14 | Three firmware-shape fixtures |
 | S24 | Substrate | A bare-metal replay reports unchanged. | S23 | A replay test |
 | S25 | Substrate and Container cluster | Every admitted root-device hint reaches the installer, and a hint set it cannot carry refuses. | X17 goldens | Projection goldens and refusal tests |
+| S26 | Container cluster | The install identity survives `agent wait-for install-complete` rewriting the work area's `auth/kubeconfig` (the router CA prepended to the authority, `apiVersion` and `kind` added), so an attempt after that rewrite, and the unknown resolution of one interrupted after it, still prove this build's cluster; found by X15's review. | X15 | An identity test over the kubeconfig as `clientcmd.WriteToFile` writes it after `addRouterCAToClusterCA`; retry and resolution tests after the rewrite |
 | F14 | Container cluster | Topology admission: a control-plane count the qualified release accepts, and no installer-owned endpoints on a multi-node `none` platform. | X15 | Admission tests |
 | F15 | Controller | OpenShift client downloads stream to disk under size-scaled deadlines within a stage deadline derived from them, and `oc`'s version is checked. | X17 | Download and version tests |
 
