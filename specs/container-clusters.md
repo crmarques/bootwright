@@ -184,10 +184,21 @@ node and directing the operator to destroy the operation and plan again, while
 its destroy and observation still run.
 
 **Resolution before boot.** The installer polls the cluster API from the
-controller, so before anything is booted the block proves that the controller
-resolves the cluster's API, internal API and applications names to the
-addresses the plan froze. A name that does not resolve fails the block naming
-each missing answer, and nothing is booted.
+controller, so before anything is booted the block resolves the name of each
+API, internal API and applications endpoint slot the plan froze an address for
+(`api`, `api-int` or `console-openshift-console.apps`, then the cluster name
+and the zone) through the controller's own resolver, for every address family
+the controller is configured for. It proves that each name answers with its own
+slot's address and nothing else, because any other answer is one the installer
+may poll instead of the cluster. A slot with no address, such as a single-node
+slot satisfied by a `dnsName` alone, freezes no name, and nothing here proves
+how the controller resolves it. When the applications slot froze an address,
+its name is a wildcard, so one more name beneath it is held to that address
+too: its label is `bootwright-` followed by the cluster name, cut to 63
+characters and to no trailing hyphen, so it is deterministic and names nothing
+secret. A name that does not resolve, that resolves elsewhere, or that resolves
+to its frozen address and any other fails the block naming each such name, its
+answers and the address it must answer with, and nothing is booted.
 
 **Boot.** Each node is booted in node-name order, through
 [its own substrate's boot operation](substrates.md#identity-and-power-operations):
