@@ -745,5 +745,6 @@ collection tests
 and `test_a_lifecycle_playbook_dies_with_its_killed_supervisor`.
 
 **Constraints left behind:** backlog S15 (rest), S16 (rest), S17 (rest), the
-S14 edges recorded in C28 and the per-object reasons in F7; the M4a operator
-gate still waits for X16.
+S14 edges recorded in C28 and the per-object reasons in F7; S26, which X15's
+review found: the identity does not survive the installer's install-complete
+rewrite of the kubeconfig; the M4a operator gate still waits for X16.
