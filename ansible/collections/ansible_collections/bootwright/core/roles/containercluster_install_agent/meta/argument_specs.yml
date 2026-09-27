@@ -9,6 +9,16 @@ argument_specs:
           budgets:
             type: dict
             required: true
+            options:
+              bootSeconds:
+                type: int
+                required: true
+              bootstrapSeconds:
+                type: int
+                required: true
+              installSeconds:
+                type: int
+                required: true
           endpoints:
             type: list
             elements: dict
@@ -35,7 +45,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [cluster-install-agent-v1]
+            choices: [cluster-install-agent-v2]
           workRoot:
             type: str
             required: true

@@ -1,9 +1,11 @@
 package agentinstall
 
 import (
+	"slices"
+	"time"
+
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
-	"slices"
 )
 
 // Identity names the block, context and cluster one request belongs to.
@@ -83,7 +85,10 @@ type Endpoint struct {
 // secret value: the pull secret, the cluster key and each trust bundle are
 // named as declarations and reach the adapter at execution.
 type MediaRequest struct {
-	AgentConfig     map[string]any       `json:"agentConfig"`
+	AgentConfig map[string]any `json:"agentConfig"`
+	// Budgets bound the build in wall-clock time, and the run's deadline is
+	// derived from them.
+	Budgets         MediaBudgets         `json:"budgets"`
 	Identity        Identity             `json:"identity"`
 	Image           Publication          `json:"image"`
 	InstallConfig   map[string]any       `json:"installConfig"`
@@ -99,9 +104,9 @@ type MediaRequest struct {
 
 // InstallRequest is the complete frozen intent for installing one cluster from
 // that image: the nodes to boot, the names the controller must resolve first,
-// and the budgets each wait is bounded by.
+// and the budgets each phase is bounded by.
 type InstallRequest struct {
-	Budgets   Budgets              `json:"budgets"`
+	Budgets   InstallBudgets       `json:"budgets"`
 	Endpoints []Endpoint           `json:"endpoints"`
 	Identity  Identity             `json:"identity"`
 	Image     Publication          `json:"image"`
@@ -113,20 +118,51 @@ type InstallRequest struct {
 	WorkRoot  string               `json:"workRoot"`
 }
 
-// Budgets bound each phase by wall clock. The installer gives up on its own
-// compiled deadlines while the cluster keeps converging, so a budget decides
-// when a new wait may start rather than when the block returns.
-type Budgets struct {
+// MediaBudgets bound the media block's one long phase in wall-clock time: the
+// installer building the image runs under timeout with BuildSeconds, and is
+// stopped once they are spent.
+type MediaBudgets struct {
+	BuildSeconds int `json:"buildSeconds"`
+}
+
+// InstallBudgets bound each phase of the installation in wall-clock time. The
+// boot phase gives every node's boot only what is left of BootSeconds, and each
+// installer wait runs every attempt under timeout with what is left of its own
+// budget, so a phase returns once its budget is spent rather than only ceasing
+// to start new attempts. The installer gives up on its own compiled deadlines
+// while the cluster keeps converging, so a give-up it can resume from is
+// re-invoked while the budget lasts.
+type InstallBudgets struct {
 	BootSeconds      int `json:"bootSeconds"`
 	BootstrapSeconds int `json:"bootstrapSeconds"`
-	BuildSeconds     int `json:"buildSeconds"`
 	InstallSeconds   int `json:"installSeconds"`
 }
 
-// DefaultBudgets are the bounds a cluster installs within unless a later
-// contract admits declaring them.
-func DefaultBudgets() Budgets {
-	return Budgets{BootSeconds: 900, BuildSeconds: 1800, BootstrapSeconds: 5400, InstallSeconds: 5400}
+// mediaBudgets and installBudgets are what every request this build plans
+// freezes, until a later contract admits declaring them.
+var (
+	mediaBudgets   = MediaBudgets{BuildSeconds: 1800}
+	installBudgets = InstallBudgets{BootSeconds: 900, BootstrapSeconds: 5400, InstallSeconds: 5400}
+)
+
+func seconds(count int) time.Duration { return time.Duration(count) * time.Second }
+
+// Deadline bounds every run of this request: the build budget it froze, and
+// the margin for everything else the block does.
+func (r MediaRequest) Deadline() time.Duration {
+	return seconds(r.Budgets.BuildSeconds) + mediaMargin
+}
+
+// Deadline bounds every run of this request: the budgets it froze back to
+// back, and the margin for everything else the block does, which grows with
+// the nodes it reads and releases.
+func (r InstallRequest) Deadline() time.Duration {
+	return installDeadline(r.Budgets, len(r.Nodes))
+}
+
+func installDeadline(budgets InstallBudgets, nodes int) time.Duration {
+	phases := seconds(budgets.BootSeconds) + seconds(budgets.BootstrapSeconds) + seconds(budgets.InstallSeconds)
+	return phases + installMargin + time.Duration(nodes)*nodeMargin
 }
 
 func (r MediaRequest) Canonical() ([]byte, error) {

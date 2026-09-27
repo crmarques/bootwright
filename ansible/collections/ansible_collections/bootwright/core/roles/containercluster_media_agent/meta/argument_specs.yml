@@ -9,6 +9,13 @@ argument_specs:
           agentConfig:
             type: dict
             required: true
+          budgets:
+            type: dict
+            required: true
+            options:
+              buildSeconds:
+                type: int
+                required: true
           identity:
             type: dict
             required: true
@@ -40,7 +47,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [cluster-media-agent-v1]
+            choices: [cluster-media-agent-v2]
           workRoot:
             type: str
             required: true

@@ -1,56 +1,71 @@
 ---
-# One installer wait, bounded by wall clock rather than by attempt count. The
+# One installer wait, bounded by its phase's budget in wall-clock time. The
 # installer gives up on its own compiled deadline while the cluster keeps
-# converging, so a give-up it can be resumed after is re-invoked until this
-# cluster's own budget is spent. The budget bounds when a new wait may start,
-# not when this task returns.
-- name: Set the deadline this wait may start another attempt before
+# converging, so a give-up it can be resumed after is re-invoked while the
+# budget lasts. Every attempt runs under timeout with only what the budget has
+# left when that attempt starts, so the wait returns within its budget and one
+# kill-after grace, and an attempt the budget stopped is told apart from the
+# installer's own give-up.
+#
+# The attempts are a looped include rather than an until loop: ansible-core
+# templates a task's arguments once, before its first attempt, and retries it
+# with those same arguments (executor/task_executor.py, post_validate before
+# the attempt loop), so every retry would run under the time the first one was
+# given. A looped include expands every iteration before the first runs, so
+# each iteration gates itself on what the one before it recorded rather than
+# on a condition of the include.
+- name: Set the moment this wait's budget is spent
   ansible.builtin.set_fact:
     containercluster_install_agent_deadline: >-
       {{ (now(utc=true).timestamp() | int) + (containercluster_install_agent_budget | int) }}
+    containercluster_install_agent_waiting: true
+    containercluster_install_agent_wait:
+      rc: null
+      stderr: ''
+    containercluster_install_agent_stalled: false
   changed_when: false
 
-- name: Wait for the installer to report this milestone
-  ansible.builtin.command:
-    argv:
-      - '{{ containercluster_install_agent_installer }}'
-      - agent
-      - wait-for
-      - '{{ containercluster_install_agent_milestone }}'
-      - --dir
-      - '{{ containercluster_install_agent_work }}'
-      - --log-level
-      - info
-  register: containercluster_install_agent_wait
-  until: >-
-    containercluster_install_agent_wait.rc == 0
-    or (containercluster_install_agent_wait.stderr | default('')
-        is search(containercluster_install_agent_host_error_pattern))
-    or not (containercluster_install_agent_wait.stderr | default('')
-            is search(containercluster_install_agent_resumable_pattern))
-    or (now(utc=true).timestamp() | int) >= (containercluster_install_agent_deadline | int)
-  retries: '{{ containercluster_install_agent_wait_retries }}'
-  delay: '{{ containercluster_install_agent_wait_delay }}'
-  changed_when: containercluster_install_agent_wait.rc == 0
-  failed_when: false
+- name: Wait for the installer to report this milestone while the budget lasts
+  ansible.builtin.include_tasks: wait_attempt.yml
+  loop: '{{ range((containercluster_install_agent_wait_retries | int) + 1) | list }}'
+  loop_control:
+    loop_var: containercluster_install_agent_attempt
+    label: attempt {{ containercluster_install_agent_attempt + 1 }}
 
 # The classification leads the failure rather than trailing it, because a run
 # tree keeps only the beginning of a message. The host-error class is checked
 # first: the same output carries both it and the installer's own timeout, and
-# only one of them means the cluster stopped installing.
+# only one of them means the cluster stopped installing. A stall comes next,
+# whether the last attempt reported it or it was the installer's last give-up
+# before the budget stopped the attempt re-invoked after it: that attempt
+# proved nothing new, so the stall stays what the wait diagnoses. An
+# attempt the budget stopped, or none at all because nothing of the budget was
+# left, comes after it, before the installer's own timeout, which such an
+# attempt never reached.
 - name: Report why this milestone was never reached
+  vars:
+    containercluster_install_agent_stopped: >-
+      {{ containercluster_install_agent_wait.rc is none
+         or containercluster_install_agent_wait.rc in containercluster_install_agent_budget_spent_codes }}
+    containercluster_install_agent_stall_seen: >-
+      {{ containercluster_install_agent_stalled | bool
+         or (containercluster_install_agent_wait.stderr | default('')
+             is search(containercluster_install_agent_stalled_pattern)) }}
   ansible.builtin.fail:
     msg: >-
       {{ containercluster_install_agent_host_error_hint
          if (containercluster_install_agent_wait.stderr | default('')
              is search(containercluster_install_agent_host_error_pattern))
-         else (containercluster_install_agent_stalled_hint
-               if (containercluster_install_agent_wait.stderr | default('')
-                   is search(containercluster_install_agent_stalled_pattern))
-               else (containercluster_install_agent_timeout_hint
-                     if (containercluster_install_agent_wait.stderr | default('')
-                         is search(containercluster_install_agent_timeout_pattern))
-                     else containercluster_install_agent_unclassified_hint)) }}
+         else ((containercluster_install_agent_stalled_hint
+                ~ (' ' ~ containercluster_install_agent_stopped_after_stall_note
+                   if containercluster_install_agent_stopped | bool else ''))
+               if containercluster_install_agent_stall_seen | bool
+               else (containercluster_install_agent_budget_spent_hint
+                     if containercluster_install_agent_stopped | bool
+                     else (containercluster_install_agent_timeout_hint
+                           if (containercluster_install_agent_wait.stderr | default('')
+                               is search(containercluster_install_agent_timeout_pattern))
+                           else containercluster_install_agent_unclassified_hint))) }}
       The installer did not reach {{ containercluster_install_agent_milestone }} for
       {{ bootwright_cluster_install_request.identity.cluster }}.
   when: containercluster_install_agent_wait.rc != 0

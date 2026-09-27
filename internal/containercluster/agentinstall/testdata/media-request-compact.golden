@@ -171,6 +171,9 @@
     },
     "rendezvousIP": "198.51.100.31"
   },
+  "budgets": {
+    "buildSeconds": 1800
+  },
   "identity": {
     "block": "cluster-media-ocp",
     "cluster": "ocp",
@@ -241,6 +244,6 @@
     "kind": "openshift-install",
     "version": "4.21.15"
   },
-  "version": "cluster-media-agent-v1",
+  "version": "cluster-media-agent-v2",
   "workRoot": "/var/lib/bootwright-clusters/lab/ocp"
 }

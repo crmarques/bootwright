@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
+	"time"
 )
 
 // Kind is the API kind these capabilities realize.
@@ -20,8 +21,31 @@ const (
 )
 
 const (
-	mediaRequestVersion   = "cluster-media-agent-v1"
-	installRequestVersion = "cluster-install-agent-v1"
+	mediaRequestVersion   = "cluster-media-agent-v2"
+	installRequestVersion = "cluster-install-agent-v2"
+)
+
+// mediaMargin is what a media run's deadline allows beyond its build budget:
+// reading the installer's version, writing its inputs, the build's own
+// kill-after grace, moving the image into the served tree, which is a copy
+// when the work area and the served root are on different filesystems,
+// labelling it, and the one fetch through the listener, which the role bounds
+// at 30 seconds.
+const mediaMargin = 30 * time.Minute
+
+// installMargin is what an installation run's deadline allows beyond its
+// budgets whatever its size: proving name resolution, the inspection, the
+// cluster reads before and after the waits, each request of which oc gives up
+// on after the role's request timeout, each wait's kill-after grace, and
+// Ansible's own time between tasks. nodeMargin is what each node adds beyond
+// the boot budget: the eject its media release polls for, pausing at most two
+// minutes (MEDIA_PROBES times MEDIA_PROBE_DELAY in redfish_control.py), and
+// its controller read in each of the two state reads, each request of which
+// the adapter bounds at 30 seconds (REQUEST_TIMEOUT). A cluster whose deadline
+// would pass the runner's ceiling refuses before registration.
+const (
+	installMargin = 30 * time.Minute
+	nodeMargin    = 5 * time.Minute
 )
 
 // consumerPrefix is the subtree these blocks own beneath a managed artifact

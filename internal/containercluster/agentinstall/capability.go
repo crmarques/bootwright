@@ -254,9 +254,11 @@ func (c MediaCapability) run(ctx context.Context, execution lifecycle.Execution,
 			})
 		}
 	}
+	// The deadline follows the budgets this request froze, not this build's.
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: MediaImplementation, Operation: operation, Variable: mediaVariablePrefix,
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
+		Deadline: request.Deadline(),
 	}))
 }
 

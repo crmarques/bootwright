@@ -217,14 +217,57 @@ and a virtual node boots without it; tracked as
 completion, through the same installer that built the image. Each wait is a
 read-only observation that starts nothing: the installer gives up on its own
 compiled deadlines while the cluster keeps converging, so a give-up it can
-resume from is re-invoked until this block's own wall-clock budget is spent,
-and the budget bounds when a new wait may start rather than when the block
-returns. A give-up that proves the cluster stopped installing — a declared host
-the assisted service moved into error — is never re-invoked, because the next
+resume from is re-invoked while that wait's own budget lasts, 30 seconds after
+the last and at most 40 times. Every attempt runs under `timeout` with only
+what the budget has left when that attempt starts, so the wait returns within
+its budget and a 30-second grace: `timeout` sends the installer SIGTERM once
+the budget is spent, and kills it with its process group once the grace has
+passed too. An attempt the budget stopped, which exits 124, or 137 as a shell
+reports the kill after the grace and -9 as the adapter does, fails the block as
+the budget spent, with a message of its own that no give-up of the installer's
+shares. It is resumable: the cluster keeps converging after its wait is
+stopped, so repeating the apply watches it again under a fresh budget. A
+give-up that proves the cluster stopped installing — a declared host the
+assisted service moved into error — is never re-invoked, because the next
 window would watch a state that cannot change; it fails the block naming the
-host and what that state means. A give-up that proves a declared node never
-registered fails the block naming that node, because the cluster waits for
-exactly the nodes the install configuration declares.
+host and what that state means, even when the budget stopped that attempt. A
+give-up that proves a declared node never registered fails the block naming
+that node, because the cluster waits for exactly the nodes the install
+configuration declares. It does so even when the budget stops the attempt
+re-invoked after that give-up: an attempt the budget stopped proves nothing
+new, so when the last give-up the installer itself reported in that wait was a
+stall, the block fails as that stall and adds that the budget stopped the
+attempt after it. A wait is thus diagnosed as a host in error first, then as a
+stall, then as the budget spent, and only then as the installer's own timeout.
+
+**Budgets.** Each long phase of a cluster's two blocks is bounded in wall-clock
+time by a budget its frozen request carries, never by a value the adapter
+chooses: the media request's build budget of 1,800 seconds, and the install
+request's boot budget of 900 seconds and its bootstrap and installation wait
+budgets of 5,400 seconds each. The image build runs under `timeout` with the
+build budget and the same grace; a build the budget stopped fails the media
+block as the budget spent, publishes nothing, and is resumable, because the
+next apply discards the work area and builds again. The boot budget bounds
+booting every node together: its deadline is taken once, before the first
+node, and each boot step, the substrate's own included, runs under
+ansible-core's task timeout with only what is left of it, so a node already
+running from this cluster's image, which the boot leaves alone, takes none of
+it. A step still running at the deadline is stopped there, and a node reached
+after it is not booted; either fails the block as the boot budget spent, and a
+repeated apply boots only the nodes not already running from the image. The
+task timeout ends the step but not the management-controller request the step
+made, which ends within the adapter's own fixed bounds. Every read of the
+cluster through its API passes oc's `--request-timeout` of 30 seconds, so each
+request oc makes gives up rather than waiting on an API that accepted the
+connection and never answers. Every run of either block is bounded by a
+[deadline](architecture.md#the-adapter-result-protocol) derived from the
+budgets its request froze: the build budget plus 30 minutes for the media
+block, and for the installation its three budgets back to back plus 30 minutes
+and 5 minutes for each node it reads and releases, which is 3 hours 50
+minutes for a single node. A cluster whose installation deadline would pass
+the runner's 6-hour ceiling, more than 27 nodes with these budgets, refuses
+before registration, naming that deadline and how many nodes fit, rather than
+being cut short part way through its installation.
 
 **The access it produces.** The installer writes the cluster administrator
 kubeconfig and the initial administrator password into the work area when it

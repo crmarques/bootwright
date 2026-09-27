@@ -25,8 +25,22 @@ containercluster_install_agent_resumable_pattern: >-
   }}|{{ containercluster_install_agent_cluster_init_pattern }}
 containercluster_install_agent_host_error_pattern: >-
   has hosts in error|updated status from [a-z-]+ to error(?![-a-z])
+# A resumable give-up is re-invoked at most this many times, this many seconds
+# apart, while the wait's budget lasts; the budget, not these counts, is what
+# bounds the wait in wall-clock time.
 containercluster_install_agent_wait_delay: 30
 containercluster_install_agent_wait_retries: 40
+# Once a phase's budget is spent, timeout sends the installer SIGTERM, and
+# SIGKILL to its process group this many seconds later if it is still running.
+containercluster_install_agent_kill_grace: 30
+# How an installer wait that its budget stopped exits: 124 is timeout's own
+# status once it sent SIGTERM, and a kill after the grace reaches timeout's own
+# process group too, which a shell reports as 137 (128 + 9) and the command
+# module, reading the process's return code, as -9.
+containercluster_install_agent_budget_spent_codes: [124, 137, -9]
+# Every request oc makes to the cluster API gives up after this long, rather
+# than waiting on an API that accepted the connection and never answers.
+containercluster_install_agent_request_timeout: 30s
 
 containercluster_install_agent_host_error_hint: >-
   the assisted service moved a declared host into error and stopped installing
@@ -39,12 +53,28 @@ containercluster_install_agent_stalled_hint: >-
   It starts only once every declared node reports known, so a node that never
   booted the image, whose declared hardware address is not the one it registers
   with, or whose install disk was rejected holds the cluster there.
+containercluster_install_agent_stopped_after_stall_note: >-
+  The installer was re-invoked after that give-up, and this wait's budget of
+  {{ containercluster_install_agent_budget }} seconds stopped that attempt.
 containercluster_install_agent_timeout_hint: >-
-  the installer stopped watching on its own compiled deadline, which this
-  cluster's budget has now also spent. The cluster keeps converging across that
+  the installer stopped watching on its own compiled deadline, and this wait
+  had no budget or attempt left to re-invoke it. The cluster keeps converging across that
   give-up, so the operator conditions reported here are its state at the last
   give-up rather than proof of a failed install; repeat the apply to resume
   watching where this attempt stopped.
+containercluster_install_agent_budget_spent_hint: >-
+  this wait's budget of {{ containercluster_install_agent_budget }} seconds was
+  spent while the installer was still watching, so timeout stopped it: the
+  installer did not give up on its own. The cluster keeps converging after the
+  wait is stopped, so this is no proof of a failed install; repeat the apply to
+  resume watching under a fresh budget.
+containercluster_install_agent_boot_spent_hint: >-
+  the boot phase's budget of
+  {{ bootwright_cluster_install_request.budgets.bootSeconds }} seconds was spent
+  before every node was booted, so the boot was stopped there. A node already
+  booted keeps running from this cluster's image, and a repeated apply leaves it
+  as it is and boots the others; a budget spent again points at a management
+  controller slow to insert the image or to power its machine on.
 containercluster_install_agent_unclassified_hint: >-
   this give-up is not one the installer can be resumed after, so the wait ran
   once and stopped. Read the installer output before repeating the apply.

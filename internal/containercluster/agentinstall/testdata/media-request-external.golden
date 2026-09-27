@@ -171,6 +171,9 @@
     },
     "rendezvousIP": "198.51.100.31"
   },
+  "budgets": {
+    "buildSeconds": 1800
+  },
   "identity": {
     "block": "cluster-media-ocp",
     "cluster": "ocp",
@@ -248,6 +251,6 @@
     "lab-root-ca",
     "corp-proxy-ca"
   ],
-  "version": "cluster-media-agent-v1",
+  "version": "cluster-media-agent-v2",
   "workRoot": "/var/lib/bootwright-clusters/lab/ocp"
 }

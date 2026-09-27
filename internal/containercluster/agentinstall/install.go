@@ -297,9 +297,12 @@ func (c InstallCapability) run(ctx context.Context, execution lifecycle.Executio
 				Secret: node.Controller.CredentialsRef, Variable: "controllerPassword" + nodeVariable(index),
 			})
 	}
+	// The deadline follows the budgets and nodes this request froze, not this
+	// build's.
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: InstallImplementation, Operation: operation, Variable: installVariablePrefix,
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
+		Deadline: request.Deadline(),
 	}))
 }
 

@@ -159,7 +159,7 @@ def test_the_completion_is_read_from_clusterversion_through_the_builds_kubeconfi
                          '{.status.history[0].state}{"\\n"}{.status.history[0].version}']
     assert not [value for value in argv if "insecure" in value or "certificate-authority" in value]
     # The JSONPath carries no template delimiter, so it reaches oc as written.
-    template = read["ansible.builtin.command"]["argv"][-1]
+    template = read["ansible.builtin.command"]["argv"][7]
     assert Templar(loader=LOADER, variables={}).template(template) == template
     assert read["changed_when"] is False
     assert read["failed_when"] is False
@@ -348,12 +348,22 @@ def boot_skip():
     return one("boot.yml", lambda task: "block" in task)
 
 
+def beneath(block):
+    """Every task a block holds, its nested blocks' included, in order."""
+    for task in block:
+        if "block" in task:
+            yield from beneath(task["block"])
+        else:
+            yield task
+
+
 def test_every_boot_effect_sits_under_the_skip():
     boot = tasks("boot.yml")
     skip = boot_skip()
     assert boot[-1] == skip
     assert all("ansible.builtin.assert" in task for task in boot[:-1])
-    inside = skip["block"]
+    inside = [task for task in beneath(skip["block"])
+              if "bootwright.core.redfish_boot" in task or "ansible.builtin.include_role" in task]
     assert [task.get("bootwright.core.redfish_boot", {}).get("operation") for task in inside] == [
         "insert", None, None]
     assert [(task.get("ansible.builtin.include_role") or {}).get("name") for task in inside] == [
