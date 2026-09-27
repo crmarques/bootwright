@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "id": "op-cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+  "verb": "destroy",
+  "context": "example",
+  "revision": "rev-efefefefefefefefefefefefefefefef",
+  "inputDigest": "1111111111111111111111111111111111111111111111111111111111111111",
+  "planDigest": "c67839a397882e889406c3da9aad2253f948040d5504a0d008d6c4950f138b7a",
+  "automationDigest": "2222222222222222222222222222222222222222222222222222222222222222",
+  "executable": {
+    "version": "devel",
+    "commit": "abcdef1"
+  },
+  "source": "op-abababababababababababababababab",
+  "bindings": [
+    "bind-cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+  ],
+  "state": "running",
+  "logFault": false,
+  "created": "2026-09-11T12:00:00Z",
+  "updated": "2026-09-11T12:00:00Z"
+}

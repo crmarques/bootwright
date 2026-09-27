@@ -1,0 +1,4 @@
+{"time":"2026-09-11T12:00:03Z","event":"opened"}
+{"time":"2026-09-11T12:00:04Z","event":"group","group":"start-service","detail":"changed"}
+{"time":"2026-09-11T12:00:05Z","event":"outcome","block":"server-lab","detail":"changed"}
+{"time":"2026-09-11T12:00:06Z","event":"group","block":"server-lab","group":"start-service","detail":"changed"}

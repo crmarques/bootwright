@@ -1,0 +1,8 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Context
+metadata:
+  name: "lab"
+
+spec:
+  secretStore:
+    type: "local-keyring"

@@ -1,0 +1,25 @@
+{
+  "formatVersion": 1,
+  "hosts": [
+    {
+      "machine": "node-01",
+      "address": "192.0.2.10",
+      "port": 22,
+      "keyType": "ssh-ed25519",
+      "publicKey": "AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c",
+      "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+      "source": "machine trust",
+      "recorded": "2026-09-16T00:00:00Z"
+    },
+    {
+      "machine": "node-02",
+      "address": "192.0.2.11",
+      "port": 2222,
+      "keyType": "ssh-ed25519",
+      "publicKey": "AAAAC3NzaC1lZDI1NTE5AAAAIIE5dw6ofRdfVqNUZsNMfszLjYqRtO43ol32D1uPybOU",
+      "fingerprint": "SHA256:4A9jyZBOhnKZvcGQ6TRFbf5Gymb41AfYvYaVmWHD+G4",
+      "source": "first use",
+      "recorded": "2026-09-17T08:30:00Z"
+    }
+  ]
+}

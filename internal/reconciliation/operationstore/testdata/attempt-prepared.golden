@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "block": "server-lab",
+  "number": 1,
+  "resolution": 0,
+  "phase": "running",
+  "outcome": "",
+  "effect": "",
+  "evidence": null,
+  "preparation": {
+    "unit": "absent"
+  },
+  "started": "2026-09-11T12:00:01Z",
+  "updated": "2026-09-11T12:00:02Z"
+}

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "block": "server-lab",
+  "number": 1,
+  "resolution": 0,
+  "phase": "observed",
+  "outcome": "changed",
+  "effect": "completed",
+  "evidence": {
+    "postcondition": true,
+    "unit": "present"
+  },
+  "preparation": {
+    "unit": "absent"
+  },
+  "started": "2026-09-11T12:00:01Z",
+  "updated": "2026-09-11T12:00:03Z"
+}
