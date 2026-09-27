@@ -243,6 +243,8 @@ physical nodes keep running (C9).
 goldens), S19 to S21, S13 and Z2 (digest) of the
 [pre-OpenShift program](milestones/backlog.md#pre-openshift-readiness-program-2026-09).
 Exit gates: each item's exit evidence, `make check`, `make docs-check` and CI.
+T1, S19 to S21 and S13 are implemented; Z2 (digest) is pinned, its attribution
+moved to X22; the review found S26 (X16). Remaining: its pull request.
 
 ## Next ordered outcomes
 
