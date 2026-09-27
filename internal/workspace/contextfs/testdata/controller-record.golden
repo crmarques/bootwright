@@ -9,7 +9,7 @@
   "receipt": {
     "id": "setup-11111111111111111111111111111111",
     "catalogDigest": "ac95e7788338e669db5924cbf862b7474204ae8217d40beec41cfd77a50275e7",
-    "planDigest": "4522f2a0a459cc23cb8051bd41e4dfd4b9f3ba90b8097eadd5ee1a9e57235771",
+    "planDigest": "209a0d3f3d3399d6a70a5d4a47958fb334fa7bcd17c082a9f3dcf3763bdb0df5",
     "context": {
       "name": "",
       "revision": "",
@@ -399,20 +399,46 @@
     },
     "actions": [
       {
-        "id": "baseline-bundle",
+        "id": "execution-bundle",
         "request": {
-          "dependency": "synthetic-python"
+          "catalogDigest": "ac95e7788338e669db5924cbf862b7474204ae8217d40beec41cfd77a50275e7",
+          "readyBefore": false
         },
         "phase": "observed",
-        "outcome": "unchanged",
+        "outcome": "changed",
         "evidence": {
-          "ready": true
+          "postcondition": "verified"
+        }
+      },
+      {
+        "id": "container-runtime",
+        "request": {
+          "readyBefore": false,
+          "version": "1.2.3-1.fc43"
+        },
+        "phase": "observed",
+        "outcome": "changed",
+        "evidence": {
+          "added": [
+            "openssh-clients",
+            "podman"
+          ],
+          "after": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "before": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "planDigest": "d4fb2117f60f111eb4c8e6328d927fd2eb1cda7e15bb94bb6739b37945f7d2e5",
+          "postcondition": true,
+          "request": "ac95e7788338e669db5924cbf862b7474204ae8217d40beec41cfd77a50275e7",
+          "tools": []
         },
         "preparation": {
           "addedSources": [
-            "synthetic-runtime"
+            "openssh-clients",
+            "podman"
           ],
-          "inventorySHA256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          "afterInventorySHA256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "inventorySHA256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "planDigest": "d4fb2117f60f111eb4c8e6328d927fd2eb1cda7e15bb94bb6739b37945f7d2e5",
+          "transitionsSHA256": "32cb585e9b02af14a2e16d2ab9046c02365c4167cd845c1a102a943dd3da6a75"
         }
       }
     ],

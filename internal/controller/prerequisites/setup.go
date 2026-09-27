@@ -152,7 +152,7 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 			if area == nil {
 				return failure("controller.unknown", "native recovery execution bundle is missing", "restore the exact retained bundle")
 			}
-			preparation, err := nativePreparation(action.Preparation, current.definition)
+			preparation, err := ReadNativePreparation(action.Preparation, current.definition)
 			if err != nil {
 				return err
 			}
@@ -216,8 +216,8 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 					if err == nil {
 						var result ActionResult
 						result, err = s.runtime.Prepare(ctx, area, current.platform, current.definition, current.route(), func(call context.Context, preparation NativePreparation) error {
-							encoded := preparationObject(preparation)
-							if _, err := nativePreparation(encoded, current.definition); err != nil {
+							encoded := EncodeNativePreparation(preparation)
+							if _, err := ReadNativePreparation(encoded, current.definition); err != nil {
 								return err
 							}
 							if len(action.Preparation) != 0 && !bytes.Equal(action.Preparation, encoded) {
@@ -303,7 +303,12 @@ func publish(ctx context.Context, tx StorageTransaction, state HostState) error 
 	return nil
 }
 
-func nativePreparation(data []byte, definition Definition) (NativePreparation, error) {
+// ReadNativePreparation admits a container-runtime action's before-state only
+// when its bytes are exactly what EncodeNativePreparation writes, its added
+// sources belong to definition, and its native fields match definition's
+// native plan or, without one, are absent. Setup reads each preparation back
+// this way before retaining it and again before recovering from it.
+func ReadNativePreparation(data []byte, definition Definition) (NativePreparation, error) {
 	var preparation NativePreparation
 	invalid := func() (NativePreparation, error) {
 		return NativePreparation{}, failure("controller.unknown", "native preparation evidence is incomplete or incompatible", "restore the exact native setup evidence before continuing")
@@ -330,14 +335,16 @@ func nativePreparation(data []byte, definition Definition) (NativePreparation, e
 	} else if preparation.PlanDigest != "" || preparation.AfterInventorySHA256 != "" || preparation.TransitionsSHA256 != "" {
 		return invalid()
 	}
-	encoded := preparationObject(preparation)
+	encoded := EncodeNativePreparation(preparation)
 	if !bytes.Equal(data, encoded) {
 		return invalid()
 	}
 	return preparation, nil
 }
 
-func preparationObject(preparation NativePreparation) json.RawMessage {
+// EncodeNativePreparation is the canonical object the container-runtime
+// action retains as its preparation, published once while its intent is held.
+func EncodeNativePreparation(preparation NativePreparation) json.RawMessage {
 	value := map[string]any{"inventorySHA256": preparation.InventorySHA256, "addedSources": slices.Clone(preparation.AddedSources)}
 	if preparation.PlanDigest != "" || preparation.AfterInventorySHA256 != "" || preparation.TransitionsSHA256 != "" {
 		value["planDigest"] = preparation.PlanDigest
