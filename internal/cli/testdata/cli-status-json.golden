@@ -24,8 +24,20 @@
       "Files": 14,
       "Objects": 14
     },
-    "clusters": [],
-    "storageClusters": [],
+    "clusters": [
+      {
+        "Name": "ocp-01",
+        "Kind": "ContainerCluster",
+        "Status": "unsupported"
+      }
+    ],
+    "storageClusters": [
+      {
+        "Name": "ceph-01",
+        "Kind": "StorageCluster",
+        "Status": "unsupported"
+      }
+    ],
     "shared": [
       {
         "Kind": "ArtifactServer",

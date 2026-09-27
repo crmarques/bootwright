@@ -257,8 +257,8 @@ func cliGoldens() []cliGolden {
 			Context:         lifecycle.ContextIdentity{Name: "lab", Revision: revision},
 			SetupChecks:     []lifecycle.SetupCheck{{ID: "controller-binding", Status: "ready"}, {ID: "dependency-bundle", Status: "ready"}},
 			Desired:         lifecycle.DesiredSummary{Revision: revision, Environment: "lab-rhel", Files: 14, Objects: 14},
-			Clusters:        []lifecycle.ClusterSummary{},
-			StorageClusters: []lifecycle.ClusterSummary{},
+			Clusters:        []lifecycle.ClusterSummary{{Name: "ocp-01", Kind: "ContainerCluster", Status: "unsupported"}},
+			StorageClusters: []lifecycle.ClusterSummary{{Name: "ceph-01", Kind: "StorageCluster", Status: "unsupported"}},
 			Shared: []lifecycle.ServiceSummary{
 				{Kind: "ArtifactServer", Name: "lab-artifacts", Machine: "controller", Status: "done"},
 				{Kind: "DNSServer", Name: "lab-dns", Machine: "controller", Status: "unsupported"},
@@ -449,7 +449,10 @@ func cliGoldens() []cliGolden {
 		},
 		// Status JSON still carries Go field names in its nested objects, a
 		// deviation specs/cli/output.md records as backlog F5; this golden is
-		// what F5's tagged DTOs will visibly change.
+		// what F5's tagged DTOs will visibly change. Human status departs from
+		// the JSON membership that spec asks it to present, and the text golden
+		// pins both F5 deviations: cluster and storage cluster rows are not
+		// rendered, and only the first of the next steps is shown.
 		{golden: "cli-status", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = status() }},
 		{golden: "cli-status-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = status() }},
 
