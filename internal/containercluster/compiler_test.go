@@ -92,7 +92,7 @@ metadata:
 spec:
   distribution:
     release:
-      version: 4.99.1
+      version: 4.21.15
   install:
     endpoints:
       api:
@@ -225,7 +225,7 @@ func TestContainerSchemaAndAuthoredFailures(t *testing.T) {
 		"derived address as input": strings.Replace(clusterYAML, "      api:\n        source:", "      api:\n        address: 192.0.2.10\n        source:", 1),
 		"mixed node SSH":           strings.Replace(clusterYAML, "  install:\n    endpoints:", "  install:\n    nodeSSH:\n      keyPairRef: cluster-cluster-admin-ssh-key\n      publicKeyRef: cluster-cluster-admin-ssh-key\n    endpoints:", 1),
 		"wrong pull Secret":        strings.Replace(clusterYAML, "  type: dockerConfigJson", "  type: opaque", 1),
-		"unpinned image":           strings.Replace(clusterYAML, "      version: 4.99.1", "      image: quay.io/example/release:latest", 1),
+		"unpinned image":           strings.Replace(clusterYAML, "      version: 4.21.15", "      image: quay.io/example/release:latest", 1),
 		"PCR fields":               strings.Replace(clusterYAML, "  nodes:\n", "  security:\n    diskEncryption:\n      unlock:\n        tpm2:\n          pcrIds: [7]\n  nodes:\n", 1),
 	}
 	for name, content := range cases {
