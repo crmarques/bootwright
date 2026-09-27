@@ -107,7 +107,7 @@ created `0700` because the installer retains inside it the material it was
 given. The attempt writes the frozen input files there, substitutes the bound
 material into them, and invokes the installer once. The installer consumes its
 inputs into its own asset state and writes beside the image the access the
-installation later needs, whose trust anchor is the cluster's
+installation later needs, whose admin client certificate is the cluster's
 [identity](#installation), so the area outlives the attempt that created it, is
 never enumerated in evidence, progress output or a log, and is discarded and
 rebuilt rather than reused whenever the inputs it was built from are not the

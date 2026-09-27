@@ -119,12 +119,13 @@ func decodeMediaEvidence(data []byte, digest string) (MediaEvidence, error) {
 // installed and the release it reports — and nothing secret.
 type InstallEvidence struct {
 	Absent bool `json:"absent"`
-	// Identity is this build's trust anchor: the SHA-256 of the certificate
-	// authority and client certificate in the kubeconfig its installer wrote
-	// with the image. Cluster is that identity when the cluster answers a read
-	// through that kubeconfig, verified and authenticated; a fixed foreign
-	// marker when an API answers but rejects the anchor; and empty when nothing
-	// answers. A foreign answer belongs to another installation.
+	// Identity names this build: a domain-separated SHA-256 of the admin client
+	// certificate in the kubeconfig its installer wrote with the image, which
+	// the installer's later rewrite of that file keeps. Cluster is that
+	// identity when the cluster answers a read through that kubeconfig,
+	// verified and authenticated; a fixed foreign marker when an API answers but
+	// rejects the read; and empty when nothing answers. A foreign answer belongs
+	// to another installation.
 	Cluster string `json:"cluster"`
 	// Completed is the cluster's own report, read through the same kubeconfig,
 	// that its installation finished at the declared release: ClusterVersion's

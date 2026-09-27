@@ -55,12 +55,14 @@ DNS=192.0.2.1
 Domains=~lab.example.test
 EOF
 sudo systemctl restart systemd-resolved
-getent hosts api.sno.lab.example.test
+getent ahosts api.sno.lab.example.test
+getent ahosts bootwright-sno.apps.sno.lab.example.test
 ```
 
-The installation proves those names resolve before it boots anything and fails
-naming each one it cannot resolve, so a missing route costs a refusal rather
-than a failed install.
+Before it boots anything, the installation proves that each cluster name,
+including a name under `*.apps`, answers with the address frozen for it and
+nothing else, and fails naming the name, its answers and the expected address,
+so a missing or wrong route costs a refusal rather than a failed install.
 
 ## The pull secret
 

@@ -55,12 +55,13 @@ type RunRequest struct {
 }
 
 // MaxDeadline is the longest any adapter run may take, whatever deadline its
-// request states. It is about twice the longest deadline this build derives,
-// the managed operating-system installation's 3 hours 5 minutes, so budgets
-// can grow without any run becoming unbounded. An operation runs one block at
-// a time, so this is also the longest one block holds back the rest of its
-// operation; a budget that needs more is one to shorten, not a reason to raise
-// this.
+// request states. The managed operating-system installation derives 3 hours 5
+// minutes and a single-node cluster installation 3 hours 50 minutes; a cluster
+// installation's deadline grows with its nodes, and selection refuses one that
+// would pass this ceiling rather than letting it be clamped. An operation runs
+// one block at a time, so this is also the longest one block holds back the
+// rest of its operation; a budget that needs more is one to shorten, not a
+// reason to raise this.
 const MaxDeadline = 6 * time.Hour
 
 type RunResult struct {
