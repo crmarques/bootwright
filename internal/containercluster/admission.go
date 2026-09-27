@@ -319,9 +319,7 @@ func validateLocal(o api.Object, partial bool) []api.Issue {
 			}
 		}
 	}
-	if !partial && len(nodes) > 0 && !roles["master"] {
-		issues = add(issues, invariant("$.spec.nodes", "a container cluster requires at least one master node"))
-	}
+	issues = add(issues, validateTopology(s, partial)...)
 	if selected := s.Get("security", "diskEncryption", "roles"); selected.Present() && (!partial || s.Has("nodes")) {
 		if selected.Len() == 0 {
 			issues = add(issues, invariant("$.spec.security.diskEncryption.roles", "encryption role selection must select declared nodes"))
@@ -664,11 +662,11 @@ func sourceType(endpoint api.Value) string {
 	return kind
 }
 func releaseChannel(version string) (string, bool) {
-	parts := strings.Split(version, ".")
-	if len(parts) < 2 || !decimal(parts[0]) || !decimal(parts[1]) {
+	minor, ok := releaseMinor(version)
+	if !ok {
 		return "", false
 	}
-	return "stable-" + parts[0] + "." + parts[1], true
+	return "stable-" + minor, true
 }
 func decimal(s string) bool {
 	if s == "" {

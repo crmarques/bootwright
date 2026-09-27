@@ -16,7 +16,7 @@ kind: ContainerCluster
 metadata: {name: trust-cluster}
 spec:
   distribution:
-    release: {version: 4.99.1}
+    release: {version: 4.21.15}
   install:
 `
 

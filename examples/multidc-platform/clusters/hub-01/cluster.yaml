@@ -8,8 +8,8 @@ spec:
     type: openshift
 
     release:
-      version: 4.99.0
-      channel: stable-4.99
+      version: 4.21.15
+      channel: stable-4.21
 
   security:
     fips:

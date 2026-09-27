@@ -1,11 +1,19 @@
 package containercluster
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"go.yaml.in/yaml/v3"
 )
 
 func m(kv ...any) api.Value {
@@ -45,7 +53,7 @@ func fixture(variant string, count int, ipv6 bool) (api.Object, api.Catalog) {
 		machine := obj(api.Machine, name, m("capabilities", api.StringList("openshift-node"), "os", m("provided", false), "substrate", m("providerRef", "provider"), "hardware", m("nics", list(m("name", "eth0", "macAddress", fmt.Sprintf("02:00:00:00:00:%02x", i+1)))), "network", m("inline", m("machineNetwork", list(m("cidr", cidr)), "nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")))), "addresses", list(m("name", "primary", "address", address, "interface", "eth0")))))
 		objects = append(objects, machine)
 		role := "worker"
-		if i == 0 {
+		if i < 3 {
 			role = "master"
 		}
 		nodes = append(nodes, m("name", name, "role", role, "machineRef", name))
@@ -60,14 +68,14 @@ func fixture(variant string, count int, ipv6 bool) (api.Object, api.Catalog) {
 		}
 		return m("address", address, "source", m("type", "external"))
 	}
-	cluster := obj(api.ContainerCluster, "cluster", m("distribution", m("type", "openshift", "release", m("version", "4.99.1")), "install", m("method", "agent", "mode", "connected", "endpoints", m("api", endpoint(apiIP), "ingress", endpoint(ingressIP))), "nodes", list(nodes...)))
+	cluster := obj(api.ContainerCluster, "cluster", m("distribution", m("type", "openshift", "release", m("version", "4.21.15")), "install", m("method", "agent", "mode", "connected", "endpoints", m("api", endpoint(apiIP), "ingress", endpoint(ingressIP))), "nodes", list(nodes...)))
 	return cluster, api.NewCatalog(objects)
 }
 
 func TestPlatformDerivationAndAuthoredExternalPreservation(t *testing.T) {
 	for variant, want := range map[string]string{"baremetal": "baremetal", "libvirt": "baremetal", "vsphere": "vsphere", "kubevirt": "none"} {
 		t.Run(variant, func(t *testing.T) {
-			o, c := fixture(variant, 2, false)
+			o, c := fixture(variant, 4, false)
 			effective, issues := Normalize(o, c)
 			if len(issues) > 0 {
 				t.Fatal(issues)
@@ -85,7 +93,7 @@ func TestPlatformDerivationAndAuthoredExternalPreservation(t *testing.T) {
 			}
 		})
 	}
-	o, c := fixture("kubevirt", 2, false)
+	o, c := fixture("kubevirt", 4, false)
 	external := m("type", "external", "external", m("providerName", "example", "nativeList", list(api.StringValue("untouched")), "threshold", api.NumberValue("1.5")))
 	o = o.WithSpec(o.Spec().WithPath(external, "install", "platform"))
 	effective, _ := Normalize(o, c)
@@ -143,7 +151,7 @@ func TestSingleNodeSourceDerivationAndAuthoredRestrictions(t *testing.T) {
 }
 
 func TestAPIInternalCopiesOnlyAddressAndSource(t *testing.T) {
-	o, c := fixture("vsphere", 2, false)
+	o, c := fixture("vsphere", 4, false)
 	apiEndpoint := o.Spec().Get("install", "endpoints", "api").With("dnsName", api.StringValue("api.example.test")).With("port", api.IntegerValue("6443")).With("scheme", api.StringValue("https")).With("prefixLength", api.IntegerValue("24")).With("interfaceNetworks", api.StringList("192.0.2.7/24"))
 	o = o.WithSpec(o.Spec().WithPath(apiEndpoint, "install", "endpoints", "api"))
 	effective, _ := Normalize(o, c)
@@ -168,7 +176,7 @@ func TestAPIInternalCopiesOnlyAddressAndSource(t *testing.T) {
 }
 
 func TestLoadBalancerSelectionAndVIPCollisions(t *testing.T) {
-	o, c := fixture("vsphere", 2, false)
+	o, c := fixture("vsphere", 4, false)
 	lb := obj(api.LoadBalancer, "lb", m("management", "external", "bindAddresses", list(m("name", "api", "address", "192.0.2.2"), m("name", "ingress", "address", "192.0.2.3"))))
 	c = api.NewCatalog(append(c.Objects(), lb))
 	o = o.WithSpec(o.Spec().WithPath(m("source", m("type", "loadBalancer", "loadBalancerRef", "lb", "bindAddressRef", "api")), "install", "endpoints", "api"))
@@ -231,10 +239,10 @@ func TestNetworkDefaultsAndFamilyConstraints(t *testing.T) {
 }
 
 func TestReleaseCredentialsSecurityAndPlacement(t *testing.T) {
-	o, c := fixture("kubevirt", 2, false)
+	o, c := fixture("kubevirt", 4, false)
 	o = o.WithSpec(o.Spec().WithPath(m("unlock", m("tpm2", m())), "security", "diskEncryption"))
 	effective, _ := Normalize(o, c)
-	if effective.Spec().Get("distribution", "release", "channel").Text() != "stable-4.99" || effective.Spec().Get("install", "pullSecretRef").Text() != "openshift-pull-secret" || effective.Spec().Get("install", "nodeSSH", "keyPairRef").Text() != "cluster-cluster-admin-ssh-key" {
+	if effective.Spec().Get("distribution", "release", "channel").Text() != "stable-4.21" || effective.Spec().Get("install", "pullSecretRef").Text() != "openshift-pull-secret" || effective.Spec().Get("install", "nodeSSH", "keyPairRef").Text() != "cluster-cluster-admin-ssh-key" {
 		t.Fatal("credential/release defaults missing")
 	}
 	if strings.Join(effective.Spec().Get("security", "diskEncryption", "roles").Strings(), ",") != "master,worker" {
@@ -258,7 +266,7 @@ func TestReleaseCredentialsSecurityAndPlacement(t *testing.T) {
 			}
 		})
 	}
-	image := o.WithSpec(o.Spec().WithPath(m("image", "quay.io/example/release:4.99.1"), "distribution", "release"))
+	image := o.WithSpec(o.Spec().WithPath(m("image", "quay.io/example/release:4.21.15"), "distribution", "release"))
 	image, _ = Normalize(image, c)
 	if image.Spec().Has("distribution", "release", "channel") {
 		t.Fatal("image acquired channel")
@@ -290,7 +298,7 @@ func TestKubernetesLabelsAndRepeatedTaints(t *testing.T) {
 }
 
 func TestDisconnectedAndBaremetalArtifactSelections(t *testing.T) {
-	o, c := fixture("baremetal", 2, false)
+	o, c := fixture("baremetal", 4, false)
 	o, _ = Normalize(o, c)
 	if issues := Validate(o, c); !hasField(issues, "$.spec.install.agent.redfishVirtualMedia.artifactServerEndpoint") {
 		t.Fatal(issues)
@@ -336,7 +344,7 @@ func TestDisconnectedAndBaremetalArtifactSelections(t *testing.T) {
 }
 
 func TestMissingPrerequisitesSuppressSecondaryErrors(t *testing.T) {
-	o, _ := fixture("vsphere", 2, false)
+	o, _ := fixture("vsphere", 4, false)
 	o, _ = Normalize(o, api.Catalog{})
 	for _, issue := range Validate(o, api.Catalog{}) {
 		if issue.Field == "$.spec.install.platform" || strings.Contains(issue.Message, "Machine requires") {
@@ -347,6 +355,234 @@ func TestMissingPrerequisitesSuppressSecondaryErrors(t *testing.T) {
 	if issues := ValidatePartial(fragment, api.Catalog{}); len(issues) != 0 {
 		t.Fatal("partial required fields cascaded", issues)
 	}
+}
+
+// roster is a cluster on the fixture's release whose nodes take these roles in
+// order, normalized as admission receives it. Edits apply to the authored
+// object first.
+func roster(variant string, roles []string, edits ...func(api.Value) api.Value) (api.Object, api.Catalog) {
+	o, c := fixture(variant, len(roles), false)
+	nodes := o.Spec().Get("nodes").Items()
+	for i, role := range roles {
+		nodes[i] = nodes[i].With("role", api.StringValue(role))
+	}
+	spec := o.Spec().With("nodes", list(nodes...))
+	for _, edit := range edits {
+		spec = edit(spec)
+	}
+	o, _ = Normalize(o.WithSpec(spec), c)
+	return o, c
+}
+
+func TestTopologyAdmitsOnlyTheControlPlaneCountsItsReleaseAccepts(t *testing.T) {
+	for masters := range 7 {
+		t.Run(fmt.Sprint(masters), func(t *testing.T) {
+			roles := slices.Repeat([]string{"master"}, masters)
+			if masters == 0 {
+				roles = []string{"worker"}
+			}
+			issues := Validate(roster("libvirt", roles))
+			switch masters {
+			case 1, 3, 4, 5:
+				if len(issues) > 0 {
+					t.Fatal(issues)
+				}
+			case 0:
+				if !hasIssue(issues, "$.spec.nodes", "requires at least one master node") {
+					t.Fatal("a cluster without a master admitted", issues)
+				}
+			default:
+				if !hasIssue(issues, "$.spec.nodes", fmt.Sprintf("release 4.21 accepts 1, 3, 4 or 5 master nodes, not %d", masters)) {
+					t.Fatal("a control plane the release refuses admitted", issues)
+				}
+			}
+		})
+	}
+}
+
+func TestTopologyRefusesComputeBesideOneMaster(t *testing.T) {
+	for _, roles := range [][]string{{"master", "worker"}, {"master", "infra"}, {"master", "worker", "infra", "worker"}} {
+		t.Run(strings.Join(roles, ","), func(t *testing.T) {
+			if issues := Validate(roster("libvirt", roles)); !hasIssue(issues, "$.spec.nodes", "a single-master cluster admits no worker or infra node") {
+				t.Fatal("compute beside a single master admitted", issues)
+			}
+		})
+	}
+	if issues := Validate(roster("libvirt", []string{"master", "master", "master", "worker", "infra"})); len(issues) > 0 {
+		t.Fatal("compute beside three masters refused", issues)
+	}
+	imageOnly := func(spec api.Value) api.Value {
+		return spec.WithPath(m("image", "quay.io/example/release:4.21.15"), "distribution", "release")
+	}
+	if issues := Validate(roster("libvirt", []string{"master", "worker"}, imageOnly)); !hasIssue(issues, "$.spec.nodes", "a single-master cluster admits no worker or infra node") {
+		t.Fatal("compute beside a single master admitted for a release pinned by image", issues)
+	}
+}
+
+func TestTopologyRefusesAReleaseTheTableDoesNotQualify(t *testing.T) {
+	for version, minor := range map[string]string{"4.20.3": "4.20", "4.22.0": "4.22", "5.0.1": "5.0", "latest": "latest"} {
+		t.Run(version, func(t *testing.T) {
+			o, c := roster("libvirt", []string{"master", "master"}, func(spec api.Value) api.Value {
+				return spec.WithPath(api.StringValue(version), "distribution", "release", "version")
+			})
+			issues := Validate(o, c)
+			if !hasIssue(issues, "$.spec.distribution.release.version", "the topology table qualifies no release "+minor) {
+				t.Fatal("an unqualified release admitted", issues)
+			}
+			for _, issue := range issues {
+				if strings.Contains(issue.Message, "topology table") && !strings.Contains(issue.Remediation, "qualifies: 4.21") {
+					t.Fatal("the remedy names no qualified release", issue)
+				}
+				if issue.Field == "$.spec.nodes" {
+					t.Fatal("a release with no row judged its control plane", issue)
+				}
+			}
+		})
+	}
+	o, c := roster("kubevirt", []string{"master"}, func(spec api.Value) api.Value {
+		return spec.WithPath(m("image", "quay.io/example/release:4.21.15"), "distribution", "release")
+	})
+	if issues := Validate(o, c); len(issues) > 0 {
+		t.Fatal("a release pinned by image alone refused at admission instead of selection", issues)
+	}
+}
+
+func TestTopologyRefusesInstallerOwnedEndpointsOnAMultiNodePlatformNone(t *testing.T) {
+	masters := []string{"master", "master", "master"}
+	installerOwned := func(spec api.Value) api.Value {
+		for _, slot := range []string{"api", "ingress"} {
+			spec = spec.WithPath(api.StringValue("openshift"), "install", "endpoints", slot, "source", "type")
+		}
+		return spec
+	}
+	authoredNone := func(spec api.Value) api.Value {
+		return spec.WithPath(m("type", "none"), "install", "platform")
+	}
+	for name, o := range map[string]func() (api.Object, api.Catalog){
+		"derived none":  func() (api.Object, api.Catalog) { return roster("kubevirt", masters, installerOwned) },
+		"authored none": func() (api.Object, api.Catalog) { return roster("libvirt", masters, installerOwned, authoredNone) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			issues := Validate(o())
+			for _, slot := range endpointSlots {
+				if !hasIssue(issues, "$.spec.install.endpoints."+slot+".source.type", "platform none installs no endpoint VIPs") {
+					t.Fatal("an installer-owned endpoint admitted without VIPs", slot, issues)
+				}
+			}
+		})
+	}
+	for name, o := range map[string]func() (api.Object, api.Catalog){
+		"derived baremetal": func() (api.Object, api.Catalog) { return roster("libvirt", masters, installerOwned) },
+		"external on none":  func() (api.Object, api.Catalog) { return roster("kubevirt", masters) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			if issues := Validate(o()); len(issues) > 0 {
+				t.Fatal(issues)
+			}
+		})
+	}
+}
+
+// TestEveryExampleReleaseHasATopologyRow makes a release bump in an example
+// review the topology table first.
+func TestEveryExampleReleaseHasATopologyRow(t *testing.T) {
+	clusters := 0
+	err := filepath.WalkDir(filepath.Join("..", "..", "examples"), func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() && (entry.Name() == "wip" || entry.Name() == "secrets") {
+			return fs.SkipDir
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".yaml" {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		decoder := yaml.NewDecoder(bytes.NewReader(data))
+		for {
+			var document struct {
+				Kind string    `yaml:"kind"`
+				Spec yaml.Node `yaml:"spec"`
+			}
+			if err := decoder.Decode(&document); errors.Is(err, io.EOF) {
+				return nil
+			} else if err != nil {
+				return fmt.Errorf("%s: %w", path, err)
+			}
+			if document.Kind != string(api.ContainerCluster) {
+				continue
+			}
+			clusters++
+			var spec struct {
+				Distribution struct{ Release struct{ Version string } }
+			}
+			if err := document.Spec.Decode(&spec); err != nil {
+				return fmt.Errorf("%s: %w", path, err)
+			}
+			version := spec.Distribution.Release.Version
+			if minor, ok := releaseMinor(version); !ok || releaseTopologies[minor].controlPlane == nil {
+				t.Errorf("%s declares release %q, whose minor has no row in releaseTopologies; read its installer branch and add the row first", path, version)
+			}
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clusters == 0 {
+		t.Fatal("no example declares a ContainerCluster")
+	}
+}
+
+// TestTopologyTableMatchesSpec keeps the spec's table and the code's rows one
+// table: each row states its minor, its counts and every upstream source.
+func TestTopologyTableMatchesSpec(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "specs", "api", "container-clusters.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := 0
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "| `") && strings.Contains(line, "openshift/installer/blob/release-") {
+			rows++
+		}
+	}
+	if rows != len(releaseTopologies) {
+		t.Fatalf("the spec lists %d topology rows, the code %d", rows, len(releaseTopologies))
+	}
+	for minor, row := range releaseTopologies {
+		counts := make([]string, len(row.controlPlane))
+		for i, count := range row.controlPlane {
+			counts[i] = fmt.Sprint(count)
+		}
+		prefix := fmt.Sprintf("| `%s` | %s |", minor, strings.Join(counts, ", "))
+		found := false
+		for _, line := range strings.Split(string(data), "\n") {
+			if !strings.HasPrefix(line, prefix) {
+				continue
+			}
+			found = true
+			for _, source := range row.sources {
+				if !strings.Contains(line, "("+source+")") {
+					t.Errorf("the spec row for %s does not cite %s", minor, source)
+				}
+			}
+		}
+		if !found || len(row.sources) == 0 {
+			t.Errorf("the spec has no row %q, or the code row cites no source", prefix)
+		}
+	}
+}
+
+func hasIssue(issues []api.Issue, field, fragment string) bool {
+	for _, issue := range issues {
+		if issue.Field == field && issue.Code == "api.invariant" && strings.Contains(issue.Message, fragment) {
+			return true
+		}
+	}
+	return false
 }
 
 func hasField(issues []api.Issue, field string) bool {

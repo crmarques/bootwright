@@ -59,6 +59,13 @@ spec:
 An authored image wins as the exact release payload. Declaration validity
 claims no renderer support for that release.
 
+The major and minor of `release.version` must have a row in the
+[topology table](#topology); a version whose minor has none, or that names no
+numeric minor, refuses at `spec.distribution.release.version`. A release pinned
+by image alone declares no minor, so only the release-independent topology
+rules apply to it, and [selection](../container-clusters.md#selection-and-refusal)
+refuses it.
+
 ## Install selection
 
 | Field | Type | Required | Default | Rule |
@@ -180,6 +187,13 @@ installation candidates are errors. Single-node clusters reject the
 default `openshift` source for all three slots; `source.type: node` is the
 recommended form so one machine address is not repeated in three places, while
 `external` with a sufficient `dnsName` is also valid.
+
+A multi-node cluster whose effective platform is `none`, authored or derived
+for KubeVirt machines, also rejects the `openshift` source for every slot, at
+its `source.type`: the installer receives no VIPs on that platform, so nothing
+in the cluster would answer the endpoint. An `external` or `loadBalancer`
+source is valid there. Multi-node libvirt and bare-metal machines derive
+`baremetal`, which carries the VIPs.
 
 On a multi-node `baremetal` or `vsphere` platform, all three endpoint slots are
 VIP-bearing. Each therefore resolves an address directly or through an
@@ -314,8 +328,8 @@ a native renderer derives pools and replica counts.
 Normalization composes the node FQDN under
 [Environment domains](environment.md#domains); an authored `fqdn` wins verbatim.
 
-At least one node is a `master`. An `infra` node installs through the native
-worker pool but retains its authoring role for post-install placement intent.
+An `infra` node installs through the native worker pool but retains its
+authoring role for post-install placement intent.
 Desired-state compilation accepts and preserves repeated authored taints. A
 native projection deduplicates by `key` plus `effect`; explicitly authoring the
 standard infra taint is therefore a no-op rather than an error.
@@ -323,6 +337,31 @@ standard infra taint is therefore a no-op rather than an error.
 Every `machineRef` requires capability `openshift-node` and `os.provided: false`.
 Network and root-device input comes only from that Machine. The common
 [graph invariants](../api.md#graph-validation) enforce unique node binding.
+
+### Topology
+
+At least one node is a `master`, and the number of `master` nodes is one the
+declared release's row below accepts. The release's install-config validation
+refuses only zero control-plane replicas; its agent installer narrows that to
+the listed counts. Two install upstream only beside an arbiter pool, which
+[needs a feature gate](https://github.com/openshift/installer/blob/release-4.21/pkg/types/validation/installconfig.go#L138-L144),
+and no node role is an arbiter, so no row accepts two. Whatever the release, a
+cluster with one `master` declares no `worker` or `infra` node, because every
+row's agent installer refuses compute replicas beside a single control-plane
+replica. Each of these refusals is an `api.invariant` at `spec.nodes`. A
+release minor with no row refuses at `spec.distribution.release.version`, as
+[distribution and release](#distribution-and-release) states, with a
+remediation naming the qualified minors.
+
+| Release minor | Master counts | Read from `openshift/installer` |
+| --- | --- | --- |
+| `4.21` | 1, 3, 4, 5 | [agent control plane](https://github.com/openshift/installer/blob/release-4.21/pkg/asset/agent/installconfig.go#L217-L232), [agent single node](https://github.com/openshift/installer/blob/release-4.21/pkg/asset/agent/installconfig.go#L234-L263), [install-config control plane](https://github.com/openshift/installer/blob/release-4.21/pkg/types/validation/installconfig.go#L758-L771) |
+
+The rows are `releaseTopologies` in `internal/containercluster/topology.go`.
+Qualifying a minor means reading its installer branch and adding its row to
+both tables: `TestTopologyTableMatchesSpec` keeps them one, and
+`TestEveryExampleReleaseHasATopologyRow` holds every example to a qualified
+minor, so an example's release bump reviews the table.
 
 ## Cross-object invariants
 

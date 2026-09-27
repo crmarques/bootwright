@@ -118,8 +118,8 @@ func TestActualExampleSelectsTargetToolsFromItsClusters(t *testing.T) {
 	tools, err := controller.SelectTools(state.Effective())
 	want := []controller.ToolRequest{
 		{Kind: "helm", Version: "latest"},
-		{Kind: "openshift-clients", Version: "4.99.0", Compatibility: "openshift"},
-		{Kind: "openshift-install", Version: "4.99.0", Compatibility: "openshift"},
+		{Kind: "openshift-clients", Version: "4.21.15", Compatibility: "openshift"},
+		{Kind: "openshift-install", Version: "4.21.15", Compatibility: "openshift"},
 		{Kind: "virtctl", Version: "latest", Compatibility: "kubevirt"},
 	}
 	if err != nil || !slices.Equal(tools, want) {
