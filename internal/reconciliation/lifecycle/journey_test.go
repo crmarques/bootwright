@@ -252,11 +252,18 @@ type testView struct{ workspace *testWorkspace }
 func (v *testView) Identity() ContextIdentity {
 	return ContextIdentity{Name: testContextName, Revision: v.workspace.revision}
 }
-func (v *testView) Inputs() desiredstate.Sources          { return v.workspace.inputs }
-func (v *testView) Controller() prerequisites.StorageView { return v.workspace.controller }
-func (v *testView) Evidence() []byte                      { return slices.Clone(v.workspace.evidence) }
-func (v *testView) Operations() operationstore.Area       { return v.workspace.area }
-func (v *testView) Runs() operationstore.Area             { return v.workspace.runArea }
+func (v *testView) Inputs() desiredstate.Sources { return v.workspace.inputs }
+
+// Controller mirrors the reservations this workspace holds into the controller
+// record, as the store's controller record carries them.
+func (v *testView) Controller() prerequisites.StorageView {
+	view := v.workspace.controller
+	view.State.Reservations = slices.Clone(v.workspace.reservations)
+	return view
+}
+func (v *testView) Evidence() []byte                { return slices.Clone(v.workspace.evidence) }
+func (v *testView) Operations() operationstore.Area { return v.workspace.area }
+func (v *testView) Runs() operationstore.Area       { return v.workspace.runArea }
 
 func (v *testView) PublishEvidence(_ context.Context, data []byte) error {
 	if err := v.killed("publish evidence"); err != nil {
@@ -582,6 +589,9 @@ type testBinder struct {
 	issued   int
 	material map[string]secrets.Material
 	bindErr  error
+	// releaseErr fails every Release, as a custody store that cannot drop a
+	// binding does, before anything is released.
+	releaseErr error
 	// kill runs first in every Bind and Release, named by the point it would
 	// publish, so a test can stop an invocation there; an error it returns
 	// fails it before anything is bound or released.
@@ -623,6 +633,9 @@ func (b *testBinder) Release(_ context.Context, request custody.BindingRequest) 
 		if err := b.kill("release secret binding"); err != nil {
 			return false, err
 		}
+	}
+	if b.releaseErr != nil {
+		return false, b.releaseErr
 	}
 	b.released = append(b.released, request.BindingID)
 	return true, nil

@@ -36,10 +36,33 @@ reaching a host. Such
 an invocation requires no authorization and no confirmation, because it has no
 consequence to acknowledge, and a token it is given authorizes nothing and
 refuses nothing. Repeating a verb is therefore always safe, which is what lets
-an operator or a script ask whether anything is left to do. A completed apply
+an operator or a script ask whether anything is left to do. A verb settles
+only once its operation's finalization, below, is complete. A completed apply
 whose records hold a block that is not `done` proves no such thing, so an
 `apply` of its unchanged input refuses, as
 [its removal does](#continuation-and-removal), rather than settling.
+
+Before any verb, an operation whose blocks are all `done` but whose record,
+[evidence](#context-mutation-evidence), reservations or Secret bindings do not
+yet say so is finalized first; an invocation interrupted between its last
+outcome and its last write leaves exactly that. The finalization runs under
+the exclusive lock after re-proving the state it was decided from, without
+authorization, presentation or confirmation, because it performs only the
+record, the releases and the projection its records prove: it records the
+operation `done`, then publishes an apply's projection, or releases a
+removal's reservations and then its Secret bindings, its own and its apply's,
+and only then publishes pristine evidence. A running operation is finalized
+only by its own verb, because the other verb decides for itself: a `destroy`
+supersedes an incomplete apply and an `apply` refuses an incomplete destroy. A
+completed operation is finalized under either verb. The verb then decides
+again from what the finalization left and goes on as it would over it, and a
+finalization that leaves another one due refuses `lifecycle.state` rather than
+repeating. An operation holding a block that is not `done` proves no
+completion and is never finalized. When the Secret-binding releases or the
+pristine publication that follow a removal's completion fail, the invocation
+fails `lifecycle.state`, beside any log fault it reports, naming the repeated
+`destroy` that finishes it, and an invocation that completed the removal itself
+still reports it `done`.
 
 Plans remain complete and immutable; later artifact generation cannot append
 blocks or expand the operation. Expansion requires destroy followed by fresh
@@ -52,7 +75,10 @@ Reconciliation owns a closed version-1 mutation record initialized with
 `pending`, `failed`, `unknown` and `applied`; ownership is `none` or `retained`.
 A paused operation records `pending` and `retained`, exactly as a running one
 does, because a pause leaves its [ownership](#continuation-and-removal) in
-place.
+place. A completed removal's evidence becomes `none` and `none` only once its
+reservations and Secret bindings are released, so evidence that is not its
+completed operation's projection marks a [finalization](#lifecycle-unit) that
+did not complete.
 This record establishes only local disposal/update restrictions, not native
 execution, readiness, ownership release or permission to run lifecycle work.
 Lifecycle publication participates in the same context lease and updates this
@@ -209,6 +235,11 @@ synchronized bytes.
 | destroy running | continue that exact destroy |
 | destroy failed | continue that exact destroy, or start a fresh destroy of what it has not removed |
 | destroy unknown | resolve the exact unknown block; start no effect or retry |
+
+Before any row, an operation whose blocks are all `done` is
+[finalized](#lifecycle-unit) first while its record, evidence, reservations or
+Secret bindings do not yet say it completed; a running one only by its own
+verb.
 
 Changed desired state never turns continuation into reconciliation. A
 continuation verifies the operation kind, context identity, frozen-input
@@ -952,7 +983,10 @@ blocks [consume](#plan-and-execution). A token the frozen plan does not require
 is inapplicable and refuses with `lifecycle.authorization` before registration,
 so a habitual authorization cannot pre-authorize a future destructive plan; a
 required token that is not supplied refuses the same way, naming the blocks
-that consume it. An
+that consume it. The [finalization](#lifecycle-unit) of an operation whose
+blocks are all `done` precedes planning, consumes no token and asks no
+confirmation, because it performs only the record, releases and projection its
+records prove. An
 enabled `CustomPlaybook` has no authorization bypass; it refuses under the
 [unrealizable-kind rule](#stages-and-the-pause-boundary).
 
