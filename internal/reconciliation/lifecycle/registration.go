@@ -113,9 +113,11 @@ func (s Service) settle(ctx context.Context, tx Transaction, verb reconciliation
 // controller host or reserves anything, so none of those is ever held under
 // evidence that lets the context be updated or deleted. The claim comes first
 // so that no raise, even one interrupted before it returns, ever lands without
-// moving the claim count an older apply still in flight re-proves. The
-// transition it returns requires that evidence and that claim when it
-// registers.
+// moving the claim count an older apply still in flight re-proves. A claim
+// that fails may have created its directory, and that directory makes every
+// older apply refuse, so the evidence is then this invocation's to give back
+// unless a listing proves the directory absent. The transition it returns
+// requires that evidence and that claim when it registers.
 func (s Service) protect(ctx context.Context, name string, decided transition, record *registering) (transition, error) {
 	protected := decided
 	err := s.workspace.MutateLifecycle(ctx, name, func(tx Transaction) error {
@@ -131,6 +133,8 @@ func (s Service) protect(ctx context.Context, name string, decided transition, r
 			return err
 		}
 		if err := store.Claim(ctx, identity); err != nil {
+			claimed, listed := store.Claimed(recordingContext(ctx))
+			record.raised = listed != nil || slices.Contains(claimed, identity)
 			return err
 		}
 		record.raised = true

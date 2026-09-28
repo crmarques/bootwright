@@ -708,6 +708,125 @@ func TestConcurrentFreshAppliesThatBothFailLeaveNothingRaised(t *testing.T) {
 	}
 }
 
+var errClaimFailed = errors.New("the operation directory could not be created")
+
+// claimFault fails the first creation of one operation directory before it
+// creates anything, as a claim refused part way does, or with interrupt
+// cancels the claim's context first, which the area then refuses as the real
+// one does. Once it has, unlisted also fails the next listing of the operation
+// directories.
+type claimFault struct {
+	mutex     sync.Mutex
+	directory string
+	interrupt context.CancelFunc
+	unlisted  bool
+	fired     bool
+}
+
+type claimFaultArea struct {
+	operationstore.Area
+	fault *claimFault
+}
+
+func (a claimFaultArea) EnsureDirectory(ctx context.Context, target string) error {
+	a.fault.mutex.Lock()
+	failed := !a.fault.fired && target == a.fault.directory
+	a.fault.fired = a.fault.fired || failed
+	a.fault.mutex.Unlock()
+	switch {
+	case failed && a.fault.interrupt != nil:
+		a.fault.interrupt()
+	case failed:
+		return errClaimFailed
+	}
+	return a.Area.EnsureDirectory(ctx, target)
+}
+
+func (a claimFaultArea) Entries(ctx context.Context, target string) ([]operationstore.Entry, error) {
+	a.fault.mutex.Lock()
+	failed := target == "" && a.fault.fired && a.fault.unlisted
+	a.fault.unlisted = a.fault.unlisted && !failed
+	a.fault.mutex.Unlock()
+	if failed {
+		return nil, errors.New("the operation directories cannot be listed")
+	}
+	return a.Area.Entries(ctx, target)
+}
+
+// A fresh apply whose claim failed under the running evidence of an apply in
+// flight may still have created its directory, and every earlier claimant then
+// refuses at its re-proof, so the evidence is the failed apply's to give back
+// unless its directory is provably absent. Nothing is left raised with nothing
+// in flight, and an apply the failed claim provably left alone keeps its
+// evidence and registers.
+func TestAFreshApplyWhoseClaimFailedRestoresTheEvidenceItsDirectoryMayHold(t *testing.T) {
+	ctx := context.Background()
+	first, second := "op-"+strings.Repeat("01", 16), "op-"+strings.Repeat("02", 16)
+	for _, row := range []struct {
+		name, directory string
+		interrupted     bool
+		unlisted        bool
+		registers       bool
+		directories     []string
+	}{
+		{name: "after it created its directory", directory: path.Join(second, "blocks"), directories: []string{first, second}},
+		{name: "before it created anything", directory: second, registers: true, directories: []string{first}},
+		{name: "interrupted after it created its directory", directory: path.Join(second, "blocks"), interrupted: true, directories: []string{first, second}},
+		{name: "interrupted before it created anything", directory: second, interrupted: true, registers: true, directories: []string{first}},
+		{name: "where the directories cannot be listed again", directory: second, unlisted: true, directories: []string{first}},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			h := newHarness(t, "alpha")
+			inner, cancel := context.WithCancel(ctx)
+			t.Cleanup(cancel)
+			fault, want := &claimFault{directory: row.directory, unlisted: row.unlisted}, errClaimFailed
+			if row.interrupted {
+				fault.interrupt, want = cancel, context.Canceled
+			}
+			base := h.service.options.Operations
+			h.service.options.Operations = func(area operationstore.Area) OperationStore {
+				return base(claimFaultArea{Area: area, fault: fault})
+			}
+			start := h.workspace.mutations
+			h.workspace.beforeMutation = func() {
+				if h.workspace.mutations != start+1 {
+					return
+				}
+				h.workspace.beforeMutation = nil
+				if _, err := h.service.Apply(inner, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); !errors.Is(err, want) {
+					t.Fatalf("the apply whose claim failed = %v, want %v", err, want)
+				}
+			}
+			result, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+			fault.mutex.Lock()
+			fired, unlisted := fault.fired, fault.unlisted
+			fault.mutex.Unlock()
+			if !fired || unlisted {
+				t.Fatalf("the claim fault fired %t and still holds a listing fault %t", fired, unlisted)
+			}
+			if _, directories := operations(t, h.workspace); !slices.Equal(directories, row.directories) {
+				t.Fatalf("the applies left directories %v, want %v", directories, row.directories)
+			}
+			if row.registers {
+				if err != nil || result.Receipt.State != "done" || currentOperation(t, h) != first || len(h.binder.released) != 0 {
+					t.Fatalf("the apply = %+v (%v), released %v", result, err, h.binder.released)
+				}
+				if applied := evidenceBytes(t, reconciliation.Apply, reconciliation.OperationDone); !bytes.Equal(h.workspace.evidence, applied) {
+					t.Fatalf("evidence = %q, want %q", h.workspace.evidence, applied)
+				}
+				return
+			}
+			requireContextChanged(t, err, "apply", "it was planned from no operation, and the context now holds no operation with different mutation evidence")
+			requireRefusedRegistration(t, h, "", 0)
+			if !bytes.Equal(h.workspace.evidence, killPristine(t)) || h.binder.issued != 1 || !slices.Equal(h.binder.released, []string{"bind-1"}) ||
+				len(h.workspace.reservations) != 0 {
+				t.Fatalf("both failures left evidence %q and reservations %v, bound %d and released %v",
+					h.workspace.evidence, h.workspace.reservations, h.binder.issued, h.binder.released)
+			}
+		})
+	}
+}
+
 // Collecting bindings is housekeeping, so a custody store whose bindings
 // cannot be listed refuses no transition: the removal completes and releases
 // what its records name, and a destroy over what an interrupted registration
