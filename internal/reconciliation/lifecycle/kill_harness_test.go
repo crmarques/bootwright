@@ -72,21 +72,6 @@ func killLedger() map[string]string {
 		// registered apply under pristine evidence, and its continuation starts
 		// every block without projecting any.
 		"a/publish evidence#1": "S10 (rest)",
-		// A kill between the last block's outcome and the completed record
-		// leaves every block done under a running apply, whose continuation
-		// then refuses lifecycle.stage because nothing is left to start.
-		"a/replace <op>/operation.json#1": "S10 (rest)",
-		"c/replace <op>/operation.json#2": "S10 (rest)",
-		// A kill after the completed record and before the invocation's last
-		// write leaves the operation settled, and repeating its verb settles
-		// without projecting it or releasing the reservations and Secret binding
-		// a completed removal no longer holds.
-		"a/publish evidence#2":       "S10 (rest)",
-		"b/release reservations#1":   "S10 (rest)",
-		"b/publish evidence#2":       "S10 (rest)",
-		"b/release secret binding#1": "S10 (rest)",
-		"c/publish evidence#1":       "S10 (rest)",
-		"e/publish evidence#2":       "S10 (rest)",
 		// A kill after a fresh apply bound its Secrets and before the index names
 		// its operation leaves that binding held by no operation: an apply
 		// retried over it binds another, and a destroy, which has nothing to
@@ -342,7 +327,10 @@ func killCloneWorkspace(w *testWorkspace, live *memoryArea, files map[string][]b
 func killCloneBinder(b *testBinder) *testBinder {
 	material := make(map[string]secrets.Material, len(b.material))
 	maps.Copy(material, b.material)
-	return &testBinder{bound: slices.Clone(b.bound), released: slices.Clone(b.released), issued: b.issued, material: material, bindErr: b.bindErr}
+	return &testBinder{
+		bound: slices.Clone(b.bound), released: slices.Clone(b.released), issued: b.issued, material: material,
+		bindErr: b.bindErr, releaseErr: b.releaseErr,
+	}
 }
 
 var killError = errors.New("killed at a durable write")

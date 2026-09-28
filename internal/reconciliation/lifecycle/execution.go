@@ -37,8 +37,11 @@ func (s Service) Destroy(ctx context.Context, request DestroyRequest) (*Operatio
 // transition is the legal step that has nothing left to do: the context
 // already holds the state its verb would leave it in.
 type transition struct {
-	fresh     bool
-	noop      bool
+	fresh bool
+	noop  bool
+	// finalize marks an operation whose block records prove it complete while
+	// its record, evidence, reservations or Secret bindings do not yet say so.
+	finalize  bool
 	verb      reconciliation.Verb
 	operation operationstore.Operation
 	plan      reconciliation.Plan
@@ -96,15 +99,18 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	if err != nil {
 		return nil, err
 	}
-	var decided transition
-	var identity ContextIdentity
-	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
-		identity = view.Identity()
-		decided, err = s.decide(ctx, view, verb, selection)
-		return err
-	})
+	decided, identity, err := s.decideShared(ctx, name, verb, selection)
 	if err != nil {
 		return nil, err
+	}
+	// An operation its block records already prove complete is finalized
+	// before anything is authorized, presented or confirmed, because doing so
+	// performs no effect: only the record, releases and projection those
+	// records prove. The verb then decides again from what that leaves.
+	if decided.finalize {
+		if decided, identity, err = s.finalizeFirst(ctx, name, verb, selection, decided); err != nil {
+			return nil, err
+		}
 	}
 	// A verb with nothing to do ends here. It registers nothing and performs
 	// no effect, so it needs neither authorization nor confirmation: there is
@@ -128,6 +134,20 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 		}
 	}
 	return s.execute(ctx, name, decided)
+}
+
+// decideShared takes one decision from durable state read under the shared
+// lock, together with the identity of the context it read.
+func (s Service) decideShared(ctx context.Context, name string, verb reconciliation.Verb, selection reconciliation.StageSelection) (transition, ContextIdentity, error) {
+	var decided transition
+	var identity ContextIdentity
+	err := s.workspace.ReadLifecycle(ctx, name, func(view View) error {
+		var err error
+		identity = view.Identity()
+		decided, err = s.decide(ctx, view, verb, selection)
+		return err
+	})
+	return decided, identity, err
 }
 
 // authorize compares the tokens this invocation supplied with the tokens the
@@ -165,7 +185,8 @@ func authorize(plan reconciliation.Plan, authorizations []string) error {
 }
 
 // decide reads durable state and returns the one legal transition. Changed
-// desired state never turns a continuation into a reconciliation.
+// desired state never turns a continuation into a reconciliation. An operation
+// whose finalization is due is marked before any other decision is taken.
 func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.StageSelection) (transition, error) {
 	store := s.store(view)
 	index, err := store.Index(ctx)
@@ -189,6 +210,9 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 	states, err := store.BlockStates(ctx, operation.ID, frozen)
 	if err != nil {
 		return transition{}, err
+	}
+	if marked, err := finalization(ctx, view, store, verb, operation, frozen, states); err != nil || marked.finalize {
+		return marked, err
 	}
 	if verb == reconciliation.Destroy && supersedable(operation) {
 		return s.supersede(ctx, view, store, operation, frozen, states)
@@ -610,15 +634,28 @@ func (s Service) execute(ctx context.Context, name string, decided transition) (
 	}
 	defer clearMaterial(material)
 	var result *OperationResult
+	var completion removalCompletion
+	var unreleased error
 	err = s.workspace.MutateLifecycle(ctx, name, func(tx Transaction) error {
 		result, err = s.run(ctx, tx, decided, binding, material)
+		// The state a completed removal's record left is captured here, after
+		// finish wrote it, because the pristine publication re-proves exactly
+		// that once the releases are done. What it gives back is what its
+		// transition releases and the binding this invocation reopened.
+		if completedRemoval(decided, result) {
+			completion, unreleased = captureRemoval(ctx, s.store(tx), result.Receipt.Operation, joinBindings(slices.Clone(decided.release), binding))
+		}
 		return err
 	})
 	// A completed removal no longer needs the material its apply bound, even
-	// when a log fault it latched makes the invocation report a failure.
-	if decided.verb == reconciliation.Destroy && result != nil && result.Receipt.State == string(reconciliation.OperationDone) {
-		for _, released := range slices.Clone(decided.release) {
-			_, _ = s.binder.Release(ctx, custody.BindingRequest{ContextName: name, BindingID: released})
+	// when a log fault it latched makes the invocation report a failure. Its
+	// receipt stays done whether or not everything it owned was given back.
+	if completedRemoval(decided, result) {
+		if unreleased == nil {
+			unreleased = s.completeRemoval(ctx, name, completion)
+		}
+		if unreleased != nil {
+			err = withCause(err, incompleteRemoval(unreleased))
 		}
 	}
 	if err != nil {

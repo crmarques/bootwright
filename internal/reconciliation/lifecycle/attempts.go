@@ -289,20 +289,15 @@ func (s Service) project(ctx context.Context, tx Transaction, verb reconciliatio
 	return tx.PublishEvidence(ctx, data)
 }
 
-// finish records the operation's terminal state, releases what a completed
-// removal no longer owns, and assembles the result the CLI renders. A log fault
-// this invocation latched is recorded again here, so the operation keeps it
-// even when the latch could not write it.
+// finish records the operation's terminal state, releases the reservations a
+// completed removal no longer owns, and assembles the result the CLI renders. A
+// log fault this invocation latched is recorded again here, so the operation
+// keeps it even when the latch could not write it. A completed removal
+// publishes no evidence here: its pristine evidence follows the release of its
+// Secret bindings, outside this transaction, so evidence that is not yet
+// pristine marks a removal whose finalization did not complete.
 func (s Service) finish(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, boundary, faulted bool, result *OperationResult) (*OperationResult, error) {
-	ordered := make([]reconciliation.BlockState, 0, len(plan.Blocks))
-	for _, block := range plan.Blocks {
-		state := states[block.ID]
-		if state == "" {
-			state = reconciliation.BlockPending
-		}
-		ordered = append(ordered, state)
-	}
-	next, err := reconciliation.NextOperationState(ordered, boundary)
+	next, err := reconciliation.NextOperationState(orderedStates(plan, states), boundary)
 	if err != nil {
 		return result, err
 	}
@@ -318,8 +313,7 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 		if err := tx.ReleaseReservations(ctx); err != nil {
 			return result, err
 		}
-	}
-	if err := s.project(ctx, tx, operation.Verb, next); err != nil {
+	} else if err := s.project(ctx, tx, operation.Verb, next); err != nil {
 		return result, err
 	}
 	result.Blocks = blockResults(plan, states)
