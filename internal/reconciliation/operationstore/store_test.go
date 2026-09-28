@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -233,6 +234,97 @@ func TestStoredPlanMustBeReproducible(t *testing.T) {
 	if _, err := New(area, fixedClock()).ReadPlan(ctx, operation.ID); err == nil {
 		t.Fatal("a plan with an unrecognized verb was accepted")
 	}
+}
+
+// Every read of a frozen plan holds it to the record of its operation, as its
+// registration did, so a plan.json replaced by another valid plan is never
+// continued, removed or reported. The record is read without being remembered,
+// so one replaced since the store last read it still refuses the replacement
+// guarded on that read.
+func TestAFrozenPlanThatIsNotItsOperationsRefuses(t *testing.T) {
+	ctx := context.Background()
+	registered := func(t *testing.T) (*memoryArea, Operation, reconciliation.Plan) {
+		t.Helper()
+		store, area := newStore(t)
+		plan := testPlan(t, "alpha", "bravo")
+		operation := testOperation(t, plan)
+		if _, err := store.Index(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.Register(ctx, operation, plan); err != nil {
+			t.Fatal(err)
+		}
+		return area, operation, plan
+	}
+	write := func(t *testing.T, area *memoryArea, target string, value any, maximum int) []byte {
+		t.Helper()
+		encoded, err := encode(value, maximum)
+		if err != nil {
+			t.Fatal(err)
+		}
+		area.files[target] = encoded
+		return encoded
+	}
+	refused := func(t *testing.T, area *memoryArea, id, message string) {
+		t.Helper()
+		_, err := New(area, fixedClock()).ReadPlan(ctx, id)
+		reported := diagnostics.Of(err)
+		if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != message {
+			t.Fatalf("the read = %+v (%v)", reported, err)
+		}
+	}
+	const disagreement = "the frozen plan is not the plan its operation recorded"
+	t.Run("a valid plan whose digest the record does not carry", func(t *testing.T) {
+		area, operation, _ := registered(t)
+		write(t, area, operation.ID+"/plan.json", testPlan(t, "alpha", "charlie"), MaxPlanBytes)
+		refused(t, area, operation.ID, disagreement)
+	})
+	t.Run("a plan of the other verb whose digest the record carries", func(t *testing.T) {
+		area, operation, plan := registered(t)
+		inverse, err := plan.Inverse()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if operation.PlanDigest, err = inverse.Digest(); err != nil {
+			t.Fatal(err)
+		}
+		write(t, area, operation.ID+"/plan.json", inverse, MaxPlanBytes)
+		write(t, area, operation.ID+"/operation.json", operation, MaxOperationBytes)
+		refused(t, area, operation.ID, disagreement)
+	})
+	t.Run("a plan beside no operation record", func(t *testing.T) {
+		area, operation, _ := registered(t)
+		delete(area.files, operation.ID+"/operation.json")
+		refused(t, area, operation.ID, "the named lifecycle operation has no durable record")
+	})
+	t.Run("the registered plan", func(t *testing.T) {
+		area, operation, plan := registered(t)
+		read, err := New(area, fixedClock()).ReadPlan(ctx, operation.ID)
+		if err != nil || !reflect.DeepEqual(read, plan) {
+			t.Fatalf("the registered plan read back as %+v (%v)", read, err)
+		}
+	})
+	t.Run("a record replaced after it was read", func(t *testing.T) {
+		area, operation, _ := registered(t)
+		store := New(area, fixedClock())
+		read, err := store.ReadOperation(ctx, operation.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		replaced := read
+		replaced.LogFault = true
+		want := write(t, area, operation.ID+"/operation.json", replaced, MaxOperationBytes)
+		if _, err := store.ReadPlan(ctx, operation.ID); err != nil {
+			t.Fatalf("the plan beside a record carrying its digest refused: %v", err)
+		}
+		read.State = reconciliation.OperationFailed
+		if err := store.UpdateOperation(ctx, read); err == nil {
+			t.Fatal("reading the plan adopted a record the store never read")
+		}
+		if !bytes.Equal(area.files[operation.ID+"/operation.json"], want) {
+			t.Fatalf("the replacement overwrote the record: %s", area.files[operation.ID+"/operation.json"])
+		}
+	})
 }
 
 func TestAttemptLifecycleIsDurableAndExclusive(t *testing.T) {

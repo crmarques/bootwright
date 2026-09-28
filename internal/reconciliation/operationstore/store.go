@@ -198,30 +198,45 @@ func (s *Store) ensureOperation(ctx context.Context, id string) error {
 func (s *Store) operationPath(id string) string { return path.Join(id, "operation.json") }
 
 func (s *Store) ReadOperation(ctx context.Context, id string) (Operation, error) {
-	if !reconciliation.ValidOperationID(id) {
-		return Operation{}, recordError("lifecycle operation identity is invalid")
-	}
-	data, found, err := s.area.Read(ctx, s.operationPath(id), MaxOperationBytes)
+	operation, data, err := s.readOperation(ctx, id)
 	if err != nil {
 		return Operation{}, err
-	}
-	if !found {
-		return Operation{}, recordError("the named lifecycle operation has no durable record")
-	}
-	var operation Operation
-	if err := decode(data, MaxOperationBytes, &operation); err != nil {
-		return Operation{}, err
-	}
-	if err := validateOperation(operation); err != nil {
-		return Operation{}, err
-	}
-	if operation.ID != id {
-		return Operation{}, recordError("lifecycle operation record contradicts its location")
 	}
 	s.remember(s.operationPath(id), slices.Clone(data))
 	return operation, nil
 }
 
+// readOperation decodes and validates one operation record without taking its
+// bytes as the expectation a later replacement must find.
+func (s *Store) readOperation(ctx context.Context, id string) (Operation, []byte, error) {
+	if !reconciliation.ValidOperationID(id) {
+		return Operation{}, nil, recordError("lifecycle operation identity is invalid")
+	}
+	data, found, err := s.area.Read(ctx, s.operationPath(id), MaxOperationBytes)
+	if err != nil {
+		return Operation{}, nil, err
+	}
+	if !found {
+		return Operation{}, nil, recordError("the named lifecycle operation has no durable record")
+	}
+	var operation Operation
+	if err := decode(data, MaxOperationBytes, &operation); err != nil {
+		return Operation{}, nil, err
+	}
+	if err := validateOperation(operation); err != nil {
+		return Operation{}, nil, err
+	}
+	if operation.ID != id {
+		return Operation{}, nil, recordError("lifecycle operation record contradicts its location")
+	}
+	return operation, data, nil
+}
+
+// ReadPlan reads an operation's frozen plan and holds it to the record of the
+// same operation, as Register did: a plan whose digest or verb is not the one
+// that record carries refuses, however valid it is. The record is read without
+// being remembered, so a record another writer replaced since this store last
+// read it still refuses the replacement guarded on that earlier read.
 func (s *Store) ReadPlan(ctx context.Context, id string) (reconciliation.Plan, error) {
 	if !reconciliation.ValidOperationID(id) {
 		return reconciliation.Plan{}, recordError("lifecycle operation identity is invalid")
@@ -251,6 +266,13 @@ func (s *Store) ReadPlan(ctx context.Context, id string) (reconciliation.Plan, e
 	rebuiltDigest, err := rebuilt.Digest()
 	if err != nil || stored != rebuiltDigest {
 		return reconciliation.Plan{}, recordError("the frozen plan is not a plan this executable could have produced")
+	}
+	operation, _, err := s.readOperation(ctx, id)
+	if err != nil {
+		return reconciliation.Plan{}, err
+	}
+	if operation.PlanDigest != stored || operation.Verb != plan.Verb {
+		return reconciliation.Plan{}, recordError("the frozen plan is not the plan its operation recorded")
 	}
 	return plan, nil
 }
