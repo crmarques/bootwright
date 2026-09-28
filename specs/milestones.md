@@ -242,8 +242,9 @@ sequence, on explicit request on 2026-09-28.
 **Definition:** Specified. **Delivery:** in progress. Items S27, S12 (rest),
 S10 (rest), S9 (full) and S8 (collector, primitive) with R3 of the
 [pre-OpenShift program](milestones/backlog.md#pre-openshift-readiness-program-2026-09),
-in that order. Exit gates: each item's exit evidence, an empty lifecycle kill
-ledger, `make check`, `make race`, `make docs-check` and CI.
+in that order; S28 and R3 (rest) hold what the owner split out on 2026-09-28.
+Exit gates: each item's exit evidence, an empty lifecycle kill ledger,
+`make check`, `make race`, `make docs-check` and CI.
 
 ## Next ordered outcomes
 
