@@ -268,6 +268,58 @@ func (s *Store) Block(ctx context.Context, id, block string) (BlockRecord, error
 	return s.readBlock(ctx, id, block)
 }
 
+// LostBlockRecords names, in frozen order, each block of a plan that has no
+// block record beside an attempt or resolution record of its own. A start
+// publishes the block record before any attempt record, so such a block lost
+// its record, and it reads back as pending as though it never started. The
+// listing serves a refusal only: it reads no record it finds, and adopts and
+// writes nothing.
+func (s *Store) LostBlockRecords(ctx context.Context, id string, plan reconciliation.Plan) ([]string, error) {
+	lost := []string{}
+	for _, block := range plan.Blocks {
+		_, recorded, err := s.readBlockRecord(ctx, id, block.ID)
+		if err != nil {
+			return nil, err
+		}
+		if recorded {
+			continue
+		}
+		entries, err := s.area.Entries(ctx, path.Join(id, "blocks", block.ID))
+		if err != nil {
+			return nil, err
+		}
+		if slices.ContainsFunc(entries, attemptRecordEntry) {
+			lost = append(lost, block.ID)
+		}
+	}
+	return lost, nil
+}
+
+// attemptRecordEntry reports whether an entry is a file named exactly as an
+// attempt or a resolution record is published, with canonical numbers, so a
+// staged file or any other name is never taken for one.
+func attemptRecordEntry(entry Entry) bool {
+	if entry.Directory {
+		return false
+	}
+	numbers, found := strings.CutPrefix(entry.Name, "attempt-")
+	if !found {
+		return false
+	}
+	if numbers, found = strings.CutSuffix(numbers, ".json"); !found {
+		return false
+	}
+	attempt, resolution, resolved := strings.Cut(numbers, "-resolution-")
+	if _, err := reconciliation.ParseNumber(attempt); err != nil {
+		return false
+	}
+	if !resolved {
+		return true
+	}
+	_, err := reconciliation.ParseNumber(resolution)
+	return err == nil
+}
+
 // Attempt reads one durable attempt record, including the evidence a completed
 // one carries. It never reports a running attempt's absent evidence as content.
 func (s *Store) Attempt(ctx context.Context, id, block string, number int) (Attempt, error) {

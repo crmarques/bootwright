@@ -219,6 +219,7 @@ type OperationStore interface {
 	UpdateOperation(context.Context, operationstore.Operation) error
 	BlockStates(context.Context, string, reconciliation.Plan) (map[string]reconciliation.BlockState, error)
 	Block(context.Context, string, string) (operationstore.BlockRecord, error)
+	LostBlockRecords(context.Context, string, reconciliation.Plan) ([]string, error)
 	Attempt(context.Context, string, string, int) (operationstore.Attempt, error)
 	StartAttempt(context.Context, string, string) (int, error)
 	RecordPreparation(context.Context, string, string, int, json.RawMessage) error

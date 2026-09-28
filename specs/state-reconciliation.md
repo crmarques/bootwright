@@ -28,14 +28,18 @@ can start, and an edited input refuses by naming that removal.
 
 A verb whose work durable state already proves performs none of it and
 succeeds: an `apply` repeated over the unchanged input its completed apply
-froze, and a `destroy` of a context that owns nothing, which is one holding no
-operation or a completed destroy, each report the completed operation and
-`done` without registering an operation, opening a transaction, binding a
-Secret, claiming a reservation or reaching a host. Such
+froze, while every block of that apply's plan is `done`, and a `destroy` of a
+context that owns nothing, which is one holding no operation or a completed
+destroy, each report the completed operation and `done` without registering an
+operation, opening a transaction, binding a Secret, claiming a reservation or
+reaching a host. Such
 an invocation requires no authorization and no confirmation, because it has no
 consequence to acknowledge, and a token it is given authorizes nothing and
 refuses nothing. Repeating a verb is therefore always safe, which is what lets
-an operator or a script ask whether anything is left to do.
+an operator or a script ask whether anything is left to do. A completed apply
+whose records hold a block that is not `done` proves no such thing, so an
+`apply` of its unchanged input refuses, as
+[its removal does](#continuation-and-removal), rather than settling.
 
 Plans remain complete and immutable; later artifact generation cannot append
 blocks or expand the operation. Expansion requires destroy followed by fresh
@@ -154,15 +158,23 @@ contexts/<name>/state/operations/
     logs/
 ```
 
-`index.json` names at most one current operation and the completed operations
-retained for audit. `operation.json` binds the operation to its verb, context
+`index.json` names at most one current operation and nothing else. Every other
+operation directory is kept for audit and never named by the index: a
+completed operation, one a removal superseded, and the unreferenced directory
+an interrupted registration leaves. A later command reads one again only as the
+current operation's `source`, and each counts toward the
+[retained-operation bound](contexts.md#storage-locking-and-publication).
+`operation.json` binds the operation to its verb, context
 identity, input revision and digest, plan digest, selected implementation and
 automation identities, executable identity, secret bindings, durable state and
 log-fault flag. `plan.json` is the immutable frozen plan: every block with its
 description, dependencies, impacts, presentation groups, resolved
 implementation identity, content digest and canonical secret-free request.
 Block records carry the block state and its next attempt number; attempt and
-resolution records carry their request, phase, outcome and bounded evidence. A
+resolution records carry their block, attempt and resolution numbers, phase,
+outcome, effect, bounded evidence and timestamps, and never restate the
+request: the request an attempt or resolution acted on is its block's in
+`plan.json`, which the operation's plan digest names and nothing replaces. A
 running attempt may additionally publish one bounded `preparation` object: the
 before-state its capability observed, recorded durably while the attempt is
 still running and before it is permitted to change the host. It is written once
@@ -193,7 +205,7 @@ synchronized bytes.
 | apply failed | continue that exact apply, or start a fresh destroy of the blocks it started |
 | apply paused | continue that exact apply under any stage selection, or start a fresh destroy of the blocks it started |
 | apply unknown | resolve the exact unknown block, or start a fresh destroy of the blocks it started, which resolves that block first; start no other effect or retry |
-| apply done | start a fresh destroy; an `apply` of the unchanged input settles without effect, and of a changed input refuses |
+| apply done | start a fresh destroy; an `apply` of the unchanged input settles without effect, and of a changed input refuses; both the destroy and that apply refuse while a block of the plan is not `done` |
 | destroy running | continue that exact destroy |
 | destroy failed | continue that exact destroy, or start a fresh destroy of what it has not removed |
 | destroy unknown | resolve the exact unknown block; start no effect or retry |
@@ -685,6 +697,35 @@ with the state its record reads, points at `bootwright status`, and comes
 before the removal binds, probes, registers or releases anything. An incomplete
 apply and a failed removal are not held to this, because blocks that are not
 `done` are legitimate in both.
+
+A removal of an incomplete apply refuses instead where the apply's records
+contradict what it started, with the completed-apply refusal's code, remedy
+and timing. The refusal names the apply and each contradiction, per block in
+frozen plan order and then the apply's own:
+
+- a block that reads `pending` while a block that depends on it directly
+  reads anything else, because a block starts only once every dependency is
+  `done`;
+- a block with no block record beside an attempt or resolution record of its
+  own, because a start publishes a block's record before any attempt record of
+  it, so only a lost record leaves one;
+- an apply recorded `failed` that holds no `failed` block, because an apply
+  records `failed` only while a block is `failed`, and a `failed` block
+  changes only through a retry, which first records the apply `running`.
+
+Each shows the records no longer say what the apply started, and a started
+block whose record was lost reads back as `pending`, which a removal planned
+from them would skip. Records that leave nothing to remove although
+the apply's own state says it started a block answer first, with the refusal
+of records that contradict themselves above. Only a file named exactly as an
+attempt or resolution record is published counts; a staged file and the
+operation logs are never evidence. A block's records are listed only for a
+block without a block record and only to refuse: nothing listed is read,
+adopted or written. An `unknown` apply need not hold an `unknown` block: a
+removal interrupted after resolving that block and before recording the
+apply's new state leaves it `done` or `failed`, and still owned. A lost record
+that leaves none of the three cannot be told from a block that never started,
+and the rule holds whatever executable wrote the records.
 
 A frozen block records what creating it did; removing it is the other half of
 the same request. Each capability therefore reads its own frozen request and
