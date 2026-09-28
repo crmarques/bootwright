@@ -450,6 +450,98 @@ func TestAStartAdoptsNothingButAnInterruptedStart(t *testing.T) {
 	}
 }
 
+// A start publishes a block's record before any attempt of it, so an attempt or
+// resolution record beside no block record proves that record was lost, and
+// nothing else does: a present record, an empty or missing directory, a staged
+// file, a name whose numbers are not canonical or a directory that only carries
+// a record's name proves nothing. The listing names each lost block in frozen
+// order and writes nothing.
+func TestLostBlockRecordsNamesOnlyAbsentRecordsBesideAnAttempt(t *testing.T) {
+	ctx := context.Background()
+	encoded := func(t *testing.T, value any) []byte {
+		t.Helper()
+		data, err := encode(value, MaxAttemptBytes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	pending := BlockRecord{Version: 1, Block: "alpha", State: reconciliation.BlockPending}
+	running := Attempt{Version: 1, Block: "alpha", Number: 1, Phase: "running", Started: "2026-09-11T12:00:00Z", Updated: "2026-09-11T12:00:00Z"}
+	resolution := running
+	resolution.Resolution = 1
+	for name, test := range map[string]struct {
+		files       map[string]any
+		directories []string
+		lost        []string
+	}{
+		"an absent record beside an attempt record": {
+			files: map[string]any{"alpha/attempt-000001.json": running},
+			lost:  []string{"alpha"},
+		},
+		"an absent record beside only a resolution record": {
+			files: map[string]any{"alpha/attempt-000001-resolution-000001.json": resolution},
+			lost:  []string{"alpha"},
+		},
+		"a present pending record beside an attempt record": {
+			files: map[string]any{"alpha/state.json": pending, "alpha/attempt-000001.json": running},
+		},
+		"an absent record with an empty directory": {directories: []string{"alpha"}},
+		"an absent record with no directory":       {},
+		"an absent record beside only a staged attempt record": {
+			files: map[string]any{"alpha/attempt-000001.json.tmp": running},
+		},
+		"an absent record beside only a stage file": {
+			files: map[string]any{"alpha/pending-" + strings.Repeat("0f", 16): running},
+		},
+		"an absent record beside a directory named like a record": {
+			directories: []string{"alpha/attempt-000001.json"},
+		},
+		"an absent record beside only attempt names without a canonical number": {
+			files: map[string]any{"alpha/attempt-1.json": running, "alpha/attempt-000000.json": running},
+		},
+		"an absent record beside only a resolution name without a canonical number": {
+			files: map[string]any{"alpha/attempt-000001-resolution-1.json": resolution},
+		},
+		"each lost record in frozen order": {
+			files: map[string]any{
+				"alpha/attempt-000001.json": running, "bravo/state.json": BlockRecord{Version: 1, Block: "bravo", State: reconciliation.BlockPending},
+				"bravo/attempt-000001.json": running, "charlie/attempt-000002.json": running,
+			},
+			lost: []string{"alpha", "charlie"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store, area := newStore(t)
+			plan := testPlan(t, "alpha", "bravo", "charlie")
+			operation := testOperation(t, plan)
+			if _, err := store.Index(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.Register(ctx, operation, plan); err != nil {
+				t.Fatal(err)
+			}
+			for target, value := range test.files {
+				area.files[operation.ID+"/blocks/"+target] = encoded(t, value)
+			}
+			for _, directory := range test.directories {
+				area.directories[operation.ID+"/blocks/"+directory] = true
+			}
+			snapshot := maps.Clone(area.files)
+			lost, err := New(area, fixedClock()).LostBlockRecords(ctx, operation.ID, plan)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(lost, test.lost) {
+				t.Fatalf("lost block records = %v, want %v", lost, test.lost)
+			}
+			if !maps.EqualFunc(area.files, snapshot, bytes.Equal) {
+				t.Fatal("listing lost block records changed a record")
+			}
+		})
+	}
+}
+
 func TestResolutionNumbersNeverReuseAPath(t *testing.T) {
 	ctx := context.Background()
 	store, area := newStore(t)

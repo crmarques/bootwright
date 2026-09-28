@@ -216,12 +216,7 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 	}
 	if operation.Verb == reconciliation.Apply {
 		if verb == reconciliation.Apply {
-			if unchangedInput(view, operation) {
-				return transition{noop: true, verb: verb, operation: operation, plan: frozen, states: states}, nil
-			}
-			return transition{}, failure("lifecycle.state",
-				"the desired state changed after this apply completed",
-				"destroy what it owns before applying the changed input")
+			return settleApply(view, operation, frozen, states)
 		}
 		owned, err := completedOwnership(operation, frozen, states)
 		if err != nil {
@@ -253,6 +248,37 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 // binds, probes, registers or releases anything. An incomplete apply and a
 // failed removal legitimately hold blocks that are not done and never come here.
 func completedOwnership(operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (reconciliation.Plan, error) {
+	if unfinished := unfinishedBlocks(frozen, states); len(unfinished) != 0 {
+		return reconciliation.Plan{}, failure("lifecycle.state",
+			"the completed apply "+operation.ID+" records no block completion for these blocks, and a removal that skipped one would leave its effect in place: "+strings.Join(unfinished, ", "),
+			"review its durable state with bootwright status")
+	}
+	return reconciliation.OwnedSubset(frozen, states), nil
+}
+
+// settleApply is an apply over a completed apply. A changed input refuses by
+// naming the removal it needs. The unchanged input settles only while every
+// block of the frozen plan is done, because the settled verb reports that
+// completion: a block whose record reads anything else, a lost one included,
+// contradicts it, and nothing then proves the input applied.
+func settleApply(view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (transition, error) {
+	if !unchangedInput(view, operation) {
+		return transition{}, failure("lifecycle.state",
+			"the desired state changed after this apply completed",
+			"destroy what it owns before applying the changed input")
+	}
+	if unfinished := unfinishedBlocks(frozen, states); len(unfinished) != 0 {
+		return transition{}, failure("lifecycle.state",
+			"the completed apply "+operation.ID+" records no block completion for these blocks, so this input cannot be proved applied: "+strings.Join(unfinished, ", "),
+			"review its durable state with bootwright status")
+	}
+	return transition{noop: true, verb: reconciliation.Apply, operation: operation, plan: frozen, states: states}, nil
+}
+
+// unfinishedBlocks names each block of a frozen plan whose record reads
+// anything but done, with the state it reads, in frozen order. A lost record
+// reads as pending.
+func unfinishedBlocks(frozen reconciliation.Plan, states map[string]reconciliation.BlockState) []string {
 	unfinished := []string{}
 	for _, block := range frozen.Blocks {
 		state := states[block.ID]
@@ -264,12 +290,7 @@ func completedOwnership(operation operationstore.Operation, frozen reconciliatio
 		}
 		unfinished = append(unfinished, block.ID+" ("+string(state)+")")
 	}
-	if len(unfinished) != 0 {
-		return reconciliation.Plan{}, failure("lifecycle.state",
-			"the completed apply "+operation.ID+" records no block completion for these blocks, and a removal that skipped one would leave its effect in place: "+strings.Join(unfinished, ", "),
-			"review its durable state with bootwright status")
-	}
-	return reconciliation.OwnedSubset(frozen, states), nil
+	return unfinished
 }
 
 // unchangedInput reports whether this context still holds exactly the desired
@@ -398,8 +419,16 @@ func mayHaveStartedNothing(operation operationstore.Operation) bool {
 // the blocks an apply started, or the blocks a removal has not yet proved gone.
 func (s Service) supersede(ctx context.Context, view View, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (transition, error) {
 	if operation.Verb == reconciliation.Apply {
+		// An empty set the operation's own state cannot explain is refused by
+		// freshDestroy first, whatever else the records say.
+		owned, startedNothing := reconciliation.OwnedSubset(frozen, states), mayHaveStartedNothing(operation)
+		if len(owned.Blocks) != 0 || startedNothing {
+			if err := refuseContradictions(ctx, store, operation, frozen, states); err != nil {
+				return transition{}, err
+			}
+		}
 		decided, err := s.freshDestroy(ctx, operation.Executable, operation.ID, firstBinding(operation.Bindings),
-			operation.Bindings, reconciliation.OwnedSubset(frozen, states), mayHaveStartedNothing(operation))
+			operation.Bindings, owned, startedNothing)
 		if err != nil {
 			return transition{}, err
 		}
