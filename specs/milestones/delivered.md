@@ -820,3 +820,36 @@ kill), F6 (`::/96` addresses and name-only slots), S6b (rest), F7 (refusal
 reasons, including the deadline ceiling's) and Z2 (digest attribution) in X22.
 Request versions changed (managed OS v4, cluster media and install v2), so a
 machine or marked work area from an earlier build refuses until destroyed.
+
+### X17 — goldens and checkpoint harnesses
+
+**Owner:** every context. Landed on `main` at `ed0e5d5` through pull request 7
+on 2026-09-27, on explicit request.
+
+**Outcome:** byte goldens pin every lifecycle and workspace record, the frozen
+plan, request, input and automation digests and the mutation evidence, each
+read back through its own reader, and
+`.agents/skills/code-implementation/references/go.md` states the golden
+convention (T1, records). Exact goldens taken at the CLI Runner pin every
+available command's JSON and text with its exit code and stderr, and each
+example's effective output (T1, CLI). Every contextfs checkpoint is a catalogued
+constant, and a harness refuses, cancels or kills every publication at each one;
+a kill harness interrupts every lifecycle journey at every durable write; and a
+Capability contract suite holds every production binding to its request,
+outcome and evidence kinds (T2). What fails today is kept in exact ledgers that
+only shrink.
+
+**Guard tests:** `TestWorkspaceRecordsMatchTheirGoldens`,
+`TestOperationRecordsMatchTheirGoldens`, `TestPlanDigestsMatchTheirGolden`,
+`TestCommandOutputMatchesItsGoldens`, `TestEveryAvailableCommandHasAGolden`,
+`TestEveryExampleEffectiveStateMatchesItsGolden`,
+`TestAnInterruptedPublicationLeavesAUsableStoreAndItsRetryConverges`,
+`TestEveryCheckpointIsACataloguedConstant`,
+`TestAJourneyKilledAtAnyWriteLeavesAUsableStoreAndConvergesOnRetry`,
+`TestEveryCapabilityHonoursTheCapabilityContract` and
+`TestEveryBindingJoinsTheCapabilityContractSuite`.
+
+**Constraints left behind:** the ledgers name backlog S8, S10 (rest), S12 (rest)
+and S27, all in X18, and a keyring-initialization stage X18 settles; the goldens
+pin F5's status omissions and secret sequence ordinals as they are; T2's flaky
+reservation test; and three follow-ups recorded in F4 (rest), R4 and R5.
