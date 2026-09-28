@@ -718,10 +718,14 @@ confirms is the plan either outcome produces. Performing one does: a removal
 resolves every unproved effect it would take back, read-only and against the
 frozen request, before it proves quiescence and before it registers anything of
 its own. It records each resolution on the operation it replaces, so what was
-proved survives whether or not the removal then goes on to register. A removal
-that still cannot prove an effect registers nothing and refuses, naming each
-block it could not prove, because an effect no observation resolves says
-nothing about what it owns.
+proved survives whether or not the removal then goes on to register. Before its
+first resolution it records a `failed` apply it replaces in the state that
+apply's blocks give it, as a retry first records its apply `running`, so a
+removal stopped between a resolution and the record of what it proved never
+leaves a `failed` apply beside no block that
+[accounts for it](#continuation-and-removal). A removal that still cannot prove
+an effect registers nothing and refuses, naming each block it could not prove,
+because an effect no observation resolves says nothing about what it owns.
 
 A required-log write failure is also a sticky, durable operation fault: it sets
 the operation record's `logFault` flag, and no later effect or retry starts
@@ -810,9 +814,13 @@ frozen plan order and then the apply's own:
 - a block with no block record beside an attempt or resolution record of its
   own, because a start publishes a block's record before any attempt record of
   it, so only a lost record leaves one;
-- an apply recorded `failed` that holds no `failed` block, because an apply
-  records `failed` only while a block is `failed`, and a `failed` block
-  changes only through a retry, which first records the apply `running`.
+- an apply recorded `failed` that holds no `failed`, `running` or `unknown`
+  block, because an apply records `failed` only once a block failed, a
+  `failed` block changes only through a retry, which first records the apply
+  `running`, and a `running` or `unknown` block changes only through a
+  resolution, before which a continuation records the apply `running` and a
+  removal records it in the state its blocks give it, which is `failed` only
+  while another block is.
 
 Each shows the records no longer say what the apply started, and a started
 block whose record was lost reads back as `pending`, which a removal planned
@@ -822,11 +830,19 @@ of records that contradict themselves above. Only a file named exactly as an
 attempt or resolution record is published counts; a staged file and the
 operation logs are never evidence. A block's records are listed only for a
 block without a block record and only to refuse: nothing listed is read,
-adopted or written. An `unknown` apply need not hold an `unknown` block: a
-removal interrupted after resolving that block and before recording the
-apply's new state leaves it `done` or `failed`, and still owned. A lost record
-that leaves none of the three cannot be told from a block that never started,
-and the rule holds whatever executable wrote the records.
+adopted or written. A `failed` apply need not hold a `failed` block: a retry
+whose start published the block's `running` record and then reported a
+failure leaves the apply `failed` beside that `running` block, which is not a
+contradiction. A `running` or `unknown` block started and its outcome is
+unproved, so the removal resolves it before it registers and counting it skips
+no effect. A removal stopped after resolving that block leaves the apply in the
+state it recorded before the resolution, `running` or `unknown`, rather than
+`failed` beside a block the resolution proved `done`. An `unknown` apply need
+not hold an `unknown` block either: a removal interrupted after resolving that
+block and before recording the apply's new state leaves it `done` or `failed`,
+and still owned. A lost record that leaves none of the three cannot be told
+from a block that never started, and the rule holds whatever executable wrote
+the records.
 
 A frozen block records what creating it did; removing it is the other half of
 the same request. Each capability therefore reads its own frozen request and
