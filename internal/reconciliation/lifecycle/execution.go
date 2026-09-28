@@ -908,12 +908,22 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 	if len(unproved) == 0 {
 		return nil
 	}
+	// A failed apply may hold a running block in place of the failed one it was
+	// retrying, and a resolution may prove that block done. The apply first
+	// takes the state its blocks give it, as a retry first records it running,
+	// so a removal stopped before it records what it resolved never leaves a
+	// failed apply that no block accounts for.
+	if replaced.Verb == reconciliation.Apply && replaced.State == reconciliation.OperationFailed {
+		if err := s.recordFromBlocks(ctx, tx, store, replaced, frozen, states); err != nil {
+			return err
+		}
+	}
 	observed := s
 	reporter := &resolutionProgress{report: s.report, declared: len(unproved)}
 	observed.options.Progress = reporter
 	cause := observed.observe(work, tx, store, approved, logging, replaced, frozen, states, material)
 	logging.close(ctx, log)
-	if err := s.recordResolved(recordingContext(ctx), tx, store, replaced, frozen, states); err != nil {
+	if err := s.recordFromBlocks(recordingContext(ctx), tx, store, replaced, frozen, states); err != nil {
 		return err
 	}
 	// A log fault refuses the removal even when every observation proved its
@@ -1027,11 +1037,12 @@ func contextChanged(verb reconciliation.Verb, planned, current basis) error {
 	return failure("lifecycle.state", message, "repeat bootwright "+string(verb)+" to plan from what the context holds now")
 }
 
-// recordResolved publishes what the resolutions proved about the replaced
-// operation, so its durable state matches its blocks whether or not this
-// removal goes on to register. A later invocation then takes the ordinary road
-// instead of observing the same effects again.
-func (s Service) recordResolved(ctx context.Context, tx Transaction, store OperationStore, replaced operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) error {
+// recordFromBlocks publishes the state the replaced operation's blocks give it.
+// After the resolutions it records what they proved, so its durable state
+// matches its blocks whether or not this removal goes on to register. A later
+// invocation then takes the ordinary road instead of observing the same
+// effects again.
+func (s Service) recordFromBlocks(ctx context.Context, tx Transaction, store OperationStore, replaced operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) error {
 	ordered := make([]reconciliation.BlockState, 0, len(frozen.Blocks))
 	for _, block := range frozen.Blocks {
 		state := states[block.ID]

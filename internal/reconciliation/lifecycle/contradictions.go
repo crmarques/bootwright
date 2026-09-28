@@ -33,10 +33,17 @@ func refuseContradictions(ctx context.Context, store OperationStore, operation o
 // in frozen order and then for the operation: a pending block a direct
 // dependent of which started, since a block starts only once every dependency
 // is done; a block that lost its record beside an attempt of it, since a start
-// publishes the block record first; and a failed apply without a failed block,
-// since an apply records failed only while a block does and a failed block
-// changes only through a retry that first marks the apply running. An unknown
-// apply without an unknown block is not one of them: a removal interrupted
+// publishes the block record first; and a failed apply with no failed, running
+// or unknown block, since an apply records failed only once a block failed, a
+// failed block changes only through a retry that first marks the apply
+// running, and a running or unknown block changes only through a resolution,
+// before which a continuation marks the apply running and a removal records a
+// failed apply in the state its blocks give it, which is failed only while
+// another block is. A retry whose start published its running record and then
+// reported a failure leaves the apply failed beside that running block, which
+// is no contradiction: a running or unknown block started and its outcome is
+// unproved, so the removal resolves it before it registers. An unknown apply
+// without an unknown block is not one of them either: a removal interrupted
 // after resolving that block and before recording the apply leaves it so.
 func contradictions(operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, lost []string) []string {
 	read := func(id string) reconciliation.BlockState {
@@ -46,9 +53,12 @@ func contradictions(operation operationstore.Operation, frozen reconciliation.Pl
 		return reconciliation.BlockPending
 	}
 	entries := []string{}
-	failed := false
+	accounted := false
 	for _, block := range frozen.Blocks {
-		failed = failed || read(block.ID) == reconciliation.BlockFailed
+		switch read(block.ID) {
+		case reconciliation.BlockFailed, reconciliation.BlockRunning, reconciliation.BlockUnknown:
+			accounted = true
+		}
 		if read(block.ID) == reconciliation.BlockPending {
 			for _, dependent := range frozen.Blocks {
 				if slices.Contains(dependent.Dependencies, block.ID) && read(dependent.ID) != reconciliation.BlockPending {
@@ -61,7 +71,7 @@ func contradictions(operation operationstore.Operation, frozen reconciliation.Pl
 			entries = append(entries, block.ID+" (no block record, yet an attempt of it is recorded)")
 		}
 	}
-	if operation.State == reconciliation.OperationFailed && !failed {
+	if operation.State == reconciliation.OperationFailed && !accounted {
 		entries = append(entries, "the apply records failed, yet no block records the failure")
 	}
 	return entries

@@ -45,6 +45,50 @@ func applyChained(t *testing.T, h *harness, outcomes map[string]Result, stages .
 	h.capability.outcomeFor = nil
 }
 
+// failRetryStart fails bravo and continues the apply with a retry whose start
+// lands bravo's running record and then reports a failure, which leaves the
+// apply failed beside that running block.
+func failRetryStart(t *testing.T, h *harness) {
+	t.Helper()
+	applyChained(t, h, map[string]Result{"bravo": {Outcome: reconciliation.OutcomeFailed}})
+	record := path.Join(currentOperation(t, h), "blocks", "bravo", "state.json")
+	started := "replace " + record
+	h.workspace.area.failAfter[started] = errors.New("interrupted")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("a continuation whose retry start reported a failure reported success")
+	}
+	if _, armed := h.workspace.area.failAfter[started]; armed {
+		t.Fatal("the continuation never retried bravo")
+	}
+	_, attempted := h.workspace.area.files[path.Join(path.Dir(record), "attempt-000002.json")]
+	if landed := string(h.workspace.area.files[record]); !attempted || !strings.Contains(landed, `"state":"running","attempts":2`) {
+		t.Fatalf("the retry start did not land before it failed: %s", landed)
+	}
+}
+
+// killResolution runs a removal that is killed once its resolution lands
+// bravo's record as state: every later write fails, so the records keep
+// exactly what had landed by then.
+func killResolution(t *testing.T, h *harness, state reconciliation.BlockState) {
+	t.Helper()
+	record := path.Join(currentOperation(t, h), "blocks", "bravo", "state.json")
+	killed := false
+	h.workspace.area.landing = func(_, _ string, files map[string][]byte) error {
+		if strings.Contains(string(files[record]), `"state":"`+string(state)+`"`) {
+			killed = true
+			return errors.New("killed")
+		}
+		return nil
+	}
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("a removal killed as its resolution landed reported success")
+	}
+	h.workspace.area.landing = nil
+	if !killed {
+		t.Fatalf("the removal never resolved bravo %s", state)
+	}
+}
+
 // An incomplete apply owns every block it started, and a lost block record
 // reads back as pending, as though that block never started. A removal planned
 // from such records would skip the block, leave its effect in place and then
@@ -163,15 +207,21 @@ func TestADestroyOverAnIncompleteApplyWithAContradictedBlockRefuses(t *testing.T
 	}
 }
 
-// Blocks that are not done are legitimate in an incomplete apply, and so is an
-// unknown apply that holds no unknown block. None of them contradicts what the
-// apply started, so each removal takes back every started block and completes.
+// Blocks that are not done are legitimate in an incomplete apply, and so are an
+// unknown apply that holds no unknown block and a failed apply that holds a
+// running or unknown block in place of a failed one. None of them contradicts
+// what the apply started, so each removal resolves every unproved block, takes
+// back every started block and completes. A removal records a failed apply in
+// the state its blocks give it before it resolves any of them, so one killed
+// after a resolution never leaves the apply failed beside no block that
+// accounts for it.
 func TestAnIncompleteApplyWithoutAContradictionIsStillRemovable(t *testing.T) {
 	unknown := map[string]Result{"bravo": {Outcome: reconciliation.OutcomeUnknown}}
 	for name, test := range map[string]struct {
 		arrange   func(*testing.T, *harness)
 		operation reconciliation.OperationState
 		states    map[string]reconciliation.BlockState
+		resolved  []string
 		removed   []string
 	}{
 		"a failed block whose dependent never started": {
@@ -180,6 +230,78 @@ func TestAnIncompleteApplyWithoutAContradictionIsStillRemovable(t *testing.T) {
 			},
 			operation: reconciliation.OperationFailed,
 			states:    map[string]reconciliation.BlockState{"alpha": "done", "bravo": "failed", "charlie": "pending"},
+			removed:   []string{"alpha", "bravo"},
+		},
+		"a failed apply whose retry start landed and then reported a failure": {
+			arrange: func(t *testing.T, h *harness) {
+				failRetryStart(t, h)
+				h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+			},
+			operation: reconciliation.OperationFailed,
+			states:    map[string]reconciliation.BlockState{"alpha": "done", "bravo": "running", "charlie": "pending"},
+			resolved:  []string{"bravo"},
+			removed:   []string{"alpha", "bravo"},
+		},
+		"a failed apply whose running block an interrupted removal resolved": {
+			arrange: func(t *testing.T, h *harness) {
+				failRetryStart(t, h)
+				h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+				killResolution(t, h, reconciliation.BlockDone)
+			},
+			operation: reconciliation.OperationRunning,
+			states:    map[string]reconciliation.BlockState{"alpha": "done", "bravo": "done", "charlie": "pending"},
+			removed:   []string{"alpha", "bravo"},
+		},
+		// A removal that cannot record the failed apply in the state its blocks
+		// give it must stop before it resolves anything: the same fault would
+		// fail its record of the resolution too, and leave the apply failed
+		// beside a done block that no later removal accepts.
+		"a failed apply whose removal could not record it first": {
+			arrange: func(t *testing.T, h *harness) {
+				failRetryStart(t, h)
+				h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+				recorded := "replace " + path.Join(currentOperation(t, h), "operation.json")
+				fault := errors.New("no space left on device")
+				h.workspace.area.fail[recorded] = fault
+				h.capability.observes = nil
+				if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); !errors.Is(err, fault) {
+					t.Fatalf("a removal that could not record the apply returned %v, want the write fault", err)
+				}
+				delete(h.workspace.area.fail, recorded)
+				if len(h.capability.observes) != 0 {
+					t.Fatalf("a removal that could not record the apply resolved %v", h.capability.observes)
+				}
+			},
+			operation: reconciliation.OperationFailed,
+			states:    map[string]reconciliation.BlockState{"alpha": "done", "bravo": "running", "charlie": "pending"},
+			resolved:  []string{"bravo"},
+			removed:   []string{"alpha", "bravo"},
+		},
+		"a failed apply whose running block an interrupted removal left unknown": {
+			arrange: func(t *testing.T, h *harness) {
+				failRetryStart(t, h)
+				killResolution(t, h, reconciliation.BlockUnknown)
+				h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+			},
+			operation: reconciliation.OperationRunning,
+			states:    map[string]reconciliation.BlockState{"alpha": "done", "bravo": "unknown", "charlie": "pending"},
+			resolved:  []string{"bravo"},
+			removed:   []string{"alpha", "bravo"},
+		},
+		// An executable that resolved a failed apply's running block before it
+		// recorded the apply, as this one did until a removal first recorded
+		// it, left the apply failed beside the block it resolved unknown when
+		// it was killed there.
+		"a failed apply beside an unknown block": {
+			arrange: func(t *testing.T, h *harness) {
+				failRetryStart(t, h)
+				killResolution(t, h, reconciliation.BlockUnknown)
+				rewriteState(t, h, path.Join(currentOperation(t, h), "operation.json"), string(reconciliation.OperationFailed))
+				h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+			},
+			operation: reconciliation.OperationFailed,
+			states:    map[string]reconciliation.BlockState{"alpha": "done", "bravo": "unknown", "charlie": "pending"},
+			resolved:  []string{"bravo"},
 			removed:   []string{"alpha", "bravo"},
 		},
 		"a start interrupted between its writes": {
@@ -215,6 +337,7 @@ func TestAnIncompleteApplyWithoutAContradictionIsStillRemovable(t *testing.T) {
 			},
 			operation: reconciliation.OperationUnknown,
 			states:    map[string]reconciliation.BlockState{"alpha": "done", "bravo": "unknown", "charlie": "pending"},
+			resolved:  []string{"bravo"},
 			removed:   []string{"alpha", "bravo"},
 		},
 		"an unknown apply whose block an interrupted removal resolved": {
@@ -240,13 +363,16 @@ func TestAnIncompleteApplyWithoutAContradictionIsStillRemovable(t *testing.T) {
 			if operation, states := durableOperation(t, h); operation.State != test.operation || !maps.Equal(states, test.states) {
 				t.Fatalf("the records read %s with %v, want %s with %v", operation.State, states, test.operation, test.states)
 			}
-			h.capability.destroys = nil
+			h.capability.destroys, h.capability.observes = nil, nil
 			result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
 			if err != nil {
 				t.Fatalf("the removal refused: %+v", diagnostics.Of(err))
 			}
 			if result.Receipt.State != string(reconciliation.OperationDone) || result.Receipt.Operation == applied {
 				t.Fatalf("receipt = %+v", result.Receipt)
+			}
+			if !slices.Equal(h.capability.observes, test.resolved) {
+				t.Fatalf("the removal resolved %v, want %v", h.capability.observes, test.resolved)
 			}
 			if removed := slices.Sorted(slices.Values(h.capability.destroys)); !slices.Equal(removed, test.removed) {
 				t.Fatalf("the removal took back %v, want %v", h.capability.destroys, test.removed)
