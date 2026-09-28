@@ -3,7 +3,6 @@ package lifecycle
 import (
 	"bytes"
 	"context"
-	"maps"
 	"slices"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -21,7 +20,7 @@ import (
 // one is finalized under either verb, since only its own bookkeeping is left.
 // Records that hold a block that is not done prove no completion, so they are
 // never finalized. Anything else returns no mark and keeps its decision.
-func finalization(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (transition, error) {
+func finalization(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (transition, error) {
 	if pendingRemains(frozen, states) {
 		return transition{}, nil
 	}
@@ -46,7 +45,7 @@ func finalization(ctx context.Context, view View, store OperationStore, verb rec
 		}
 		decided.release = release
 	}
-	return plannedFrom(decided, operation, states), nil
+	return plannedFrom(decided, operation, states, attempts), nil
 }
 
 // finalized reports whether a completed operation's finalization is complete:
@@ -143,8 +142,8 @@ func (s Service) finalize(ctx context.Context, name string, decided transition) 
 		if err != nil {
 			return err
 		}
-		// The record verifyBasis read under this lock is current, so rewriting
-		// it keeps the log fault a latch recorded after the decision.
+		// The record verifyBasis read under this lock is the one the decision
+		// read, log fault included, so rewriting it changes only its state.
 		if operation.State != next {
 			operation.State = next
 			if err := store.UpdateOperation(ctx, operation); err != nil {
@@ -189,14 +188,11 @@ func captureRemoval(ctx context.Context, store OperationStore, id string, releas
 	if err != nil {
 		return removalCompletion{}, err
 	}
-	states, err := store.BlockStates(ctx, id, frozen)
+	states, attempts, err := blockRecords(ctx, store, id, frozen)
 	if err != nil {
 		return removalCompletion{}, err
 	}
-	return removalCompletion{
-		basis:   basis{operation: id, state: operation.State, blocks: maps.Clone(states)},
-		release: slices.Clone(release),
-	}, nil
+	return removalCompletion{basis: recorded(operation, states, attempts), release: slices.Clone(release)}, nil
 }
 
 // completeRemoval gives back what a completed removal owned and only then

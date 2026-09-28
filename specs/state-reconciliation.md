@@ -282,11 +282,15 @@ verified handles, with the directory and file modes of
 or plan record is at most 1 MiB, an attempt or resolution record at most
 64 KiB, and an index at most 256 KiB. Unknown fields, duplicate keys,
 noncanonical encodings and unsupported versions refuse; there is no repair,
-migration or scan-based adoption of an unpublished record. An attempt record
-is created exclusively, so a reused attempt number refuses rather than
-overwriting durable evidence. An exclusively created record is staged and then
-renamed without replacement, so its name appears only with complete,
-synchronized bytes.
+migration or scan-based adoption of an unpublished record. Every read of a
+frozen plan holds it to its operation's record, as the registration did: a
+`plan.json` whose digest or verb is not the one that record carries refuses
+`lifecycle.state`, however valid a plan it is, as does one beside no operation
+record, so a replaced plan is never continued, removed, previewed or reported.
+An attempt record is created exclusively, so a reused attempt number refuses
+rather than overwriting durable evidence. An exclusively created record is
+staged and then renamed without replacement, so its name appears only with
+complete, synchronized bytes.
 
 ## State machine
 
@@ -872,18 +876,26 @@ registered under while a fresh operation runs under the current one.
 Every transition is decided from durable state read under the shared lock and
 performs its effects under the exclusive one. Under the exclusive lock, before
 it does anything, it re-proves that the context still holds exactly the state
-it was planned from: the same current operation, or still none, in the same
-state and with the same block states. Anything else means another invocation
-advanced the context in between, so the plan that was presented and confirmed
-may no longer describe what the context owns, and the transition refuses
-`lifecycle.state` rather than applying it. A removal re-proves it before it
-resolves, proves quiescence or registers; a continuation re-proves it before it
-registers, and a fresh apply both before it raises its evidence and again
-before it claims a controller host, reserves anything or registers, each
-together with the input revision and input digest the context holds: a
-continuation against those its operation froze, and a fresh apply against those
-its plan was compiled from, so it never registers a plan under an input it was
-not compiled from.
+it was planned from: the same current operation, or still none; the same
+operation record, every field of it; the same frozen plan, whose digest is the
+one that record carries; and the same block records, state and attempt count
+alike, since a retry that failed again leaves its block's state as it found
+it. Anything else means another invocation advanced the context in between, so
+the plan that was presented and confirmed may no longer describe what the
+context owns, and the transition refuses `lifecycle.state` rather than
+applying it. A removal re-proves it before it resolves, proves quiescence or
+registers; a continuation before it registers; a
+[finalization](#lifecycle-unit) before it records, releases or projects; a
+completed removal, against the records its completion left, before it
+publishes pristine evidence; a destroy of a context holding no operation
+before it releases what an interrupted registration left; and a fresh apply
+both before it claims its operation directory, raises its evidence and binds a
+Secret, and again before it claims a controller host, reserves anything or
+registers. A continuation and a fresh apply each re-prove it together with the
+input revision and input digest the context holds: a continuation against
+those its operation froze, and a fresh apply against those its plan was
+compiled from, so it never registers a plan under an input it was not compiled
+from.
 
 Destroy retains evidence until positive removal or positive absence is durable.
 It accepts no stage selection.

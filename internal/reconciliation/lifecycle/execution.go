@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -67,13 +68,24 @@ type transition struct {
 }
 
 // basis is the durable state a transition was planned from: the context's
-// current operation, its state and its block states, or no operation at all.
-// The decision is taken under the shared lock and the effects run under the
+// current operation, its whole record, and each of its frozen blocks' state and
+// attempt count, or no operation at all. The frozen plan is part of it through
+// the record's plan digest, which every read of the plan is held to. The
+// decision is taken under the shared lock and the effects run under the
 // exclusive one, so the transition re-proves this before it does anything.
+//
+// The apply a removal releases is not part of it. That apply is either the
+// basis operation itself, for a fresh removal over an apply, or one that
+// stopped being current when its first removal registered, and it is written
+// only by the restoration and the resolutions recorded in the transaction that
+// registers that removal, so nothing moves it between a later decision and its
+// effects.
 type basis struct {
 	operation string
 	state     reconciliation.OperationState
+	record    operationstore.Operation
 	blocks    map[string]reconciliation.BlockState
+	attempts  map[string]int
 	// revision and input are the input revision and digest a fresh apply
 	// compiled its plan from. Every other transition plans from frozen records
 	// rather than from the input, so it leaves them empty.
@@ -230,15 +242,15 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 	if err != nil {
 		return transition{}, err
 	}
-	states, err := store.BlockStates(ctx, operation.ID, frozen)
+	states, attempts, err := blockRecords(ctx, store, operation.ID, frozen)
 	if err != nil {
 		return transition{}, err
 	}
-	if marked, err := finalization(ctx, view, store, verb, operation, frozen, states); err != nil || marked.finalize {
+	if marked, err := finalization(ctx, view, store, verb, operation, frozen, states, attempts); err != nil || marked.finalize {
 		return marked, err
 	}
 	if verb == reconciliation.Destroy && supersedable(operation) {
-		return s.supersede(ctx, view, store, operation, frozen, states)
+		return s.supersede(ctx, view, store, operation, frozen, states, attempts)
 	}
 	if operation.State != reconciliation.OperationDone {
 		if operation.Verb != verb {
@@ -259,7 +271,7 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 			}
 			decided.release = applied.Bindings
 		}
-		return plannedFrom(decided, operation, states), nil
+		return plannedFrom(decided, operation, states, attempts), nil
 	}
 	if operation.Verb == reconciliation.Apply {
 		if verb == reconciliation.Apply {
@@ -274,7 +286,7 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 		if err != nil {
 			return transition{}, err
 		}
-		return plannedFrom(decided, operation, states), nil
+		return plannedFrom(decided, operation, states, attempts), nil
 	}
 	if verb == reconciliation.Destroy {
 		return transition{noop: true, verb: verb, operation: operation, plan: frozen, states: states}, nil
@@ -283,7 +295,7 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 	if err != nil {
 		return transition{}, err
 	}
-	return plannedFrom(decided, operation, states), nil
+	return plannedFrom(decided, operation, states, attempts), nil
 }
 
 // completedOwnership is what a completed apply owns: its whole frozen plan,
@@ -464,7 +476,7 @@ func mayHaveStartedNothing(operation operationstore.Operation) bool {
 
 // supersede plans a fresh removal over what an incomplete operation still owns:
 // the blocks an apply started, or the blocks a removal has not yet proved gone.
-func (s Service) supersede(ctx context.Context, view View, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (transition, error) {
+func (s Service) supersede(ctx context.Context, view View, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (transition, error) {
 	if operation.Verb == reconciliation.Apply {
 		// An empty set the operation's own state cannot explain is refused by
 		// freshDestroy first, whatever else the records say.
@@ -479,7 +491,7 @@ func (s Service) supersede(ctx context.Context, view View, store OperationStore,
 		if err != nil {
 			return transition{}, err
 		}
-		return plannedFrom(decided, operation, states), nil
+		return plannedFrom(decided, operation, states, attempts), nil
 	}
 	// A superseded removal is continued by nothing, so its own binding is
 	// released beside the apply's once the replacement completes. The one it
@@ -506,16 +518,47 @@ func (s Service) supersede(ctx context.Context, view View, store OperationStore,
 	if err != nil {
 		return transition{}, err
 	}
-	return plannedFrom(decided, operation, states), nil
+	return plannedFrom(decided, operation, states, attempts), nil
 }
 
 // plannedFrom records the durable state a transition was planned from. The
 // decision is read under the shared lock and the effects run under the
 // exclusive one, so the transition re-proves this before it registers. It
 // keeps the input a fresh apply recorded compiling its plan.
-func plannedFrom(decided transition, operation operationstore.Operation, states map[string]reconciliation.BlockState) transition {
-	decided.basis.operation, decided.basis.state, decided.basis.blocks = operation.ID, operation.State, maps.Clone(states)
+func plannedFrom(decided transition, operation operationstore.Operation, states map[string]reconciliation.BlockState, attempts map[string]int) transition {
+	planned := recorded(operation, states, attempts)
+	decided.basis.operation, decided.basis.state, decided.basis.record = planned.operation, planned.state, planned.record
+	decided.basis.blocks, decided.basis.attempts = planned.blocks, planned.attempts
 	return decided
+}
+
+// recorded is the basis an operation's records give, sharing nothing with
+// them. Its bindings stay an empty set rather than none, because the record
+// it is compared with decodes an empty set that way.
+func recorded(operation operationstore.Operation, states map[string]reconciliation.BlockState, attempts map[string]int) basis {
+	record := operation
+	record.Bindings = slices.Clone(operation.Bindings)
+	return basis{
+		operation: operation.ID, state: operation.State, record: record,
+		blocks: maps.Clone(states), attempts: maps.Clone(attempts),
+	}
+}
+
+// blockRecords reads each frozen block's record: the state it proves and the
+// attempts it counts. A block retried by another invocation that failed again
+// leaves the state it found, so only its count shows the retry. A lost record
+// reads as pending with no attempt.
+func blockRecords(ctx context.Context, store OperationStore, id string, frozen reconciliation.Plan) (map[string]reconciliation.BlockState, map[string]int, error) {
+	states := make(map[string]reconciliation.BlockState, len(frozen.Blocks))
+	attempts := make(map[string]int, len(frozen.Blocks))
+	for _, block := range frozen.Blocks {
+		record, err := store.Block(ctx, id, block.ID)
+		if err != nil {
+			return nil, nil, err
+		}
+		states[block.ID], attempts[block.ID] = record.State, record.Attempts
+	}
+	return states, attempts, nil
 }
 
 func firstBinding(bindings []string) string {
@@ -891,7 +934,8 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 }
 
 // verifyBasis proves the context still holds exactly the durable state a
-// transition was planned from, and otherwise returns what refuse makes of the
+// transition was planned from, its operation's whole record, frozen plan and
+// block records included, and otherwise returns what refuse makes of the
 // state it holds instead. Anything else means another invocation advanced the
 // context between the decision and this transaction, so the plan waiting to
 // register may no longer describe what the context owns. A context that held
@@ -915,7 +959,7 @@ func (s Service) verifyBasis(ctx context.Context, store OperationStore, planned 
 	if err != nil {
 		return fail(err)
 	}
-	current.state = operation.State
+	current.state, current.record = operation.State, operation
 	if current.operation != planned.operation || current.state != planned.state {
 		return fail(refuse(current))
 	}
@@ -923,28 +967,54 @@ func (s Service) verifyBasis(ctx context.Context, store OperationStore, planned 
 	if err != nil {
 		return fail(err)
 	}
-	states, err := store.BlockStates(ctx, operation.ID, frozen)
+	states, attempts, err := blockRecords(ctx, store, operation.ID, frozen)
 	if err != nil {
 		return fail(err)
 	}
-	current.blocks = states
-	if !maps.Equal(states, planned.blocks) {
+	current.blocks, current.attempts = states, attempts
+	if _, moved := recordsMoved(planned, current); moved {
 		return fail(refuse(current))
 	}
 	return operation, frozen, states, nil
 }
 
+// recordsMoved compares the operation records two bases hold, in the order a
+// refusal names them: the operation and its state, each block's state, each
+// block's attempt count, the frozen plan through the digest the operation's
+// record carries, and then the rest of that record. It returns the words a
+// refusal adds for the first difference, which are none for the operation or
+// its state, since the refusal names both. Every read of a frozen plan is held
+// to that digest, so a different record implies any different plan; the
+// digest is compared before the rest of the record only so that the refusal
+// names the plan.
+func recordsMoved(planned, current basis) (string, bool) {
+	switch {
+	case current.operation != planned.operation || current.state != planned.state:
+		return "", true
+	case !maps.Equal(current.blocks, planned.blocks):
+		return " with different block states", true
+	case !maps.Equal(current.attempts, planned.attempts):
+		return " with block attempts recorded since it was read", true
+	case current.record.PlanDigest != planned.record.PlanDigest:
+		return " with a different frozen plan", true
+	case !reflect.DeepEqual(current.record, planned.record):
+		return " with a different operation record", true
+	}
+	return "", false
+}
+
 // contextChanged refuses a continuation or a fresh apply whose basis moved
 // after it was presented and confirmed. It names what the command planned from
 // and what the context holds now, because repeating the command decides again
-// from the latter, which is the only plan it may register.
+// from the latter, which is the only plan it may register. The operation
+// records are compared first, and the input and evidence only once they agree.
 func contextChanged(verb reconciliation.Verb, planned, current basis) error {
 	message := "the context changed after this command read it: it was planned from " + planned.describe() +
 		", and the context now holds " + current.describe()
+	records, moved := recordsMoved(planned, current)
 	switch {
-	case current.operation != planned.operation || current.state != planned.state:
-	case !maps.Equal(current.blocks, planned.blocks):
-		message += " with different block states"
+	case moved:
+		message += records
 	case current.revision != planned.revision:
 		message += " at input revision " + current.revision + " rather than " + planned.revision
 	case current.input != planned.input:
