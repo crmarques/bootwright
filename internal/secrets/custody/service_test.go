@@ -22,12 +22,16 @@ type serviceAccess struct {
 	transactions   int
 	contextFailure error
 	failure        error
+	// unlocks records the unlock argument of every View, so a test can prove
+	// a read acquired no unlock material.
+	unlocks []bool
 }
 
 func (a *serviceAccess) Context(context.Context, string) (secretstore.ContextSnapshot, error) {
 	return a.snapshot, a.contextFailure
 }
-func (a *serviceAccess) View(_ context.Context, _ secretstore.Context, _ bool, callback func(secretstore.StoreSession, secretstore.Selection) error) error {
+func (a *serviceAccess) View(_ context.Context, _ secretstore.Context, unlock bool, callback func(secretstore.StoreSession, secretstore.Selection) error) error {
+	a.unlocks = append(a.unlocks, unlock)
 	if a.failure != nil {
 		return a.failure
 	}
@@ -406,5 +410,30 @@ func TestGeneratedDeclarationDefaultsRemainTypeScoped(t *testing.T) {
 				t.Fatal("token entropy default leaked across generation types")
 			}
 		})
+	}
+}
+
+// A consumer lists a context's binding identities to release those no record
+// of its own names. The listing reveals no material and no version, takes no
+// transaction, and a store that was never initialized lists nothing.
+func TestBindingsListsIdentitiesWithoutMaterial(t *testing.T) {
+	service, access, material, _ := serviceFixture(t, declarationYAML("token", ""))
+	access.session.snapshot.Bindings = []secretstore.Binding{
+		{ID: "binding-b", Versions: []string{"version-1"}},
+		{ID: "binding-a", Versions: []string{"version-0", "version-1"}},
+	}
+	listed, err := service.Bindings(context.Background(), BindingsRequest{ContextName: "fixture"})
+	if err != nil || strings.Join(listed, ",") != "binding-a,binding-b" {
+		t.Fatalf("bindings = %v (%v)", listed, err)
+	}
+	if access.session.reads != 0 || access.session.writes != 0 || access.transactions != 0 || material.acquired != 0 || material.files != 0 {
+		t.Fatal("listing bindings read material or mutated the store")
+	}
+	if len(access.unlocks) != 1 || access.unlocks[0] {
+		t.Fatalf("listing bindings opened the store with unlock %v", access.unlocks)
+	}
+	access.session = nil
+	if listed, err := service.Bindings(context.Background(), BindingsRequest{ContextName: "fixture"}); err != nil || len(listed) != 0 {
+		t.Fatalf("an uninitialized store lists %v (%v)", listed, err)
 	}
 }

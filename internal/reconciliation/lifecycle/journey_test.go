@@ -38,11 +38,17 @@ const (
 // serializes concurrent blocks through the filesystem, so this one holds a
 // mutex: without it the race detector reports the fake rather than the engine.
 // It refuses a cancelled context exactly as the real one does, so a test can
-// prove which records an interrupted invocation still writes.
+// prove which records an interrupted invocation still writes. It keeps the
+// directories it was asked to create, because a claimed operation directory
+// holds no file.
 type memoryArea struct {
-	mutex sync.Mutex
-	files map[string][]byte
-	fail  map[string]error
+	mutex       sync.Mutex
+	files       map[string][]byte
+	directories map[string]bool
+	fail        map[string]error
+	// failAfter fails a write once, after its bytes landed, as a rename that
+	// succeeded before its read-back or sync failed does.
+	failAfter map[string]error
 	// landing, when set, runs as each write is about to land: after the area
 	// is held and before anything changes, with the live files. It may copy
 	// them but must not take the area again, and an error it returns fails
@@ -50,7 +56,9 @@ type memoryArea struct {
 	landing func(operation, target string, files map[string][]byte) error
 }
 
-func newArea() *memoryArea { return &memoryArea{files: map[string][]byte{}, fail: map[string]error{}} }
+func newArea() *memoryArea {
+	return &memoryArea{files: map[string][]byte{}, directories: map[string]bool{}, fail: map[string]error{}, failAfter: map[string]error{}}
+}
 
 // written reports whether this area holds anything under one identity, so a
 // test can prove a bounded run left the operation records alone.
@@ -72,7 +80,15 @@ func (a *memoryArea) clone() *memoryArea {
 	for name, data := range a.files {
 		copied.files[name] = slices.Clone(data)
 	}
+	maps.Copy(copied.directories, a.directories)
 	return copied
+}
+
+// landed fails a write whose bytes just landed, once, when a test asked for it.
+func (a *memoryArea) landed(target string) error {
+	err := a.failAfter[target]
+	delete(a.failAfter, target)
+	return err
 }
 
 func (a *memoryArea) Read(ctx context.Context, target string, _ int) ([]byte, bool, error) {
@@ -110,12 +126,27 @@ func (a *memoryArea) Entries(ctx context.Context, target string) ([]operationsto
 			seen[rest] = operationstore.Entry{Name: rest}
 		}
 	}
+	for name := range a.directories {
+		if rest, ok := strings.CutPrefix(name, prefix); ok && rest != "" && !strings.Contains(rest, "/") {
+			seen[rest] = operationstore.Entry{Name: rest, Directory: true}
+		}
+	}
 	entries := slices.Collect(maps.Values(seen))
 	slices.SortFunc(entries, func(x, y operationstore.Entry) int { return strings.Compare(x.Name, y.Name) })
 	return entries, nil
 }
 
-func (a *memoryArea) EnsureDirectory(ctx context.Context, _ string) error { return ctx.Err() }
+func (a *memoryArea) EnsureDirectory(ctx context.Context, target string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	for current := target; current != "." && current != ""; current = path.Dir(current) {
+		a.directories[current] = true
+	}
+	return nil
+}
 
 func (a *memoryArea) WriteExclusive(ctx context.Context, target string, data []byte) error {
 	if err := ctx.Err(); err != nil {
@@ -135,7 +166,7 @@ func (a *memoryArea) WriteExclusive(ctx context.Context, target string, data []b
 		return errors.New("exists")
 	}
 	a.files[target] = slices.Clone(data)
-	return nil
+	return a.landed("write " + target)
 }
 
 func (a *memoryArea) Replace(ctx context.Context, target string, data, expected []byte) error {
@@ -161,7 +192,7 @@ func (a *memoryArea) Replace(ctx context.Context, target string, data, expected 
 		return errors.New("expectation")
 	}
 	a.files[target] = slices.Clone(data)
-	return nil
+	return a.landed("replace " + target)
 }
 
 func (a *memoryArea) Append(ctx context.Context, target string, data []byte) error {
@@ -202,6 +233,9 @@ type testWorkspace struct {
 	retained     []prerequisites.DependencySource
 	resolutions  int
 	failPublish  error
+	// landThenFail fails the next evidence publication once, after its bytes
+	// landed, as a publication whose read-back or sync failed does.
+	landThenFail error
 	// opened counts how many times this operation asked for the approved
 	// execution bundle, which an operation does once however many blocks run.
 	opened int
@@ -273,7 +307,9 @@ func (v *testView) PublishEvidence(_ context.Context, data []byte) error {
 		return v.workspace.failPublish
 	}
 	v.workspace.evidence = slices.Clone(data)
-	return nil
+	failed := v.workspace.landThenFail
+	v.workspace.landThenFail = nil
+	return failed
 }
 
 // Bind records the relationship the way the store does: a first apply
@@ -592,6 +628,9 @@ type testBinder struct {
 	// releaseErr fails every Release, as a custody store that cannot drop a
 	// binding does, before anything is released.
 	releaseErr error
+	// bindingsErr fails every listing, as a custody store that cannot be read
+	// does.
+	bindingsErr error
 	// kill runs first in every Bind and Release, named by the point it would
 	// publish, so a test can stop an invocation there; an error it returns
 	// fails it before anything is bound or released.
@@ -628,7 +667,27 @@ func (b *testBinder) Reopen(_ context.Context, request custody.BindingRequest) (
 	return out, nil
 }
 
-func (b *testBinder) Release(_ context.Context, request custody.BindingRequest) (bool, error) {
+// Bindings lists what the store still holds: every binding issued and not yet
+// released.
+func (b *testBinder) Bindings(context.Context, custody.BindingsRequest) ([]string, error) {
+	if b.bindingsErr != nil {
+		return nil, b.bindingsErr
+	}
+	held := []string{}
+	for issued := 1; issued <= b.issued; issued++ {
+		if binding := fmt.Sprintf("bind-%d", issued); !slices.Contains(b.released, binding) {
+			held = append(held, binding)
+		}
+	}
+	return held, nil
+}
+
+// Release refuses a cancelled context before anything else, as the custody
+// store does.
+func (b *testBinder) Release(ctx context.Context, request custody.BindingRequest) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
 	if b.kill != nil {
 		if err := b.kill("release secret binding"); err != nil {
 			return false, err
@@ -2860,10 +2919,14 @@ func TestFreshApplyRefusesWhenTheContextChangedBeforeMutation(t *testing.T) {
 	if h.workspace.area.written("op-" + strings.Repeat("02", 16)) {
 		t.Fatal("a stale apply registered an operation")
 	}
-	// Only the refused apply's own binding is released; the registered one
-	// keeps the binding its operation owns.
-	if !slices.Equal(h.binder.released, []string{"bind-1"}) {
-		t.Fatalf("released = %v", h.binder.released)
+	// The refused apply refuses in the transaction that protects the context,
+	// before it binds anything, so the only binding is the one the registered
+	// operation owns, and it is kept, as is that operation's evidence.
+	if h.binder.issued != 1 || len(h.binder.released) != 0 {
+		t.Fatalf("issued %d, released %v", h.binder.issued, h.binder.released)
+	}
+	if applied := evidenceBytes(t, reconciliation.Apply, reconciliation.OperationDone); string(h.workspace.evidence) != string(applied) {
+		t.Fatalf("evidence = %s, want the registered apply's %s", h.workspace.evidence, applied)
 	}
 }
 
@@ -2938,8 +3001,8 @@ func TestFreshApplyRefusesWhenTheInputChangedBeforeMutation(t *testing.T) {
 	if string(h.workspace.evidence) != string(pristine) {
 		t.Fatalf("a stale apply projected evidence: %s", h.workspace.evidence)
 	}
-	if !slices.Equal(h.binder.released, []string{"bind-1"}) {
-		t.Fatalf("released = %v", h.binder.released)
+	if h.binder.issued != 0 || len(h.binder.released) != 0 {
+		t.Fatalf("a stale apply bound: issued %d, released %v", h.binder.issued, h.binder.released)
 	}
 }
 

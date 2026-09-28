@@ -629,6 +629,64 @@ func TestRegisterRefusesBeyondTheRetentionBound(t *testing.T) {
 	}
 }
 
+// A claim creates an operation's directory, empty, before anything fills it,
+// and the registration of the same identity fills that directory without
+// counting it against the retention bound a second time. A claim refuses an
+// identity that already has a directory, and refuses at the bound.
+func TestAClaimedOperationRegistersIntoItsDirectory(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	plan := testPlan(t, "alpha")
+	operation := testOperation(t, plan)
+	if err := store.Claim(ctx, operation.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, directory := range []string{operation.ID, operation.ID + "/blocks", operation.ID + "/logs"} {
+		if !area.directories[directory] {
+			t.Fatalf("the claim did not create %s", directory)
+		}
+	}
+	if len(area.files) != 0 {
+		t.Fatalf("the claim wrote %v", slices.Collect(maps.Keys(area.files)))
+	}
+	if claimed, err := store.Claimed(ctx); err != nil || !slices.Equal(claimed, []string{operation.ID}) {
+		t.Fatalf("claimed = %v (%v)", claimed, err)
+	}
+	if started, err := store.Started(ctx, operation.ID); err != nil || started {
+		t.Fatalf("a claimed directory reads started %t (%v)", started, err)
+	}
+	if err := store.Claim(ctx, operation.ID); err == nil {
+		t.Fatal("a claim took an identity that already has a directory")
+	}
+	for index := range MaxOperations - 1 {
+		area.directories["slot-"+FormatIndex(index)] = true
+	}
+	other := "op-" + strings.Repeat("cd", 16)
+	if err := store.Claim(ctx, other); err == nil || area.directories[other] {
+		t.Fatal("a claim exceeded the retained operation bound")
+	}
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Register(ctx, operation, plan); err != nil {
+		t.Fatalf("the claimed operation did not register into its directory: %v", err)
+	}
+	if index, err := store.Index(ctx); err != nil || index.Current != operation.ID {
+		t.Fatalf("index = %+v (%v)", index, err)
+	}
+	if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if started, err := store.Started(ctx, operation.ID); err != nil || !started {
+		t.Fatalf("a started operation reads started %t (%v)", started, err)
+	}
+	unclaimed := testOperation(t, plan)
+	unclaimed.ID = other
+	if err := store.Register(ctx, unclaimed, plan); err == nil || area.directories[other] {
+		t.Fatal("a registration without a claim exceeded the retained operation bound")
+	}
+}
+
 func FormatIndex(value int) string {
 	if value == 0 {
 		return "0"

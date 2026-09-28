@@ -44,6 +44,8 @@ type BindingRequest struct {
 	BindingID   string
 }
 
+type BindingsRequest struct{ ContextName string }
+
 type MutationResult struct {
 	Context   secretstore.Context
 	Name      string

@@ -122,8 +122,15 @@ func (s Service) finalizeFirst(ctx context.Context, name string, verb reconcilia
 // decided from is re-proved, only what the block records already prove: the
 // operation's completed record, the releases a completed removal owes and the
 // operation's projection. It performs no effect and starts no block, so it
-// needs no authorization, presentation or confirmation.
+// needs no authorization, presentation or confirmation. A removal's pristine
+// publication lowers the evidence every fresh apply still in flight raised, so
+// once it lands the bindings the context held before the finalization began
+// that no operation names are released too.
 func (s Service) finalize(ctx context.Context, name string, decided transition) error {
+	var held []string
+	if decided.operation.Verb == reconciliation.Destroy {
+		held = s.held(ctx, name)
+	}
 	var completion removalCompletion
 	err := s.workspace.MutateLifecycle(ctx, name, func(tx Transaction) error {
 		store := s.store(tx)
@@ -156,7 +163,11 @@ func (s Service) finalize(ctx context.Context, name string, decided transition) 
 	if err != nil || decided.operation.Verb == reconciliation.Apply {
 		return err
 	}
-	return incompleteRemoval(s.completeRemoval(ctx, name, completion))
+	if err := incompleteRemoval(s.completeRemoval(ctx, name, completion)); err != nil {
+		return err
+	}
+	s.collect(ctx, name, held, decided.release)
+	return nil
 }
 
 // removalCompletion is what a completed removal still owes once its record is

@@ -78,12 +78,17 @@ type Compiler interface {
 	Compile(context.Context, desiredstate.Sources) (*compilation.State, *compilation.Report, error)
 }
 
-// SecretBinder freezes confidential material before registration and releases
-// it only after a completed destroy no longer needs it.
+// SecretBinder freezes confidential material before registration. A binding an
+// operation names is released only after a completed destroy no longer needs
+// it; one a registration that provably did not happen created is released at
+// once, and one no operation names is released after the context's next
+// registration or by its next destroy. Bindings lists identities only, so the
+// engine can tell those bindings apart without reading any material.
 type SecretBinder interface {
 	Bind(context.Context, custody.BindRequest) (secretstore.Binding, error)
 	Reopen(context.Context, custody.BindingRequest) ([]secretstore.BoundMaterial, error)
 	Release(context.Context, custody.BindingRequest) (bool, error)
+	Bindings(context.Context, custody.BindingsRequest) ([]string, error)
 }
 
 type HostIdentity interface {
@@ -213,6 +218,14 @@ type UnsupportedReporter interface {
 // Composition binds it to the Workspace-held area for each invocation.
 type OperationStore interface {
 	Index(context.Context) (operationstore.Index, error)
+	// Claim creates a fresh apply's operation directory, empty, before it binds
+	// anything; Register then fills that directory under the same identity.
+	Claim(context.Context, string) error
+	// Claimed names every operation directory, which nothing removes, so a
+	// directory added since a count was taken proves a newer claim.
+	Claimed(context.Context) ([]string, error)
+	// Started reports whether an operation directory lists a block record.
+	Started(context.Context, string) (bool, error)
 	Register(context.Context, operationstore.Operation, reconciliation.Plan) error
 	ReadOperation(context.Context, string) (operationstore.Operation, error)
 	ReadPlan(context.Context, string) (reconciliation.Plan, error)
