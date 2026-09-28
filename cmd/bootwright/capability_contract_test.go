@@ -108,7 +108,25 @@ type contractRow struct {
 	// adapter publishes that form over a target it could not read, so only the
 	// repeated removal proves its absence.
 	removalAbsenceUnproved string
+	// readiness names the presence field carrying what the listeners answered,
+	// for a binding whose removal's resolution reads only what the removal
+	// takes back and never the apply's readiness or postcondition:
+	// specs/infrastructure-services.md, Unknown resolution. Such a binding
+	// reads its presence with that field emptied, and the partial fixture,
+	// which still reports everything the removal takes back, as positive no
+	// effect.
+	readiness string
+	// removalPartial is what, over such a binding's presence evidence, leaves
+	// only part of what its removal takes back; its removal's resolution reads
+	// it as partial in place of the partial fixture. A row names it exactly
+	// when it names readiness.
+	removalPartial map[string]any
 }
+
+// contractStoppedService leaves a managed service's unit stopped and its
+// container gone beside its content root, as a removal killed after its stop
+// does.
+var contractStoppedService = map[string]any{"unit": "inactive", "container": "", "postcondition": false}
 
 func (r contractRow) binding() lifecycle.CapabilityBinding {
 	return lifecycle.CapabilityBinding{Kind: r.kind, Implementation: r.implementation}
@@ -130,10 +148,14 @@ func contractRows() []contractRow {
 		{kind: agentinstall.Kind, implementation: agentinstall.MediaImplementation, example: "lab-sno", presence: contractMediaPresence},
 		{kind: agentinstall.Kind, implementation: agentinstall.InstallImplementation, example: "lab-sno", presence: contractClusterPresence,
 			removalKeepsPresence: true},
-		{kind: string(proxy.Definition().Kind), implementation: proxy.Definition().Implementation, example: "lab-rhel", presence: contractServicePresence},
-		{kind: string(dnsserver.Definition().Kind), implementation: dnsserver.Definition().Implementation, example: "lab-rhel", presence: contractServicePresence},
-		{kind: string(ntpserver.Definition().Kind), implementation: ntpserver.Definition().Implementation, example: "lab-rhel", presence: contractServicePresence},
-		{kind: artifactserver.Kind, implementation: artifactserver.Implementation, example: "lab-rhel", presence: contractArtifactServerPresence},
+		{kind: string(proxy.Definition().Kind), implementation: proxy.Definition().Implementation, example: "lab-rhel", presence: contractServicePresence,
+			readiness: "answers", removalPartial: contractStoppedService},
+		{kind: string(dnsserver.Definition().Kind), implementation: dnsserver.Definition().Implementation, example: "lab-rhel", presence: contractServicePresence,
+			readiness: "answers", removalPartial: contractStoppedService},
+		{kind: string(ntpserver.Definition().Kind), implementation: ntpserver.Definition().Implementation, example: "lab-rhel", presence: contractServicePresence,
+			readiness: "answers", removalPartial: contractStoppedService},
+		{kind: artifactserver.Kind, implementation: artifactserver.Implementation, example: "lab-rhel", presence: contractArtifactServerPresence,
+			readiness: "listeners", removalPartial: contractStoppedService},
 	}
 }
 
@@ -166,6 +188,7 @@ var contractProperties = []string{
 	"observe-unproved", "quiescence-unproved",
 	"observe-removal-request", "observe-removal-unproved", "observe-removal-evidence-proves-request",
 	"observe-removal-proves-absence", "observe-removal-reads-presence", "observe-removal-reads-partial",
+	"observe-removal-ignores-readiness",
 }
 
 // contractRunner is a scripted runner: it records every request and answers
@@ -277,7 +300,10 @@ func (f *contractFindings) record(row contractRow, property, message string) {
 // the same adapter operation, proves nothing from a failed or empty
 // observation or one of another request, and reads absence, and any no-effect
 // evidence, as the removal's completion, presence as positive no effect and a
-// partial realization as partial. A binding whose removal keeps what its
+// partial realization as partial. A binding whose removal reads only what it
+// takes back reads its presence with readiness unproved, and a partial
+// realization still reporting all of it, as positive no effect, and its own
+// partial removal as partial. A binding whose removal keeps what its
 // presence reports reads presence and a partial realization as completion too,
 // one whose removal changes nothing observable runs no adapter and reads
 // everything as completion, and one whose adapter also publishes its absence
@@ -307,6 +333,9 @@ func TestEveryCapabilityHonoursTheCapabilityContract(t *testing.T) {
 		}
 		if !contractPlanningOnly(row) && row.presence == nil {
 			t.Fatalf("%s drives the runner but its row builds no presence evidence to hold its digest check to", row.implementation)
+		}
+		if (row.readiness == "") != (row.removalPartial == nil) {
+			t.Fatalf("%s reads its removal from what it takes back, so its row names both the readiness it ignores and its partial removal", row.implementation)
 		}
 		if !contractPlanningOnly(row) {
 			contractEffects(t, row, example, capability, runner, findings)
@@ -540,8 +569,9 @@ func contractRunnerFailures(row contractRow, block reconciliation.Block, capabil
 // contractEvidence proves no changed or unchanged outcome is accepted, and no
 // observation proves anything, on evidence that is empty or names another
 // request: only positive evidence for this very request leaves unknown. The
-// foreign evidence is this block's own presence, absence and partial fixtures
-// with only the request digest swapped, and contractEvidenceControls proves
+// foreign evidence is this block's own presence, absence and partial fixtures,
+// and any unready and partial-removal ones, with only the request digest
+// swapped, and contractEvidenceControls proves
 // the presence and absence fixtures naming this block's digest prove their
 // operations, so a refusal of either by that operation is the digest check's
 // alone. It then holds the same fixtures under this block's digest to their
@@ -561,6 +591,9 @@ func contractEvidence(t *testing.T, row contractRow, example contractExample, bl
 	}
 	if row.noEffect != nil {
 		foreign = append(foreign, contractNoEffect(t, row, other))
+	}
+	if row.readiness != "" {
+		foreign = append(foreign, contractUnready(t, row, execution, other), contractRemovalPartial(t, row, execution, other))
 	}
 	for _, operation := range []string{"apply", "destroy"} {
 		for _, outcome := range []string{"changed", "unchanged"} {
@@ -603,8 +636,12 @@ func contractEvidence(t *testing.T, row contractRow, example contractExample, bl
 // presence reports, and one whose removal observes nothing, read presence and
 // a partial realization as completion instead, and one whose absence evidence
 // its adapter also publishes over a target it could not read reads that
-// absence as positive no effect, so the removal repeats and proves it. The
-// fixtures are the ones contractEvidenceControls proves sound.
+// absence as positive no effect, so the removal repeats and proves it. A
+// binding whose removal reads only what it takes back reads its presence with
+// readiness unproved, and the partial fixture, which still reports all of it,
+// as positive no effect, and its own partial removal as partial, so a silent
+// listener never leaves a removal unresolvable. The fixtures are the ones
+// contractEvidenceControls proves sound.
 func contractRemovalObservations(t *testing.T, row contractRow, block reconciliation.Block, capability lifecycle.Capability, execution lifecycle.Execution, runner *contractRunner, findings *contractFindings) {
 	t.Helper()
 	kept := row.removalKeepsPresence || row.removalObservesNothing != ""
@@ -621,10 +658,18 @@ func contractRemovalObservations(t *testing.T, row contractRow, block reconcilia
 		evidence json.RawMessage
 		want     reconciliation.EffectState
 	}
+	partial := contractPartial(t, row, execution, block.RequestDigest)
 	rules := []removalRule{
 		{"observe-removal-proves-absence", contractAbsence(t, row, block.RequestDigest), absenceWant},
 		{"observe-removal-reads-presence", contractPresence(t, row, execution, block.RequestDigest), presenceWant},
-		{"observe-removal-reads-partial", contractPartial(t, row, execution, block.RequestDigest), partialWant},
+	}
+	if row.readiness == "" {
+		rules = append(rules, removalRule{"observe-removal-reads-partial", partial, partialWant})
+	} else {
+		rules = append(rules,
+			removalRule{"observe-removal-reads-partial", contractRemovalPartial(t, row, execution, block.RequestDigest), reconciliation.EffectPartial},
+			removalRule{"observe-removal-ignores-readiness", contractUnready(t, row, execution, block.RequestDigest), reconciliation.EffectNoEffect},
+			removalRule{"observe-removal-ignores-readiness", partial, reconciliation.EffectNoEffect})
 	}
 	if row.noEffect != nil {
 		rules = append(rules, removalRule{"observe-removal-proves-absence", contractNoEffect(t, row, block.RequestDigest), reconciliation.EffectCompleted})
@@ -766,11 +811,42 @@ func contractPresence(t *testing.T, row contractRow, execution lifecycle.Executi
 // naming one request digest: its presence evidence with the postcondition
 // unproved, so everything the frozen request names is reported present while
 // the adapter proved no settled state, which every binding that is not
-// indivisible reads as this context's work part way through.
+// indivisible reads as this context's work part way through. A binding whose
+// removal reads only what it takes back reads it, for a removal, as no effect.
 func contractPartial(t *testing.T, row contractRow, execution lifecycle.Execution, digest string) json.RawMessage {
 	t.Helper()
 	fields := row.presence(t, execution)
 	fields["request"], fields["postcondition"] = digest, false
+	data, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+// contractUnready is the row's presence evidence with its readiness unproved,
+// naming one request digest: everything the removal takes back reported
+// present while no listener answered, as a service whose one probe went
+// unanswered reports it.
+func contractUnready(t *testing.T, row contractRow, execution lifecycle.Execution, digest string) json.RawMessage {
+	t.Helper()
+	return contractPresenceOver(t, row, execution, digest, map[string]any{row.readiness: []any{}})
+}
+
+// contractRemovalPartial is the row's partial removal, naming one request
+// digest: its presence evidence with removalPartial over it.
+func contractRemovalPartial(t *testing.T, row contractRow, execution lifecycle.Execution, digest string) json.RawMessage {
+	t.Helper()
+	return contractPresenceOver(t, row, execution, digest, row.removalPartial)
+}
+
+// contractPresenceOver is the row's presence evidence with fields replaced,
+// naming one request digest.
+func contractPresenceOver(t *testing.T, row contractRow, execution lifecycle.Execution, digest string, over map[string]any) json.RawMessage {
+	t.Helper()
+	fields := row.presence(t, execution)
+	maps.Copy(fields, over)
+	fields["request"] = digest
 	data, err := json.Marshal(fields)
 	if err != nil {
 		t.Fatal(err)

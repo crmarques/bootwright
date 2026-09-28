@@ -193,17 +193,20 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 	})
 }
 
-// ObserveRemoval reads the same observation for what a removal proves: nothing
-// present is its completion, the whole server is positive no effect, and any
-// part of it is a positive partial removal the next attempt converges.
+// ObserveRemoval reads the same observation for what a removal takes back, not
+// for readiness: nothing present is its completion; the unit active, the
+// container of the frozen image and the content root all present is positive
+// no effect, whatever the listeners answer or present; and part of them is a
+// positive partial removal the next attempt converges. Only an observation
+// that cannot be made or read as this request's stays unknown.
 func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, func(evidence []byte, request Request, digest, fingerprint string) reconciliation.EffectState {
+	return c.observe(ctx, execution, func(evidence []byte, request Request, digest, _ string) reconciliation.EffectState {
 		switch {
 		case ValidateAbsence(evidence, digest) == nil:
 			return reconciliation.EffectCompleted
-		case ValidatePresence(evidence, request, digest, fingerprint) == nil:
+		case ValidateUnremoved(evidence, request, digest) == nil:
 			return reconciliation.EffectNoEffect
-		case ValidatePartial(evidence, digest) == nil:
+		case ValidateRemovalUnfinished(evidence, request, digest) == nil:
 			return reconciliation.EffectPartial
 		}
 		return reconciliation.EffectUnknown

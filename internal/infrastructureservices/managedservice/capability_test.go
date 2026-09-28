@@ -329,7 +329,13 @@ func (r *scriptedRunner) Run(_ context.Context, request lifecycle.RunRequest) (l
 
 // A removal's resolution reads the same observation for what the removal
 // proves, so a service still present is a removal that had no effect rather
-// than one that completed.
+// than one that completed. It reads only what the removal takes back: a
+// listener that stays silent, or a postcondition left unproved, leaves a
+// present service a removal with no effect rather than an unresolvable one.
+// Each of the unit, the container and the content root decides on its own, so
+// whatever is left of them, down to any one alone, is a removal part way
+// through. Only the presence form reports what is left: an absence form that
+// still reports the service contradicts itself and stays unknown.
 func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 	catalog := catalogOf(controller(), service(api.Proxy, "lab-proxy"))
 	plan, err := NewCapability(testDefinition(), nil).Plan(context.Background(), lifecycle.PlanInput{
@@ -356,18 +362,40 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 	if err := ValidatePresence(encode(t, present), request, digest); err != nil {
 		t.Fatalf("the presence fixture no longer proves presence: %v", err)
 	}
-	partial := present
-	partial.Postcondition = false
+	silent := present
+	silent.Answers = []Answer{}
+	unproved := present
+	unproved.Postcondition = false
+	otherImage := present
+	otherImage.Container = "docker.io/library/squid:6"
+	stopped := silent
+	stopped.Postcondition, stopped.Unit = false, "inactive"
+	rootGone := present
+	rootGone.ContentRoot, rootGone.Postcondition = false, false
+	foreignSilent := silent
+	foreignSilent.Request = strings.Repeat("e", 64)
 	for name, tc := range map[string]struct {
 		evidence []byte
 		err      error
 		want     reconciliation.EffectState
 	}{
-		"absent":          {encode(t, Evidence{Absent: true, Answers: []Answer{}, Postcondition: true, Request: digest}), nil, reconciliation.EffectCompleted},
-		"present":         {encode(t, present), nil, reconciliation.EffectNoEffect},
-		"partial":         {encode(t, partial), nil, reconciliation.EffectPartial},
-		"another request": {encode(t, Evidence{Absent: true, Answers: []Answer{}, Postcondition: true, Request: strings.Repeat("e", 64)}), nil, reconciliation.EffectUnknown},
-		"adapter failed":  {nil, errors.New("unreachable"), reconciliation.EffectUnknown},
+		"absent":                       {encode(t, Evidence{Absent: true, Answers: []Answer{}, Postcondition: true, Request: digest}), nil, reconciliation.EffectCompleted},
+		"present":                      {encode(t, present), nil, reconciliation.EffectNoEffect},
+		"present and silent":           {encode(t, silent), nil, reconciliation.EffectNoEffect},
+		"present and unproved":         {encode(t, unproved), nil, reconciliation.EffectNoEffect},
+		"unit stopped, root left":      {encode(t, Evidence{Answers: []Answer{}, ContentRoot: true, Request: digest, Unit: "inactive"}), nil, reconciliation.EffectPartial},
+		"unit without a container":     {encode(t, Evidence{Answers: []Answer{}, ContentRoot: true, Postcondition: true, Request: digest, Unit: "active"}), nil, reconciliation.EffectPartial},
+		"another image running":        {encode(t, otherImage), nil, reconciliation.EffectPartial},
+		"unit stopped, container left": {encode(t, stopped), nil, reconciliation.EffectPartial},
+		"content root gone":            {encode(t, rootGone), nil, reconciliation.EffectPartial},
+		"only the content root left":   {encode(t, Evidence{Answers: []Answer{}, ContentRoot: true, Request: digest}), nil, reconciliation.EffectPartial},
+		"only the unit left":           {encode(t, Evidence{Answers: []Answer{}, Request: digest, Unit: "inactive"}), nil, reconciliation.EffectPartial},
+		"only the container left":      {encode(t, Evidence{Answers: []Answer{}, Container: request.Image, Request: digest}), nil, reconciliation.EffectPartial},
+		"nothing reported":             {encode(t, Evidence{Answers: []Answer{}, Request: digest}), nil, reconciliation.EffectUnknown},
+		"absence form, service left":   {encode(t, Evidence{Absent: true, Answers: []Answer{}, Container: request.Image, ContentRoot: true, Request: digest, Unit: "active"}), nil, reconciliation.EffectUnknown},
+		"silent, another request":      {encode(t, foreignSilent), nil, reconciliation.EffectUnknown},
+		"another request":              {encode(t, Evidence{Absent: true, Answers: []Answer{}, Postcondition: true, Request: strings.Repeat("e", 64)}), nil, reconciliation.EffectUnknown},
+		"adapter failed":               {nil, errors.New("unreachable"), reconciliation.EffectUnknown},
 	} {
 		t.Run(name, func(t *testing.T) {
 			runner := &scriptedRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: tc.evidence}, err: tc.err}
@@ -377,6 +405,17 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 			}
 			if len(runner.requests) != 1 || runner.requests[0].Operation != "observe" {
 				t.Fatalf("adapter invocation = %+v", runner.requests)
+			}
+			readings := 0
+			for _, validate := range []error{
+				ValidateAbsence(tc.evidence, digest), ValidateUnremoved(tc.evidence, request, digest), ValidateRemovalUnfinished(tc.evidence, request, digest),
+			} {
+				if validate == nil {
+					readings++
+				}
+			}
+			if readings > 1 {
+				t.Fatalf("the evidence proves %d removal effects at once", readings)
 			}
 		})
 	}
