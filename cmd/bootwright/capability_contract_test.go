@@ -86,6 +86,28 @@ type contractRow struct {
 	// replay finds nothing realized that could drift, so an observation leaves
 	// partial evidence unknown.
 	indivisible bool
+	// removalKeepsPresence marks a binding whose removal takes back nothing
+	// its presence evidence reports, so a removal's resolution reads the
+	// presence fixture, and that fixture with its postcondition unproved, as
+	// the removal's completion: specs/container-clusters.md, Installation,
+	// takes back the boot media each node presents, which a completed
+	// installation already presents none of. What such a binding does take
+	// back is held by its own package's tests. It is the converse of retains:
+	// retains says the removal's absence proves nothing about the apply, and
+	// this says the apply's presence proves nothing against the removal. An
+	// installation retains the installed system but withdraws the content its
+	// presence reports, so it does not keep presence.
+	removalKeepsPresence bool
+	// removalObservesNothing says why a binding's removal resolution runs no
+	// adapter: its removal changes nothing a run could observe, so the
+	// resolution is always the removal's completion, whatever the target
+	// would report.
+	removalObservesNothing string
+	// removalAbsenceUnproved says why a binding's removal resolution reads its
+	// own absence evidence as positive no effect rather than completion: its
+	// adapter publishes that form over a target it could not read, so only the
+	// repeated removal proves its absence.
+	removalAbsenceUnproved string
 }
 
 func (r contractRow) binding() lifecycle.CapabilityBinding {
@@ -99,12 +121,15 @@ func contractRows() []contractRow {
 			absence: map[string]any{"answered": true}, presence: contractMachinePresence},
 		{kind: baremetal.Kind, implementation: baremetal.Implementation, example: "lab-baremetal", presence: contractBareMetalPresence,
 			retains: true, indivisible: true,
-			noEffectUnreported: "specs/substrates.md proves no effect only from a claim never published, which the controller's reservations hold, not the adapter's evidence"},
+			noEffectUnreported:     "specs/substrates.md proves no effect only from a claim never published, which the controller's reservations hold, not the adapter's evidence",
+			removalObservesNothing: "specs/substrates.md, Physical machine realization, releases only the claim and never contacts the machine"},
 		{kind: installation.Kind, implementation: installation.Implementation, example: "lab-rhel", presence: contractInstallationPresence, retains: true,
 			noEffect: map[string]any{"power": "Off"}},
-		{kind: libvirt.HostKind, implementation: libvirt.HostImplementation, example: "lab-rhel", presence: contractHostPresence},
+		{kind: libvirt.HostKind, implementation: libvirt.HostImplementation, example: "lab-rhel", presence: contractHostPresence,
+			removalAbsenceUnproved: "specs/substrates.md, Provider host realization, publishes the absence form over a connection that does not answer and over a pool undefined before its directory was deleted"},
 		{kind: agentinstall.Kind, implementation: agentinstall.MediaImplementation, example: "lab-sno", presence: contractMediaPresence},
-		{kind: agentinstall.Kind, implementation: agentinstall.InstallImplementation, example: "lab-sno", presence: contractClusterPresence},
+		{kind: agentinstall.Kind, implementation: agentinstall.InstallImplementation, example: "lab-sno", presence: contractClusterPresence,
+			removalKeepsPresence: true},
 		{kind: string(proxy.Definition().Kind), implementation: proxy.Definition().Implementation, example: "lab-rhel", presence: contractServicePresence},
 		{kind: string(dnsserver.Definition().Kind), implementation: dnsserver.Definition().Implementation, example: "lab-rhel", presence: contractServicePresence},
 		{kind: string(ntpserver.Definition().Kind), implementation: ntpserver.Definition().Implementation, example: "lab-rhel", presence: contractServicePresence},
@@ -139,6 +164,8 @@ var contractProperties = []string{
 	"apply-evidence-proves-presence", "destroy-evidence-proves-absence",
 	"observe-absence-proves-no-effect", "observe-no-effect-proves-no-effect", "observe-partial-proves-partial",
 	"observe-unproved", "quiescence-unproved",
+	"observe-removal-request", "observe-removal-unproved", "observe-removal-evidence-proves-request",
+	"observe-removal-proves-absence", "observe-removal-reads-presence", "observe-removal-reads-partial",
 }
 
 // contractRunner is a scripted runner: it records every request and answers
@@ -246,6 +273,15 @@ func (f *contractFindings) record(row contractRow, property, message string) {
 // effect and partial; a binding whose removal's absence proves only that
 // removal is held to its own no-effect evidence instead, and one its spec
 // leaves with no partial state reads a partial realization as unknown. A
+// destroy's resolution is held to what the removal proves: it observes through
+// the same adapter operation, proves nothing from a failed or empty
+// observation or one of another request, and reads absence, and any no-effect
+// evidence, as the removal's completion, presence as positive no effect and a
+// partial realization as partial. A binding whose removal keeps what its
+// presence reports reads presence and a partial realization as completion too,
+// one whose removal changes nothing observable runs no adapter and reads
+// everything as completion, and one whose adapter also publishes its absence
+// over a target it could not read reads that absence as positive no effect. A
 // failed or empty probe never reads as quiescent.
 func TestEveryCapabilityHonoursTheCapabilityContract(t *testing.T) {
 	runner := &contractRunner{}
@@ -416,7 +452,8 @@ func contractEffects(t *testing.T, row contractRow, example contractExample, cap
 }
 
 // contractCall performs one operation, reporting the outcome an attempt
-// records or the effect an observation proves.
+// records or the effect an observation proves. An operation it does not name
+// panics, so a forgotten case can never silently measure another method.
 func contractCall(capability lifecycle.Capability, operation string, execution lifecycle.Execution) (lifecycle.Result, lifecycle.Observation, error) {
 	ctx := context.Background()
 	switch operation {
@@ -426,28 +463,45 @@ func contractCall(capability lifecycle.Capability, operation string, execution l
 	case "destroy":
 		result, err := capability.Destroy(ctx, execution)
 		return result, lifecycle.Observation{}, err
+	case "observe":
+		observation, err := capability.Observe(ctx, execution)
+		return lifecycle.Result{}, observation, err
+	case "observe-removal":
+		observation, err := capability.ObserveRemoval(ctx, execution)
+		return lifecycle.Result{}, observation, err
 	}
-	observation, err := capability.Observe(ctx, execution)
-	return lifecycle.Result{}, observation, err
+	panic("the capability contract suite performs no " + operation + " operation")
 }
 
 // contractRequests proves every operation sends exactly one request carrying
-// the frozen bytes under the block's identity and a bounded deadline.
+// the frozen bytes under the block's identity and a bounded deadline. A
+// removal's resolution runs the observe operation, and one whose removal
+// observes nothing sends no request at all.
 func contractRequests(row contractRow, block reconciliation.Block, capability lifecycle.Capability, execution lifecycle.Execution, runner *contractRunner, findings *contractFindings) {
-	for _, operation := range []string{"apply", "observe", "destroy"} {
+	for _, operation := range []string{"apply", "observe", "observe-removal", "destroy"} {
 		runner.script(lifecycle.RunResult{Outcome: "changed", Evidence: json.RawMessage(`{}`)}, nil)
 		_, _, _ = contractCall(capability, operation, execution)
 		sent := runner.sent()
 		property := operation + "-request"
-		if len(sent) != 1 {
-			findings.record(row, property, fmt.Sprintf("%s sent %d requests", block.ID, len(sent)))
+		want, runs := operation, 1
+		if operation == "observe-removal" {
+			want = "observe"
+			if row.removalObservesNothing != "" {
+				runs = 0
+			}
+		}
+		if len(sent) != runs {
+			findings.record(row, property, fmt.Sprintf("%s sent %d requests, want %d", block.ID, len(sent), runs))
+			continue
+		}
+		if runs == 0 {
 			continue
 		}
 		request := sent[0]
 		switch {
 		case request.Implementation != row.implementation:
 			findings.record(row, property, block.ID+" ran "+request.Implementation)
-		case request.Operation != operation:
+		case request.Operation != want:
 			findings.record(row, property, block.ID+" ran the "+request.Operation+" operation")
 		case request.Digest != block.RequestDigest:
 			findings.record(row, property, block.ID+" named another request digest")
@@ -526,8 +580,62 @@ func contractEvidence(t *testing.T, row contractRow, example contractExample, bl
 			findings.record(row, "observe-evidence-proves-request",
 				fmt.Sprintf("%s: an observation of %s proved %q", block.ID, evidence, observation.Effect))
 		}
+		if row.removalObservesNothing != "" {
+			continue
+		}
+		runner.script(lifecycle.RunResult{Outcome: "unchanged", Evidence: evidence}, nil)
+		if _, observation, _ := contractCall(capability, "observe-removal", execution); observation.Effect != reconciliation.EffectUnknown {
+			findings.record(row, "observe-removal-evidence-proves-request",
+				fmt.Sprintf("%s: a removal observation of %s proved %q", block.ID, evidence, observation.Effect))
+		}
 	}
 	contractEvidenceKinds(t, row, block, capability, execution, runner, findings)
+	contractRemovalObservations(t, row, block, capability, execution, runner, findings)
+}
+
+// contractRemovalObservations holds a destroy's resolution to what the
+// removal proves, under this block's own digest (specs/state-reconciliation.md,
+// Resolution outcomes): the removal's own absence, and a binding's no-effect
+// evidence, which reports nothing the removal would take back, are its
+// completion; presence is positive no effect, because the removal took
+// nothing back; and a partial realization is partial, because the removal
+// left part of what it takes back. A binding whose removal keeps what its
+// presence reports, and one whose removal observes nothing, read presence and
+// a partial realization as completion instead, and one whose absence evidence
+// its adapter also publishes over a target it could not read reads that
+// absence as positive no effect, so the removal repeats and proves it. The
+// fixtures are the ones contractEvidenceControls proves sound.
+func contractRemovalObservations(t *testing.T, row contractRow, block reconciliation.Block, capability lifecycle.Capability, execution lifecycle.Execution, runner *contractRunner, findings *contractFindings) {
+	t.Helper()
+	kept := row.removalKeepsPresence || row.removalObservesNothing != ""
+	presenceWant, partialWant := reconciliation.EffectNoEffect, reconciliation.EffectPartial
+	if kept {
+		presenceWant, partialWant = reconciliation.EffectCompleted, reconciliation.EffectCompleted
+	}
+	absenceWant := reconciliation.EffectCompleted
+	if row.removalAbsenceUnproved != "" {
+		absenceWant = reconciliation.EffectNoEffect
+	}
+	type removalRule struct {
+		property string
+		evidence json.RawMessage
+		want     reconciliation.EffectState
+	}
+	rules := []removalRule{
+		{"observe-removal-proves-absence", contractAbsence(t, row, block.RequestDigest), absenceWant},
+		{"observe-removal-reads-presence", contractPresence(t, row, execution, block.RequestDigest), presenceWant},
+		{"observe-removal-reads-partial", contractPartial(t, row, execution, block.RequestDigest), partialWant},
+	}
+	if row.noEffect != nil {
+		rules = append(rules, removalRule{"observe-removal-proves-absence", contractNoEffect(t, row, block.RequestDigest), reconciliation.EffectCompleted})
+	}
+	for _, rule := range rules {
+		runner.script(lifecycle.RunResult{Outcome: "unchanged", Evidence: rule.evidence}, nil)
+		if _, observation, _ := contractCall(capability, "observe-removal", execution); observation.Effect != rule.want {
+			findings.record(row, rule.property,
+				fmt.Sprintf("%s: a removal observation of %s proved %q, want %q", block.ID, rule.evidence, observation.Effect, rule.want))
+		}
+	}
 }
 
 // contractEvidenceKinds holds each operation to the kind of its evidence under
@@ -546,9 +654,9 @@ func contractEvidence(t *testing.T, row contractRow, example contractExample, bl
 // operation accepts that no-effect evidence, since a direct result with
 // positive no effect is never success. The presence and absence fixtures are
 // those contractEvidenceControls proves the other operation accepts, so
-// refusing them is the kind check's alone. The blocks are an apply's, so an
-// observation here is an apply's resolution; how a destroy's resolution reads
-// presence is S27's to settle.
+// refusing them is the kind check's alone. An observation here is an apply's
+// resolution; contractRemovalObservations holds a destroy's resolution to the
+// same fixtures.
 func contractEvidenceKinds(t *testing.T, row contractRow, block reconciliation.Block, capability lifecycle.Capability, execution lifecycle.Execution, runner *contractRunner, findings *contractFindings) {
 	t.Helper()
 	presence := contractPresence(t, row, execution, block.RequestDigest)
@@ -852,7 +960,9 @@ func contractArtifactServerPresence(t *testing.T, execution lifecycle.Execution)
 }
 
 // contractObservations proves a failed or empty observation proves nothing,
-// and that a probe reading one is never quiescent.
+// for an apply's resolution and a removal's alike, and that a probe reading
+// one is never quiescent. A removal that observes nothing reads no evidence,
+// so only its request check holds it.
 func contractObservations(row contractRow, block reconciliation.Block, capability lifecycle.Capability, execution lifecycle.Execution, runner *contractRunner, findings *contractFindings) {
 	scripted := []struct {
 		name   string
@@ -866,6 +976,12 @@ func contractObservations(row contractRow, block reconciliation.Block, capabilit
 		runner.script(script.result, script.err)
 		if _, observation, _ := contractCall(capability, "observe", execution); observation.Effect != reconciliation.EffectUnknown {
 			findings.record(row, "observe-unproved", fmt.Sprintf("%s: an observation %s proved %q", block.ID, script.name, observation.Effect))
+		}
+		if row.removalObservesNothing == "" {
+			runner.script(script.result, script.err)
+			if _, observation, _ := contractCall(capability, "observe-removal", execution); observation.Effect != reconciliation.EffectUnknown {
+				findings.record(row, "observe-removal-unproved", fmt.Sprintf("%s: a removal observation %s proved %q", block.ID, script.name, observation.Effect))
+			}
 		}
 		if !row.probes {
 			continue

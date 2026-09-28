@@ -512,8 +512,18 @@ func (c *testCapability) Destroy(_ context.Context, execution Execution) (Result
 }
 
 func (c *testCapability) Observe(_ context.Context, execution Execution) (Observation, error) {
+	return c.observe("observe:", execution)
+}
+
+// ObserveRemoval answers from the same script as Observe, and names itself in
+// calls, so a test proves which of the two a resolution asked.
+func (c *testCapability) ObserveRemoval(_ context.Context, execution Execution) (Observation, error) {
+	return c.observe("observe-removal:", execution)
+}
+
+func (c *testCapability) observe(call string, execution Execution) (Observation, error) {
 	c.record(&c.observes, execution.Block.ID)
-	c.record(&c.calls, "observe:"+execution.Block.ID)
+	c.record(&c.calls, call+execution.Block.ID)
 	c.recordExecution(execution)
 	c.mutex.Lock()
 	hold := c.observeHold

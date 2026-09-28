@@ -117,7 +117,23 @@ frozen request: the pool or an owned managed network present without the whole
 is a positive partial realization the next attempt converges, while a managed
 network the hypervisor defines without this context's ownership is foreign and
 stays unknown. The hypervisor closure is shared host software this block never
-removes, so its presence alone is not a partial realization.
+removes, so its presence alone is not a partial realization. A removal's
+resolution reads the same observation for what the removal proves: all of the
+owned networks and the pool present is positive no effect, and some of them is
+a positive partial realization, while the hypervisor closure proves nothing
+either way. It never reads the absence form as the removal's completion,
+because a connection that does not answer publishes that form too, and so does
+a pool undefined before its directory was deleted: the form reads as no
+effect, and the repeated removal proves its own absence against a connection
+that answers.
+
+Not yet met: the observation reads a silent connection or an empty pool as
+removed and then publishes the absence form, which carries neither whether the
+connection answered nor the pool directory. An owned network left without its
+pool therefore resolves unknown instead of partial, and a removal whose effect
+finished before it was interrupted is repeated once, because its resolution
+cannot prove that from the absence form; tracked as
+[backlog S6b](milestones/backlog.md#audit-follow-ups-2026-09).
 
 ## Machine realization
 
@@ -183,7 +199,16 @@ operator acknowledges the loss before the plan registers. Observation is
 read-only; nothing present with no recorded before-state is positive no effect;
 the domain, its controller unit or one of its disks present without the whole
 is a positive partial realization the next attempt converges; and a same-name
-domain without this context's ownership is foreign and stays unknown.
+domain without this context's ownership is foreign and stays unknown. A
+removal's resolution reads the same observation for what the removal proves:
+none of the domain, its controller unit and its disks present is its
+completion, the whole machine is positive no effect, and any of them present
+is a positive partial realization.
+
+Not yet met: the observation reads an empty domain and controller unit as
+removed, so a machine with only its disks left resolves unknown instead of
+partial, in an apply's resolution and a removal's alike; tracked as
+[backlog S6b](milestones/backlog.md#audit-follow-ups-2026-09).
 
 **Hypervisor answer.** The observation and its evidence report whether the
 hypervisor answered for the domain, because a hypervisor that does not answer
@@ -266,7 +291,9 @@ reports positive no effect only when its own claim was never published.
 its firmware settings, its disks and whatever operating system is installed on
 it are retained exactly as they are, so the block's removal description says it
 retains the machine and lists no impact. It consumes no authorization, because
-it destroys nothing. Physical erasure is deliberately not part of this contract
+it destroys nothing. The removal's resolution observes nothing and is always
+its completion, because the removal changes nothing on the machine. Physical
+erasure is deliberately not part of this contract
 and remains [deferred](milestones/backlog.md#candidates).
 
 **Quiescence.** The removal takes back only a claim, which nothing reads, so

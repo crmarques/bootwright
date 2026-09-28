@@ -240,6 +240,18 @@ anything else, and a fresh `destroy` over an incomplete apply observes them
 before it registers. No command edits a block state. An observation that fails
 or reports an effect outside this set is recorded as `unknown`.
 
+A block is observed for the verb its operation froze, so each row below proves
+that verb's effect. A destroy block's completion is its removal's own
+postcondition, as its capability states it, so a target that still shows what
+the removal takes back, and is this context's own, is positive no effect or a
+positive partial realization, as its capability states which. What a removal
+keeps by design proves nothing against it. An observation that cannot tell the
+removal's postcondition from a target it could not read never proves
+completion: its capability reads it as no effect, and the retry that follows
+proves its own absence, since a removal over an absent target completes (see
+[attempts and unknown outcomes](#attempts-and-unknown-outcomes)). A fresh
+`destroy` observes the incomplete apply's blocks as that apply's.
+
 | Observation proves | Effect state | Block |
 | --- | --- | --- |
 | Positive completion | `completed` | `done` |
@@ -550,7 +562,8 @@ operation may continue past, remove, or delete it until a new observation
 resolves it, although the attempt had already proved its outcome. Cancellation
 stops the next attempt from starting; it never suppresses the record of the
 attempt that already ran. Resolving `unknown` is a read-only, capability-owned
-observation against the frozen request and exact target identity. Before any resolution
+observation against the frozen request, the verb it was frozen for and the
+exact target identity. Before any resolution
 observation—including local process, network, or remote probing—Bootwright must
 restore the required operation logging boundary as defined below, durably
 allocate the next resolution number for the exact unknown effect attempt, and

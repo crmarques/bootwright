@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"slices"
@@ -552,6 +553,62 @@ func TestDestroyRetainsSharedClients(t *testing.T) {
 	var evidence Evidence
 	if json.Unmarshal(result.Evidence, &evidence) != nil || !evidence.Retained {
 		t.Fatalf("evidence = %s", result.Evidence)
+	}
+}
+
+// A removal retains the shared closure and takes nothing back, so its
+// resolution runs nothing and reads no host state: it is the removal's
+// completion, with exactly the evidence the removal publishes. Only a request
+// it cannot read, or a resolution already cancelled, stays unknown.
+func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
+	tools := &fakeTools{selected: []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}, complete: true, present: true}
+	native := &fakeNative{ready: true}
+	installer := &fakeInstaller{}
+	capability := New(tools, native, native, installer)
+	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Destroy)
+	recorder := newRecorder(&fakeArea{sealed: true})
+	removed, err := capability.Destroy(context.Background(), recorder.execution(t, block, hostState(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	groups := slices.Clone(recorder.groups)
+	bare := lifecycle.Execution{Operation: "op-0000000000000000000000000000", Attempt: 1, Resolution: 1, Block: block}
+	for name, execution := range map[string]lifecycle.Execution{
+		"with the controller stage": recorder.execution(t, block, hostState(t)),
+		"with no host state at all": bare,
+	} {
+		t.Run(name, func(t *testing.T) {
+			observation, err := capability.ObserveRemoval(context.Background(), execution)
+			if err != nil || observation.Effect != reconciliation.EffectCompleted {
+				t.Fatalf("removal observation = %+v (%v), want completed", observation, err)
+			}
+			if !bytes.Equal(observation.Evidence, removed.Evidence) {
+				t.Fatalf("the resolution's evidence %s is not the %s the removal publishes", observation.Evidence, removed.Evidence)
+			}
+			if tools.selects+tools.presents+tools.resolves+native.resolves+native.checks+installer.installs != 0 ||
+				len(recorder.areas) != 0 || len(recorder.sealed) != 0 || len(recorder.retained) != 0 || !slices.Equal(recorder.groups, groups) {
+				t.Fatalf("a removal's resolution ran or read something: tools=%+v native=%+v installs=%d areas=%v groups=%v",
+					tools, native, installer.installs, recorder.areas, recorder.groups)
+			}
+		})
+	}
+	malformed := bare
+	malformed.Block.Request = json.RawMessage(`{}`)
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	for name, refused := range map[string]struct {
+		ctx       context.Context
+		execution lifecycle.Execution
+	}{
+		"a malformed request":    {context.Background(), malformed},
+		"a cancelled resolution": {cancelled, bare},
+	} {
+		t.Run(name, func(t *testing.T) {
+			observation, err := capability.ObserveRemoval(refused.ctx, refused.execution)
+			if err == nil || observation.Effect != reconciliation.EffectUnknown {
+				t.Fatalf("removal observation = %+v (%v), want unknown with its reason", observation, err)
+			}
+		})
 	}
 }
 

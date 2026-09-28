@@ -316,6 +316,50 @@ func TestObservationMapsEvidenceToTheEffectItProves(t *testing.T) {
 	}
 }
 
+// A removal withdraws published content whatever the guest holds and keeps
+// the installed system, so its resolution reads only that content: none left
+// is its completion whatever marker or power the guest reports, the whole
+// completion is a removal that had no effect, and any content left is partial.
+func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
+	call, request := execution(t, "digest")
+	marker, _ := MarkerFor(request, "digest")
+	other, _ := MarkerFor(request, "another")
+	encode := func(evidence Evidence) json.RawMessage {
+		data, err := json.Marshal(evidence)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	for name, test := range map[string]struct {
+		runner *fakeRunner
+		want   reconciliation.EffectState
+	}{
+		"absent":                         {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Absent: true, Postcondition: true, Request: "digest"})}}, reconciliation.EffectCompleted},
+		"never installed":                {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Power: "Off", Request: "digest"})}}, reconciliation.EffectCompleted},
+		"installed and withdrawn":        {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Marker: string(marker), Power: "On", Request: "digest"})}}, reconciliation.EffectCompleted},
+		"another installation":           {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Marker: string(other), Power: "On", Request: "digest"})}}, reconciliation.EffectCompleted},
+		"complete":                       {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: completeEvidence(request, "digest", string(marker))}}, reconciliation.EffectNoEffect},
+		"partial":                        {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: mutate(request, "digest", string(marker), func(e *Evidence) { e.Postcondition = false })}}, reconciliation.EffectPartial},
+		"content under a foreign marker": {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Image: true, Marker: string(other), Power: "On", Request: "digest"})}}, reconciliation.EffectPartial},
+		"content on a running guest":     {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Image: true, Power: "On", Request: "digest"})}}, reconciliation.EffectPartial},
+		"tree and private left":          {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Marker: string(marker), Power: "On", Private: true, Tree: true, Request: "digest"})}}, reconciliation.EffectPartial},
+		"private left":                   {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Marker: string(marker), Power: "On", Private: true, Request: "digest"})}}, reconciliation.EffectPartial},
+		"another request":                {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Absent: true, Postcondition: true, Request: "another"})}}, reconciliation.EffectUnknown},
+		"failed":                         {&fakeRunner{err: errors.New("unreachable")}, reconciliation.EffectUnknown},
+	} {
+		t.Run(name, func(t *testing.T) {
+			observation, err := New(test.runner).ObserveRemoval(context.Background(), call)
+			if err != nil || observation.Effect != test.want {
+				t.Fatalf("removal observation = %+v (%v), want %s", observation, err, test.want)
+			}
+			if len(test.runner.requests) != 1 || test.runner.requests[0].Operation != "observe" {
+				t.Fatalf("adapter invocation = %+v", test.runner.requests)
+			}
+		})
+	}
+}
+
 // An operation registered before a physical installation or a private
 // publication was refused still carries one in its frozen request. Its apply
 // refuses before the adapter boots or publishes anything, naming the Machine,

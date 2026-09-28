@@ -193,6 +193,39 @@ func (c InstallCapability) mutate(ctx context.Context, execution lifecycle.Execu
 // effect; that same cluster answering with the completion not yet true is a
 // positive partial realization the next attempt converges.
 func (c InstallCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
+	return c.observe(ctx, execution, func(evidence []byte, request InstallRequest, digest string) reconciliation.EffectState {
+		switch {
+		case ValidateInstallPresence(evidence, request, digest) == nil:
+			return reconciliation.EffectCompleted
+		case ValidateInstallNoEffect(evidence, digest) == nil:
+			return reconciliation.EffectNoEffect
+		case ValidateInstallPartial(evidence, digest) == nil:
+			return reconciliation.EffectPartial
+		}
+		return reconciliation.EffectUnknown
+	})
+}
+
+// ObserveRemoval reads the same observation for what a removal proves. The
+// removal takes back the media each node presents, and a completed
+// installation already presents none, so no node presenting media is its
+// completion whatever answers; only this cluster's own image on some nodes is
+// a positive partial removal; and a foreign image stays unknown.
+func (c InstallCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
+	return c.observe(ctx, execution, func(evidence []byte, _ InstallRequest, digest string) reconciliation.EffectState {
+		switch {
+		case ValidateInstallReleased(evidence, digest) == nil:
+			return reconciliation.EffectCompleted
+		case ValidateInstallReleasePartial(evidence, digest) == nil:
+			return reconciliation.EffectPartial
+		}
+		return reconciliation.EffectUnknown
+	})
+}
+
+// observe runs the one read-only observation both resolutions share and reads
+// its evidence for the verb the block was frozen for.
+func (c InstallCapability) observe(ctx context.Context, execution lifecycle.Execution, read func([]byte, InstallRequest, string) reconciliation.EffectState) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, err := c.prepare(ctx, execution, "observe")
 	if err != nil {
@@ -203,17 +236,7 @@ func (c InstallCapability) Observe(ctx context.Context, execution lifecycle.Exec
 		recordObservationFailure(ctx, execution, err)
 		return unknown, nil
 	}
-	digest := execution.Block.RequestDigest
-	if ValidateInstallPresence(result.Evidence, request, digest) == nil {
-		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: result.Evidence}, nil
-	}
-	if ValidateInstallNoEffect(result.Evidence, digest) == nil {
-		return lifecycle.Observation{Effect: reconciliation.EffectNoEffect, Evidence: result.Evidence}, nil
-	}
-	if ValidateInstallPartial(result.Evidence, digest) == nil {
-		return lifecycle.Observation{Effect: reconciliation.EffectPartial, Evidence: result.Evidence}, nil
-	}
-	return lifecycle.Observation{Effect: reconciliation.EffectUnknown, Evidence: result.Evidence}, nil
+	return lifecycle.Observation{Effect: read(result.Evidence, request, execution.Block.RequestDigest), Evidence: result.Evidence}, nil
 }
 
 // Quiescent is derived rather than probed. This block owns the media each node

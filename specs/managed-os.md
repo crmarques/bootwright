@@ -216,7 +216,11 @@ which is either content it published on a powered-off guest that never
 installed, or the frozen marker with the completion not yet true. Anything else
 stays unknown, including a guest answering with another marker and a powered-on
 guest with none, because the first belongs to another installation and the
-second may be running the installer now.
+second may be running the installer now. A removal's resolution reads only the
+published content, which the removal withdraws whatever the guest holds: none
+left is its completion, whatever marker or power the guest reports; the whole
+completion is positive no effect; and any content left is a positive partial
+realization.
 
 **Quiescence and cancellation.** This block owns published installer content,
 which an installed Machine no longer reads, so its quiescence follows the

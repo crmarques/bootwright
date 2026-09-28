@@ -287,6 +287,42 @@ func (c HostCapability) mutate(ctx context.Context, execution lifecycle.Executio
 // context's own networks or pool part way realized is positive partial, and a
 // foreign or contradictory observation stays unknown.
 func (c HostCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
+	return c.observe(ctx, execution, func(evidence []byte, request HostRequest, digest string) reconciliation.EffectState {
+		switch {
+		case ValidateHostPresence(evidence, request, digest) == nil:
+			return reconciliation.EffectCompleted
+		case ValidateHostAbsence(evidence, digest) == nil:
+			return reconciliation.EffectNoEffect
+		case ValidateHostPartial(evidence, digest) == nil:
+			return reconciliation.EffectPartial
+		}
+		return reconciliation.EffectUnknown
+	})
+}
+
+// ObserveRemoval reads the same observation for what a removal proves: all of
+// this context's networks and pool present is positive no effect, and some of
+// them is a positive partial removal the next attempt converges. It never
+// reads the absence form as the removal's completion, because a connection
+// that does not answer publishes that form too, as does a pool undefined
+// before its directory was deleted; the form reads as no effect, so the
+// removal repeats and proves its own absence. The hypervisor closure it never
+// removes proves nothing either way.
+func (c HostCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
+	return c.observe(ctx, execution, func(evidence []byte, request HostRequest, digest string) reconciliation.EffectState {
+		switch {
+		case ValidateHostAbsence(evidence, digest) == nil, ValidateHostPresence(evidence, request, digest) == nil:
+			return reconciliation.EffectNoEffect
+		case ValidateHostPartial(evidence, digest) == nil:
+			return reconciliation.EffectPartial
+		}
+		return reconciliation.EffectUnknown
+	})
+}
+
+// observe runs the one read-only observation both resolutions share and reads
+// its evidence for the verb the block was frozen for.
+func (c HostCapability) observe(ctx context.Context, execution lifecycle.Execution, read func([]byte, HostRequest, string) reconciliation.EffectState) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, err := c.prepare(ctx, execution)
 	if err != nil {
@@ -297,17 +333,7 @@ func (c HostCapability) Observe(ctx context.Context, execution lifecycle.Executi
 		recordObservationFailure(ctx, execution, err)
 		return unknown, nil
 	}
-	digest := execution.Block.RequestDigest
-	if ValidateHostPresence(result.Evidence, request, digest) == nil {
-		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: result.Evidence}, nil
-	}
-	if ValidateHostAbsence(result.Evidence, digest) == nil {
-		return lifecycle.Observation{Effect: reconciliation.EffectNoEffect, Evidence: result.Evidence}, nil
-	}
-	if ValidateHostPartial(result.Evidence, digest) == nil {
-		return lifecycle.Observation{Effect: reconciliation.EffectPartial, Evidence: result.Evidence}, nil
-	}
-	return lifecycle.Observation{Effect: reconciliation.EffectUnknown, Evidence: result.Evidence}, nil
+	return lifecycle.Observation{Effect: read(result.Evidence, request, execution.Block.RequestDigest), Evidence: result.Evidence}, nil
 }
 
 func (c HostCapability) prepare(ctx context.Context, execution lifecycle.Execution) (HostRequest, error) {
@@ -385,6 +411,40 @@ func (c MachineCapability) mutate(ctx context.Context, execution lifecycle.Execu
 // positive no effect; this context's own domain, controller or disks part way
 // realized is positive partial; a foreign domain stays unknown.
 func (c MachineCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
+	return c.observe(ctx, execution, func(evidence []byte, request MachineRequest, digest string) reconciliation.EffectState {
+		switch {
+		case ValidateMachinePresence(evidence, request, digest) == nil:
+			return reconciliation.EffectCompleted
+		case ValidateMachineAbsence(evidence, digest) == nil:
+			return reconciliation.EffectNoEffect
+		case ValidateMachinePartial(evidence, digest) == nil:
+			return reconciliation.EffectPartial
+		}
+		return reconciliation.EffectUnknown
+	})
+}
+
+// ObserveRemoval reads the same observation for what a removal proves: none of
+// the domain, its controller unit and its disks present is its completion, the
+// whole machine is positive no effect, and part of it is a positive partial
+// removal the next attempt converges.
+func (c MachineCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
+	return c.observe(ctx, execution, func(evidence []byte, request MachineRequest, digest string) reconciliation.EffectState {
+		switch {
+		case ValidateMachineAbsence(evidence, digest) == nil:
+			return reconciliation.EffectCompleted
+		case ValidateMachinePresence(evidence, request, digest) == nil:
+			return reconciliation.EffectNoEffect
+		case ValidateMachinePartial(evidence, digest) == nil:
+			return reconciliation.EffectPartial
+		}
+		return reconciliation.EffectUnknown
+	})
+}
+
+// observe runs the one read-only observation both resolutions share and reads
+// its evidence for the verb the block was frozen for.
+func (c MachineCapability) observe(ctx context.Context, execution lifecycle.Execution, read func([]byte, MachineRequest, string) reconciliation.EffectState) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, err := c.prepare(ctx, execution)
 	if err != nil {
@@ -395,17 +455,7 @@ func (c MachineCapability) Observe(ctx context.Context, execution lifecycle.Exec
 		recordObservationFailure(ctx, execution, err)
 		return unknown, nil
 	}
-	digest := execution.Block.RequestDigest
-	if ValidateMachinePresence(result.Evidence, request, digest) == nil {
-		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: result.Evidence}, nil
-	}
-	if ValidateMachineAbsence(result.Evidence, digest) == nil {
-		return lifecycle.Observation{Effect: reconciliation.EffectNoEffect, Evidence: result.Evidence}, nil
-	}
-	if ValidateMachinePartial(result.Evidence, digest) == nil {
-		return lifecycle.Observation{Effect: reconciliation.EffectPartial, Evidence: result.Evidence}, nil
-	}
-	return lifecycle.Observation{Effect: reconciliation.EffectUnknown, Evidence: result.Evidence}, nil
+	return lifecycle.Observation{Effect: read(result.Evidence, request, execution.Block.RequestDigest), Evidence: result.Evidence}, nil
 }
 
 func (c MachineCapability) prepare(ctx context.Context, execution lifecycle.Execution) (MachineRequest, error) {

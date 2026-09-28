@@ -212,6 +212,41 @@ func TestObserveMapsLiveEvidenceToItsEffectState(t *testing.T) {
 	}
 }
 
+// A removal's resolution reads the same observation for what the removal
+// proves, so a server still present is a removal that had no effect rather
+// than one that completed.
+func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
+	material, fingerprint := issue(t, validOptions())
+	call := execution(t, material)
+	request, err := DecodeRequest(call.Block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := call.Block.RequestDigest
+	for name, tc := range map[string]struct {
+		result lifecycle.RunResult
+		err    error
+		want   reconciliation.EffectState
+	}{
+		"absent":          {lifecycle.RunResult{Outcome: "unchanged", Evidence: absenceEvidence(digest)}, nil, reconciliation.EffectCompleted},
+		"present":         {lifecycle.RunResult{Outcome: "unchanged", Evidence: presenceEvidence(request, digest, fingerprint)}, nil, reconciliation.EffectNoEffect},
+		"partial":         {lifecycle.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(`{"absent":false,"container":"","contentRoot":true,"listeners":[],"postcondition":false,"request":"` + digest + `","unit":"active"}`)}, nil, reconciliation.EffectPartial},
+		"another request": {lifecycle.RunResult{Outcome: "unchanged", Evidence: absenceEvidence(testDigest)}, nil, reconciliation.EffectUnknown},
+		"adapter failed":  {lifecycle.RunResult{}, errors.New("unreachable"), reconciliation.EffectUnknown},
+	} {
+		t.Run(name, func(t *testing.T) {
+			runner := &fakeRunner{result: tc.result, err: tc.err}
+			observation, err := New(runner, fixedClock{}).ObserveRemoval(context.Background(), call)
+			if err != nil || observation.Effect != tc.want {
+				t.Fatalf("removal observation = %+v (%v), want %s", observation, err, tc.want)
+			}
+			if len(runner.requests) != 1 || runner.requests[0].Operation != "observe" {
+				t.Fatalf("adapter invocation = %+v", runner.requests)
+			}
+		})
+	}
+}
+
 func TestDestroyRequiresPositiveAbsence(t *testing.T) {
 	material, fingerprint := issue(t, validOptions())
 	call := execution(t, material)

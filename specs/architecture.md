@@ -474,7 +474,9 @@ completion, readiness and absence evidence, returning it through typed results;
 it cannot schedule another domain's work, allocate an operation identity or
 write lifecycle state. A cluster capability therefore cannot drive storage or
 OS installation, and an adapter returns bounded results only to its own
-application service. A capability names what its blocks depend on as API
+application service. A capability observes a frozen apply and a frozen removal
+through separate port methods, so a removal is resolved by what the removal
+proves. A capability names what its blocks depend on as API
 objects and the authorization they consume; Reconciliation resolves the former
 into block dependencies and checks the latter at registration, so no capability
 learns another's block identities.

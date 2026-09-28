@@ -147,13 +147,38 @@ func (c Capability) Destroy(ctx context.Context, execution lifecycle.Execution) 
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
 	report(ctx, execution, "retain-clients", "running")
-	evidence := Evidence{Area: "", Libvirt: request.LibvirtClient, Request: execution.Block.RequestDigest, Retained: true, Roots: []string{}, Tools: []ToolRecord{}}
-	encoded, err := evidence.encode()
+	encoded, err := retainedEvidence(request, execution.Block.RequestDigest)
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
 	report(ctx, execution, "retain-clients", "ok")
 	return lifecycle.Result{Outcome: reconciliation.OutcomeUnchanged, Evidence: encoded}, nil
+}
+
+// ObserveRemoval runs nothing and reads no host state. The removal takes
+// nothing back, so resolving it is always its completion, with the evidence
+// Destroy publishes.
+func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
+	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
+	if err := ctx.Err(); err != nil {
+		return unknown, err
+	}
+	request, err := DecodeRequest(execution.Block.Request)
+	if err != nil {
+		return unknown, err
+	}
+	encoded, err := retainedEvidence(request, execution.Block.RequestDigest)
+	if err != nil {
+		return unknown, err
+	}
+	return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: encoded}, nil
+}
+
+// retainedEvidence is the one statement of what removing this block proves,
+// that it retained the shared closure, so Destroy and a removal's resolution
+// can never publish two different ones.
+func retainedEvidence(request Request, digest string) ([]byte, error) {
+	return Evidence{Area: "", Libvirt: request.LibvirtClient, Request: digest, Retained: true, Roots: []string{}, Tools: []ToolRecord{}}.encode()
 }
 
 // Observe reads live evidence only. The block's effect is the complete

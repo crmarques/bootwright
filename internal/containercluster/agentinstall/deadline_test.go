@@ -13,9 +13,13 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-// operations are every run a cluster block makes, each under the one deadline
-// its frozen request derives.
-var operations = []string{"apply", "observe", "destroy"}
+// operations are every entry point a cluster block's role offers, and runs
+// every call that runs one, each under the one deadline its frozen request
+// derives: a removal's resolution runs the observe entry point.
+var (
+	operations = []string{"apply", "observe", "destroy"}
+	runs       = []string{"apply", "observe", "observe-removal", "destroy"}
+)
 
 // mediaRunDeadline is the deadline one operation's run states for a frozen
 // media request.
@@ -35,8 +39,12 @@ func mediaRunDeadline(t *testing.T, request MediaRequest, operation string) time
 		_, _ = capability.Apply(context.Background(), execution)
 	case "destroy":
 		_, _ = capability.Destroy(context.Background(), execution)
-	default:
+	case "observe":
 		_, _ = capability.Observe(context.Background(), execution)
+	case "observe-removal":
+		_, _ = capability.ObserveRemoval(context.Background(), execution)
+	default:
+		t.Fatalf("no run measures the %s operation", operation)
 	}
 	if len(runner.requests) != 1 {
 		t.Fatalf("media %s ran the adapter %d times", operation, len(runner.requests))
@@ -66,8 +74,12 @@ func installRunDeadline(t *testing.T, request InstallRequest, operation string) 
 		_, _ = capability.Apply(context.Background(), execution)
 	case "destroy":
 		_, _ = capability.Destroy(context.Background(), execution)
-	default:
+	case "observe":
 		_, _ = capability.Observe(context.Background(), execution)
+	case "observe-removal":
+		_, _ = capability.ObserveRemoval(context.Background(), execution)
+	default:
+		t.Fatalf("no run measures the %s operation", operation)
 	}
 	if len(runner.requests) != 1 {
 		t.Fatalf("install %s ran the adapter %d times", operation, len(runner.requests))
@@ -99,7 +111,7 @@ func TestEveryCapabilityDeadlineCoversItsFrozenBudgets(t *testing.T) {
 			}
 			phases += time.Duration(budget) * time.Second
 		}
-		for _, operation := range operations {
+		for _, operation := range runs {
 			if deadline := mediaRunDeadline(t, media, operation); deadline <= build || deadline > lifecycle.MaxDeadline {
 				t.Errorf("%s media %s runs under %s, which must exceed the %s build budget and stay within the %s ceiling",
 					name, operation, deadline, build, lifecycle.MaxDeadline)
@@ -129,7 +141,7 @@ func TestTheDeadlineFollowsTheBudgetsTheRequestFroze(t *testing.T) {
 			*field(&frozen.Budgets) += 7
 		}
 		want := time.Duration(frozen.Budgets.BuildSeconds)*time.Second + mediaMargin
-		for _, operation := range operations {
+		for _, operation := range runs {
 			if got := mediaRunDeadline(t, frozen, operation); got != want {
 				t.Errorf("media %s with %s moved runs under %s, want %s for %+v", operation, name, got, want, frozen.Budgets)
 			}
@@ -148,7 +160,7 @@ func TestTheDeadlineFollowsTheBudgetsTheRequestFroze(t *testing.T) {
 		}
 		seconds := frozen.Budgets.BootSeconds + frozen.Budgets.BootstrapSeconds + frozen.Budgets.InstallSeconds
 		want := time.Duration(seconds)*time.Second + installMargin + 3*nodeMargin
-		for _, operation := range operations {
+		for _, operation := range runs {
 			if got := installRunDeadline(t, frozen, operation); got != want {
 				t.Errorf("install %s with %s moved runs under %s, want %s for %+v", operation, name, got, want, frozen.Budgets)
 			}

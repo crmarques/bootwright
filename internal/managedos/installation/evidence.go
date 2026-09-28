@@ -107,6 +107,35 @@ func ValidateAbsence(data []byte, digest string) error {
 	return nil
 }
 
+// ValidateWithdrawn accepts evidence only when it names this request and
+// reports no published content, which is what the removal takes back. The
+// installed system stays with the Machine's disks, so neither the marker nor
+// the power state is read.
+func ValidateWithdrawn(data []byte, digest string) error {
+	evidence, err := decodeEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if evidence.Image || evidence.Private || evidence.Tree {
+		return refusal("lifecycle.state", "the served root still carries this installation's content", "")
+	}
+	return nil
+}
+
+// ValidateWithdrawalUnfinished accepts evidence only when it names this request
+// and reports published content left, which the removal withdraws whatever the
+// guest holds, so the next attempt converges it.
+func ValidateWithdrawalUnfinished(data []byte, digest string) error {
+	evidence, err := decodeEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if !evidence.Image && !evidence.Private && !evidence.Tree {
+		return refusal("lifecycle.state", "the served root carries none of this installation's content", "")
+	}
+	return nil
+}
+
 // ValidateNoEffect accepts evidence only when it positively proves that nothing
 // was installed: a powered-off machine holding no marker, with no content
 // published. Anything else stays unknown.
