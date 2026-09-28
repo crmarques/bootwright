@@ -3,7 +3,6 @@
 package contextfs
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -549,63 +548,10 @@ func discardCreated(parent *directory, name string, identity syscall.Stat_t) {
 // replacing it, so name appears only with complete, synchronized content. A
 // failure before the rename removes the stage unless retain is set.
 func (s *Store) writeExclusiveAtomic(ctx context.Context, parent *directory, name string, data []byte, retain bool) error {
-	var pending string
-	var created syscall.Stat_t
-	written := false
-	for range 16 {
-		candidate, err := s.candidate("pending-")
-		if err != nil {
-			return err
-		}
-		pending = candidate
-		created, err = s.writeExclusiveIdentity(ctx, parent, pending, data, retain)
-		if errors.Is(err, syscall.EEXIST) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		written = true
-		break
-	}
-	if !written {
-		return state("immutable state staging exhausted its collision limit")
-	}
-	renamed := false
-	defer func() {
-		if !renamed && !retain {
-			discardCreated(parent, pending, created)
-		}
-	}()
-	staged, stagedIdentity, err := readBoundedIdentity(ctx, parent, pending, len(data), true)
-	stagedMatches := bytes.Equal(staged, data)
-	clear(staged)
-	if err != nil || !stagedMatches {
-		return state("staged immutable state changed before publication")
-	}
-	if err := s.checkpoint(ctx, checkpointBeforeSecretImmutableRename); err != nil {
-		return err
-	}
-	current, currentIdentity, err := readBoundedIdentity(ctx, parent, pending, len(data), true)
-	currentMatches := bytes.Equal(current, data)
-	clear(current)
-	if err != nil || !currentMatches || !sameFile(stagedIdentity, currentIdentity) {
-		return state("staged immutable state changed before publication")
-	}
-	if err := renameNoReplaceAt(parent, pending, name); err != nil {
-		return err
-	}
-	renamed = true
-	published, publishedIdentity, err := readBoundedIdentity(ctx, parent, name, len(data), true)
-	publishedMatches := bytes.Equal(published, data)
-	clear(published)
-	if err != nil || !publishedMatches || !sameIdentity(stagedIdentity, publishedIdentity) {
-		return state("published immutable state is unsafe")
-	}
-	if err := s.checkpoint(ctx, checkpointAfterSecretImmutableRename); err != nil {
-		return err
-	}
-	return s.syncDirectory(ctx, parent)
+	_, err := s.publishStage(ctx, parent, name, data, stagedPublication{
+		subject: "immutable state", immutable: true, bound: len(data), retain: retain,
+	}, checkpointBeforeSecretImmutableRename, checkpointAfterSecretImmutableRename)
+	return err
 }
 
 func renameNoReplaceAt(parent *directory, oldName, newName string) error {

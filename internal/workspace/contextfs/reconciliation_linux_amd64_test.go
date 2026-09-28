@@ -571,10 +571,10 @@ func TestPublicationLeavesNoStageOnFailure(t *testing.T) {
 	}
 }
 
-// A mutation-evidence rename that fails after its stage is complete must still
-// remove the stage: no checkpoint separates the two, so only a rename refused
-// by the filesystem reaches that path.
-func TestFailedEvidenceRenameLeavesNoStage(t *testing.T) {
+// The evidence destination is proved right before its one rename, and a
+// destination that no longer holds what the transaction observed refuses the
+// publication and removes its complete stage.
+func TestAnEvidenceDestinationChangedBeforeTheRenameLeavesNoStage(t *testing.T) {
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	runtime := filepath.Join(store.options.Root, "contexts", record.Name, "state")
@@ -583,13 +583,12 @@ func TestFailedEvidenceRenameLeavesNoStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	armed := false
+	replaced := false
 	store.fail = func(point string) error {
-		if !armed || point != "sync-directory" {
+		if point != "before-evidence-rename" || replaced {
 			return nil
 		}
-		armed = false
-		// A regular file cannot be renamed over a directory.
+		replaced = true
 		if err := os.Remove(mutation); err != nil {
 			return err
 		}
@@ -597,12 +596,14 @@ func TestFailedEvidenceRenameLeavesNoStage(t *testing.T) {
 	}
 	defer func() { store.fail = nil }()
 	err = store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
-		armed = true
 		return tx.PublishEvidence(ctx, data)
 	})
+	if !replaced {
+		t.Fatal("the evidence publication never reached its rename")
+	}
 	failures := diagnostics.Of(err)
-	if len(failures) != 1 || failures[0].Message != "context mutation evidence could not be atomically published" {
-		t.Fatalf("the evidence rename was not refused: %#v", failures)
+	if len(failures) != 1 || failures[0].Code != "context.state" || failures[0].Message != "context mutation evidence changed before publication" {
+		t.Fatalf("the changed destination was not refused: %#v", failures)
 	}
 	entries, err := os.ReadDir(runtime)
 	if err != nil {
@@ -610,7 +611,7 @@ func TestFailedEvidenceRenameLeavesNoStage(t *testing.T) {
 	}
 	for _, entry := range entries {
 		if strings.HasPrefix(entry.Name(), "pending-") {
-			t.Errorf("a refused evidence rename left its stage: %s", entry.Name())
+			t.Errorf("a refused evidence publication left its stage: %s", entry.Name())
 		}
 	}
 }

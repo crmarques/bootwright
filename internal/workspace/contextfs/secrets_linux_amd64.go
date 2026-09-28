@@ -189,6 +189,9 @@ func (s *Store) MutateSecrets(ctx context.Context, expected secretstore.Context,
 		return secretLockFailure(ctx, "secret context is held by another mutator", err)
 	}
 	defer syscall.Flock(int(dir.file.Fd()), syscall.LOCK_UN)
+	if err := s.collectContextStages(ctx, dir, false); err != nil {
+		return safeError(err)
+	}
 	if err := verifySecretContextLayout(ctx, dir); err != nil {
 		return safeError(err)
 	}
@@ -853,7 +856,9 @@ func (a *secretArea) Replace(ctx context.Context, path string, data, expected []
 			return secretstore.NotCommitted, err
 		}
 		pending = candidate
-		_, err = a.store.writeExclusiveIdentity(ctx, parent, pending, data, true)
+		// The keyring attributes only a complete stage, so a write that fails
+		// in process removes what it created; nothing removes a complete one.
+		_, err = a.store.writeExclusiveIdentity(ctx, parent, pending, data, false)
 		if errors.Is(err, syscall.EEXIST) {
 			continue
 		}

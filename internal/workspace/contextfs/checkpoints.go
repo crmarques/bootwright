@@ -15,6 +15,7 @@ const (
 	checkpointAfterControllerBundleRetiring  checkpoint = "after-controller-bundle-retiring"
 	checkpointAfterControllerDirectory       checkpoint = "after-controller-directory"
 	checkpointAfterControllerRename          checkpoint = "after-controller-rename"
+	checkpointAfterEvidenceRename            checkpoint = "after-evidence-rename"
 	checkpointAfterInitialRegistryRecovery   checkpoint = "after-initial-registry-recovery"
 	checkpointAfterOperationRename           checkpoint = "after-operation-rename"
 	checkpointAfterRegistryRename            checkpoint = "after-registry-rename"
@@ -35,6 +36,7 @@ const (
 	checkpointBeforeControllerBundleWrite    checkpoint = "before-controller-bundle-write"
 	checkpointBeforeControllerRename         checkpoint = "before-controller-rename"
 	checkpointBeforeEvidence                 checkpoint = "before-evidence"
+	checkpointBeforeEvidenceRename           checkpoint = "before-evidence-rename"
 	checkpointBeforeInitialRegistryRecovery  checkpoint = "before-initial-registry-recovery"
 	checkpointBeforeMediaImageRemoval        checkpoint = "before-media-image-removal"
 	checkpointBeforeMediaRecord              checkpoint = "before-media-record"
@@ -55,6 +57,7 @@ const (
 	checkpointBeforeSecretPrune              checkpoint = "before-secret-prune"
 	checkpointBeforeSecretRename             checkpoint = "before-secret-rename"
 	checkpointBeforeSecretUnlink             checkpoint = "before-secret-unlink"
+	checkpointBeforeStageCollection          checkpoint = "before-stage-collection"
 	checkpointConfirmOperationEntry          checkpoint = "confirm-operation-entry"
 	checkpointCreateFile                     checkpoint = "create-file"
 	checkpointMeasureOperationEntry          checkpoint = "measure-operation-entry"
@@ -76,6 +79,7 @@ func checkpoints() []checkpoint {
 		checkpointAfterControllerBundleRetiring,
 		checkpointAfterControllerDirectory,
 		checkpointAfterControllerRename,
+		checkpointAfterEvidenceRename,
 		checkpointAfterInitialRegistryRecovery,
 		checkpointAfterOperationRename,
 		checkpointAfterRegistryRename,
@@ -96,6 +100,7 @@ func checkpoints() []checkpoint {
 		checkpointBeforeControllerBundleWrite,
 		checkpointBeforeControllerRename,
 		checkpointBeforeEvidence,
+		checkpointBeforeEvidenceRename,
 		checkpointBeforeInitialRegistryRecovery,
 		checkpointBeforeMediaImageRemoval,
 		checkpointBeforeMediaRecord,
@@ -116,6 +121,7 @@ func checkpoints() []checkpoint {
 		checkpointBeforeSecretPrune,
 		checkpointBeforeSecretRename,
 		checkpointBeforeSecretUnlink,
+		checkpointBeforeStageCollection,
 		checkpointConfirmOperationEntry,
 		checkpointCreateFile,
 		checkpointMeasureOperationEntry,

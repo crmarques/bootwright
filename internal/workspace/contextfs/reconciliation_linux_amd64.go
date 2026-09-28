@@ -342,47 +342,21 @@ func (t *lifecycleTransaction) PublishEvidence(ctx context.Context, data []byte)
 	if err := t.base.store.checkpoint(ctx, checkpointBeforeEvidence); err != nil {
 		return err
 	}
-	var pending string
-	var created syscall.Stat_t
-	for range 16 {
-		candidate, err := t.base.store.candidate("pending-")
-		if err != nil {
-			return err
-		}
-		pending = candidate + ".json"
-		created, err = t.base.store.writeExclusiveIdentity(ctx, runtime, pending, data, false)
-		if errors.Is(err, syscall.EEXIST) {
-			pending = ""
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		break
-	}
-	if pending == "" {
-		return state("context mutation evidence exhausted its collision limit")
-	}
-	// The state directory admits no staging entry, so a stage left behind
-	// would refuse every later mutation of this context.
-	renamed := false
-	defer func() {
-		if !renamed {
-			discardCreated(runtime, pending, created)
-		}
-	}()
-	if err := runtime.verify(); err != nil {
-		return err
-	}
-	if err := syscall.Renameat(int(runtime.file.Fd()), pending, int(runtime.file.Fd()), "mutation.json"); err != nil {
-		return state("context mutation evidence could not be atomically published")
-	}
-	renamed = true
-	published, err := readBounded(ctx, runtime, "mutation.json", maxRecord, true)
-	if err != nil || !bytes.Equal(published, data) {
-		return state("published context mutation evidence is unsafe")
-	}
-	if err := t.base.store.syncDirectory(ctx, runtime); err != nil {
+	// Only a committed publication advances what this transaction observed:
+	// after a failure at or after the rename, the next command reads what was
+	// published instead.
+	_, err = t.base.store.publishStage(ctx, runtime, "mutation.json", data, stagedPublication{
+		subject: "context mutation evidence", suffix: ".json", replace: true, immutable: true, bound: maxRecord,
+		renameFailure: "context mutation evidence could not be atomically published",
+		prove: func(ctx context.Context) error {
+			current, err := readBounded(ctx, runtime, "mutation.json", maxRecord, true)
+			if err != nil || !bytes.Equal(current, t.evidence) {
+				return state("context mutation evidence changed before publication")
+			}
+			return nil
+		},
+	}, checkpointBeforeEvidenceRename, checkpointAfterEvidenceRename)
+	if err != nil {
 		return err
 	}
 	t.evidence = slices.Clone(data)

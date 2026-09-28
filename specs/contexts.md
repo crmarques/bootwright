@@ -305,17 +305,39 @@ The selected revision changes at that registry commit point. Readers observe
 a complete old or new input; interrupted unpublished revisions are never
 adopted by scanning. Small temporary files for atomic record replacement stay
 inside existing directories; they do not introduce a staging tree. A write
-that fails after creating its file removes exactly that file, and a mutation
-evidence or operation record publication that fails before its rename removes
-its temporary file, even when the command was cancelled: a temporary file left
-directly in the context's `state/` directory would refuse every later mutation
-of the context. Removal happens only while the containing directory still
-verifies; otherwise the file stays and the original failure is reported. The
-[secret store](secrets.md#local-keyring-v3) instead retains what an
-interrupted write leaves for its own recovery, and so does the context
-reservation write: until the registry records the context directory's
-identity, the reservation alone lets an init retry attribute that directory
-and record the identity that deletion requires.
+that fails after creating its file removes exactly that file, unless its retry
+relies on what it leaves, as below. Every record publication except the
+registry's and the secret store's stages its bytes beside its target, proves
+right before one rename that the destination still holds what it replaces or
+renames without replacing anything, and removes its stage on any failure
+before that rename, even when the command was cancelled. Removal happens only
+while the containing directory still verifies; otherwise the file stays and
+the original failure is reported.
+
+Every writer of a stage in the controller directory or in a context's `state/`
+subtree holds the root lock for its whole command, so under the exclusive root
+lock no stage there has a live writer: only a killed process, or a failure
+whose directory no longer verified, leaves one. Every command that opens a
+registry transaction (`context init`, `use`, `update` and `delete`, `setup`,
+and the execution of `apply` and `destroy`) therefore first removes the
+controller directory's stages and, when it takes the lease of a context whose
+directory identity the registry records, the stages in that context's `state/`
+directory and in its operation, run and trust areas; every secret mutation
+first removes the stages in its context's `state/` directory; each does so
+before it verifies the layout. Only a private regular file named as that
+directory's publication stage, on its device and within its record bound, is
+removed; anything else is left to the verification that already refuses it.
+Reads never collect.
+
+The [secret store](secrets.md#local-keyring-v3) keeps what its writes leave
+for its own recovery, except that its replacement removes a stage whose write
+fails in-process, because the keyring attributes only a complete stage; what a
+killed write leaves follows [Local keyring v3](secrets.md#local-keyring-v3).
+The context reservation write also keeps what it leaves: until the registry
+records the context directory's identity, the reservation alone lets an init
+retry attribute that directory and record the identity that deletion
+requires. Registry stages follow the root admission rule below, and media
+stages follow [Media acquisition](#media-acquisition).
 
 After durable registry publication, a pristine context may collect verified
 unselected revisions while holding the root lock and context lease. Pristine
@@ -339,7 +361,8 @@ filesystems are ext4, XFS, Btrfs, tmpfs and overlayfs; Linux must provide
 
 Bounds apply before allocation/traversal: registry 8 MiB; manifest 4 MiB and
 32 MiB aggregate referenced manifests; paths 4096 bytes; mutation records
-64 KiB; media images 32 GiB each and 64 entries, with records of at most 4 KiB
+64 KiB, with at most 16 abandoned publication stages beside a context's state
+entries; media images 32 GiB each and 64 entries, with records of at most 4 KiB
 and at most 16 stages; and the operator-visible bounds below. Input and
 Secrets limits additionally bound their trees.
 

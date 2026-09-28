@@ -586,6 +586,9 @@ func (s *Store) Transact(ctx context.Context, create bool, inputs []string, call
 	if err := verifyMappings(ctx, root, registry); err != nil {
 		return safeError(err)
 	}
+	if err := s.collectControllerStages(ctx, root, registry); err != nil {
+		return safeError(err)
+	}
 	expected, err := registryExpectation(ctx, root, registry)
 	if err != nil {
 		return safeError(err)
@@ -756,6 +759,17 @@ func (t *transaction) leaseContext(ctx context.Context, name string) (*directory
 		return nil, err
 	}
 	t.leases[name] = dir
+	// A directory the registry does not yet attribute may not be this
+	// context's own, so nothing in it is collected.
+	record, err := t.record(name)
+	if err != nil {
+		return nil, err
+	}
+	if record.DirectoryInode != 0 {
+		if err := t.store.collectContextStages(ctx, dir, true); err != nil {
+			return nil, err
+		}
+	}
 	if err := verifyContextLayout(ctx, dir); err != nil {
 		return nil, err
 	}
