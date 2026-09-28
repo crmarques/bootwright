@@ -463,6 +463,167 @@ func requireRunningWithEveryBlockDone(t *testing.T, run killedRun, verb reconcil
 	}
 }
 
+// An operation recorded unknown whose blocks are all done is finalized by its
+// own verb alone, exactly as a running one is: its blocks prove completion and
+// only its record lags. The own verb records it done and projects it without
+// the token its plan consumes, a confirmation or a presented plan, and the
+// other verb keeps its own decision: a destroy supersedes the apply with a
+// presented removal and an apply refuses the destroy.
+func TestAnUnknownOperationWhoseBlocksAreAllDoneIsFinalizedByItsOwnVerb(t *testing.T) {
+	ctx := context.Background()
+	t.Run("an apply over its unknown apply settles", func(t *testing.T) {
+		h := unknownApplyWithEveryBlockDone(t)
+		applied := currentOperation(t, h)
+		h.service.options.Confirmer = nil
+		applies, observes, presented := len(h.capability.applies), len(h.capability.observes), len(h.presenter.presented)
+		result, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName})
+		if err != nil || !result.Settled || result.Receipt.State != "done" || result.Receipt.Operation != applied {
+			t.Fatalf("the apply = %+v, %+v (%v)", result, diagnostics.Of(err), err)
+		}
+		requireRecordedWithEveryBlockDone(t, h, reconciliation.Apply, reconciliation.OperationDone)
+		if want := evidenceBytes(t, reconciliation.Apply, reconciliation.OperationDone); !bytes.Equal(h.workspace.evidence, want) {
+			t.Fatalf("evidence = %q, want %q", h.workspace.evidence, want)
+		}
+		if len(h.capability.applies) != applies || len(h.capability.observes) != observes || len(h.presenter.presented) != presented {
+			t.Fatal("the apply ran or observed a block, or presented a plan")
+		}
+	})
+	t.Run("a destroy over an unknown apply whose blocks are all done presents a fresh removal", func(t *testing.T) {
+		h := unknownApplyWithEveryBlockDone(t)
+		applied := currentOperation(t, h)
+		h.service.options.Confirmer = nil
+		records, evidence, mutations, presented := h.workspace.area.clone(), slices.Clone(h.workspace.evidence), h.workspace.mutations, len(h.presenter.presented)
+		_, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName})
+		if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.authorization" {
+			t.Fatalf("the unauthorized destroy = %+v (%v)", reported, err)
+		}
+		if !sameFiles(h.workspace.area, records) || !bytes.Equal(h.workspace.evidence, evidence) || h.workspace.mutations != mutations ||
+			len(h.presenter.presented) != presented {
+			t.Fatal("the unauthorized destroy finalized the apply it supersedes")
+		}
+		h.capability.destroys = nil
+		result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, Authorizations: dataLoss(), SkipConfirmation: true})
+		if err != nil || result.Settled || result.Receipt.State != "done" || result.Receipt.Operation == applied {
+			t.Fatalf("the destroy = %+v (%v)", result, err)
+		}
+		shown := h.presenter.presented
+		if len(shown) != presented+1 || shown[presented].Continuation || shown[presented].Verb != string(reconciliation.Destroy) {
+			t.Fatalf("the destroy presented %+v", shown[presented:])
+		}
+		if !slices.Equal(h.capability.destroys, []string{"alpha"}) {
+			t.Fatalf("the removal took back %v", h.capability.destroys)
+		}
+	})
+	t.Run("a destroy over its unknown destroy completes, releases and publishes pristine", func(t *testing.T) {
+		h := unknownDestroyWithEveryBlockDone(t)
+		removal := currentOperation(t, h)
+		h.service.options.Confirmer = nil
+		destroys, observes, presented := len(h.capability.destroys), len(h.capability.observes), len(h.presenter.presented)
+		result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName})
+		if err != nil || !result.Settled || result.Receipt.State != "done" || result.Receipt.Operation != removal {
+			t.Fatalf("the destroy = %+v, %+v (%v)", result, diagnostics.Of(err), err)
+		}
+		requireRecordedWithEveryBlockDone(t, h, reconciliation.Destroy, reconciliation.OperationDone)
+		if !bytes.Equal(h.workspace.evidence, killPristine(t)) || len(h.workspace.reservations) != 0 || !slices.Equal(h.binder.released, []string{"bind-1"}) {
+			t.Fatalf("the destroy left evidence %q, reservations %v and released %v", h.workspace.evidence, h.workspace.reservations, h.binder.released)
+		}
+		if len(h.capability.destroys) != destroys || len(h.capability.observes) != observes || len(h.presenter.presented) != presented {
+			t.Fatal("the destroy ran or observed a block, or presented a plan")
+		}
+	})
+	t.Run("an apply over an unknown destroy whose blocks are all done still refuses", func(t *testing.T) {
+		h := unknownDestroyWithEveryBlockDone(t)
+		records, evidence, mutations := h.workspace.area.clone(), slices.Clone(h.workspace.evidence), h.workspace.mutations
+		released, reservations := slices.Clone(h.binder.released), slices.Clone(h.workspace.reservations)
+		_, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, Authorizations: dataLoss(), SkipConfirmation: true})
+		reported := diagnostics.Of(err)
+		if len(reported) != 1 || reported[0].Message != "an incomplete destroy must be continued before another operation" {
+			t.Fatalf("the apply = %+v (%v)", reported, err)
+		}
+		if !sameFiles(h.workspace.area, records) || !bytes.Equal(h.workspace.evidence, evidence) || h.workspace.mutations != mutations ||
+			!slices.Equal(h.binder.released, released) || len(h.workspace.reservations) != len(reservations) {
+			t.Fatal("the refused apply wrote or released something")
+		}
+	})
+}
+
+// unknownApplyWithEveryBlockDone applies alpha to an unknown outcome and then
+// runs a removal whose resolution proves alpha done and whose record of what it
+// proved fails, which leaves the apply unknown beside no block that is not done.
+func unknownApplyWithEveryBlockDone(t *testing.T) *harness {
+	t.Helper()
+	ctx := context.Background()
+	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("alpha")})
+	h.capability.consumes = map[string][]string{"alpha": dataLoss()}
+	h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, Authorizations: dataLoss(), SkipConfirmation: true}); err == nil {
+		t.Fatal("an apply whose block lost its outcome reported success")
+	}
+	h.capability.outcomeFor = nil
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+	recorded := "replace " + path.Join(currentOperation(t, h), "operation.json")
+	h.workspace.area.fail[recorded] = errors.New("interrupted")
+	if _, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, Authorizations: dataLoss(), SkipConfirmation: true}); err == nil {
+		t.Fatal("a removal that could not record its resolution reported success")
+	}
+	delete(h.workspace.area.fail, recorded)
+	if !slices.Equal(h.capability.observes, []string{"alpha"}) || len(h.capability.destroys) != 0 {
+		t.Fatalf("the removal observed %v and took back %v", h.capability.observes, h.capability.destroys)
+	}
+	requireRecordedWithEveryBlockDone(t, h, reconciliation.Apply, reconciliation.OperationUnknown)
+	return h
+}
+
+// unknownDestroyWithEveryBlockDone applies alpha and removes it with a removal
+// whose record of alpha's completion lands and then reports a failure, as a
+// rename whose read-back or sync failed does: the removal keeps alpha unknown
+// and records itself unknown beside alpha's done record, still holding the
+// reservations and the Secret binding it would release.
+func unknownDestroyWithEveryBlockDone(t *testing.T) *harness {
+	t.Helper()
+	ctx := context.Background()
+	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("alpha")})
+	h.capability.consumes = map[string][]string{"alpha": dataLoss()}
+	h.capability.reservations = []prerequisites.HostReservation{{Context: testContextName, Kind: "artifact-server", Service: "alpha", Keys: []string{"socket:192.0.2.1:8443"}}}
+	if err := authorized(ctx, h.service, reconciliation.Apply); err != nil {
+		t.Fatal(err)
+	}
+	applied := currentOperation(t, h)
+	area, completed := h.workspace.area, false
+	area.landing = func(operation, target string, files map[string][]byte) error {
+		if operation != "replace" || path.Base(target) != "state.json" || strings.HasPrefix(target, applied+"/") {
+			return nil
+		}
+		if strings.Contains(string(files[path.Join(path.Dir(target), "attempt-000001.json")]), `"phase":"observed"`) {
+			completed = true
+			area.failAfter["replace "+target] = errors.New("the record could not be read back")
+		}
+		return nil
+	}
+	if err := authorized(ctx, h.service, reconciliation.Destroy); err == nil {
+		t.Fatal("a removal whose completion record reported a failure reported success")
+	}
+	area.landing = nil
+	if !completed || !slices.Equal(h.capability.destroys, []string{"alpha"}) {
+		t.Fatalf("the removal never completed alpha: it took back %v", h.capability.destroys)
+	}
+	requireRecordedWithEveryBlockDone(t, h, reconciliation.Destroy, reconciliation.OperationUnknown)
+	if len(h.workspace.reservations) == 0 || len(h.binder.released) != 0 {
+		t.Fatalf("the unknown removal left reservations %v and released %v", h.workspace.reservations, h.binder.released)
+	}
+	return h
+}
+
+// requireRecordedWithEveryBlockDone holds the context's current operation to a
+// verb and state beside alpha's done record.
+func requireRecordedWithEveryBlockDone(t *testing.T, h *harness, verb reconciliation.Verb, state reconciliation.OperationState) {
+	t.Helper()
+	operation, states := durableOperation(t, h)
+	if operation.Verb != verb || operation.State != state || !maps.Equal(states, map[string]reconciliation.BlockState{"alpha": reconciliation.BlockDone}) {
+		t.Fatalf("the records read %s %s %v, want %s %s with alpha done", operation.Verb, operation.State, states, verb, state)
+	}
+}
+
 // A fresh apply over a removal whose finalization an interruption cut short
 // finishes it before it presents its own plan, so the plan an operator
 // confirms is taken over a context already at rest.
