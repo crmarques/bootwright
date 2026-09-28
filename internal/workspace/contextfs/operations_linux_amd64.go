@@ -404,63 +404,18 @@ func (a *operationArea) Replace(ctx context.Context, target string, data, expect
 	if expected == nil {
 		return a.store.writeExclusiveAtomic(ctx, parent, name, data, false)
 	}
-	var pending string
-	var created syscall.Stat_t
-	for range 16 {
-		candidate, err := a.store.candidate("pending-")
-		if err != nil {
-			return err
-		}
-		pending = candidate + ".json"
-		created, err = a.store.writeExclusiveIdentity(ctx, parent, pending, data, false)
-		if errors.Is(err, syscall.EEXIST) {
-			pending = ""
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		break
-	}
-	if pending == "" {
-		return state("lifecycle operation publication exhausted its collision limit")
-	}
-	renamed := false
-	defer func() {
-		if !renamed {
-			discardCreated(parent, pending, created)
-		}
-	}()
-	staged, stagedIdentity, err := readBoundedIdentity(ctx, parent, pending, maxOperationRecord, true)
-	if err != nil || !bytes.Equal(staged, data) {
-		return state("staged lifecycle record changed before publication")
-	}
-	if err := a.store.checkpoint(ctx, checkpointBeforeOperationRename); err != nil {
-		return err
-	}
-	current, _, err := readBoundedIdentity(ctx, parent, name, maxOperationRecord, false)
-	if err != nil || !bytes.Equal(current, expected) {
-		return state("lifecycle record changed before publication")
-	}
-	recheck, recheckIdentity, err := readBoundedIdentity(ctx, parent, pending, maxOperationRecord, true)
-	if err != nil || !bytes.Equal(recheck, data) || !sameFile(stagedIdentity, recheckIdentity) {
-		return state("staged lifecycle record was substituted")
-	}
-	if err := parent.verify(); err != nil {
-		return err
-	}
-	if err := syscall.Renameat(int(parent.file.Fd()), pending, int(parent.file.Fd()), name); err != nil {
-		return state("lifecycle record could not be atomically published")
-	}
-	renamed = true
-	if err := a.store.checkpoint(ctx, checkpointAfterOperationRename); err != nil {
-		return err
-	}
-	published, _, err := readBoundedIdentity(ctx, parent, name, maxOperationRecord, false)
-	if err != nil || !bytes.Equal(published, data) {
-		return state("published lifecycle record is unsafe")
-	}
-	return a.store.syncDirectory(ctx, parent)
+	_, err = a.store.publishStage(ctx, parent, name, data, stagedPublication{
+		subject: "lifecycle record", suffix: ".json", replace: true, bound: maxOperationRecord,
+		renameFailure: "lifecycle record could not be atomically published",
+		prove: func(ctx context.Context) error {
+			current, _, err := readBoundedIdentity(ctx, parent, name, maxOperationRecord, false)
+			if err != nil || !bytes.Equal(current, expected) {
+				return state("lifecycle record changed before publication")
+			}
+			return nil
+		},
+	}, checkpointBeforeOperationRename, checkpointAfterOperationRename)
+	return err
 }
 
 // Append is the only non-atomic effect here: a log is troubleshooting material

@@ -170,8 +170,12 @@ them.
 
 Publication writes and syncs an exclusive private staging file, revalidates
 the held directory and previous record identity, then renames and syncs its
-parent. A pre-rename failure is uncommitted; uncertain rename/durability closes
-the transaction capability and permits no further mutation. The root lock
+parent. A pre-rename failure is uncommitted and removes its staging file; a
+staging file a killed publication leaves is removed by the next command that
+opens a registry transaction
+([storage and publication](../contexts.md#storage-locking-and-publication)).
+An uncertain rename or durability closes the transaction capability and
+permits no further mutation. The root lock
 precedes the selected context lease and remains held through each callback.
 Read-only bundle capabilities expire with their shared-lock callback, and all
 mutation capabilities expire with their transaction.

@@ -565,73 +565,30 @@ func (s *Store) replaceControllerRecord(ctx context.Context, dir *directory, exp
 	if err != nil || len(names) >= maxControllerStages+2 {
 		return prerequisites.NotCommitted, state("controller publication stages exceed their bound")
 	}
-	var pending string
-	for range 16 {
-		candidate, err := s.candidate("pending-")
-		if err != nil {
-			return prerequisites.NotCommitted, err
-		}
-		pending = candidate + ".json"
-		err = s.writeExclusive(ctx, dir, pending, data)
-		if errors.Is(err, syscall.EEXIST) {
-			pending = ""
-			continue
-		}
-		if err != nil {
-			return prerequisites.NotCommitted, err
-		}
-		break
-	}
-	if pending == "" {
-		return prerequisites.NotCommitted, state("controller publication exhausted its collision limit")
-	}
-	staged, stageIdentity, err := readBoundedIdentity(ctx, dir, pending, maxControllerState, true)
-	if err != nil || !bytes.Equal(staged, data) {
-		return prerequisites.NotCommitted, state("staged controller receipt changed")
-	}
-	if err := s.checkpoint(ctx, checkpointBeforeControllerRename); err != nil {
-		return prerequisites.NotCommitted, err
-	}
-	current, identity, err := readBoundedIdentity(ctx, dir, "state.json", maxControllerState, true)
-	if expected.data == nil {
-		if !errors.Is(err, syscall.ENOENT) {
-			return prerequisites.NotCommitted, state("initial controller receipt destination exists")
-		}
-	} else if err != nil || !bytes.Equal(current, expected.data) || !sameFile(identity, expected.identity) {
-		return prerequisites.NotCommitted, state("controller receipt changed before publication")
-	}
-	recheck, recheckIdentity, err := readBoundedIdentity(ctx, dir, pending, maxControllerState, true)
-	if err != nil || !bytes.Equal(recheck, data) || !sameFile(stageIdentity, recheckIdentity) {
-		return prerequisites.NotCommitted, state("staged controller receipt was substituted")
-	}
-	if expected.data == nil {
-		err = renameNoReplaceAt(dir, pending, "state.json")
-	} else {
-		if err = dir.verify(); err == nil {
-			err = syscall.Renameat(int(dir.file.Fd()), pending, int(dir.file.Fd()), "state.json")
-		}
-	}
-	if err != nil {
-		return prerequisites.NotCommitted, state("controller receipt could not be atomically published")
-	}
-	unknown := func() (prerequisites.Publication, error) {
+	outcome, err := s.publishStage(ctx, dir, "state.json", data, stagedPublication{
+		subject: "controller receipt", suffix: ".json", replace: expected.data != nil, immutable: true,
+		bound: maxControllerState, renameFailure: "controller receipt could not be atomically published",
+		prove: func(ctx context.Context) error {
+			current, identity, err := readBoundedIdentity(ctx, dir, "state.json", maxControllerState, true)
+			if expected.data == nil {
+				if !errors.Is(err, syscall.ENOENT) {
+					return state("initial controller receipt destination exists")
+				}
+				return nil
+			}
+			if err != nil || !bytes.Equal(current, expected.data) || !sameFile(identity, expected.identity) {
+				return state("controller receipt changed before publication")
+			}
+			return nil
+		},
+	}, checkpointBeforeControllerRename, checkpointAfterControllerRename)
+	switch outcome {
+	case publicationCommitted:
+		return prerequisites.Committed, nil
+	case publicationUnknown:
 		return prerequisites.Unknown, controllerFailure("controller.unknown", "controller receipt publication may have completed; preserve all verified progress")
 	}
-	if err := s.checkpoint(ctx, checkpointAfterControllerRename); err != nil {
-		return unknown()
-	}
-	published, publishedIdentity, err := readBoundedIdentity(ctx, dir, "state.json", maxControllerState, true)
-	if err != nil || !bytes.Equal(published, data) || !sameIdentity(stageIdentity, publishedIdentity) {
-		return unknown()
-	}
-	if err := s.syncDirectory(ctx, dir); err != nil {
-		return unknown()
-	}
-	final, finalIdentity, err := readBoundedIdentity(ctx, dir, "state.json", maxControllerState, true)
-	if err != nil || !bytes.Equal(final, data) || !sameFile(publishedIdentity, finalIdentity) {
-		return unknown()
-	}
-	return prerequisites.Committed, nil
+	return prerequisites.NotCommitted, err
 }
 
 func (t *transaction) checkControllerRecovery(ctx context.Context, name string) error {

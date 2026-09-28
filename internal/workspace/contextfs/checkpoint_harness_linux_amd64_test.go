@@ -237,8 +237,6 @@ func TestAnInterruptedPublicationLeavesAUsableStoreAndItsRetryConverges(t *testi
 								switch {
 								case failure == nil:
 									t.Errorf("%s now converges; remove this entry (%s)", key, entry)
-								case entry == "S8" && failure.phase != checkpointUsablePhase:
-									t.Errorf("%s is ledgered as a stale stage (S8), but %v", key, failure)
 								default:
 									t.Logf("%s fails as ledgered (%s): %v", key, entry, failure)
 								}
@@ -465,7 +463,9 @@ func checkpointUsable(t *testing.T, ctx context.Context, scenario checkpointScen
 // checkpointStaleEntries lists every pending or staging entry beneath the root
 // that no component may keep. specs/contexts.md lets the root keep verified
 // pending registry files, which are ignored and never adopted, and lets the
-// secret store keep what an interrupted write leaves for its own recovery.
+// secret store keep what its writes leave for its own recovery, so nothing
+// beneath a context's secrets/ counts here; what a killed keyring write leaves
+// is the keyring's to resolve (S28).
 func checkpointStaleEntries(root string) ([]string, error) {
 	var stale []string
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
@@ -646,16 +646,20 @@ func TestEveryCheckpointIsACataloguedConstant(t *testing.T) {
 			t.Errorf("checkpoints() repeats %s", name)
 		}
 	}
+	// A forwarder passes the hook a checkpoint its caller chose, so each of
+	// its callers must pass catalogued constants in its last that-many
+	// arguments instead.
+	forwarders := map[string]int{"publishControllerState": 1, "publishStage": 2}
 	passed := map[string]bool{}
-	accept := func(argument ast.Expr, forward string) {
+	accept := func(argument ast.Expr, forward []string) {
 		identifier, ok := argument.(*ast.Ident)
 		if !ok {
 			t.Errorf("%s passes %s, not a catalogued checkpoint constant", files.Position(argument.Pos()), checkpointSource(files, argument))
 			return
 		}
-		if forward != "" {
-			if identifier.Name != forward {
-				t.Errorf("%s forwards %s, not its own checkpoint parameter %s", files.Position(argument.Pos()), identifier.Name, forward)
+		if forward != nil {
+			if !slices.Contains(forward, identifier.Name) {
+				t.Errorf("%s forwards %s, not one of its own checkpoint parameters %v", files.Position(argument.Pos()), identifier.Name, forward)
 			}
 			return
 		}
@@ -665,23 +669,17 @@ func TestEveryCheckpointIsACataloguedConstant(t *testing.T) {
 		}
 		passed[identifier.Name] = true
 	}
-	forwarders := 0
+	declared := map[string]int{}
 	for _, file := range syntax {
 		for _, declaration := range file.Decls {
 			function, ok := declaration.(*ast.FuncDecl)
 			if !ok || function.Body == nil {
 				continue
 			}
-			forward := ""
-			if function.Recv != nil && function.Name.Name == "publishControllerState" {
-				forwarders++
-				parameters := function.Type.Params.List
-				last := parameters[len(parameters)-1]
-				if !checkpointTyped(last.Type) || len(last.Names) != 1 {
-					t.Errorf("publishControllerState's last parameter is not one checkpoint")
-				} else {
-					forward = last.Names[0].Name
-				}
+			var forward []string
+			if count, found := forwarders[function.Name.Name]; found {
+				declared[function.Name.Name]++
+				forward = checkpointForwarded(t, function, count)
 			}
 			ast.Inspect(function.Body, func(node ast.Node) bool {
 				call, ok := node.(*ast.CallExpr)
@@ -692,28 +690,62 @@ func TestEveryCheckpointIsACataloguedConstant(t *testing.T) {
 				if !ok || len(call.Args) == 0 {
 					return true
 				}
-				switch selector.Sel.Name {
-				case "checkpoint":
+				if selector.Sel.Name == "checkpoint" {
 					if len(call.Args) != 2 {
 						t.Errorf("%s calls checkpoint with %d arguments", files.Position(call.Pos()), len(call.Args))
 						return true
 					}
 					accept(call.Args[1], forward)
-				case "publishControllerState":
-					accept(call.Args[len(call.Args)-1], "")
+					return true
+				}
+				if count := forwarders[selector.Sel.Name]; count > 0 {
+					if len(call.Args) < count {
+						t.Errorf("%s calls %s with %d arguments", files.Position(call.Pos()), selector.Sel.Name, len(call.Args))
+						return true
+					}
+					for _, argument := range call.Args[len(call.Args)-count:] {
+						accept(argument, nil)
+					}
 				}
 				return true
 			})
 		}
 	}
-	if forwarders != 1 {
-		t.Errorf("found %d publishControllerState declarations, want 1", forwarders)
+	for name := range forwarders {
+		if declared[name] != 1 {
+			t.Errorf("found %d %s declarations, want 1", declared[name], name)
+		}
 	}
 	for name := range constants {
 		if !passed[name] {
 			t.Errorf("no publication passes %s", name)
 		}
 	}
+}
+
+// checkpointForwarded returns the checkpoint parameters a forwarder declares:
+// its last field names exactly count of them. A forwarder is a method, so
+// every call to it is a selector call the catalogue check inspects.
+func checkpointForwarded(t *testing.T, function *ast.FuncDecl, count int) []string {
+	t.Helper()
+	if function.Recv == nil {
+		t.Errorf("%s forwards checkpoints but has no receiver", function.Name.Name)
+	}
+	parameters := function.Type.Params.List
+	if len(parameters) == 0 {
+		t.Errorf("%s declares no checkpoint parameter", function.Name.Name)
+		return []string{}
+	}
+	last := parameters[len(parameters)-1]
+	if !checkpointTyped(last.Type) || len(last.Names) != count {
+		t.Errorf("%s's last parameter field does not name %d checkpoints", function.Name.Name, count)
+		return []string{}
+	}
+	names := make([]string, 0, count)
+	for _, name := range last.Names {
+		names = append(names, name.Name)
+	}
+	return names
 }
 
 func checkpointTyped(expression ast.Expr) bool {
@@ -774,6 +806,7 @@ func checkpointScenarios() []checkpointScenario {
 		checkpointSecretRotationScenario(),
 		checkpointSecretCleanupScenario(),
 		checkpointSecretInitializationScenario(),
+		checkpointStageCollectionScenario(),
 	}
 }
 
@@ -813,7 +846,8 @@ func checkpointTraceShapes() map[string]map[checkpoint]int {
 		},
 		"evidence": {
 			checkpointBeforeEvidence: 1, checkpointCreateFile: 1, checkpointWriteFile: 1,
-			checkpointSyncFile: 1, checkpointSyncDirectory: 2,
+			checkpointSyncFile: 1, checkpointSyncDirectory: 2, checkpointBeforeEvidenceRename: 1,
+			checkpointAfterEvidenceRename: 1,
 		},
 		"operation-exclusive": {
 			checkpointMkdir: 1, checkpointSyncDirectory: 3, checkpointCreateFile: 1,
@@ -914,6 +948,9 @@ func checkpointTraceShapes() map[string]map[checkpoint]int {
 		"secret-cleanup": {
 			checkpointBeforeSecretPrune: 1, checkpointSyncContextFile: 1, checkpointSyncDirectory: 2,
 			checkpointBeforeSecretUnlink: 1, checkpointAfterSecretUnlink: 1,
+		},
+		"stage-collection": {
+			checkpointBeforeStageCollection: 3, checkpointSyncDirectory: 3,
 		},
 		"secret-initialization": {
 			checkpointBeforeSecretFileSync: 1, checkpointSyncContextFile: 2, checkpointSyncDirectory: 8,
@@ -2270,6 +2307,59 @@ func checkpointSecretInitializationScenario() checkpointScenario {
 	}
 }
 
+// checkpointStageCollectionScenario collects what killed publications left: a
+// controller receipt stage, a mutation evidence stage and an operation record
+// stage. specs/contexts.md, Storage, locking and publication: the next command
+// that opens a registry transaction removes the controller directory's stages,
+// and the next that takes the context's lease removes those in its state
+// directory and operation areas, so the retry is that command again.
+func checkpointStageCollectionScenario() checkpointScenario {
+	collect := func(_ *testing.T, ctx context.Context, store *Store) error {
+		return checkpointMutateLifecycle(ctx, store, func(lifecycle.Transaction) error { return nil })
+	}
+	plant := func(t *testing.T, directory, name, source string, data []byte) {
+		t.Helper()
+		if source != "" {
+			copied, err := os.ReadFile(filepath.Join(directory, source))
+			if err != nil {
+				t.Fatal(err)
+			}
+			data = copied
+		}
+		if err := os.WriteFile(filepath.Join(directory, name), data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	scenario := checkpointLifecycleScenario(checkpointScenario{
+		name: "stage-collection",
+		prepare: func(t *testing.T) *Store {
+			store := checkpointSealedFixture(t)
+			if err := checkpointMutateLifecycle(context.Background(), store, func(tx lifecycle.Transaction) error {
+				return tx.Operations().EnsureDirectory(context.Background(), "op-1")
+			}); err != nil {
+				t.Fatal(err)
+			}
+			root := store.options.Root
+			runtime := filepath.Join(root, "contexts", checkpointContext, "state")
+			plant(t, filepath.Join(root, "controller"), "pending-"+strings.Repeat("1", 32)+".json", "state.json", nil)
+			plant(t, runtime, "pending-"+strings.Repeat("2", 32)+".json", "mutation.json", nil)
+			plant(t, filepath.Join(runtime, "operations", "op-1"), "pending-"+strings.Repeat("3", 32), "", []byte("{}\n"))
+			return store
+		},
+		operate: collect,
+		retry:   collect,
+		settled: func(_ *testing.T, _ context.Context, store *Store) error {
+			stale, err := checkpointStaleEntries(store.options.Root)
+			if err != nil || len(stale) != 0 {
+				return fmt.Errorf("stages remain: %v (%v)", stale, err)
+			}
+			return nil
+		},
+	})
+	scenario.reads = checkpointControllerReads
+	return scenario
+}
+
 // checkpointLedger records every case that does not converge today, keyed
 // "<scenario>/<mode>/<checkpoint>#<occurrence>". A value naming a backlog row,
 // or candidate:<slug> for a defect no row names, marks a case that must fail;
@@ -2277,14 +2367,10 @@ func checkpointSecretInitializationScenario() checkpointScenario {
 // must refuse with a diagnosed context.state failure while the store reads,
 // and one prefixed restore: marks a refusal whose store no read admits.
 //
-//   - S8: a stage no collector removes. The controller record keeps its stage
-//     after any interruption before its rename, and a kill leaves the stage of
-//     an operation record, a trust record or the mutation evidence, the last
-//     of which refuses every later context mutation.
-//   - candidate:unattributable-secret-initialization-stage: the secret area
-//     keeps the stage an interrupted keyring initialization write leaves, and
-//     the keyring's recovery then refuses it as not attributable, so neither
-//     init nor secret encryption init can complete.
+//   - S28: a kill inside a keyring initialization's staged write leaves an
+//     incomplete secrets/pending-* that the keyring refuses as not
+//     attributable, so neither init nor secret encryption init completes; an
+//     in-process interruption no longer leaves one.
 //   - restore:specs/contexts.md#storage-locking-and-publication: a kill while
 //     the first registry is written leaves the root's only entry a pending
 //     file whose bytes are not the canonical empty registry, which init may
@@ -2297,110 +2383,35 @@ func checkpointSecretInitializationScenario() checkpointScenario {
 //     created before its identity is recorded refuses adoption.
 func checkpointLedger() map[string]string {
 	return map[string]string{
-		"binding/refused/before-controller-rename#1":                  "S8",
-		"binding/cancelled/before-controller-rename#1":                "S8",
-		"binding/killed/before-controller-rename#1":                   "S8",
-		"binding/killed/sync-directory#1":                             "S8",
-		"binding/killed/sync-file#1":                                  "S8",
-		"binding/killed/write-file#1":                                 "S8",
-		"client-area/refused/before-controller-rename#1":              "S8",
-		"client-area/cancelled/before-controller-rename#1":            "S8",
-		"client-area/killed/before-controller-rename#1":               "S8",
-		"client-area/refused/before-controller-rename#2":              "S8",
-		"client-area/cancelled/before-controller-rename#2":            "S8",
-		"client-area/refused/before-controller-rename#3":              "S8",
-		"client-area/cancelled/before-controller-rename#3":            "S8",
-		"client-area/killed/sync-directory#1":                         "S8",
-		"client-area/killed/sync-file#1":                              "S8",
-		"client-area/killed/write-file#1":                             "S8",
-		"controller-bundle/refused/before-controller-rename#1":        "S8",
-		"controller-bundle/cancelled/before-controller-rename#1":      "S8",
-		"controller-bundle/killed/before-controller-rename#1":         "S8",
-		"controller-bundle/refused/before-controller-rename#2":        "S8",
-		"controller-bundle/cancelled/before-controller-rename#2":      "S8",
-		"controller-bundle/refused/before-controller-rename#3":        "S8",
-		"controller-bundle/cancelled/before-controller-rename#3":      "S8",
-		"controller-bundle/refused/before-controller-rename#4":        "S8",
-		"controller-bundle/cancelled/before-controller-rename#4":      "S8",
-		"controller-bundle/killed/sync-directory#1":                   "S8",
-		"controller-bundle/killed/sync-file#1":                        "S8",
-		"controller-bundle/killed/write-file#1":                       "S8",
-		"controller-record/refused/after-controller-directory#1":      "specs/contexts/controller-record.md#descriptor",
-		"controller-record/cancelled/after-controller-directory#1":    "specs/contexts/controller-record.md#descriptor",
-		"controller-record/killed/after-controller-directory#1":       "specs/contexts/controller-record.md#descriptor",
-		"controller-record/refused/before-controller-rename#1":        "S8",
-		"controller-record/cancelled/before-controller-rename#1":      "S8",
-		"controller-record/killed/before-controller-rename#1":         "S8",
-		"controller-record/refused/before-registry-rename#2":          "specs/contexts/controller-record.md#descriptor",
-		"controller-record/cancelled/before-registry-rename#2":        "specs/contexts/controller-record.md#descriptor",
-		"controller-record/refused/create-file#2":                     "specs/contexts/controller-record.md#descriptor",
-		"controller-record/cancelled/create-file#2":                   "specs/contexts/controller-record.md#descriptor",
-		"controller-record/refused/sync-directory#3":                  "specs/contexts/controller-record.md#descriptor",
-		"controller-record/cancelled/sync-directory#3":                "specs/contexts/controller-record.md#descriptor",
-		"controller-record/refused/sync-directory#4":                  "specs/contexts/controller-record.md#descriptor",
-		"controller-record/cancelled/sync-directory#4":                "specs/contexts/controller-record.md#descriptor",
-		"controller-record/refused/sync-file#2":                       "specs/contexts/controller-record.md#descriptor",
-		"controller-record/cancelled/sync-file#2":                     "specs/contexts/controller-record.md#descriptor",
-		"controller-record/refused/write-file#2":                      "specs/contexts/controller-record.md#descriptor",
-		"controller-record/cancelled/write-file#2":                    "specs/contexts/controller-record.md#descriptor",
-		"evidence/killed/sync-directory#1":                            "S8",
-		"evidence/killed/sync-file#1":                                 "S8",
-		"evidence/killed/write-file#1":                                "S8",
-		"init/refused/after-context-directory#1":                      "specs/contexts.md#storage-locking-and-publication",
-		"init/cancelled/after-context-directory#1":                    "specs/contexts.md#storage-locking-and-publication",
-		"init/killed/after-context-directory#1":                       "specs/contexts.md#storage-locking-and-publication",
-		"init/refused/create-file#3":                                  "specs/contexts.md#storage-locking-and-publication",
-		"init/cancelled/create-file#3":                                "specs/contexts.md#storage-locking-and-publication",
-		"init/refused/mkdir#3":                                        "specs/contexts.md#storage-locking-and-publication",
-		"init/cancelled/mkdir#3":                                      "specs/contexts.md#storage-locking-and-publication",
-		"init/refused/sync-directory#6":                               "specs/contexts.md#storage-locking-and-publication",
-		"init/cancelled/sync-directory#6":                             "specs/contexts.md#storage-locking-and-publication",
-		"init/refused/sync-directory#7":                               "specs/contexts.md#storage-locking-and-publication",
-		"init/cancelled/sync-directory#7":                             "specs/contexts.md#storage-locking-and-publication",
-		"init/killed/write-file#1":                                    "restore:specs/contexts.md#storage-locking-and-publication",
-		"init/refused/write-file#3":                                   "specs/contexts.md#storage-locking-and-publication",
-		"init/cancelled/write-file#3":                                 "specs/contexts.md#storage-locking-and-publication",
-		"init/refused/write-file#7":                                   "candidate:unattributable-secret-initialization-stage",
-		"init/cancelled/write-file#7":                                 "candidate:unattributable-secret-initialization-stage",
-		"init/refused/write-file#9":                                   "candidate:unattributable-secret-initialization-stage",
-		"init/cancelled/write-file#9":                                 "candidate:unattributable-secret-initialization-stage",
-		"init/refused/write-file#11":                                  "candidate:unattributable-secret-initialization-stage",
-		"init/cancelled/write-file#11":                                "candidate:unattributable-secret-initialization-stage",
-		"operation-exclusive/killed/before-secret-immutable-rename#1": "S8",
-		"operation-exclusive/killed/sync-file#1":                      "S8",
-		"operation-exclusive/killed/write-file#1":                     "S8",
-		"operation-replace/killed/before-operation-rename#1":          "S8",
-		"operation-replace/killed/sync-directory#1":                   "S8",
-		"operation-replace/killed/sync-file#1":                        "S8",
-		"operation-replace/killed/write-file#1":                       "S8",
-		"reservation/refused/before-controller-rename#1":              "S8",
-		"reservation/cancelled/before-controller-rename#1":            "S8",
-		"reservation/killed/before-controller-rename#1":               "S8",
-		"reservation/killed/sync-directory#1":                         "S8",
-		"reservation/killed/sync-file#1":                              "S8",
-		"reservation/killed/write-file#1":                             "S8",
-		"retained-dependencies/refused/before-controller-rename#1":    "S8",
-		"retained-dependencies/cancelled/before-controller-rename#1":  "S8",
-		"retained-dependencies/killed/before-controller-rename#1":     "S8",
-		"retained-dependencies/killed/sync-directory#1":               "S8",
-		"retained-dependencies/killed/sync-file#1":                    "S8",
-		"retained-dependencies/killed/write-file#1":                   "S8",
-		"retirement/refused/before-controller-rename#1":               "S8",
-		"retirement/cancelled/before-controller-rename#1":             "S8",
-		"retirement/killed/before-controller-rename#1":                "S8",
-		"retirement/refused/before-controller-rename#2":               "S8",
-		"retirement/cancelled/before-controller-rename#2":             "S8",
-		"retirement/killed/sync-directory#1":                          "S8",
-		"retirement/killed/sync-file#1":                               "S8",
-		"retirement/killed/write-file#1":                              "S8",
-		"secret-initialization/refused/write-file#1":                  "candidate:unattributable-secret-initialization-stage",
-		"secret-initialization/cancelled/write-file#1":                "candidate:unattributable-secret-initialization-stage",
-		"secret-initialization/killed/write-file#1":                   "candidate:unattributable-secret-initialization-stage",
-		"secret-initialization/refused/write-file#3":                  "candidate:unattributable-secret-initialization-stage",
-		"secret-initialization/cancelled/write-file#3":                "candidate:unattributable-secret-initialization-stage",
-		"trust/killed/before-operation-rename#1":                      "S8",
-		"trust/killed/before-secret-immutable-rename#1":               "S8",
-		"trust/killed/sync-file#1":                                    "S8",
-		"trust/killed/write-file#1":                                   "S8",
+		"controller-record/refused/after-controller-directory#1":   "specs/contexts/controller-record.md#descriptor",
+		"controller-record/cancelled/after-controller-directory#1": "specs/contexts/controller-record.md#descriptor",
+		"controller-record/killed/after-controller-directory#1":    "specs/contexts/controller-record.md#descriptor",
+		"controller-record/refused/before-registry-rename#2":       "specs/contexts/controller-record.md#descriptor",
+		"controller-record/cancelled/before-registry-rename#2":     "specs/contexts/controller-record.md#descriptor",
+		"controller-record/refused/create-file#2":                  "specs/contexts/controller-record.md#descriptor",
+		"controller-record/cancelled/create-file#2":                "specs/contexts/controller-record.md#descriptor",
+		"controller-record/refused/sync-directory#3":               "specs/contexts/controller-record.md#descriptor",
+		"controller-record/cancelled/sync-directory#3":             "specs/contexts/controller-record.md#descriptor",
+		"controller-record/refused/sync-directory#4":               "specs/contexts/controller-record.md#descriptor",
+		"controller-record/cancelled/sync-directory#4":             "specs/contexts/controller-record.md#descriptor",
+		"controller-record/refused/sync-file#2":                    "specs/contexts/controller-record.md#descriptor",
+		"controller-record/cancelled/sync-file#2":                  "specs/contexts/controller-record.md#descriptor",
+		"controller-record/refused/write-file#2":                   "specs/contexts/controller-record.md#descriptor",
+		"controller-record/cancelled/write-file#2":                 "specs/contexts/controller-record.md#descriptor",
+		"init/refused/after-context-directory#1":                   "specs/contexts.md#storage-locking-and-publication",
+		"init/cancelled/after-context-directory#1":                 "specs/contexts.md#storage-locking-and-publication",
+		"init/killed/after-context-directory#1":                    "specs/contexts.md#storage-locking-and-publication",
+		"init/refused/create-file#3":                               "specs/contexts.md#storage-locking-and-publication",
+		"init/cancelled/create-file#3":                             "specs/contexts.md#storage-locking-and-publication",
+		"init/refused/mkdir#3":                                     "specs/contexts.md#storage-locking-and-publication",
+		"init/cancelled/mkdir#3":                                   "specs/contexts.md#storage-locking-and-publication",
+		"init/refused/sync-directory#6":                            "specs/contexts.md#storage-locking-and-publication",
+		"init/cancelled/sync-directory#6":                          "specs/contexts.md#storage-locking-and-publication",
+		"init/refused/sync-directory#7":                            "specs/contexts.md#storage-locking-and-publication",
+		"init/cancelled/sync-directory#7":                          "specs/contexts.md#storage-locking-and-publication",
+		"init/killed/write-file#1":                                 "restore:specs/contexts.md#storage-locking-and-publication",
+		"init/refused/write-file#3":                                "specs/contexts.md#storage-locking-and-publication",
+		"init/cancelled/write-file#3":                              "specs/contexts.md#storage-locking-and-publication",
+		"secret-initialization/killed/write-file#1":                "S28",
 	}
 }
