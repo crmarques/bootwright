@@ -84,7 +84,9 @@ func (s *Store) Index(ctx context.Context) (Index, error) {
 
 // Register publishes the plan and operation before the index names them, so an
 // interrupted registration leaves an unreferenced directory rather than a
-// current operation whose plan is missing.
+// current operation whose plan is missing. It registers into the directory a
+// claim created for the same identity, which is why that directory is not
+// counted against the bound a second time.
 func (s *Store) Register(ctx context.Context, operation Operation, plan reconciliation.Plan) error {
 	if err := validateOperation(operation); err != nil {
 		return err
@@ -99,17 +101,15 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 	if plan.Verb != operation.Verb {
 		return recordError("lifecycle plan and operation disagree about the verb")
 	}
-	count, err := s.count(ctx)
+	claimed, err := s.Claimed(ctx)
 	if err != nil {
 		return err
 	}
-	if count >= MaxOperations {
+	if len(slices.DeleteFunc(claimed, func(directory string) bool { return directory == operation.ID })) >= MaxOperations {
 		return recordError("the context has retained the maximum number of lifecycle operations")
 	}
-	for _, directory := range []string{operation.ID, path.Join(operation.ID, "blocks"), path.Join(operation.ID, "logs")} {
-		if err := s.area.EnsureDirectory(ctx, directory); err != nil {
-			return err
-		}
+	if err := s.ensureOperation(ctx, operation.ID); err != nil {
+		return err
 	}
 	encodedPlan, err := encode(plan, MaxPlanBytes)
 	if err != nil {
@@ -138,18 +138,61 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 	return nil
 }
 
-func (s *Store) count(ctx context.Context) (int, error) {
+// Claim creates an operation's directory, empty, before anything names or
+// fills it, so the identity is one invocation's own from then on: nothing
+// removes an operation directory, and every later claim or registration
+// allocates around it. It refuses an identity that already has a directory,
+// and refuses at the retained-operation bound exactly as a registration does.
+func (s *Store) Claim(ctx context.Context, id string) error {
+	if !reconciliation.ValidOperationID(id) {
+		return recordError("lifecycle operation identity is invalid")
+	}
+	claimed, err := s.Claimed(ctx)
+	if err != nil {
+		return err
+	}
+	if len(claimed) >= MaxOperations {
+		return recordError("the context has retained the maximum number of lifecycle operations")
+	}
+	if slices.Contains(claimed, id) {
+		return recordError("the lifecycle operation identity already has a directory")
+	}
+	return s.ensureOperation(ctx, id)
+}
+
+// Claimed names every operation directory, in name order: each registered
+// operation, each claim and each directory an interrupted registration left.
+// It is exactly what the retained-operation bound counts.
+func (s *Store) Claimed(ctx context.Context) ([]string, error) {
 	entries, err := s.area.Entries(ctx, "")
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	count := 0
+	claimed := []string{}
 	for _, entry := range entries {
 		if entry.Directory {
-			count++
+			claimed = append(claimed, entry.Name)
 		}
 	}
-	return count, nil
+	return claimed, nil
+}
+
+// Started reports whether an operation directory lists anything under its
+// blocks, which only a registered operation's first start writes. A claimed
+// directory, and the one an interrupted registration leaves, list nothing. It
+// reads no record it finds.
+func (s *Store) Started(ctx context.Context, id string) (bool, error) {
+	entries, err := s.area.Entries(ctx, path.Join(id, "blocks"))
+	return len(entries) != 0, err
+}
+
+func (s *Store) ensureOperation(ctx context.Context, id string) error {
+	for _, directory := range []string{id, path.Join(id, "blocks"), path.Join(id, "logs")} {
+		if err := s.area.EnsureDirectory(ctx, directory); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) operationPath(id string) string { return path.Join(id, "operation.json") }

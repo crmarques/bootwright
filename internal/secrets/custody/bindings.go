@@ -118,6 +118,42 @@ func (s Service) Reopen(ctx context.Context, request BindingRequest) ([]secretst
 	return result, nil
 }
 
+// Bindings names every binding a context's store holds, in identity order, so
+// a consumer can release the ones no record of its own names. It is a read that
+// unlocks nothing: it reveals no material and no version, and a store that was
+// never initialized holds none.
+func (s Service) Bindings(ctx context.Context, request BindingsRequest) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if s.access == nil {
+		return nil, secretstore.Failure("store.implementation", "secret service is not configured")
+	}
+	selected, err := s.access.Context(ctx, request.ContextName)
+	if err != nil {
+		return nil, err
+	}
+	identities := []string{}
+	err = s.access.View(ctx, selected.Context, false, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+		if session == nil {
+			return nil
+		}
+		snapshot, err := session.Inspect(ctx)
+		if err != nil {
+			return err
+		}
+		for _, binding := range snapshot.Bindings {
+			identities = append(identities, binding.ID)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	slices.Sort(identities)
+	return identities, nil
+}
+
 func (s Service) Release(ctx context.Context, request BindingRequest) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err

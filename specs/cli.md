@@ -362,14 +362,16 @@ that: it presents no plan, asks for no confirmation, requires and refuses no
 authorization, and reports `done` with the blocks its completed operation
 finished, under the [settled-verb rule](state-reconciliation.md#lifecycle-unit).
 Its result says in one line that nothing is left to do and, when it first
-completed an interrupted finalization, that it did only that, so a table of
-completed blocks is never read as work this invocation performed.
-Not yet met: the line does not yet name a finalization it completed; tracked as [backlog F5](milestones/backlog.md#audit-follow-ups-2026-09).
+completed an interrupted finalization or a `destroy` first released what an
+interrupted registration left, that it did only that, so a table of completed
+blocks is never read as work this invocation performed.
+Not yet met: the line does not yet name a finalization it completed or a release it performed; tracked as [backlog F5](milestones/backlog.md#audit-follow-ups-2026-09).
 
 `apply` and `destroy` present the frozen plan, then any required
 authorizations, then the ordinary confirmation. The
 [finalization](state-reconciliation.md#lifecycle-unit) of an interrupted
-operation precedes them and presents nothing. During execution they report
+operation precedes them and presents nothing, as does a `destroy`'s release of
+what an interrupted registration left. During execution they report
 [progress](cli/output.md#long-running-progress) per block, with its
 [presentation groups](cli/output.md#multi-machine-presentation) as sub-steps,
 and they close with the ordered result, the safe log reference and the

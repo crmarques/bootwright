@@ -216,15 +216,17 @@ func TestAnInterruptedRemovalFinalizationIsCompletedByTheNextDestroy(t *testing.
 
 // A fresh apply killed after it claimed its reservations and before its plan
 // landed leaves them held beside the completed removal the context rests on,
-// under pristine evidence. That removal's finalization is then incomplete, so
-// the next destroy releases them without the token or a confirmation and
-// settles, presenting nothing and reaching no host.
+// under the running evidence the apply raised first. That removal's
+// finalization is then incomplete, so the next destroy releases them without
+// the token or a confirmation and settles, presenting nothing and reaching no
+// host.
 func TestAReservationHeldBesideACompletedRemovalIsReleasedByTheNextDestroy(t *testing.T) {
 	ctx := context.Background()
 	pristine := killPristine(t)
 	run := killedAt(ctx, t, []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy}, reconciliation.Apply, "write <op>/plan.json#1")
 	w := run.snapshot.workspace
-	if killRest(w) != "removed" || !bytes.Equal(w.evidence, pristine) || len(w.reservations) == 0 {
+	running := evidenceBytes(t, reconciliation.Apply, reconciliation.OperationRunning)
+	if killRest(w) != "removed" || !bytes.Equal(w.evidence, running) || len(w.reservations) == 0 {
 		t.Fatalf("the kill left %s under evidence %q holding %v", killRest(w), w.evidence, w.reservations)
 	}
 	service, host := run.repairing()

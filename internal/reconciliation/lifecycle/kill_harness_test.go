@@ -51,8 +51,10 @@ const (
 	// killBoundSupersede is one destroy. A fresh destroy over an incomplete
 	// apply observes every unproved block before it registers (Resolution
 	// outcomes) and then removes every block the apply started, failed or done
-	// alike (Continuation and removal), all in one invocation: no rule leaves
-	// anything for a second one.
+	// alike (Continuation and removal), all in one invocation, and a destroy
+	// over no operation releases what an interrupted registration left in the
+	// same invocation (Lifecycle unit): no rule leaves anything for a second
+	// one.
 	killBoundSupersede = 1
 	// killBoundSettled is one apply. Over a completed apply no block is
 	// unproved, failed or pending, so an apply of unchanged input is the verb
@@ -67,26 +69,7 @@ const (
 // failing point missing from it, an entry naming a point no journey reaches,
 // and an entry whose point now passes all fail, so it only shrinks.
 func killLedger() map[string]string {
-	return map[string]string{
-		// A kill between registration and the running projection leaves a
-		// registered apply under pristine evidence, and its continuation starts
-		// every block without projecting any.
-		"a/publish evidence#1": "S10 (rest)",
-		// A kill after a fresh apply bound its Secrets and before the index names
-		// its operation leaves that binding held by no operation: an apply
-		// retried over it binds another, and a destroy, which has nothing to
-		// remove, releases neither it nor the reservations that already landed.
-		"a/publish binding#1":           "S10 (rest)",
-		"a/publish reservations#1":      "S10 (rest)",
-		"a/write <op>/plan.json#1":      "S10 (rest)",
-		"a/write <op>/operation.json#1": "S10 (rest)",
-		"a/replace index.json#1":        "S10 (rest)",
-		"d/publish binding#1":           "S10 (rest)",
-		"d/publish reservations#1":      "S10 (rest)",
-		"d/write <op>/plan.json#1":      "S10 (rest)",
-		"d/write <op>/operation.json#1": "S10 (rest)",
-		"d/replace index.json#1":        "S10 (rest)",
-	}
+	return map[string]string{}
 }
 
 // killHost is the host every block of a journey acts on. Blocks run on their
@@ -278,6 +261,9 @@ func killCloneArea(area, live *memoryArea, files map[string][]byte) *memoryArea 
 	for name, data := range files {
 		copied.files[name] = slices.Clone(data)
 	}
+	// The write about to land holds the live area, so its directories are
+	// read as they stand rather than through its lock.
+	maps.Copy(copied.directories, live.directories)
 	return copied
 }
 
@@ -329,7 +315,7 @@ func killCloneBinder(b *testBinder) *testBinder {
 	maps.Copy(material, b.material)
 	return &testBinder{
 		bound: slices.Clone(b.bound), released: slices.Clone(b.released), issued: b.issued, material: material,
-		bindErr: b.bindErr, releaseErr: b.releaseErr,
+		bindErr: b.bindErr, releaseErr: b.releaseErr, bindingsErr: b.bindingsErr,
 	}
 }
 

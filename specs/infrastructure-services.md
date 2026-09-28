@@ -79,12 +79,18 @@ A reservation key is one of:
 
 Every key is exclusive except the class marked shared. Reservations are
 published under the root lock before the operation's first effect and released
-only by a completed destroy. An exclusive key held by another context refuses
-`controller.conflict`, naming the holding context and the key class without
-private paths. A context's own keys are replaced by its own apply. An
-interrupted apply leaves its reservation in place; the same context's next
-apply replaces it, and another context's apply keeps refusing until that
-operation is continued or destroyed.
+by a completed destroy, or by a destroy that finds them held by no operation
+because the registration that published them was
+[interrupted](state-reconciliation.md#lifecycle-unit). An exclusive key held by
+another context refuses `controller.conflict`, naming the holding context and
+the key class without private paths. A context's own keys are replaced by its
+own apply. An interrupted apply leaves its reservation in place; the same
+context's next apply replaces it, and another context's apply keeps refusing
+until that operation is continued or destroyed. A failed registration likewise
+leaves its reservations held, and its context protected by running
+[evidence](state-reconciliation.md#context-mutation-evidence), until a destroy
+releases them, or the context's next apply releases them as it finishes the
+removal they sit beside or replaces them.
 
 Dependency readiness never establishes service ownership, and
 [controller setup](controller.md#host-identity-and-shared-prerequisites)

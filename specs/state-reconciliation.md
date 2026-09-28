@@ -29,10 +29,10 @@ can start, and an edited input refuses by naming that removal.
 A verb whose work durable state already proves performs none of it and
 succeeds: an `apply` repeated over the unchanged input its completed apply
 froze, while every block of that apply's plan is `done`, and a `destroy` of a
-context that owns nothing, which is one holding no operation or a completed
-destroy, each report the completed operation and `done` without registering an
-operation, opening a transaction, binding a Secret, claiming a reservation or
-reaching a host. Such
+context that owns nothing, which is one holding a completed destroy or holding
+no operation while nothing claims it, below, each report the completed
+operation and `done` without registering an operation, opening a transaction,
+binding a Secret, claiming a reservation or reaching a host. Such
 an invocation requires no authorization and no confirmation, because it has no
 consequence to acknowledge, and a token it is given authorizes nothing and
 refuses nothing. Repeating a verb is therefore always safe, which is what lets
@@ -64,6 +64,24 @@ fails `lifecycle.state`, beside any log fault it reports, naming the repeated
 `destroy` that finishes it, and an invocation that completed the removal itself
 still reports it `done`.
 
+Nothing claims a context holding no operation only while its evidence is
+pristine and it holds no reservation. Running evidence, or a reservation
+beside pristine evidence, is what a
+[registration](#context-mutation-evidence) interrupted before its index named
+its operation leaves, and the destroy releases it first, under the exclusive
+lock and without authorization, presentation or confirmation, because it
+performs no effect: once it re-proves that the context still holds no
+operation, the evidence it decided from and no operation directory holding
+block records, it releases the context's reservations and publishes pristine
+evidence, and only then releases every Secret binding the context held before
+it began; it then settles, reporting no operation and `done`. Any other
+evidence beside no operation, or an operation directory whose `blocks/` lists
+anything while no index names it, is state no index accounts for, so the
+destroy refuses `lifecycle.state`, naming `bootwright status`, and writes
+nothing. A binding stranded beside pristine evidence and no reservation cannot
+be told from a context at rest, so that destroy settles and keeps it for the
+next registration to release.
+
 Plans remain complete and immutable; later artifact generation cannot append
 blocks or expand the operation. Expansion requires destroy followed by fresh
 apply.
@@ -78,12 +96,54 @@ does, because a pause leaves its [ownership](#continuation-and-removal) in
 place. A completed removal's evidence becomes `none` and `none` only once its
 reservations and Secret bindings are released, so evidence that is not its
 completed operation's projection marks a [finalization](#lifecycle-unit) that
-did not complete.
+did not complete, or a fresh apply over it that has not registered, which the
+next verb's finalization gives back the same way.
 This record establishes only local disposal/update restrictions, not native
 execution, readiness, ownership release or permission to run lifecycle work.
 Lifecycle publication participates in the same context lease and updates this
 evidence before any remote mutation. Missing or unknown evidence fails closed.
 A live lease refuses every context mutation.
+
+A fresh apply claims its [operation directory](#operation-records) and then
+raises its running evidence, in an exclusive transaction of its own, before it
+binds a Secret, claims the controller host, reserves or registers, so nothing
+it holds is ever covered by evidence that permits update or deletion. Before it
+registers, it re-proves that this evidence still holds and that no operation
+directory was claimed since its own, because evidence bytes are no token: a
+release that lowered them and a later claim that raised them again leave the
+same bytes, and only a claim, which nothing removes, tells the two apart. The
+claim precedes the evidence so that no running evidence, even from an
+invocation interrupted between the two, lands without one. A fresh removal
+raises its running evidence immediately before it registers, and a
+continuation before it marks its operation running; each publication is
+skipped when the evidence already reads so.
+
+A registration that provably did not happen, because it stopped before its
+index write or its index does not name the operation it wrote, releases the
+binding it created and restores the evidence the index then implies: the
+projection of the operation it names, read again, or pristine for none. The
+evidence is its to restore once it may have published it, or once it claimed a
+directory under running evidence it found, because every apply that claimed
+before it then refuses. The running evidence stays instead when a newer claim
+raised it since, which makes it that claim's, and when the index names no
+operation or a completed destroy while the context holds a reservation no
+operation owns, which keeps the context protected until a destroy or its next
+apply releases it. A restoration that fails is reported beside the failure that
+caused it. A registration that may have happened, because its index write
+failed where it may have landed, keeps its running evidence and its binding,
+which the operation it may have registered needs. A Secret binding no operation
+names, which an interrupted registration or a release that failed leaves, is
+released once the context's next fresh operation registers, after its pristine
+evidence when that operation is a removal that completes, once a removal's
+[finalization](#lifecycle-unit) publishes pristine evidence, or by a destroy's
+release of what an interrupted registration left; a continuation collects
+nothing, and a release that fails leaves the binding for the next of them. Each
+reads the context's bindings before its first transaction and
+releases only what it read and does not itself keep, so a binding issued since
+is never touched, and each fresh apply still in flight that bound one of them
+refuses at its re-proof rather than register it. The releases are made even
+once the invocation is interrupted. A listing that fails collects nothing,
+because collection is housekeeping no transition may be refused for.
 
 The guard allows update only without pending, failed or unknown operations;
 recreation/final deletion requires `none` operation and `none` ownership.
@@ -186,10 +246,16 @@ contexts/<name>/state/operations/
 
 `index.json` names at most one current operation and nothing else. Every other
 operation directory is kept for audit and never named by the index: a
-completed operation, one a removal superseded, and the unreferenced directory
-an interrupted registration leaves. A later command reads one again only as the
-current operation's `source`, and each counts toward the
-[retained-operation bound](contexts.md#storage-locking-and-publication).
+completed operation, one a removal superseded, the unreferenced directory an
+interrupted registration leaves, and the claimed directory of a fresh apply
+that never registered. A later command reads one again only as the current
+operation's `source`, and each counts toward the
+[retained-operation bound](contexts.md#storage-locking-and-publication). A
+fresh apply's `<operation-id>/` exists, holding only its empty `blocks/` and
+`logs/`, from the transaction that raises its
+[evidence](#context-mutation-evidence); its identity is allocated against every
+operation directory, and its registration fills that directory without
+counting it against the bound a second time.
 `operation.json` binds the operation to its verb, context
 identity, input revision and digest, plan digest, selected implementation and
 automation identities, executable identity, secret bindings, durable state and
@@ -226,7 +292,7 @@ synchronized bytes.
 
 | Durable state | Allowed lifecycle transition |
 | --- | --- |
-| no operation, or completed destroy | start a fresh apply; a `destroy` settles without effect |
+| no operation, or completed destroy | start a fresh apply; a `destroy` settles without effect, over no operation first releasing what an interrupted registration left and refusing evidence or records no index accounts for |
 | apply running | continue that exact apply, or start a fresh destroy of the blocks it started |
 | apply failed | continue that exact apply, or start a fresh destroy of the blocks it started |
 | apply paused | continue that exact apply under any stage selection, or start a fresh destroy of the blocks it started |
@@ -811,8 +877,9 @@ state and with the same block states. Anything else means another invocation
 advanced the context in between, so the plan that was presented and confirmed
 may no longer describe what the context owns, and the transition refuses
 `lifecycle.state` rather than applying it. A removal re-proves it before it
-resolves, proves quiescence or registers; a continuation and a fresh apply
-re-prove it before they register, claim a controller host or reserve anything,
+resolves, proves quiescence or registers; a continuation re-proves it before it
+registers, and a fresh apply both before it raises its evidence and again
+before it claims a controller host, reserves anything or registers, each
 together with the input revision and input digest the context holds: a
 continuation against those its operation froze, and a fresh apply against those
 its plan was compiled from, so it never registers a plan under an input it was

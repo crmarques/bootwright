@@ -125,10 +125,23 @@ versions; release drops only its references.
 [State reconciliation](state-reconciliation.md#plan-and-execution) is the
 lifecycle consumer: it binds every consumed declaration before operation
 registration, reopens bound material for each attempt, and releases the binding
-only after a completed destroy has removed the effects that needed it. A failed
-registration releases the binding it just created. Binding and release occur
-outside the lifecycle operation's own store transaction, because acquisition
-holds the same store lock.
+only after a completed destroy has removed the effects that needed it. A
+registration that provably did not happen releases the binding it created, and
+one that may have happened keeps it, because the operation it may have
+registered reopens it for every later attempt and its removal. A binding no
+operation names, which an interrupted registration leaves, is released under
+the [collection rule](state-reconciliation.md#context-mutation-evidence): after
+the context's next fresh registration, a removal's finalization, or a destroy's
+release of what the interrupted registration left, and only when read before
+that invocation began and never kept by it. Beside a context at rest, with
+pristine evidence and no reservation, it waits for the next registration. A
+consumer may list a context's binding identities for this; the listing unlocks
+nothing, reveals no material or version, and a store never initialized lists
+none. A bounded consumer's transient binding read in such a listing before it
+was reopened may be released with them, and that consumer then fails without
+reading any material. Binding and release occur outside the lifecycle
+operation's own store transaction, because acquisition holds the same store
+lock.
 
 Canonical non-secret declaration fingerprints cover type/source/parameters and
 provenance. Changed declarations make retained values stale/orphaned, never
