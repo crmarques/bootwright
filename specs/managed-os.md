@@ -91,7 +91,7 @@ The Environment's
 [rescue declaration](api/environment.md#lifecycle-rescue-declaration) is
 admitted and validated, and no lifecycle yet requires or consumes it. Whether
 it becomes a requirement, a refusal or is retired is an open owner decision,
-recorded in [backlog A6](milestones/backlog.md#audit-follow-ups-2026-09).
+recorded in [B40](milestones/m1.md#b40).
 
 **Derived installation.** Planning derives the complete Kickstart from
 effective state alone: text mode; the accepted license; the install source;
@@ -240,7 +240,7 @@ operation and plan again, while its destroy and observation still run.
 Not yet met: private delivery, because the Kickstart that names the tokenized
 key URL is implanted in the unauthenticated `os/<machine>/install.iso`, so
 every physical installation refuses; tracked as
-[backlog S3b](milestones/backlog.md#audit-follow-ups-2026-09).
+[B73](milestones/m4.md#b73).
 
 Installing a physical server differs from installing a virtual one in three
 ways, each following from the machine existing before Bootwright and outliving

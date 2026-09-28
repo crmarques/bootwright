@@ -4,7 +4,7 @@
 operator-supplied Ansible. The closed schema in
 `api/v1alpha1/customplaybooks.go` is authoritative for its fields, and the
 [custom playbook detail](../deferred/custom-playbooks.md) records their lexical
-rules and the reserved ordering graph that C8 revives.
+rules and the reserved ordering graph that [B102](../milestones/backlog.md#b102) revives.
 [The compiler boundary](../api.md#compiler-boundary) applies to enabled and
 disabled objects alike: both are strictly decoded, normalized,
 reference-checked and rendered. The retired `run` and `onFailure` fields are

@@ -365,7 +365,7 @@ Its result says in one line that nothing is left to do and, when it first
 completed an interrupted finalization or a `destroy` first released what an
 interrupted registration left, that it did only that, so a table of completed
 blocks is never read as work this invocation performed.
-Not yet met: the line does not yet name a finalization it completed or a release it performed; tracked as [backlog F5](milestones/backlog.md#audit-follow-ups-2026-09).
+Not yet met: the line does not yet name a finalization it completed or a release it performed; tracked as [B11](milestones/m1.md#b11).
 
 `apply` and `destroy` present the frozen plan, then any required
 authorizations, then the ordinary confirmation. The
@@ -449,7 +449,7 @@ context-owned artifacts, and durable ownership evidence. A name can locate an
 entry but never proves identity or ownership. The detailed contract of cluster
 inspection, access handoff and node selection is
 [deferred](deferred/cli-access-and-rendering.md) to a
-[C6](milestones/backlog.md#candidates) slice.
+parked item, [B101](milestones/backlog.md#b101).
 
 `secret show` and `cluster kubeconfig` are raw sensitive-byte exports.
 They require an exact context and object, perform no implicit fallback, emit

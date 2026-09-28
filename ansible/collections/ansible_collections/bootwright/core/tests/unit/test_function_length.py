@@ -17,7 +17,7 @@ LINE_LIMIT = 100
 
 # The functions already past the limit. The set only shrinks: a new entry means
 # a function grew past it instead of being split, and removing one is the point.
-# Their split is backlog C29 in specs/milestones/backlog.md.
+# Their split is item B47 in specs/milestones/m1.md.
 AWAITING_SPLIT = {
     "plugins/action/controller_protocol.py.ActionModule.run",
 }

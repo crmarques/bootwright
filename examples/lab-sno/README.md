@@ -1,7 +1,7 @@
 # Single-node OpenShift on emulated bare metal
 
 This example is the shape the
-[M4a delivery](../../specs/milestones.md#m4a--single-node-openshift-through-the-agent-installer)
+[B61 delivery](../../specs/milestones/m3.md#b61)
 targets: the same managed service set as [`lab-rhel`](../lab-rhel/README.md),
 one libvirt Machine whose hardware the substrate realizes, and one
 single-node OpenShift cluster the agent installer writes onto it. Bootwright

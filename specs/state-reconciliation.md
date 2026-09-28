@@ -543,7 +543,7 @@ continuation of an operation frozen by another build therefore runs under this
 build's bound, which changes no effect, no order and no evidence.
 
 Not yet met: roles still share host scratch paths, so the bound is one block;
-tracked as [backlog S4b](milestones/backlog.md#audit-follow-ups-2026-09).
+tracked as [B17](milestones/m1.md#b17).
 
 An operation is `paused` when execution stops because no block is startable,
 nothing is still running, no block is failed or unknown, and pending blocks
@@ -1037,7 +1037,7 @@ supported.
 
 Physical destroy and offline disk erase are outside this contract: a removal
 retains the machine and the system installed on it, and erasing one requires a
-separate safety contract ([backlog C9](milestones/backlog.md#candidates)).
+separate safety contract ([B70](milestones/m3.md#b70)).
 
 ### Controller-host protection
 

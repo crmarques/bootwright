@@ -24,7 +24,7 @@ cannot bind before the bridge exists.
 Not yet met: no service block names that requirement, so nothing orders a
 service bound to a managed bridge address after the block that creates the
 bridge; tracked as
-[backlog F8](milestones/backlog.md#audit-follow-ups-2026-09).
+[B33](milestones/m1.md#b33).
 
 An unsupported required capability refuses before operation registration, with one
 diagnostic naming every unsupported object, the reason, and a safe next action.
@@ -222,7 +222,7 @@ treat the publication as complete.
 
 Not yet met: the physical installation's host-key publication carries no such
 proof, and its refusal before registration leaves that publication unreachable;
-tracked as [backlog S3b](milestones/backlog.md#audit-follow-ups-2026-09).
+tracked as [B73](milestones/m4.md#b73).
 
 Published material is removed as soon as the work that needed it completes,
 and its absence is part of that block's completion evidence, because material

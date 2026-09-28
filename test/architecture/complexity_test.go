@@ -17,8 +17,8 @@ const functionLineLimit = 100
 
 // longFunctionsAwaitingSplit are the bodies that already exceed the limit. The
 // list only shrinks: a new entry means a function grew past it instead of being
-// split, and removing one is the whole point. Their split is backlog C29 in
-// specs/milestones/backlog.md.
+// split, and removing one is the whole point. Their split is item B47 in
+// specs/milestones/m1.md.
 func longFunctionsAwaitingSplit() []string {
 	return []string{
 		"internal/cli/results.go.writeResult",

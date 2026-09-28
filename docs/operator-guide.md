@@ -62,9 +62,9 @@ same sockets and the same guest bridge.
 
 | Journey | What it runs | Gate |
 | --- | --- | --- |
-| [lab-rhel](../examples/lab-rhel/README.md#run-it) | One RHEL guest installed through an emulated Redfish BMC, a settled replay, a removal refused while the guest runs, a fresh apply and a host restart | [M1h](../specs/milestones.md#m1h--managed-rhel-on-emulated-bare-metal) operator gate |
-| [lab-sno](../examples/lab-sno/README.md#run-it) | A single-node OpenShift cluster installed by the agent installer on one libvirt guest | [M4a](../specs/milestones.md#m4a--single-node-openshift-through-the-agent-installer) operator gate |
-| [lab-baremetal](../examples/lab-baremetal/README.md#run-it-today) | Admission and import of one physical Machine, then the refusal of its installation; the emulated rehearsal once backlog S3b lands | [M5a](../specs/milestones.md#m5a--managed-rhel-on-physical-bare-metal) operator gate, blocked |
+| [lab-rhel](../examples/lab-rhel/README.md#run-it) | One RHEL guest installed through an emulated Redfish BMC, a settled replay, a removal refused while the guest runs, a fresh apply and a host restart | [B72](../specs/milestones/m4.md#b72) operator gate |
+| [lab-sno](../examples/lab-sno/README.md#run-it) | A single-node OpenShift cluster installed by the agent installer on one libvirt guest | [B61](../specs/milestones/m3.md#b61) operator gate |
+| [lab-baremetal](../examples/lab-baremetal/README.md#run-it-today) | Admission and import of one physical Machine, then the refusal of its installation; the emulated rehearsal once B73 resumes | [B73](../specs/milestones/m4.md#b73) operator gate, blocked |
 
 Run each block from the repository root, one line at a time, and keep the
 sequence exactly as run: the ledger records it. After each operation, `status`
@@ -88,9 +88,10 @@ sudo journalctl -f -u bootwright-apply
 
 SSH placement of a managed service on a second OS-ready host, with that host's
 authored access and bound host key, is operator-run too and has no example.
-Real hardware is not a gate for any open slice: for M5a its tier is an open
-owner decision, and today a physical installation refuses until backlog S3b and
-a physical cluster node until S2b.
+Real hardware is no item's gate yet, but M3 and M4 each need a real-hardware
+row besides their emulated rehearsal (decision D17). Today a physical
+installation refuses until [B73](../specs/milestones/m4.md#b73) resumes, and a
+physical cluster node until [B67](../specs/milestones/m3.md#b67).
 
 ## Changing the build between runs
 
@@ -120,11 +121,11 @@ by this one. Destroy or purge any live context before switching builds.
 The ledger owns the [row format](acceptance.md#row-format) and who may accept a
 row. To record a run:
 
-1. Build a commit that descends from the acceptance baseline the slice's
-   [milestones](../specs/milestones.md#open-slices) section records, from a
-   checkout with no local changes, so `version` reports a `clean` source. Any
-   other build, and any run before the slice records a baseline, is an
-   observation.
+1. Build a commit that descends from the acceptance baseline the item's
+   section on its [milestone page](../specs/milestones.md#status) records,
+   from a checkout with no local changes, so `version` reports a `clean`
+   source. Any other build, and any run before the item records a baseline, is
+   an observation.
 2. Before the journey, note the `Commit` and `Source` lines `version` prints and
    the host's distribution, release and architecture.
 3. Run the example's block as written. Note every local edit beyond its lab
@@ -135,4 +136,4 @@ row. To record a run:
    result names as `Logs`, with the command the row format gives.
 6. Add the row to the [ledger](acceptance.md#ledger). Its last cell is
    `observation, not acceptance` unless the human owner accepts it there for a
-   slice it matches; an agent records only observations.
+   item it matches; an agent records only observations.

@@ -196,7 +196,7 @@ the controller is configured for. It proves that each name answers with its own
 slot's address and nothing else, because any other answer is one the installer
 may poll instead of the cluster. A slot with no address, such as a single-node
 slot satisfied by a `dnsName` alone, freezes no name, and nothing here proves
-how the controller resolves it ([backlog F6](milestones/backlog.md#audit-follow-ups-2026-09)). When the applications slot froze an address,
+how the controller resolves it ([B12](milestones/m1.md#b12)). When the applications slot froze an address,
 its name is a wildcard, so one more name beneath it is held to that address
 too: its label is `bootwright-` followed by the cluster name, cut to 63
 characters and to no trailing hyphen, so it is deterministic and names nothing
@@ -215,7 +215,8 @@ installer.
 
 Not yet met: the per-node pre-boot target proof, so every physical node refuses
 and a virtual node boots without it; tracked as
-[backlog S2b](milestones/backlog.md#audit-follow-ups-2026-09).
+[B6](milestones/m1.md#b6), and lifting the physical refusal as
+[B67](milestones/m3.md#b67).
 
 **Waiting.** The block waits for bootstrap completion and then for installation
 completion, through the same installer that built the image. Each wait is a
@@ -275,7 +276,7 @@ being cut short part way through its installation.
 
 Not yet met: `plan` and `apply` report that refusal without its reason and
 remedy, because the lifecycle's unsupported-shape refusal drops each object's
-reason; tracked as [backlog F7](milestones/backlog.md#audit-follow-ups-2026-09).
+reason; tracked as [B32](milestones/m1.md#b32).
 
 **The access it produces.** The installer writes the cluster administrator
 kubeconfig and the initial administrator password into the work area when it

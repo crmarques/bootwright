@@ -11,8 +11,8 @@ It never authorizes a push, a release or product scope.
 ## Before editing
 
 1. Confirm the authorized slice (AGENTS.md) and its owning specs, milestone
-   section and knowledge. Record unrelated discoveries in
-   `specs/milestones/backlog.md`; report a pre-existing defect as a follow-up
+   page and knowledge. Record unrelated discoveries as an item under
+   `specs/milestones/`; report a pre-existing defect as a follow-up
    instead of fixing it in this change.
 2. Work on a task branch in its own worktree, never in the destination
    checkout; in a cloud session the harness-designated branch is the task
@@ -47,7 +47,7 @@ It never authorizes a push, a release or product scope.
 
 - One commit per coherent change: a `type(domain): subject` Conventional Commit
   subject; a body stating what changed and why and every gate that ran with its
-  result; a `Refs:` line naming the slice or plan item.
+  result; a `Refs:` line naming the slice and its items.
 - Integrate through a pull request gated by CI. Follow-ups on an open pull
   request are new commits. Local integration, parallel workers and cleanup are
   in [git integration](references/git-integration.md); model, effort and

@@ -6,7 +6,7 @@ and `StorageExport`. The closed schema in `api/v1alpha1/storage.go` is
 authoritative for field names, types, defaults and shapes. The
 [storage field detail](../deferred/storage-api.md) records its tables, the
 field-local rules `internal/storage` admission enforces, and the renderer
-defaults M2b revives; changing an enforced rule is an API change under
+defaults [B55](../milestones/m2.md#b55) revives; changing an enforced rule is an API change under
 [version authority](../api.md#version-authority). Fields use Bootwright camel case; only the
 explicitly declared `config`, `spec` and `parameters` maps accept open payloads.
 [The compiler boundary](../api.md#compiler-boundary) and

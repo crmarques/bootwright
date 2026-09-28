@@ -612,10 +612,10 @@ facts to communicate across capability boundaries.
 A consumer of a realized Machine dispatches on the substrate arm or identity
 channel Go froze into its request, through that substrate role's fixed task
 files, and each dispatch ends in a terminal fail for a value it has no task file
-for. Who owns substrate composition is an open owner decision
-([backlog A3 (port)](milestones/backlog.md#audit-follow-ups-2026-09)).
+for. The substrate owns its composition as role entry points (decision D1),
+not yet implemented ([B5](milestones/m1.md#b5)).
 
-Not yet met: the Managed OS and cluster-install dispatches refuse an unknown value with a leading assert, not a terminal fail, and no structural test checks either; tracked as [backlog Y1](milestones/backlog.md#audit-follow-ups-2026-09).
+Not yet met: the Managed OS and cluster-install dispatches refuse an unknown value with a leading assert, not a terminal fail, and no structural test checks either; tracked as [B7](milestones/m1.md#b7).
 
 ### Ansible collection plugins and results
 
@@ -692,7 +692,7 @@ runner carries every adapter run. What the evidence contains, and what proves
 it, belong to each capability. Go decides what an outcome and its evidence
 mean; a plugin neither schedules work nor authorizes it.
 
-Not yet met: `controller/ansiblelocal` and `reconciliation/ansiblerunner` each decode the protocol, with bounds of 132 and 64 records; the lifecycle decoder admits duplicate keys, a `group` on `completed` and any non-empty `status`; and each capability's action plugin copies the phase dispatch, enums and postcondition rule; tracked as [backlog C28](milestones/backlog.md#candidates).
+Not yet met: `controller/ansiblelocal` and `reconciliation/ansiblerunner` each decode the protocol, with bounds of 132 and 64 records; the lifecycle decoder admits duplicate keys, a `group` on `completed` and any non-empty `status`; and each capability's action plugin copies the phase dispatch, enums and postcondition rule; tracked as [B19](milestones/m1.md#b19).
 
 ## Implementations and version variation
 
@@ -775,7 +775,7 @@ reviewers retain semantic judgments that source checks cannot prove.
   is no longer needed, or names what no longer exists, fails, so each list only
   shrinks. A production function, in Go or in the collection's plugins, stays
   within 100 lines; the ones already longer are listed awaiting their split
-  ([backlog C29](milestones/backlog.md#candidates)).
+  ([B47](milestones/m1.md#b47)).
 
 Unit or fake-adapter success never qualifies a remote implementation. Every
 supported substrate/component/product/version combination needs its named

@@ -74,7 +74,7 @@ pool is defined.
 
 Not yet met: an SSH-host installation frozen as an exact transaction and
 authorized under the controller stage's before-state rules; tracked as
-[backlog F9](milestones/backlog.md#audit-follow-ups-2026-09).
+[B34](milestones/m1.md#b34).
 
 **Managed networks.** Each `networkAttachments[]` entry whose libvirt arm
 declares `management: managed` becomes one persistent libvirt network named
@@ -133,7 +133,7 @@ connection answered nor the pool directory. An owned network left without its
 pool therefore resolves unknown instead of partial, and a removal whose effect
 finished before it was interrupted is repeated once, because its resolution
 cannot prove that from the absence form; tracked as
-[backlog S6b](milestones/backlog.md#audit-follow-ups-2026-09).
+[B8](milestones/m1.md#b8).
 
 ## Machine realization
 
@@ -208,7 +208,7 @@ is a positive partial realization.
 Not yet met: the observation reads an empty domain and controller unit as
 removed, so a machine with only its disks left resolves unknown instead of
 partial, in an apply's resolution and a removal's alike; tracked as
-[backlog S6b](milestones/backlog.md#audit-follow-ups-2026-09).
+[B8](milestones/m1.md#b8).
 
 **Hypervisor answer.** The observation and its evidence report whether the
 hypervisor answered for the domain, because a hypervisor that does not answer
@@ -264,7 +264,7 @@ answers at the same endpoint after a re-cabling or a re-addressing.
 
 Not yet met: the ComputerSystem identity is recorded but not yet compared with
 the identity an earlier attempt proved, so only the MAC set distinguishes a
-replacement server; tracked as [backlog S11](milestones/backlog.md#audit-follow-ups-2026-09).
+replacement server; tracked as [B3](milestones/m1.md#b3).
 
 **Claim.** The block claims `bmc:<host>:<port>/<system>` for the normalized
 endpoint, so two contexts cannot both drive one physical server. The claim
@@ -294,7 +294,7 @@ retains the machine and lists no impact. It consumes no authorization, because
 it destroys nothing. The removal's resolution observes nothing and is always
 its completion, because the removal changes nothing on the machine. Physical
 erasure is deliberately not part of this contract
-and remains [deferred](milestones/backlog.md#candidates).
+and remains [B70](milestones/m3.md#b70).
 
 **Quiescence.** The removal takes back only a claim, which nothing reads, so
 this block is always quiescent under the
@@ -332,7 +332,7 @@ the machine off, selects the installed disk before powering it on again.
 
 Not yet met: every consumer booting through this substrate-owned operation
 rather than selecting a boot device itself; tracked as
-[backlog A3 (port)](milestones/backlog.md#audit-follow-ups-2026-09).
+[B5](milestones/m1.md#b5).
 
 Day-2 power commands consume exactly these operations. `machine start`,
 `machine stop` and `machine restart` freeze one request naming the Machine's

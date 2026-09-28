@@ -5,10 +5,10 @@ native tools and adapters. Route to the owner of each fact; do not bulk-read.
 
 - [specs/index.md](specs/index.md) names the spec that owns each question. Load
   only the owning sections.
-- [specs/milestones.md](specs/milestones.md): read its status header, its scope
-  rules and the section of the slice your task names. Delivered history and
-  deferred work live in `specs/milestones/`; search them when a task refers to
-  them.
+- [specs/milestones.md](specs/milestones.md): read its status, its scope rules
+  and the milestone page of the slice or item your task names. Delivered
+  history, parked items and decisions live in `specs/milestones/`; search them
+  when a task refers to them.
 - [.agents/knowledge/index.md](.agents/knowledge/index.md): search it by symptom,
   symbol or error text before investigating, then open only matching pages.
 

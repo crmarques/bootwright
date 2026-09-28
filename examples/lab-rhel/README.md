@@ -1,7 +1,7 @@
 # Managed RHEL on emulated bare metal
 
 This example is the complete shape the
-[M1h delivery](../../specs/milestones.md#m1h--managed-rhel-on-emulated-bare-metal)
+[B72 delivery](../../specs/milestones/m4.md#b72)
 targets: one OS-ready Machine that is the Bootwright controller, the host of
 every managed infrastructure service, and the libvirt provider host for one
 guest whose RHEL 9.8 Bootwright installs through an emulated Redfish BMC. It
@@ -43,9 +43,9 @@ reservations, readiness evidence and the inverse.
   host before the input is imported.
 
 Every in-tree test is unitary: none creates a container, a network or a guest.
-Running this journey under a build matching M1h's acceptance baseline and
+Running this journey under a build matching B72's acceptance baseline and
 recording it in the
-[acceptance ledger](../../docs/acceptance.md) is M1h's operator gate. The first
+[acceptance ledger](../../docs/acceptance.md) is B72's operator gate. The first
 real runs, which qualified the emulated BMC's Redfish surface and `mkksiso`
 against RHEL 9.8 boot media, are described in
 [development](../../docs/development.md) and
@@ -180,7 +180,7 @@ created, so stopping the guest and repeating the command is the whole recovery.
 The inverse removes exactly what the apply created, and destroy ends
 `state: done` and `next: none`; repeating it settles.
 
-M1h's operator gate continues past that destroy. A fresh `apply` realizes the
+B72's operator gate continues past that destroy. A fresh `apply` realizes the
 environment again under a new operation. The host restart then proves the
 provider host carries its guest network and storage pool across a reboot: once
 the host is back, return to the repository root and `machine start` powers

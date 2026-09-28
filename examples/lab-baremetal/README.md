@@ -1,12 +1,13 @@
 # lab-baremetal
 
 One physical server installed with RHEL through its own Redfish management
-controller. It is the smallest complete shape M5a supports: a controller
+controller. It is the smallest complete shape
+[B73](../../specs/milestones/m4.md#b73) supports: a controller
 Machine running the managed services, a bare-metal `InfraProvider`, and one
 Machine that declares the hardware it must be proved to be.
 
 **Physical installation is refused today.** Until private host-key delivery is
-repaired (backlog S3b), the installation of `Machine/metal-01`
+repaired (B73), the installation of `Machine/metal-01`
 [refuses before registration](../../specs/managed-os.md#physical-installation),
 because the delivered host key would be readable from the publicly served
 installer image, so an apply of this example registers nothing.
@@ -70,13 +71,13 @@ executable cannot realize; a `--stage` selection refuses the same way. `status`
 still lists every managed service as pending, because nothing was registered.
 `TestLabBaremetalExampleRefusesItsInstallation` holds that refusal in-tree.
 
-A run of this block is an observation, not M5a's operator gate: the gate is the
-rehearsal below, and M5a records no acceptance baseline until S3b lands.
+A run of this block is an observation, not B73's operator gate: the gate is the
+rehearsal below, and B73 records no acceptance baseline until B9 lands.
 
 ## Rehearsing it without hardware
 
 The rehearsal stops at the installation refusal above until private host-key
-delivery is repaired (backlog S3b). Once it is, the physical path can be driven
+delivery is repaired (B73). Once it is, the physical path can be driven
 end to end on one workstation, because the emulated controller `lab-rhel` uses
 implements the same Redfish surface this one drives, including the
 `EthernetInterfaces` collection the target proof reads. This rehearsal is the

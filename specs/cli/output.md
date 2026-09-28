@@ -21,7 +21,7 @@ output.
 | [SSH session](../cli.md#machine-ssh-sessions) | the remote process's own bytes | Bootwright diagnostics and the host-key confirmation before the connection, then the remote process's own bytes | the SSH client's exit status |
 | Interrupt-driven cancellation | as required by the selected structured mode | as required by that mode | `130` |
 
-Not yet met: `machine start`, `machine stop` and `machine restart` with `--output json` write the human `Logs` field before the document; tracked as [backlog F5](../milestones/backlog.md#audit-follow-ups-2026-09).
+Not yet met: `machine start`, `machine stop` and `machine restart` with `--output json` write the human `Logs` field before the document; tracked as [B11](../milestones/m1.md#b11).
 
 An operating-system interrupt reports `runtime.interrupted` and exits `130` for
 a Bootwright-owned operation. Another canceled context or expired deadline
@@ -335,7 +335,7 @@ characters, ESC, newline, and invalid UTF-8 bytes with deterministic `\\`,
 
 The `cluster list` and `cluster info` result shape, `accessCommands` included,
 is [deferred](../deferred/cli-access-and-rendering.md#cluster-discovery) to a
-[C6](../milestones/backlog.md#candidates) slice.
+parked item, [B101](../milestones/backlog.md#b101).
 
 ## Lifecycle and status results
 
@@ -377,7 +377,7 @@ probe. Its result orders these fields:
 | `nextSteps` | Ordered safe command strings, empty when no action is available. |
 | `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe relative paths. |
 
-Not yet met: nested status objects carry Go field names and another shape, and setup checks use their own vocabulary; tracked as [backlog F5](../milestones/backlog.md#audit-follow-ups-2026-09).
+Not yet met: nested status objects carry Go field names and another shape, and setup checks use their own vocabulary; tracked as [B11](../milestones/m1.md#b11).
 
 Rows sort by their documented key: checks and blocks in frozen order,
 everything else in ascending bytewise name order. Human `status` presents the
@@ -385,7 +385,7 @@ same membership and order, omitting empty sections.
 
 Not yet met: human `status` omits `context.mode`, `desired`, cluster and
 storage cluster rows, `secrets` and the lifecycle `operation`, `verb` and
-`state`, and shows only the first next step; tracked as [backlog F5](../milestones/backlog.md#audit-follow-ups-2026-09).
+`state`, and shows only the first next step; tracked as [B11](../milestones/m1.md#b11).
 
 ## Diagnostic taxonomy and order
 

@@ -1,8 +1,9 @@
 # Add-ons design
 
-C4 revives this design with the first built-in package and binding lifecycle,
-C10 with custom-catalog acquisition and C11 with a declarative custom-package
-lifecycle, each listed in the [backlog](../milestones/backlog.md#candidates).
+[B83](../milestones/m5.md#b83) revives this design with the first built-in
+package and binding lifecycle, [B89](../milestones/m7.md#b89) with
+custom-catalog acquisition and [B90](../milestones/m7.md#b90) with a
+declarative custom-package lifecycle.
 Until then the [add-on boundary](../add-ons.md) and the
 [add-on API](../api/addons.md) own what admission and the current code
 enforce, and nothing here is implemented except the step shape recorded

@@ -1,8 +1,8 @@
 # Custom playbook detail
 
-C8 revives this detail when it replaces the reserved `CustomPlaybook` shape
-with one typed, invertible executable journey, listed in the
-[backlog](../milestones/backlog.md#candidates). Until then the
+The parked item [B102](../milestones/backlog.md#b102) revives this detail when
+it replaces the reserved `CustomPlaybook` shape with one typed, invertible
+executable journey. Until then the
 [reserved-shape contract](../api/custom-playbooks.md) owns what admission and
 lifecycle enforce, and the closed schema in `api/v1alpha1/customplaybooks.go`
 is authoritative for field names, types and defaults; the rules below are the

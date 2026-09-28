@@ -305,12 +305,12 @@ installed bootstrap and target file inventories from approved retained sources.
 
 The automation content digest covers every embedded automation file except
 documentation, the collection's root `README` and `CHANGELOG`, which stay in
-the bundle ([owner decision D14](milestones/backlog.md#pre-openshift-readiness-program-2026-09)).
+the bundle ([owner decision D14](milestones/backlog.md#decisions)).
 That exclusion has its own digest domain version, so no digest under one rule
 equals a digest under the other. A check of an approved bundle's automation
 compares only what the digest covers.
 
-Not yet met: the digest still covers documentation, because the lifecycle runner, the controller adapter and bundle inspection still compare every embedded file; dropping documentation from the digest before them would let a documentation-only change keep the digest while setup refuses the retained bundle as unattributable instead of carrying it forward; tracked as [backlog Z2](milestones/backlog.md#audit-follow-ups-2026-09).
+Not yet met: the digest still covers documentation, because the lifecycle runner, the controller adapter and bundle inspection still compare every embedded file; dropping documentation from the digest before them would let a documentation-only change keep the digest while setup refuses the retained bundle as unattributable instead of carrying it forward; tracked as [B16](milestones/m1.md#b16).
 
 `--yes` suppresses ordinary confirmation only. Use the
 [ordinary confirmation](cli.md#ordinary-confirmation), with the plan before
@@ -483,7 +483,7 @@ clone preserving all three identity values and the relevant namespace view is
 indistinguishable; copied identity bytes alone are never a claim of clone
 resistance. Full-store restore follows the
 [restore boundary](contexts.md#format-and-restore-boundary); controller
-relocation waits on backlog [C14](milestones/backlog.md#candidates).
+relocation waits on [B103](milestones/backlog.md#b103).
 
 [Workspace](contexts.md#controller-relationship-and-host-binding) persists the
 verified identity and context relationship. Setup prepares the host without

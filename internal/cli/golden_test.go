@@ -448,10 +448,10 @@ func cliGoldens() []cliGolden {
 			stderr: "[FAIL] lifecycle.authorization: this plan has data-loss consequences that are not authorized: os-install-rhel-01; next: review the plan's impacts and repeat the command with --authorize data-loss\n",
 		},
 		// Status JSON still carries Go field names in its nested objects, a
-		// deviation specs/cli/output.md records as backlog F5; this golden is
-		// what F5's tagged DTOs will visibly change. Human status departs from
+		// deviation specs/cli/output.md records as item B11; this golden is
+		// what B11's tagged DTOs will visibly change. Human status departs from
 		// the JSON membership that spec asks it to present, and the text golden
-		// pins every omission its F5 line lists: the fixture fills the context
+		// pins every omission its B11 line lists: the fixture fills the context
 		// mode, desired state, cluster rows, secrets and lifecycle operation,
 		// none of which is rendered, and only the first next step is shown.
 		{golden: "cli-status", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = status() }},
@@ -561,7 +561,7 @@ func cliGoldens() []cliGolden {
 		// Machines. A power verb's service also reports where its run's
 		// output is kept, through a reporter outside this boundary: that Logs
 		// line precedes the JSON document in the real executable
-		// (specs/cli/output.md, backlog F5), so F5 adds its own wiring-level
+		// (specs/cli/output.md, item B11), so B11 adds its own wiring-level
 		// test and these goldens hold what the Runner writes.
 		{golden: "cli-machine-list", args: "machine list --power-status", record: func(r *dispatchRecord) { r.result.machines = machines(true) }},
 		{golden: "cli-machine-list-json", args: "machine list --power-status --output json", record: func(r *dispatchRecord) { r.result.machines = machines(true) }},

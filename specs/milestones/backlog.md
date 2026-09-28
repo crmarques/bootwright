@@ -1,66 +1,100 @@
 # Backlog
 
-Unpromoted work. None of it is an exit gate or authorizes implementation;
-[milestones](../milestones.md) promotes a named slice on explicit request and
-fills its version, journey and evidence gaps then.
-[Product non-goals](../project.md#design-priorities-and-non-goals) stay
-excluded: reconciliation, adoption, force behavior and day-2 mutation need an
-explicit product or state-contract change before candidacy. Stage selection is
-not one of them, because it gates which blocks an invocation starts and leaves
-the plan, the lifecycle unit and ownership complete.
+Items attached to no milestone, the IDs the 2026-09-28 reorganization retired,
+and the owner decisions the milestone pages cite. Open work lives on the
+milestone pages [M1](m1.md) to [M7](m7.md); [milestones](../milestones.md)
+owns the rules. [Product non-goals](../project.md#design-priorities-and-non-goals)
+stay excluded: reconciliation, adoption, force behavior and day-2 mutation need
+an explicit product or state-contract change before candidacy. Stage selection
+is not one of them, because it gates which blocks an invocation starts and
+leaves the plan, the lifecycle unit and ownership complete.
 
-## Candidates
+## Parked
 
-Unless marked, a candidate's definition status is **Candidate**.
+A parked item gates no milestone and authorizes nothing. Attaching one to a
+milestone page is an explicit request, recorded with its date in the item's
+Alias cell.
 
-| ID | Owner and bounded outcome | Deferred because / requires | Exit evidence |
-| --- | --- | --- | --- |
-| C1 | Substrate: one vSphere or KubeVirt provisioning variant; the libvirt variant is **promoted into M1h** and the bare-metal variant into M5a. | No further variant/consumer selected; requires a named use case. M5a made the shape of this work clear: an arm is a capability package plus one case of the [target derivation](../substrates.md#selection-and-refusal), and no consumer of a realized Machine changes. | Exact release, adapter contract, its two fixed identity and pre-boot task files, failure/replay tests and real-system qualification; the admitted arms are recorded in [refused machine arms](../deferred/machine-arms.md). |
-| C2 | Infrastructure services: one managed `Registry` or `LoadBalancer` lifecycle. | No named consumer; requires M1f, whose shared managed-service capability both kinds would extend. | Typed port, exact implementation, lifecycle evidence, failure and acceptance tests. |
-| C3 | Storage: one Ceph pool, filesystem, gateway, NFS or export lifecycle. | Separate from operator-run scripts; requires M6 and a named service. | Ownership, replay, destroy and real-system qualification. |
-| C4 | Add-ons: one built-in package and binding lifecycle. | No exact package/target/release selected; requires a supported cluster. | [Package/driver design](../deferred/add-ons-design.md), compatibility, trust/secrets, readiness, ordering/replay/destroy and acceptance. |
-| C5 | Managed OS: one additional image/profile/entitlement variant. | No concrete consumer; requires M5. | Intent gap, deliberate API revision, renderer/executor parity and qualification. |
-| C6 | UX: one additional view of available evidence or explicit access, or a dashboard/completion extension. It also owns the administrator-access custody contract descoped from [M4a](../milestones.md#m4a--single-node-openshift-through-the-agent-installer): moving the access a completed installation leaves in the installer's root-owned work area into context custody, which `cluster kubeconfig` would then reveal. X16 found two hazards custody removes: each rerun of `agent wait-for install-complete` prepends the router CA to `auth/kubeconfig` again, growing it toward the inspection's 64 KiB read bound, and a budget kill during the installer's in-place write of that file could truncate it. | No journey selected; requires the underlying capability, and M4a for custody. | Complete human/machine journey, diagnostics, safety and end-to-end tests; a cluster inspection or access slice also meets the [cluster evidence](#c6-cluster-inspection-and-access-evidence) below, and the custody contract meets its own non-disclosure and removal tests. |
-| C7 | State reconciliation: the lease-only mutation boundary. | Bounded parallel block execution is **delivered** out of sequence; what remains is the lock it does not need but a reader does. A lifecycle operation holds the exclusive root lock for its whole duration, so a concurrent read refuses; narrowing that to the context lease alone, which would let a read such as `status` observe a running operation, belongs here. Requires S4b per-invocation scratch and a cross-context concurrent-install test. | Concurrent-reader evidence for the narrowed lock, and proof that an operation's own blocks still see one coherent record set. |
-| C8 | Custom automation: one typed, invertible executable playbook journey. **Needs definition.** | Reserved schema cannot prove effects/ownership/non-exfiltration; requires M1e, L2/L4/L5 and a named journey. | Same-change API replacement of the [reserved shape](../deferred/custom-playbooks.md), immutable source/dependencies, exact targets, bounded secrets, authorization, continuation, failure injection and isolated-runner qualification. |
-| C9 | Bare-metal safety: physical offline disk erase and managed-machine destroy. **Blocked.** | Exact disk identity is unproved during the controller-to-installer interval; needs new safety evidence that closes or explicitly bounds it. M5a narrowed that interval with an in-installer identity check but did not close it, and deliberately kept removal retaining: a physical removal releases its claim and erases nothing. | Separate safety contract, immutable target proof at erase, failure injection and real-hardware qualification. |
-| C10 | Add-ons, Workspace and CLI: custom-catalog acquisition, immutable publication, selection and removal, including the storage location and record format of `add-ons add` registrations and the meaning of the [`add-ons/_store` selection exception](../api/environment.md#resource-and-cluster-selection). **Needs definition.** | No source/trust/storage/selection contract; requires M1b and C4. The three `add-ons` commands stay unavailable until promoted. | Closed schemas and formats, fixed bounds, authenticity, atomic/crash-safe storage, deterministic selection, retention through destroy and security/acceptance tests. |
-| C11 | Add-ons: one declarative custom-package lifecycle. | No package/target/driver selected; requires C4, C10 and a supported cluster. | Exact identities, qualified driver, host-contract suite, code-content refusal and apply/readiness/replay/destroy acceptance. |
-| C12 | Container cluster and Native artifacts: one local bootable installer ISO an operator builds and keeps, outside any operation. **Needs definition.** | No builder journey; requires M1e and M2a. The image a cluster installs from is **delivered by M4a** as an owned lifecycle effect, published privately and removed by its inverse; what remains here is a disposable artifact with no operation, no ownership and no remote publication. | Exact builder/dependencies, bounded inputs, sensitive classification, typed manifest/digest, atomic publication, metadata goldens, negative effect tests and boot evidence. |
-| C13 | Release engineering: one source/binary distribution with licensing and notices. **Needs definition.** | Buildability does not define redistribution; requires M1a and one release channel. | Project license, direct/transitive license review, exact release toolchain/platform/shell matrix, non-skipping completion tests, reproducible archives, notices, dependency inventory, checksums, provenance, SBOM and clean-room packaging verification. |
-| C14 | Workspace and Secrets: explicit complete-store restore with logical identity preservation. **Needs definition.** | Copy restoration changes physical identities and may roll back seal reservations; [M1c](delivered.md#m1c--context-secret-management) converts no earlier keyring format and refuses it instead, and offers no backup/restore command. Requires M1b/M1c and a selected restore journey. | Coherent snapshot validation, authorized inode rebinding, fresh key before writes after rollback, interruption/retry and wrong-store refusal tests; preserve lifecycle recovery evidence. |
-| C15 | Secrets: replace per-ID reservations with bounded lifetime allocation. **Needs definition.** | Current opaque random version/binding IDs retain historical reservation files; a new allocation scheme must preserve issued-ID non-reuse across crashes and restore. Requires M1c and C14 restore semantics. | Bounded allocator state, reservation-before-use, counter/namespace exhaustion, migration of existing bindings and failed attempts, non-reuse and crash tests. |
-| C19 | Secrets: one additional secret-store implementation (passphrase-protected store, external broker or KDF-based custody). | `local-keyring` meets the current scope; requires M1c and a named operator need. | Shared conformance suite pass, session-material contract, rotation, tamper refusal and non-disclosure tests. |
-| C20 | Infrastructure services and Native artifacts: publish generated content into a managed `ArtifactServer`'s served root as an owned lifecycle effect. Consumer publication beneath the served root is **promoted into M1h** (D4); typed manifests for rendered native artifacts remain here. **Needs definition.** | M1e serves an empty root; the first content producer is M1h's installer ISO and package tree, and rendered boot artifacts arrive with C12 and M2a. Requires M1h and C12. | Typed content manifest and digests, destination and overwrite rules within the owned root, atomic publication, retention through destroy, bounded source reads, sensitive classification and negative effect tests. A frozen M1e plan cannot be appended; publication is a block of its own operation. |
-| C21 | Secrets and Workspace: bring `file`-sourced Secret material under the [copied-input rule](../project.md#design-priorities-and-non-goals) so materialization reads only context custody. **Needs definition.** | The [file source](../api/secrets.md#file-source) names operator-owned paths that a lifecycle operation reads at materialization, after admission; whether import copies them into the keyring, the `secret` tree does, or the arm is retired changes the Secrets API and custody contract. Requires M1c and M1e. | Closed import journey and record format, binding of imported bytes to the declaring Secret, refusal of a changed or missing source after import, non-disclosure and negative effect tests. |
-| C22 | State reconciliation and Secrets: one recovery for a registered operation whose frozen binding can no longer be reopened. **Needs definition.** | A continuation reopens the exact binding the operation froze, and an incomplete apply refuses every other verb, so a binding lost to an earlier defect or to operator action leaves the context with no continue, no destroy and no delete. Whether recovery re-binds under a proved-equivalent declaration, admits a destroy of a failed apply, or releases ownership explicitly changes both contracts. Requires M1e and M1c. | Exact recovery journey and its authorization, proof that re-acquired material is the material the operation froze or an explicit refusal, ownership and reservation release, and crash/replay tests over a lost binding. |
-| C23 | State reconciliation: one recovery for an operation whose unknown block no observation can resolve. **Needs definition.** | [Resolution](../state-reconciliation.md#attempts-and-unknown-outcomes) admits only positive completion or positive no effect, and an unknown block starts no retry, dependent block, destroy effect or replacement while [deletion](../contexts.md#permanent-deletion) refuses a context that owns one until the operator abandons it. A partially realized target proves neither state — a libvirt domain defined and owned whose management controller never started is the worked example — so the context has no continue and no destroy, and its only delete abandons what that block may own. M1h and the removal of an unfinished apply narrowed what reaches this four times over: a diagnosed adapter failure is reported as `failed`, leaving only a lost or cancelled result; a fresh destroy supersedes any apply that has not completed, so neither a repaired adapter nor an interrupt strands the context; a resolution that proves a target is this context's own and part way realized now fails its block, which the next attempt converges; and a removal performs that resolution itself before it registers, so a lost or cancelled result is resolved by the command that takes the environment back rather than only by repeating the operation that lost it. What remains is an observation that can prove neither: a foreign target of the same name, or one that cannot be read at all. That block admits no removal effect, because no evidence says what it owns, and the removal that tried to prove it refuses having registered nothing. Whether a capability may prove a third resolution or destroy is admitted over an unknown block changes the safety contract; abandoning the context locally is already answered and recovers nothing. Requires M1e. | Exact recovery journey and its authorization; proof that no unproved effect is repeated outside the capability's safe retry contract; ownership and reservation release; crash and replay tests over a partially realized target; and the refusal that still holds when an effect is genuinely unprovable. |
-| C24 | Controller setup and Workspace: the automation projection as its own layer over a shared foundation. **Needs definition.** | Retiring a superseded execution bundle is **delivered** by [`setup --purge-old-bundles`](../controller.md#supported-host-and-dependency-selection), so the retention bound is no longer reached with no operator recovery. What remains is the other half of the original question: an automation-only revision still names a whole new bundle area and republishes the same closure into it, because the projection that carries the automation is part of the bundle's identity rather than a layer over a shared foundation. Requires M1d and M1e. | Closed layer identities and their attribution; proof that a foundation is reused only when its resolved closure is unchanged and that sealed-bundle immutability survives an automation-only revision; and bounded reacquisition. |
-| C25 | State reconciliation and Controller setup: the remainder of the upgrade journey — scoped removal, and the bundle half of the same collision. **Needs definition.** | Planning a removal from the plan its apply froze is **delivered** by [removal under the build in hand](delivered.md#x9--removal-under-the-build-in-hand), so a moved content digest, a request shape one version old and an edited declaration no longer strand a context. Two parts remain. `destroy` admits no stage or block scope, so a recovery removes every block the context owns rather than the one whose digest moved. And a sealed bundle is retired by nothing (C24), so an operation that must be *continued* rather than superseded still runs the automation it froze and still refuses a host whose bundle has moved on; only a fresh verb runs under the build in hand. Requires M1d and M1e. | The authorization and journey of a scoped removal, and proof that a scope never leaves a dependent behind; how a continuation names the bundle identity its frozen operation needs so the refusal states the remedy; and crash and replay tests over both. |
-| C26 | Controller setup and Workspace: a durable home for what local `setup` prints. **Needs definition.** | Setup allocates [no lifecycle identity and no operation log](../cli/output.md#private-operation-logs), so the Ansible that installs the container runtime and publishes the execution bundle discards its own output, and a failure it does not diagnose leaves nothing to read. The controller stage has no such gap, because it is a lifecycle block whose attempt already owns a retained output file, and neither does a bounded run, which retains its own under [`state/runs/<run-id>`](../cli/output.md#bounded-run-output). Setup is what is left: it selects no context, so it has no context state to keep a run beside. Whether it gains a bounded log tree beside its [private recovery receipt](../controller.md#publication-and-interrupted-setup), reuses the receipt itself, or keeps discarding changes what a context-free local command is permitted to leave behind. Requires M1d. | Closed path grammar, ownership and retention bound beneath the root-owned controller area; exclusive creation that follows no link and overwrites no unrelated content; proof that a retention fault never changes a setup outcome or its receipt; the `Logs` reference in the human result; and negative tests over a full, unwritable and pre-existing destination. |
-| C28 | Architecture (audit R1): one implementation of [the adapter result protocol](../architecture.md#the-adapter-result-protocol), and one Ansible runner. **Needs definition.** Its hang clause landed as S14 in X14; the rest is X24. | The protocol is now specified, but ten per-capability action plugins each carry their own copy of its phase dispatch, acknowledgement, group emission and postcondition rule, and each is paired with a documentation-only module. Beside them, `controller/ansiblelocal` is a second runner with a second protocol reader with a different record bound and a `prepared` phase the lifecycle runner does not have, so `setup` and the controller stage cross a different boundary from every other block. A refusal that races the adapter's own non-zero exit can be classified `failed` instead of `unknown`, and a controller refusal before native authorization releases the adapter only at its next acknowledgement. Collapsing both is mechanical but changes what every role emits and what fails a run, and no in-tree gate proves an adapter's real host behavior. Whether the postcondition decision moves to Go, and whether progress groups come from task tags through a callback plugin instead of 194 emission tasks, changes what a role contains. Requires M1h. | One shared protocol implementation with its own unit tests; one runner whose request, phases and failure semantics both consumers share; per-capability evidence proved by its own tests; the collection sanity, lint and integration gates; and a real-host run of one apply and one destroy before the old paths are removed. |
-| C29 | Architecture (audit R2): split the production functions still over the line limit, and retire the three copied managed-service roles. **Needs definition.** | [`test/architecture/complexity_test.go`](../../test/architecture/complexity_test.go) fails a production function longer than 100 lines unless it is listed as awaiting a split, and 38 are; the collection's `tests/unit/test_function_length.py` does the same for its Python, where `ActionModule.run` in `plugins/action/controller_protocol.py` awaits one. Separately, `infra_dns_server_dnsmasq`, `infra_ntp_server_chrony` and `infra_proxy_squid` differ only by a variable prefix and a template name, while Go already runs all three through one capability over one definition; collapsing them to one role changes each frozen request's shape and every role identity, which no in-tree gate proves against a host. Requires M1h. | Each split proved by the suite that already covers the function, with the entry removed from the list; one parameterized managed-service role with its argument spec, the collection gates over it, and a real-host apply and destroy of one managed service before the copies are removed. |
-| C30 | Architecture: reduce production comments to what the [code clarity contract](../architecture.md#self-explanatory-code-and-retained-knowledge) retains. **Needs definition.** | Production Go carries about 5,200 comment lines, role and playbook YAML about 210, and collection plugins about 370 beyond the documentation blocks `ansible-doc` requires. Most state rationale the contract sends to the knowledge catalog, and some state invariants that must survive as tests or names rather than prose. Deciding each one is the work; a blanket strip would lose the findings the catalog is meant to keep. Requires no other slice. | Each retained comment justified by language, tooling or a maintained contract; every durable finding moved into `.agents/knowledge/` with its links and evidence; and a fitness gate that holds the result. |
-| C31 | Add-ons: one IBM Fusion, IBM Fusion Data Foundation or Red Hat OpenShift Data Foundation integration, which the [product scope](../project.md#product-scope) no longer names. **Needs definition.** | No package, target, release or journey selected; requires C4 and a supported OpenShift cluster. | [Package and driver design](../deferred/add-ons-design.md), exact release and compatibility, trust and secrets, readiness, ordering, replay and destroy, and acceptance on a supported cluster. |
+| ID | Alias | Kind | Owner | Outcome | Why parked |
+| --- | --- | --- | --- | --- | --- |
+| [B94](#b94) | F10 | enabling | Controller and Workspace | Delete the dead setup-binding and legacy prerequisites layer | Pruned from M1 on 2026-09-28 so M1 can finish |
+| [B95](#b95) | F11 | enabling | CLI | Help and usage polish | Pruned from M1 on 2026-09-28 |
+| [B96](#b96) | Y3 | enabling | Architecture | Collection metadata and naming polish | Pruned from M1 on 2026-09-28 |
+| [B97](#b97) | A8 (kind tables) | enabling | Desired state and Workspace | Kind field-table parity and a path checker | Pruned from M1 on 2026-09-28 |
+| [B98](#b98) | C30 | enabling | Architecture | Production comments reduced to what the clarity contract keeps | Pruned from M1 on 2026-09-28 |
+| [B99](#b99) | C1 (vSphere) | product | Substrate | One vSphere provisioning variant | No milestone names vSphere |
+| [B100](#b100) | C2 (LoadBalancer) | product | Infrastructure services | One managed `LoadBalancer` lifecycle | No consumer; M5's MetalLB is an in-cluster add-on |
+| [B101](#b101) | C6 (rest) | product | CLI | One more view of evidence or access, or a dashboard | No milestone names a view or dashboard |
+| [B102](#b102) | C8 | product | Custom automation | One typed, invertible executable playbook journey | M7's packages are add-ons, not playbooks |
+| [B103](#b103) | C14 | safety | Workspace and Secrets | Explicit complete-store restore | No milestone needs backup and restore |
+| [B104](#b104) | C15 | safety | Secrets | Bounded lifetime allocation for secret reservations | Waits on B103; no defect drives it |
+| [B105](#b105) | C19 | product | Secrets | One more secret-store implementation | `local-keyring` meets the current scope |
+| [B106](#b106) | M4 (day-2 surface) | product | Container cluster | The day-2 surface a completed cluster exposes | A product non-goal |
+| [B107](#b107) | new, 2026-09-28 | product | Add-ons and Storage | Data Foundation over an external Ceph cluster | M5 integrates a managed Ceph cluster (D19) |
 
-Removed rows:
+### B94
 
-- C16 is delivered: controller setup and host binding by
-  [M1d](delivered.md#m1d--controller-setup), local service ownership and
-  conflict refusal by
-  [M1e](delivered.md#m1e--lifecycle-engine-and-managed-artifact-serving).
-  Controller relocation remains C14.
-- C17 is promoted into
-  [M1h](../milestones.md#m1h--managed-rhel-on-emulated-bare-metal) as its
-  host-wide media store (D3), whose exit evidence it shares.
-- C27 is delivered by
-  [X3](delivered.md#x3--machine-ssh-sessions-and-host-trust).
+Delete the dead setup-binding and legacy prerequisites layer, and share one
+retained-native matcher between preflight and the controller stage. **Exit
+evidence:** preflight and stage tests over one closure.
 
-### C6 cluster inspection and access evidence
+### B95
 
-When a cluster inspection or access slice under C6 is promoted, its exit
-evidence exercises the [cluster discovery](../cli/output.md#cluster-discovery)
-and [applicability](../cli/commands.md#cluster-command-applicability) contracts
+Help and usage polish, and the request fields `inventory.ListRequest.Silent`
+and `contexts.CurrentRequest.Short` that only the CLI's result writer reads
+through their flags, which `TestEveryRequestFieldIsRead` allowlists. **Exit
+evidence:** CLI help goldens.
+
+### B96
+
+Collection metadata and naming polish. **Exit evidence:**
+`./scripts/ansible-check`.
+
+### B97
+
+Kind field-table to `Shape` parity and the `Value.Get` path checker. **Exit
+evidence:** parity tests over every kind.
+
+### B98
+
+Reduce production comments to what the
+[code clarity contract](../architecture.md#self-explanatory-code-and-retained-knowledge)
+retains. Most production comments state rationale the contract sends to the
+knowledge catalog, and some state invariants that must survive as tests or
+names rather than prose. Deciding each one is the work; a blanket strip would
+lose the findings the catalog is meant to keep. **Exit evidence:** each
+retained comment justified by language, tooling or a maintained contract;
+every durable finding moved into `.agents/knowledge/` with its links and
+evidence; and a fitness gate that holds the result.
+
+### B99
+
+One vSphere machine-provisioning variant. An arm is a capability package plus
+one case of the [target derivation](../substrates.md#selection-and-refusal),
+and no consumer of a realized Machine changes; its KubeVirt counterpart is
+[B87](m6.md#b87). **Exit evidence:** the exact release, adapter contract, its
+two fixed identity and pre-boot task files, failure and replay tests and
+real-system qualification; [refused machine arms](../deferred/machine-arms.md)
+records the admitted arm.
+
+### B100
+
+One managed `LoadBalancer` lifecycle over the shared managed-service capability
+M1f delivered; its `Registry` half is [B68](m3.md#b68). **Exit evidence:** a
+typed port, the exact implementation, lifecycle evidence, and failure and
+acceptance tests.
+
+### B101
+
+One additional view of available evidence or explicit access, or a dashboard or
+completion extension. Its custody half is [B10](m1.md#b10). **Exit evidence:**
+a complete human and machine journey, diagnostics, safety and end-to-end
+tests; a cluster inspection or access item also meets the cluster evidence
+below.
+
+When a cluster inspection or access item is promoted, its exit evidence
+exercises the [cluster discovery](../cli/output.md#cluster-discovery) and
+[applicability](../cli/commands.md#cluster-command-applicability) contracts
 across OpenShift, OKD, managed Ceph and external Ceph. Cover explicit and
 current contexts, selected and excluded names, each applicable and inapplicable
 command, missing access metadata or artifacts, unavailable implementations,
@@ -73,141 +107,122 @@ descriptor or sensitive result, and successful handoff or export preserves its
 payload and output boundary. These tests depend on the promoted use case and do
 not expand M1a availability.
 
-## Later-outcome detail
+### B102
 
-The definitions behind the [next ordered outcomes](../milestones.md#next-ordered-outcomes).
-Each needs definition before implementation, qualifies exact releases and
-closes its own contracts.
+One typed, invertible executable custom-playbook journey. The reserved schema
+cannot prove effects, ownership or non-exfiltration; it needs M1e, the plan and
+execution extensions of [B62](m3.md#b62) to [B64](m3.md#b64) and a named
+journey. **Exit evidence:** a same-change API replacement of the
+[reserved shape](../deferred/custom-playbooks.md), immutable source and
+dependencies, exact targets, bounded secrets, authorization, continuation,
+failure injection and isolated-runner qualification.
 
-| Milestone | Owner and outcome | Requires | Definition and exit evidence |
-| --- | --- | --- | --- |
-| M2a — OpenShift/OKD native files | Container cluster and Native artifacts: make the [installer inputs](../container-clusters.md#installer-inputs) an operator-run standalone artifact through `render installer`, with the secret placeholders and optional sensitive render that command owns. The projection itself is **delivered by M4a**, which freezes it in a plan instead of writing it to a chosen directory. | M1e, M4a | Map identity, roles, networks, VIPs, hosts, interfaces, root hints and rendezvous. **N1:** validate NMState/installer schema parity. **N2:** validate/bind pull-secret and public SSH key (M1c). **N3:** define typed manifest, canonical bytes, destinations and overwrite rules (M1b). Prove API sufficiency, sensitive publication/cleanup, non-disclosure and release-specific native goldens. A FIPS slice also qualifies the matching installer and artifact parity. |
-| M2b — Ceph native files | Storage and Native artifacts: render typed storage intent into one release-specific declarative file set. | M1e, N3 | Qualify release schemas against the [storage field detail](../deferred/storage-api.md) and reject unprovable fields; revise the API deliberately if needed. **N5:** define each storage secret consumer's validation, immutable binding and sensitive publication (M1c, N3), or prove outputs secret-free. Native goldens and negative disclosure tests. |
-| M3 — Ceph-pool script | Storage and Native artifacts: generate one deterministic native-CLI pool script. | M1e | **N4:** define the script manifest, bytes, fixed command structure, destination and generation journey (M1b). Prove argument encoding, replay semantics, diagnostics, sensitive classification, publication and goldens. No authored shell fragments, inline secrets or execution. |
-| M4 — OCP bare-metal lifecycle | State reconciliation, Substrate and Container cluster: the cluster-facing remainder of OCP effects, beyond the one topology **M4a delivers** — a multi-node cluster with its virtual addresses, physical nodes, disconnected installation and the day-2 surface a completed cluster exposes. | M1e, M4a | **L2:** extend pure plans, impacts, dependencies and digests. **L5:** add consumer-owned OCP remote ports. **L4:** extend durable execution, readiness and removal, preserving the M1e inverse and safely refusing incompatible state. **L6:** qualify exact implementations with contract, crash/lease, identity/ownership, replay, cancellation and real-system tests. Destroy a completed M1e snapshot before a fresh expanded apply. |
-| M5 — managed RHEL on bare metal | Managed OS and Substrate: the secret-bearing profile arms and the cluster-facing remainder of physical installation, using typed image, profile, entitlement, Secret and Machine intent. The Anaconda path itself is **delivered by M5a**, which also delivers the private publication those arms need. The install arms alone — a bonded or VLAN installation interface, FIPS, registration and disk encryption — depend on M5a and on nothing else here, so they are separable as a bounded out-of-sequence slice when a consumer needs them; the cluster-facing remainder is what requires M4 and C9. | M5a, M4, C9 | Extend L2/L4/L5; apply L6. Prove renderer/executor parity, ownership, replay, secret custody over the private path, a bonded or VLAN installation interface, and real-hardware acceptance. |
-| M6 — managed Ceph bare metal | Storage, Managed OS, Substrate and State reconciliation: provision one Ceph cluster slice. | M2b, M5a; **Needs definition:** which M5 profile arms a Ceph host needs | Extend L2/L4/L5; apply L6 to each implementation. Prove storage identity, ownership, destructive authorization, replay, secret custody and real-system acceptance. |
+### B103
 
-Independent execution of M2a, M2b and M3 artifacts creates no Bootwright
-operation, lease, ownership or continuation state; generated artifacts remain
-disposable.
+Explicit complete-store restore with logical identity preservation. Copy
+restoration changes physical identities and may roll back seal reservations;
+[M1c](delivered.md#m1c--context-secret-management) converts no earlier keyring
+format and refuses it instead, and offers no backup or restore command.
+Controller relocation, left over from C16, waits here too. **Exit evidence:**
+coherent snapshot validation, authorized inode rebinding, a fresh key before
+writes after rollback, interruption and retry and wrong-store refusal tests;
+lifecycle recovery evidence preserved.
 
-## Pre-OpenShift readiness program (2026-09)
+### B104
 
-The owner asked on 2026-09-26 for everything necessary, important or good to be
-in the code before OpenShift provisioning (single-node or multi-node, on bare
-metal with a BMC or on libvirt behind sushy-tools) is expanded under M4. Its
-slices run one at a time, out of sequence, in this order; each opens on the
-delivery of the one before it. The expansion itself (multi-node qualification,
-lifting the physical-node refusal, C2, disconnected installs, day-2, C9, M2a)
-stays M4 work.
+Replace per-ID secret reservations with bounded lifetime allocation. Current
+opaque random version and binding IDs retain historical reservation files; a
+new allocation scheme must preserve issued-ID non-reuse across crashes and
+restore, so it needs [B103](#b103)'s restore semantics. **Exit evidence:**
+bounded allocator state, reservation before use, counter and namespace
+exhaustion, migration of existing bindings and failed attempts, non-reuse and
+crash tests.
 
-| Slice | Items | Owner decisions |
+### B105
+
+One additional secret-store implementation: a passphrase-protected store, an
+external broker or KDF-based custody. **Exit evidence:** the shared
+conformance suite, the session-material contract, rotation, tamper refusal and
+non-disclosure tests.
+
+### B106
+
+The day-2 surface a completed cluster exposes, beyond bootstrap, continuation
+and removal. It stays parked until a product-scope change admits it. **Exit
+evidence:** set by that change.
+
+### B107
+
+OpenShift Data Foundation, through IBM Fusion Data Foundation, integrating an
+OpenShift cluster with a Ceph cluster Bootwright does not manage. M5 integrates
+the Ceph cluster M4 manages instead (D19). **Exit evidence:** set when it is
+attached to a milestone.
+
+## Retired
+
+Each ID below leads nowhere else. Searching an old ID over `specs/milestones/`
+finds its item's Alias cell, its record in [delivered](delivered.md), or its
+line here.
+
+| Old ID | Retired on | Reason and record |
 | --- | --- | --- |
-| X14 | S14, S15, S16, S17, S18, F13 | D8, D12 |
-| X15 | T1 (cluster goldens) first, then S19, S20, S21, S13, Z2 (digest) | D5, D14 |
-| X16 | S26 and Z2 (runner deadline) first, then Z2 (cluster budgets), S22, F14, S6b (quiescence) | D8, D9, D16 |
-| X17 | T1 (lifecycle and workspace records, CLI), T2 (checkpoint harness, capability suite) | none |
-| X18 | S27 first, then S12 (rest), S10 (rest), S9 (full), S8 (collector, primitive) with R3 | none |
-| X19 | S23, S24, S11, S25 | D6 |
-| X20 | A3 (port), S2b (pre-boot), Y1 (substrate rules), S6b (rest) | D1, D2 |
-| X21 | S3b (trust) with a BMC CA-bundle field, C6 (custody) | D3, D4 |
-| X22 | F5, F6, F15, Y2, S7 (rest), Z2 (digest attribution) | D7, D10, D14 |
-| X23 | S4b, C7; concurrency stays one until a real-host run | none |
-| X24 | C28 with R1, a C29 and R2 subset, R4; after a real-host run | D11 |
+| V1 | 2026-09-28 | Answered by X14: the identity is the build's trust anchor (S18) and the image is fetched through the listener with its certificate verified (S17). |
+| V2 | 2026-09-28 | Folded into [B72](m4.md#b72)'s operator gate. |
+| V3, V4 | 2026-09-28 | Folded into [B61](m3.md#b61)'s operator gate. |
+| V5 | 2026-09-28 | Folded into the operator gates of B61 and B72: a row accepted before X19 lands is repeated on a build that contains it. |
+| S13 | 2026-09-28 | Delivered by [X15](delivered.md#x15--installs-that-neither-strand-nor-over-report); its row was left behind. |
+| T1 | 2026-09-28 | Delivered by X15 (cluster goldens) and [X17](delivered.md#x17--goldens-and-checkpoint-harnesses) (records, commands and examples); no bounded remainder was named. |
+| C13 | 2026-09-28 | No milestone needs a redistributable release. |
+| O9 | 2026-09-28 | It measures the repository's guidance, not the product. |
+| C16 | before 2026-09 | Delivered by [M1d](delivered.md#m1d--controller-setup) and [M1e](delivered.md#m1e--lifecycle-engine-and-managed-artifact-serving); controller relocation is [B103](#b103). |
+| C17 | before 2026-09 | Promoted into M1h, now [B72](m4.md#b72), as its host-wide media store. |
+| C18 | 2026-09-28 | Delivered by `d0980fc3` (refactor(architecture): align packages with the command and port map), which removed its row from the milestones page with no note. |
+| C27 | before 2026-09 | Delivered by [X3](delivered.md#x3--machine-ssh-sessions-and-host-trust). |
+| R1 | 2026-09-28 | Merged into [B19](m1.md#b19) with C28, whose outcome it was. |
+| M2a, M2b, M3, M4, M5, M6 | 2026-09-28 | These rows became items whose Alias cells name them; the numbers M3 to M6 now name milestones. |
+| M1h, M5a, M4a, M1i | 2026-09-28 | Became [B72](m4.md#b72), [B73](m4.md#b73), [B61](m3.md#b61) and [B71](m3.md#b71); M-letter IDs are no longer issued. |
+| N1 to N5, L2, L4, L5, L6 | 2026-09-28 | Became items whose Alias cells name them; L1 and L3 never existed. |
+| K01 to K73 | 2026-09-28 | The audit plan's cluster tokens, defined nowhere in the repository; the grouping stays in Git history. |
+| Phase 0 to Phase 4 | 2026-09-28 | The audit plan's ordering; slices carry order now. |
+| M1h's (D1) to (D6) | 2026-09-28 | Capability labels that collided with the decision log; they became prose. |
+| D13, D15 | never issued | Recorded so nobody looks for them. |
 
-Owner decisions of 2026-09-26, each the recommended option: D1 the substrate
-owns the machine port as role entry points; D2 lifting the physical refusal
-needs in-tree tests and an emulated rehearsal, with real-hardware acceptance
-before support is claimed; D3 the BMC certificate is imported where the BMC
-supports it, otherwise an explicit per-machine disable-verification exception
-applies, never a default, and controller-to-BMC TLS gains a CA bundle; D4 admin
-access is kept in context custody with `cluster kubeconfig`; D5 every node
-presenting this block's own tokenized image proves a partial install; D6 the
-first proved UUID and serial are pinned and a mismatch refuses; D7 non-root SSH
-accounts refuse at admission for now; D8 the cluster identity is the build's
-kubeconfig trust anchor, refined on 2026-09-27 (S26) to its admin client
-certificate, which the installer's install-complete rewrite keeps; D9 multi-node libvirt stays admitted under F14; D10
-ansible-core is the latest patch of the qualified 2.21 minor; D11 postcondition
-decisions stay in Go; D12 media completion claims the inputs digest and
-installer version, not an image digest; D14 documentation stays in the bundle
-but leaves the automation digest; D16 managed-OS waits are frozen as request
-budgets. M4a is blocked until X14 to X16 land.
+## Decisions
 
-Operator checks the slices cannot run: V1, now, build lab-sno's agent image and
-confirm that its work area holds no `metadata.json` and what status a fetch of
-the published image returns; V2, now, lab-rhel for M1h; V3, after X14, a full
-lab-sno run with each phase's duration; V4, after X15, interruption drills
-during the bootstrap and install waits; V5, after X19, the labs again, since the
-Redfish effect path changes.
+Owner decisions, dated. An item waiting on one not yet taken names it in its
+Requires cell as `owner decision: <question>`.
 
-| ID | Owner | Bounded outcome | Requires | Exit evidence |
-| --- | --- | --- | --- | --- |
-| S15 (rest) | State reconciliation | A lifecycle supervisor killed outright (for example by the OOM killer) runs no handler, and ansible-core's session-isolated workers (`setsid`) survive it with their task; run lifecycle playbooks without worker session isolation or make the invocation a subreaper. | X23 | A killed supervisor leaving no worker |
-| S16 (rest) | State reconciliation, with Machine | Carry the context name and block in each run request so the running-adapter refusal holds only within the held job's context (two `machine power` commands on different contexts refuse each other today), and exempt an invocation's own in-flight jobs before concurrency rises. | X23 | Per-context refusal tests |
-| S17 (rest) | Container cluster | Bind the artifact server's certificate as media material so the fetch-through probe verifies against the Secret, not the server's installed copy. | X21 | A probe test against bound material |
-| S19 | Container cluster | Completion and the settled decision require ClusterVersion `Available` and a completed history entry at the declared version. | X15 goldens | Evidence and plugin tests; goldens |
-| S20 | Container cluster | Nodes presenting this block's own tokenized image prove a partial install, and a retry never re-boots them. | S19 | Kill-during-bootstrap classification tests |
-| S21 | Container cluster | A media rebuild never discards a work area an install already booted from. | S19 | A structural refusal test |
-| S22 | Container cluster | Name resolution before boot proves the frozen addresses, not only that names resolve. | X15 | Resolution tests with a wrong answer |
-| S23 | Substrate | Redfish effects go through the vendor-neutral client: media discovery, transfer protocol, task polling, `If-Match` and read-back. | X14 | Three firmware-shape fixtures |
-| S24 | Substrate | A bare-metal replay reports unchanged. | S23 | A replay test |
-| S25 | Substrate and Container cluster | Every admitted root-device hint reaches the installer, and a hint set it cannot carry refuses. | X17 goldens | Projection goldens and refusal tests |
-| S26 | Container cluster | The install identity survives `agent wait-for install-complete` rewriting the work area's `auth/kubeconfig` (the router CA prepended to the authority, `apiVersion` and `kind` added), so an attempt after that rewrite, and the unknown resolution of one interrupted after it, still prove this build's cluster; found by X15's review. | X15 | An identity test over the kubeconfig as `clientcmd.WriteToFile` writes it after `addRouterCAToClusterCA`; retry and resolution tests after the rewrite |
-| S27 | State reconciliation | An unknown destroy block resolves by what the removal proves, not by presence: today resolution observes through the capability whatever the verb, so a destroy killed before its effect resolves done while its target still exists and completes with pristine evidence; found by X17's kill harness. X18 met this exit evidence once S10 (rest) removed journey b's last three ledger entries. | X17 | The kill harness's destroy journey converging with no ledgered point |
-| S28 | Secrets | A keyring initialization killed inside any of its staged writes resumes: initialization recovery treats a root `secrets/pending-*` stage that decodes as no record as an interrupted temporary, and the cleanup after publication removes it. Today the kill leaves a stage the keyring refuses with `secret.store.corrupt`, so neither `context init` nor `secret encryption init` completes; split from S8 on the owner's choice of 2026-09-28, after which an in-process interruption leaves no such stage. | X18 | The contextfs checkpoint harness's `secret-initialization/killed/write-file#1` case converging, and keyring tests with a torn stage at each staged initialization write |
-| S29 | State reconciliation | The lost and lagging record paths X18 left, found by its items and reviews. A lost `index.json` reads as no operation, so a fresh apply registers beside directories that hold block records and a destroy over pristine evidence settles over them. A completed destroy whose plan holds a block that is not `done` settles and is never finalized. A failed removal whose blocks are all `done`, which a removal of it killed right after its resolution leaves, is finalized by no verb and refused by every destroy (the fix: finalize it under destroy as X18 does an unknown one, and correct the spec's claim that a failed removal holds the block that failed). A dependency rewritten to `failed`, `running` or `unknown` while a dependent started escapes rule (a), and a `running` block masks rule (c) beside a lost failed-block directory. Records written before `83dcbebe` leave a first start as an attempt beside no block record, which a removal now refuses and a continuation already refused. A continuation over a started block's lost record marks the operation running before `StartAttempt` refuses. The refusals point at `bootwright status`, which shows neither the contradiction, unindexed directories nor unexpected evidence. The spec's Operation records say a block record carries its next attempt number, where it counts the attempts started, and its Block transitions say an attempt that cannot start leaves its block record unchanged, where a start whose final publication lands and then errors leaves it `running`. | X18 | Journeys over each path that refuse or converge; status naming what each refusal names |
-| S30 | State reconciliation, with Secrets | What X18's evidence and claim rules leave. Every fresh apply refused after its claim leaves an empty operation directory nothing removes, counting toward `MaxOperations` (4096) and the operation area's entry bound, so enough refused retries stop even a destroy from registering. A bounded run's transient binding read in a registration's listing before its reopen can be collected, failing that run once, because a binding names no consumer (a keyring format change). A destroy over pristine evidence with no reservation settles beside a stranded binding, which only the next registration collects. A destroy interrupted after its operation reads `done` leaves its releases and pristine publication to the next destroy. | X18 | A reclaim test for empty claims; a bounded-run race test |
-| S31 | Managed OS and Container cluster, with Infrastructure services and Substrate | Resolution gaps X18's S27 and its reviews left, most needing adapter changes. An installation removal killed while its package tree is deleted resolves completed, because the inspect reports the tree only by its `.treeinfo` marker, which the deletion removes first. An installation apply killed before it published anything resolves unknown for ever, because the observe's absence form reports power `''` where `ValidateNoEffect` requires `Off`. The installation and agent-install removal observations run the whole apply observation (identity channel, fleet SSH, BMC and `oc` reads) where content or media alone decide. A physical agent-install removal selects the installed disk as boot device after ejecting, which no evidence reports. A node presenting a foreign image leaves an agent-install removal unknown although the removal ejects any node's media (an owner decision whether that reads as partial). A destroy over an unfinished apply resolves the apply's blocks through `Observe`, which reads a present managed service with a silent listener as unknown. | X18 | Protocol tests and a removal-observation row for each |
-| F14 | Container cluster | Topology admission: a control-plane count the qualified release accepts, and no installer-owned endpoints on a multi-node `none` platform. | X15 | Admission tests |
-| F15 | Controller | OpenShift client downloads stream to disk under size-scaled deadlines within a stage deadline derived from them, and `oc`'s version is checked. | X17 | Download and version tests |
-
-## Audit follow-ups (2026-09)
-
-The items of the 2026-09 audit plan that [X11](delivered.md#x11--audit-phase-0-and-spec-restructure)
-does not execute; this table is their record in the repository. Each is
-promoted as a slice under the WIP limit. Every row's definition status is
-**Candidate**, and each is deferred to its plan phase. Phases order them: 1
-context and guards, 2 durability and proof, 3 contract and operator journey, 4
-consolidation. A safety repair lifts its Phase 0 refusal only with its own
-tests, and lifecycle concurrency stays one until S4b and a real-host run.
-
-| ID | Owner | Bounded outcome | Requires | Clusters | Exit evidence |
-| --- | --- | --- | --- | --- | --- |
-| S2b | Container cluster and Substrate | Freeze each node's hardware from `substrate.TargetFor`, include the substrate's `pre_boot.yml` before `insert` and end every arm in a terminal fail; lifts M4a's physical-node refusal. Its pre-boot proof is X20; lifting the refusal stays M4. | Phase 2; the A3 substrate port; owner decision on the physical-install tier | K01 K09 | `./scripts/go test ./internal/containercluster/...`; the Y1 insert-after-pre-boot rule |
-| S3b | Managed OS, with Infrastructure services | Publish the installer ISO under the private token subtree or deliver the host key over another channel; refuse `disable-verification` for private consumers or add a bounded [security](../security.md) exception; serving-uid ownership and a fetch-through probe; lifts M5a's physical-installation refusal. Its serving half is S17 (X14) and its trust half X21; the host-key channel stays M5a. | Phase 2; owner decisions on BMC TLS verification and the physical key channel | K06 | Delivery tests in place of the refusal test; the Y1 no-private-URL-in-public-artifacts rule |
-| S4b | State reconciliation, with every lifecycle role | Per-invocation private scratch passed to every role, disjoint machine and provider namespaces and hardened delete guards, before concurrency rises above one. | Phase 2; a real-host run before concurrency rises | K03 | A two-concurrent-installs test; the Y1 no-fixed-scratch-path rule |
-| S6b | Substrate (quiescence in X16, the rest in X20) | The observation reports whether the hypervisor answered; absence evidence publishes observed values and checks sockets are free. X16 left two pre-existing gaps here: the Evidence paragraph of [substrates](../substrates.md) says the inverse forces the domain off, which it never does, and `observe.yml` reads empty domain and unit as removed, so a machine with only its disks left resolves unknown instead of partial. X18's removal resolution depends on the same fixes: a disk whose `qemu-img info` fails reads absent, and the host absence form proves neither that the hypervisor answered nor that the pool directory is gone, so a host removal interrupted after its effect is repeated once ([substrates](../substrates.md) records the host case as Not yet met). | Phase 2; the A3 substrate port; owner decision on who owns substrate composition | K10 K21 | A Go quiescence table; `./scripts/ansible-check --suite units` |
-| S7 (rest) | Machine, with State reconciliation | A privilege model for SSH-arm Ansible: `become` for a non-root account with its `sudoPasswordRef`, or a refusal of non-root accounts. | Owner decision on non-root SSH users | K15 | `internal/reconciliation/ansiblerunner`, `internal/machine` and `cmd/bootwright` tests over the chosen arm |
-| S8 (collector, primitive) | Workspace | A stale-stage collector and one contextfs publication primitive (R3) in place of the hand-written stage-and-rename protocols. X17's checkpoint harness ledgers what it must collect: `replaceControllerRecord` leaves `controller/pending-*.json` even when refused or cancelled in-process, so stages pile up to `maxControllerStages` and every controller publication refuses; kills leave operation, trust and evidence stages whose cleanup lives only in defers; and a keyring initialization interrupted in-process leaves an incomplete `secrets/pending-*` that `secret.store.corrupt` then refuses. A killed initialization's stage is S28. | Phase 2; T2 checkpoints | K04 | Kill-at-checkpoint tests leaving every context mutable |
-| S9 (full) | State reconciliation | The full re-proof fingerprint under the exclusive lock, including the plan digest. | Phase 2 | K05 | Journeys that change the operation, block states or plan between decision and mutation, and refuse |
-| S10 (rest) | State reconciliation | Evidence published before registration, and finalization repair; the Phase 1 part (a sticky, restorable log fault, the zero-block destroy, the named controller runner deadline and the resolution that cannot start) landed with X12. X17's kill harness found four more: a continuation never projects running evidence; a kill after the last outcome and before the operation's final update strands a running apply that the stage boundary refuses to continue; a settled verb never re-projects evidence or releases a completed removal's reservations or Secret binding; and a kill between binding an apply's Secrets and registering its operation leaves that binding, and any reservations already published, held with no current operation, so a retried apply binds again and destroy treats them as nothing to do. | Phase 2 | K13 | Kill-at-checkpoint journeys |
-| S11 | Substrate and Machine | Pin the first proved UUID and serial and refuse a mismatch, or narrow [substrates](../substrates.md). | Phase 2; owner decision on physical identity | K08 | An identity-mismatch refusal test |
-| S12 (rest) | State reconciliation | The lost-block-record paths X13 left: a removal of an incomplete apply whose started block's record was lost reads it as `pending` and skips its effect, and an `apply` of unchanged input over a completed apply settles as `done` without checking that its blocks agree. Each must refuse on a contradiction it can prove, as the completed-apply destroy now does. X17's goldens found two spec statements the records do not carry: `index.json` naming the completed operations retained for audit, and attempt and resolution records carrying their request. | Phase 2; T2 checkpoints | K13 | Journeys over each path with one lost block record that refuse |
-| S13 | State reconciliation | `operationstore.Store.StartAttempt` writes `attempt-<n>.json` exclusively before it publishes the block record, so a failed publish leaves an orphan `running` attempt record while the block record keeps the old count; every later start computes the same number, the exclusive write refuses it, and the block never starts again in any invocation. A start must be one publication, or adopt or remove its own orphan. | Phase 2; T2 checkpoints | K13 | A kill or failure between the two writes followed by a start that succeeds |
-| F1 (rest) | State reconciliation and CLI | The two previews X12 left apart from their verbs: a continuation preview runs the stage refusal a continued apply makes (so `plan --stage` never offers a continuation `apply` refuses with `lifecycle.stage`), and the destroy preview after a completed apply decides through the same removal decision as `destroy`, its empty-owned-set and not-`done`-block refusals included. X18 adds that the preview runs none of the contradiction refusals, the repeated apply's block check or the finalization, so over an operation whose blocks are all `done` it still offers a continuation the verb only finalizes. | Phase 1 | K24 | Journeys where each preview and its registration agree |
-| F4 (rest) | Workspace and Managed OS | What X12's lock-free media acquisition left: a `media add` whose second hold meets a held lock keeps its verified stage so the repeated command publishes without acquiring again; the replacement and deletion confirmations prompt with no root lock held; `ValidMediaName` admits no name whose record name, `<name>.json`, exceeds 255 bytes (today such an image is acquired and then refused at the rename); and the media bounds join the [bounds table](../contexts.md#storage-locking-and-publication). X17 found that `mediaStage.release` closes its locked stage file without `LOCK_UN`, where every other contextfs lock unlocks explicitly. | Phase 1 | K26 | A repeated add that publishes a retained stage without acquiring; a prompt that holds no lock; a refused over-long name before any acquisition; bound rows in `TestDocumentedBoundsMatchCode` |
-| F5 | CLI | CLI-owned tagged JSON DTOs, a JSON mode with a no-op progress reporter, and every next step rendered. X17 found that `secret check` and `secret list` JSON drop each secret's sequence ordinal (always 0) although the output spec requires it, and that human `status` omits `context.mode`, `desired`, cluster and storage cluster rows, `secrets` and the lifecycle `operation`, `verb` and `state`, and shows only the first next step, although it must present the JSON membership; the goldens pin today's bytes. X18 found that a settled verb that first completed an interrupted finalization, or a destroy that released what an interrupted registration left, still says only that nothing was left to do ([cli](../cli.md) records it as Not yet met). | Phase 3; T1 | K37 | Exact JSON and text goldens |
-| F6 | Desired state, with Infrastructure services and Substrate | Consumer-only invariants moved into admission: a non-wildcard `bindAddress`, positive libvirt sizes and the BMC URL grammar. X16's S22 adds two: an IPv4-compatible (`::/96`) endpoint address, which glibc prints in another form than the frozen one, and a name-only endpoint slot, which resolution before boot never checks. | Phase 3 | K22 | Admission refusal tests |
-| F7 | Every context, with CLI | Refusals carry object, reason and remedy, including the per-object reasons `refuseUnsupported` drops today, so `plan` shows the cluster refusals [container clusters](../container-clusters.md#selection-and-refusal) says it names. The Waiting paragraph of [container clusters](../container-clusters.md) says a give-up proving a declared node never registered names that node; the stalled hint names none (found in X16). | Phase 3; the A5 registry | K23 K69 | Diagnostic tests per refusal |
-| F8 | Substrate and Infrastructure services | The bridge `Requires` edge and wildcard-aware socket reservation keys. | Phase 2 | K19 K11 | Planning and reservation tests |
-| F9 | Substrate | Replay convergence: bcrypt `checkpw` for BMC credentials and live network observation; and an SSH-host provider's hypervisor install frozen as one exact transaction under the controller stage's before-state rules, or that contract narrowed for good. | Phase 2; owner decision on frozen remote package transactions | K18 | Replay tests that change nothing; a frozen-transaction test for the SSH arm or the recorded decision |
-| F10 | Controller and Workspace | Delete the dead setup-binding and legacy prerequisites layer, and share one retained-native matcher between preflight and the controller stage. | Phase 3 | K39 K40 | Preflight and stage tests over one closure |
-| F11 | CLI | Help and usage polish, and the request fields `inventory.ListRequest.Silent` and `contexts.CurrentRequest.Short` that only the CLI's result writer reads through their flags, which `TestEveryRequestFieldIsRead` allowlists. | Phase 4 | K70 K71 | CLI help goldens |
-| R1 | Architecture | [C28](#candidates): a shared plugin base and one Go decoder over the A2 protocol table. | Phase 4; A2 | K28 | C28's exit evidence |
-| R2 | Architecture | [C29](#candidates), plus Freeze and Thaw everywhere, one `recordObservationFailure` and a generic evidence decoder, with no generic framework. X18 found that the managed-service observations never record their failure reason and that the lifecycle projects evidence through three copies of one step. | Phase 4 | K29 | C29's exit evidence; `make check` |
-| R3 | Workspace | One contextfs publication primitive, with S8's collector, for the four protocols that stage beside their target: `writeExclusiveAtomic`, `operationArea.Replace`, `PublishEvidence` and `replaceControllerRecord`. | Phase 2; T2 | K04 | `make check`; kill-at-checkpoint tests |
-| R3 (rest) | Workspace | The two protocols R3 leaves hand-written: `writeRegistry`'s replacement mode through the primitive, keeping the initial registry stage as its recovery artifact, and `secretArea.Replace`, folded in only with its expectation, phase and three-outcome recovery semantics. The checkpoint harness ledgers neither, because it exempts root registry stages and everything under `secrets/`. Split from R3 on the owner's choice of 2026-09-28. X18's collector also left four gaps: the operation, run and trust areas admit a final record named like a stage (`pending-<32 hex>`), which the collector would remove; `leaseContext` caches a lease before its collection and layout check succeed; the first lease walks every operation, run and trust directory, at a cost not yet measured on a context with many runs; and the [lock table](../contexts.md#storage-locking-and-publication) lists `setup` as taking no lease, although a setup scoped to a context leases it and now collects its stages. | Phase 2; X18 | K04 | `make check`; kill-at-checkpoint tests |
-| R4 | Architecture | One canonical-JSON package in place of the five codecs. X17's goldens pin frozen plans encoding an unset `dependencies` or `consumes` as `null`, although go.md asks for deliberate nil-versus-empty serialization; changing it moves every plan digest. | Phase 4 | K30 | `make check` |
-| R5 | Architecture | Composition-root policy moved into tested packages, fixing the `sudo:` stderr filter that reports false `runtime.privilege` failures. X17 found that `ansiblerunner.New` takes no argument off linux/amd64 (`process_unsupported.go`) while the untagged composition root passes one, so `cmd/bootwright` does not build off that platform. | Phase 3 | K48 K49 | `make check` with tests for the moved policy |
-| R6 (rest) | Architecture | The ratchets X12 left: `test/architecture/docs_test.go`'s `ignoredGuidancePaths` fails on an entry nothing needs and `docsByteBudgets` on a budget with slack; the effect-boundary grants are proved per clause, not per package capability; and the diagnostic registry follows a package-level constant or variable used as a code in its own file instead of reporting it unresolved. | Phase 1 | K68 | `make check` |
-| T1 | Every context | Goldens with `-update` for every persisted record, plan, attempt and digest bytes, each example's effective output and exact CLI JSON and text; a record type's golden lands before or with its first change. | Phase 2 before any format change; the rest Phase 3 | K33 | `./scripts/go test ./... -run Golden` |
-| T2 | Every lifecycle capability, Workspace, Environment and Desired state | Shared Capability and Storage contract suites; typed checkpoints with a harness asserting the store stays usable and a retry converges; `environment.Select` and strict-YAML tables. X17 delivered the contextfs checkpoint harness, the lifecycle kill harness and the Capability contract suite; it also found `TestDeletedNameIsReservableAgainWithAFreshDirectory` flaky, because ext4 may reuse a freed inode. | Phase 2 | K34 K35 | The contract suites and the checkpoint harness |
-| Y1 (rest) | Architecture, with each role's owner | The structural module's remaining rules, each with the fix it guards: every substrate dispatch ends in a terminal `fail` (today the consumers refuse an unknown arm with a leading assert); `loaded` first; `no_log` on material and completion tasks; an argv0 allowlist; containers that set Entrypoint and never `--debug`; no fixed scratch paths (S4b); no private URL in a public artifact (S3b); an insert preceded by a pre-boot proof (S2b); `argument_specs` checked against Go requests; render-twice template goldens; a stub `ActionModule.run()` test. | Phases 1 to 3 | K32 K14 K21 | `./scripts/ansible-check --suite units` |
-| Y2 | Controller | One ansible-core dependency model: the latest patch of a qualified minor or a per-minor gate matrix; never refuse unqualified minors; a bounded `requires_ansible`; a Python 3.9 import check. | Phase 4; owner decision on the version model | K31 | `./scripts/ansible-check` |
-| Y3 | Architecture | Collection metadata and naming polish. | Phase 4 | K73 | `./scripts/ansible-check` |
-| Z2 | Controller and State reconciliation (digest pinned in X15, its attribution in X22, deadlines in X16) | Drop README and CHANGELOG from the automation digest; freeze wait budgets in requests and derive the runner deadline from them. X15 found that documentation can leave the digest only together with every check that compares each embedded file against the approved bundle: the lifecycle runner's automation check, the controller adapter's request, bundle inspection and the bootstrap projection identity; until then `TestAutomationDigestCoversEveryEmbeddedFile` keeps the digest over every file. X18 found, unverified, that the State machine section of [state reconciliation](../state-reconciliation.md) says a continuation verifies every selected implementation, while it compares only the automation digest over the embedded tree and no frozen block's content digest. | Phase 2; owner decision on retention | K51 K27 | A test that every frozen budget stays below the runner deadline |
-| O9 | Architecture | A small eval loop: 10 to 12 tasks drawn from confirmed defects, each with a hidden grader, in two arms (baseline `33bde79` and current guidance), recording pass rate, input, output and cached tokens, tokens before the first edit, turns and gate violations. | Phase 1; owner decision on committing the eval set | K56 K64 | A runner under test/agent-evals that writes a CSV |
-| A3 (port) | Substrate, with Managed OS and Container cluster | The substrate machine port (pre-boot proof, boot media, identity read, power) as argument-spec entry points, with every consumer booting through the substrate-owned boot operation instead of selecting a boot device itself. | Phase 2; owner decision on who owns substrate composition | K21 K47 | A collection structural test that consumers include only the port's entry points |
-| A6 | Each capability spec's owner | One refusal table per capability spec (row, path, reason, remedy), mirrored by a table test over `Unsupported`; milestones link to it instead of copying. | Phase 1; owner decision on the rescue declaration: a requirement before a fresh bare-metal apply, a refusal, or a retired field | K20 K09 K22 K24 | A refusal-table test per capability |
-| A8 (kind tables) | Desired state and Workspace | Kind field-table to `Shape` parity and the `Value.Get` path checker. | Phases 3 and 4 | K35 K50 | Parity tests over every kind |
+- **D1** (2026-09-26): the substrate owns the machine port as role entry points.
+- **D2** (2026-09-26): lifting the physical refusal needs in-tree tests and an
+  emulated rehearsal, with real-hardware acceptance before support is claimed.
+- **D3** (2026-09-26): the BMC certificate is imported where the BMC supports
+  it, otherwise an explicit per-machine disable-verification exception applies,
+  never a default, and controller-to-BMC TLS gains a CA bundle.
+- **D4** (2026-09-26): administrator access is kept in context custody with
+  `cluster kubeconfig`.
+- **D5** (2026-09-26): every node presenting this block's own tokenized image
+  proves a partial install.
+- **D6** (2026-09-26): the first proved UUID and serial are pinned and a
+  mismatch refuses.
+- **D7** (2026-09-26): non-root SSH accounts refuse at admission for now.
+- **D8** (2026-09-26): the cluster identity is the build's kubeconfig trust
+  anchor, refined on 2026-09-27 (S26) to its admin client certificate, which
+  the installer's install-complete rewrite keeps.
+- **D9** (2026-09-26): multi-node libvirt stays admitted under F14.
+- **D10** (2026-09-26): ansible-core is the latest patch of the qualified 2.21
+  minor.
+- **D11** (2026-09-26): postcondition decisions stay in Go.
+- **D12** (2026-09-26): media completion claims the inputs digest and installer
+  version, not an image digest.
+- **D14** (2026-09-26): documentation stays in the bundle but leaves the
+  automation digest.
+- **D16** (2026-09-26): managed-OS waits are frozen as request budgets.
+- **D17** (2026-09-28): M3 and M4 are done only with two owner-accepted
+  acceptance-ledger rows each: an emulated rehearsal on libvirt guests behind
+  sushy-tools Redfish BMCs, and a run on real hardware. Each item keeps the
+  gate its own detail names.
+- **D18** (2026-09-28): the product scope names MetalLB, IBM Fusion Data
+  Foundation, Red Hat Advanced Cluster Management, Argo CD and GitLab as the
+  first add-on packages.
+- **D19** (2026-09-28): M5 integrates OpenShift with a Ceph cluster M4 manages;
+  an external Ceph cluster is parked as [B107](#b107).

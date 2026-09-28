@@ -153,8 +153,7 @@ discovered under [the API input rules](input.md#discovery):
   invalid.
 
 A native add-on descriptor published by the add-on registration journey
-([milestones](../milestones/backlog.md#candidates) candidate C10 owns its storage and
-publication) is the sole selection exception.
+([B89](../milestones/m7.md#b89) owns its storage and publication) is the sole selection exception.
 `add-ons/_store/<name>/add-on.yaml` is selected when it contains exactly one
 `ClusterAddon/<name>` and the same directory contains the exact sibling basename
 `.bootwright-addon`. `<name>` is a DNS label of at most 63 ASCII bytes, and the
@@ -426,7 +425,7 @@ The selected artifact server must run on a Machine with `os.provided: true` so
 it remains reachable after managed machines shut down. Validation checks the
 declaration and its references. No lifecycle yet requires or consumes the
 declaration: whether it becomes a requirement, a refusal or is retired is an
-open owner decision, recorded in [backlog A6](../milestones/backlog.md#audit-follow-ups-2026-09).
+open owner decision, recorded in [B40](../milestones/m1.md#b40).
 
 ## Aggregate invariants and read-only boundary
 

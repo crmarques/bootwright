@@ -87,7 +87,9 @@ why each removed step was expensive, which is the reason those rules matter.
   `internal/controller/bundlelocal/manager.go` (`validateDefinition`,
   `qualifiedFoundation`, `Rebase`, `retainedSource`),
   `internal/controller/prerequisites/resolution.go` (`carryForward`, `rebind`).
-  Retirement of the replaced area is deferred to milestone candidate C24.
+  Retiring the replaced area is `setup --purge-old-bundles` (X7); a foundation
+  shared across automation-only revisions is
+  [B44](../../specs/milestones/m1.md#b44).
 - Staging acquires every repository member the solver may open, and narrowing
   that set by what a solver is configured to load does not work. Staging only
   `primary` and `filelists` for DNF5, on the reasoning that

@@ -65,7 +65,7 @@ const (
 
 // killLedger names every kill point whose store fails the harness today, by
 // "<journey>/<operation> <target>#<occurrence>" with the operation identity
-// elided, and the backlog item or candidate that repairs it. It is exact: a
+// elided, and the backlog item (B<n>) that repairs it. It is exact: a
 // failing point missing from it, an entry naming a point no journey reaches,
 // and an entry whose point now passes all fail, so it only shrinks.
 func killLedger() map[string]string {
@@ -670,10 +670,10 @@ func TestAJourneyKilledAtAnyWriteLeavesAUsableStoreAndConvergesOnRetry(t *testin
 	ctx := context.Background()
 	pristine := killPristine(t)
 	ledger := killLedger()
-	named := regexp.MustCompile(`^(candidate:[a-z0-9]+(-[a-z0-9]+)*|[A-Z][0-9]+( \([a-z0-9 ,]+\))?)$`)
+	named := regexp.MustCompile(`^B[0-9]+$`)
 	for reference, reason := range ledger {
 		if !named.MatchString(reason) {
-			t.Errorf("ledger entry %s names %q, which is neither a backlog item nor a candidate", reference, reason)
+			t.Errorf("ledger entry %s names %q, which is not a backlog item", reference, reason)
 		}
 	}
 	reached := map[string]bool{}

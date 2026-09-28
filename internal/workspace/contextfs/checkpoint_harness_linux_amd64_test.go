@@ -465,7 +465,7 @@ func checkpointUsable(t *testing.T, ctx context.Context, scenario checkpointScen
 // pending registry files, which are ignored and never adopted, and lets the
 // secret store keep what its writes leave for its own recovery, so nothing
 // beneath a context's secrets/ counts here; what a killed keyring write leaves
-// is the keyring's to resolve (S28).
+// is the keyring's to resolve (B26).
 func checkpointStaleEntries(root string) ([]string, error) {
 	var stale []string
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
@@ -2361,13 +2361,13 @@ func checkpointStageCollectionScenario() checkpointScenario {
 }
 
 // checkpointLedger records every case that does not converge today, keyed
-// "<scenario>/<mode>/<checkpoint>#<occurrence>". A value naming a backlog row,
-// or candidate:<slug> for a defect no row names, marks a case that must fail;
+// "<scenario>/<mode>/<checkpoint>#<occurrence>". A value naming a backlog item
+// (B<n>) marks a case that must fail;
 // a value citing the specification marks a refusal it permits, whose retry
 // must refuse with a diagnosed context.state failure while the store reads,
 // and one prefixed restore: marks a refusal whose store no read admits.
 //
-//   - S28: a kill inside a keyring initialization's staged write leaves an
+//   - B26: a kill inside a keyring initialization's staged write leaves an
 //     incomplete secrets/pending-* that the keyring refuses as not
 //     attributable, so neither init nor secret encryption init completes; an
 //     in-process interruption no longer leaves one.
@@ -2412,6 +2412,6 @@ func checkpointLedger() map[string]string {
 		"init/killed/write-file#1":                                 "restore:specs/contexts.md#storage-locking-and-publication",
 		"init/refused/write-file#3":                                "specs/contexts.md#storage-locking-and-publication",
 		"init/cancelled/write-file#3":                              "specs/contexts.md#storage-locking-and-publication",
-		"secret-initialization/killed/write-file#1":                "S28",
+		"secret-initialization/killed/write-file#1":                "B26",
 	}
 }

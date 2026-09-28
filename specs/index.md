@@ -1,9 +1,9 @@
 # Specification Index
 
 Start with [project intent](project.md) when scope matters. Read the
-[milestones](milestones.md) status header and the section of the authorized
-slice, then open only the owning section below. A specified capability is not
-necessarily implemented or authorized.
+[milestones](milestones.md) status and the milestone page of the authorized
+slice or item, then open only the owning section below. A specified capability
+is not necessarily implemented or authorized.
 
 | Read when the task touches | Owner |
 | --- | --- |
@@ -23,14 +23,15 @@ necessarily implemented or authorized.
 | Container cluster installation | [container clusters](container-clusters.md) |
 | Trust, sensitive material, processes, network, supply chain | [security](security.md) |
 | The add-on boundary | [add-ons](add-ons.md) |
-| Delivery state, delivered history, deferred work | [milestones](milestones.md), [delivered](milestones/delivered.md), [backlog](milestones/backlog.md) |
+| Delivery state, open items, delivered history, parked work, decisions | [milestones](milestones.md) and its pages, [delivered](milestones/delivered.md), [backlog](milestones/backlog.md) |
 | Design for an unpromoted feature, only when reviving it | [deferred](deferred/) |
 
 ## Conventions
 
 Each requirement has one owner; other pages link to it. Specs state target
 invariants in the present tense and claim no availability. A rule the code does
-not yet meet carries one line, "Not yet met: ...; tracked as backlog <ID>".
+not yet meet carries one line, "Not yet met: ...; tracked as B<n>", linking the
+item on its milestone page.
 Delivery state lives in milestones, observed lessons in
 [knowledge](../.agents/knowledge/index.md), and working procedure in skills. Add
 detail with its first requested feature or a demonstrated ambiguity; design for

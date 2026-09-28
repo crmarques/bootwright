@@ -39,5 +39,5 @@ evidence current; correct or retire obsolete findings when their basis changes.
 
 Use the [code clarity contract](../../specs/architecture.md#self-explanatory-code-and-retained-knowledge)
 when moving useful explanations out of comments. Redundant narration needs no
-catalog entry. Put unfinished implementation work under the earliest fitting
-future milestone in [milestones](../../specs/milestones.md).
+catalog entry. Record unfinished implementation work as an item of the earliest
+fitting milestone in [milestones](../../specs/milestones.md).

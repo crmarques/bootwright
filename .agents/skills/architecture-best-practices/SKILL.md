@@ -17,7 +17,7 @@ owns lifecycle and durable state. Load the affected contracts from the
   [milestones](../../../specs/milestones.md), and observed constraints in indexed
   [knowledge](../../knowledge/index.md). Keep one statement and link to it.
 - Specs state target invariants. A rule the code does not yet meet links the
-  milestone row that will close it; nothing else in a spec claims availability.
+  milestone item that will close it; nothing else in a spec claims availability.
 - The code owns inventories. Do not hand-copy command lists, package maps or
   interface catalogs into prose; point at the code, or add a test that holds a
   table to it. A rule a tool can check becomes a test, and its prose goes.

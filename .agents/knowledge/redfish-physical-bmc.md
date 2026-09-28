@@ -7,7 +7,7 @@ flow, and re-read from that branch when
 owns required behavior; this page records the firmware behavior that shaped it,
 so an implementation does not rediscover each item by failing against hardware.
 
-The emulated controller M1h uses is one more shape in this list, not the
+The emulated controller [B72](../../specs/milestones/m4.md#b72) uses is one more shape in this list, not the
 reference shape. Anything written against it alone will meet at least three of
 the divergences below on the first real server.
 

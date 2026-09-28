@@ -168,7 +168,7 @@ func contractPlanningOnly(row contractRow) bool {
 }
 
 // contractKnownDeviations names every contract property a binding fails today,
-// by "<implementation>/<property>", and the backlog item or candidate that
+// by "<implementation>/<property>", and the backlog item (B<n>) that
 // repairs it. It is exact: a failure missing from it, an entry whose property
 // now holds and an entry naming no binding or property all fail, so it only
 // shrinks.
@@ -356,8 +356,8 @@ func contractCompare(t *testing.T, failures map[string][]string, known map[strin
 		if !implementations[implementation] || !slices.Contains(contractProperties, property) {
 			t.Errorf("known deviation %s names no binding or property of the suite: remove it", key)
 		}
-		if !regexp.MustCompile(`^(candidate:[a-z0-9]+(-[a-z0-9]+)*|[A-Z][0-9]+( \([a-z0-9 ,]+\))?)$`).MatchString(reason) {
-			t.Errorf("known deviation %s names %q, which is neither a backlog item nor a candidate", key, reason)
+		if !regexp.MustCompile(`^B[0-9]+$`).MatchString(reason) {
+			t.Errorf("known deviation %s names %q, which is not a backlog item", key, reason)
 		}
 		if _, failing := failures[key]; !failing {
 			t.Errorf("%s now holds: remove its known deviation", key)

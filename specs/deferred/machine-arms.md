@@ -1,7 +1,8 @@
 # Refused machine arms
 
-C1 revives this detail when it promotes one vSphere or KubeVirt provisioning
-variant, listed in the [backlog](../milestones/backlog.md#candidates). Until
+[B87](../milestones/m6.md#b87) revives this detail for the KubeVirt
+provisioning variant, and the parked item [B99](../milestones/backlog.md#b99)
+for the vSphere one. Until
 then these arms are admitted by the closed schema in `api/v1alpha1/machines.go`
 and `api/v1alpha1/machines_install.go`, whose admission enforces the rules
 below as written, and refused before registration under the

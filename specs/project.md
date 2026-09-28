@@ -24,7 +24,9 @@ The target platform families are:
   time synchronization and registries;
 - OpenShift and OKD container clusters;
 - open-source, Red Hat and IBM Ceph storage distributions; and
-- cluster-bound integrations through built-in and custom add-ons.
+- cluster-bound integrations through built-in and custom add-ons, first
+  MetalLB, IBM Fusion Data Foundation, Red Hat Advanced Cluster Management,
+  Argo CD and GitLab.
 
 These platform families bound Bootwright's intended scope;
 [milestones](milestones.md) own what is delivered.
@@ -83,7 +85,7 @@ Never depend on an external location after admission: a command that admits
 input copies it into the Bootwright store, later commands read only that copy,
 and a recorded source location is provenance, never identity, uniqueness or a
 read path. Secret `file` sources are the recorded exception until
-[C21](milestones/backlog.md#candidates) brings them under this rule.
+[B41](milestones/m1.md#b41) brings them under this rule.
 
 Before 1.0, a durable format change converts no earlier format: a record in an
 earlier format is refused, and the refusal names the remedy.

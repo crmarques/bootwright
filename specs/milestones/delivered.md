@@ -8,9 +8,12 @@ the completion rules.
 
 M1a to M1g completed before the [acceptance ledger](../../docs/acceptance.md)
 existed and named no operator gate; the operator-run acceptance some of them
-name is unrecorded. Out-of-sequence slices carry X IDs, distinct from the audit
-plan's item prefixes. Entries predate the Kind field and keep the fields their
-delivery recorded.
+name is unrecorded. They and X1 to X10 predate the seven milestones M1 to M7
+and belong to none of them; X11 to X18 delivered toward M1. Out-of-sequence
+slices carry X IDs, distinct from the audit plan's item prefixes. Entries
+predate the Kind field and keep the fields and item IDs their delivery
+recorded; from the reorganization of 2026-09-28, a record names each item it
+delivers by its B ID with the old ID beside it.
 
 ## Completed milestones
 
@@ -651,8 +654,8 @@ tests.
 refuse until S2b; concurrency stays one until S4b and a real-host run;
 `vulncheck` and the networked `ansible-test` suites run only in CI where a
 session's egress refuses their hosts; architecture.md stays near 50 KB; and
-every item not executed is an
-[audit follow-up](backlog.md#audit-follow-ups-2026-09).
+every item not executed became an audit follow-up, now an item of
+[M1](m1.md) or [parked](backlog.md#parked).
 
 ### X12 — audit Phase 1: context and guards
 
@@ -853,3 +856,49 @@ only shrink.
 and S27, all in X18, and a keyring-initialization stage X18 settles; the goldens
 pin F5's status omissions and secret sequence ordinals as they are; T2's flaky
 reservation test; and three follow-ups recorded in F4 (rest), R4 and R5.
+
+### X18 — durable records
+
+**Owner:** State reconciliation and Workspace. Landed on `main` at `d2b94c6`
+through pull request 8 on 2026-09-28, on explicit request.
+
+**Outcome:** an unknown destroy block resolves by what its removal proves,
+through a `Capability.ObserveRemoval` port every binding implements (S27). A
+removal of an incomplete apply refuses the record contradictions it can prove,
+and an unchanged apply over a completed apply settles only when every block is
+done (S12, rest). The next apply or destroy finalizes an operation whose blocks
+are all done but whose record, evidence, reservations or Secret bindings lag,
+with no token or confirmation, and a failed final release fails the command
+while the receipt reads done; a fresh apply claims its operation directory and
+raises running evidence before it binds a Secret, and bindings no operation
+names are collected (S10, rest). Every transition re-proves under the exclusive
+lock the full fingerprint it was decided from, and every reader refuses a
+frozen plan its operation record does not name (S9, full). One contextfs
+publication primitive serves four protocols and removes its stage on any
+failure, and a collector under the exclusive root lock removes the stages a
+killed publication left (S8, collector and primitive, with R3). The lifecycle
+kill ledger is empty. No record, request or plan format changed, but some
+records earlier builds wrote now refuse where they used to proceed.
+
+**Guard tests:** `TestAnUnknownDestroyBlockResolvesByWhatItsRemovalProves`,
+`TestADestroyOverAnIncompleteApplyWithAContradictedBlockRefuses`,
+`TestARepeatedApplyOverACompletedApplyWithABlockNotDoneRefuses`,
+`TestARunningOperationWhoseBlocksAreAllDoneIsFinalized`,
+`TestAnUnknownOperationWhoseBlocksAreAllDoneIsFinalizedByItsOwnVerb`,
+`TestARemovalWhoseBindingReleaseFailsReportsIncompleteFinalization`,
+`TestAFreshApplyClaimsItsOperationBeforeItBinds`,
+`TestTheNextRegistrationReleasesBindingsNoOperationNames`,
+`TestATransitionRefusesWhenItsFrozenPlanChangedBeforeMutation`,
+`TestAFrozenPlanThatIsNotItsOperationsRefuses`,
+`TestPublicationLeavesNoStageOnFailure`,
+`TestTheNextLeaseCollectsWhatAKilledPublicationLeft`,
+`TestReadsNeverCollectAStage`, and
+`TestAJourneyKilledAtAnyWriteLeavesAUsableStoreAndConvergesOnRetry` with an
+empty ledger.
+
+**Constraints left behind:** a killed keyring initialization
+([B26](m1.md#b26), was S28), lost and lagging records ([B27](m1.md#b27), was
+S29), claims and bindings ([B28](m1.md#b28), was S30), resolution gaps that
+need adapter changes ([B29](m1.md#b29), was S31) and the protocols the
+primitive leaves ([B35](m1.md#b35), was R3 (rest)), with clauses added to B8,
+B11, B16 and B30. No real-host run.

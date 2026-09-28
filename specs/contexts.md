@@ -89,7 +89,7 @@ context-specific references but never uninstalls shared packages or deletes
 shared bundles/host evidence. Package failure or process death is not disposal
 proof. Complete-store restore must preserve these relationships under the
 [restore boundary](#format-and-restore-boundary); controller relocation waits
-on backlog [C14](milestones/backlog.md#candidates).
+on [B103](milestones/backlog.md#b103).
 [Architecture](architecture.md#controller-host-and-local-services) owns consumer
 boundaries.
 
@@ -278,7 +278,7 @@ other store command, a read included, therefore refuses while one runs; only
 the lock-free [acquisition](#media-acquisition) of a `media add` admitted
 earlier continues, and it refuses at its second hold.
 Narrowing that boundary to the lease alone is
-[deferred work](milestones/backlog.md#candidates). Within it, Workspace
+[B18](milestones/m1.md#b18). Within it, Workspace
 supplies the operation area, the mutation-evidence replacement primitive and
 the reservation publication; Reconciliation owns what they contain and when
 they advance.

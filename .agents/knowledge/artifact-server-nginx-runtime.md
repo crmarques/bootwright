@@ -43,8 +43,8 @@ against podman 5.8.4 on Fedora 43 with nginx 1.24.0 inside the image.
 - Workers open served files as `default` (1001) with group `root` (0), and the
   container is rootful with no user namespace, so those are host identities. A
   file `0600 root:root` is therefore unreadable by the worker; that is inferred
-  from the configuration, not yet observed on a host (operator check V1 records
-  the status a fetch returns). Private files are published `0640 root:root`:
+  from the configuration, not yet observed on a host (X14's fetch-through probe
+  reports the status a fetch returns). Private files are published `0640 root:root`:
   owning them by uid 1001 instead would grant whichever host account holds that
   uid. `tests/unit/test_served_content_is_readable.py` ties every served file
   task to the worker the template names.

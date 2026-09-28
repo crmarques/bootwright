@@ -36,7 +36,7 @@ func TestConfigurationDeclaresNoEmptyValue(t *testing.T) {
 // every embedded file against that bundle. A file the digest skipped could
 // differ under an equal digest: setup would then refuse the retained bundle as
 // unattributable instead of carrying it forward. Documentation leaves the
-// digest (backlog Z2) only together with those comparisons.
+// digest (item B16) only together with those comparisons.
 func TestAutomationDigestCoversEveryEmbeddedFile(t *testing.T) {
 	files := Assets()
 	baseline := Digest()

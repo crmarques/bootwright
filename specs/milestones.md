@@ -1,62 +1,77 @@
 # Milestones
 
-This file owns delivery scope, status and the next outcomes; specs claim no
-availability. The catalog in [`internal/cli`](../internal/cli/catalog.go) marks
-each available command; every other command `bootwright --help` lists returns
-the [unavailable result](cli.md#recognized-but-unavailable-commands).
+This file owns delivery status and the rules every milestone page follows;
+specs claim no availability. The catalog in
+[`internal/cli`](../internal/cli/catalog.go) marks each available command;
+every other command `bootwright --help` lists returns the
+[unavailable result](cli.md#recognized-but-unavailable-commands).
 
-- [Delivered](milestones/delivered.md): completed work, guard tests and constraints.
-- [Backlog](milestones/backlog.md): candidates and audit follow-ups.
+- [M1](milestones/m1.md) to [M7](milestones/m7.md): one page per milestone,
+  with its scope, planned slices and open items.
+- [Delivered](milestones/delivered.md): completed work, guard tests and
+  constraints.
+- [Backlog](milestones/backlog.md): parked items, retired IDs and owner
+  decisions.
 
 ## Status
 
-| ID | Slice | Owner | Kind | Definition | Delivery |
-| --- | --- | --- | --- | --- | --- |
-| [M1h](#m1h--managed-rhel-on-emulated-bare-metal) | Managed RHEL on emulated bare metal | Substrate, Managed OS | product | Specified | awaiting operator acceptance |
-| [M5a](#m5a--managed-rhel-on-physical-bare-metal) | Managed RHEL on physical bare metal | Substrate, Managed OS | product | Specified | blocked |
-| [M4a](#m4a--single-node-openshift-through-the-agent-installer) | Single-node OpenShift through the agent installer | Container cluster, Substrate | product | Specified | blocked |
-| [X18](#x18--durable-records) | Durable records | State reconciliation, Workspace | safety | Specified | in progress |
+| ID | Milestone | Requires | Delivery | Next |
+| --- | --- | --- | --- | --- |
+| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | X19 |
+| [M2](milestones/m2.md) | Native input files for `openshift-install` and the cephadm and ceph CLIs | none | not started | define B51 |
+| [M3](milestones/m3.md) | Provision and destroy OpenShift clusters on bare metal | M1 | in progress | B61's operator gate |
+| [M4](milestones/m4.md) | Provision and destroy IBM Ceph clusters on bare metal | M1, M2, M3 | in progress | B72's operator gate; B73 resumes on B9 |
+| [M5](milestones/m5.md) | First add-ons: MetalLB ingress and IBM Fusion Data Foundation | M3, M4 | not started | nothing until M3 and M4 |
+| [M6](milestones/m6.md) | Provision and destroy OpenShift clusters over OpenShift Virtualization | M3 | not started | nothing until M3 |
+| [M7](milestones/m7.md) | Add-ons ACM, Argo CD and GitLab | M5 | not started | nothing until M5 |
 
-- **Next for agents:** deliver X18, then the [pre-OpenShift program](milestones/backlog.md#pre-openshift-readiness-program-2026-09) in order; promote [audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09) only on request.
-- **Next for operator:** on a clean build descending from `8aa4494`, run [lab-rhel](../examples/lab-rhel/README.md#run-it) and record it in the [acceptance ledger](../docs/acceptance.md) as the [operator guide](../docs/operator-guide.md) describes (M1h), run [lab-sno](../examples/lab-sno/README.md) (M4a) now that X16 has landed; M5a's rehearsal waits for S3b.
-- **Next to define:** M1i, the [GitOps handoff gate](#next-ordered-outcomes).
+No slice is active.
+
+- **Next for agents:** X19, the next planned slice of M1.
+- **Next for operator:** on a clean build descending from `8aa4494`, run
+  [lab-rhel](../examples/lab-rhel/README.md#run-it) for
+  [B72](milestones/m4.md#b72) and [lab-sno](../examples/lab-sno/README.md) for
+  [B61](milestones/m3.md#b61), and record each in the
+  [acceptance ledger](../docs/acceptance.md) as the
+  [operator guide](../docs/operator-guide.md) describes; repeat both once X19
+  lands. [B73](milestones/m4.md#b73)'s rehearsal waits for B9.
 
 ## Scope rules
 
-- Implement only the prompt-authorized outcome: an active slice's open work, or
-  an explicitly requested out-of-sequence slice, which authorizes only itself.
-  A spec, backlog row or audit item authorizes no implementation or effect.
+- Implement only the prompt-authorized outcome: an active slice's open work,
+  or an explicitly requested slice or item, which authorizes only itself. A
+  spec, milestone page, item or decision authorizes no implementation or
+  effect.
 - A slice is **active** only while its Delivery is `in progress`, and only
-  active slices count toward the WIP limit of two: one product or safety and
-  one enabling, at most one of them out of sequence.
-- **In sequence** means the first uncompleted ordered outcome: M1h, then the
-  [next ordered outcomes](#next-ordered-outcomes) in row order. Anything else
-  is out of sequence.
-- Every slice carries an ID, a Kind (`product`, `safety` or `enabling`),
-  Definition and Delivery status, Requires and exit gates.
+  active slices count toward the WIP limit of two: one product, safety or
+  defect slice and one enabling slice, at most one of them out of sequence.
+  Milestones are never active.
+- **In sequence** means the next planned slice of the first milestone in
+  Status order that holds open items. Anything else is out of sequence.
 - Requires governs promotion and implementation, not definition. An unmet
   Requires needs a waiver, which needs an explicit user request and is recorded
-  in the slice with its date.
+  in the item with its date.
 - Removing or narrowing any safety refusal in [specs](index.md) needs a named
   slice.
-- Record discovered work under the earliest fitting milestone or as a backlog
-  candidate with owner, bounded outcome, deferral reason, Requires, definition
-  status and exit evidence. Accepted work, audit items included, carries its
-  plan item ID.
+- Record discovered work as an item on the page of the earliest milestone not
+  done whose scope it blocks, or as a parked item, with owner, Kind, bounded
+  outcome, deferral reason, Requires, Definition and exit evidence.
 - `Specified` is ready for authorized implementation; `Needs definition` lists
   open decisions; `Candidate` is unpromoted; `Blocked` names its resumption
   condition. Promotion fixes the exact implementation and version, closes
-  contract gaps and names executable exit evidence; candidates add no gate.
+  contract gaps and names executable exit evidence. Every item on a milestone
+  page gates that milestone, whatever its Definition.
 - Deferred commands keep the unavailable result with no placeholder or adjacent
   effect. Cross-cutting safety constraints apply from the start.
 
 ## Completion and verification
 
 - Delivery status is `not started`, `in progress`,
-  `awaiting operator acceptance`, `blocked` or `completed`; a Delivery cell
-  holds one value alone and a deviation lives in the slice. A slice completes
-  when every exit gate passes; one whose in-tree gates pass awaits operator
-  acceptance, or is `blocked` while a deviation stops its operator gate.
+  `awaiting operator acceptance`, `blocked` or `completed`; an item's Delivery
+  cell holds one value, then its planned slice if it has one, and a deviation
+  lives in its detail. An item completes when every exit gate passes; one
+  whose in-tree gates pass awaits operator acceptance, or is `blocked` while a
+  deviation stops its operator gate.
 - An **in-tree gate** records its command and result in the delivering
   commit's body, and the slice summarizes it. Its tests are unitary and
   host-independent (no package manager, network, privilege, second OS or
@@ -64,201 +79,47 @@ the [unavailable result](cli.md#recognized-but-unavailable-commands).
   executed native installer.
 - An **operator-run gate** records date, build commit and source stamp, command
   sequence, outcome and operation-log digest in the
-  [acceptance ledger](../docs/acceptance.md), and completes its slice only on
-  an owner-accepted row that matches the slice's acceptance baseline.
+  [acceptance ledger](../docs/acceptance.md), and completes its item only on
+  an owner-accepted row that matches the item's acceptance baseline.
   [Development](../docs/development.md) lists the harnesses.
 - Qualification tiers are in-tree, emulated rehearsal and real hardware; each
-  destructive path names its tier.
+  destructive path names its tier, and each milestone page its exit tier.
 - A gate passes only with the command and result that produced it; failed,
   skipped, flaky, unavailable and unrun gates are not passes.
+- A milestone is **done** when its page holds no item and no planned slice,
+  every milestone it requires is done, and owner-accepted ledger rows meet its
+  exit tier where that tier is operator-run. The owner declares it in one docs
+  commit that sets its Status Delivery to `done` and writes
+  `Done <date> at <commit>` on its page. A done milestone takes no new item.
+  Its Delivery is otherwise `in progress` once any of its items has started,
+  and `not started` before.
 
-## Open slices
+## Identifiers
 
-### M1h — managed RHEL on emulated bare metal
-
-**Owners:** Substrate and Managed OS, with Infrastructure services, Workspace
-(media store), Controller (stage closures) and State reconciliation.
-**Kind:** product. **Requires:** M1g. **Definition:** Specified.
-**Delivery:** awaiting operator acceptance. **Acceptance baseline:** `8aa4494`,
-where X11 landed.
-
-One Bootwright-installed RHEL 9.8 Machine on a libvirt guest that boots its
-installer through an emulated Redfish BMC. Consumer:
-[`examples/lab-rhel`](../examples/lab-rhel/README.md).
-
-**Supported shape.** The M1f service set, one libvirt `InfraProvider` whose host
-is the controller or an SSH-reachable OS-ready Machine and whose BMCs bind a
-unicast address, and installed Machines whose Anaconda profile selects
-`hostedTree` or no package source. `initialPassword`, `diskEncryption`, `fips`,
-`fromSubscription`, `mirror`, `templateClone` and vSphere or KubeVirt providers
-refuse before registration, so the served ISO is secret-free; a private-content
-path must extend the frozen request without changing its shape. Bare metal is
-M5a's.
-
-**Capabilities.** [Provider host](substrates.md#provider-host-realization) with
-managed [attachments](api/machines.md#machine-profiles-and-network-attachments)
-(D1) and [machine realization](substrates.md#machine-realization) with a pinned
-sushy-tools BMC per domain (D2, D6); the host-wide
-[media store](managed-os.md#media-store) (D3);
-[installation](managed-os.md#installation) from a per-machine ISO and DVD tree
-under [consumer publication](infrastructure-services.md#consumer-publication)
-(D4), proved by the guest agent (D5); a disk-deleting destroy consuming
-`data-loss`; one progress row per step and retained output for every adapter
-run.
-
-**Exit evidence:** the `internal/substrate` admission tests for managed
-attachments and BMC port ranges; capability planning goldens over
-`examples/lab-rhel`; request round-trip, evidence-validation and refusal tests
-for both capabilities; the engine suite for requirements, consumed
-authorization, binding resolution, the inverted removal graph and the fresh
-removal that supersedes a failed operation; media store bounds, fault injection
-and cross-context freeze refusal; adapter protocol and module tests with fake
-HTTP and virsh runners; the collection gates over the new roles, playbooks and
-plugins; CLI goldens for the media commands and the authorization refusal; the
-progress-row goldens over a step with sub-steps and the retained-adapter-log
-suites for a completed run; `cmd/bootwright/lab_rhel_example_test.go`; and
-`make check`.
-
-**Operator gate** (emulated rehearsal): lab-rhel under a matching build
-(staged apply, a settled replay, a removal refused while the guest runs,
-`machine stop`, destroy, a fresh apply), then a host restart and `machine
-start`. The 2026-09-17 run predates `c42ea10`, so it is an
-[observation](../.agents/knowledge/installation-completion-proof.md).
-
-**Constraints left behind:** local `setup` retains no adapter output (C26).
-
-### M5a — managed RHEL on physical bare metal
-
-**Owners:** Substrate and Managed OS, with Infrastructure services, Machine and
-State reconciliation. **Kind:** product. **Requires:** M1h, waived on explicit
-request by 2026-09-16. **Definition:** Specified. **Delivery:** blocked. The
-physical half of M5 on M1h's Anaconda path, without M4 or C9.
-
-**Deviation.** Physical managed-OS installation refuses before registration
-until private host-key delivery is repaired. Its in-tree gates pass; delivery
-resumes on backlog S3b, which sets the acceptance baseline.
-
-**Supported shape.** A bare-metal `InfraProvider` whose Machines declare NICs,
-boot NIC, management controller and root device, install through
-`redfishVirtualMedia` and name the delivered `sshKeyPair`; `substrates` may be
-empty and virtual and physical Machines may mix. M1h's refusals stand;
-`import-certificate` trust is unimplemented and refuses.
-
-**Capabilities.** One [target derivation](substrates.md#selection-and-refusal)
-every consumer reads, so `machine start` honours `bmc.tls.verify`;
-[physical realization](substrates.md#physical-machine-realization), which proves
-identity and MAC set and retains everything on removal; and
-[physical installation](managed-os.md#physical-installation), which consumes
-`data-loss` on apply, re-proves the target before and inside the installer and
-proves completion over SSH pinned to the key its
-[private publication](infrastructure-services.md#private-consumer-publication)
-delivered.
-
-**Exit evidence:** the `substrate` target-derivation tests (each arm's
-controller, channel and requirement, and a consumer that reads only the derived
-answer); the `substrate/baremetal` capability suite (identity and MAC proof, an
-incomplete inventory left unknown, the claim key, a removal that retains and
-consumes nothing, always-quiescent); the `managedos/installation` suite for the
-physical arm (authorization on apply, private publication removed at
-completion, delivered-key completion, the Kickstart's in-installer proof);
-`internal/machine/power` honouring declared controller trust; the collection's
-Redfish client suite against three firmware shapes, its system-inspection and
-protocol suites; the `examples/lab-baremetal` acceptance; and `make check`.
-
-**Operator gate** (emulated rehearsal): the
-[lab-baremetal](../examples/lab-baremetal/README.md) rehearsal, first proof of
-the emulator's `EthernetInterfaces`. Real hardware is not a gate; its tier is
-an open owner decision ([knowledge](../.agents/knowledge/redfish-physical-bmc.md)).
-
-**Constraints left behind:** a
-[residual race](state-reconciliation.md#mutation-safety) between the last
-controller proof and the installer's first write; physical destroy and erase
-remain C9, so removal retains the system; bonded or VLAN install interfaces and
-FIPS profiles refuse; and two contexts claiming one controller from different
-hosts are not coordinated.
-
-### M4a — single-node OpenShift through the agent installer
-
-**Owners:** Container cluster and Substrate, with Infrastructure services,
-Controller, Secrets and State reconciliation; using Machine. **Kind:**
-product. **Requires:** M1h, waived on explicit request on 2026-09-16.
-**Definition:** Specified. **Delivery:** blocked.
-**Acceptance baseline:** `8aa4494`, where X11 landed. The agent-installer half of
-M4, without M2a's `render installer`, C12 or C9.
-
-**Deviation.** A physical cluster node refuses before registration until the
-pre-boot target proof is repaired (backlog S2b). Since 2026-09-26 its operator
-gate cannot pass: the install identity comes from a `metadata.json` the agent
-installer never writes, and the served image is unreadable by the artifact
-server (backlog S17, S18); it resumes when X14 to X16 land.
-
-**Descoped:** the administrator-access custody contract moves to C6.
-
-**Supported shape.** Nodes that are virtual Machines on a realized substrate;
-single-node is the rehearsed topology and multi-node libvirt stays admitted
-(owner decision D9, 2026-09-26) under backlog F14's topology checks. The rest is
-[selection and refusal](container-clusters.md#selection-and-refusal): a release
-declared by version, the `agent` method, `connected` mode. OKD, disconnected
-mode, FIPS, disk encryption, serving certificates, registry policy and a
-release pinned by image alone refuse. Consumer:
-[`examples/lab-sno`](../examples/lab-sno/README.md).
-
-**Capabilities.** [Boot media](container-clusters.md#boot-media) proves the
-installer against the release and builds the agent image from the
-[projected inputs](container-clusters.md#installer-inputs), published privately
-because it carries the pull secret. [Installation](container-clusters.md#installation)
-boots each node through its
-[substrate's boot operation](substrates.md#identity-and-power-operations) and
-reads the cluster back before releasing the media.
-
-**Exit evidence:** the `containercluster` projection suite
-(install-config and agent-config goldens for a single-node libvirt cluster, a
-multi-node libvirt cluster and a multi-node physical cluster, the derived
-platform and rendezvous address, and the refusals above); the capability suite
-for both blocks (the installer-version refusal, private publication removed by
-the inverse, the resumable and terminal wait classifications, completion proved
-against the cluster's own identity, replay without a rebuild, an inverse that
-retains the cluster, quiescence); the substrate boot-operation tests for both
-arms; the managed resolver's cluster records; the `examples/lab-sno`
-acceptance; and `make check`.
-
-**Operator gate** (emulated rehearsal): lab-sno on a libvirt host with a pull
-secret; physical hardware is not a gate
-([knowledge](../.agents/knowledge/openshift-agent-disk-safety.md)).
-
-**Constraints left behind:** administrator access stays in the installer's
-root-owned work area, so no command reveals it and a destroy of the context
-takes it with the area; an artifact server on another Machine refuses;
-`render installer` stays unavailable (M2a); the controller's resolver is proved,
-not configured, so the operator routes the managed zone; disconnected
-installation waits for a managed `Registry` (C2); and a destroyed cluster's
-physical nodes keep running (C9).
-
-### X18 — durable records
-
-**Owner:** State reconciliation and Workspace. **Kind:** safety, out of
-sequence, on explicit request on 2026-09-28.
-**Requires:** [X17](milestones/delivered.md#x17--goldens-and-checkpoint-harnesses).
-**Definition:** Specified. **Delivery:** in progress. Items S27, S12 (rest),
-S10 (rest), S9 (full) and S8 (collector, primitive) with R3 of the
-[pre-OpenShift program](milestones/backlog.md#pre-openshift-readiness-program-2026-09),
-in that order; S28 and R3 (rest) hold what the owner split out on 2026-09-28.
-Exit gates: each item's exit evidence, an empty lifecycle kill ledger,
-`make check`, `make race`, `make docs-check` and CI. Implemented and
-reviewed; remaining: its pull request.
-
-## Next ordered outcomes
-
-Each needs definition; the
-[later-outcome detail](milestones/backlog.md#later-outcome-detail) keeps their
-N and L items.
-
-| Outcome | Owner and outcome | Requires | Definition and exit evidence |
-| --- | --- | --- | --- |
-| M1i — GitOps handoff gate (audit G4) | State reconciliation and CLI: a derived, effect-free `status` handoff section whose [predicate](state-reconciliation.md#bootstrap-completion-and-gitops-readiness) uses facts the code has: the apply is done, every planned block is done, no unresolved `unknown`, no durable fault. | M1h, M5a, M4a | **Needs definition:** whether block completion discharges frozen readiness and access requirements, and how a completed apply whose last write latched the log fault restores it short of a destroy. Status goldens for ready and each unready reason. |
-| M2a — OpenShift/OKD native files | Container cluster and Native artifacts: `render installer` writes M4a's installer inputs as a standalone artifact. | M1e, M4a | N1 to N3; non-disclosure and release goldens. |
-| M2b — Ceph native files | Storage and Native artifacts: one release-specific file set. | M1e, N3 | N5; qualified schemas and goldens. |
-| M3 — Ceph-pool script | Storage and Native artifacts: one deterministic pool script. | M1e | N4; replay and goldens, no execution. |
-| M4 — OCP bare-metal lifecycle | State reconciliation, Substrate and Container cluster: multi-node, physical nodes, disconnected, day-2. | M1e, M4a | L2, L4, L5, L6. |
-| M5 — managed RHEL on bare metal | Managed OS and Substrate: secret-bearing arms and the cluster-facing remainder. | M5a, M4, C9 | L2, L4, L5, L6; real hardware. |
-| M6 — managed Ceph bare metal | Storage, Managed OS, Substrate and State reconciliation: one Ceph cluster. | M2b, M5a | **Needs definition:** the M5 arms a Ceph host needs; L2, L4, L5, L6. |
+- **M\<n\>, milestone.** A positive integer, never reused or suffixed; its
+  number is its place in the delivery sequence. A new milestone is appended.
+- **B\<n\>, item.** One bounded outcome on exactly one milestone page, or
+  parked in the backlog. The number encodes nothing and never changes: a new
+  item takes one above the largest B under `specs/milestones/`, and a branch
+  that collides with another renumbers the item that has not landed. Only open
+  work receives a B; delivered work keeps the ID its record names.
+- **X\<n\>, slice.** The ordered items of one milestone that one pull request
+  delivers; each commit's `Refs:` line names the slice and the items it
+  advances. A fix with no planned slice takes the next X when it opens.
+- **D\<n\>, decision.** One dated log in [backlog](milestones/backlog.md#decisions),
+  appended when the owner decides.
+- **Alias.** Each item row keeps the IDs it had before 2026-09-28 and its dated
+  move and split notes; an old ID found nowhere else is in the backlog's
+  Retired table.
+- A milestone page opens with its scope, Requires, Exit tier and Open
+  decisions, then `Planned slices`, the `Items` table
+  (`ID | Alias | Kind | Owner | Outcome | Requires | Definition | Delivery`)
+  and one `### B<n>` detail section per item holding its bounded outcome,
+  deferral reason and exit evidence. Kind is `product`, `safety`, `defect` or
+  `enabling`.
+- A moved item keeps its ID, and its row and section move with a dated Alias
+  note. A split keeps the ID on the part that stays and gives each part split
+  out a new B whose Alias names its source and date; no B carries a qualifier
+  such as "(rest)". A partly delivered item keeps its ID and states what
+  remains. A dropped item is retired with reason and date. A completed item
+  leaves its page for the record of the slice that delivered it.

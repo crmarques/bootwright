@@ -77,7 +77,7 @@ Machine receives.
 Not yet met: admission neither refuses a wildcard `bindAddress` nor stops
 defaulting it to `0.0.0.0`, so a provider that omits it validates and then
 refuses at `plan` and `apply`, before registration; tracked as
-[backlog F6](../milestones/backlog.md#audit-follow-ups-2026-09).
+[B12](../milestones/m1.md#b12).
 
 ### Refused arms
 
@@ -86,7 +86,7 @@ the `templateClone` installer arm are admitted by the closed schema and refused
 before registration by [substrate selection](../substrates.md#selection-and-refusal)
 and [managed-OS installation](../managed-os.md#installation). Their field
 detail is recorded in [refused machine arms](../deferred/machine-arms.md),
-which C1 revives.
+which [B87](../milestones/m6.md#b87) and [B99](../milestones/backlog.md#b99) revive.
 
 ### Machine profiles and network attachments
 
@@ -106,7 +106,7 @@ shape; the vSphere-only `template` and `failureDomainRef` fields belong to the
 
 Not yet met: admission requires positive sizes only for vSphere and
 materializes `0` for an omitted libvirt size, which libvirt planning refuses;
-tracked as [backlog F6](../milestones/backlog.md#audit-follow-ups-2026-09).
+tracked as [B12](../milestones/m1.md#b12).
 
 `networkAttachments[]` names are unique. Each entry has required `name` and
 exactly one arm matching the provider's selected substrate; the `vsphere` and

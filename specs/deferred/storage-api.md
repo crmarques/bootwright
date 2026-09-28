@@ -1,12 +1,12 @@
 # Storage field detail
 
-[M2b](../milestones/backlog.md#later-outcome-detail) revives this detail when
+[B55](../milestones/m2.md#b55) revives this detail when
 it qualifies a Ceph release and its renderer. Until then the
 [storage admission contract](../api/storage.md) owns the kinds, references,
 replicated protection and graph invariants, and the closed schema in
 `api/v1alpha1/storage.go` is authoritative for field names, types and shapes.
 The tables below record that schema, the field-local rules `internal/storage`
-admission enforces as written, and the renderer defaults M2b must confirm or
+admission enforces as written, and the renderer defaults B55 must confirm or
 revise.
 
 ## Shared shapes

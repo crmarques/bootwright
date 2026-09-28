@@ -310,7 +310,7 @@ func goldenSetupActions(t *testing.T, definition prerequisites.Definition) ([]pr
 // exclusive host reservation. The retained before-state is read back as setup
 // and recovery read it, so the golden cannot hold one the product refuses. The
 // receipt's context member is always empty and is pinned as it encodes today
-// (backlog F10).
+// (item B94).
 func TestControllerRecordMatchesItsGolden(t *testing.T) {
 	definition := goldenResolution(t)
 	value := syntheticControllerState(t, prerequisites.SetupContext{})
