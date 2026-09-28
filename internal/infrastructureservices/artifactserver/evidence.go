@@ -174,4 +174,62 @@ func ValidatePartial(data []byte, digest string) error {
 	return nil
 }
 
+// ValidateUnremoved accepts observed evidence only when it proves a removal of
+// the frozen request took nothing back: this request's presence form reporting
+// the unit active, the container of the frozen image and the content root.
+// The listeners, their status lines and presented certificates, and the
+// postcondition flag are the apply's proof of readiness, not anything a
+// removal takes back, so none of them plays any part.
+func ValidateUnremoved(data []byte, request Request, digest string) error {
+	evidence, err := removalEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if !unremoved(evidence, request) {
+		return refusal("lifecycle.state", "the artifact server no longer holds everything its removal takes back", "")
+	}
+	return nil
+}
+
+// ValidateRemovalUnfinished accepts observed evidence only when it proves a
+// removal of the frozen request took back part of what it owns and not the
+// rest: this request's presence form reporting a unit, a container or the
+// content root, without the whole that ValidateUnremoved reads. Each carries
+// the context in its name and is claimed by its host reservation, so what is
+// left is this context's own and the next attempt converges it. Readiness
+// plays no part here either.
+func ValidateRemovalUnfinished(data []byte, request Request, digest string) error {
+	evidence, err := removalEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if evidence.Unit == "" && evidence.Container == "" && !evidence.ContentRoot {
+		return refusal("lifecycle.state", "the artifact-server evidence reports nothing its removal takes back", "")
+	}
+	if unremoved(evidence, request) {
+		return refusal("lifecycle.state", "the artifact server still holds everything its removal takes back", "")
+	}
+	return nil
+}
+
+// removalEvidence decodes observed evidence for this request in its presence
+// form, the only form that reports what a removal has still to take back.
+func removalEvidence(data []byte, digest string) (Evidence, error) {
+	evidence, err := decodeEvidence(data)
+	if err != nil {
+		return Evidence{}, err
+	}
+	if evidence.Request != digest {
+		return Evidence{}, refusal("lifecycle.state", "the artifact-server evidence names another request", "")
+	}
+	if evidence.Absent {
+		return Evidence{}, refusal("lifecycle.state", "the artifact-server evidence is an absence form, which reports nothing left to take back", "")
+	}
+	return evidence, nil
+}
+
+func unremoved(evidence Evidence, request Request) bool {
+	return evidence.Unit == "active" && evidence.Container == request.Image && evidence.ContentRoot
+}
+
 const maxEvidenceBytes = 64 << 10

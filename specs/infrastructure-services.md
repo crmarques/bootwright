@@ -158,10 +158,15 @@ completion; nothing present, with a before-state that recorded nothing, is
 positive no effect; and any of the unit, container or content root present
 without the whole is a positive partial realization, which the next attempt
 converges. A removal's resolution reads the same observation for what the
-removal proves: nothing present is its completion, the whole realization is
-positive no effect, and any of the unit, container or content root present is a
-positive partial realization. Only an observation that cannot be made remains
-unknown.
+removal takes back: nothing present is its completion; the unit active, the
+container of the frozen image and the content root all present is positive no
+effect; and any of the unit, container or content root present without all of
+them is a positive partial realization. Listeners do not decide a removal's
+resolution: a listener that does not answer, or presents another certificate,
+leaves a service otherwise present a removal with no effect. A removal's
+resolution remains unknown only when its observation cannot be made, cannot be
+read as this request's own, or contradicts itself: absence evidence that still
+reports part of the service, or presence evidence that names none of it.
 
 **Quiescence.** A managed service's quiescence follows the Machines under the
 [removal gate](state-reconciliation.md#quiescence-before-removal); its own
