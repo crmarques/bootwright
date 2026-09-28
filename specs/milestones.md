@@ -15,9 +15,9 @@ the [unavailable result](cli.md#recognized-but-unavailable-commands).
 | [M1h](#m1h--managed-rhel-on-emulated-bare-metal) | Managed RHEL on emulated bare metal | Substrate, Managed OS | product | Specified | awaiting operator acceptance |
 | [M5a](#m5a--managed-rhel-on-physical-bare-metal) | Managed RHEL on physical bare metal | Substrate, Managed OS | product | Specified | blocked |
 | [M4a](#m4a--single-node-openshift-through-the-agent-installer) | Single-node OpenShift through the agent installer | Container cluster, Substrate | product | Specified | blocked |
-| [X17](#x17--goldens-and-checkpoint-harnesses) | Goldens and checkpoint harnesses | Every context | enabling | Specified | in progress |
+| [X18](#x18--durable-records) | Durable records | State reconciliation, Workspace | safety | Specified | in progress |
 
-- **Next for agents:** deliver X17, then the [pre-OpenShift program](milestones/backlog.md#pre-openshift-readiness-program-2026-09) in order; promote [audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09) only on request.
+- **Next for agents:** deliver X18, then the [pre-OpenShift program](milestones/backlog.md#pre-openshift-readiness-program-2026-09) in order; promote [audit follow-ups](milestones/backlog.md#audit-follow-ups-2026-09) only on request.
 - **Next for operator:** on a clean build descending from `8aa4494`, run [lab-rhel](../examples/lab-rhel/README.md#run-it) and record it in the [acceptance ledger](../docs/acceptance.md) as the [operator guide](../docs/operator-guide.md) describes (M1h), run [lab-sno](../examples/lab-sno/README.md) (M4a) now that X16 has landed; M5a's rehearsal waits for S3b.
 - **Next to define:** M1i, the [GitOps handoff gate](#next-ordered-outcomes).
 
@@ -234,16 +234,16 @@ not configured, so the operator routes the managed zone; disconnected
 installation waits for a managed `Registry` (C2); and a destroyed cluster's
 physical nodes keep running (C9).
 
-### X17 — goldens and checkpoint harnesses
+### X18 — durable records
 
-**Owner:** every context. **Kind:** enabling, out of sequence, on explicit
-request on 2026-09-27.
-**Requires:** [X16](milestones/delivered.md#x16--budgets-that-bound-the-run).
-**Definition:** Specified. **Delivery:** in progress. Items T1 (lifecycle and
-workspace records, CLI) and T2 (checkpoint harness, capability suite) of the
-[pre-OpenShift program](milestones/backlog.md#pre-openshift-readiness-program-2026-09).
-Exit gates: each item's exit evidence, `make check`, `make docs-check` and CI.
-Implemented; remaining: its adversarial review and its pull request.
+**Owner:** State reconciliation and Workspace. **Kind:** safety, out of
+sequence, on explicit request on 2026-09-28.
+**Requires:** [X17](milestones/delivered.md#x17--goldens-and-checkpoint-harnesses).
+**Definition:** Specified. **Delivery:** in progress. Items S27, S12 (rest),
+S10 (rest), S9 (full) and S8 (collector, primitive) with R3 of the
+[pre-OpenShift program](milestones/backlog.md#pre-openshift-readiness-program-2026-09),
+in that order. Exit gates: each item's exit evidence, an empty lifecycle kill
+ledger, `make check`, `make race`, `make docs-check` and CI.
 
 ## Next ordered outcomes
 
