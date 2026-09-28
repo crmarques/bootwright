@@ -51,10 +51,13 @@ authorization, presentation or confirmation, because it performs only the
 record, the releases and the projection its records prove: it records the
 operation `done`, then publishes an apply's projection, or releases a
 removal's reservations and then its Secret bindings, its own and its apply's,
-and only then publishes pristine evidence. A running operation is finalized
-only by its own verb, because the other verb decides for itself: a `destroy`
-supersedes an incomplete apply and an `apply` refuses an incomplete destroy. A
-completed operation is finalized under either verb. The verb then decides
+and only then publishes pristine evidence. A running or unknown operation is
+finalized only by its own verb, because the other verb decides for itself: a
+`destroy` supersedes an incomplete apply and an `apply` refuses an incomplete
+destroy. An unknown one whose blocks are all `done` has a record that lags
+behind them, as a removal stopped after its resolution proved an unknown
+apply's block and before it recorded the apply leaves it. A completed
+operation is finalized under either verb. The verb then decides
 again from what the finalization left and goes on as it would over it, and a
 finalization that leaves another one due refuses `lifecycle.state` rather than
 repeating. An operation holding a block that is not `done` proves no
@@ -308,8 +311,8 @@ complete, synchronized bytes.
 
 Before any row, an operation whose blocks are all `done` is
 [finalized](#lifecycle-unit) first while its record, evidence, reservations or
-Secret bindings do not yet say it completed; a running one only by its own
-verb.
+Secret bindings do not yet say it completed; a running or unknown one only by
+its own verb.
 
 Changed desired state never turns continuation into reconciliation. A
 continuation verifies the operation kind, context identity, frozen-input

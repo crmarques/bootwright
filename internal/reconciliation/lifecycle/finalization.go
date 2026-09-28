@@ -14,10 +14,14 @@ import (
 // finalization marks an operation whose block records already prove it
 // complete while its record, evidence, reservations or Secret bindings do not
 // yet say so, which is what an invocation interrupted between its last outcome
-// and its last write leaves. A running operation is finalized only by its own
-// verb, because the other verb over it decides for itself: a destroy supersedes
-// an incomplete apply and an apply refuses an incomplete destroy. A completed
-// one is finalized under either verb, since only its own bookkeeping is left.
+// and its last write leaves. A running or unknown operation is finalized only
+// by its own verb, because the other verb over it decides for itself: a
+// destroy supersedes an incomplete apply and an apply refuses an incomplete
+// destroy. An unknown one whose blocks are all done has a record that lags
+// behind them, as a removal stopped after its resolution proved an unknown
+// apply's block and before it recorded the apply leaves it, so its blocks
+// prove completion exactly as a running one's do. A completed one is
+// finalized under either verb, since only its own bookkeeping is left.
 // Records that hold a block that is not done prove no completion, so they are
 // never finalized. Anything else returns no mark and keeps its decision.
 func finalization(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (transition, error) {
@@ -25,7 +29,7 @@ func finalization(ctx context.Context, view View, store OperationStore, verb rec
 		return transition{}, nil
 	}
 	switch operation.State {
-	case reconciliation.OperationRunning:
+	case reconciliation.OperationRunning, reconciliation.OperationUnknown:
 		if operation.Verb != verb {
 			return transition{}, nil
 		}
