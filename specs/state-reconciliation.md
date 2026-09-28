@@ -127,7 +127,11 @@ binding it created and restores the evidence the index then implies: the
 projection of the operation it names, read again, or pristine for none. The
 evidence is its to restore once it may have published it, or once it claimed a
 directory under running evidence it found, because every apply that claimed
-before it then refuses. The running evidence stays instead when a newer claim
+before it then refuses. A claim that failed, interrupted or not, counts as one
+unless a listing of the operation directories read after it proves its
+directory absent, because a claim can fail after creating it; an older apply
+that such a failure provably left alone keeps its evidence and registers. The
+running evidence stays instead when a newer claim
 raised it since, which makes it that claim's, and when the index names no
 operation or a completed destroy while the context holds a reservation no
 operation owns, which keeps the context protected until a destroy or its next
