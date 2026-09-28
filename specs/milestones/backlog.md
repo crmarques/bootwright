@@ -160,9 +160,10 @@ attached to a milestone.
 
 ## Retired
 
-Each ID below leads nowhere else. Searching an old ID over `specs/milestones/`
-finds its item's Alias cell, its record in [delivered](delivered.md), or its
-line here.
+IDs no longer issued. Where an item took one over, its line here names that
+item, whose Alias cell names the old ID too. Searching an old ID over
+`specs/milestones/` finds its item's Alias cell, its record in
+[delivered](delivered.md), or its line here.
 
 | Old ID | Retired on | Reason and record |
 | --- | --- | --- |

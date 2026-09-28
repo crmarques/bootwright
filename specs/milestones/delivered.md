@@ -654,8 +654,8 @@ tests.
 refuse until S2b; concurrency stays one until S4b and a real-host run;
 `vulncheck` and the networked `ansible-test` suites run only in CI where a
 session's egress refuses their hosts; architecture.md stays near 50 KB; and
-every item not executed became an audit follow-up, now an item of
-[M1](m1.md) or [parked](backlog.md#parked).
+every item not executed became an audit follow-up, now an item of a milestone
+page, [parked](backlog.md#parked) or retired.
 
 ### X12 — audit Phase 1: context and guards
 
@@ -866,10 +866,12 @@ through pull request 8 on 2026-09-28, on explicit request.
 through a `Capability.ObserveRemoval` port every binding implements (S27). A
 removal of an incomplete apply refuses the record contradictions it can prove,
 and an unchanged apply over a completed apply settles only when every block is
-done (S12, rest). The next apply or destroy finalizes an operation whose blocks
-are all done but whose record, evidence, reservations or Secret bindings lag,
-with no token or confirmation, and a failed final release fails the command
-while the receipt reads done; a fresh apply claims its operation directory and
+done (S12, rest). An operation whose blocks are all done but whose record,
+evidence, reservations or Secret bindings lag is finalized with no token or
+confirmation: a completed one by the next apply or destroy, a running or
+unknown one only by its own verb; a removal whose final release fails reports
+an incomplete finalization, while the receipt of the invocation that
+completed it reads done; a fresh apply claims its operation directory and
 raises running evidence before it binds a Secret, and bindings no operation
 names are collected (S10, rest). Every transition re-proves under the exclusive
 lock the full fingerprint it was decided from, and every reader refuses a
@@ -901,4 +903,5 @@ empty ledger.
 S29), claims and bindings ([B28](m1.md#b28), was S30), resolution gaps that
 need adapter changes ([B29](m1.md#b29), was S31) and the protocols the
 primitive leaves ([B35](m1.md#b35), was R3 (rest)), with clauses added to B8,
-B11, B16 and B30. No real-host run.
+B11, B16, B21 and B30. Gates: `make check` in CI, `make race` and the kill
+harness locally, `make docs-check`. No real-host run.

@@ -31,7 +31,7 @@ is not necessarily implemented or authorized.
 Each requirement has one owner; other pages link to it. Specs state target
 invariants in the present tense and claim no availability. A rule the code does
 not yet meet carries one line, "Not yet met: ...; tracked as B<n>", linking the
-item on its milestone page.
+item on its milestone page or among the parked items.
 Delivery state lives in milestones, observed lessons in
 [knowledge](../.agents/knowledge/index.md), and working procedure in skills. Add
 detail with its first requested feature or a demonstrated ambiguity; design for

@@ -448,8 +448,9 @@ List and info commands derive their result from validated desired state,
 context-owned artifacts, and durable ownership evidence. A name can locate an
 entry but never proves identity or ownership. The detailed contract of cluster
 inspection, access handoff and node selection is
-[deferred](deferred/cli-access-and-rendering.md) to a
-parked item, [B101](milestones/backlog.md#b101).
+[deferred](deferred/cli-access-and-rendering.md): the administrator-access
+export `cluster kubeconfig` to [B10](milestones/m1.md#b10), and the rest to the
+parked item [B101](milestones/backlog.md#b101).
 
 `secret show` and `cluster kubeconfig` are raw sensitive-byte exports.
 They require an exact context and object, perform no implicit fallback, emit

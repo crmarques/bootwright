@@ -72,7 +72,8 @@ still lists every managed service as pending, because nothing was registered.
 `TestLabBaremetalExampleRefusesItsInstallation` holds that refusal in-tree.
 
 A run of this block is an observation, not B73's operator gate: the gate is the
-rehearsal below, and B73 records no acceptance baseline until B9 lands.
+rehearsal below, and B73 records no acceptance baseline until its host-key
+repair lands.
 
 ## Rehearsing it without hardware
 

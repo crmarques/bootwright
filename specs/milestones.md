@@ -20,7 +20,7 @@ every other command `bootwright --help` lists returns the
 | [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | X19 |
 | [M2](milestones/m2.md) | Native input files for `openshift-install` and the cephadm and ceph CLIs | none | not started | define B51 |
 | [M3](milestones/m3.md) | Provision and destroy OpenShift clusters on bare metal | M1 | in progress | B61's operator gate |
-| [M4](milestones/m4.md) | Provision and destroy IBM Ceph clusters on bare metal | M1, M2, M3 | in progress | B72's operator gate; B73 resumes on B9 |
+| [M4](milestones/m4.md) | Provision and destroy IBM Ceph clusters on bare metal | M1, M2, M3 | in progress | B72's operator gate; B73 waits for B9 and its host-key repair |
 | [M5](milestones/m5.md) | First add-ons: MetalLB ingress and IBM Fusion Data Foundation | M3, M4 | not started | nothing until M3 and M4 |
 | [M6](milestones/m6.md) | Provision and destroy OpenShift clusters over OpenShift Virtualization | M3 | not started | nothing until M3 |
 | [M7](milestones/m7.md) | Add-ons ACM, Argo CD and GitLab | M5 | not started | nothing until M5 |
@@ -34,7 +34,8 @@ No slice is active.
   [B61](milestones/m3.md#b61), and record each in the
   [acceptance ledger](../docs/acceptance.md) as the
   [operator guide](../docs/operator-guide.md) describes; repeat both once X19
-  lands. [B73](milestones/m4.md#b73)'s rehearsal waits for B9.
+  lands. [B73](milestones/m4.md#b73)'s rehearsal waits for B9 and its host-key
+  repair.
 
 ## Scope rules
 
@@ -47,7 +48,8 @@ No slice is active.
   defect slice and one enabling slice, at most one of them out of sequence.
   Milestones are never active.
 - **In sequence** means the next planned slice of the first milestone in
-  Status order that holds open items. Anything else is out of sequence.
+  Status order that holds open items; when it has none, planning its next
+  slice is. Anything else is out of sequence.
 - Requires governs promotion and implementation, not definition. An unmet
   Requires needs a waiver, which needs an explicit user request and is recorded
   in the item with its date.
@@ -103,9 +105,9 @@ No slice is active.
   item takes one above the largest B under `specs/milestones/`, and a branch
   that collides with another renumbers the item that has not landed. Only open
   work receives a B; delivered work keeps the ID its record names.
-- **X\<n\>, slice.** The ordered items of one milestone that one pull request
-  delivers; each commit's `Refs:` line names the slice and the items it
-  advances. A fix with no planned slice takes the next X when it opens.
+- **X\<n\>, slice.** The ordered items of one milestone delivered together,
+  with the Kind its Planned slices row declares; each commit's `Refs:` line
+  names the slice and the items it advances. A fix with no planned slice takes the next X when it opens.
 - **D\<n\>, decision.** One dated log in [backlog](milestones/backlog.md#decisions),
   appended when the owner decides.
 - **Alias.** Each item row keeps the IDs it had before 2026-09-28 and its dated
@@ -115,11 +117,12 @@ No slice is active.
   decisions, then `Planned slices`, the `Items` table
   (`ID | Alias | Kind | Owner | Outcome | Requires | Definition | Delivery`)
   and one `### B<n>` detail section per item holding its bounded outcome,
-  deferral reason and exit evidence. Kind is `product`, `safety`, `defect` or
+  exit evidence and any deferral reason. Kind is `product`, `safety`, `defect` or
   `enabling`.
 - A moved item keeps its ID, and its row and section move with a dated Alias
   note. A split keeps the ID on the part that stays and gives each part split
-  out a new B whose Alias names its source and date; no B carries a qualifier
+  out a new B whose Alias names its source and date (a split made by the
+  2026-09-28 reorganization names its source only); no B carries a qualifier
   such as "(rest)". A partly delivered item keeps its ID and states what
   remains. A dropped item is retired with reason and date. A completed item
   leaves its page for the record of the slice that delivered it.

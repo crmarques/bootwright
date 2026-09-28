@@ -17,10 +17,10 @@ knowledge owns lessons; skills own procedure. Keep each fact in one place and
 link to it.
 
 Implement only the slice the prompt authorizes: an active slice's open work, or
-an explicitly requested out-of-sequence slice. With no active slice, only an
-explicit request authorizes a tracked edit. A spec or backlog entry is not
-authorization. Record other discovered work in the earliest fitting future
-milestone instead of doing it, and report a pre-existing defect you find rather
+an explicitly requested slice or item. With no active slice, only an explicit
+request authorizes a tracked edit. A spec or backlog entry is not
+authorization. Record other discovered work as an item of the earliest fitting
+milestone, or parked, instead of doing it, and report a pre-existing defect you find rather
 than fixing it in the same change. Update the owning spec with any intentional
 contract change; add future detail when a requested feature needs it.
 

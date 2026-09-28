@@ -88,8 +88,9 @@ sudo journalctl -f -u bootwright-apply
 
 SSH placement of a managed service on a second OS-ready host, with that host's
 authored access and bound host key, is operator-run too and has no example.
-Real hardware is no item's gate yet, but M3 and M4 each need a real-hardware
-row besides their emulated rehearsal (decision D17). Today a physical
+No real-hardware row has been accepted yet: [B67](../specs/milestones/m3.md#b67)
+and [B78](../specs/milestones/m4.md#b78) name one as exit evidence, and M3 and
+M4 each need one besides their emulated rehearsal (decision D17). Today a physical
 installation refuses until [B73](../specs/milestones/m4.md#b73) resumes, and a
 physical cluster node until [B67](../specs/milestones/m3.md#b67).
 
