@@ -34,8 +34,12 @@ func runDeadline(t *testing.T, request Request, operation string) time.Duration 
 		_, _ = capability.Apply(context.Background(), call)
 	case "destroy":
 		_, _ = capability.Destroy(context.Background(), call)
-	default:
+	case "observe":
 		_, _ = capability.Observe(context.Background(), call)
+	case "observe-removal":
+		_, _ = capability.ObserveRemoval(context.Background(), call)
+	default:
+		t.Fatalf("no run measures the %s operation", operation)
 	}
 	if len(runner.requests) != 1 {
 		t.Fatalf("%s ran the adapter %d times", operation, len(runner.requests))
@@ -69,7 +73,7 @@ func TestEveryCapabilityDeadlineCoversItsFrozenBudgets(t *testing.T) {
 			}
 			waits += time.Duration(budget.Attempts*budget.DelaySeconds) * time.Second
 		}
-		for _, operation := range []string{"apply", "observe", "destroy"} {
+		for _, operation := range []string{"apply", "observe", "observe-removal", "destroy"} {
 			deadline := runDeadline(t, request, operation)
 			if deadline <= waits {
 				t.Errorf("%s %s runs under %s, which does not cover the %s its budgets wait", name, operation, deadline, waits)
@@ -118,7 +122,7 @@ func TestTheDeadlineFollowsTheBudgetsTheRequestFroze(t *testing.T) {
 			*field(&frozen.Budgets) += 7
 		}
 		want := pauses(frozen.Budgets) + mediaMargin
-		for _, operation := range []string{"apply", "observe", "destroy"} {
+		for _, operation := range []string{"apply", "observe", "observe-removal", "destroy"} {
 			if got := runDeadline(t, frozen, operation); got != want {
 				t.Errorf("%s with %s moved runs under %s, want %s for the frozen budgets %+v", operation, name, got, want, frozen.Budgets)
 			}

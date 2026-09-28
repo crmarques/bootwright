@@ -2,6 +2,7 @@ package baremetal
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -176,6 +177,21 @@ func (c MachineCapability) Observe(ctx context.Context, execution lifecycle.Exec
 		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: result.Evidence}, nil
 	}
 	return lifecycle.Observation{Effect: reconciliation.EffectUnknown, Evidence: result.Evidence}, nil
+}
+
+// ObserveRemoval runs nothing. The removal releases only the claim and never
+// contacts the machine, so nothing the machine reports could prove it either
+// way: resolving it is always its completion, with the evidence it publishes.
+func (c MachineCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
+	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
+	if _, err := c.prepare(ctx, execution); err != nil {
+		return unknown, err
+	}
+	evidence, err := json.Marshal(Evidence{Absent: true, Addresses: []string{}, Postcondition: true, Request: execution.Block.RequestDigest})
+	if err != nil {
+		return unknown, refusal("lifecycle.state", "the machine removal evidence cannot be encoded", "")
+	}
+	return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: evidence}, nil
 }
 
 // Quiescent is derived rather than probed. The removal takes back a claim,

@@ -112,12 +112,25 @@ type Capability interface {
 	// of the authorization removing it needs.
 	Removal(context.Context, reconciliation.Block) (Removal, error)
 	Apply(context.Context, Execution) (Result, error)
+	// Observe reads a frozen block of an apply, read-only, and reports the
+	// state of the apply's effect.
 	Observe(context.Context, Execution) (Observation, error)
 	// Quiescent reports whether what this block owns is still in use. It is
 	// part of the port rather than an optional extra, so a capability cannot be
 	// silently left out of the gate that protects a live environment.
 	Quiescent(context.Context, Probe) (Quiescence, error)
 	Destroy(context.Context, Execution) (Result, error)
+	// ObserveRemoval reads a frozen block of a destroy, read-only, and reports
+	// the state of the removal: completed when the removal's own postcondition
+	// holds, no-effect when the target still shows everything the removal
+	// takes back, partial when part of that remains and is this context's own,
+	// and unknown otherwise. It is separate from Observe because a target the
+	// apply realized is the removal's absence of effect, and what a removal
+	// keeps by design proves nothing against it. An observation that cannot
+	// tell the removal's postcondition from a target it could not read is
+	// never completed: it reports no-effect, so the removal repeats and proves
+	// its own postcondition.
+	ObserveRemoval(context.Context, Execution) (Observation, error)
 }
 
 // Removal is the half of a frozen block that removing it decides: the words it

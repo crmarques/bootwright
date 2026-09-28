@@ -3,6 +3,7 @@ package managedservice
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 	"strings"
@@ -310,6 +311,72 @@ func TestPartialRequiresSomethingThisContextOwns(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if err := ValidatePartial(encode(t, evidence), digest); err == nil {
 				t.Fatal("evidence that proves no partial realization was accepted")
+			}
+		})
+	}
+}
+
+type scriptedRunner struct {
+	requests []lifecycle.RunRequest
+	result   lifecycle.RunResult
+	err      error
+}
+
+func (r *scriptedRunner) Run(_ context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
+	r.requests = append(r.requests, request)
+	return r.result, r.err
+}
+
+// A removal's resolution reads the same observation for what the removal
+// proves, so a service still present is a removal that had no effect rather
+// than one that completed.
+func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
+	catalog := catalogOf(controller(), service(api.Proxy, "lab-proxy"))
+	plan, err := NewCapability(testDefinition(), nil).Plan(context.Background(), lifecycle.PlanInput{
+		Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: testContext},
+		State: compilation.NewState(catalog, catalog, nil), Controller: "controller",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	frozen, err := reconciliation.NewPlan(reconciliation.Apply, plan.Definitions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := lifecycle.Execution{Operation: "op-1", Attempt: 1, Block: frozen.Blocks[0]}
+	request, err := DecodeRequest(call.Block.Request, testDefinition().Version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := call.Block.RequestDigest
+	present := Evidence{
+		Answers:   []Answer{{Address: "192.0.2.1", Answer: "HTTP/1.1 400 Bad Request", Port: request.Port}},
+		Container: request.Image, ContentRoot: true, Postcondition: true, Request: digest, Unit: "active",
+	}
+	if err := ValidatePresence(encode(t, present), request, digest); err != nil {
+		t.Fatalf("the presence fixture no longer proves presence: %v", err)
+	}
+	partial := present
+	partial.Postcondition = false
+	for name, tc := range map[string]struct {
+		evidence []byte
+		err      error
+		want     reconciliation.EffectState
+	}{
+		"absent":          {encode(t, Evidence{Absent: true, Answers: []Answer{}, Postcondition: true, Request: digest}), nil, reconciliation.EffectCompleted},
+		"present":         {encode(t, present), nil, reconciliation.EffectNoEffect},
+		"partial":         {encode(t, partial), nil, reconciliation.EffectPartial},
+		"another request": {encode(t, Evidence{Absent: true, Answers: []Answer{}, Postcondition: true, Request: strings.Repeat("e", 64)}), nil, reconciliation.EffectUnknown},
+		"adapter failed":  {nil, errors.New("unreachable"), reconciliation.EffectUnknown},
+	} {
+		t.Run(name, func(t *testing.T) {
+			runner := &scriptedRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: tc.evidence}, err: tc.err}
+			observation, err := NewCapability(testDefinition(), runner).ObserveRemoval(context.Background(), call)
+			if err != nil || observation.Effect != tc.want {
+				t.Fatalf("removal observation = %+v (%v), want %s", observation, err, tc.want)
+			}
+			if len(runner.requests) != 1 || runner.requests[0].Operation != "observe" {
+				t.Fatalf("adapter invocation = %+v", runner.requests)
 			}
 		})
 	}

@@ -151,7 +151,11 @@ exact identity. Live state matching the frozen request in full is positive
 completion; nothing present, with a before-state that recorded nothing, is
 positive no effect; and any of the unit, container or content root present
 without the whole is a positive partial realization, which the next attempt
-converges. Only an observation that cannot be made remains unknown.
+converges. A removal's resolution reads the same observation for what the
+removal proves: nothing present is its completion, the whole realization is
+positive no effect, and any of the unit, container or content root present is a
+positive partial realization. Only an observation that cannot be made remains
+unknown.
 
 **Quiescence.** A managed service's quiescence follows the Machines under the
 [removal gate](state-reconciliation.md#quiescence-before-removal); its own

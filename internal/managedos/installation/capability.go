@@ -238,6 +238,41 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 // anything else stays unknown, including a guest that answers with a different
 // marker and one powered on without any.
 func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
+	return c.observe(ctx, execution, func(evidence []byte, request Request, digest, marker string) reconciliation.EffectState {
+		switch {
+		case ValidatePresence(evidence, request, digest, marker) == nil:
+			return reconciliation.EffectCompleted
+		case ValidateNoEffect(evidence, digest) == nil:
+			return reconciliation.EffectNoEffect
+		case ValidatePartial(evidence, digest, marker) == nil:
+			return reconciliation.EffectPartial
+		}
+		return reconciliation.EffectUnknown
+	})
+}
+
+// ObserveRemoval reads the same observation for what a removal proves. The
+// removal withdraws published content whatever the guest holds, so no content
+// left is its completion whatever marker or power the guest reports; the
+// whole completion is positive no effect; and any content left is a positive
+// partial removal the next attempt converges.
+func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
+	return c.observe(ctx, execution, func(evidence []byte, request Request, digest, marker string) reconciliation.EffectState {
+		switch {
+		case ValidateWithdrawn(evidence, digest) == nil:
+			return reconciliation.EffectCompleted
+		case ValidatePresence(evidence, request, digest, marker) == nil:
+			return reconciliation.EffectNoEffect
+		case ValidateWithdrawalUnfinished(evidence, digest) == nil:
+			return reconciliation.EffectPartial
+		}
+		return reconciliation.EffectUnknown
+	})
+}
+
+// observe runs the one read-only observation both resolutions share and reads
+// its evidence for the verb the block was frozen for.
+func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, read func([]byte, Request, string, string) reconciliation.EffectState) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, marker, err := c.prepare(ctx, execution, "observe")
 	if err != nil {
@@ -248,17 +283,7 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 		recordObservationFailure(ctx, execution, err)
 		return unknown, nil
 	}
-	digest := execution.Block.RequestDigest
-	if ValidatePresence(result.Evidence, request, digest, string(marker)) == nil {
-		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: result.Evidence}, nil
-	}
-	if ValidateNoEffect(result.Evidence, digest) == nil {
-		return lifecycle.Observation{Effect: reconciliation.EffectNoEffect, Evidence: result.Evidence}, nil
-	}
-	if ValidatePartial(result.Evidence, digest, string(marker)) == nil {
-		return lifecycle.Observation{Effect: reconciliation.EffectPartial, Evidence: result.Evidence}, nil
-	}
-	return lifecycle.Observation{Effect: reconciliation.EffectUnknown, Evidence: result.Evidence}, nil
+	return lifecycle.Observation{Effect: read(result.Evidence, request, execution.Block.RequestDigest, string(marker)), Evidence: result.Evidence}, nil
 }
 
 // prepare decodes the frozen request and derives the exact marker bytes this

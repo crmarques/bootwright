@@ -164,7 +164,11 @@ requires, before it reports: an image an earlier executable published with a
 mode the serving process cannot read is repaired and reported changed, and one
 the listener still refuses fails the block with its cause. The inverse
 removes the published image and the private directory that held it, discards
-the installer work directory, and proves each absent.
+the installer work directory, and proves each absent. A removal's resolution
+reads the observation for what the removal proves: neither the image nor the
+work area present is its completion, the image this request describes is
+positive no effect, and anything else of this block's own left is a positive
+partial realization.
 
 ## Installation
 
@@ -365,7 +369,12 @@ image and no node presents any other, which an attempt interrupted during boot
 or the bootstrap wait leaves. Anything else stays unknown, including a foreign
 answer, a foreign image while nothing answers, and a node running while nothing
 answers and no node presents this cluster's own image, because the first two
-may belong to another installation and the last may be installing now.
+may belong to another installation and the last may be installing now. A
+removal's resolution reads only the media, because that is what the removal
+takes back and a completed installation already presents none: no node
+presenting media is its completion, whatever answers; only this cluster's own
+image on some nodes is a positive partial realization; and a foreign image
+stays unknown.
 
 **Quiescence and cancellation.** This block owns published boot media and
 controller-side state that a running cluster does not read, so its quiescence

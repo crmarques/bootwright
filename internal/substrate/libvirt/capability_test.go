@@ -213,6 +213,84 @@ func TestObservationMapsEvidenceToTheEffectItProves(t *testing.T) {
 	}
 }
 
+// A removal's resolution reads the same observation for what the removal
+// proves, so a host or machine still realized is a removal that had no effect
+// rather than one that completed. The host's absence form is no effect too,
+// because a connection that does not answer publishes it as well, so the
+// removal repeats and proves its absence instead of trusting it.
+func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
+	hosts, _ := HostRequests(labCatalog(), "controller", testContext)
+	machines, _ := MachineRequests(labCatalog(), "controller", testContext)
+	hostCanonical, _ := hosts[0].Canonical()
+	machineCanonical, _ := machines[0].Canonical()
+	block := func(id string, canonical []byte) lifecycle.Execution {
+		return lifecycle.Execution{Block: reconciliation.Block{
+			BlockDefinition: reconciliation.BlockDefinition{ID: id, Request: canonical}, RequestDigest: "digest",
+		}}
+	}
+	encode := func(evidence any) json.RawMessage {
+		data, err := json.Marshal(evidence)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	for _, target := range []struct {
+		name      string
+		execution lifecycle.Execution
+		observe   func(Runner) func(context.Context, lifecycle.Execution) (lifecycle.Observation, error)
+		absent    json.RawMessage
+		absentIs  reconciliation.EffectState
+		present   json.RawMessage
+		partial   json.RawMessage
+		foreign   json.RawMessage
+	}{
+		{
+			name: "host", execution: block("substrate-host-lab-libvirt", hostCanonical),
+			observe: func(runner Runner) func(context.Context, lifecycle.Execution) (lifecycle.Observation, error) {
+				return NewHost(runner).ObserveRemoval
+			},
+			absent:   encode(HostEvidence{Absent: true, Postcondition: true, Request: "digest"}),
+			absentIs: reconciliation.EffectNoEffect,
+			present:  hostEvidence(hosts[0], "digest"),
+			partial:  encode(HostEvidence{Pool: "active", Request: "digest"}),
+			foreign:  encode(HostEvidence{Absent: true, Postcondition: true, Request: "other"}),
+		},
+		{
+			name: "machine", execution: block("machine-rhel-01", machineCanonical),
+			observe: func(runner Runner) func(context.Context, lifecycle.Execution) (lifecycle.Observation, error) {
+				return NewMachine(runner).ObserveRemoval
+			},
+			absent:   encode(MachineEvidence{Absent: true, Answered: true, Postcondition: true, Request: "digest"}),
+			absentIs: reconciliation.EffectCompleted,
+			present:  machineEvidence(machines[0], "digest"),
+			partial:  encode(MachineEvidence{Domain: machines[0].Domain, Owned: true, Request: "digest"}),
+			foreign:  encode(MachineEvidence{Absent: true, Answered: true, Postcondition: true, Request: "other"}),
+		},
+	} {
+		for name, test := range map[string]struct {
+			runner *fakeRunner
+			want   reconciliation.EffectState
+		}{
+			"absent":          {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: target.absent}}, target.absentIs},
+			"present":         {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: target.present}}, reconciliation.EffectNoEffect},
+			"partial":         {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: target.partial}}, reconciliation.EffectPartial},
+			"another request": {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: target.foreign}}, reconciliation.EffectUnknown},
+			"failed":          {&fakeRunner{err: errors.New("unreachable")}, reconciliation.EffectUnknown},
+		} {
+			t.Run(target.name+"/"+name, func(t *testing.T) {
+				observation, err := target.observe(test.runner)(context.Background(), target.execution)
+				if err != nil || observation.Effect != test.want {
+					t.Fatalf("removal observation = %+v (%v), want %s", observation, err, test.want)
+				}
+				if len(test.runner.requests) != 1 || test.runner.requests[0].Operation != "observe" {
+					t.Fatalf("adapter invocation = %+v", test.runner.requests)
+				}
+			})
+		}
+	}
+}
+
 func TestAnUnconfiguredCapabilityRefusesBeforeAnyEffect(t *testing.T) {
 	execution := lifecycle.Execution{Block: reconciliation.Block{RequestDigest: "digest"}}
 	if _, err := NewHost(nil).Apply(context.Background(), execution); err == nil {

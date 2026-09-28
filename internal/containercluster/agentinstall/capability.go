@@ -175,6 +175,41 @@ func (c MediaCapability) mutate(ctx context.Context, execution lifecycle.Executi
 // is positive no effect; anything of this block's own left behind is a positive
 // partial realization the next attempt converges by building again.
 func (c MediaCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
+	return c.observe(ctx, execution, func(evidence []byte, request MediaRequest, digest string) reconciliation.EffectState {
+		switch {
+		case ValidateMediaPresence(evidence, request, digest) == nil:
+			return reconciliation.EffectCompleted
+		case ValidateMediaNoEffect(evidence, digest) == nil:
+			return reconciliation.EffectNoEffect
+		case ValidateMediaPartial(evidence, digest) == nil:
+			return reconciliation.EffectPartial
+		}
+		return reconciliation.EffectUnknown
+	})
+}
+
+// ObserveRemoval reads the same observation for what a removal proves. The
+// observation never reports the absence form, so neither the image nor the
+// work area present is the removal's completion; the image this request
+// describes is positive no effect; and anything of this block's own left is a
+// positive partial removal the next attempt converges.
+func (c MediaCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
+	return c.observe(ctx, execution, func(evidence []byte, request MediaRequest, digest string) reconciliation.EffectState {
+		switch {
+		case ValidateMediaNoEffect(evidence, digest) == nil:
+			return reconciliation.EffectCompleted
+		case ValidateMediaPresence(evidence, request, digest) == nil:
+			return reconciliation.EffectNoEffect
+		case ValidateMediaPartial(evidence, digest) == nil:
+			return reconciliation.EffectPartial
+		}
+		return reconciliation.EffectUnknown
+	})
+}
+
+// observe runs the one read-only observation both resolutions share and reads
+// its evidence for the verb the block was frozen for.
+func (c MediaCapability) observe(ctx context.Context, execution lifecycle.Execution, read func([]byte, MediaRequest, string) reconciliation.EffectState) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, err := c.prepare(ctx, execution)
 	if err != nil {
@@ -185,17 +220,7 @@ func (c MediaCapability) Observe(ctx context.Context, execution lifecycle.Execut
 		recordObservationFailure(ctx, execution, err)
 		return unknown, nil
 	}
-	digest := execution.Block.RequestDigest
-	if ValidateMediaPresence(result.Evidence, request, digest) == nil {
-		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: result.Evidence}, nil
-	}
-	if ValidateMediaNoEffect(result.Evidence, digest) == nil {
-		return lifecycle.Observation{Effect: reconciliation.EffectNoEffect, Evidence: result.Evidence}, nil
-	}
-	if ValidateMediaPartial(result.Evidence, digest) == nil {
-		return lifecycle.Observation{Effect: reconciliation.EffectPartial, Evidence: result.Evidence}, nil
-	}
-	return lifecycle.Observation{Effect: reconciliation.EffectUnknown, Evidence: result.Evidence}, nil
+	return lifecycle.Observation{Effect: read(result.Evidence, request, execution.Block.RequestDigest), Evidence: result.Evidence}, nil
 }
 
 // Quiescent is derived rather than probed. This block owns a published image

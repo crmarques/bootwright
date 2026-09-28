@@ -94,7 +94,10 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 // resolveUnknown observes the exact frozen request read-only under a freshly
 // allocated resolution identity and log, before any observation begins. Until
 // both exist it has observed nothing, so it returns no state and the block
-// keeps the one it had: a resolution that cannot start moves nothing.
+// keeps the one it had: a resolution that cannot start moves nothing. It
+// observes for the verb the operation froze: a destroy's block through
+// ObserveRemoval, so a target its removal has not yet taken back is no
+// removal, and every other block through Observe.
 func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, position, total int) (reconciliation.BlockState, error) {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
@@ -123,7 +126,11 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Detail: "resolving the unknown outcome from live evidence", Status: "running", Position: position, Total: total})
 	var observation Observation
 	_, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, block, material, log, attemptNumber, number, position, total, func(inner context.Context, execution Execution) (Result, error) {
-		value, err := capability.Observe(inner, execution)
+		observe := capability.Observe
+		if operation.Verb == reconciliation.Destroy {
+			observe = capability.ObserveRemoval
+		}
+		value, err := observe(inner, execution)
 		observation = value
 		return Result{Outcome: reconciliation.OutcomeUnknown}, err
 	})

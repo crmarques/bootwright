@@ -3,6 +3,7 @@ package agentinstall
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -471,6 +472,57 @@ func TestARemovalProvesOnlyThatTheMediaIsReleased(t *testing.T) {
 	}}
 	if _, err := NewInstall(runner).Destroy(context.Background(), execution); err == nil {
 		t.Fatal("a removal that left media inserted was accepted")
+	}
+}
+
+// A removal only ejects the media each node presents, and a completed
+// installation already presents none, so its resolution reads only the media:
+// none presented is its completion whatever answers, only this cluster's own
+// image on some nodes is partial, and any other image stays unknown. The
+// cluster the apply installed is kept, so nothing proves no effect.
+func TestAnInstallRemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
+	for name, expectation := range map[string]struct {
+		mutate func(*InstallEvidence)
+		err    error
+		effect reconciliation.EffectState
+	}{
+		"released": {func(e *InstallEvidence) {
+			e.Absent, e.Postcondition, e.Media = true, true, []string{}
+		}, nil, reconciliation.EffectCompleted},
+		"installed": {nil, nil, reconciliation.EffectCompleted},
+		"installed, not yet reported completed": {func(e *InstallEvidence) {
+			e.Postcondition, e.Completed = false, false
+		}, nil, reconciliation.EffectCompleted},
+		"another cluster answering": {func(e *InstallEvidence) {
+			e.Postcondition, e.Cluster = false, foreignAnswer
+		}, nil, reconciliation.EffectCompleted},
+		"its own image on one node": {func(e *InstallEvidence) {
+			e.Postcondition, e.Media, e.OwnMedia = false, []string{"sno-01"}, []string{"sno-01"}
+		}, nil, reconciliation.EffectPartial},
+		"its own image beside a foreign one": {func(e *InstallEvidence) {
+			e.Postcondition, e.Media, e.OwnMedia = false, []string{"sno-01", "sno-02"}, []string{"sno-01"}
+		}, nil, reconciliation.EffectUnknown},
+		"a foreign image alone": {func(e *InstallEvidence) {
+			e.Postcondition, e.Media, e.OwnMedia = false, []string{"sno-01"}, []string{}
+		}, nil, reconciliation.EffectUnknown},
+		"another block's evidence": {func(e *InstallEvidence) {
+			e.Request = testDigest[:63] + "0"
+		}, nil, reconciliation.EffectUnknown},
+		"adapter failed": {nil, errors.New("unreachable"), reconciliation.EffectUnknown},
+	} {
+		t.Run(name, func(t *testing.T) {
+			execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
+			runner := &fakeRunner{result: lifecycle.RunResult{
+				Outcome: "unchanged", Evidence: installEvidence(t, testDigest, expectation.mutate),
+			}, err: expectation.err}
+			observation, err := NewInstall(runner).ObserveRemoval(context.Background(), execution)
+			if err != nil || observation.Effect != expectation.effect {
+				t.Fatalf("removal observation = %+v (%v), want %q", observation, err, expectation.effect)
+			}
+			if len(runner.requests) != 1 || runner.requests[0].Operation != "observe" {
+				t.Fatalf("adapter invocation = %+v", runner.requests)
+			}
+		})
 	}
 }
 

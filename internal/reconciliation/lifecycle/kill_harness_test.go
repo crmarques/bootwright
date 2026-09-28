@@ -29,14 +29,15 @@ import (
 const (
 	// killBoundFreshApply is two applies. A kill after a block's running
 	// record lands and before its outcome does leaves the block running, which
-	// the next invocation observes before it starts anything (block
-	// transitions, specs/state-reconciliation.md:254-269; the running-block
-	// rule, :283-289). A kill before the effect ran makes that observation
-	// prove no effect, so the block is failed; the scheduler never admits a
-	// block its own invocation observed (scheduler.go's worked rule) and
-	// continuation retries a failed block once per invocation and never one it
-	// failed itself (:627-631), so only the second apply retries it and starts
-	// what waits on it. One block runs at a time, so no kill leaves two.
+	// the next invocation observes before it starts anything
+	// (specs/state-reconciliation.md, Block transitions and its running-block
+	// rule). A kill before the effect ran makes that observation prove no
+	// effect, so the block is failed; the scheduler never admits a block its
+	// own invocation observed (scheduler.go's worked rule) and continuation
+	// retries a failed block once per invocation and never one it failed
+	// itself (Continuation and removal), so only the second apply retries it
+	// and starts what waits on it. One block runs at a time, so no kill leaves
+	// two.
 	killBoundFreshApply = 2
 	// killBoundDestroy is two destroys, for the same reason: a kill before a
 	// removal's effect leaves its block running with the target present, which
@@ -48,15 +49,15 @@ const (
 	// retried the same way.
 	killBoundContinuation = 2
 	// killBoundSupersede is one destroy. A fresh destroy over an incomplete
-	// apply observes every unproved block before it registers (:237-240) and
-	// then removes every block the apply started, failed or done alike
-	// (:647-651), all in one invocation: no rule leaves anything for a second
-	// one.
+	// apply observes every unproved block before it registers (Resolution
+	// outcomes) and then removes every block the apply started, failed or done
+	// alike (Continuation and removal), all in one invocation: no rule leaves
+	// anything for a second one.
 	killBoundSupersede = 1
 	// killBoundSettled is one apply. Over a completed apply no block is
 	// unproved, failed or pending, so an apply of unchanged input is the verb
-	// with nothing left to do: no block transition (:254-269) and no
-	// continuation (:627-631) asks for a second invocation.
+	// with nothing left to do: no block transition (Block transitions) and no
+	// continuation (Continuation and removal) asks for a second invocation.
 	killBoundSettled = 1
 )
 
@@ -86,15 +87,6 @@ func killLedger() map[string]string {
 		"b/release secret binding#1": "S10 (rest)",
 		"c/publish evidence#1":       "S10 (rest)",
 		"e/publish evidence#2":       "S10 (rest)",
-		// A kill after a removal's running record and before its effect leaves
-		// the target present; the resolution reads that presence as completion,
-		// so the removal completes with pristine evidence over what it kept.
-		"b/append <op>/logs/blocks/a/attempt-000001.jsonl#1": "S27",
-		"b/append <op>/logs/blocks/a/attempt-000001.jsonl#2": "S27",
-		"b/append <op>/logs/blocks/b/attempt-000001.jsonl#1": "S27",
-		"b/append <op>/logs/blocks/b/attempt-000001.jsonl#2": "S27",
-		"b/append <op>/logs/blocks/c/attempt-000001.jsonl#1": "S27",
-		"b/append <op>/logs/blocks/c/attempt-000001.jsonl#2": "S27",
 		// A kill after a fresh apply bound its Secrets and before the index names
 		// its operation leaves that binding held by no operation: an apply
 		// retried over it binds another, and a destroy, which has nothing to
@@ -187,8 +179,8 @@ func (h *killHost) effect(ctx context.Context, execution Execution, verb reconci
 	return Result{Outcome: reconciliation.OutcomeChanged, Evidence: killEvidence(block, verb == reconciliation.Apply)}, nil
 }
 
-// Observe answers from the host alone, blind to the verb the block was frozen
-// for, exactly as every production capability's observation is.
+// Observe answers an apply's resolution from the host alone: a realized block
+// is the apply's completion and one not realized is its absence of effect.
 func (h *killHost) Observe(_ context.Context, execution Execution) (Observation, error) {
 	block := execution.Block.ID
 	h.mutex.Lock()
@@ -198,6 +190,21 @@ func (h *killHost) Observe(_ context.Context, execution Execution) (Observation,
 		return Observation{Effect: reconciliation.EffectCompleted, Evidence: killEvidence(block, true)}, nil
 	}
 	return Observation{Effect: reconciliation.EffectNoEffect, Evidence: killEvidence(block, false)}, nil
+}
+
+// ObserveRemoval answers a destroy's resolution from the host alone, as a
+// production capability's removal observation does: a block no longer
+// realized is the removal's completion, and one still realized is its absence
+// of effect.
+func (h *killHost) ObserveRemoval(_ context.Context, execution Execution) (Observation, error) {
+	block := execution.Block.ID
+	h.mutex.Lock()
+	realized := h.realized[block]
+	h.mutex.Unlock()
+	if realized {
+		return Observation{Effect: reconciliation.EffectNoEffect, Evidence: killEvidence(block, true)}, nil
+	}
+	return Observation{Effect: reconciliation.EffectCompleted, Evidence: killEvidence(block, false)}, nil
 }
 
 func (h *killHost) realizedBlocks() []string {

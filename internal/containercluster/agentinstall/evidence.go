@@ -199,6 +199,41 @@ func ValidateInstallAbsence(data []byte, digest string) error {
 	return nil
 }
 
+// ValidateInstallReleased accepts evidence only when it names this request and
+// no node presents boot media, which is what the removal takes back. The
+// observation never reports the absence form, and the cluster keeps running
+// with its nodes' disks, so neither the flag nor what answers is read.
+func ValidateInstallReleased(data []byte, digest string) error {
+	evidence, err := decodeInstallEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if len(evidence.Media) != 0 {
+		return refusal("lifecycle.state", "a node still presents boot media", "")
+	}
+	return nil
+}
+
+// ValidateInstallReleasePartial accepts evidence only when it positively
+// proves a removal part way through: at least one node presents boot media and
+// every such node presents the image this cluster published. A node presenting
+// any other image may belong to another installation, so it is never partial.
+func ValidateInstallReleasePartial(data []byte, digest string) error {
+	evidence, err := decodeInstallEvidence(data, digest)
+	if err != nil {
+		return err
+	}
+	if len(evidence.Media) == 0 {
+		return refusal("lifecycle.state", "no node presents boot media", "")
+	}
+	for _, node := range evidence.Media {
+		if !slices.Contains(evidence.OwnMedia, node) {
+			return refusal("lifecycle.state", "a node presents an image this cluster did not publish", "")
+		}
+	}
+	return nil
+}
+
 // ValidateInstallNoEffect accepts evidence only when it positively proves that
 // nothing was installed: no cluster answers, no node runs and no node holds
 // this operation's media.

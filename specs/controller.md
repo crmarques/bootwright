@@ -362,7 +362,8 @@ operation identity, so it has nowhere of its own to put it.
 The closure is shared host state. Two contexts selecting the same clients prove
 the same sealed files, a different closure gets its own area, and removing a
 context retains both: destroying a context uninstalls no native package and
-deletes no client area. Recovery is idempotent rather than compensating —
+deletes no client area, so resolving the stage's removal runs nothing and is
+always its completion. Recovery is idempotent rather than compensating —
 publication verifies existing bytes instead of overwriting them, so an
 interrupted stage is completed by repeating it. `preflight controller --context
 <name>` reports the same closure by presence, and names this command when it is

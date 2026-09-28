@@ -3,6 +3,7 @@ package agentinstall
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -308,6 +309,49 @@ func TestObservationClassifiesWhatItFound(t *testing.T) {
 			}
 			if observation.Effect != expectation.effect {
 				t.Fatalf("effect = %q, want %q", observation.Effect, expectation.effect)
+			}
+		})
+	}
+}
+
+// A removal's resolution reads the same observation for what the removal
+// proves. The observation never reports the absence form, so neither the
+// image nor the work area is the removal's completion, and the image this
+// request describes is a removal that had no effect rather than one that
+// completed.
+func TestAMediaRemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
+	for name, expectation := range map[string]struct {
+		mutate func(*MediaEvidence)
+		err    error
+		effect reconciliation.EffectState
+	}{
+		"absent": {func(e *MediaEvidence) {
+			*e = MediaEvidence{Absent: true, Postcondition: true, Request: testDigest}
+		}, nil, reconciliation.EffectCompleted},
+		"nothing published": {func(e *MediaEvidence) {
+			*e = MediaEvidence{Request: testDigest}
+		}, nil, reconciliation.EffectCompleted},
+		"published": {nil, nil, reconciliation.EffectNoEffect},
+		"partial": {func(e *MediaEvidence) {
+			e.Postcondition, e.Inputs = false, ""
+		}, nil, reconciliation.EffectPartial},
+		"work area left": {func(e *MediaEvidence) {
+			*e = MediaEvidence{Request: testDigest, Work: true}
+		}, nil, reconciliation.EffectPartial},
+		"another block's evidence": {func(e *MediaEvidence) {
+			*e = MediaEvidence{Request: testDigest[:63] + "0"}
+		}, nil, reconciliation.EffectUnknown},
+		"adapter failed": {nil, errors.New("unreachable"), reconciliation.EffectUnknown},
+	} {
+		t.Run(name, func(t *testing.T) {
+			execution, _ := mediaExecution(t, testDigest)
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: mediaEvidence(t, testDigest, expectation.mutate)}, err: expectation.err}
+			observation, err := NewMedia(runner).ObserveRemoval(context.Background(), execution)
+			if err != nil || observation.Effect != expectation.effect {
+				t.Fatalf("removal observation = %+v (%v), want %q", observation, err, expectation.effect)
+			}
+			if len(runner.requests) != 1 || runner.requests[0].Operation != "observe" {
+				t.Fatalf("adapter invocation = %+v", runner.requests)
 			}
 		})
 	}

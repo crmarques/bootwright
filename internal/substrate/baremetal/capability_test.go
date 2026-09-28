@@ -3,6 +3,7 @@ package baremetal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"testing"
 
@@ -201,6 +202,82 @@ func TestEvidenceMustNameItsOwnRequest(t *testing.T) {
 	evidence := Evidence{Addresses: request.Addresses(), Postcondition: true, Power: "Off", Request: "another", UUID: "u"}
 	if err := ValidatePresence(encode(t, evidence), request, "digest"); err == nil {
 		t.Fatal("evidence naming another request was accepted")
+	}
+}
+
+type scriptedRunner struct {
+	requests []lifecycle.RunRequest
+	result   lifecycle.RunResult
+	err      error
+}
+
+func (r *scriptedRunner) Run(_ context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
+	r.requests = append(r.requests, request)
+	return r.result, r.err
+}
+
+// A removal releases only the claim and never contacts the machine, so its
+// resolution runs nothing: whatever the machine would answer, it is the
+// removal's completion, with the evidence the removal publishes. Only a
+// request it cannot read, or a resolution already cancelled, stays unknown.
+func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
+	frozen, err := reconciliation.NewPlan(reconciliation.Apply, planOf(t, reconciliation.Apply).Definitions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := lifecycle.Execution{Operation: "op-1", Attempt: 1, Block: frozen.Blocks[0]}
+	digest := call.Block.RequestDigest
+	addresses := fixtureRequest(t).Addresses()
+	for name, runner := range map[string]*scriptedRunner{
+		"the machine answering": {result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, Evidence{
+			Addresses: addresses, Postcondition: true, Power: "On", Request: digest, UUID: "uuid-1",
+		})}},
+		"the machine unproved": {result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, Evidence{
+			Addresses: addresses, Power: "On", Request: digest, UUID: "uuid-1",
+		})}},
+		"the claim released": {result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, Evidence{
+			Absent: true, Addresses: []string{}, Postcondition: true, Request: digest,
+		})}},
+		"another request": {result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, Evidence{
+			Absent: true, Addresses: []string{}, Postcondition: true, Request: "another",
+		})}},
+		"the adapter failing": {err: errors.New("unreachable")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			observation, err := NewMachine(runner).ObserveRemoval(context.Background(), call)
+			if err != nil || observation.Effect != reconciliation.EffectCompleted {
+				t.Fatalf("removal observation = %+v (%v), want completed", observation, err)
+			}
+			if len(runner.requests) != 0 {
+				t.Fatalf("a removal's resolution contacted the machine: %+v", runner.requests)
+			}
+			if err := ValidateAbsence(observation.Evidence, digest); err != nil {
+				t.Fatalf("the resolution's evidence %s is not what the removal publishes: %v", observation.Evidence, err)
+			}
+			if ValidateAbsence(observation.Evidence, "another") == nil {
+				t.Fatal("the resolution's evidence proves another request")
+			}
+		})
+	}
+	malformed := call
+	malformed.Block.Request = json.RawMessage(`{}`)
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	for name, refused := range map[string]struct {
+		ctx       context.Context
+		runner    Runner
+		execution lifecycle.Execution
+	}{
+		"a malformed request":    {context.Background(), &scriptedRunner{}, malformed},
+		"a cancelled resolution": {cancelled, &scriptedRunner{}, call},
+		"no adapter configured":  {context.Background(), nil, call},
+	} {
+		t.Run(name, func(t *testing.T) {
+			observation, err := NewMachine(refused.runner).ObserveRemoval(refused.ctx, refused.execution)
+			if err == nil || observation.Effect != reconciliation.EffectUnknown {
+				t.Fatalf("removal observation = %+v (%v), want unknown with its reason", observation, err)
+			}
+		})
 	}
 }
 
