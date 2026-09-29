@@ -144,16 +144,32 @@ func TestInterruptedDeletionResumesOnlyRecordedIdentity(t *testing.T) {
 }
 
 // A deleted name is reservable again, and its replacement is an independent
-// context with a freshly created directory rather than an adopted one.
+// context with a freshly created directory rather than an adopted one. The
+// test holds the deleted directory open: an open descriptor keeps its inode
+// allocated after the unlink, so no filesystem can hand that number to the
+// replacement, and comparing identities does not depend on inode reuse.
 func TestDeletedNameIsReservableAgainWithAFreshDirectory(t *testing.T) {
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
-	before, err := os.Stat(filepath.Join(store.options.Root, "contexts", "example"))
+	base := filepath.Join(store.options.Root, "contexts", "example")
+	held, err := os.Open(base)
 	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	var before syscall.Stat_t
+	if err := syscall.Fstat(int(held.Fd()), &before); err != nil {
 		t.Fatal(err)
 	}
 	if err := deleteContext(t, store, record); err != nil {
 		t.Fatal(err)
+	}
+	var removed syscall.Stat_t
+	if err := syscall.Fstat(int(held.Fd()), &removed); err != nil {
+		t.Fatal(err)
+	}
+	if removed.Nlink != 0 {
+		t.Fatalf("deletion left the context directory linked: nlink %d", removed.Nlink)
 	}
 	config := contexts.Configuration{Name: "example", SecretStore: contexts.SecretStoreConfiguration{Type: "local-keyring"}}.Canonical()
 	err = store.Transact(context.Background(), true, nil, func(tx contexts.Transaction) error {
@@ -167,19 +183,16 @@ func TestDeletedNameIsReservableAgainWithAFreshDirectory(t *testing.T) {
 	if err != nil || len(registry.Contexts) != 1 || registry.Contexts[0].Name != "example" || registry.Contexts[0].Revision != "" {
 		t.Fatalf("reserved name after deletion: %#v %v", registry, err)
 	}
-	after, err := os.Stat(filepath.Join(store.options.Root, "contexts", "example"))
-	if err != nil {
+	var after syscall.Stat_t
+	if err := syscall.Stat(base, &after); err != nil {
 		t.Fatal("reused name did not create its context directory")
 	}
-	if sameStat(before, after) {
+	if after.Dev == before.Dev && after.Ino == before.Ino {
 		t.Fatal("reused name adopted the deleted context's directory")
 	}
-}
-
-func sameStat(a, b os.FileInfo) bool {
-	left, leftOK := a.Sys().(*syscall.Stat_t)
-	right, rightOK := b.Sys().(*syscall.Stat_t)
-	return leftOK && rightOK && left.Dev == right.Dev && left.Ino == right.Ino
+	if got := registry.Contexts[0]; got.DirectoryDevice != after.Dev || got.DirectoryInode != after.Ino {
+		t.Fatalf("registry records directory %d/%d, created %d/%d", got.DirectoryDevice, got.DirectoryInode, after.Dev, after.Ino)
+	}
 }
 
 func TestDeletionRefusesUnknownObjectsBeforeRemovingAnything(t *testing.T) {

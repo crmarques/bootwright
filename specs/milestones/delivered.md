@@ -1012,3 +1012,52 @@ Operator inputs that use a metal3 BMC scheme or omit an emulated BMC's bind
 address now fail `validate`. The automation digest moves, so finish or destroy
 in-flight operations with the build that registered them, then run `setup`; a
 retained 2.19 or 2.20 resolution is resolved fresh.
+
+### X25 — ratchets, milestone status and the storage suite
+
+**Owner:** Architecture, with Workspace, Environment and Desired state.
+Integrated on local `main` on 2026-09-29 as one commit, beside X20, on
+explicit request. **Items:** B37 (was R6 (rest)), B50 (new), B38 (was T2
+(rest)).
+
+**Outcome:** a docs byte budget fails with more than a tenth to spare, so
+AGENTS.md, CLAUDE.md and the spec index budgets drop to 2516, 12 and 4656
+bytes; an ignored guidance path fails once nothing outside it cites it; each
+effect-boundary clause has a fixture proving it refuses what it guards and
+that each grant exempts only its own clause (the reading of "per clause",
+X25-B37-D2); the diagnostic registry follows a same-file package variable
+through every write; and quick-test names a changed directory the default
+build omits and tests the package a moved file left (B37). A docs test holds
+each milestone's Status to its page, each item row to its section and each B ID
+to one page or one delivered record (B50). One contract suite holds the
+workspace's operation area and both in-memory doubles to its port; environment
+selection and strict YAML each have a table, the environment API's closure
+table now describes the code, the merge-key deviation is ledgered as B123, and
+the reservation test is deterministic, settling X17's flaky test (B38).
+
+**Guard tests:** `TestByteBudgetsFailWithMoreThanATenthToSpare`,
+`TestIgnoredGuidancePathsFailOnceNothingOutsideThemCitesThem`,
+`TestEveryEffectClauseRefusesWhatItGuards`,
+`TestDiagnosticCodesFollowPackageDeclarationsOfTheirFile`,
+`TestQuickTestSelectsChangedPackagesAndNamesWhatTheBuildOmits`,
+`TestQuickTestTestsThePackageAMovedFileLeft`,
+`TestDocsMilestonePagesAgreeWithTheirStatus`,
+`TestDocsMilestoneCheckFindsEachDisagreement`,
+`TestOperationAreaHonoursTheAreaContract`,
+`TestMemoryAreaHonoursTheAreaContract`, `TestJourneyAreaHonoursTheAreaContract`,
+`TestSelectionRetainsExactlyWhatTheClosureTableNames`,
+`TestEveryStrictYAMLRuleRefusesWithItsCode` and
+`TestStrictYAMLLedgerHoldsEachDeviationToItsOutcome`.
+
+**Review:** three findings confirmed and fixed (a same-file package variable
+reassigned elsewhere, a ledger that admitted any failure of the merge-key row,
+and quick-test missing the package a moved file left); the older registry and
+quick-test gaps are recorded as B124 and B125.
+
+**Gates:** `make check-offline tidy-check modules-check vulncheck docs-check
+race` passes on the integrated slice and on the squashed commit; nothing
+under `ansible/` changed, so the collection suites were not required.
+
+**Constraints left behind:** new items B124 to B128; the `GOOS=darwin
+GOARCH=arm64` vet failures in contextfs and the Ansible runner, which X20's B36
+settles.

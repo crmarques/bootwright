@@ -2,10 +2,12 @@ package architecture_test
 
 import (
 	"bufio"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -13,19 +15,21 @@ import (
 )
 
 // docsByteBudgets bounds the files an agent reads at the start of every task or
-// every tracked edit. Lower a budget when its file shrinks; never raise one to
-// admit growth that belongs in an on-demand page.
+// every tracked edit. A budget more than a tenth above its file's size fails,
+// so each one follows its file down; never raise one to admit growth that
+// belongs in an on-demand page.
 func docsByteBudgets() map[string]int {
 	return map[string]int{
-		"AGENTS.md":           2600,
-		"CLAUDE.md":           64,
-		"specs/index.md":      5120,
+		"AGENTS.md":           2516,
+		"CLAUDE.md":           12,
+		"specs/index.md":      4656,
 		"specs/milestones.md": 8192,
 		".agents/skills/code-implementation/SKILL.md": 3072,
 	}
 }
 
-// ignoredGuidancePaths are cited on purpose although Git ignores them.
+// ignoredGuidancePaths are cited on purpose although Git ignores them. An entry
+// fails once no guidance outside the ignored paths cites it.
 var ignoredGuidancePaths = map[string]bool{
 	"examples/wip/": true, // the local work area examples/.gitignore excludes
 }
@@ -180,12 +184,28 @@ var (
 )
 
 func TestDocsRepositoryPathsExist(t *testing.T) {
-	root := filepath.Join("..", "..")
-	for _, file := range guidanceFiles(t) {
+	for _, violation := range citedPathViolations(filepath.Join("..", ".."), guidanceFiles(t), ignoredGuidancePaths) {
+		t.Error(violation)
+	}
+}
+
+// citedPathViolations reports each backticked repository path that names
+// nothing under root, and each ignored path no file outside the ignored paths
+// cites. Whether an ignored path exists never decides, since a fresh clone has
+// none.
+func citedPathViolations(root string, files []markdownFile, ignored map[string]bool) []string {
+	var violations []string
+	cited := map[string]bool{}
+	for _, file := range files {
+		inside := slices.ContainsFunc(sortedKeys(ignored), func(path string) bool { return strings.HasPrefix(file.path, path) })
 		proseLines(file, func(number int, line string) {
 			for _, match := range citedPath.FindAllStringSubmatch(line, -1) {
 				token := strings.TrimRight(match[1], ".,;")
-				if !hasRepositoryPrefix(token) || strings.ContainsAny(token, "<>*{}$[]|") || ignoredGuidancePaths[token] {
+				if !hasRepositoryPrefix(token) || strings.ContainsAny(token, "<>*{}$[]|") {
+					continue
+				}
+				if ignored[token] {
+					cited[token] = cited[token] || !inside
 					continue
 				}
 				path := token
@@ -198,11 +218,17 @@ func TestDocsRepositoryPathsExist(t *testing.T) {
 					path = path[:symbol[0]]
 				}
 				if _, err := os.Stat(filepath.Join(root, path)); err != nil {
-					t.Errorf("%s:%d cites missing path %s", file.path, number, token)
+					violations = append(violations, fmt.Sprintf("%s:%d cites missing path %s", file.path, number, token))
 				}
 			}
 		})
 	}
+	for _, path := range sortedKeys(ignored) {
+		if !cited[path] {
+			violations = append(violations, fmt.Sprintf("ignoredGuidancePaths excuses %s, which no guidance outside it cites; remove it", path))
+		}
+	}
+	return violations
 }
 
 func hasRepositoryPrefix(token string) bool {
@@ -326,23 +352,43 @@ func TestDocsExamplesAreIndexed(t *testing.T) {
 
 func TestDocsStayWithinByteBudgets(t *testing.T) {
 	root := filepath.Join("..", "..")
-	budgets := docsByteBudgets()
 	rules, err := filepath.Glob(filepath.Join(root, ".claude", "rules", "*.md"))
 	if err != nil {
 		t.Fatalf("find rules: %v", err)
 	}
+	caps := map[string]int{}
 	for _, rule := range rules {
 		relative, _ := filepath.Rel(root, rule)
-		budgets[filepath.ToSlash(relative)] = 1024
+		caps[filepath.ToSlash(relative)] = 1024
 	}
-	for path, budget := range budgets {
+	for _, violation := range byteBudgetViolations(root, docsByteBudgets(), caps) {
+		t.Error(violation)
+	}
+}
+
+// byteBudgetViolations reports each file above its budget or cap, and each
+// budget, never a cap, more than a tenth above its file's size. The largest
+// budget a file of size bytes admits is size+size/9.
+func byteBudgetViolations(root string, budgets, caps map[string]int) []string {
+	var violations []string
+	check := func(path string, limit int, ratcheted bool) {
 		info, err := os.Stat(filepath.Join(root, path))
 		if err != nil {
-			t.Errorf("budgeted file %s: %v", path, err)
-			continue
+			violations = append(violations, fmt.Sprintf("budgeted file %s: %v", path, err))
+			return
 		}
-		if info.Size() > int64(budget) {
-			t.Errorf("%s is %d bytes, above its %d-byte budget; move detail to an on-demand page", path, info.Size(), budget)
+		size := int(info.Size())
+		if size > limit {
+			violations = append(violations, fmt.Sprintf("%s is %d bytes, above its %d-byte budget; move detail to an on-demand page", path, size, limit))
+		} else if ratcheted && limit-size > limit/10 {
+			violations = append(violations, fmt.Sprintf("%s is %d bytes, more than a tenth below its %d-byte budget; lower the budget to %d", path, size, limit, size+size/9))
 		}
 	}
+	for _, path := range sortedKeys(budgets) {
+		check(path, budgets[path], true)
+	}
+	for _, path := range sortedKeys(caps) {
+		check(path, caps[path], false)
+	}
+	return violations
 }

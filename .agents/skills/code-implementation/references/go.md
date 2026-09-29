@@ -92,7 +92,10 @@ Report failed, skipped, flaky, or unavailable gates under the shared workflow.
 
 For lifecycle capabilities, the shared port contract suite is
 `cmd/bootwright/capability_contract_test.go`: a new binding joins it with a
-row, which `TestEveryBindingJoinsTheCapabilityContractSuite` requires. A new
+row, which `TestEveryBindingJoinsTheCapabilityContractSuite` requires. For the
+operation area a Workspace supplies, it is `areacontract.Verify` in
+`internal/reconciliation/operationstore/areacontract`, which contextfs's area
+and every in-memory double run. A new
 contextfs checkpoint is a catalogued constant that the checkpoint harness
 reaches, and a new publication protocol or lifecycle journey joins its harness
 with the retry its spec names; lifecycle journeys are killed at every durable

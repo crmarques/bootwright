@@ -59,7 +59,7 @@ says what that requires.
 | --- | --- |
 | `make build` | Build `bin/bootwright`, stamped with the version, commit and source state of the checkout it was built from. |
 | `make quick` | Inner loop: formatting, vet, the architecture suite, and the packages this branch changed with their dependents. |
-| `make docs-check` | Check guidance links, anchors, cited paths and tests, documented command lines, skill frontmatter and byte budgets. |
+| `make docs-check` | Check guidance links, anchors, cited paths and tests, documented command lines, skill frontmatter and byte budgets, and that each milestone's Status Delivery agrees with its page and every item has one row, one detail section and no delivered record (`TestDocsMilestonePagesAgreeWithTheirStatus`). |
 | `make test` | Run all package tests. |
 | `make vet` | Run Go static analysis. |
 | `make fmt-check` | Check Go formatting. |

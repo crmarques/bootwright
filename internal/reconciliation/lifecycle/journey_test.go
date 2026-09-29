@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"path"
 	"slices"
@@ -34,13 +35,14 @@ const (
 	testAutomaton   = "aaaa0123456789abcdef0123456789abcdef0123456789abcdef0123456789ab"
 )
 
-// memoryArea models the Workspace-held operation area contract. The real area
-// serializes concurrent blocks through the filesystem, so this one holds a
-// mutex: without it the race detector reports the fake rather than the engine.
-// It refuses a cancelled context exactly as the real one does, so a test can
-// prove which records an interrupted invocation still writes. It keeps the
-// directories it was asked to create, because a claimed operation directory
-// holds no file.
+// memoryArea is an in-memory operation area that areacontract.Verify holds to
+// the same clauses as contextfs's area (TestJourneyAreaHonoursTheAreaContract).
+// The real area serializes concurrent blocks through the filesystem, so this
+// one holds a mutex: without it the race detector reports the fake rather than
+// the engine. It refuses a cancelled context, as the contract requires, so a
+// test can prove which records an interrupted invocation still writes. It
+// keeps the directories it was asked to create, because a claimed operation
+// directory holds no file.
 type memoryArea struct {
 	mutex       sync.Mutex
 	files       map[string][]byte
@@ -91,31 +93,70 @@ func (a *memoryArea) landed(target string) error {
 	return err
 }
 
-func (a *memoryArea) Read(ctx context.Context, target string, _ int) ([]byte, bool, error) {
+// admit refuses, before any injected failure or hook runs, what the contract
+// refuses: a cancelled context, a path outside the area, a path beneath a
+// record, and a record where a directory is named or the reverse.
+func (a *memoryArea) admit(ctx context.Context, target string, record bool) error {
 	if err := ctx.Err(); err != nil {
-		return nil, false, err
+		return err
 	}
+	if !(fs.ValidPath(target) && target != ".") && (record || target != "") {
+		return errors.New("path escapes the area")
+	}
+	for parent := path.Dir(target); target != "" && parent != "."; parent = path.Dir(parent) {
+		if _, isRecord := a.files[parent]; isRecord {
+			return errors.New("path lies beneath a record")
+		}
+	}
+	if _, isRecord := a.files[target]; !record && isRecord {
+		return errors.New("not a directory")
+	}
+	if record && a.isDirectory(target) {
+		return errors.New("is a directory")
+	}
+	return nil
+}
+
+func (a *memoryArea) isDirectory(target string) bool {
+	if a.directories[target] {
+		return true
+	}
+	for name := range a.files {
+		if strings.HasPrefix(name, target+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *memoryArea) Read(ctx context.Context, target string, maximum int) ([]byte, bool, error) {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
+	if err := a.admit(ctx, target, true); err != nil {
+		return nil, false, err
+	}
 	if err := a.fail["read "+target]; err != nil {
 		return nil, false, err
 	}
 	data, ok := a.files[target]
+	if ok && maximum > 0 && len(data) > maximum {
+		return nil, false, errors.New("record exceeds its maximum")
+	}
 	return slices.Clone(data), ok, nil
 }
 
 func (a *memoryArea) Entries(ctx context.Context, target string) ([]operationstore.Entry, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
+	if err := a.admit(ctx, target, false); err != nil {
+		return nil, err
+	}
 	prefix := target
 	if prefix != "" {
 		prefix += "/"
 	}
 	seen := map[string]operationstore.Entry{}
-	for name := range a.files {
+	for name, data := range a.files {
 		rest, ok := strings.CutPrefix(name, prefix)
 		if !ok || rest == "" {
 			continue
@@ -123,7 +164,7 @@ func (a *memoryArea) Entries(ctx context.Context, target string) ([]operationsto
 		if head, _, nested := strings.Cut(rest, "/"); nested {
 			seen[head] = operationstore.Entry{Name: head, Directory: true}
 		} else {
-			seen[rest] = operationstore.Entry{Name: rest}
+			seen[rest] = operationstore.Entry{Name: rest, Size: int64(len(data))}
 		}
 	}
 	for name := range a.directories {
@@ -137,11 +178,11 @@ func (a *memoryArea) Entries(ctx context.Context, target string) ([]operationsto
 }
 
 func (a *memoryArea) EnsureDirectory(ctx context.Context, target string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
+	if err := a.admit(ctx, target, false); err != nil {
+		return err
+	}
 	for current := target; current != "." && current != ""; current = path.Dir(current) {
 		a.directories[current] = true
 	}
@@ -149,11 +190,11 @@ func (a *memoryArea) EnsureDirectory(ctx context.Context, target string) error {
 }
 
 func (a *memoryArea) WriteExclusive(ctx context.Context, target string, data []byte) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
+	if err := a.admit(ctx, target, true); err != nil {
+		return err
+	}
 	if a.landing != nil {
 		if err := a.landing("write", target, a.files); err != nil {
 			return err
@@ -170,11 +211,11 @@ func (a *memoryArea) WriteExclusive(ctx context.Context, target string, data []b
 }
 
 func (a *memoryArea) Replace(ctx context.Context, target string, data, expected []byte) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
+	if err := a.admit(ctx, target, true); err != nil {
+		return err
+	}
 	if a.landing != nil {
 		if err := a.landing("replace", target, a.files); err != nil {
 			return err
@@ -196,11 +237,11 @@ func (a *memoryArea) Replace(ctx context.Context, target string, data, expected 
 }
 
 func (a *memoryArea) Append(ctx context.Context, target string, data []byte) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
+	if err := a.admit(ctx, target, true); err != nil {
+		return err
+	}
 	if a.landing != nil {
 		if err := a.landing("append", target, a.files); err != nil {
 			return err
@@ -213,7 +254,11 @@ func (a *memoryArea) Append(ctx context.Context, target string, data []byte) err
 	return nil
 }
 
-func (a *memoryArea) Sync(ctx context.Context, _ string) error { return ctx.Err() }
+func (a *memoryArea) Sync(ctx context.Context, target string) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	return a.admit(ctx, target, false)
+}
 
 func (a *memoryArea) Location() string { return "/var/lib/bootwright/contexts/lab/state/operations" }
 

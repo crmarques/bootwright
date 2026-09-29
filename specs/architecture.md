@@ -253,7 +253,7 @@ has one kind, and its role in `packageRoles`
 | Command service | `internal/<context>/<capability>` | One command family. `service.go` declares `Service`, its constructor and one exported method per command; `requests.go` the request and result types the CLI consumes; `contracts.go` every interface the package consumes. A recognized but unavailable family is a stub, `service.go` alone, listed in `stubCapabilities`. | application |
 | Lifecycle capability | `internal/<context>/<capability>`, such as `managedos/installation`, `containercluster/agentinstall`, `infrastructureservices/managedservice` and `infrastructureservices/artifactserver` | The [`Capability` port](#lifecycle-ports) implementations of one substrate arm, installation method or service, or of the controller stage. `capability.go` declares a capability type and its constructor, `contracts.go` its ports, `requests.go` and `evidence.go` its frozen request and the evidence it proves, and, where it has them, `catalog.go` its kind and implementation identities and `selection.go` the objects it plans. | application |
 | Capability definition | `infrastructureservices/dnsserver`, `ntpserver` and `proxy` | One `managedservice.Definition` the shared capability runs; it consumes no other application package. | application |
-| Application store | `reconciliation/operationstore`, `secrets/secretstore` | A durable record format and its consistency over an `Area` a Workspace adapter supplies. `reconciliation/contextguard` likewise implements `workspace/contexts.ContextMutationGuard` for Reconciliation and consumes no port. | application |
+| Application store | `reconciliation/operationstore`, `secrets/secretstore` | A durable record format and its consistency over an `Area` a Workspace adapter supplies. `reconciliation/contextguard` likewise implements `workspace/contexts.ContextMutationGuard` for Reconciliation and consumes no port. `reconciliation/operationstore/areacontract` is the operation store `Area`'s shared contract suite: every implementation's tests run it, the in-memory doubles included, and no production package imports it. | application |
 | Driven adapter | `internal/<context>/<implementation>`, named by what it binds | One effect behind another package's contract, within what `TestAdmissionEffectBoundary` allows it. `secrets/material` and `controller/privilege` keep their consumed interfaces in `contracts.go`. | adapter |
 | Diagnostics | `internal/diagnostics` | The diagnostic and typed-failure vocabulary every layer emits; it imports nothing first-party. | technical |
 | Availability | `internal/availability` | The single unavailable-capability sentinel, `ErrNotImplemented`. | technical |
@@ -778,9 +778,15 @@ reviewers retain semantic judgments that source checks cannot prove.
   and graph composition with applicable golden and end-to-end tests.
 - Keep every allowlist and registry a fitness check reads exact: an entry that
   is no longer needed, or names what no longer exists, fails, so each list only
-  shrinks. A production function, in Go or in the collection's plugins, stays
-  within 100 lines; the ones already longer are listed awaiting their split
-  ([B47](milestones/m1.md#b47)).
+  shrinks. A known deviation in a table of refusals names its backlog item and
+  the exact diagnostics its row reports until that item lands, which must
+  refuse, so it excuses no other outcome. An ignored guidance path fails once
+  no guidance outside the ignored paths cites it, and a guidance byte budget
+  once it exceeds its file's size by more than a tenth of itself. Each clause of the effect boundary is proved by
+  a fixture it refuses, and each kind of grant by the clauses it exempts and
+  the ones it leaves. A production function, in Go or in the collection's
+  plugins, stays within 100 lines; the ones already longer are listed awaiting
+  their split ([B47](milestones/m1.md#b47)).
 
 Unit or fake-adapter success never qualifies a remote implementation. Every
 supported substrate/component/product/version combination needs its named

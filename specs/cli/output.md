@@ -465,6 +465,9 @@ A command context that needs a narrower code adds its row with the code's
 first emission. A namespace alone is not a fallback code. New codes may be
 added, but the meaning of an existing code cannot change.
 
+Not yet met: a plain `<<` merge key is refused as `yaml.shape`, not
+`yaml.alias`; tracked as [B123](../milestones/m1.md#b123).
+
 Diagnostics are sorted by:
 
 1. normalized source path;

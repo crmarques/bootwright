@@ -197,7 +197,14 @@ The cluster-selection closure is authoritative and independent of file layout:
 | One `StorageCluster` | That root and every `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`, `StorageObjectGateway`, `StorageNFSExport`, and `StorageExport` naming it; its node, provider, provider-host, and consumed-service Machines; and each `ContainerCluster` attached to one of those exports through a `storageExportAttachment` effect, together with that container root's bindings, recursively expanded profiles, and add-ons. |
 
 Closures for all listed roots are unioned and then emitted in canonical API
-order. A `Machine` or `InfraProvider` not reached by the rules above is
+order. The rules apply until nothing more is retained. A `ContainerCluster`
+retained through an attachment brings everything its own row names, its node
+Machines and its other attached exports and their chains included. A
+`StorageCluster` retained only through a `StorageExport` keeps its node
+Machines and their provider and provider-host closure, but not every object
+naming it and no other attached `ContainerCluster`. A cluster root retained
+this way is not excluded and produces no warning, even when an authored list
+omits it. A `Machine` or `InfraProvider` not reached by the rules above is
 excluded. A reference from an always-retained object to an excluded object is
 not an implicit retention edge; it is an unresolved-reference error that tells
 the author to make the selections consistent. Omission of both cluster lists

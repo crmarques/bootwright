@@ -2,7 +2,8 @@
 # Test what this branch changed: every Go package with a changed file since the
 # branch left main, every package that depends on one, and the architecture
 # fitness suite. A change to the module files, or no base to compare against,
-# tests everything.
+# tests everything. A changed directory the default build does not list, such
+# as a package behind a build tag, is named and left to its own gate.
 set -eu
 repository=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repository"
@@ -10,7 +11,9 @@ base=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2
 if test -z "$base"; then
     exec ./scripts/go test ./...
 fi
-changed=$({ git diff --name-only "$base" --; git ls-files --others --exclude-standard; } | sort -u)
+# Without rename detection a moved file names both the directory it left and
+# the one it entered; with it, the name-only listing gives only the new path.
+changed=$({ git diff --name-only --no-renames "$base" --; git ls-files --others --exclude-standard; } | sort -u)
 if printf '%s\n' "$changed" | grep -Eq '^(go\.mod|go\.sum)$'; then
     exec ./scripts/go test ./...
 fi
@@ -22,8 +25,19 @@ done | sort -u)
 if test -z "$directories"; then
     exec ./scripts/go test ./test/architecture/...
 fi
+# The listing is taken on its own so that its failure stops the run: piped into
+# the selection, a failed listing left out every package it could not list.
+graph=$(./scripts/go list -f '{{.ImportPath}} {{join .Deps " "}}' ./...)
+listed=$(printf '%s\n' "$graph" | cut -d ' ' -f 1)
+printf '%s\n' "$directories" | while IFS= read -r directory; do
+    target=$module/$directory
+    if test "$directory" = .; then target=$module; fi
+    if ! printf '%s\n' "$listed" | grep -Fqx -- "$target"; then
+        printf 'quick-test: %s is outside the default build; its own gate runs it\n' "$directory" >&2
+    fi
+done
 targets=$(printf '%s\n' "$directories" | sed "s|^\.$|$module|; s|^\([^/].*\)$|$module/\1|" | sort -u)
-packages=$(./scripts/go list -f '{{.ImportPath}} {{join .Deps " "}}' ./... | awk -v targets="$targets" '
+packages=$(printf '%s\n' "$graph" | awk -v targets="$targets" '
     BEGIN { n = split(targets, list, "\n"); for (i = 1; i <= n; i++) wanted[list[i]] = 1 }
     { for (i = 1; i <= NF; i++) if ($i in wanted) { print $1; next } }')
 exec ./scripts/go test ./test/architecture/... $packages

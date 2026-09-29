@@ -65,6 +65,8 @@ func packageRoles() map[string]packageRole {
 		"internal/secrets":                       domainRole,
 		"internal/storage":                       domainRole,
 		"internal/trust":                         domainRole,
+		// A port's shared contract suite, imported only by tests.
+		"internal/reconciliation/operationstore/areacontract": applicationRole,
 	}
 	for _, capability := range []string{
 		"addons/catalog", "addons/preflight",
@@ -122,6 +124,9 @@ func applicationDependencies() map[string][]string {
 		// package's vocabulary and nothing else.
 		"internal/reconciliation/contextguard":   {"internal/workspace/contexts"},
 		"internal/reconciliation/operationstore": {},
+		// The operation area's contract suite exercises that store's Area port
+		// and consumes nothing else.
+		"internal/reconciliation/operationstore/areacontract": {"internal/reconciliation/operationstore"},
 		// Each named service is one managed-service definition and consumes only
 		// the package whose capability runs it.
 		"internal/infrastructureservices/dnsserver": {"internal/infrastructureservices/managedservice"},
@@ -418,6 +423,87 @@ func effectViolations(source sourceFile, held []string) []string {
 // process, the network, the kernel, randomness or unchecked memory.
 func effectImport(name string) bool {
 	return strings.HasPrefix(name, "os/") || strings.HasPrefix(name, "net/") || strings.HasPrefix(name, "golang.org/x/sys") || name == "os" || name == "syscall" || name == "crypto/rand" || name == "unsafe"
+}
+
+// TestEveryEffectClauseRefusesWhatItGuards proves each clause of
+// effectViolations by a fixture it refuses: (a) math/rand, (b) an effect
+// import, (c) a presentation or unrestricted I/O import, (d) input mutation,
+// (e) networking, (f) presentation outside the CLI and (g) a member beyond
+// those held. A whole-import grant exempts its import under (b) or (c) and
+// every member; a member grant exempts only that member under (e), (f) or (g)
+// and admits its import under (b), never (c). Nothing exempts (a) or (d).
+func TestEveryEffectClauseRefusesWhatItGuards(t *testing.T) {
+	const (
+		fixture      = "internal/fixture"
+		cli          = "github.com/crmarques/bootwright/internal/cli"
+		random       = "package fixture\nimport (\n\t\"math/rand\"\n\trandv2 \"math/rand/v2\"\n)\nvar _, _ = rand.Intn, randv2.IntN\n"
+		effects      = "package fixture\nimport (\n\t_ \"crypto/rand\"\n\t_ \"golang.org/x/sys/unix\"\n\t_ \"net/http\"\n\t_ \"os\"\n\t_ \"os/exec\"\n\t_ \"syscall\"\n\t_ \"unsafe\"\n)\n"
+		oneEffect    = "package fixture\nimport (\n\t\"os\"\n\t\"os/exec\"\n)\nvar _, _ = os.Getpid, exec.Command\n"
+		presentation = "package fixture\nimport (\n\t_ \"io\"\n\t_ \"github.com/spf13/cobra\"\n\t_ \"" + cli + "\"\n)\n"
+		mutation     = "package inputfs\nimport \"syscall\"\nvar _ = []any{syscall.O_RDONLY, syscall.O_WRONLY, syscall.O_RDWR, syscall.O_CREAT, syscall.O_TRUNC, syscall.Write, syscall.Unlink, syscall.Rename}\n"
+		networking   = "package fixture\nimport \"net\"\nvar _ = []any{net.Dial, net.ParseIP}\n"
+		printing     = "package fixture\nimport \"fmt\"\nvar _ = []any{fmt.Println, fmt.Fprintln, fmt.Scanln, fmt.Fscanf, fmt.Sprintf, fmt.Sscan, fmt.Errorf}\n"
+		members      = "package fixture\nimport \"os\"\nvar _ = []any{os.Getpid, os.Remove}\n"
+	)
+	source := fixture + "/fixture.go"
+	input := readOnlyInput + "/fixture.go"
+	mutating := []string{"O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "Write", "Unlink", "Rename"}
+	var mutations, mutationGrants []string
+	for _, member := range mutating {
+		mutations = append(mutations, input+" grants input mutation through syscall."+member)
+		mutationGrants = append(mutationGrants, "syscall."+member)
+	}
+	unauthorized := func(path string, imports ...string) []string {
+		var found []string
+		for _, name := range imports {
+			found = append(found, path+" imports unauthorized effect capability "+name)
+		}
+		return found
+	}
+	presentationImports := []string{
+		source + " depends on presentation or unrestricted I/O io",
+		source + " depends on presentation or unrestricted I/O github.com/spf13/cobra",
+		source + " depends on presentation or unrestricted I/O " + cli,
+	}
+	printed := func(names ...string) []string {
+		var found []string
+		for _, name := range names {
+			found = append(found, source+" performs presentation outside the CLI through fmt."+name)
+		}
+		return found
+	}
+	for _, row := range []struct {
+		name, owner, source string
+		held                []string
+		want                []string
+	}{
+		{"(a) math/rand", fixture, random, nil, unauthorized(source, "math/rand", "math/rand/v2")},
+		{"(a) exempt by no grant", fixture, random, []string{"math/rand", "math/rand.Intn", "math/rand/v2", "math/rand/v2.IntN"}, unauthorized(source, "math/rand", "math/rand/v2")},
+		{"(b) an effect import", fixture, effects, nil, unauthorized(source, "crypto/rand", "golang.org/x/sys/unix", "net/http", "os", "os/exec", "syscall", "unsafe")},
+		{"(b) exempt by its whole import", fixture, effects, []string{"crypto/rand", "golang.org/x/sys/unix", "net/http", "os", "os/exec", "syscall", "unsafe"}, nil},
+		{"(b) exempt by a member of that import alone", fixture, oneEffect, []string{"os.Getpid"}, unauthorized(source, "os/exec")},
+		{"(c) presentation or unrestricted I/O", fixture, presentation, nil, presentationImports},
+		{"(c) exempt by its whole import", fixture, presentation, []string{"io", "github.com/spf13/cobra", cli}, nil},
+		{"(c) exempt by no member", fixture, presentation, []string{"io.Reader", "github.com/spf13/cobra.Command", cli + ".Output"}, presentationImports},
+		{"(d) input mutation", readOnlyInput, mutation, append([]string{"syscall"}, mutationGrants...), mutations},
+		{"(d) guards the input adapter alone", fixture, mutation, []string{"syscall"}, nil},
+		{"(e) networking", fixture, networking, nil, []string{source + " accesses networking through net.Dial", source + " accesses networking through net.ParseIP"}},
+		{"(e) exempt by its member alone", fixture, networking, []string{"net.ParseIP"}, []string{source + " accesses networking through net.Dial"}},
+		{"(f) presentation outside the CLI", fixture, printing, nil, printed("Println", "Fprintln", "Scanln", "Fscanf")},
+		{"(f) exempt by its member alone", fixture, printing, []string{"fmt.Fprintln"}, printed("Println", "Scanln", "Fscanf")},
+		{"(g) a member beyond those held", fixture, members, []string{"os.Getpid"}, []string{source + " names os.Remove beyond the members its package holds"}},
+		{"(g) exempt by its member", fixture, members, []string{"os.Getpid", "os.Remove"}, nil},
+		{"(g) exempt by its whole import", fixture, members, []string{"os"}, nil},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			got := effectViolations(compositionSource(t, row.owner, row.source), row.held)
+			slices.Sort(got)
+			want := slices.Sorted(slices.Values(row.want))
+			if !slices.Equal(got, want) {
+				t.Fatalf("violations:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+			}
+		})
+	}
 }
 
 func TestSecretImplementationsRemainBehindPorts(t *testing.T) {

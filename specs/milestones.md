@@ -17,7 +17,7 @@ every other command `bootwright --help` lists returns the
 
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
-| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | X19 |
+| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | X20 |
 | [M2](milestones/m2.md) | Native input files for `openshift-install` and the cephadm and ceph CLIs | none | not started | define B51 |
 | [M3](milestones/m3.md) | Provision and destroy OpenShift clusters on bare metal | M1 | in progress | B61's operator gate |
 | [M4](milestones/m4.md) | Provision and destroy IBM Ceph clusters on bare metal | M1, M2, M3 | in progress | B72's operator gate; B73 waits for B9 and its host-key repair |
@@ -25,9 +25,9 @@ every other command `bootwright --help` lists returns the
 | [M6](milestones/m6.md) | Provision and destroy OpenShift clusters over OpenShift Virtualization | M3 | not started | nothing until M3 |
 | [M7](milestones/m7.md) | Add-ons ACM, Argo CD and GitLab | M5 | not started | nothing until M5 |
 
-No slice is active.
+X20 is active.
 
-- **Next for agents:** X20, the next planned slice of M1.
+- **Next for agents:** deliver X20, then X21.
 - **Next for operator:** on a clean build that contains X19, run
   [lab-rhel](../examples/lab-rhel/README.md#run-it) for
   [B72](milestones/m4.md#b72) and [lab-sno](../examples/lab-sno/README.md) for
@@ -96,7 +96,8 @@ No slice is active.
   commit that sets its Status Delivery to `done` and writes
   `Done <date> at <commit>` on its page. A done milestone takes no new item.
   Its Delivery is otherwise `in progress` once any of its items has started,
-  and `not started` before.
+  and `not started` before. An item that completed has left its page, so the
+  page's opening then links the record of a slice delivered toward it.
 
 ## Identifiers
 
