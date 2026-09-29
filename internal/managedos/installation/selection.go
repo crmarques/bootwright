@@ -315,7 +315,7 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 	// fixed, so its derived interfaces are deliberately left out of what the
 	// installation freezes.
 	if derived.Physical {
-		hardware := Hardware{RootDevice: derived.RootDevice}
+		hardware := Hardware{RootDevice: derived.RootDeviceHints.DeviceName}
 		for _, declared := range derived.Interfaces {
 			hardware.Interfaces = append(hardware.Interfaces, Interface{MACAddress: declared.MACAddress, Name: declared.Name})
 		}
@@ -332,9 +332,22 @@ func refusedTarget(machine api.Object, target substrate.Target) error {
 	// that names no disk leaves the installer to clear every one. A wwn is
 	// admitted as a selector but not yet derived into a device the installer
 	// and its own target proof can name.
-	if target.Physical && target.RootDevice == "" {
+	if target.Physical && target.RootDeviceHints.DeviceName == "" {
 		return refusal("lifecycle.unsupported", "a physical installation erases only a root device named by path, and the Machine names none",
 			"set spec.os.install.rootDeviceHints.deviceName on "+machine.Identity()+"; a wwn-only selection is not yet supported")
+	}
+	// The Kickstart selects its disk by name alone, so any other hint would be
+	// ignored and the disk it selected installed over regardless.
+	var uncarried []string
+	for _, name := range target.RootDeviceHints.Names() {
+		if name != "deviceName" {
+			uncarried = append(uncarried, "spec.os.install.rootDeviceHints."+name)
+		}
+	}
+	if len(uncarried) != 0 {
+		return refusal("lifecycle.unsupported",
+			"a managed-OS installation selects its root disk by deviceName alone and cannot carry the other root-device hints the Machine declares",
+			"remove "+strings.Join(uncarried, ", ")+" from "+machine.Identity())
 	}
 	// A delivered key reaches the installer at a tokenized URL the Kickstart
 	// names, and the Kickstart is implanted in an installer image served

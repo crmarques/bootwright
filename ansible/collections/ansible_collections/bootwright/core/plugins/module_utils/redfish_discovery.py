@@ -20,17 +20,29 @@ MEDIA_NAMES = re.compile(r"(?i)/(cd|cd1|dvd|dvd1|virtualcd|virtualdvd|[0-9]+)$")
 # is first because a controller that offers it applies power without waiting on
 # an operating system that is not running yet.
 POWER_ON_ORDER = ("ForceOn", "On", "PushPowerButton")
-TERMINAL_TASK_STATES = ("Completed", "Exception", "Killed", "Cancelled", "Interrupted")
+# Interrupted and Suspended are absent: the Task schema says either task is
+# expected to restart, so it is still running.
+TERMINAL_TASK_STATES = ("Completed", "Exception", "Killed", "Cancelled")
+DEFAULT_PORTS = {"http": 80, "https": 443}
+MESSAGE_ID = re.compile(r"[A-Za-z0-9._]+")
 
 
 def resolve(base, reference):
-    """Turn a member reference into an absolute URL against the controller."""
+    """Turn a path reference into an absolute URL against the controller.
+
+    A reference that names a scheme or an authority, a network-path reference
+    included, is returned as it is rather than rebased onto the endpoint, so the
+    client's own authority check sees exactly what the controller returned.
+    """
     reference = reference if isinstance(reference, str) else ""
     reference = reference.strip()
     if not reference:
         return ""
-    parsed = urlsplit(reference)
-    if parsed.scheme in ("http", "https") and parsed.netloc:
+    try:
+        parsed = urlsplit(reference)
+    except ValueError:
+        return reference
+    if parsed.scheme or reference.startswith("//"):
         return reference
     root = urlsplit(base)
     if reference.startswith("/"):
@@ -87,12 +99,7 @@ def accepts_connect_disconnect(action_info):
     and a connect instruction, so capability is proved rather than assumed. An
     action that declares no allowable values constrains nothing and is accepted.
     """
-    if not isinstance(action_info, dict):
-        return False
-    parameters = {}
-    for parameter in action_info.get("Parameters") or []:
-        if isinstance(parameter, dict) and isinstance(parameter.get("Name"), str):
-            parameters[parameter["Name"]] = parameter
+    parameters = _parameters(action_info)
     if "Image" not in parameters or "VmmControlType" not in parameters:
         return False
     allowed = parameters["VmmControlType"].get("AllowableValues")
@@ -103,20 +110,51 @@ def accepts_connect_disconnect(action_info):
     return {"Connect", "Disconnect"}.issubset({v for v in allowed if isinstance(v, str)})
 
 
-def power_on_reset_type(system, action_info=None):
-    """The reset type this controller advertises for turning a machine on."""
-    allowable = []
+def parameter_required(action_info, name):
+    """Whether an action's metadata marks one of its parameters as required."""
+    return _parameters(action_info).get(name, {}).get("Required") is True
+
+
+def _parameters(action_info):
+    parameters = action_info.get("Parameters") if isinstance(action_info, dict) else None
+    found = {}
+    for parameter in parameters if isinstance(parameters, list) else []:
+        if isinstance(parameter, dict) and isinstance(parameter.get("Name"), str):
+            found[parameter["Name"]] = parameter
+    return found
+
+
+def reset_action(system):
+    """The standard reset action a system advertises, or None."""
     for descriptor in actions(system, "#ComputerSystem.Reset"):
-        values = descriptor["action"].get("ResetType@Redfish.AllowableValues")
-        allowable.extend(v for v in values or [] if isinstance(v, str))
-    if isinstance(action_info, dict):
-        for parameter in action_info.get("Parameters") or []:
-            if isinstance(parameter, dict) and parameter.get("Name") == "ResetType":
-                allowable.extend(v for v in parameter.get("AllowableValues") or [] if isinstance(v, str))
+        if descriptor["source"] == "standard":
+            return descriptor
+    return None
+
+
+def allowed_reset_types(system, action_info):
+    """The reset types a controller advertises, or None when it names none.
+
+    The action's own `ResetType@Redfish.AllowableValues` wins; otherwise the
+    `ResetType` parameter of its fetched `@Redfish.ActionInfo` decides. None
+    means neither constrains the type, which is not the same as an empty list.
+    """
+    descriptor = reset_action(system)
+    inline = descriptor["action"].get("ResetType@Redfish.AllowableValues") if descriptor else None
+    if isinstance(inline, list):
+        return [value for value in inline if isinstance(value, str)]
+    listed = _parameters(action_info).get("ResetType", {}).get("AllowableValues")
+    if isinstance(listed, list):
+        return [value for value in listed if isinstance(value, str)]
+    return None
+
+
+def power_on_reset_type(allowed):
+    """The advertised reset type that turns a machine on, or the empty string."""
     for candidate in POWER_ON_ORDER:
-        if candidate in allowable:
+        if candidate in allowed:
             return candidate
-    return "On"
+    return ""
 
 
 def media_candidates(system_members, manager_members):
@@ -145,16 +183,23 @@ def optical(member):
 
 def inserted_image(member):
     """The image a member reports presenting, or the empty string."""
-    if not isinstance(member, dict) or not _truthy(member.get("Inserted")):
+    if not media_present(member):
         return ""
     return str(member.get("Image") or "")
+
+
+def media_present(member):
+    """Whether a member reports media inserted, whether or not it names the image."""
+    return isinstance(member, dict) and _truthy(member.get("Inserted"))
 
 
 def image_matches(observed, expected):
     """Whether a reported image is the one that was inserted.
 
     A controller may normalize what it echoes back, most often by dropping a
-    default port, so scheme, host and path are compared rather than the text.
+    default port, so scheme, host, port and path are compared rather than the
+    text. An absent port is the scheme's default and nothing else: an image
+    served on 8443 is not proved by an echo that names no port.
     """
     if not observed:
         return False
@@ -162,15 +207,18 @@ def image_matches(observed, expected):
         return True
     try:
         left, right = urlsplit(observed), urlsplit(expected)
+        ports = (left.port, right.port)
     except ValueError:
         return False
-    if not left.scheme or left.scheme.lower() != right.scheme.lower():
+    if not left.scheme or left.scheme != right.scheme:
         return False
     if (left.hostname or "").lower() != (right.hostname or "").lower():
         return False
     if left.path != right.path or left.query != right.query:
         return False
-    return left.port == right.port or left.port is None
+    default = DEFAULT_PORTS.get(left.scheme)
+    observed_port, expected_port = (default if port is None else port for port in ports)
+    return observed_port == expected_port
 
 
 def transfer_protocol(image):
@@ -187,7 +235,8 @@ def task_reference(response_json, headers):
     """The task resource an asynchronous insert reports its outcome in.
 
     A monitor URL is normalized to the task itself, because the monitor is a
-    polling endpoint while the task carries the state and the message.
+    polling endpoint while the task carries the state and the message. The
+    headers are the client's, whose names are already lower-cased.
     """
     reference = ""
     if isinstance(response_json, dict):
@@ -195,23 +244,62 @@ def task_reference(response_json, headers):
             if isinstance(response_json.get(key), str) and response_json[key]:
                 reference = response_json[key]
                 break
-    if not reference and isinstance(headers, dict):
-        for key in ("location", "Location"):
-            if isinstance(headers.get(key), str) and headers[key]:
-                reference = headers[key]
-                break
+    if not reference and isinstance(headers, dict) and isinstance(headers.get("location"), str):
+        reference = headers["location"]
     reference = reference.replace("/TaskService/TaskMonitors/", "/TaskService/Tasks/")
     return re.sub(r"/Monitor/?$", "", reference)
 
 
 def task_settled(task):
-    """Whether a task has reached a state it will not leave, and whether it won."""
-    if not isinstance(task, dict):
-        return True, False
-    state = task.get("TaskState")
+    """Whether a task has reached a state it will not leave, and whether it won.
+
+    A completed task has done what it was asked to, whatever `TaskStatus` says
+    about it: a Warning reports a condition beside the outcome, and the device
+    read back afterwards decides. Anything but a known terminal state, a body
+    that is not a task included, has not settled yet.
+    """
+    state = task.get("TaskState") if isinstance(task, dict) else None
     if not isinstance(state, str) or state not in TERMINAL_TASK_STATES:
         return False, False
-    return True, state == "Completed" and task.get("TaskStatus") in (None, "OK")
+    return True, state == "Completed"
+
+
+def message_id(body):
+    """The controller's own message identifier for an outcome, or the empty string.
+
+    It is taken from a task's first message or an error body's first extended
+    information entry, and kept only when it is a bounded identifier, so what
+    a controller writes there never reaches a failure line as free text.
+    """
+    entries = []
+    if isinstance(body, dict):
+        entries = body.get("Messages")
+        error = body.get("error")
+        if not isinstance(entries, list) and isinstance(error, dict):
+            entries = error.get("@Message.ExtendedInfo")
+    first = entries[0] if isinstance(entries, list) and entries else None
+    value = first.get("MessageId") if isinstance(first, dict) else None
+    if isinstance(value, str) and MESSAGE_ID.fullmatch(value):
+        return value[:64]
+    return ""
+
+
+def boot_selected(system, target):
+    """Whether a system reports the one-time boot device that was selected.
+
+    `Once` proves it. `Continuous` proves it only on a controller that does not
+    offer `Once` at all, because such firmware reports every override as
+    continuous; one that advertises `Once` and reports `Continuous` did not
+    apply what was asked.
+    """
+    boot = system.get("Boot") if isinstance(system, dict) else None
+    if not isinstance(boot, dict) or boot.get("BootSourceOverrideTarget") != target:
+        return False
+    enabled = boot.get("BootSourceOverrideEnabled")
+    if enabled == "Once":
+        return True
+    offered = boot.get("BootSourceOverrideEnabled@Redfish.AllowableValues")
+    return enabled == "Continuous" and not (isinstance(offered, list) and "Once" in offered)
 
 
 def canonical_mac(value):

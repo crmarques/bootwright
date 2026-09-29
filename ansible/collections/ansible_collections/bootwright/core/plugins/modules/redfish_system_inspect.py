@@ -14,8 +14,9 @@ short_description: Read one machine's identity, hardware and power state
 version_added: "0.1.0"
 description:
   - Reports the identity the controller gives this system, every hardware
-    address it reports, the image its virtual media presents, and its power
-    state.
+    address it reports, and its power state.
+  - A system that cannot be read reports an empty identity and power state,
+    which prove nothing.
   - An interface collection that cannot be read in full reports no addresses
     and names why, because a partial inventory proves nothing about which
     machine this is.
@@ -51,7 +52,7 @@ EXAMPLES = r"""
 
 RETURN = r"""
 observation:
-  description: The identity, addresses, media and power state the controller reported.
+  description: The identity, addresses and power state the controller reported.
   returned: always
   type: dict
 """
@@ -74,18 +75,31 @@ def main():
         module.params["endpoint"], module.params["user"], module.params["password"],
         verify=bool(module.params["verify"]),
     )
-    identity = client.identity()
+    module.exit_json(changed=False, observation=observe(client))
+
+
+def observe(client):
+    """What the controller reports about this machine, without changing it.
+
+    The system is read once. One that cannot be read leaves the identity and
+    the power state empty, which proves nothing, and the interface inventory
+    then reports its own failures. Virtual media is not looked for: the proof
+    does not need it, and an inspection makes no request it does not need.
+    """
+    try:
+        identity, power = client.identity(), client.power_state()
+    except redfish_control.ControllerError:
+        identity, power = dict.fromkeys(("UUID", "SerialNumber", "Manufacturer", "Model"), ""), ""
     addresses, failures = client.hardware_addresses()
-    module.exit_json(changed=False, observation={
+    return {
         "addresses": addresses,
         "failures": failures,
         "manufacturer": identity["Manufacturer"],
-        "media": client.inserted(),
         "model": identity["Model"],
-        "power": client.power_state(),
+        "power": power,
         "serial": identity["SerialNumber"],
         "uuid": identity["UUID"],
-    })
+    }
 
 
 if __name__ == "__main__":

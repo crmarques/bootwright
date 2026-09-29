@@ -25,6 +25,16 @@ them, prefer a member whose `MediaTypes` contains `CD` or `DVD`, and fall back
 to an id ending in `Cd`, `CD`, `DVD` or a digit. A client hard-coded to `/Cd`
 under the system works only on the emulator.
 
+A view that cannot be read is not a view without media. Bootwright's client
+requires a declared collection, a linked manager and every probed member to
+answer 200 with an object. A view that declares no `VirtualMedia` is probed at
+`<resource>/VirtualMedia`, and only 404, 501 or another 4xx except 401 and 403
+there reads as none offered; 401, 403, any other 5xx, no answer or a body that
+is not an object is unreadable and fails the read. The reason is the eject: a
+client that reads an unreadable view as empty proves a release against a device
+it never found, which is how an agent-install removal could resolve released
+with media still attached.
+
 ## A request is not an outcome
 
 `ComputerSystem.Reset` returning 204 means the request was accepted. The
@@ -44,8 +54,24 @@ header, and the Task resource is the only place that reports either success or
 `/TaskService/TaskMonitors/<id>` and a trailing `/Monitor` to the Task resource,
 poll to a terminal state, and then confirm against the VirtualMedia resource
 itself. Some controllers normalize the reported `Image` afterwards — preserving
-scheme, host and path while dropping a default port — so compare those three
-parts rather than the whole string.
+scheme, host and path while dropping a default port — so compare those parts
+rather than the whole string, reading an absent port as the scheme's default
+(443 for `https`, 80 for `http`) and nothing else: Bootwright serves installer
+images on 8443, and an echo naming no port does not prove one of them.
+
+The task rule the client applies: 202, any 5xx and no answer mean the task is
+still running, as does a 200 whose `TaskState` is not terminal (openstack/sushy
+at ecddf50 also reads 202 as still processing, in sushy/taskmonitor.py lines
+78-119; not re-checked here). `Completed` succeeds whatever `TaskStatus` says,
+because a `Warning` reports a condition beside the outcome and the device read
+back afterwards decides; `Exception`, `Killed` and `Cancelled` fail, naming the
+state and the task's `MessageId`. `Interrupted` and `Suspended` are still
+running: the [DMTF Task schema](https://redfish.dmtf.org/schemas/v1/Task.v1_7_4.json)
+defines each as a task expected to restart, and failing on one would release a
+device the task may still attach to and send a second attach beside it. Any
+other answer, a 404 from a monitor that has gone included, leaves the outcome
+to the device read-back. A task that never settles within the poll bound fails
+the attempt.
 
 ## `PowerState=On` is not "the installer booted"
 
@@ -66,7 +92,20 @@ after it.
 
 Some controllers reject a PATCH with HTTP 412 unless the request carries the
 resource's current `@odata.etag` as `If-Match`. Fetch the resource immediately
-before the write and send the tag it returned; `*` is a last resort.
+before the write and send the tag it returned; `*` is a last resort. The tag
+may arrive only as an `ETag` response header, whose name a server spells as it
+likes (openstack/sushy at ecddf50 reads it without regard to case, in
+sushy/resources/base.py lines 643-648; not re-checked here), so the client
+lower-cases every header name and prefers the header over the body's tag.
+
+An accepted boot PATCH is not a selection either. The client reads the system
+back until `BootSourceOverrideTarget` is the target and
+`BootSourceOverrideEnabled` is `Once`, or `Continuous` on a controller that
+does not list `Once` in `BootSourceOverrideEnabled@Redfish.AllowableValues`:
+the emulator reports every override as `Continuous` and advertises nothing, but
+one that offers `Once` and reports `Continuous` did not apply what was asked.
+The bound, 12 reads 5 s apart, is borrowed from the reference's power-state
+poll below and has never been observed for a boot selection.
 
 `VerifyCertificate` on a VirtualMedia member is read-only on some firmware,
 which answers 501 (iBMC), 400 or 405. Tolerate exactly those. Do **not**
@@ -98,6 +137,17 @@ default, and their bypass implementations do not treat a CIDR `no_proxy` entry
 as matching a concrete BMC address. A proxy's own 403 then looks exactly like a
 BMC refusing the credential. A client that must not use a proxy installs an
 empty proxy handler explicitly rather than trusting the environment to be clean.
+
+A controller's references are its own to choose, and nothing stops one from
+naming another host. Bootwright's client follows a returned reference — a
+member, an action target, an action's `@Redfish.ActionInfo`, a task or a
+`Location` header — only when its scheme, its host compared without case and
+its port (the scheme's default when absent) are the endpoint's and it carries
+no user information. Anything else is refused before a request is built, so the
+Basic credential never leaves the endpoint; a task reference refused this way
+is simply not polled, and the device read-back decides. This is the
+[security](../../specs/security.md#network-remote-systems-and-privilege) rule
+applied to Redfish, not an observed firmware behavior.
 
 `TransferProtocolType` must match the scheme of the image URL, and iBMC
 rejects an `HTTP` value outright before it creates the insert task; with
@@ -138,6 +188,11 @@ the metadata decide**. A vendor name never appears in a condition.
 - **Media members are unioned and de-duplicated** across the system and every
   manager view, keyed on the resolved URL, then narrowed by `MediaTypes` or an
   id suffix.
+- **Ejecting through the extension** sends `VmmControlType` `Disconnect` to
+  the proved `VmmControl`, adding the presented `Image` only when its
+  ActionInfo marks `Image` as `Required`. The reference's Disconnect payload
+  was not recorded, so this rule is **not observed on hardware**: qualify it on
+  the first physical controller that only offers the extension.
 
 The one place a fixed value was unavoidable is the iBMC certificate slot
 (`RootCertId` 8, because that firmware admits only 5 through 8). That is data
@@ -153,6 +208,20 @@ treating a 404 as ejected because some controllers remove the resource
 entirely. Insert accepts its own status, then polls the asynchronous task, then
 confirms `Inserted` with a matching image. The status of a request is never the
 evidence; the state of the resource is.
+
+Bootwright's [client](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/redfish_control.py),
+which [redfish_boot](../../ansible/collections/ansible_collections/bootwright/core/plugins/modules/redfish_boot.py)
+and [redfish_system_inspect](../../ansible/collections/ansible_collections/bootwright/core/plugins/modules/redfish_system_inspect.py)
+drive, keeps this with one exception: 401 and 403 end any write at once,
+because no retry or read-back changes a missing privilege. An attach nothing
+answered is read back before anything else; a failed attach is retried only
+after the device is proved empty. Every poll, the power poll and each
+read-back, treats an answer that is not a readable resource as not yet the
+state, so only exhaustion fails it. Its
+[tests](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/modules/test_redfish_boot.py)
+drive the emulator, a manager-scoped and a dual-view shape through urllib, and
+the [discovery readings](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_redfish_discovery.py)
+are tested as pure functions.
 
 Bounds it settled on: 60 s per request, 3 insert attempts 10 s apart, 60 task
 polls 2 s apart, 24 media probes 5 s apart, 12 power-state polls 5 s apart, and

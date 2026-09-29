@@ -40,6 +40,49 @@
     status: ok
   no_log: true
 
+# A physical machine is held to the identity the context's current apply proved
+# before any power request. That pin is what a management controller once
+# reported, and this run's variables are rendered as templates when they are
+# read, so it arrives base64-encoded and is decoded only inside the comparison,
+# where a decoded value is data and never a template.
+- name: Read the identity the management controller reports
+  bootwright.core.redfish_system_inspect:
+    endpoint: '{{ bootwright_machine_power_request.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerUser) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerPassword) }}'
+    verify: '{{ bootwright_machine_power_request.controller.tlsVerify }}'
+  register: machine_power_redfish_identity
+  when: >-
+    (bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length > 0)
+    or (bootwright_machine_power_material.pinnedSerialBase64 | default('') | length > 0)
+  no_log: true
+
+- name: Refuse a machine that answers as another system
+  ansible.builtin.assert:
+    that:
+      - >-
+        (bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length == 0)
+        or ((machine_power_redfish_identity.observation.uuid | default('') | trim | lower)
+        == (bootwright_machine_power_material.pinnedUUIDBase64 | b64decode | trim | lower))
+      - >-
+        (bootwright_machine_power_material.pinnedSerialBase64 | default('') | length == 0)
+        or ((machine_power_redfish_identity.observation.serial | default('') | trim)
+        == (bootwright_machine_power_material.pinnedSerialBase64 | b64decode | trim))
+    quiet: true
+    fail_msg: >-
+      Machine/{{ bootwright_machine_power_request.identity.object }} answers at
+      {{ bootwright_machine_power_request.controller.endpoint }} as UUID
+      '{{ machine_power_redfish_identity.observation.uuid | default('') }}' and serial
+      '{{ machine_power_redfish_identity.observation.serial | default('') }}', but this
+      context's current apply proved UUID
+      '{{ bootwright_machine_power_material.pinnedUUIDBase64 | default('') | b64decode }}' and serial
+      '{{ bootwright_machine_power_material.pinnedSerialBase64 | default('') | b64decode }}', so no
+      power request was sent. Correct spec.hardware.management.bmc.address, or destroy and apply
+      this context so the machine is proved again.
+  when: >-
+    (bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length > 0)
+    or (bootwright_machine_power_material.pinnedSerialBase64 | default('') | length > 0)
+
 - name: Stop the machine and poll it to off
   ansible.builtin.include_tasks: stop.yml
   when:

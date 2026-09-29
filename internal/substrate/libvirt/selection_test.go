@@ -187,8 +187,8 @@ func TestTheDomainPresentsTheInterfacesTheRealizedTargetReports(t *testing.T) {
 			t.Fatalf("interface %d: target %+v, domain %+v", index, reported, presented)
 		}
 	}
-	if target.RootDevice != "/dev/vda" {
-		t.Fatalf("root device = %q", target.RootDevice)
+	if target.RootDeviceHints.DeviceName != "/dev/vda" {
+		t.Fatalf("root device = %q", target.RootDeviceHints.DeviceName)
 	}
 }
 

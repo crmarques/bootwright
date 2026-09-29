@@ -905,3 +905,53 @@ need adapter changes ([B29](m1.md#b29), was S31) and the protocols the
 primitive leaves ([B35](m1.md#b35), was R3 (rest)), with clauses added to B8,
 B11, B16, B21 and B30. Gates: `make check` in CI, `make race` and the kill
 harness locally, `make docs-check`. No real-host run.
+
+### X19 — Redfish and identity
+
+**Owner:** Substrate, with Machine, Container cluster and Managed OS.
+Integrated on local `main` on 2026-09-28 as one commit, on explicit request.
+**Items:** B1 (was S23), B2 (was S24), B3 (was S11), B4 (was S25).
+
+**Outcome:** every Redfish effect and every read a consumer decides from goes
+through the vendor-neutral client, which discovers the media device, follows
+tasks by their state, sends `If-Match`, reads each outcome back, speaks only to
+the endpoint's own authority and fails closed on what it cannot read; the
+fixed-path helpers are gone (B1). A proving bare-metal apply reports
+`unchanged` (B2). A physical Machine's power operations compare the UUID and
+serial its done bare-metal apply proved and refuse a mismatch before any
+request; emulated Machines consult no pin (B3, D6). Every admitted root-device
+hint reaches the agent configuration, which is written with every value's type
+kept, a hint the installer cannot carry refuses, the media request is version
+3, and a managed-OS installation refuses every hint but `deviceName` (B4).
+
+**Guard tests:** `TestOnlyADoneBareMetalApplyProofPinsAMachine`,
+`TestTheProvedIdentityIsReadOnlyFromAPresenceProof`,
+`TestProvedEvidenceMatchesItsGolden`,
+`TestAProvedMachineCarriesItsIdentityToTheAdapter`,
+`TestAnEmulatedMachineConsultsNoPin`,
+`TestAnUnreadableProofRefusesBeforeAnyPromptOrRun`,
+`TestEveryDeclaredRootDeviceHintReachesTheAgentConfig`,
+`TestARootDeviceTheAgentInstallerCannotCarryRefuses`,
+`TestAnInstallationRefusesARootDeviceHintItCannotCarry`,
+`TestLabSNOExampleCarriesEveryRootDeviceHintToItsAgentConfig`, and the
+collection tests `test_every_operation_goes_through_the_client`,
+`test_no_operation_builds_a_controller_path_itself`,
+`test_a_reference_to_another_authority_is_refused_and_never_sent_the_credential`,
+`test_an_unreadable_controller_is_a_failure_not_an_empty_answer`,
+`test_a_boot_selection_is_read_back`, `test_the_inspection_contract_is_kept`,
+`test_a_proving_apply_publishes_no_change`,
+`test_the_identity_is_read_and_compared_before_any_power_request` and
+`test_a_string_above_the_bmp_reaches_the_installer_as_a_yaml_escape`.
+
+**Review:** five findings; two confirmed and fixed (a task reported
+Interrupted no longer triggers a second insert; code points above U+FFFF
+reach the installer as YAML escapes), three rejected.
+
+**Gates:** `make check-offline tidy-check modules-check vulncheck docs-check
+race` and `./scripts/ansible-check --suite units`, `sanity`, `integration` and
+`lint` pass on the integrated slice. No real-host run.
+
+**Constraints left behind:** new items B108 to B113; clauses on B5, B6, B12,
+B29, B32, B39, B67, B73 and B96; the emulated labs repeat their rows on a build
+with X19, destroying lab-sno contexts applied before it with their own
+executable. The upstream Redfish citations were not re-fetched.

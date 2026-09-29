@@ -603,6 +603,13 @@ power instead, and is a separate request rather than a fallback. Restarting
 proves the stop before it starts, so an interrupted restart is never reported
 as settled.
 
+A physical Machine whose [pin](substrates.md#physical-machine-realization) the
+context's current apply recorded is held to it: a controller reporting another
+identity refuses `lifecycle.state` with exit `1` before any power request, and
+the run's retained output names the Machine and both identities. A
+current-operation record or pin of that Machine that cannot be read refuses
+`lifecycle.state` before any confirmation or run.
+
 [`machine list --power-status`](#resource-inspection-and-explicit-access)
 reads the same controllers over the same boundary and under the same lock, and
 follows the same reachability rules, but drives nothing: it asks each

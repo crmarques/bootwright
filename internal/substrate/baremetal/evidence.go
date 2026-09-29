@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"slices"
+
+	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 const maxEvidenceBytes = 64 << 10
@@ -73,7 +77,55 @@ func ValidateAbsence(data []byte, digest string) error {
 	return nil
 }
 
+// ProvedIdentity reads the identity one presence proof recorded. It reads the
+// evidence as strictly as the proof accepted it, without the request digest
+// the proof was bound to, and refuses anything that is not a proof of a
+// present machine with an identity.
+func ProvedIdentity(data []byte) (machineref.HardwareIdentity, error) {
+	evidence, err := decodeStrict(data)
+	if err != nil {
+		return machineref.HardwareIdentity{}, err
+	}
+	if !evidence.Postcondition || evidence.Absent || (evidence.UUID == "" && evidence.Serial == "") {
+		return machineref.HardwareIdentity{}, refusal("lifecycle.state", "the machine evidence proves no identity", "")
+	}
+	return machineref.HardwareIdentity{UUID: evidence.UUID, Serial: evidence.Serial}, nil
+}
+
+// PinnedIdentity is the identity the context's current apply proved for one
+// Machine: the evidence of its done bare-metal block. A block resolved by
+// observation recorded no evidence of its own attempt, and a Machine this
+// capability never proved has no such block, so either pins nothing.
+func PinnedIdentity(machine string, blocks []lifecycle.BlockEvidence) (machineref.HardwareIdentity, bool, error) {
+	for _, block := range blocks {
+		if block.Implementation != Implementation || block.Verb != reconciliation.Apply || block.State != reconciliation.BlockDone {
+			continue
+		}
+		if len(block.Evidence) == 0 || bytes.Equal(block.Evidence, []byte("null")) {
+			return machineref.HardwareIdentity{}, false, nil
+		}
+		identity, err := ProvedIdentity(block.Evidence)
+		if err != nil {
+			return machineref.HardwareIdentity{}, false, refusal("lifecycle.state",
+				"the proof that pins Machine/"+machine+" cannot be read", "destroy and apply this context so the machine is proved again")
+		}
+		return identity, true, nil
+	}
+	return machineref.HardwareIdentity{}, false, nil
+}
+
 func decodeEvidence(data []byte, digest string) (Evidence, error) {
+	evidence, err := decodeStrict(data)
+	if err != nil {
+		return Evidence{}, err
+	}
+	if evidence.Request != digest {
+		return Evidence{}, refusal("lifecycle.state", "the machine evidence names another request", "")
+	}
+	return evidence, nil
+}
+
+func decodeStrict(data []byte) (Evidence, error) {
 	if len(data) == 0 || len(data) > maxEvidenceBytes {
 		return Evidence{}, refusal("lifecycle.state", "the machine adapter returned no bounded evidence", "")
 	}
@@ -85,9 +137,6 @@ func decodeEvidence(data []byte, digest string) (Evidence, error) {
 	}
 	if decoder.More() {
 		return Evidence{}, refusal("lifecycle.state", "the machine adapter returned trailing evidence", "")
-	}
-	if evidence.Request != digest {
-		return Evidence{}, refusal("lifecycle.state", "the machine evidence names another request", "")
 	}
 	return evidence, nil
 }

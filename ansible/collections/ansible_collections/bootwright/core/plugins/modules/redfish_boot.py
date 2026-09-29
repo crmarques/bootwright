@@ -4,7 +4,24 @@
 Every power operation goes through the management controller, never through the
 hypervisor, so a consumer takes the same path to a virtual and a physical
 server. A request is not evidence: each operation polls the resource to its
-expected state within a bounded window.
+expected state within a bounded window, and an answer the controller does not
+give readably fails the operation rather than reading as empty.
+
+Each operation's worst case, from the bounds in redfish_control:
+
+- insert: at most 1,880 s of pauses and attach timeouts, 3 x (MEDIA_TIMEOUT
+  300 + TASK_POLLS 60 x 2 + MEDIA_PROBES 24 x 5) + 2 x (24 x 5 +
+  INSERT_RETRY_DELAY 10), and at most 10,940 s when every request also times
+  out, 3 x (300 + 60 x 32 + 24 x 35) + 2 x (30 + 24 x 35 + 10); plus one
+  REQUEST_TIMEOUT for each discovery read and for each read before an attach
+  or an eject.
+- eject: at most 120 s of pauses, and 870 s when every request after discovery
+  times out (the detach and 24 probes).
+- boot: at most 60 s, and 510 s with timeouts (the system read, two PATCHes and
+  12 read-backs).
+- power-on, power-off and shutdown: at most attempts x 2 s, and attempts x 32 s
+  with timeouts, plus three requests (the system read, an ActionInfo and the
+  reset).
 """
 
 from __future__ import annotations
@@ -72,17 +89,20 @@ power:
   returned: always
   type: str
 media:
-  description: The image the controller presents, or the empty string.
+  description:
+    - The image the virtual-media device last reported for read, insert and
+      eject, or the empty string when it presents none or none is offered.
+    - Always empty for boot and power operations, which never look for media.
   returned: always
   type: str
 """
-
-import urllib.error
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils import redfish_control
 
 MAX_ATTEMPTS = 600
+# Each power operation's reset type and the state it must reach.
+RESETS = {"power-on": ("On", "On"), "power-off": ("ForceOff", "Off"), "shutdown": ("GracefulShutdown", "Off")}
 
 
 def main():
@@ -102,53 +122,46 @@ def main():
         },
         supports_check_mode=False,
     )
-    endpoint = module.params["endpoint"]
-    user, password = module.params["user"], module.params["password"]
-    operation = module.params["operation"]
-    attempts = max(1, min(int(module.params["attempts"]), MAX_ATTEMPTS))
-    verify = bool(module.params["verify"])
+    params = module.params
+    operation = params["operation"]
+    client = redfish_control.Client(params["endpoint"], params["user"], params["password"], verify=bool(params["verify"]))
+    attempts = max(1, min(int(params["attempts"]), MAX_ATTEMPTS))
     try:
-        changed = drive(module, endpoint, user, password, operation, attempts, verify)
-        module.exit_json(
-            changed=changed,
-            power=redfish_control.power_state(endpoint, user, password, verify=verify),
-            media=redfish_control.media_inserted(endpoint, user, password, verify=verify),
-        )
-    except (urllib.error.URLError, OSError, ValueError) as failure:
-        module.fail_json(msg="the management controller did not complete %s: %s" % (operation, type(failure).__name__))
+        changed, power, media = drive(client, operation, attempts, params["image"] or "", params["target"])
+    except redfish_control.ControllerError as failure:
+        module.fail_json(msg="the management controller did not complete %s: %s" % (operation, failure))
+    else:
+        module.exit_json(changed=changed, power=power, media=media)
 
 
-def drive(module, endpoint, user, password, operation, attempts, verify=True):
-    """Perform exactly the one operation asked for, and prove its outcome."""
-    if operation == "read":
-        return False
-    if operation == "insert":
-        image = module.params["image"]
-        if not image:
-            raise ValueError("image")
-        if redfish_control.media_inserted(endpoint, user, password, verify=verify) == image:
-            return False
-        redfish_control.insert_media(endpoint, user, password, image, verify=verify)
-        return True
-    if operation == "eject":
-        if not redfish_control.media_inserted(endpoint, user, password, verify=verify):
-            return False
-        redfish_control.eject_media(endpoint, user, password, verify=verify)
-        return True
+def drive(client, operation, attempts, image="", target="Cd"):
+    """Perform exactly the one operation asked for, prove it, and report it.
+
+    Returns whether it changed anything, the power state the invocation's last
+    system read reported, and the image the device last reported. Only read,
+    insert and eject look for media; boot and power operations never do, so
+    they report no image.
+    """
+    if operation == "insert" and not image:
+        raise redfish_control.ControllerError("insert needs an image")
     if operation == "boot":
-        redfish_control.boot_once(endpoint, user, password, module.params["target"], verify=verify)
-        return True
-    expected = "On" if operation == "power-on" else "Off"
-    if redfish_control.power_state(endpoint, user, password, verify=verify) == expected:
-        return False
-    # A graceful request asks the operating system to stop; forcing the power
-    # off does not. Both are polled to the state they asked for, so neither is
-    # reported as settled before the controller says it is.
-    kind = {"power-on": "On", "power-off": "ForceOff", "shutdown": "GracefulShutdown"}[operation]
-    redfish_control.reset(endpoint, user, password, kind, verify=verify)
-    if not redfish_control.await_power(endpoint, user, password, expected, attempts, verify=verify):
-        raise ValueError("power state")
-    return True
+        client.boot_once(target)
+        return True, client.last_power, ""
+    if operation in RESETS:
+        # A graceful request asks the operating system to stop; forcing the
+        # power off does not. Both are polled to the state they asked for, so
+        # neither is reported as settled before the controller says it is.
+        kind, expected = RESETS[operation]
+        return client.power(kind, expected, attempts), client.last_power, ""
+    power = client.power_state()
+    changed = False
+    if operation == "insert":
+        changed = client.insert(image)
+    elif operation == "eject":
+        changed = client.eject()
+    else:
+        client.inserted()
+    return changed, power, client.last_image
 
 
 if __name__ == "__main__":

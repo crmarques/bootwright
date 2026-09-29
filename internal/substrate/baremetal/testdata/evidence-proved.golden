@@ -1,0 +1,14 @@
+{
+  "absent": false,
+  "addresses": [
+    "aa:bb:cc:dd:ee:01",
+    "aa:bb:cc:dd:ee:02"
+  ],
+  "manufacturer": "Dell Inc.",
+  "model": "PowerEdge R740",
+  "postcondition": true,
+  "power": "Off",
+  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "serial": "CZJ2440ABC",
+  "uuid": "4c4c4544-0042-3510-8052-b4c04f4d4e31"
+}

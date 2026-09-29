@@ -71,7 +71,7 @@ func readSurveysFor(catalog api.Catalog, contextName string, names []string, own
 		if !ok {
 			continue
 		}
-		controller, placement, err := controllerFor(catalog, object, contextName, controllerMachine, owned)
+		controller, placement, _, err := controllerFor(catalog, object, contextName, controllerMachine, owned)
 		if err != nil {
 			continue
 		}

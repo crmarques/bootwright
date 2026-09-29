@@ -1,7 +1,9 @@
 ---
-# This block realizes nothing. A physical server exists before Bootwright is
-# told about it, so what an apply does is prove that the machine answering at
-# the declared controller is the machine the declaration names, and claim it.
+# This block realizes nothing and writes nothing. A physical server exists
+# before Bootwright is told about it, so what an apply does is prove that the
+# machine answering at the declared controller is the machine the declaration
+# names. Its claim is the operation's reservation, taken when the operation
+# registers, so every proving apply, the first included, reports no change.
 - name: Validate the frozen machine request
   ansible.builtin.assert:
     that:
@@ -57,7 +59,7 @@
 - name: Publish bounded machine proof
   bootwright.core.substrate_physical_protocol:
     phase: completed
-    outcome: changed
+    outcome: unchanged
     digest: '{{ bootwright_substrate_physical_digest }}'
     observation: '{{ substrate_baremetal_machine_observed.observation }}'
     expected: '{{ substrate_baremetal_machine_expected }}'

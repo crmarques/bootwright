@@ -225,6 +225,44 @@ func compactCatalog() api.Catalog {
 	return api.NewCatalog(objects)
 }
 
+// withHints replaces the root-device hints a Machine declares.
+func withHints(machine api.Object, hints ...api.FieldValue) api.Object {
+	return machine.WithSpec(machine.Spec().WithPath(api.MapValue(hints...), "os", "install", "rootDeviceHints"))
+}
+
+// everyHint is every root-device hint admission accepts, each string one a
+// YAML 1.1 reader would take for a number, with a size of zero and a disk
+// that is not rotational, so the frozen input must keep each type and value.
+func everyHint() []api.FieldValue {
+	return []api.FieldValue{
+		text("deviceName", "/dev/disk/by-path/pci-0000:00:04.0"), text("hctl", "1:0:0:0"), text("model", "1e3"),
+		text("vendor", "0o17"), text("serialNumber", "0987654321"), text("wwn", "0x5000c500a1b2c3d4"),
+		number("minSizeGigabytes", "0"), field("rotational", api.BoolValue(false)),
+	}
+}
+
+// hintsCatalog is the compact topology whose first node declares every hint,
+// whose second selects its disk by wwn alone and whose third names its device.
+func hintsCatalog() api.Catalog {
+	objects := append(base(),
+		withHints(guest("ocp-01", "198.51.100.31/24"), everyHint()...),
+		withHints(guest("ocp-02", "198.51.100.32/24"), text("wwn", "0x5000c500a1b2c3d5")),
+		guest("ocp-03", "198.51.100.33/24"))
+	compact, _ := compactCatalog().Find(api.ContainerCluster, "ocp")
+	return api.NewCatalog(append(objects, compact))
+}
+
+// singleNodeWith is the lab-sno shape with its node declaring the given hints.
+func singleNodeWith(hints ...api.FieldValue) api.Catalog {
+	objects := singleNodeCatalog().Objects()
+	for index, object := range objects {
+		if object.Kind() == api.Machine && object.Name() == "sno-01" {
+			objects[index] = withHints(object, hints...)
+		}
+	}
+	return api.NewCatalog(objects)
+}
+
 // externalCatalog is the compact topology with endpoints something outside the
 // cluster answers, so its load balancer is user-managed. It also trusts two
 // additional CA bundles, declared out of name order so the order the media

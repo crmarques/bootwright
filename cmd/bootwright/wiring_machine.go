@@ -13,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/trust"
 	"github.com/crmarques/bootwright/internal/trust/enrollment"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -45,8 +46,8 @@ func wireMachine(deps machineDependencies) cli.Services {
 	selection := currentSelection(deps.Selection)
 	evidence := machineOwnership{reconciler: deps.Lifecycle}
 	client := sshlocal.New(deps.Home, deps.Owner)
-	powered := power.New(deps.State, evidence, deps.Lifecycle, ansiblerunner.New(operationPlaybook()),
-		deps.Confirmer, deps.Reporter, selection)
+	powered := power.New(deps.State, evidence, machineIdentities{reconciler: deps.Lifecycle}, deps.Lifecycle,
+		ansiblerunner.New(operationPlaybook()), deps.Confirmer, deps.Reporter, selection)
 	return cli.Services{
 		MachineInventory: inventory.New(deps.State, evidence, powered, selection),
 		MachineAccess: machineaccess.New(deps.State, selection, machineaccess.Options{
@@ -110,4 +111,18 @@ func (h machineHostKeys) HostKey(ctx context.Context, contextName, name string) 
 		return machine.HostKeyEvidence{Address: address, HostKey: parsed}, true, nil
 	}
 	return machine.HostKeyEvidence{}, false, nil
+}
+
+// machineIdentities reads the hardware identity one context's current apply
+// proved for a physical Machine. The bare-metal capability wrote that
+// evidence, so it decodes it here and decides what pins the Machine; a power
+// operation asks only for the answer.
+type machineIdentities struct{ reconciler lifecycle.Service }
+
+func (i machineIdentities) ProvedIdentity(ctx context.Context, contextName, name string) (machine.HardwareIdentity, bool, error) {
+	published, err := i.reconciler.Evidence(ctx, contextName, baremetal.Kind, name)
+	if err != nil {
+		return machine.HardwareIdentity{}, false, err
+	}
+	return baremetal.PinnedIdentity(name, published)
 }

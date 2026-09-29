@@ -81,7 +81,10 @@ and `fromMedia` name entries of the media store. A profile selecting
 registration. These shapes carry secret bytes or effects this contract does not
 prove. A Machine whose management controller's virtual-media trust is
 `import-certificate` also refuses before registration, because importing a
-certificate into a management controller is not implemented. Publicly served
+certificate into a management controller is not implemented. A Machine
+declaring any root-device hint other than `deviceName` refuses before
+registration, naming each such field, because the Kickstart selects its disk
+by name alone and would ignore the others. Publicly served
 content remains secret-free by construction; the one thing an installation
 may deliver confidentially is the host key it installs, through the
 [private path](#physical-installation) below, and every other secret-bearing
@@ -101,7 +104,7 @@ effective state alone: text mode; the accepted license; the install source;
 prefix, the default route and the selected DNS servers, with the Machine's
 effective `fqdn` as hostname; a locked root account; the `bootwright` account
 with the public half of `remoteMachinesAccessKey` authorized and passwordless
-sudo; the named root disk from `rootDeviceHints` cleared and partitioned, or
+sudo; the root disk `rootDeviceHints.deviceName` names cleared and partitioned, or
 automatic partitioning when a Machine its substrate created names none; the
 `minimal` environment, the profile's packages, and `qemu-guest-agent` on a
 Machine whose identity channel is the guest agent; the profile's enabled and
@@ -256,7 +259,9 @@ nothing from the machine. The authorization acknowledges already-planned loss;
 it selects no target and relaxes no proof. The erasure is confined to the disk
 `rootDeviceHints.deviceName` names: an installation that names none, including
 one selecting by `wwn` alone, refuses before registration, and the Kickstart
-renderer refuses rather than clearing every disk.
+renderer refuses rather than clearing every disk. One declaring any other hint
+beside `deviceName` refuses before registration too, as the
+[supported shape](#installation) states.
 
 **The target is proved inside the installer as well.** The controller-side
 proof above closes before the machine boots, and a machine can be re-cabled or

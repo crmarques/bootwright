@@ -105,6 +105,9 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 			return "physical cluster nodes are not supported until the installer proves each node before booting it",
 				bound.Identity() + " is physical; declare " + cluster.Identity() + " on virtual nodes"
 		}
+		if _, reason, remediation := installerRootDeviceHints(bound, target.RootDeviceHints); reason != "" {
+			return reason, remediation
+		}
 		if target.Controller.VirtualMedia.Trust == substrate.TrustImportCertificate {
 			return "importing a certificate into a management controller is not implemented", ""
 		}
@@ -294,14 +297,56 @@ func clusterKeyRef(cluster api.Object) (string, error) {
 // nodeProjection is one declared node with everything both installer inputs
 // and the boot itself need, derived once.
 type nodeProjection struct {
-	address    string
-	interfaces []substrate.Interface
-	machine    api.Object
-	name       string
-	network    map[string]any
-	role       string
-	rootDevice string
-	target     substrate.Target
+	address         string
+	interfaces      []substrate.Interface
+	machine         api.Object
+	name            string
+	network         map[string]any
+	role            string
+	rootDeviceHints map[string]any
+	target          substrate.Target
+}
+
+// maxInstallerRootDeviceGigabytes is the largest minSizeGigabytes the frozen
+// media request carries exactly, because it is read back as a float64.
+const maxInstallerRootDeviceGigabytes = 1<<53 - 1
+
+// installerRootDeviceHints renders every root-device hint a node declares
+// under its admitted name and with its declared type, or nothing when it
+// declares none. A hint the agent installer or the frozen request cannot carry
+// refuses instead, naming the bound Machine, because that is what an operator
+// changes; the rule on deviceName is the installer's own for agent hosts.
+func installerRootDeviceHints(bound api.Object, hints substrate.RootDeviceHints) (rendered map[string]any, reason, remediation string) {
+	if len(hints.Names()) == 0 {
+		return nil, "", ""
+	}
+	remainder := strings.TrimPrefix(strings.TrimPrefix(hints.DeviceName, "/dev/"), "disk/by-path/")
+	if strings.Contains(remainder, "/") {
+		return nil, "the agent installer names a root device only as /dev/<name> or /dev/disk/by-path/<name>",
+			"set spec.os.install.rootDeviceHints.deviceName on " + bound.Identity() + " to such a path"
+	}
+	rendered = map[string]any{}
+	if hints.MinSizeGigabytes != "" {
+		size, err := strconv.ParseInt(hints.MinSizeGigabytes, 10, 64)
+		if err != nil || size > maxInstallerRootDeviceGigabytes {
+			return nil, "a node's minSizeGigabytes is larger than the frozen installer input carries exactly",
+				"declare spec.os.install.rootDeviceHints.minSizeGigabytes on " + bound.Identity() + " as at most " +
+					strconv.FormatInt(maxInstallerRootDeviceGigabytes, 10)
+		}
+		rendered["minSizeGigabytes"] = size
+	}
+	for name, value := range map[string]string{
+		"deviceName": hints.DeviceName, "hctl": hints.HCTL, "model": hints.Model, "vendor": hints.Vendor,
+		"serialNumber": hints.SerialNumber, "wwn": hints.WWN,
+	} {
+		if value != "" {
+			rendered[name] = value
+		}
+	}
+	if hints.Rotational != nil {
+		rendered["rotational"] = *hints.Rotational
+	}
+	return rendered, "", ""
 }
 
 // nodeProjections derives every declared node in node-name order, which is the
@@ -323,6 +368,10 @@ func nodeProjections(catalog api.Catalog, cluster api.Object, contextName, contr
 		if err != nil {
 			return nil, err
 		}
+		hints, reason, remediation := installerRootDeviceHints(bound, target.RootDeviceHints)
+		if reason != "" {
+			return nil, refusal("lifecycle.unsupported", reason, remediation)
+		}
 		address, err := installAddress(catalog, bound)
 		if err != nil {
 			return nil, err
@@ -343,7 +392,7 @@ func nodeProjections(catalog api.Catalog, cluster api.Object, contextName, contr
 		projections = append(projections, nodeProjection{
 			address: address, interfaces: target.Interfaces, machine: bound,
 			name: node.Get("name").Text(), network: network, role: node.Get("role").Text(),
-			rootDevice: target.RootDevice, target: target,
+			rootDeviceHints: hints, target: target,
 		})
 	}
 	if len(projections) == 0 {

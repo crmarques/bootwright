@@ -3,6 +3,7 @@ package power
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"maps"
 	"slices"
@@ -17,17 +18,21 @@ import (
 )
 
 type Service struct {
-	state     EffectiveState
-	ownership Ownership
-	runtime   Runtime
-	runner    Runner
-	confirmer Confirmer
-	reporter  Reporter
-	selection machine.CurrentSelection
+	state      EffectiveState
+	ownership  Ownership
+	identities Identities
+	runtime    Runtime
+	runner     Runner
+	confirmer  Confirmer
+	reporter   Reporter
+	selection  machine.CurrentSelection
 }
 
-func New(state EffectiveState, ownership Ownership, runtime Runtime, runner Runner, confirmer Confirmer, reporter Reporter, selection machine.CurrentSelection) Service {
-	return Service{state: state, ownership: ownership, runtime: runtime, runner: runner, confirmer: confirmer, reporter: reporter, selection: selection}
+func New(state EffectiveState, ownership Ownership, identities Identities, runtime Runtime, runner Runner, confirmer Confirmer, reporter Reporter, selection machine.CurrentSelection) Service {
+	return Service{
+		state: state, ownership: ownership, identities: identities, runtime: runtime, runner: runner,
+		confirmer: confirmer, reporter: reporter, selection: selection,
+	}
 }
 
 // Start converges one Machine to powered on.
@@ -134,12 +139,15 @@ func (s Service) observe(ctx context.Context, runtime lifecycle.Runtime, frozen 
 
 // converge drives one Machine to the power state its verb names. The operation
 // registers nothing and owns nothing: a power state is not desired state, so it
-// proves only what the controller reported when it settled.
+// proves only what the controller reported when it settled. A physical Machine
+// is held to the identity the context's current apply proved for it, read
+// before anything is asked or run, so a pin that cannot be read refuses
+// without a prompt.
 func (s Service) converge(ctx context.Context, request PowerRequest) (*Result, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if s.state == nil || s.ownership == nil || s.runtime == nil || s.runner == nil {
+	if s.state == nil || s.ownership == nil || s.identities == nil || s.runtime == nil || s.runner == nil {
 		return nil, availability.ErrNotImplemented
 	}
 	name, err := machine.SelectedContext(ctx, s.selection, request.ContextName)
@@ -154,14 +162,24 @@ func (s Service) converge(ctx context.Context, request PowerRequest) (*Result, e
 	if err != nil {
 		return nil, err
 	}
-	frozen, err := requestFor(effective.Effective, name, request.Name, request.Verb, request.Force, owned)
+	frozen, physical, err := requestFor(effective.Effective, name, request.Name, request.Verb, request.Force, owned)
 	if err != nil {
 		return nil, err
+	}
+	var pin machine.HardwareIdentity
+	if physical {
+		proved, found, err := s.identities.ProvedIdentity(ctx, name, frozen.Identity.Object)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			pin = proved
+		}
 	}
 	if err := s.confirm(ctx, request, frozen); err != nil {
 		return nil, err
 	}
-	return s.execute(ctx, name, frozen)
+	return s.execute(ctx, name, frozen, pin)
 }
 
 // confirm asks before an operation interrupts a running system. Powering a
@@ -180,7 +198,7 @@ func (s Service) confirm(ctx context.Context, request PowerRequest, frozen Reque
 	return s.confirmer.Confirm(ctx, action, frozen.Identity.Object)
 }
 
-func (s Service) execute(ctx context.Context, name string, frozen Request) (*Result, error) {
+func (s Service) execute(ctx context.Context, name string, frozen Request, pin machine.HardwareIdentity) (*Result, error) {
 	canonical, err := frozen.Canonical()
 	if err != nil {
 		return nil, err
@@ -201,7 +219,7 @@ func (s Service) execute(ctx context.Context, name string, frozen Request) (*Res
 		if s.reporter != nil {
 			s.reporter.ReportLogLocation(inner, runtime.LogLocation)
 		}
-		run, err := s.runner.Run(inner, invocation(runtime, frozen, canonical, digest))
+		run, err := s.runner.Run(inner, invocation(runtime, frozen, canonical, digest, pin))
 		if err != nil {
 			return err
 		}
@@ -240,7 +258,7 @@ func readInvocation(runtime lifecycle.Runtime, frozen ReadSurvey, canonical []by
 	}
 }
 
-func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, digest string) lifecycle.RunRequest {
+func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, digest string, pin machine.HardwareIdentity) lifecycle.RunRequest {
 	materials := []lifecycle.MaterialFile{
 		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: frozen.Controller.CredentialsRef, Variable: "controllerUser"},
 		{Name: "bmc-password", Part: secrets.PasswordPart, Secret: frozen.Controller.CredentialsRef, Variable: "controllerPassword"},
@@ -253,6 +271,7 @@ func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, dig
 		Canonical:      canonical,
 		Placement:      frozen.Placement,
 		Materials:      append(materials, lifecycle.Materials(frozen.Placement)...),
+		MaterialValues: pinValues(pin),
 		Sudo:           frozen.Placement.SudoPasswordRef,
 		Launch:         runtime.Launch,
 		Bundle:         runtime.Bundle,
@@ -260,6 +279,24 @@ func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, dig
 		Material:       runtime.Material,
 		Output:         runtime.Output,
 	}
+}
+
+// pinValues carries a proved identity to the adapter encoded. The values are
+// what a management controller once reported, and a run's variables are
+// rendered as templates when they are read, so a raw value could be evaluated
+// there rather than compared. A field the proof recorded empty is not sent.
+func pinValues(pin machine.HardwareIdentity) map[string]string {
+	if !pin.Present() {
+		return nil
+	}
+	values := map[string]string{}
+	if pin.UUID != "" {
+		values["pinnedUUIDBase64"] = base64.StdEncoding.EncodeToString([]byte(pin.UUID))
+	}
+	if pin.Serial != "" {
+		values["pinnedSerialBase64"] = base64.StdEncoding.EncodeToString([]byte(pin.Serial))
+	}
+	return values
 }
 
 // ContentDigest binds a power request to the exact behavior this build

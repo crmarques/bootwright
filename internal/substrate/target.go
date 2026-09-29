@@ -120,9 +120,10 @@ type Target struct {
 	// machine's hardware to an installer reads them here rather than learning
 	// how each substrate assigns one.
 	Interfaces []Interface
-	// RootDevice is the whole disk an installation is permitted to erase,
-	// exactly as the Machine selects it.
-	RootDevice string
+	// RootDeviceHints select the whole disk an installation is permitted to
+	// erase, exactly as the Machine declares them. Which of them an
+	// installation can carry is that installation's own rule.
+	RootDeviceHints RootDeviceHints
 	// PlacementMachine is the Machine whose host reaches the controller.
 	PlacementMachine api.Object
 }
@@ -241,7 +242,7 @@ func virtualTarget(catalog api.Catalog, provider, machine api.Object, contextNam
 			Name: name, MACAddress: InterfaceMAC(contextName, machine.Name(), name),
 		})
 	}
-	target.RootDevice = rootDevice(machine)
+	target.RootDeviceHints = rootDeviceHints(machine)
 	target.PlacementMachine = host
 	return target, nil
 }
@@ -270,15 +271,9 @@ func physicalTarget(catalog api.Catalog, provider, machine api.Object, controlle
 		Channel: ChannelDeliveredKey, HostKeyRef: machine.Spec().Get("os", "install", "hostKeyRef").Text(),
 	}
 	target.Interfaces = interfaces
-	target.RootDevice = rootDevice(machine)
+	target.RootDeviceHints = rootDeviceHints(machine)
 	target.PlacementMachine = host
 	return target, nil
-}
-
-// rootDevice is the disk the Machine selects for its installation, empty when
-// it selects none. Only a physical Machine is required to name one.
-func rootDevice(machine api.Object) string {
-	return machine.Spec().Get("os", "install", "rootDeviceHints", "deviceName").Text()
 }
 
 func virtualMediaTrust(tls api.Value) VirtualMedia {

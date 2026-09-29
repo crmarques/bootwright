@@ -223,8 +223,8 @@ func agentConfig(cluster api.Object, nodes []nodeProjection, timeSources []strin
 			"interfaces":    nodeInterfaces(node),
 			"networkConfig": node.network,
 		}
-		if node.rootDevice != "" {
-			host["rootDeviceHints"] = map[string]any{"deviceName": node.rootDevice}
+		if node.rootDeviceHints != nil {
+			host["rootDeviceHints"] = node.rootDeviceHints
 		}
 		hosts = append(hosts, host)
 	}

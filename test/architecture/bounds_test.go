@@ -56,6 +56,7 @@ func documentedBounds() []documentedBound {
 		{contexts, "| One lifecycle adapter invocation whose request states no deadline | %s |", lifecycleRun, "invocationTimeout", &application{runner: "execute"}},
 		{contexts, "| The longest deadline a lifecycle adapter request may state | %s |", lifecycleRequest, "MaxDeadline", &application{runner: "execute", source: lifecycleRun, ceiling: true}},
 		{contexts, "| One controller Ansible run: setup, its recovery or a controller-stage client installation | %s |", setupRun, "runTimeout", &application{runner: "runProcess"}},
+		{"specs/container-clusters.md", "whose `minSizeGigabytes` exceeds %s", "internal/containercluster/agentinstall/selection.go", "maxInstallerRootDeviceGigabytes", nil},
 	}
 }
 

@@ -55,7 +55,14 @@
         },
         "role": "master",
         "rootDeviceHints": {
-          "deviceName": "/dev/vda"
+          "deviceName": "/dev/disk/by-path/pci-0000:00:04.0",
+          "hctl": "1:0:0:0",
+          "minSizeGigabytes": 0,
+          "model": "1e3",
+          "rotational": false,
+          "serialNumber": "0987654321",
+          "vendor": "0o17",
+          "wwn": "0x5000c500a1b2c3d4"
         }
       },
       {
@@ -108,7 +115,7 @@
         },
         "role": "master",
         "rootDeviceHints": {
-          "deviceName": "/dev/vda"
+          "wwn": "0x5000c500a1b2c3d5"
         }
       },
       {
@@ -202,7 +209,7 @@
     "networking": {
       "clusterNetwork": [
         {
-          "cidr": "10.132.0.0/14",
+          "cidr": "10.128.0.0/14",
           "hostPrefix": 23
         }
       ],
@@ -211,22 +218,19 @@
           "cidr": "198.51.100.0/24"
         }
       ],
-      "networkType": "OVNKubernetes",
       "serviceNetwork": [
-        "172.31.0.0/16"
+        "172.30.0.0/16"
       ]
     },
     "platform": {
       "baremetal": {
         "apiVIPs": [
-          "198.51.100.20"
+          "198.51.100.10"
         ],
         "ingressVIPs": [
-          "198.51.100.21"
+          "198.51.100.11"
         ],
-        "loadBalancer": {
-          "type": "UserManaged"
-        }
+        "provisioningNetwork": "Disabled"
       }
     },
     "pullSecret": "",
@@ -247,10 +251,6 @@
     "kind": "openshift-install",
     "version": "4.21.15"
   },
-  "trustBundleRefs": [
-    "lab-root-ca",
-    "corp-proxy-ca"
-  ],
   "version": "cluster-media-agent-v3",
   "workRoot": "/var/lib/bootwright-clusters/lab/ocp"
 }

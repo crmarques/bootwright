@@ -2,66 +2,161 @@
 
 from __future__ import annotations
 
-import pytest
-
+import http.client
+import io
 import ssl
+import urllib.error
 import urllib.request
+
+import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import redfish_control
 
-
-def test_only_a_reported_power_state_is_ever_returned(monkeypatch):
-    answers = iter([{"PowerState": "On"}, {"PowerState": "Unknown"}, {}])
-    monkeypatch.setattr(redfish_control, "request", lambda *a, **k: next(answers))
-    assert redfish_control.power_state("http://c/1", "u", "p") == "On"
-    assert redfish_control.power_state("http://c/1", "u", "p") == ""
-    assert redfish_control.power_state("http://c/1", "u", "p") == ""
+ENDPOINT = "https://bmc.test/redfish/v1/Systems/1"
 
 
-def test_media_is_reported_only_while_a_device_says_it_is_inserted(monkeypatch):
-    monkeypatch.setattr(redfish_control, "request", lambda *a, **k: {"Inserted": True, "Image": "http://s/i.iso"})
-    assert redfish_control.media_inserted("http://c/1", "u", "p") == "http://s/i.iso"
-    monkeypatch.setattr(redfish_control, "request", lambda *a, **k: {"Inserted": False})
-    assert redfish_control.media_inserted("http://c/1", "u", "p") == ""
+class Reply:
+    """A 2xx answer the way urllib hands one back, or one whose read fails."""
+
+    def __init__(self, raw=b"{}", headers=None, failure=None):
+        self.status, self.stream, self.failure = 200, io.BytesIO(raw), failure
+        self.headers = http.client.HTTPMessage()
+        for name, value in (headers or {}).items():
+            self.headers[name] = value
+
+    def read(self, amount=-1):
+        if self.failure is not None:
+            raise self.failure
+        return self.stream.read(amount)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
 
 
-def test_every_action_names_its_own_resource(monkeypatch):
-    calls = []
+class Recorder:
+    """An opener that records every request it is handed and answers one way."""
 
-    def record(endpoint, user, password, method="GET", path="", payload=None, **kwargs):
-        calls.append((method, path, payload))
-        return {}
+    def __init__(self, answer=None):
+        self.requests, self.answer = [], answer if answer is not None else Reply()
 
-    monkeypatch.setattr(redfish_control, "request", record)
-    redfish_control.insert_media("http://c/1", "u", "p", "http://s/i.iso")
-    redfish_control.eject_media("http://c/1", "u", "p")
-    redfish_control.boot_once("http://c/1", "u", "p")
-    redfish_control.reset("http://c/1", "u", "p", "ForceOff")
-    assert calls[0][0:2] == ("POST", "/VirtualMedia/Cd/Actions/VirtualMedia.InsertMedia")
-    assert calls[0][2] == {"Image": "http://s/i.iso", "Inserted": True, "WriteProtected": True}
-    assert calls[1][0:2] == ("POST", "/VirtualMedia/Cd/Actions/VirtualMedia.EjectMedia")
-    assert calls[2][0] == "PATCH"
-    assert calls[2][2]["Boot"]["BootSourceOverrideEnabled"] == "Once"
-    assert calls[3][2] == {"ResetType": "ForceOff"}
+    def opener(self, verify=True):
+        return self
+
+    def open(self, request, timeout=None):
+        self.requests.append(request)
+        if isinstance(self.answer, BaseException):
+            raise self.answer
+        return self.answer
 
 
-# A power request is not evidence: the outcome is whatever the resource reports
-# within the bounded window, and an outcome that never arrives is unproved.
-def test_a_power_outcome_is_polled_rather_than_assumed(monkeypatch):
-    states = iter(["Off", "Off", "On"])
-    monkeypatch.setattr(redfish_control, "power_state", lambda *a, **k: next(states))
-    assert redfish_control.await_power("http://c/1", "u", "p", "On", attempts=5, sleep=lambda _: None)
+@pytest.fixture(name="built")
+def built_fixture(monkeypatch):
+    """Every Request the client constructs, whether or not it is ever sent."""
+    built = []
 
-    monkeypatch.setattr(redfish_control, "power_state", lambda *a, **k: "Off")
-    assert not redfish_control.await_power("http://c/1", "u", "p", "On", attempts=3, sleep=lambda _: None)
+    class Recording(urllib.request.Request):
+        def __init__(self, url, *args, **kwargs):
+            built.append(url)
+            super().__init__(url, *args, **kwargs)
+
+    monkeypatch.setattr(urllib.request, "Request", Recording)
+    return built
 
 
-def test_an_unreadable_resource_never_proves_a_state(monkeypatch):
-    def refuse(*_args, **_kwargs):
-        raise OSError("unreachable")
+def client(monkeypatch, recorder, endpoint=ENDPOINT):
+    monkeypatch.setattr(redfish_control, "_opener", recorder.opener)
+    return redfish_control.Client(endpoint, "operator", "p4ssw0rd")
 
-    monkeypatch.setattr(redfish_control, "power_state", refuse)
-    assert not redfish_control.await_power("http://c/1", "u", "p", "On", attempts=2, sleep=lambda _: None)
+
+# The credential goes to the one endpoint the frozen request names. A reference
+# the controller returns that names anything else is refused before a request,
+# and so before an Authorization header, exists.
+@pytest.mark.parametrize("reference", [
+    "https://elsewhere.test/redfish/v1/Systems/1",
+    "https://bmc.test:8443/redfish/v1/Systems/1",
+    "http://bmc.test/redfish/v1/Systems/1",
+    "//elsewhere.test/redfish/v1/Systems/1",
+    "https://intruder:secret@bmc.test/redfish/v1/Systems/1",
+    "https://@bmc.test/redfish/v1/Systems/1",
+    "https://bmc.test:99999/redfish/v1/Systems/1",
+    "https://bmc.test:port/redfish/v1/Systems/1",
+    "https://[fd00::1/redfish/v1/Systems/1",
+    "ftp://bmc.test/redfish/v1/Systems/1",
+    "https:/redfish/v1/Systems/1",
+])
+def test_a_reference_to_another_authority_is_refused_and_never_sent_the_credential(monkeypatch, built, reference):
+    recorder = Recorder()
+    with pytest.raises(redfish_control.ControllerError) as failure:
+        client(monkeypatch, recorder).fetch(reference)
+    assert not built and not recorder.requests
+    assert "intruder" not in str(failure.value) and "secret" not in str(failure.value)
+
+
+@pytest.mark.parametrize("endpoint, reference, requested", [
+    (ENDPOINT, "https://BMC.test/redfish/v1/Managers/1", "https://BMC.test/redfish/v1/Managers/1"),
+    (ENDPOINT, "https://bmc.test:443/redfish/v1/Managers/1", "https://bmc.test:443/redfish/v1/Managers/1"),
+    (ENDPOINT, "//bmc.test/redfish/v1/Managers/1", "https://bmc.test/redfish/v1/Managers/1"),
+    (ENDPOINT, "/redfish/v1/Managers/1", "https://bmc.test/redfish/v1/Managers/1"),
+    ("http://bmc.test:80/redfish/v1/Systems/1", "http://bmc.test/redfish/v1/Managers/1",
+     "http://bmc.test/redfish/v1/Managers/1"),
+    ("https://[fd00::1]:8443/redfish/v1/Systems/1", "https://[FD00::1]:8443/redfish/v1/Managers/1",
+     "https://[FD00::1]:8443/redfish/v1/Managers/1"),
+    ("https://[fd00::1]:8443/redfish/v1/Systems/1", "/redfish/v1/Managers/1",
+     "https://[fd00::1]:8443/redfish/v1/Managers/1"),
+])
+def test_a_reference_to_the_endpoint_itself_is_followed(monkeypatch, built, endpoint, reference, requested):
+    recorder = Recorder()
+    assert client(monkeypatch, recorder, endpoint).fetch(reference)[0] == 200
+    assert built == [requested] and [request.full_url for request in recorder.requests] == [requested]
+    assert recorder.requests[0].get_header("Authorization").startswith("Basic ")
+
+
+# A transport that breaks mid-answer is no answer, reported as status 0 rather
+# than escaping as a traceback past the module's failure handling.
+@pytest.mark.parametrize("failure", [
+    http.client.IncompleteRead(b"{", 10),
+    http.client.LineTooLong("header line"),
+    http.client.RemoteDisconnected("closed"),
+    TimeoutError("timed out"),
+    urllib.error.URLError("refused"),
+])
+def test_a_broken_transport_is_a_failure_not_a_traceback(monkeypatch, failure):
+    assert client(monkeypatch, Recorder(failure)).fetch() == (0, None, {})
+    assert client(monkeypatch, Recorder(Reply(failure=failure))).fetch() == (0, None, {})
+
+
+def test_response_headers_are_read_without_case(monkeypatch):
+    reply = Reply(headers={"ETag": 'W/"1"', "LOCATION": "/redfish/v1/TaskService/Tasks/1"})
+    status, body, headers = client(monkeypatch, Recorder(reply)).fetch()
+    assert (status, body) == (200, {}) and headers["etag"] == 'W/"1"'
+    assert headers["location"] == "/redfish/v1/TaskService/Tasks/1"
+
+    message = http.client.HTTPMessage()
+    message["Location"] = "/redfish/v1/TaskService/Tasks/2"
+    refused = urllib.error.HTTPError(ENDPOINT, 500, "failed", message, io.BytesIO(b""))
+    assert client(monkeypatch, Recorder(refused)).fetch()[2] == {"location": "/redfish/v1/TaskService/Tasks/2"}
+
+
+# A body is one JSON object or nothing: a list, a scalar, an empty read or a
+# body past the bound never reads as an empty resource. The two bounded cases
+# are valid JSON, so only the length decides them.
+@pytest.mark.parametrize("method, raw, body", [
+    ("GET", b'{"PowerState": "On"}', {"PowerState": "On"}),
+    ("GET", b"", None),
+    ("GET", b"[]", None),
+    ("GET", b'"On"', None),
+    ("GET", b"{", None),
+    ("GET", b"[" * 100000, None),
+    ("POST", b"", {}),
+    ("PATCH", b"", {}),
+    ("GET", b" " * (redfish_control.MAX_BODY - 2) + b"{}", {}),
+    ("GET", b" " * (redfish_control.MAX_BODY - 1) + b"{}", None),
+])
+def test_a_body_is_one_object_or_nothing(monkeypatch, method, raw, body):
+    assert client(monkeypatch, Recorder(Reply(raw))).fetch(method=method)[1] == body
 
 
 def test_a_redirect_is_refused_rather_than_followed():

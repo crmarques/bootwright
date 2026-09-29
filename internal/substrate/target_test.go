@@ -101,8 +101,8 @@ func TestAPhysicalMachineIsReachedAtTheControllerItAuthors(t *testing.T) {
 	if target.Identity.Domain != "" || target.Identity.URI != "" {
 		t.Fatal("a machine with no hypervisor names none")
 	}
-	if target.RootDevice != "/dev/sda" {
-		t.Fatalf("root device = %q", target.RootDevice)
+	if target.RootDeviceHints.DeviceName != "/dev/sda" {
+		t.Fatalf("root device = %q", target.RootDeviceHints.DeviceName)
 	}
 	if target.PlacementMachine.Name() != "controller" {
 		t.Fatalf("placement = %q", target.PlacementMachine.Name())

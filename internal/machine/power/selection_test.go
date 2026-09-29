@@ -76,9 +76,12 @@ func code(t *testing.T, err error) string {
 // An emulated controller is reached at its own allocated port, from the host
 // that runs it, and the request names the credential rather than any material.
 func TestAnEmulatedControllerIsReachedFromItsProviderHost(t *testing.T) {
-	request, err := requestFor(catalog(), "lab", "guest", Stop, false, realized())
+	request, physical, err := requestFor(catalog(), "lab", "guest", Stop, false, realized())
 	if err != nil {
 		t.Fatal(err)
+	}
+	if physical {
+		t.Fatal("a Machine whose controller its provider emulates was resolved as physical")
 	}
 	want := "http://192.0.2.10:8000/redfish/v1/Systems/" + substrate.DomainUUID("lab", "guest")
 	if request.Controller.Endpoint != want {
@@ -101,9 +104,12 @@ func TestAnEmulatedControllerIsReachedFromItsProviderHost(t *testing.T) {
 // An authored controller belongs to the machine itself, so it is reached from
 // the controller host and needs no realization of its own.
 func TestAnAuthoredControllerIsReachedFromTheControllerHost(t *testing.T) {
-	request, err := requestFor(catalog(), "lab", "metal", Start, false, nil)
+	request, physical, err := requestFor(catalog(), "lab", "metal", Start, false, nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !physical {
+		t.Fatal("a Machine that authors its own controller was not resolved as physical")
 	}
 	if request.Controller.Endpoint != "https://bmc.example.test/redfish/v1/Systems/1" {
 		t.Fatalf("endpoint = %q", request.Controller.Endpoint)
@@ -126,7 +132,7 @@ func TestAnEmulatedControllerThatIsNotRealizedRefusesBeforeActing(t *testing.T) 
 		{"removed", map[string]machine.OwnershipState{"Machine/guest": {Verb: "destroy", State: "done"}}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := requestFor(catalog(), "lab", "guest", Start, false, test.owned); code(t, err) != "access.unavailable" {
+			if _, _, err := requestFor(catalog(), "lab", "guest", Start, false, test.owned); code(t, err) != "access.unavailable" {
 				t.Fatalf("unrealized Machine accepted a power request: %v", err)
 			}
 		})
@@ -134,13 +140,13 @@ func TestAnEmulatedControllerThatIsNotRealizedRefusesBeforeActing(t *testing.T) 
 }
 
 func TestAnUnresolvableTargetOrVerbRefuses(t *testing.T) {
-	if _, err := requestFor(catalog(), "lab", "absent", Start, false, realized()); code(t, err) != "access.target" {
+	if _, _, err := requestFor(catalog(), "lab", "absent", Start, false, realized()); code(t, err) != "access.target" {
 		t.Fatalf("unknown Machine: %v", err)
 	}
-	if _, err := requestFor(catalog(), "lab", "controller", Start, false, realized()); code(t, err) != "access.unavailable" {
+	if _, _, err := requestFor(catalog(), "lab", "controller", Start, false, realized()); code(t, err) != "access.unavailable" {
 		t.Fatalf("a Machine with no controller at all: %v", err)
 	}
-	if _, err := requestFor(catalog(), "lab", "guest", "suspend", false, realized()); code(t, err) != "lifecycle.state" {
+	if _, _, err := requestFor(catalog(), "lab", "guest", "suspend", false, realized()); code(t, err) != "lifecycle.state" {
 		t.Fatalf("unsupported verb: %v", err)
 	}
 }

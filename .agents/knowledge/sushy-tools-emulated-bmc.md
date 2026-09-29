@@ -7,9 +7,37 @@ it should do.
 
 Image `quay.io/metal3-io/sushy-tools`, digest
 `sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e`,
-built 2026-09-09, carrying sushy-tools `2.2.1.dev14` on Debian 12 with Python
-3.12 at `/usr/local/bin/python3`. Resolved from the publisher's `latest` tag and
-driven by hand against podman 5.8.4 on Fedora 43 on 2026-09-15.
+built 2026-09-09, carrying sushy-tools `2.2.1.dev14` (git `3b57e7a`, from its
+dist-info `pbr.json`) on Debian 12 with Python 3.12 at `/usr/local/bin/python3`.
+Resolved from the publisher's `latest` tag and driven by hand against podman
+5.8.4 on Fedora 43 on 2026-09-15.
+
+What the Redfish client relies on, read from that image's `sushy_tools/emulator`
+on 2026-09-28:
+
+- `BootSourceOverrideEnabled` is always `Continuous` (`templates/system.json`
+  lines 19 and 42), because the PATCH ignores the field (`main.py` 593-597)
+  before answering 204 (620), and no
+  `BootSourceOverrideEnabled@Redfish.AllowableValues` appears anywhere. A
+  boot read-back therefore accepts `Continuous` from this controller.
+- The reported target follows the PATCH: `set_boot_device` makes the selected
+  device the only bootable one (`resources/systems/libvirtdriver.py` 416), and
+  the target reported is the lowest-ordered boot device (325-405).
+- No `etag` appears anywhere, and the system resource carries no
+  `SerialNumber`, so a boot selection is sent without `If-Match` and a target
+  proof identifies the machine by its `UUID`.
+- The reset advertises `ForceOn` among its types (`templates/system.json`
+  127-139), handles it like `On` (`libvirtdriver.py` 299-301) and answers 204
+  (`main.py` 713), so power-on sends `ForceOn`.
+- The manager, built from the system's UUID, links the system's own
+  VirtualMedia collection (`main.py` 366-368), which lists `Cd` by that UUID
+  (`templates/virtual_media_collection.json` line 9); discovery fetches that
+  collection once.
+- The insert reads only `Image`, `Inserted`, `WriteProtected`, `UserName` and
+  `Password` (`controllers/virtual_media.py` 172-176), so it ignores
+  `TransferProtocolType`, and downloads the image inside the request (184-186)
+  before answering 204 (204): the attach is synchronous and bounded by the
+  client's media timeout.
 
 ## The stock command must not be used
 
@@ -74,8 +102,14 @@ refused by SELinux, so the unit sets `SecurityLabelDisable=true`.
   `controllers/virtual_media.py` registers
   `/redfish/v1/Systems/<identity>/VirtualMedia/<device>` with the
   `VirtualMedia.InsertMedia` and `VirtualMedia.EjectMedia` actions beneath it,
-  and the manager resource links there. `redfish_control` builds its paths from
-  the system endpoint for that reason.
+  and the manager resource links there. The
+  [Redfish client](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/redfish_control.py)
+  builds none of these paths itself: it discovers the device and its actions
+  from what the controller advertises, and this emulator is one of the three
+  firmware shapes its
+  [tests](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/modules/test_redfish_boot.py)
+  drive, beside the manager-scoped and dual-view shapes
+  [physical controllers](redfish-physical-bmc.md) show.
 
 ## Host firewall
 

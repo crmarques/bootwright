@@ -249,6 +249,65 @@ func TestAPhysicalInstallationRefusesWhileItsHostKeyWouldBePublic(t *testing.T) 
 	}
 }
 
+// The Kickstart selects its root disk by name alone, so a Machine declaring any
+// other hint refuses before registration on either arm, naming each field to
+// remove, rather than being installed onto a disk those hints did not select. A
+// physical Machine reaches this refusal before the delivered-key one, so its
+// remediation is the hint and not the key.
+func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
+	onGuest := func(hints api.Value) api.Object {
+		declared := guest()
+		return declared.WithSpec(declared.Spec().WithPath(hints, "os", "install", "rootDeviceHints"))
+	}
+	for name, test := range map[string]struct {
+		overrides   []api.Object
+		machine     string
+		remediation string
+	}{
+		"a physical model": {
+			[]api.Object{metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"), text("model", "PERC H755")))},
+			"Machine/metal-01", "remove spec.os.install.rootDeviceHints.model from Machine/metal-01",
+		},
+		"a physical wwn": {
+			[]api.Object{metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"), text("wwn", "0x5000c500a1b2c3d4")))},
+			"Machine/metal-01", "remove spec.os.install.rootDeviceHints.wwn from Machine/metal-01",
+		},
+		"a guest's rotational": {
+			[]api.Object{onGuest(api.MapValue(text("deviceName", "/dev/vda"), field("rotational", api.BoolValue(false))))},
+			"Machine/rhel-01", "remove spec.os.install.rootDeviceHints.rotational from Machine/rhel-01",
+		},
+		"a guest's model alone": {
+			[]api.Object{onGuest(api.MapValue(text("model", "QEMU HARDDISK")))},
+			"Machine/rhel-01", "remove spec.os.install.rootDeviceHints.model from Machine/rhel-01",
+		},
+		"a guest's wwn and size": {
+			[]api.Object{onGuest(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"), number("minSizeGigabytes", "40")))},
+			"Machine/rhel-01",
+			"remove spec.os.install.rootDeviceHints.minSizeGigabytes, spec.os.install.rootDeviceHints.wwn from Machine/rhel-01",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			catalog := labCatalog(test.overrides...)
+			if unsupported := Unsupported(catalog); !slices.Equal(unsupported, []string{test.machine}) {
+				t.Fatalf("unsupported = %v", unsupported)
+			}
+			_, _, err := Requests(catalog, "controller", testContext)
+			expectRefusal(t, err, "lifecycle.unsupported")
+			reported := diagnostics.Of(err)[0]
+			if reported.Message != "a managed-OS installation selects its root disk by deviceName alone and cannot carry the other root-device hints the Machine declares" {
+				t.Fatalf("message = %q", reported.Message)
+			}
+			if reported.Remediation != test.remediation {
+				t.Fatalf("remediation = %q", reported.Remediation)
+			}
+		})
+	}
+	request, _ := onlyRequest(t, labCatalog(onGuest(api.MapValue(text("deviceName", "/dev/vda")))))
+	if !strings.Contains(request.Kickstart, "ignoredisk --only-use=vda") {
+		t.Fatal("a guest naming its device alone was not installed onto it")
+	}
+}
+
 func TestSelectionRefusesWhatItCannotDerive(t *testing.T) {
 	noKey := api.NewObject(api.Environment, "lab-rhel", api.Value{}, api.MapValue(
 		field("controller", api.MapValue(text("machineRef", "controller"))),

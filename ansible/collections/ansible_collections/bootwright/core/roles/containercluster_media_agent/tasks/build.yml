@@ -53,9 +53,11 @@
       changed_when: true
       no_log: true
 
+    # The installer's YAML reader retypes a plain scalar and refuses JSON's
+    # surrogate-pair escapes, and this filter writes neither.
     - name: Write the agent configuration
       ansible.builtin.copy:
-        content: '{{ bootwright_cluster_media_request.agentConfig | to_nice_yaml(indent=2) }}'
+        content: '{{ bootwright_cluster_media_request.agentConfig | bootwright.core.to_installer_yaml }}'
         dest: '{{ containercluster_media_agent_work }}/agent-config.yaml'
         owner: root
         group: root

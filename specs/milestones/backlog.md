@@ -47,8 +47,10 @@ evidence:** CLI help goldens.
 
 ### B96
 
-Collection metadata and naming polish. **Exit evidence:**
-`./scripts/ansible-check`.
+Collection metadata and naming polish, including the collection's sanity
+README, whose `missing-gplv3-license` note names only documentation stubs
+although the ignore file also exempts the real modules with no action plugin
+(found in X19). **Exit evidence:** `./scripts/ansible-check`.
 
 ### B97
 

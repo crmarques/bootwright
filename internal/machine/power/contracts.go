@@ -22,6 +22,14 @@ type Ownership interface {
 	Ownership(context.Context, string) (map[string]machine.OwnershipState, error)
 }
 
+// Identities reports the hardware identity the context's current apply proved
+// for one physical Machine, and whether it proved one. A physical controller
+// answers whatever server is cabled behind it, so a power operation holds the
+// Machine to that pin before it sends any power request.
+type Identities interface {
+	ProvedIdentity(context.Context, string, string) (machine.HardwareIdentity, bool, error)
+}
+
 // Runtime lends the controller's private execution boundary for exactly one
 // bounded adapter call, with the Secret material that call needs bound.
 type Runtime interface {

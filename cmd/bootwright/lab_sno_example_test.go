@@ -5,7 +5,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -144,6 +146,53 @@ func TestLabSNOExampleDerivesItsInstallerInputs(t *testing.T) {
 	}
 	if _, err := installs[0].Canonical(); err != nil {
 		t.Fatalf("the install request is not canonical: %v", err)
+	}
+}
+
+// Every root-device hint the example's node declares is admitted with its type
+// and reaches the agent configuration unchanged: strings a YAML 1.1 reader
+// would take for numbers, a size of zero and a disk that is not rotational.
+func TestLabSNOExampleCarriesEveryRootDeviceHintToItsAgentConfig(t *testing.T) {
+	const (
+		selected = "deviceName: /dev/vda\n"
+		hints    = "deviceName: \"/dev/vda\"\n" +
+			"        hctl: \"1:0:0:0\"\n" +
+			"        model: \"1e3\"\n" +
+			"        vendor: \"0o17\"\n" +
+			"        serialNumber: \"0987654321\"\n" +
+			"        wwn: \"0x5000c500a1b2c3d4\"\n" +
+			"        minSizeGigabytes: 0\n" +
+			"        rotational: false\n"
+	)
+	sources := snoExampleSources(t)
+	replaced := 0
+	for index, file := range sources.Files {
+		body := string(file.Bytes())
+		replaced += strings.Count(body, selected)
+		sources.Files[index] = desiredstate.NewSourceFile(file.Path(), []byte(strings.Replace(body, selected, hints, 1)))
+	}
+	if replaced != 1 {
+		t.Fatalf("the example selects %d root devices, want 1", replaced)
+	}
+	state, _ := compileAcceptance(t, sources)
+	if unsupported := agentinstall.Unsupported(state.Effective()); len(unsupported) != 0 {
+		t.Fatalf("the example declares a cluster this contract cannot install: %v", unsupported)
+	}
+	media, _, _, err := agentinstall.Requests(state.Effective(), "controller", "lab-sno")
+	if err != nil || len(media) != 1 {
+		t.Fatalf("deriving: %d media (%v)", len(media), diagnostics.Of(err))
+	}
+	hosts, _ := media[0].AgentConfig["hosts"].([]any)
+	if len(hosts) != 1 {
+		t.Fatalf("hosts = %#v", hosts)
+	}
+	host, _ := hosts[0].(map[string]any)
+	want := map[string]any{
+		"deviceName": "/dev/vda", "hctl": "1:0:0:0", "model": "1e3", "vendor": "0o17", "serialNumber": "0987654321",
+		"wwn": "0x5000c500a1b2c3d4", "minSizeGigabytes": int64(0), "rotational": false,
+	}
+	if !reflect.DeepEqual(host["rootDeviceHints"], want) {
+		t.Fatalf("hints = %#v, want %#v", host["rootDeviceHints"], want)
 	}
 }
 

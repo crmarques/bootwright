@@ -1,7 +1,10 @@
 package agentinstall
 
 import (
+	"bytes"
 	"encoding/json"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -530,5 +533,144 @@ func TestASupportedClusterIsNotRefused(t *testing.T) {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 		})
+	}
+}
+
+func refusedWith(t *testing.T, err error, reason, remediation string) {
+	t.Helper()
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" || reported[0].Message != reason {
+		t.Fatalf("refusal = %#v", reported)
+	}
+	if reported[0].Remediation != remediation {
+		t.Fatalf("remediation = %q", reported[0].Remediation)
+	}
+}
+
+func hostHints(t *testing.T, media MediaRequest) map[string]any {
+	t.Helper()
+	hosts, _ := media.AgentConfig["hosts"].([]any)
+	found := map[string]any{}
+	for _, entry := range hosts {
+		host, _ := entry.(map[string]any)
+		name, _ := host["hostname"].(string)
+		found[name] = host["rootDeviceHints"]
+	}
+	return found
+}
+
+// Every root-device hint a node declares reaches the agent configuration under
+// its admitted name and with its declared type, a size of zero and a disk that
+// is not rotational included. A node that selects its disk by wwn alone keeps
+// that selection rather than rendering none.
+func TestEveryDeclaredRootDeviceHintReachesTheAgentConfig(t *testing.T) {
+	media, _, _ := onlyRequests(t, hintsCatalog())
+	want := map[string]any{
+		"master-0": map[string]any{
+			"deviceName": "/dev/disk/by-path/pci-0000:00:04.0", "hctl": "1:0:0:0", "model": "1e3", "vendor": "0o17",
+			"serialNumber": "0987654321", "wwn": "0x5000c500a1b2c3d4", "minSizeGigabytes": int64(0), "rotational": false,
+		},
+		"master-1": map[string]any{"wwn": "0x5000c500a1b2c3d5"},
+		"master-2": map[string]any{"deviceName": "/dev/vda"},
+	}
+	if got := hostHints(t, media); !reflect.DeepEqual(got, want) {
+		t.Fatalf("hints =\n%#v\nwant\n%#v", got, want)
+	}
+}
+
+// The agent installer names a root device only as a name directly beneath
+// /dev/ or beneath /dev/disk/by-path/, and the frozen request carries a size
+// exactly only up to 2^53-1. A node declaring anything else refuses before
+// registration, naming the bound Machine, and the projection itself refuses it
+// the same way, so no caller derives an input that selection refuses.
+func TestARootDeviceTheAgentInstallerCannotCarryRefuses(t *testing.T) {
+	const (
+		unnamed   = "the agent installer names a root device only as /dev/<name> or /dev/disk/by-path/<name>"
+		rename    = "set spec.os.install.rootDeviceHints.deviceName on Machine/sno-01 to such a path"
+		oversized = "a node's minSizeGigabytes is larger than the frozen installer input carries exactly"
+		shrink    = "declare spec.os.install.rootDeviceHints.minSizeGigabytes on Machine/sno-01 as at most 9007199254740991"
+	)
+	for name, test := range map[string]struct {
+		hints       []api.FieldValue
+		reason      string
+		remediation string
+	}{
+		"a by-id link":   {[]api.FieldValue{text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")}, unnamed, rename},
+		"a mapper":       {[]api.FieldValue{text("deviceName", "/dev/mapper/root")}, unnamed, rename},
+		"a size past it": {[]api.FieldValue{text("deviceName", "/dev/vda"), number("minSizeGigabytes", "9007199254740992")}, oversized, shrink},
+		"a size past every integer type": {
+			[]api.FieldValue{text("deviceName", "/dev/vda"), number("minSizeGigabytes", "100000000000000000000000")}, oversized, shrink,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			catalog := singleNodeWith(test.hints...)
+			if unsupported := Unsupported(catalog); !slices.Equal(unsupported, []string{"ContainerCluster/sno"}) {
+				t.Fatalf("unsupported = %v", unsupported)
+			}
+			_, _, _, err := Requests(catalog, "controller", testContext)
+			refusedWith(t, err, test.reason, test.remediation)
+			declared, _ := catalog.Find(api.ContainerCluster, "sno")
+			_, err = nodeProjections(catalog, declared, testContext, "controller", &Requirements{})
+			refusedWith(t, err, test.reason, test.remediation)
+		})
+	}
+}
+
+// A device directly beneath /dev/ or beneath /dev/disk/by-path/ is one the
+// agent installer names, so it reaches the agent configuration unrefused.
+func TestARootDeviceTheAgentInstallerCanNameIsNotRefused(t *testing.T) {
+	for _, device := range []string{"/dev/sda", "/dev/disk/by-path/pci-0000:00:1f.2-ata-1"} {
+		t.Run(device, func(t *testing.T) {
+			catalog := singleNodeWith(text("deviceName", device))
+			if unsupported := Unsupported(catalog); len(unsupported) != 0 {
+				t.Fatalf("unsupported = %v", unsupported)
+			}
+			media, _, _ := onlyRequests(t, catalog)
+			if got := hostHints(t, media); !reflect.DeepEqual(got, map[string]any{"master-0": map[string]any{"deviceName": device}}) {
+				t.Fatalf("hints = %#v", got)
+			}
+		})
+	}
+}
+
+// The frozen media request is read back through float64, so the largest size
+// it carries exactly is 2^53-1. One past it would freeze at plan and then be
+// refused as not canonical when execution reads it, which is why selection
+// refuses such a size instead.
+func TestARootDeviceSizeTheFrozenInputCannotCarryRefuses(t *testing.T) {
+	media, _, _ := onlyRequests(t, singleNodeWith(text("deviceName", "/dev/vda"), number("minSizeGigabytes", "9007199254740991")))
+	frozen, err := media.Canonical()
+	if err != nil {
+		t.Fatalf("freezing the largest size: %v", diagnostics.Of(err))
+	}
+	if _, err := DecodeMediaRequest(frozen); err != nil {
+		t.Fatalf("decoding the largest size: %v", diagnostics.Of(err))
+	}
+	past := MediaRequest{Version: mediaRequestVersion, AgentConfig: map[string]any{"minSizeGigabytes": int64(9007199254740993)}}
+	frozen, err = past.Canonical()
+	if err != nil {
+		t.Fatalf("freezing a size past the bound: %v", diagnostics.Of(err))
+	}
+	_, err = DecodeMediaRequest(frozen)
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Message != "the frozen cluster media request is not canonical" {
+		t.Fatalf("decoding a size past the bound = %#v", reported)
+	}
+}
+
+// Only the agent configuration carries the hints: the install request boots
+// the same nodes whatever disk each one selects.
+func TestTheInstallRequestCarriesNoRootDeviceHint(t *testing.T) {
+	_, hinted, _ := onlyRequests(t, hintsCatalog())
+	_, compact, _ := onlyRequests(t, compactCatalog())
+	hintedBytes, err := hinted.Canonical()
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	compactBytes, err := compact.Canonical()
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	if !bytes.Equal(hintedBytes, compactBytes) {
+		t.Fatalf("the install request changed with the hints:\n%s\n%s", hintedBytes, compactBytes)
 	}
 }

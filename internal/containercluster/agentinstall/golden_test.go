@@ -99,6 +99,7 @@ func lineDiff(want, got string) string {
 func TestFrozenRequestsMatchTheirGoldens(t *testing.T) {
 	for name, catalog := range map[string]api.Catalog{
 		"lab-sno": singleNodeCatalog(), "compact": compactCatalog(), "external": externalCatalog(),
+		"hints": hintsCatalog(),
 	} {
 		t.Run(name, func(t *testing.T) {
 			media, install, _ := onlyRequests(t, catalog)

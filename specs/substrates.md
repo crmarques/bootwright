@@ -262,9 +262,9 @@ or an address: those locate a machine, and only the complete MAC set together
 with the ComputerSystem identity distinguishes it from another server that
 answers at the same endpoint after a re-cabling or a re-addressing.
 
-Not yet met: the ComputerSystem identity is recorded but not yet compared with
-the identity an earlier attempt proved, so only the MAC set distinguishes a
-replacement server; tracked as [B3](milestones/m1.md#b3).
+Not yet met: the pre-boot proof an installation or a cluster boot repeats does
+not compare the identity this block pinned, so there only the MAC set tells a
+replacement server apart; tracked as [B6](milestones/m1.md#b6).
 
 **Claim.** The block claims `bmc:<host>:<port>/<system>` for the normalized
 endpoint, so two contexts cannot both drive one physical server. The claim
@@ -276,15 +276,25 @@ path, unit, socket or hypervisor object.
 
 **Evidence.** Completion requires the ComputerSystem answering with the bound
 credential, its recorded identity, every declared MAC observed, and a reported
-power state. Replay reports `completed` with no change whenever the same
-machine still answers with the same identity, because nothing was realized
-that could drift. The differences it converges are none: hardware is not
-converged, and a machine that answers as a *different* system, or whose MAC
-set no longer matches, fails naming the difference rather than adopting the
-new hardware. Observation is read-only: the exact identity with its complete
-MAC set is positive completion, an endpoint that answers as another system or
-does not answer at all stays unknown, and there is no absence to prove, because
-this block never created anything whose removal could be observed. It therefore
+power state. An apply that proves the machine reports `completed` with no
+change, the first proof included: the claim the block contributes is taken as
+the operation's reservation when the operation registers, not by the adapter,
+and the block realizes nothing that could drift. The differences it converges
+are none: hardware is not converged, and a machine whose MAC set no longer
+matches fails naming what it lacks rather than adopting the new hardware. The
+`UUID` and `SerialNumber` recorded by the apply attempt that proved the machine
+are its pin while that apply is the context's current operation: the day-2
+power operations below compare the controller's answer with them before any
+power request and refuse a machine that answers as a different system. A block
+a [resolution](state-reconciliation.md#resolution-outcomes) completed after an
+attempt whose outcome was not proved pins nothing, because the pin is read from
+the attempt and that attempt recorded no evidence. A destroy ends the pin once
+it is the context's current operation and releases the claim when it completes;
+the next apply pins what its own proof finds, the MAC set still required.
+Observation is read-only: the exact identity with its complete MAC set is
+positive completion, an endpoint that answers as another system or does not
+answer at all stays unknown, and there is no absence to prove, because this
+block never created anything whose removal could be observed. It therefore
 reports positive no effect only when its own claim was never published.
 
 **Inverse.** Destroy releases the claim and proves nothing else. The server,
@@ -314,7 +324,12 @@ takes the same path to a virtual and a physical server: read the power state,
 insert and eject virtual media, set a one-time boot device, power on, power
 off. A power request is not evidence; every operation polls the resource to
 its expected state within a bounded window and reports unknown when it does
-not arrive.
+not arrive. A boot selection is read back like any other effect. A read that
+cannot reach a resource the controller reports, or that receives a body which
+is not a Redfish resource, fails rather than answering empty, and the target
+proof reports what it could not read as unobserved, which proves nothing; a
+controller that offers no virtual media reports none, and inserting into it
+refuses.
 
 Booting a machine from inserted media is one operation rather than a fixed
 sequence every consumer repeats, because how a boot is selected is the
@@ -344,6 +359,13 @@ difference between the arms: a Machine that authors `hardware.management.bmc`
 is reached at that address from the controller, and a Machine whose provider
 emulates a controller is reached at its allocated port from the provider host,
 and only while the context owns the realization that controller belongs to.
+A Machine on a bare-metal provider is held to its
+[pin](#physical-machine-realization) first: the operation reads the identity
+its controller reports and refuses, before it sends any power request, a `UUID`
+that differs other than in letter case or surrounding space, or a
+`SerialNumber` that differs other than in surrounding space. A pinned value the
+controller no longer reports differs, a value the proof recorded empty is not
+compared, and a Machine with no pin is compared with nothing.
 The [CLI journey](cli.md#machine-power-operations) owns the rest.
 
 Every controller leg carries the trust its declaration sets. The
@@ -415,4 +437,9 @@ request it issued as a request rather than an outcome. Firmware differs widely
 in where virtual media lives, whether an update needs the resource's current
 entity tag, and whether an insertion completes synchronously, so the client
 discovers what a controller offers and adapts to it, and records what it could
-not determine as unknown rather than assuming the common case.
+not determine as unknown rather than assuming the common case. The one
+endpoint bounds every reference the controller returns, whether a member, an
+action target, an action's metadata, a task or a Location header: a reference
+naming another scheme, host or port, or carrying user information, is refused
+before any request is built, so it never receives the credential and nothing it
+could answer is taken as evidence.

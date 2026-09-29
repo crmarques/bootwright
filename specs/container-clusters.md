@@ -39,13 +39,17 @@ to be taught a new certificate, a virtual node whose provider host is not the
 Machine the selected artifact server is placed on, because its emulated
 controller fetches the private [boot image](#boot-media) without verifying the
 server, a node that selects an install profile,
-because managed OS and the cluster installer would both write its disk, and a
+because managed OS and the cluster installer would both write its disk, a
 node whose realized target is physical, because nothing proves each such node
-is the declared machine, powered off, before its boot erases it. Those last two
-refusals name the bound Machine in the remediation `bootwright plan` reports,
-because it is what the operator changes. Node `labels` and `taints` are accepted and reach no
-installer input, because they are post-installation placement intent rather
-than install configuration.
+is the declared machine, powered off, before its boot erases it, a node whose
+`deviceName` the agent installer cannot name, which is anything but
+`/dev/<name>` or `/dev/disk/by-path/<name>`, and a node
+whose `minSizeGigabytes` exceeds 9007199254740991, the largest integer the
+frozen input carries exactly. The placement, install-profile and physical-node
+refusals and the two root-device refusals name the bound Machine in the
+remediation the refusal carries, because it is what the operator changes. Node
+`labels` and `taints` are accepted and reach no installer input, because they
+are post-installation placement intent rather than install configuration.
 
 ## Installer inputs
 
@@ -61,9 +65,19 @@ platform the API derived, the installation proxy choice, and the additional
 trust bundles the cluster selects. `agent-config.yaml` carries the rendezvous
 address — the install address of the first master in node-name order — and one
 host record per node: its declared node name, its installer role, every NIC the
-realized target reports by name and hardware address, the root device the
-Machine selects, and the node's own network configuration with its install
-address applied. The selected NTP servers become additional time sources.
+realized target reports by name and hardware address, every root-device hint
+the Machine declares, under its own name and with its declared type, and the
+node's own network configuration with its install address applied. The
+selected NTP servers become additional time sources.
+
+The attempt writes `agent-config.yaml` in JSON's syntax, which is YAML whose
+every string is quoted, because the installer's YAML reader reads a plain
+`1e3`, `0o17` or `0987654321` as a number and passes the installer different
+text. Every character outside printable ASCII is escaped, a code point above
+U+FFFF as the YAML escape `\UXXXXXXXX` rather than JSON's surrogate pair,
+because that reader refuses a raw DEL or C1 control and any surrogate escape.
+Every value therefore reaches the installer with the type and the text the
+request froze.
 
 Two values are derived rather than authored, because the agent installer
 refuses the alternatives. A single-node cluster renders `platform: none`
