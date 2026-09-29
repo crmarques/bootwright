@@ -45,9 +45,11 @@ below; the SSH arm is coordinated by the context lease alone. A bare-metal
 provider has no host: its Machines are reached at the controllers they
 declare, always from the controller Machine.
 
-A provider whose emulated BMC binds a wildcard address refuses before
-registration: every hosted Machine's controller endpoint must be one address
-its consumers can name.
+A provider whose emulated BMC would listen on an address a controller endpoint
+cannot name, such as a wildcard, refuses at admission
+([libvirt arm](api/machines.md#libvirt-arm)): every hosted Machine's controller
+endpoint must be one address its consumers can name. Selection keeps the same
+refusal, before registration, for state that bypassed admission.
 
 ## Provider host realization
 

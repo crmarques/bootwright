@@ -34,23 +34,23 @@ func TestSecretCheckAndListResultsAreCanonical(t *testing.T) {
 	version := "ver-2"
 	check := &custody.CheckResult{Context: secretResultContext(), Secrets: []custody.CheckRow{
 		{Name: "zeta", Type: "sshKeyPair", Source: "file", Parts: []secrets.Part{secrets.PublicKeyPart, secrets.PrivateKeyPart}, Status: "available"},
-		{Name: "alpha", Type: "token", Source: "contextStore", Parts: []secrets.Part{secrets.ValuePart}, Status: "available", Version: &version},
+		{Name: "alpha", Type: "token", Source: "contextStore", Parts: []secrets.Part{secrets.ValuePart}, Status: "available", Version: &version, Sequence: 2},
 	}}
 	record := &dispatchRecord{result: commandResult{secretCheck: check}}
 	code, out, errOut := runSecretResult([]string{"secret", "check", "--output", "json"}, record)
-	want := "{\"schemaVersion\":\"v1alpha1\",\"command\":\"secret check\",\"ok\":true,\"exitCode\":0,\"result\":{\"context\":{\"name\":\"example\",\"mode\":\"ready\"},\"secrets\":[{\"name\":\"alpha\",\"type\":\"token\",\"source\":\"contextStore\",\"parts\":[\"value\"],\"status\":\"available\",\"version\":\"ver-2\",\"sequence\":0},{\"name\":\"zeta\",\"type\":\"sshKeyPair\",\"source\":\"file\",\"parts\":[\"private-key\",\"public-key\"],\"status\":\"available\",\"version\":null,\"sequence\":0}]},\"diagnostics\":[],\"logs\":[]}\n"
+	want := "{\"schemaVersion\":\"v1alpha1\",\"command\":\"secret check\",\"ok\":true,\"exitCode\":0,\"result\":{\"context\":{\"name\":\"example\",\"mode\":\"ready\"},\"secrets\":[{\"name\":\"alpha\",\"type\":\"token\",\"source\":\"contextStore\",\"parts\":[\"value\"],\"status\":\"available\",\"version\":\"ver-2\",\"sequence\":2},{\"name\":\"zeta\",\"type\":\"sshKeyPair\",\"source\":\"file\",\"parts\":[\"private-key\",\"public-key\"],\"status\":\"available\",\"version\":null,\"sequence\":0}]},\"diagnostics\":[],\"logs\":[]}\n"
 	if code != 0 || out != want || errOut != "" || record.calls != 1 {
 		t.Fatalf("check code=%d stdout=%q stderr=%q calls=%d", code, out, errOut, record.calls)
 	}
 
 	current := "ver-1"
 	list := &custody.ListResult{Context: secretResultContext(), Secrets: []custody.ListRow{
-		{Name: "zeta", Type: "caBundle", Source: "generated", Parts: []secrets.Part{secrets.PrivateKeyPart, secrets.CertificatePart}, State: "stale", CurrentVersion: &current, BoundVersions: 2},
+		{Name: "zeta", Type: "caBundle", Source: "generated", Parts: []secrets.Part{secrets.PrivateKeyPart, secrets.CertificatePart}, State: "stale", CurrentVersion: &current, CurrentSequence: 1, BoundVersions: 2},
 		{Name: "alpha", Type: "opaque", Source: "contextStore", Parts: []secrets.Part{secrets.ValuePart}, State: "orphaned", BoundVersions: 1},
 	}}
 	record = &dispatchRecord{result: commandResult{secretList: list}}
 	code, out, errOut = runSecretResult([]string{"secret", "list", "--output", "json"}, record)
-	want = "{\"schemaVersion\":\"v1alpha1\",\"command\":\"secret list\",\"ok\":true,\"exitCode\":0,\"result\":{\"context\":{\"name\":\"example\",\"mode\":\"ready\"},\"secrets\":[{\"name\":\"alpha\",\"type\":\"opaque\",\"source\":\"contextStore\",\"parts\":[\"value\"],\"state\":\"orphaned\",\"currentVersion\":null,\"currentSequence\":0,\"boundVersions\":1},{\"name\":\"zeta\",\"type\":\"caBundle\",\"source\":\"generated\",\"parts\":[\"certificate\",\"private-key\"],\"state\":\"stale\",\"currentVersion\":\"ver-1\",\"currentSequence\":0,\"boundVersions\":2}]},\"diagnostics\":[],\"logs\":[]}\n"
+	want = "{\"schemaVersion\":\"v1alpha1\",\"command\":\"secret list\",\"ok\":true,\"exitCode\":0,\"result\":{\"context\":{\"name\":\"example\",\"mode\":\"ready\"},\"secrets\":[{\"name\":\"alpha\",\"type\":\"opaque\",\"source\":\"contextStore\",\"parts\":[\"value\"],\"state\":\"orphaned\",\"currentVersion\":null,\"currentSequence\":0,\"boundVersions\":1},{\"name\":\"zeta\",\"type\":\"caBundle\",\"source\":\"generated\",\"parts\":[\"certificate\",\"private-key\"],\"state\":\"stale\",\"currentVersion\":\"ver-1\",\"currentSequence\":1,\"boundVersions\":2}]},\"diagnostics\":[],\"logs\":[]}\n"
 	if code != 0 || out != want || errOut != "" || record.calls != 1 {
 		t.Fatalf("list code=%d stdout=%q stderr=%q calls=%d", code, out, errOut, record.calls)
 	}

@@ -3,6 +3,7 @@ package machine
 import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
 const (
@@ -11,14 +12,17 @@ const (
 )
 
 // Placement fixes where one block's effect runs. The local arm needs no
-// address or credential; the SSH arm names exactly one target and account.
+// address or credential; the SSH arm names exactly one target and connects as
+// root without escalation.
 type Placement struct {
-	Address         string `json:"address,omitempty"`
-	Connection      string `json:"connection"`
-	KnownHostsRef   string `json:"knownHostsRef,omitempty"`
-	Machine         string `json:"machine"`
-	Port            int    `json:"port,omitempty"`
-	PrivateKeyRef   string `json:"privateKeyRef,omitempty"`
+	Address       string `json:"address,omitempty"`
+	Connection    string `json:"connection"`
+	KnownHostsRef string `json:"knownHostsRef,omitempty"`
+	Machine       string `json:"machine"`
+	Port          int    `json:"port,omitempty"`
+	PrivateKeyRef string `json:"privateKeyRef,omitempty"`
+	// SudoPasswordRef is never populated; it stays only so that requests frozen
+	// before placements stopped escalating remain canonical and removable.
 	SudoPasswordRef string `json:"sudoPasswordRef,omitempty"`
 	User            string `json:"user,omitempty"`
 }
@@ -26,10 +30,10 @@ type Placement struct {
 func (p Placement) Local() bool { return p.Connection == ConnectionLocal }
 
 // SecretReferences names every declaration a placement needs bound before the
-// operation registers.
+// operation registers. An escalation Secret is never one of them.
 func (p Placement) SecretReferences() []string {
 	var references []string
-	for _, reference := range []string{p.PrivateKeyRef, p.KnownHostsRef, p.SudoPasswordRef} {
+	for _, reference := range []string{p.PrivateKeyRef, p.KnownHostsRef} {
 		if reference != "" {
 			references = append(references, reference)
 		}
@@ -38,7 +42,8 @@ func (p Placement) SecretReferences() []string {
 }
 
 // PlacementFor selects the arm one block runs through. The controller is
-// local; every other host must author the SSH access the operation binds.
+// local; every other host must author the SSH access the operation binds, and
+// that access connects as root and never escalates.
 func PlacementFor(machine api.Object, controllerMachine string) (Placement, error) {
 	if machine.Name() == controllerMachine {
 		return Placement{Connection: ConnectionLocal, Machine: machine.Name()}, nil
@@ -59,6 +64,9 @@ func PlacementFor(machine api.Object, controllerMachine string) (Placement, erro
 	if !ssh.Has("knownHostsRef") {
 		return Placement{}, placementFailure("lifecycle.state", "lifecycle placement requires a bound SSH host key", "author access.ssh.knownHostsRef on "+machine.Identity())
 	}
+	if len(privilegeFields(ssh)) != 0 {
+		return Placement{}, placementFailure("lifecycle.state", "a lifecycle placement host connects as root and never escalates", "set access.ssh.user to root or omit it, and remove access.ssh.sudoPasswordRef, on "+machine.Identity())
+	}
 	address, err := ResolveAddress(machine, ssh.Get("addressRef").Text())
 	if err != nil {
 		return Placement{}, err
@@ -73,9 +81,56 @@ func PlacementFor(machine api.Object, controllerMachine string) (Placement, erro
 	}
 	return Placement{
 		Address: address, Connection: ConnectionSSH, KnownHostsRef: ssh.Get("knownHostsRef").Text(),
-		Machine: machine.Name(), Port: port, PrivateKeyRef: ssh.Get("auth", "privateKeyRef").Text(),
-		SudoPasswordRef: ssh.Get("sudoPasswordRef").Text(), User: user,
+		Machine: machine.Name(), Port: port, PrivateKeyRef: ssh.Get("auth", "privateKeyRef").Text(), User: user,
 	}, nil
+}
+
+// privilegeFields names the access.ssh fields that keep a host from connecting
+// as root without escalation: a user other than root, and an escalation Secret.
+func privilegeFields(ssh api.Value) []string {
+	var fields []string
+	if ssh.Has("user") && ssh.Get("user").Text() != "root" {
+		fields = append(fields, "user")
+	}
+	if ssh.Has("sudoPasswordRef") {
+		fields = append(fields, "sudoPasswordRef")
+	}
+	return fields
+}
+
+var privilegeRefusals = map[string]string{
+	"user":            "a lifecycle placement host connects as root; non-root SSH accounts are not supported",
+	"sudoPasswordRef": "a lifecycle placement never escalates; remove access.ssh.sudoPasswordRef",
+}
+
+// validatePlacementHost refuses a lifecycle placement host whose SSH access
+// would connect as another account or escalate. A Machine no placement names,
+// such as a cluster node, a storage node or a session target, keeps any account.
+func validatePlacementHost(o api.Object, c api.Catalog) []api.Issue {
+	ssh := o.Spec().Get("access", "ssh")
+	if !ssh.Present() || !placementHost(o, c) {
+		return nil
+	}
+	var issues []api.Issue
+	for _, field := range privilegeFields(ssh) {
+		issues = append(issues, invariant("$.spec.access.ssh."+field, privilegeRefusals[field]))
+	}
+	return issues
+}
+
+// placementHost reports whether a managed infrastructure service or a libvirt
+// provider places its lifecycle effects on the Machine.
+func placementHost(o api.Object, c api.Catalog) bool {
+	for _, candidate := range c.Objects() {
+		spec := candidate.Spec()
+		if infrastructureservices.IsService(candidate.Kind()) && spec.Get("management").Text() == "managed" && spec.Get("machineRef").Text() == o.Name() {
+			return true
+		}
+		if candidate.Kind() == api.InfraProvider && spec.Get("libvirt", "machineRef").Text() == o.Name() {
+			return true
+		}
+	}
+	return false
 }
 
 // ResolveAddress answers the address one reference names on its Machine.

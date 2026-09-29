@@ -1,14 +1,41 @@
 [OK] Context lab
 
+  Mode  ready
+
 Setup
   [OK]  controller-binding
   [OK]  dependency-bundle
 
+Desired
+  Revision         rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f
+  Environment      lab-rhel
+  Files seen       14
+  Objects decoded  14
+
+Clusters
+  [SKIPPED]  ContainerCluster/ocp-01
+
+Storage clusters
+  [SKIPPED]  StorageCluster/ceph-01
+
 Shared services
-  [OK]       ArtifactServer/lab-artifacts
-  [SKIPPED]  DNSServer/lab-dns
+  [OK]       ArtifactServer/lab-artifacts  controller
+  [SKIPPED]  DNSServer/lab-dns             controller
+
+Secrets
+  Declared  3
+  Bound     3
+
+Next steps
+  bootwright apply
+  bootwright destroy
 
 Lifecycle
+  Operation  op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
+  Verb       apply
+  State      failed
+  Next       continue-apply
+
   [DONE]     serve artifacts for lab-artifacts on controller
   [DONE]     realize the libvirt host of lab-libvirt on controller
   [FAIL]     realize the virtual machine rhel-01 and its controller
@@ -16,4 +43,3 @@ Lifecycle
 
   Registered by  1.4.0 (9f2c1ab)
   Logs           /var/lib/bootwright/contexts/lab/state/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/logs
-  Next           bootwright apply

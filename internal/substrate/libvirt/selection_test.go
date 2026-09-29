@@ -110,7 +110,7 @@ func TestARemoteProviderHostUsesItsOwnAuthoredAccess(t *testing.T) {
 		t.Fatalf("requests = %d (%v)", len(requests), err)
 	}
 	placement := requests[0].Placement
-	if placement.Connection != "ssh" || placement.Machine != "hypervisor" || placement.Address != "192.0.2.5" || placement.User != "operator" {
+	if placement.Connection != "ssh" || placement.Machine != "hypervisor" || placement.Address != "192.0.2.5" || placement.User != "root" {
 		t.Fatalf("placement = %+v", placement)
 	}
 	if !slices.Equal(requests[0].SecretReferences(), []string{"host-key", "hypervisor-key"}) {
@@ -293,12 +293,19 @@ func TestUnsupportedNamesEveryObjectThisContractCannotRealize(t *testing.T) {
 
 // A controller that binds a wildcard gives its guests no endpoint a consumer
 // can name, so the provider refuses rather than realizing an unreachable BMC.
+// Selection agrees with admission over every address, for state that bypassed
+// it, and an absent address refuses here too.
 func TestAWildcardControllerAddressRefuses(t *testing.T) {
-	for _, address := range []string{"0.0.0.0", "::", ""} {
+	for address, nameable := range map[string]bool{
+		"": false, "0.0.0.0": false, "::": false, "::0": false, "0:0:0:0:0:0:0:0": false,
+		"::ffff:0.0.0.0": false, "::ffff:192.0.2.1": false, "2001:db8::1": false, "::1": false,
+		"fe80::1": false, "ff02::1": false, "224.0.0.1": false, "255.255.255.255": false,
+		"192.0.2.1": true, "127.0.0.1": true, "169.254.1.1": true,
+	} {
 		defaults := provider().Spec().Get("libvirt", "bmcEmulationDefaults").With("bindAddress", api.StringValue(address))
-		wildcard := provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulationDefaults", defaults)))
-		if unsupported := Unsupported(catalogOf(controller(), wildcard)); !slices.Contains(unsupported, "InfraProvider/lab-libvirt") {
-			t.Fatalf("%q was accepted: %v", address, unsupported)
+		listener := provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulationDefaults", defaults)))
+		if unsupported := Unsupported(catalogOf(controller(), listener)); slices.Contains(unsupported, "InfraProvider/lab-libvirt") == nameable {
+			t.Fatalf("%q: nameable = %v, unsupported = %v", address, nameable, unsupported)
 		}
 	}
 }

@@ -79,6 +79,7 @@ spec:
     uri: qemu:///system
 
     bmcEmulationDefaults:
+      bindAddress: 192.0.2.60
       auth:
         credentialsRef: acceptance-provider-credentials
 

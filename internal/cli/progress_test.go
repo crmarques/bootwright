@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 // manualClock fires heartbeats only when a test advances it, so the rows a
@@ -354,5 +356,27 @@ func TestAppendedProgressInterleavesConcurrentStepsAndBeatsEachOne(t *testing.T)
 		"  [DONE]     [2/2] Resolve names  10s\n"
 	if out.String() != want {
 		t.Fatalf("progress = %q, want %q", out.String(), want)
+	}
+}
+
+// JSON mode writes exactly one document, so nothing an invocation reports
+// while its work runs reaches standard output there: no row, no log location
+// and no finishing line. Text mode names the log location as its own field.
+func TestJSONModeProgressWritesNothing(t *testing.T) {
+	ctx := context.Background()
+	const location = "/var/lib/bootwright/contexts/lab/state/runs/run-abc"
+	var out bytes.Buffer
+	silent := NewInvocationProgress(&out, func() int { return 80 }, true)
+	silent.ReportLogLocation(ctx, location)
+	silent.ReportProgress(ctx, lifecycle.ProgressEvent{Block: "artifact-server-lab", Description: "serve artifacts", Status: "running", Position: 1, Total: 1})
+	silent.Finish()
+	if out.Len() != 0 {
+		t.Fatalf("JSON-mode progress wrote %q", out.String())
+	}
+	text := NewInvocationProgress(&out, nil, false)
+	text.ReportLogLocation(ctx, location)
+	text.Finish()
+	if want := "\n  Logs  " + location + "\n"; out.String() != want {
+		t.Fatalf("text-mode progress = %q, want %q", out.String(), want)
 	}
 }

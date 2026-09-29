@@ -44,11 +44,14 @@ setup receipt whose automation identity matches the running executable. A
 missing, contradictory or stale binding refuses before effects and names
 `setup`.
 
-The SSH arm consumes authored `access.ssh.auth.privateKeyRef`, required
-`access.ssh.knownHostsRef` and any `access.ssh.sudoPasswordRef`, binding the
-effective user and every Secret version with the plan. `passwordRef`,
-`auth.operatorIdentity` and the global borrowed-SSH flags are unsupported and
-refuse before planning. The bound `knownHostsRef` material is parsed before
+The SSH arm connects as root and never escalates. It consumes authored
+`access.ssh.auth.privateKeyRef` and required `access.ssh.knownHostsRef`, and
+binds user `root` and only those two Secret versions with the plan. A
+placement host with another account or an escalation Secret refuses at
+admission under [addresses and access](api/machines.md#addresses-and-access),
+and the placement derivation refuses the same host before planning.
+`passwordRef`, `auth.operatorIdentity` and the global borrowed-SSH flags are
+unsupported and refuse before planning. The bound `knownHostsRef` material is parsed before
 connection under [the Machine host-key rules](api/machines.md#addresses-and-access);
 a changed, missing, corrupt or unparseable entry refuses before the connection,
 and an observed key mismatch refuses before any remote command. No SSH

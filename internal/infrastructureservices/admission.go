@@ -9,7 +9,7 @@ import (
 )
 
 func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
-	if !isService(o.Kind()) {
+	if !IsService(o.Kind()) {
 		return o, nil
 	}
 	value := normalizeServiceIPs(o.Spec())
@@ -74,7 +74,7 @@ func ValidateAuthored(o api.Object, _ api.Catalog) []api.Issue {
 }
 
 func Validate(o api.Object, c api.Catalog) []api.Issue {
-	if !isService(o.Kind()) {
+	if !IsService(o.Kind()) {
 		return nil
 	}
 	issues := validateIntrinsic(o, false)
@@ -99,7 +99,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 }
 
 func validateIntrinsic(o api.Object, partial bool) []api.Issue {
-	if !isService(o.Kind()) {
+	if !IsService(o.Kind()) {
 		return nil
 	}
 	value := o.Spec()
@@ -221,7 +221,7 @@ func validateTransport(value api.Value, partial bool) []api.Issue {
 	return issues
 }
 
-func isService(kind api.Kind) bool {
+func IsService(kind api.Kind) bool {
 	return slices.Contains([]api.Kind{api.Proxy, api.DNSServer, api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer}, kind)
 }
 

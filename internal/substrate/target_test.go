@@ -28,7 +28,7 @@ func targetCatalog() api.Catalog {
 			m("hostKeyRef", "server-host-key", "rootDeviceHints", m("deviceName", "/dev/sda"))),
 		"hardware", m("nics", list(m("name", "eno1", "macAddress", "AA:BB:CC:DD:EE:01"),
 			m("name", "eno2", "macAddress", "aa:bb:cc:dd:ee:02")),
-			"management", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1/",
+			"management", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1",
 				"credentialsRef", "server-bmc", "tls", m("verify", false))))))
 	standalone := obj(api.Machine, "bastion", m("os", m("provided", true),
 		"hardware", m("management", m("bmc", m("address", "https://bastion-bmc.example.test/redfish/v1/Systems/self",
@@ -141,27 +141,70 @@ func TestAnAuthoredControllerAnswersWithoutAProvider(t *testing.T) {
 	}
 }
 
-// An address that does not name one exact ComputerSystem is refused. It is
-// what a destructive operation is aimed at, so it may never be ambiguous.
+// An address that does not name one exact ComputerSystem in its one spelling
+// is refused. It is what a destructive operation is aimed at, so it may never
+// be ambiguous, and nothing rewrites it: what admission reads, what the claim
+// key holds and what a client sends are the same bytes.
 func TestAControllerAddressMustNameOneExactSystem(t *testing.T) {
+	const system = "/redfish/v1/Systems/1"
 	for name, address := range map[string]string{
-		"the collection":  "https://bmc.example.test/redfish/v1/Systems",
-		"a relative path": "/redfish/v1/Systems/1",
-		"another tree":    "https://bmc.example.test/redfish/v1/Chassis/1",
-		"embedded user":   "https://root:secret@bmc.example.test/redfish/v1/Systems/1",
-		"a nested child":  "https://bmc.example.test/redfish/v1/Systems/1/EthernetInterfaces",
-		"no scheme":       "bmc.example.test/redfish/v1/Systems/1",
-		"empty":           "",
+		"the collection":               "https://bmc.example.test/redfish/v1/Systems",
+		"an empty id":                  "https://bmc.example.test/redfish/v1/Systems/",
+		"a relative path":              system,
+		"another tree":                 "https://bmc.example.test/redfish/v1/Chassis/1",
+		"embedded user":                "https://root:secret@bmc.example.test" + system,
+		"a nested child":               "https://bmc.example.test/redfish/v1/Systems/1/EthernetInterfaces",
+		"no scheme":                    "bmc.example.test" + system,
+		"empty":                        "",
+		"redfish+http":                 "redfish+http://bmc.example.test" + system,
+		"redfish+https":                "redfish+https://bmc.example.test" + system,
+		"redfish-virtualmedia+http":    "redfish-virtualmedia+http://bmc.example.test" + system,
+		"redfish-virtualmedia+https":   "redfish-virtualmedia+https://bmc.example.test" + system,
+		"an upper-case scheme":         "HTTPS://bmc.example.test" + system,
+		"surrounding whitespace":       "  https://bmc.example.test" + system + "  ",
+		"embedded whitespace":          "https://bmc.example.test/redfish/v1/Systems/a b",
+		"embedded tab":                 "https://bmc.example.test/redfish/v1/Systems/a\tb",
+		"a trailing slash":             "https://bmc.example.test" + system + "/",
+		"an empty query":               "https://bmc.example.test" + system + "?",
+		"a query":                      "https://bmc.example.test" + system + "?a=b",
+		"an empty fragment":            "https://bmc.example.test" + system + "#",
+		"an empty port":                "https://bmc.example.test:" + system,
+		"a leading-zero port":          "https://bmc.example.test:0443" + system,
+		"an encoded dot":               "https://bmc.example.test/redfish/v1/Systems/%2e",
+		"an encoded space":             "https://bmc.example.test/redfish/v1/Systems/a%20b",
+		"the dot id":                   "https://bmc.example.test/redfish/v1/Systems/.",
+		"the dot-dot id":               "https://bmc.example.test/redfish/v1/Systems/..",
+		"an upper-case host":           "https://BMC.example.test" + system,
+		"a non-canonical IPv6 literal": "https://[2001:DB8::1]" + system,
+		"a zero-padded dotted host":    "https://192.000.002.001" + system,
+		"a decimal host":               "https://3232235777" + system,
+		"a one-digit host":             "https://1" + system,
+		"an underscored host":          "https://bmc_1.example.test" + system,
+		"a quote in the id":            "https://bmc.example.test/redfish/v1/Systems/a\"b",
+		"a brace in the id":            "https://bmc.example.test/redfish/v1/Systems/a{b}",
+		"a semicolon in the id":        "https://bmc.example.test/redfish/v1/Systems/a;b",
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, ok := NormalizeControllerEndpoint(address); ok {
-				t.Fatalf("%q was accepted", address)
+			if endpoint, ok := NormalizeControllerEndpoint(address); ok || endpoint != "" {
+				t.Fatalf("%q was accepted as %q", address, endpoint)
 			}
 		})
 	}
-	endpoint, ok := NormalizeControllerEndpoint("  https://bmc.example.test:8443/redfish/v1/Systems/System.1/  ")
-	if !ok || endpoint != "https://bmc.example.test:8443/redfish/v1/Systems/System.1" {
-		t.Fatalf("normalized = %q, ok = %v", endpoint, ok)
+	for _, address := range []string{
+		"https://bmc.example.test" + system,
+		"http://bmc.example.test" + system,
+		"https://bmc.example.test:8443" + system,
+		"https://[2001:db8::1]" + system,
+		"https://192.0.2.1:8443" + system,
+		"https://bmc.example.test/redfish/v1/Systems/System.Embedded.1",
+		"https://bmc.example.test/redfish/v1/Systems/4c4c4544-0042-3510-8054-b2c04f4e3032",
+		"https://bmc.example.test/redfish/v1/Systems/a-b_c~d",
+	} {
+		t.Run(address, func(t *testing.T) {
+			if endpoint, ok := NormalizeControllerEndpoint(address); !ok || endpoint != address {
+				t.Fatalf("endpoint = %q, ok = %v, want the address unchanged", endpoint, ok)
+			}
+		})
 	}
 }
 

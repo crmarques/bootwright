@@ -33,8 +33,8 @@ func TestLifecycleViewExposesTheContextSnapshot(t *testing.T) {
 	err := store.ReadLifecycle(ctx, "example", func(view lifecycle.View) error {
 		seen = true
 		identity := view.Identity()
-		if identity.Name != record.Name || identity.Revision != record.Revision {
-			t.Fatalf("identity = %+v, want %+v", identity, record)
+		if identity.Name != record.Name || identity.Revision != record.Revision || identity.Mode != "ready" {
+			t.Fatalf("identity = %+v, want %+v in mode ready", identity, record)
 		}
 		if len(view.Inputs().Files) != 1 {
 			t.Fatalf("inputs = %+v", view.Inputs())
@@ -646,6 +646,9 @@ func TestLifecycleTransactionOpensTheApprovedBundle(t *testing.T) {
 	store, record := lifecycleFixture(t)
 	digest := sealedBundleFixture(t, store, record)
 	if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		if identity := tx.Identity(); identity.Name != record.Name || identity.Mode != "ready" {
+			t.Fatalf("transaction identity = %+v, want %s in mode ready", identity, record.Name)
+		}
 		view := tx.Controller()
 		if view.OpenBundle == nil {
 			t.Fatal("the lifecycle transaction offers no execution bundle")

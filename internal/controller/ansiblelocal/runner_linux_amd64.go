@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 const entrypoint = `import sys, os
@@ -38,9 +39,41 @@ const (
 	authorizedResultDrain = 60 * time.Second
 )
 
-// runTimeout bounds one controller Ansible run: setup, its recovery or a
-// controller-stage client installation.
+// runTimeout bounds one controller Ansible run: setup, its recovery or the base
+// of a controller-stage client installation, which adds each source's
+// acquisition deadline up to clientStageCeiling.
 const runTimeout = 10 * time.Minute
+
+const clientStageCeiling = 2 * time.Hour
+
+// runDeadline is how long one run may take. A fixed deadline cut short a client
+// installation whose sources alone outlast it; a closure past the ceiling is
+// refused before Ansible starts, so the clamp never shortens an admitted run.
+func runDeadline(request capabilityRequest) time.Duration {
+	if len(request.Tools) == 0 {
+		return runTimeout
+	}
+	return min(runTimeout+acquisitionTotal(request), clientStageCeiling)
+}
+
+func acquisitionTotal(request capabilityRequest) time.Duration {
+	var total time.Duration
+	for _, tool := range request.Tools {
+		total += acquisitionDeadline(tool.Source.Bytes)
+	}
+	return total
+}
+
+func requireClientStageCeiling(request capabilityRequest) error {
+	if runTimeout+acquisitionTotal(request) <= clientStageCeiling {
+		return nil
+	}
+	var bytes int64
+	for _, tool := range request.Tools {
+		bytes += tool.Source.Bytes
+	}
+	return diagnostics.NewFailureWithRemediation("controller.unsupported", "the selected target clients total "+strconv.FormatInt(bytes, 10)+" bytes, whose acquisition deadlines exceed the controller stage's 2-hour ceiling", "", "Select fewer target clients for this context.")
+}
 
 func run(ctx context.Context, launch prerequisites.PythonLaunch, request capabilityRequest, release func() error, publish func(context.Context, prerequisites.NativePreparation) error, progress func(prerequisites.ProgressEvent), retain prerequisites.RunOutput) (prerequisites.ActionResult, error) {
 	// Invocation state is small and must not survive a reboot, so it lives on
@@ -61,7 +94,7 @@ type processBoundary struct {
 }
 
 func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request capabilityRequest, release func() error, publish func(context.Context, prerequisites.NativePreparation) error, progress func(prerequisites.ProgressEvent), retain prerequisites.RunOutput, boundary processBoundary) (prerequisites.ActionResult, error) {
-	ctx, cancel := context.WithTimeout(ctx, runTimeout)
+	ctx, cancel := context.WithTimeout(ctx, runDeadline(request))
 	defer cancel()
 	// Each protocol phase names the work Ansible is about to do, so the native
 	// transaction and every tool transfer are visible while they run.
@@ -79,6 +112,9 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 	result := actionResult("failed", false)
 	if os.Geteuid() != boundary.owner || boundary.command == nil || release == nil || !filepath.IsAbs(launch.Loader) || !filepath.IsAbs(launch.Directory) || len(request.Packages) > 512 || len(request.Tools) > 128 {
 		return result, failure("controller.setup", "the authorized Ansible execution boundary is unavailable")
+	}
+	if err := requireClientStageCeiling(request); err != nil {
+		return result, err
 	}
 	job, err := os.MkdirTemp(boundary.jobParent, "bootwright-controller-")
 	if err != nil {

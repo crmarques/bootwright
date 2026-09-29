@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"io"
 	"io/fs"
+	"maps"
 	"path"
 	"slices"
 	"sort"
@@ -35,6 +36,11 @@ type projectedFile struct {
 
 type projection struct {
 	files map[string]projectedFile
+	// documentation is the collection's documentation at its bundle path. It
+	// is published beside the automation but, like the automation digest,
+	// leaves the identity, the file count and the byte total, and no check
+	// compares its bytes.
+	documentation map[string][]byte
 	// parents holds every ancestor directory of every added file, so a
 	// file-directory collision is a lookup rather than a scan of the whole
 	// projection. A closure reaches thousands of files and is rebuilt for every
@@ -45,7 +51,7 @@ type projection struct {
 }
 
 func newProjection() *projection {
-	return &projection{files: make(map[string]projectedFile), parents: make(map[string]bool), site: sitePackages}
+	return &projection{files: make(map[string]projectedFile), documentation: make(map[string][]byte), parents: make(map[string]bool), site: sitePackages}
 }
 
 func projectionFor(record catalogRecord) *projection {
@@ -63,7 +69,7 @@ func (p *projection) identity() string {
 	}
 	sort.Strings(names)
 	hash := sha256.New()
-	hash.Write([]byte("bootwright.controller.projection-v1\x00"))
+	hash.Write([]byte("bootwright.controller.projection-v2\x00"))
 	for _, name := range names {
 		file := p.files[name]
 		binary.Write(hash, binary.BigEndian, uint32(len(name)))
@@ -87,24 +93,50 @@ func (p *projection) matches(value *prerequisites.BootstrapDefinition) bool {
 // The baseline bootstrap carries the compiled Ansible roles beside the private
 // Python runtime. Target dependency installation remains owned by those roles.
 func (p *projection) automation(ctx context.Context) error {
-	assets := ansible.Assets()
-	names := make([]string, 0, len(assets))
-	for name := range assets {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-	for _, name := range names {
+	return p.embed(ctx, ansible.Automation(), ansible.Documentation())
+}
+
+// embed projects the automation files under automation/ and records the
+// documentation there beside them. Documentation contributes only its ancestor
+// directories, because the automation digest leaves it out.
+func (p *projection) embed(ctx context.Context, automation, documentation map[string][]byte) error {
+	for _, name := range slices.Sorted(maps.Keys(automation)) {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if !validPath(name) {
 			return bundleFailure("compiled automation asset has an invalid path")
 		}
-		if err := p.add(path.Join("automation", name), assets[name], false); err != nil {
+		if err := p.add(path.Join("automation", name), automation[name], false); err != nil {
+			return err
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(documentation)) {
+		if !validPath(name) {
+			return bundleFailure("compiled automation asset has an invalid path")
+		}
+		if err := p.describe(path.Join("automation", name), documentation[name]); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// documentationNames are the bundle paths of the documentation this projection
+// publishes, in order.
+func (p *projection) documentationNames() []string {
+	return slices.Sorted(maps.Keys(p.documentation))
+}
+
+// documentationPaths are the bundle paths of the collection documentation
+// every bundle carries beside its automation.
+func documentationPaths() []string {
+	names := make([]string, 0, 2)
+	for name := range ansible.Documentation() {
+		names = append(names, path.Join("automation", name))
+	}
+	slices.Sort(names)
+	return names
 }
 
 func validPath(name string) bool {
@@ -118,26 +150,59 @@ func (p *projection) add(name string, data []byte, executable bool) error {
 	if !validPath(name) || len(p.files) >= maxArchiveEntries || len(data) > maxMemberBytes || p.bytes+int64(len(data)) > maxExpandedBytes {
 		return bundleFailure("dependency archive exceeds its qualified path or size limits")
 	}
-	if _, found := p.files[name]; found {
+	if err := p.vacant(name); err != nil {
+		return err
+	}
+	p.files[name] = projectedFile{data: data, executable: executable}
+	p.bytes += int64(len(data))
+	p.enclose(name)
+	return nil
+}
+
+// describe records one documentation file and its ancestor directories, and
+// nothing the identity, the file count or the byte total reads.
+func (p *projection) describe(name string, data []byte) error {
+	if !validPath(name) || len(data) > maxMemberBytes {
+		return bundleFailure("compiled automation documentation exceeds its qualified path or size limits")
+	}
+	if err := p.vacant(name); err != nil {
+		return err
+	}
+	p.documentation[name] = data
+	p.enclose(name)
+	return nil
+}
+
+// vacant refuses a path a file or documentation already holds. A path something
+// was already added beneath is a directory, and an ancestor that already holds
+// content is a file. Either way the entry collides.
+func (p *projection) vacant(name string) error {
+	if p.holds(name) {
 		return bundleFailure("dependency archive contains conflicting file entries")
 	}
-	// A path something was already added beneath is a directory, and an ancestor
-	// that already holds content is a file. Either way this entry collides.
 	if p.parents[name] {
 		return bundleFailure("dependency archive contains a file-directory collision")
 	}
 	for parent := path.Dir(name); parent != "."; parent = path.Dir(parent) {
-		if _, found := p.files[parent]; found {
+		if p.holds(parent) {
 			return bundleFailure("dependency archive contains a file-directory collision")
 		}
 	}
-	p.files[name] = projectedFile{data: data, executable: executable}
-	p.bytes += int64(len(data))
-	// Ancestors above the first one already recorded were recorded with it.
+	return nil
+}
+
+func (p *projection) holds(name string) bool {
+	_, file := p.files[name]
+	_, documented := p.documentation[name]
+	return file || documented
+}
+
+// enclose records the ancestors of name. Ancestors above the first one already
+// recorded were recorded with it.
+func (p *projection) enclose(name string) {
 	for parent := path.Dir(name); parent != "." && !p.parents[parent]; parent = path.Dir(parent) {
 		p.parents[parent] = true
 	}
-	return nil
 }
 
 func approvedBytes(source prerequisites.DependencySource, data []byte) bool {

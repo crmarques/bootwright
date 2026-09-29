@@ -1,0 +1,13 @@
+[OK] Apply done
+
+  Nothing to do: this invocation only completed an interrupted finalization.
+
+Result
+  [DONE]  serve artifacts for lab-artifacts on controller
+  [DONE]  realize the libvirt host of lab-libvirt on controller
+  [DONE]  realize the virtual machine rhel-01 and its controller
+  [DONE]  install the operating system of rhel-01
+operation: op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
+verb: apply
+state: done
+next: none

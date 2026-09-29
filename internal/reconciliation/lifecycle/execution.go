@@ -133,6 +133,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	// before anything is authorized, presented or confirmed, because doing so
 	// performs no effect: only the record, releases and projection those
 	// records prove. The verb then decides again from what that leaves.
+	finalized := decided.finalize
 	if decided.finalize {
 		if decided, identity, err = s.finalizeFirst(ctx, name, verb, selection, decided); err != nil {
 			return nil, err
@@ -145,14 +146,19 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 		if err := s.releaseUnclaimed(ctx, name, decided); err != nil {
 			return nil, err
 		}
-		return settled(identity, transition{verb: verb}), nil
+		return settled(identity, transition{verb: verb}, RecoveredRelease), nil
 	}
 	// A verb with nothing to do ends here. It registers nothing and performs
 	// no effect, so it needs neither authorization nor confirmation: there is
 	// no consequence to acknowledge and nothing a habitual token could
-	// pre-authorize, and repeating a completed verb stays safe.
+	// pre-authorize, and repeating a completed verb stays safe. A finalization
+	// this invocation completed first is the only thing it did, and it says so.
 	if decided.noop {
-		return settled(identity, decided), nil
+		recovered := ""
+		if finalized {
+			recovered = RecoveredFinalization
+		}
+		return settled(identity, decided, recovered), nil
 	}
 	if err := authorize(decided.plan, authorizations); err != nil {
 		return nil, err
@@ -364,18 +370,20 @@ func unchangedInput(view View, operation operationstore.Operation) bool {
 
 // settled reports the verb whose work durable state already proves. It touches
 // no record, so the operation it names keeps the state and identity it
-// finished with.
-func settled(identity ContextIdentity, decided transition) *OperationResult {
+// finished with. recovered names what the invocation completed before it
+// settled, if anything.
+func settled(identity ContextIdentity, decided transition, recovered string) *OperationResult {
 	operation := decided.operation.ID
 	if operation == "" {
 		operation = "none"
 	}
 	return &OperationResult{
-		Context: identity,
-		Verb:    string(decided.verb),
-		Steps:   steps(decided.plan, decided.states),
-		Blocks:  blockResults(decided.plan, decided.states),
-		Settled: true,
+		Context:   identity,
+		Verb:      string(decided.verb),
+		Steps:     steps(decided.plan, decided.states),
+		Blocks:    blockResults(decided.plan, decided.states),
+		Settled:   true,
+		Recovered: recovered,
 		Receipt: Receipt{
 			Operation: operation, Verb: string(decided.verb),
 			State: string(reconciliation.OperationDone), Next: "none",

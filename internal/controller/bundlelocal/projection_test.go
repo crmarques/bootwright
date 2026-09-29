@@ -10,9 +10,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"io/fs"
+	"maps"
 	"slices"
 	"testing"
 
+	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
@@ -232,6 +234,10 @@ func TestInspectionRequiresCompleteExactProjectionAndAttributablePartialFiles(t 
 	for name, file := range assets.files {
 		area.files[name] = file
 	}
+	assertInspection(false, true)
+	for name, data := range assets.documentation {
+		area.files[name] = projectedFile{data: data}
+	}
 	assertInspection(true, true)
 	area.files["python/lib/python3.13/sitecustomize.py"] = projectedFile{data: []byte("unapproved")}
 	assertInspection(false, false)
@@ -243,6 +249,57 @@ func TestInspectionRequiresCompleteExactProjectionAndAttributablePartialFiles(t 
 	area.files["python/bin/python3.13"] = projectedFile{data: []byte("executable"), executable: true}
 	delete(area.files, "sources/python")
 	assertInspection(false, false)
+}
+
+// Documentation leaves the automation digest, so it leaves the projection
+// identity, the file count and the byte total with it: a README change moves
+// none of them, while a changed module moves the identity and the bytes, and
+// an added one the count. The identity's domain version is its own, pinned by
+// the identity of an empty projection.
+func TestTheProjectionIdentityLeavesDocumentationOut(t *testing.T) {
+	const (
+		readme = "collections/ansible_collections/bootwright/core/README.md"
+		module = "collections/ansible_collections/bootwright/core/plugins/modules/artifact_server_protocol.py"
+	)
+	project := func(t *testing.T, change func(automation, documentation map[string][]byte)) *projection {
+		t.Helper()
+		automation, documentation := maps.Clone(ansible.Automation()), maps.Clone(ansible.Documentation())
+		change(automation, documentation)
+		projected := newProjection()
+		if err := projected.embed(t.Context(), automation, documentation); err != nil {
+			t.Fatal(err)
+		}
+		return projected
+	}
+	baseline := project(t, func(map[string][]byte, map[string][]byte) {})
+	if _, projected := baseline.files["automation/"+readme]; projected {
+		t.Fatal("the README is a projected file")
+	}
+	if _, documented := baseline.documentation["automation/"+readme]; !documented || !slices.Contains(baseline.directories(), "automation/collections/ansible_collections/bootwright/core") {
+		t.Fatalf("the README is not published at its bundle path: %v", baseline.documentationNames())
+	}
+	described := project(t, func(_, documentation map[string][]byte) {
+		documentation[readme] = append(slices.Clone(documentation[readme]), "\nA later release.\n"...)
+	})
+	if described.identity() != baseline.identity() || len(described.files) != len(baseline.files) || described.bytes != baseline.bytes {
+		t.Fatal("a README change moved the projection identity, file count or byte total")
+	}
+	changed := project(t, func(automation, _ map[string][]byte) {
+		automation[module] = append(slices.Clone(automation[module]), '\n')
+	})
+	if changed.identity() == baseline.identity() || changed.bytes == baseline.bytes {
+		t.Fatal("a module change left the projection identity or byte total unchanged")
+	}
+	added := project(t, func(automation, _ map[string][]byte) {
+		automation["collections/ansible_collections/bootwright/core/plugins/modules/added.py"] = []byte{}
+	})
+	if added.identity() == baseline.identity() || len(added.files) != len(baseline.files)+1 {
+		t.Fatal("an added module left the projection identity or file count unchanged")
+	}
+	empty := sha256.Sum256([]byte("bootwright.controller.projection-v2\x00"))
+	if got := newProjection().identity(); got != hex.EncodeToString(empty[:]) {
+		t.Fatalf("the projection identity domain is not bootwright.controller.projection-v2: %s", got)
+	}
 }
 
 func TestArchiveAndInspectionCancellation(t *testing.T) {

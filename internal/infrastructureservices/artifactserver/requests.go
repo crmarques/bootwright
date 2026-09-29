@@ -188,11 +188,7 @@ func (r Request) secretReferences() []string {
 	if r.TLS != nil {
 		references = append(references, r.TLS.Secret)
 	}
-	for _, reference := range []string{r.Placement.PrivateKeyRef, r.Placement.KnownHostsRef, r.Placement.SudoPasswordRef} {
-		if reference != "" {
-			references = append(references, reference)
-		}
-	}
+	references = append(references, r.Placement.SecretReferences()...)
 	slices.Sort(references)
 	return slices.Compact(references)
 }

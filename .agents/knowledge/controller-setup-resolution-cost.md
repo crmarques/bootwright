@@ -72,20 +72,32 @@ why each removed step was expensive, which is the reason those rules matter.
   Presence is now the one bar all three share. Code:
   `internal/controller/clients/capability.go` (`Apply`, `settled`, `Observe`).
 - An automation revision still names a new bundle area, because `Digest()`
-  hashes every embedded file into `BootstrapDefinition.AutomationDigest`, which
-  enters the bootstrap digest and through it `CatalogDigest`. It no longer costs
-  a resolution. `validateDefinition` checks the provided execution foundation
-  first and reports an automation-only mismatch as `ErrAutomationSuperseded`
-  beside `ErrBootstrapIncompatible`; `Setup` then carries that resolution
-  forward instead of replacing it. `Manager.Rebase` reads the retained sources
-  out of the sealed area, projects them under the embedded automation and
-  returns the same resolution under its new projection identity, and `Prepare`
-  reads each source from that area before contacting a publisher. Nothing is
-  downloaded and nothing is solved when the native roots are still installed.
-  The superseded area still remains. Code: `ansible/assets.go` (`Digest`),
+  hashes every embedded automation file into
+  `BootstrapDefinition.AutomationDigest`, which enters the bootstrap digest and
+  through it `CatalogDigest`. The collection's root README and CHANGELOG are
+  the exception (B16): `Automation()` leaves them out, and so do the digest,
+  every comparison against an approved bundle and the projection identity, file
+  count and byte total, so a documentation-only build keeps the bundle it
+  names. Inspection requires them present as regular non-executable files and
+  never compares their bytes, and preparation writes only the ones an area
+  lacks. The narrowed digest and identity took new domain versions, so the
+  first build carrying them supersedes every retained definition once. An
+  automation revision no longer costs a resolution. `validateDefinition`
+  checks the provided execution foundation first and reports an
+  automation-only mismatch as `ErrAutomationSuperseded` beside
+  `ErrBootstrapIncompatible`; `Setup` then carries that resolution forward
+  instead of replacing it. `Manager.Rebase` reads the retained sources out of
+  the sealed area, projects them under the embedded automation and returns the
+  same resolution under its new projection identity, and `Prepare` reads each
+  source from that area before contacting a publisher. Nothing is downloaded
+  and nothing is solved when the native roots are still installed. The
+  superseded area still remains. Code: `ansible/assets.go` (`Digest`,
+  `Automation`, `Documentation`),
   `internal/controller/prerequisites/definition.go` (`resolvedContentDigest`),
+  `internal/controller/bundlelocal/projection.go` (`embed`, `describe`),
   `internal/controller/bundlelocal/manager.go` (`validateDefinition`,
-  `qualifiedFoundation`, `Rebase`, `retainedSource`),
+  `qualifiedFoundation`, `Rebase`, `retainedSource`,
+  `attributableDocumentation`, `publishDocumentation`),
   `internal/controller/prerequisites/resolution.go` (`carryForward`, `rebind`).
   Retiring the replaced area is `setup --purge-old-bundles` (X7); a foundation
   shared across automation-only revisions is

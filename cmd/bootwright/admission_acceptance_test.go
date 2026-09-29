@@ -153,6 +153,9 @@ func TestActualCompilerAdmitsAllKindsAndAdditionalVariants(t *testing.T) {
 	if libvirt.Spec().Get("libvirt", "bmcEmulationDefaults", "port").Text() != "8000" || libvirt.Spec().Get("libvirt", "bmcEmulationDefaults", "emulator").Text() != "sushy-tools" {
 		t.Fatal("libvirt emulated BMC defaults missing")
 	}
+	if libvirt.Spec().Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text() != "192.0.2.60" {
+		t.Fatal("the emulated BMC's authored listener address changed")
+	}
 	vsphere := requireObject(t, state.Effective(), api.InfraProvider, "acceptance-vsphere")
 	if vsphere.Spec().Get("vsphere", "machineProfiles").Items()[0].Get("failureDomainRef").Text() != "example-zone" {
 		t.Fatal("vSphere domain default missing")

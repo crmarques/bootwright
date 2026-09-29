@@ -226,7 +226,7 @@ func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, ca
 	}
 	live := func() bool { return active }
 	view := &lifecycleView{
-		identity:   lifecycle.ContextIdentity{Name: record.Name, Revision: record.Revision},
+		identity:   lifecycle.ContextIdentity{Name: record.Name, Revision: record.Revision, Mode: string(record.Mode)},
 		inputs:     inputs,
 		controller: controllerView,
 		evidence:   evidence,
@@ -271,7 +271,7 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 		active := true
 		tx := &lifecycleTransaction{
 			lifecycleView: lifecycleView{
-				identity:   lifecycle.ContextIdentity{Name: record.Name, Revision: record.Revision},
+				identity:   lifecycle.ContextIdentity{Name: record.Name, Revision: record.Revision, Mode: string(record.Mode)},
 				inputs:     inputs,
 				controller: controllerView,
 				evidence:   evidence,

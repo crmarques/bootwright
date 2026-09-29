@@ -164,7 +164,7 @@ Every endpoint has this exact shape:
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `address` | string | source- and topology-dependent | — | Optional IP literal owned by `openshift` or `external`; absent for load-balancer and node sources and required when that direct source must supply a VIP. |
+| `address` | string | for `openshift` and `external` | — | IP literal owned by `openshift` or `external`; absent for load-balancer and node sources, which resolve it. Never in `::/96`; an IPv4-mapped address is admitted. |
 | `dnsName` | string | no | — | DNS subdomain naming the endpoint. |
 | `port` | integer | no | consumer default | `1..65535` when set. |
 | `scheme` | string | no | consumer default | `http` or `https`. |
@@ -174,8 +174,12 @@ Every endpoint has this exact shape:
 | `source.loadBalancerRef` | string | conditional | — | Global LoadBalancer; valid only for `loadBalancer`. |
 | `source.bindAddressRef` | string | conditional | sole bind address | LoadBalancer-local `bindAddresses[].name`; valid only for `loadBalancer`. |
 
-`openshift` and `external` may own an authored `address`; otherwise `dnsName`
-can satisfy a non-VIP slot. `loadBalancer` forbids an authored address: the
+`openshift` and `external` own an authored `address`, which every such slot
+requires: [resolution before boot](../container-clusters.md#installation)
+proves only a frozen address, so a `dnsName` satisfies no slot. An effective
+address in the IPv4-compatible range `::/96` is refused whatever its source,
+because glibc prints much of that range in another form than the frozen one;
+write the IPv4 address instead. `loadBalancer` forbids an authored address: the
 LoadBalancer and optional
 [bind-address ref](infrastructure-services.md#loadbalancer) resolve it.
 
@@ -186,7 +190,7 @@ and materializes the selected host IP without its prefix. Missing or ambiguous
 installation candidates are errors. Single-node clusters reject the
 default `openshift` source for all three slots; `source.type: node` is the
 recommended form so one machine address is not repeated in three places, while
-`external` with a sufficient `dnsName` is also valid.
+`external` with an `address` is also valid.
 
 A multi-node cluster whose effective platform is `none`, authored or derived
 for KubeVirt machines, also rejects the `openshift` source for every slot, at
@@ -197,7 +201,7 @@ source is valid there. Multi-node libvirt and bare-metal machines derive
 
 On a multi-node `baremetal` or `vsphere` platform, all three endpoint slots are
 VIP-bearing. Each therefore resolves an address directly or through an
-`loadBalancer`; `dnsName` alone is insufficient. API, internal API, ingress,
+`loadBalancer`. API, internal API, ingress,
 and node IPs obey the selected machine-network CIDRs. VIPs do not collide with
 node install IPs, and endpoint/network address families are consistent.
 

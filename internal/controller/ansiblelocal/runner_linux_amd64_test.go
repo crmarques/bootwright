@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -292,6 +293,62 @@ func TestRunnerStagesInPrivateDurableScratch(t *testing.T) {
 	entries, err := os.ReadDir(parent)
 	if err != nil || len(entries) != 0 {
 		t.Fatalf("staging parent retained %v (%v)", entries, err)
+	}
+}
+
+func clientTools(sizes ...int64) []prerequisites.ToolDefinition {
+	tools := make([]prerequisites.ToolDefinition, 0, len(sizes))
+	for index, size := range sizes {
+		tools = append(tools, prerequisites.ToolDefinition{Kind: "kubectl", Source: prerequisites.DependencySource{ID: "tool-" + strconv.Itoa(index), Bytes: size}})
+	}
+	return tools
+}
+
+func TestAClientStageDeadlineIsDerivedFromItsSources(t *testing.T) {
+	for name, check := range map[string]struct {
+		tools []prerequisites.ToolDefinition
+		want  time.Duration
+	}{
+		"no tools":         {nil, runTimeout},
+		"two tools":        {clientTools(1, 44_433_552), runTimeout + 121*time.Second + 205*time.Second},
+		"past the ceiling": {clientTools(1<<30, 1<<30, 1<<30, 1<<30), clientStageCeiling},
+	} {
+		if got := runDeadline(capabilityRequest{Tools: check.tools}); got != check.want {
+			t.Errorf("%s: runDeadline = %s, want %s", name, got, check.want)
+		}
+	}
+	if runTimeout != 600*time.Second || clientStageCeiling != 7_200*time.Second {
+		t.Fatalf("runTimeout %s and clientStageCeiling %s changed; the exact seconds above assume 10 minutes and 2 hours", runTimeout, clientStageCeiling)
+	}
+}
+
+// Four 1 GiB clients need 600 + 4 x 2,168 = 9,272 seconds, past the 7,200 the
+// ceiling allows, so the run refuses before a single invocation file exists.
+func TestAClientClosureBeyondTheCeilingRefusesBeforeAnsibleStarts(t *testing.T) {
+	launch, request, boundary := runnerFixture(t, "complete")
+	request.Tools = clientTools(1<<30, 1<<30, 1<<30, 1<<30)
+	var called []string
+	boundary.command = func(path string, arguments ...string) *exec.Cmd {
+		called = append(called, path)
+		return exec.Command("/bin/false")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary)
+	var classified *diagnostics.Failure
+	if !errors.As(err, &classified) || len(classified.Diagnostics) != 1 || classified.Diagnostics[0].Code != "controller.unsupported" || result.Outcome != "failed" {
+		t.Fatalf("a closure past the ceiling ran: %s %v", result.Outcome, err)
+	}
+	if want := "the selected target clients total 4294967296 bytes, whose acquisition deadlines exceed the controller stage's 2-hour ceiling"; classified.Diagnostics[0].Message != want {
+		t.Fatalf("refusal = %q, want %q", classified.Diagnostics[0].Message, want)
+	}
+	if len(called) != 0 {
+		t.Fatalf("Ansible was started for a refused closure: %v", called)
+	}
+	for _, parent := range []string{boundary.jobParent, boundary.scratchParent} {
+		if entries, err := os.ReadDir(parent); err != nil || len(entries) != 0 {
+			t.Fatalf("%s holds %v (%v) after a refusal", parent, entries, err)
+		}
 	}
 }
 

@@ -21,9 +21,40 @@ type commandEnvelope struct {
 	Command       string       `json:"command"`
 	OK            bool         `json:"ok"`
 	ExitCode      int          `json:"exitCode"`
-	Result        any          `json:"result"`
+	Result        jsonResult   `json:"result"`
 	Diagnostics   []diagnostic `json:"diagnostics"`
 	Logs          []string     `json:"logs"`
+}
+
+// jsonResult is a command's documented JSON result. Only the result types this
+// package declares implement it, so a domain value, whose field names and
+// shape belong to its own package, can never be encoded as a result.
+type jsonResult interface{ documentedResult() }
+
+// admissionCounts are the admission counts a result reports.
+type admissionCounts struct {
+	FilesSeen      int `json:"filesSeen"`
+	ObjectsDecoded int `json:"objectsDecoded"`
+}
+
+// resultContext is the context a result was read from.
+type resultContext struct {
+	Name string `json:"name"`
+	Mode string `json:"mode"`
+}
+
+type validationResult struct {
+	Counts                    admissionCounts `json:"counts"`
+	ExcludedContainerClusters []string        `json:"excludedContainerClusters"`
+	ExcludedStorageClusters   []string        `json:"excludedStorageClusters"`
+	ExcludedResourceFiles     []string        `json:"excludedResourceFiles"`
+	Advisories                []diagnostic    `json:"advisories"`
+}
+
+func (validationResult) documentedResult() {}
+
+func displayCounts(counts compilation.Counts) admissionCounts {
+	return admissionCounts{FilesSeen: counts.FilesSeen, ObjectsDecoded: counts.ObjectsDecoded}
 }
 
 func writeFailure(out, errOut io.Writer, command, code, message string, exitCode int, jsonMode bool) error {
@@ -54,8 +85,8 @@ func writeValidation(out, errOut io.Writer, command string, report *compilation.
 			advisories = append(advisories, d)
 		}
 	}
-	result := compilation.Report{
-		Counts:                    report.Counts,
+	result := validationResult{
+		Counts:                    displayCounts(report.Counts),
 		ExcludedContainerClusters: displayNames(report.ExcludedContainerClusters),
 		ExcludedStorageClusters:   displayNames(report.ExcludedStorageClusters),
 		ExcludedResourceFiles:     displayNames(report.ExcludedResourceFiles),

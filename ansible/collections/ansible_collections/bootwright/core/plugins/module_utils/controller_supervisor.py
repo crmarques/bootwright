@@ -1,5 +1,7 @@
 """Invocation-local child supervision for authorized controller actions."""
 
+from __future__ import annotations
+
 import ctypes
 import os
 import signal

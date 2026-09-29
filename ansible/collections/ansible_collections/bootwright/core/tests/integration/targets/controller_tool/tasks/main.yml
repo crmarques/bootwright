@@ -56,6 +56,7 @@
         tool: '{{ controller_tool_definition }}'
         egress: '{{ controller_tool_egress }}'
         inspect_only: false
+        deadline: 121
       register: controller_tool_first
       no_log: true
 
@@ -65,6 +66,7 @@
         tool: '{{ controller_tool_definition }}'
         egress: '{{ controller_tool_egress }}'
         inspect_only: false
+        deadline: 121
       register: controller_tool_second
       no_log: true
 

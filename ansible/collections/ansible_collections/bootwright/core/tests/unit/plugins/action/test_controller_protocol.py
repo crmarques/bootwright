@@ -5,9 +5,55 @@ import unittest
 
 from ansible_collections.bootwright.core.plugins.action.controller_protocol import (
     digest,
+    frozen_request,
     preparation,
     refusal_reason,
 )
+
+
+class FrozenRequest(unittest.TestCase):
+    """Each tool's acquisition deadline travels with the request, in its order."""
+
+    def request(self):
+        return dict(
+            version="controller-prerequisites-v4",
+            operation="setup",
+            identity="a" * 64,
+            platform={},
+            bundle={},
+            publicationBundle={},
+            packages=[],
+            native=None,
+            tools=[dict(source=dict(id="tool-oc")), dict(source=dict(id="tool-kubectl"))],
+            acquisition=[dict(source="tool-oc", seconds=205), dict(source="tool-kubectl", seconds=121)],
+            egress={},
+        )
+
+    def test_a_v4_request_whose_deadlines_match_its_tools_is_accepted(self):
+        request = self.request()
+        self.assertIs(frozen_request(request), request)
+        empty = dict(request, tools=[], acquisition=[])
+        self.assertIs(frozen_request(empty), empty)
+
+    def test_an_older_version_or_a_mismatched_deadline_is_refused(self):
+        request = self.request()
+        missing = dict(request)
+        del missing["acquisition"]
+        changes = {
+            "controller-prerequisites-v3": dict(request, version="controller-prerequisites-v3"),
+            "missing": missing,
+            "reordered": dict(request, acquisition=list(reversed(request["acquisition"]))),
+            "short": dict(request, acquisition=request["acquisition"][:1]),
+            "bool": dict(request, acquisition=[request["acquisition"][0], dict(source="tool-kubectl", seconds=True)]),
+            "zero": dict(request, acquisition=[request["acquisition"][0], dict(source="tool-kubectl", seconds=0)]),
+            "past the ceiling": dict(request, acquisition=[request["acquisition"][0], dict(source="tool-kubectl", seconds=7201)]),
+            "text": dict(request, acquisition=[request["acquisition"][0], dict(source="tool-kubectl", seconds="121")]),
+            "extra key": dict(request, acquisition=[request["acquisition"][0], dict(source="tool-kubectl", seconds=121, bytes=1)]),
+        }
+        for name, changed in changes.items():
+            with self.subTest(name):
+                with self.assertRaises((KeyError, TypeError, ValueError)):
+                    frozen_request(changed)
 
 
 class RefusalReason(unittest.TestCase):

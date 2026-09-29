@@ -666,10 +666,14 @@ out the deadline, and the lifecycle runner kills the adapter's process group.
 The controller runner kills nothing on a refusal: the adapter fails at its next
 acknowledgement, and an authorized native transaction first runs to its end. A
 deadline or a cancellation kills the adapter's process group, sparing only an
-authorized native transaction. A controller run's deadline is 10 minutes. A
-lifecycle run's is the one its request states, which its capability derives
-from the wait budgets that request froze plus a margin for the rest of the run,
-held to a ceiling of 6 hours; a request that states none keeps 2 hours, and the
+authorized native transaction. A controller run's deadline is 10 minutes; a
+client installation adds each source's
+[acquisition deadline](controller.md#the-controller-stage), held to a ceiling of
+2 hours, and a client closure past that ceiling is refused before Ansible
+starts. A lifecycle run's is the one its request states, which its capability
+derives from the wait budgets that request froze plus a margin for the rest of
+the run, held to a ceiling of 6 hours; a request that states none keeps 2
+hours, and the
 [bounds table](contexts.md#storage-locking-and-publication) names each
 constant. A descendant still holding the channel after the adapter exits is
 drained for 5 seconds, or 60 once a controller run is prepared or cancelled,
@@ -718,9 +722,10 @@ An allowlisted registry resolves from explicit validated state:
   identity to reproduce adapter mechanics.
 
 Supported matrices belong to the owning domain contract. When an operation is
-made immutable, it freezes the selected implementation identity, content
-digest, and execution dependencies; continuation refuses drift rather than
-silently selecting another implementation. Recovery follows
+made immutable, each block freezes its selected implementation identity and
+content digest, and the operation freezes the automation it runs;
+continuation refuses another implementation or automation rather than
+silently selecting one. Recovery follows
 [state reconciliation](state-reconciliation.md#dependency-safety-during-recovery).
 
 For an add-on, implementation selection also binds the exact package, catalog

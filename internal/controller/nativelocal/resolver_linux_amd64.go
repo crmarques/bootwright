@@ -452,7 +452,7 @@ func (r *Resolver) newStage(platform prerequisites.Platform) (*nativeStage, erro
 			_ = os.RemoveAll(root)
 		}
 	}()
-	asset := ansible.Assets()["collections/ansible_collections/bootwright/core/plugins/module_utils/native_resolution.py"]
+	asset := ansible.Automation()["collections/ansible_collections/bootwright/core/plugins/module_utils/native_resolution.py"]
 	if len(asset) == 0 || os.Mkdir(stage.work, 0700) != nil || os.WriteFile(stage.script, asset, 0600) != nil {
 		return nil, failure("native resolution helper is unavailable")
 	}

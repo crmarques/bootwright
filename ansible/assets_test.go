@@ -1,6 +1,8 @@
 package ansible
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"maps"
 	"slices"
 	"strings"
@@ -33,31 +35,84 @@ func TestConfigurationDeclaresNoEmptyValue(t *testing.T) {
 
 // The automation digest names the approved bundle's automation, and the
 // lifecycle runner, the controller adapter and bundle inspection each compare
-// every embedded file against that bundle. A file the digest skipped could
-// differ under an equal digest: setup would then refuse the retained bundle as
-// unattributable instead of carrying it forward. Documentation leaves the
-// digest (item B16) only together with those comparisons.
+// exactly the files Automation returns against that bundle. It covers every
+// one of them, so none can differ under an equal digest. Documentation is the
+// only embedded content outside it, and it stays embedded.
 func TestAutomationDigestCoversEveryEmbeddedFile(t *testing.T) {
-	files := Assets()
+	files, automation, documentation := Assets(), Automation(), Documentation()
 	baseline := Digest()
-	if digestOf(files) != baseline {
-		t.Fatal("the automation digest does not cover exactly the embedded files")
+	if digestOf(automation) != baseline {
+		t.Fatal("the automation digest does not cover exactly the automation files")
+	}
+	if len(automation)+len(documentation) != len(files) {
+		t.Fatalf("automation (%d) and documentation (%d) do not partition the %d embedded files", len(automation), len(documentation), len(files))
+	}
+	for name, data := range files {
+		kept, inAutomation := automation[name]
+		described, inDocumentation := documentation[name]
+		if inAutomation == inDocumentation {
+			t.Fatalf("%s is in automation %v and in documentation %v; it belongs to exactly one", name, inAutomation, inDocumentation)
+		}
+		if !slices.Equal(kept, data) && !slices.Equal(described, data) {
+			t.Fatalf("%s is not the embedded file", name)
+		}
 	}
 	for _, name := range []string{
 		"collections/ansible_collections/bootwright/core/README.md",
 		"collections/ansible_collections/bootwright/core/CHANGELOG.rst",
 	} {
 		if _, ok := files[name]; !ok {
-			t.Fatalf("the embedded automation no longer carries %s", name)
+			t.Fatalf("the embedded collection no longer carries %s", name)
 		}
 	}
-	for name, data := range files {
-		changed := maps.Clone(files)
+	for name, data := range automation {
+		changed := maps.Clone(automation)
 		changed[name] = append(slices.Clone(data), '\n')
 		if digestOf(changed) == baseline {
 			t.Fatalf("changing %s leaves the automation digest unchanged", name)
 		}
 	}
+}
+
+// Documentation runs nothing, so a build that changes only the README or the
+// CHANGELOG keeps the digest and with it the approved bundle. The narrowed
+// digest has its own domain version: no digest that covered documentation can
+// equal it.
+func TestDocumentationLeavesTheAutomationDigest(t *testing.T) {
+	documentation := Documentation()
+	want := []string{
+		"collections/ansible_collections/bootwright/core/CHANGELOG.rst",
+		"collections/ansible_collections/bootwright/core/README.md",
+	}
+	if got := slices.Sorted(maps.Keys(documentation)); !slices.Equal(got, want) {
+		t.Fatalf("documentation = %v; want exactly %v", got, want)
+	}
+	baseline := Digest()
+	for _, name := range want {
+		changed := maps.Clone(Assets())
+		changed[name] = append(slices.Clone(changed[name]), "\nA later release.\n"...)
+		automation, _ := split(changed)
+		if digestOf(automation) != baseline {
+			t.Fatalf("changing %s moved the automation digest", name)
+		}
+	}
+	if digestUnderV1(Automation()) == baseline {
+		t.Fatal("the narrowed digest kept the domain version of the digest that covered documentation")
+	}
+}
+
+// digestUnderV1 is the digest as it was computed while it covered
+// documentation, kept here only to prove the two domains never collide.
+func digestUnderV1(files map[string][]byte) string {
+	digest := sha256.New()
+	digest.Write([]byte("bootwright.controller.automation-v1\x00"))
+	for _, name := range slices.Sorted(maps.Keys(files)) {
+		digest.Write([]byte(name))
+		digest.Write([]byte{0})
+		content := sha256.Sum256(files[name])
+		digest.Write(content[:])
+	}
+	return hex.EncodeToString(digest.Sum(nil))
 }
 
 // A role states the frozen request version it accepts twice: its argument spec

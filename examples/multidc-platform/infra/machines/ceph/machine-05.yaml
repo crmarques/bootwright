@@ -72,7 +72,7 @@ spec:
 
     management:
       bmc:
-        address: redfish-virtualmedia+https://bmc-storage-b-02.example.com/redfish/v1/Systems/1
+        address: https://bmc-storage-b-02.example.com/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef: ceph-bmc-credentials
         tls:

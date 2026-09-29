@@ -27,6 +27,12 @@ options:
     type: bool
     required: true
     description: Require existing source and executable postconditions without writes.
+  deadline:
+    type: int
+    required: true
+    description:
+      - Seconds the source's acquisition may take, from 1 to 7200, as the frozen request derived them from its bytes.
+      - Bounds both the transfer and its alarm; package downloads keep their own fixed bound.
 attributes:
   action:
     support: full
@@ -46,6 +52,7 @@ EXAMPLES = r"""
     tool: '{{ item }}'
     egress: '{{ bootwright_controller_request.egress }}'
     inspect_only: true
+    deadline: 205
   no_log: true
 """
 
@@ -66,6 +73,7 @@ def main():
             tool=dict(type="dict", required=True, no_log=True),
             egress=dict(type="dict", required=True, no_log=True),
             inspect_only=dict(type="bool", required=True),
+            deadline=dict(type="int", required=True),
         ),
         supports_check_mode=False,
     )

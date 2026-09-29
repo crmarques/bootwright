@@ -37,7 +37,7 @@ func remoteHost() api.Object {
 			api.MapValue(text("name", "ip"), text("address", "192.0.2.5")),
 		)))),
 		field("access", api.MapValue(field("ssh", api.MapValue(
-			text("user", "operator"), text("addressRef", "ip"), text("knownHostsRef", "host-key"),
+			text("user", "root"), text("addressRef", "ip"), text("knownHostsRef", "host-key"),
 			field("auth", api.MapValue(text("privateKeyRef", "hypervisor-key"))),
 		)))),
 	))

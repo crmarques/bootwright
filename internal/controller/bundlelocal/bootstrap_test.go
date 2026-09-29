@@ -31,7 +31,7 @@ func pythonMetadataFixture(t *testing.T, versions ...string) []byte {
 	return data
 }
 
-func TestPythonLatestAndExplicitReleaseSelection(t *testing.T) {
+func TestPythonLatestIsTheNewestQualifiedMinor(t *testing.T) {
 	data := pythonMetadataFixture(t, "3.12.14", "3.13.15", "3.14.7")
 	for request, want := range map[string]string{"latest": "3.14.7", "3.13.15": "3.13.15"} {
 		got, source, err := selectPythonArtifact(data, request)
@@ -46,6 +46,92 @@ func TestPythonLatestAndExplicitReleaseSelection(t *testing.T) {
 	if got, _, err := selectPythonArtifact(newer, "latest"); err != nil || got != "3.14.8" {
 		t.Fatalf("new publisher release not selected: %s %v", got, err)
 	}
+	// A newer minor than the qualified ansible-core supports as a controller
+	// is neither selected nor a reason to refuse.
+	unqualified := pythonMetadataFixture(t, "3.14.7", "3.15.0", "3.16.1")
+	if got, _, err := selectPythonArtifact(unqualified, "latest"); err != nil || got != "3.14.7" {
+		t.Fatalf("latest left the qualified controller minors: %s %v", got, err)
+	}
+	if got, _, err := selectPythonArtifact(unqualified, "3.15.0"); err == nil {
+		t.Fatalf("an exact unqualified controller Python was selected: %s", got)
+	}
+}
+
+// ansibleFile is one file of a PyPI release listing, shaped like the JSON
+// API's per-file record; the selector reads only its name, type and yank.
+func ansibleFile(version, packageType, requiresPython string, yanked bool) map[string]any {
+	filename := "ansible_core-" + version + ".tar.gz"
+	if packageType == "bdist_wheel" {
+		filename = "ansible_core-" + version + "-py3-none-any.whl"
+	}
+	return map[string]any{"filename": filename, "packagetype": packageType, "python_version": "py3", "requires_python": requiresPython, "yanked": yanked, "yanked_reason": nil, "url": "https://files.pythonhosted.org/packages/" + filename, "digests": map[string]string{"sha256": strings.Repeat("a", 64)}}
+}
+
+// ansibleMetadataFixture shapes PyPI's project JSON when releases is non-nil
+// and its version-specific JSON, which carries no releases key, otherwise.
+func ansibleMetadataFixture(t *testing.T, version string, releases map[string][]map[string]any) []byte {
+	t.Helper()
+	record := map[string]any{"info": map[string]any{"name": "ansible-core", "version": version, "requires_python": ">=3.12"}, "urls": []map[string]any{ansibleFile(version, "bdist_wheel", ">=3.12", false)}}
+	if releases != nil {
+		record["releases"] = releases
+	}
+	data, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func TestAnsibleLatestIsTheNewestQualifiedPatch(t *testing.T) {
+	wheel := func(version string) []map[string]any {
+		return []map[string]any{ansibleFile(version, "bdist_wheel", ">=3.12", false), ansibleFile(version, "sdist", ">=3.12", false)}
+	}
+	releases := map[string][]map[string]any{
+		"2.20.9": wheel("2.20.9"), "2.21.4": wheel("2.21.4"), "2.21.9": wheel("2.21.9"), "2.21.10": wheel("2.21.10"),
+		"2.21.11":    {ansibleFile("2.21.11", "bdist_wheel", ">=3.12", true), ansibleFile("2.21.11", "sdist", ">=3.12", true)},
+		"2.21.12rc1": wheel("2.21.12rc1"),
+		"2.21.13":    {ansibleFile("2.21.13", "sdist", ">=3.12", false)},
+		"2.22.0b1":   wheel("2.22.0b1"), "2.22.0": wheel("2.22.0"),
+	}
+	if got, err := selectAnsibleRelease(ansibleMetadataFixture(t, "2.22.0", releases), "latest", "3.14.7"); err != nil || got != "2.21.10" {
+		t.Fatalf("latest is not the newest qualified patch with a live wheel: %s %+v", got, diagnostics.Of(err))
+	}
+	for name, listing := range map[string]map[string][]map[string]any{
+		"releases absent":        nil,
+		"no qualified candidate": {"2.20.9": wheel("2.20.9"), "2.21.13": releases["2.21.13"], "2.22.0": wheel("2.22.0")},
+	} {
+		got, err := selectAnsibleRelease(ansibleMetadataFixture(t, "2.22.0", listing), "latest", "3.14.7")
+		found := diagnostics.Of(err)
+		if len(found) != 1 || !strings.Contains(found[0].Message, "ansible-core "+prerequisites.QualifiedAnsibleMinor+" ") {
+			t.Fatalf("%s: latest did not fail closed on the qualified minor: %s %+v", name, got, found)
+		}
+	}
+}
+
+func TestAnsibleDoesNotDowngradeForIncompatiblePython(t *testing.T) {
+	// pip's exact-root resolve enforces Requires-Python; the selector never
+	// yields to an older release that the selected interpreter could run.
+	project := ansibleMetadataFixture(t, "2.21.5", map[string][]map[string]any{
+		"2.21.4": {ansibleFile("2.21.4", "bdist_wheel", ">=3.12", false)},
+		"2.21.5": {ansibleFile("2.21.5", "bdist_wheel", ">=3.15", false)},
+	})
+	if version, err := selectAnsibleRelease(project, "latest", "3.14.7"); err != nil || version != "2.21.5" {
+		t.Fatalf("latest yielded to an older release for the selected Python: %s %v", version, err)
+	}
+	if version, err := selectAnsibleRelease(project, "latest", "3.15.0"); err == nil {
+		t.Fatalf("an unqualified controller Python was accepted: %s", version)
+	}
+	_, err := selectAnsibleRelease(ansibleMetadataFixture(t, "2.20.1", nil), "2.20.1", "3.14.7")
+	if found := diagnostics.Of(err); len(found) != 1 || !strings.Contains(found[0].Message, "ansible-core "+prerequisites.QualifiedAnsibleMinor+" ") {
+		t.Fatalf("an exact release outside the qualified minor was accepted: %+v", found)
+	}
+	exact := ansibleMetadataFixture(t, "2.21.4", nil)
+	if version, err := selectAnsibleRelease(exact, "2.21.4", "3.14.7"); err != nil || version != "2.21.4" {
+		t.Fatalf("an exact qualified release was refused: %s %v", version, err)
+	}
+	if version, err := selectAnsibleRelease(exact, "2.21.3", "3.14.7"); err == nil {
+		t.Fatalf("an exact release was taken from another release's metadata: %s", version)
+	}
 }
 
 func TestPythonPublisherRejectsForeignArtifact(t *testing.T) {
@@ -56,45 +142,24 @@ func TestPythonPublisherRejectsForeignArtifact(t *testing.T) {
 	}
 }
 
-func TestAnsibleDoesNotDowngradeForIncompatiblePython(t *testing.T) {
-	data := []byte(`{"info":{"version":"2.21.4","classifiers":["Programming Language :: Python :: 3.12","Programming Language :: Python :: 3.13","Programming Language :: Python :: 3.14"]}}`)
-	if version, err := selectAnsibleRelease(data, "latest", "3.14.7"); err != nil || version != "2.21.4" {
-		t.Fatalf("compatible latest rejected: %s %v", version, err)
-	}
-	for _, pair := range [][2]string{{"latest", "3.15.0"}, {"2.20.1", "3.14.7"}} {
-		if _, err := selectAnsibleRelease(data, pair[0], pair[1]); err == nil {
-			t.Fatalf("incompatible root accepted: %v", pair)
+func TestExactReleasesOutsideTheQualifiedSetRefuseBeforeResolverEffects(t *testing.T) {
+	for _, exact := range []struct{ python, ansible, message string }{
+		{"latest", "2.18.99", "ansible-core " + prerequisites.QualifiedAnsibleMinor + " "},
+		{"latest", "2.20.9", "ansible-core " + prerequisites.QualifiedAnsibleMinor + " "},
+		{"latest", "2.22.0", "ansible-core " + prerequisites.QualifiedAnsibleMinor + " "},
+		{"3.15.0", "latest", "CPython " + strings.Join(prerequisites.QualifiedControllerPythons(), ", ") + " "},
+	} {
+		resolver := NewBootstrapResolver()
+		resolver.metadata = func(context.Context, string, string, prerequisites.SetupEgress) (toolMetadata, error) {
+			t.Fatalf("exact Python %s, Ansible %s reached publisher metadata", exact.python, exact.ansible)
+			return toolMetadata{}, nil
 		}
-	}
-}
-
-func TestAnsibleMinimumRefusesBeforeResolverEffects(t *testing.T) {
-	resolver := NewBootstrapResolver()
-	resolver.metadata = func(context.Context, string, string, prerequisites.SetupEgress) (toolMetadata, error) {
-		t.Fatal("unsupported exact Ansible request reached publisher metadata")
-		return toolMetadata{}, nil
-	}
-	versions := controller.DefaultDependencyVersions()
-	versions.Ansible = "2.18.99"
-	_, err := resolver.Resolve(context.Background(), prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, versions, prerequisites.SetupEgress{})
-	found := diagnostics.Of(err)
-	if len(found) != 1 || !strings.Contains(found[0].Message, prerequisites.MinimumBootstrapAnsibleVersion) {
-		t.Fatalf("unsupported override lacks minimum diagnostic: %+v", found)
-	}
-	for _, version := range []string{"2.18.99", "2.19.0"} {
-		data := []byte(`{"info":{"version":"` + version + `","classifiers":["Programming Language :: Python :: 3.13"]}}`)
-		for _, requested := range []string{"latest", version} {
-			got, err := selectAnsibleRelease(data, requested, "3.13.15")
-			if version == "2.19.0" {
-				if err != nil || got != version {
-					t.Fatalf("minimum compatible release rejected: %s %v", got, err)
-				}
-			} else {
-				found := diagnostics.Of(err)
-				if len(found) != 1 || !strings.Contains(found[0].Message, prerequisites.MinimumBootstrapAnsibleVersion) {
-					t.Fatalf("unsupported publisher release lacks minimum diagnostic: %+v", found)
-				}
-			}
+		versions := controller.DefaultDependencyVersions()
+		versions.Python, versions.Ansible = exact.python, exact.ansible
+		_, err := resolver.Resolve(context.Background(), prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, versions, prerequisites.SetupEgress{})
+		found := diagnostics.Of(err)
+		if len(found) != 1 || found[0].Code != "controller.unsupported" || !strings.Contains(found[0].Message, exact.message) {
+			t.Fatalf("exact Python %s, Ansible %s lacks the qualified-set diagnostic: %+v", exact.python, exact.ansible, found)
 		}
 	}
 }

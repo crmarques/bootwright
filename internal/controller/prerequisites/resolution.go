@@ -63,11 +63,14 @@ func (s Service) selectedResolution(current inspection, requirements NativeRequi
 	return Definition{Platform: current.platform, Versions: versions, NativeRequirements: requirements, PythonVersion: versions.Python, AnsibleVersion: versions.Ansible, Runtime: RuntimeRequirement{Version: versions.Podman}}, false, nil
 }
 
-// supersededLatest reports a retained latest resolution whose Ansible release
-// no longer meets the collection minimum. A raised minimum is the one update
-// setup discovers on its own; a declared release below it refuses instead.
+// supersededLatest reports a retained latest resolution whose Python or
+// Ansible release lies outside the set this build qualifies, older or newer.
+// A moved qualified set is the one update setup discovers on its own, so such
+// a record is resolved fresh rather than reused or carried forward; it stays
+// readable, and an exact intent is never superseded.
 func supersededLatest(value Definition) bool {
-	return value.Versions.Ansible == "latest" && ValidateBootstrapAnsibleVersion(value.AnsibleVersion) != nil
+	return value.Versions.Ansible == "latest" && ValidateQualifiedAnsibleVersion(value.AnsibleVersion) != nil ||
+		value.Versions.Python == "latest" && !QualifiedControllerPython(value.PythonVersion)
 }
 
 func dependencyIntent(selection controller.Selection) []string {

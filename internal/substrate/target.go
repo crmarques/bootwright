@@ -305,24 +305,58 @@ func declaredInterfaces(machine api.Object) ([]Interface, error) {
 	return interfaces, nil
 }
 
-// NormalizeControllerEndpoint accepts only an absolute URL naming one exact
-// ComputerSystem, and returns it without a trailing slash. A collection URL, a
-// relative path or an embedded credential is refused: the address is what a
-// destructive operation is aimed at, so it may not be ambiguous.
+// NormalizeControllerEndpoint is the one grammar of a controller address. It
+// rewrites nothing: it returns the address byte for byte, or refuses it, so
+// admission, the claim key and every request the target sends read one text.
+// The address is an absolute http or https URL with a lowercase scheme, a
+// canonical host and port, no userinfo, query, fragment or percent-encoding,
+// and the path /redfish/v1/Systems/<id> for one id of RFC 3986 unreserved
+// characters.
+// A collection, a child resource or any second spelling is refused: the
+// address is what a destructive operation is aimed at, so it may not be
+// ambiguous.
 func NormalizeControllerEndpoint(address string) (string, bool) {
-	parsed, err := url.Parse(strings.TrimSpace(address))
-	if err != nil || parsed.User != nil {
+	if !api.ValidLexical("http-url", address) || !strings.HasPrefix(address, "http://") && !strings.HasPrefix(address, "https://") {
 		return "", false
 	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" || parsed.Host == "" {
+	for index := range len(address) {
+		if b := address[index]; b < 0x21 || b > 0x7e || b == '?' || b == '#' || b == '%' {
+			return "", false
+		}
+	}
+	parsed, err := url.Parse(address)
+	if err != nil || !canonicalControllerHost(parsed.Hostname()) || strings.HasPrefix(parsed.Port(), "0") {
 		return "", false
 	}
-	path := strings.TrimSuffix(parsed.Path, "/")
-	identity, found := strings.CutPrefix(path, "/redfish/v1/Systems/")
-	if !found || identity == "" || strings.Contains(identity, "/") {
+	identity, found := strings.CutPrefix(parsed.Path, "/redfish/v1/Systems/")
+	if !found || !unreservedSystemIdentity(identity) {
 		return "", false
 	}
-	return parsed.Scheme + "://" + parsed.Host + path, true
+	return address, true
+}
+
+// canonicalControllerHost admits an IP literal only in the spelling netip
+// prints, and a DNS name only when its last label is not all digits, because
+// glibc reads a name such as 192.000.002.001 or 3232235777 as an IPv4 address
+// in another spelling, and two spellings would be two claims on one server.
+func canonicalControllerHost(host string) bool {
+	if address, err := netip.ParseAddr(host); err == nil {
+		return address.String() == host
+	}
+	return strings.Trim(host[strings.LastIndex(host, ".")+1:], "0123456789") != ""
+}
+
+func unreservedSystemIdentity(identity string) bool {
+	if identity == "" || identity == "." || identity == ".." {
+		return false
+	}
+	for index := range len(identity) {
+		b := identity[index]
+		if !('a' <= b && b <= 'z' || 'A' <= b && b <= 'Z' || '0' <= b && b <= '9' || b == '-' || b == '.' || b == '_' || b == '~') {
+			return false
+		}
+	}
+	return true
 }
 
 // ControllerReservationKey claims one physical machine by its controller, so

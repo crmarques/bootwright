@@ -478,12 +478,15 @@ func validateEndpoints(o api.Object, c api.Catalog) []api.Issue {
 				issues = add(issues, invariant(path+".address", "effective endpoint address must agree with its selected source"))
 			}
 		}
-		if (source == "openshift" || source == "external") && !endpoint.Has("address") && (vip || !endpoint.Has("dnsName")) {
-			issues = add(issues, invariant(path+".address", "endpoint requires an IP address for a VIP slot or a DNS name for a non-VIP slot"))
+		if (source == "openshift" || source == "external") && !endpoint.Has("address") {
+			issues = add(issues, invariant(path+".address", "an openshift or external endpoint requires an IP address; resolution before boot proves only a frozen address"))
 		}
 		address, err := netip.ParseAddr(endpoint.Get("address").Text())
 		if err != nil {
 			continue
+		}
+		if ipv4Compatible(address) {
+			issues = add(issues, invariant(path+".address", "an IPv4-compatible IPv6 endpoint address (::/96) prints differently in glibc; write the IPv4 address"))
 		}
 		if len(networks) > 0 && !contains(networks, address) {
 			issues = add(issues, invariant(path+".address", "endpoint IP must belong to a consumed machine network"))
@@ -502,6 +505,17 @@ func validateEndpoints(o api.Object, c api.Catalog) []api.Issue {
 		}
 	}
 	return issues
+}
+
+// ipv4Compatible reports an IPv6 address in ::/96. Its frozen text is netip's
+// hexadecimal form, and glibc prints much of the range in dotted form instead
+// (::c000:201 as ::192.0.2.1), so resolution before boot would not see an
+// answer equal the address; the whole range is refused rather than the part
+// glibc happens to rewrite. An IPv4-mapped address has 0xffff in bytes 10 and
+// 11, so it stays outside.
+func ipv4Compatible(address netip.Addr) bool {
+	bytes := address.As16()
+	return address.Is6() && [12]byte(bytes[:12]) == [12]byte{}
 }
 
 func validateNetworks(o api.Object, c api.Catalog) []api.Issue {

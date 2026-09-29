@@ -1,5 +1,7 @@
 """Bounded runner-owned controller capability channel."""
 
+from __future__ import annotations
+
 import json
 import os
 

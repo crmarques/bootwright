@@ -83,10 +83,33 @@ func trustDetail(host enrollment.HostReport) string {
 	return host.Fingerprint
 }
 
-func displayTrustReport(report *enrollment.Report) *enrollment.Report {
-	rows := make([]enrollment.HostReport, 0, len(report.Hosts))
+// trustResult omits exactly the host fields the enrollment report omits when
+// empty, so a host row names only what the enrollment resolved for it.
+type trustResult struct {
+	Context  string      `json:"context"`
+	DryRun   bool        `json:"dryRun"`
+	Pending  int         `json:"pending"`
+	Recorded int         `json:"recorded"`
+	Hosts    []trustHost `json:"hosts"`
+}
+
+func (trustResult) documentedResult() {}
+
+type trustHost struct {
+	Machine             string `json:"machine"`
+	Address             string `json:"address,omitempty"`
+	Port                int    `json:"port,omitempty"`
+	Action              string `json:"action"`
+	KeyType             string `json:"keyType,omitempty"`
+	Fingerprint         string `json:"fingerprint,omitempty"`
+	PreviousFingerprint string `json:"previousFingerprint,omitempty"`
+	Reason              string `json:"reason,omitempty"`
+}
+
+func displayTrustReport(report *enrollment.Report) trustResult {
+	rows := make([]trustHost, 0, len(report.Hosts))
 	for _, host := range report.Hosts {
-		rows = append(rows, enrollment.HostReport{
+		rows = append(rows, trustHost{
 			Machine: escapeDisplayLine(host.Machine), Address: escapeDisplayLine(host.Address), Port: host.Port,
 			Action: escapeDisplayLine(host.Action), KeyType: escapeDisplayLine(host.KeyType),
 			Fingerprint:         escapeDisplayLine(host.Fingerprint),
@@ -94,7 +117,7 @@ func displayTrustReport(report *enrollment.Report) *enrollment.Report {
 			Reason:              escapeDisplayLine(host.Reason),
 		})
 	}
-	return &enrollment.Report{
+	return trustResult{
 		Context: escapeDisplayLine(report.Context), DryRun: report.DryRun,
 		Pending: report.Pending, Recorded: report.Recorded, Hosts: rows,
 	}

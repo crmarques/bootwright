@@ -39,8 +39,16 @@ dependency locks must remain consistent with that exit evidence.
 
 The baseline selects CPython from python-build-standalone, `ansible-core`,
 their supporting wheels and urllib3 for bounded Ansible-owned downloads.
-Every host dependency resolves to latest stable: no Environment declares their
-versions, because setup reads none. The
+Host dependencies resolve to latest stable, with two bounded roots:
+`ansible-core` resolves to the latest stable patch of the one qualified minor,
+and CPython to the latest stable patch of the newest minor that `ansible-core`
+minor supports as a controller;
+[development](../docs/development.md#qualified-hosts-and-images) records both.
+`latest` ignores a newer minor of either: it is never selected and never
+refused. A yanked `ansible-core` release, or one without a pure-Python wheel,
+is not a candidate. The collection's `requires_ansible` names the same minor,
+and the embedded configuration makes a mismatch an error. No Environment
+declares their versions, because setup reads none. The
 [Environment version policy](api/environment.md#dependency-versions) declares
 only the versions a controller stage installs. Resolve Python and Ansible
 independently, then use the
@@ -112,9 +120,10 @@ client closure without installing virtualization daemons. The public RHEL
 baseline source does not include that client; a selected RHEL libvirt requirement
 refuses before acquisition until an approved entitled source is defined.
 
-Setup resolves Python and Ansible to latest stable during explicit setup,
-before confirmation, and only when no retained resolution serves the selected
-platform and native requirements under the running executable. Native packages
+Setup resolves Python and Ansible to their latest qualified releases during
+explicit setup, before confirmation, and only when no retained resolution
+serves the selected platform and native requirements under the running
+executable. Native packages
 use the latest available build for the selected OS release and approved
 repository set. Freeze source URL, version, byte count and publisher SHA-256 in
 the plan and receipt. Mirrors change acquisition only. Dry-run and preflight do
@@ -125,9 +134,10 @@ closure installs only what is missing. Native packages are solved again only
 when a selected native root is not installed, because the frozen transaction
 binds the host's exact before-inventory; the retained Python and Ansible
 resolution is kept. A retained resolution the running executable cannot use,
-or whose `latest` Ansible release falls below the collection minimum, is
-superseded by a fresh resolution. An incomplete setup reuses its exact frozen
-resolution without metadata refresh.
+or whose `latest` Python or Ansible release lies outside the qualified set,
+older or newer, is superseded by a fresh resolution, never carried forward; a
+resolution an earlier build recorded stays readable. An incomplete setup
+reuses its exact frozen resolution without metadata refresh.
 
 [The controller stage](#the-controller-stage) resolves target clients under the
 version intent the Environment's
@@ -274,9 +284,10 @@ or other operator mutation outside that coordination is unsupported
 interference; native transaction checks still apply, and a differing final
 inventory is an unknown outcome requiring recovery, never success.
 
-The `controller-prerequisites-v3` Ansible adapter receives one frozen request
-with platform, exact package/tool sources, two scoped bundle identities,
-declared egress and optional retained preparation. The first names the approved
+The `controller-prerequisites-v4` Ansible adapter receives one frozen request
+with platform, exact package/tool sources, each tool source's acquisition
+deadline in seconds, two scoped bundle identities, declared egress and optional
+retained preparation. The first names the approved
 execution bundle the fixed automation is read from; the second is the only area
 the request may publish into, and its writability is the adapter's authority to
 change anything at all. Setup passes the same area for both, because it
@@ -288,8 +299,20 @@ observes the before-inventory, and waits for Go to durably record preparation
 before installation. Package effects use the native package manager under its
 transaction boundary; target archives are verified before safe extraction of
 only the named regular members into private versioned tool locations. Existing
-files are verified, never overwritten. Inventory, request, downloads, expanded
-members and callback frames have fixed bounds.
+files are verified by their streamed digest, never overwritten. A target
+source streams to disk under its own
+[acquisition deadline](#the-controller-stage), each chunk written and
+digested before the next is read, and its members stream into place the same
+way, so neither a source nor a member is ever held whole in memory; an
+interrupted transfer leaves only an unlinked file. Before any member of
+`openshift-clients` is published, its `oc` must name the frozen release, for
+both compatibilities. A released `oc` names its release in its own bytes: the
+version, NUL-terminated, overwrites the head of a fixed 93-byte marker. The
+bytes must hold exactly one marker stamped with the frozen version and no
+unstamped one, or neither `oc` nor `kubectl` is published. No downloaded tool
+is ever executed, so the stamp is read, never asked of the tool. Inventory,
+request, downloads, expanded members and callback frames have fixed bounds,
+and a native package download a fixed 5-minute deadline.
 
 Go publishes only the pinned private Python/Ansible runtime and embedded
 repository automation needed to start Ansible. All host-package and target-CLI
@@ -308,9 +331,13 @@ documentation, the collection's root `README` and `CHANGELOG`, which stay in
 the bundle ([owner decision D14](milestones/backlog.md#decisions)).
 That exclusion has its own digest domain version, so no digest under one rule
 equals a digest under the other. A check of an approved bundle's automation
-compares only what the digest covers.
-
-Not yet met: the digest still covers documentation, because the lifecycle runner, the controller adapter and bundle inspection still compare every embedded file; dropping documentation from the digest before them would let a documentation-only change keep the digest while setup refuses the retained bundle as unattributable instead of carrying it forward; tracked as [B16](milestones/m1.md#b16).
+compares only what the digest covers. The bootstrap projection identity, file
+count and byte total leave documentation out too, under a projection domain
+version of their own. Documentation must still be present in every bundle, as
+a regular non-executable file within the member bound, and no check compares
+its size or bytes, so a documentation-only build keeps the digest, and a
+bundle holding an earlier release's documentation stays attributable and is
+completed rather than refused.
 
 `--yes` suppresses ordinary confirmation only. Use the
 [ordinary confirmation](cli.md#ordinary-confirmation), with the plan before
@@ -353,6 +380,15 @@ sealing rules the setup bundle has; the native transaction publishes its
 before-state into the running attempt before it is authorized. The block
 completes only after every selected client is proved present by presence alone
 and the area is sealed.
+
+Each client source has an acquisition deadline of 2 minutes plus its declared
+bytes at 512 KiB/s, rounded up to a whole second. A client installation's run
+deadline is the controller run's 10 minutes plus the acquisition deadline of
+every source it selects, and a closure whose deadline would pass the controller
+stage's 2-hour ceiling is refused before Ansible starts, so the ceiling never
+shortens a run it admits. The
+[bounds table](contexts.md#storage-locking-and-publication) names both
+constants.
 
 Because the stage is a lifecycle block, what its Ansible prints is retained as
 that block's [attempt output](cli/output.md#private-operation-logs), exactly as

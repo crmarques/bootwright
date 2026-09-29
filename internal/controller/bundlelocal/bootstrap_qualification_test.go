@@ -60,6 +60,9 @@ func TestQualifiedLatestBootstrapResolution(t *testing.T) {
 	if err := prerequisites.ValidateBootstrap(resolved); err != nil {
 		t.Fatal(err)
 	}
+	if err := prerequisites.ValidateQualifiedAnsibleVersion(resolved.AnsibleVersion); err != nil || !prerequisites.QualifiedControllerPython(resolved.PythonVersion) {
+		t.Fatalf("latest resolved Python %s, Ansible %s outside the qualified set", resolved.PythonVersion, resolved.AnsibleVersion)
+	}
 	t.Logf("resolved Python %s, Ansible %s, %d exact publisher sources, %d projected files", resolved.PythonVersion, resolved.AnsibleVersion, len(resolved.Sources), resolved.FileCount)
 	if output := os.Getenv("BOOTWRIGHT_RESOLVED_BOOTSTRAP_OUTPUT"); output != "" {
 		data, err := json.MarshalIndent(resolved, "", "  ")

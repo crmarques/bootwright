@@ -39,8 +39,7 @@
     "machine": "services",
     "port": 2222,
     "privateKeyRef": "services-ssh-key",
-    "sudoPasswordRef": "services-sudo-password",
-    "user": "operator"
+    "user": "root"
   },
   "target": {
     "channel": "guest-agent",

@@ -21,8 +21,6 @@ output.
 | [SSH session](../cli.md#machine-ssh-sessions) | the remote process's own bytes | Bootwright diagnostics and the host-key confirmation before the connection, then the remote process's own bytes | the SSH client's exit status |
 | Interrupt-driven cancellation | as required by the selected structured mode | as required by that mode | `130` |
 
-Not yet met: `machine start`, `machine stop` and `machine restart` with `--output json` write the human `Logs` field before the document; tracked as [B11](../milestones/m1.md#b11).
-
 An operating-system interrupt reports `runtime.interrupted` and exits `130` for
 a Bootwright-owned operation. Another canceled context or expired deadline
 reports `runtime.canceled` or `runtime.deadline` and exits `1`.
@@ -250,7 +248,7 @@ Successful result objects have stable top-level fields:
 | `render installer` | `clusters` |
 | `render storage` | `clusters` |
 | `machine list` | `context`, `machines`, `powerRead` |
-| `machine trust` | `context`, `dryRun`, `hosts` |
+| `machine trust` | `context`, `dryRun`, `pending`, `recorded`, `hosts` |
 | `machine start`, `machine stop`, `machine restart` | `context`, `machine`, `verb`, `power`, `previous`, `changed` |
 | `cluster list` | `context`, `clusters` |
 | `cluster info` | `context`, `clusters`, `storage` |
@@ -368,24 +366,20 @@ probe. Its result orders these fields:
 
 | Field | Contract |
 | --- | --- |
-| `context` | `name`, `mode` of the resolved context. |
+| `context` | `name`, `mode` of the resolved context. `mode` is the context record's mode, which a lifecycle read admits only as `ready`. |
 | `setupChecks` | Ordered `{id, status}` rows derived from stored controller evidence alone, without host probes. `status` uses the check vocabulary of [controller readiness](../controller.md#results-and-qualification). |
-| `desired` | `revision`, `environment` and admission `counts` of the selected immutable input, or nulls when no revision is imported. |
+| `desired` | `revision`, `environment` and admission `counts` of the selected immutable input. `counts` holds `filesSeen` and `objectsDecoded`, and an input that does not compile fails `status` with its diagnostics, so `desired` is always an object. |
 | `clusters`, `storageClusters` | Ordered `{name, kind, status}` rows for selected cluster roots. `status` is `unsupported` when this executable has no lifecycle capability for that cluster. |
 | `shared` | Ordered `{kind, name, machine, status}` rows for selected shared services. `status` is `unsupported`, `pending`, `done` or `unknown`, derived from the frozen plan and its durable evidence. |
 | `secrets` | `declared` and `bound` counts. |
 | `nextSteps` | Ordered safe command strings, empty when no action is available. |
 | `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe relative paths. |
 
-Not yet met: nested status objects carry Go field names and another shape, and setup checks use their own vocabulary; tracked as [B11](../milestones/m1.md#b11).
-
 Rows sort by their documented key: checks and blocks in frozen order,
 everything else in ascending bytewise name order. Human `status` presents the
 same membership and order, omitting empty sections.
-
-Not yet met: human `status` omits `context.mode`, `desired`, cluster and
-storage cluster rows, `secrets` and the lifecycle `operation`, `verb` and
-`state`, and shows only the first next step; tracked as [B11](../milestones/m1.md#b11).
+Its Lifecycle section also names the build that registered the operation and
+the host directory of its logs, which JSON leaves out.
 
 ## Diagnostic taxonomy and order
 
@@ -595,6 +589,10 @@ adapter runs and again after the result, for the same reason an operation names
 its log tree twice. Naming it first is what a refused run depends on, because a
 run that fails reports a diagnostic instead of a result. JSON `logs` names the
 retained file the same way an operation's logs are named.
+
+Not yet met: a `machine start`, `stop` or `restart` with `--output json` whose
+run fails reports `logs: []`, so no stream names the retained run output;
+tracked as [B115](../milestones/m1.md#b115).
 
 ## Multi-machine presentation
 

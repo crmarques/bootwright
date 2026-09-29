@@ -64,8 +64,9 @@ func (m *Manager) Inspect(ctx context.Context, area prerequisites.BundleArea, de
 }
 
 // presentFiles is the presence check for a sealed bundle: the retained sources
-// by size, the published projection by file count and total bytes, the private
-// interpreter, and each target tool's source and files. It reads no bytes.
+// by size, the published projection by file count and total bytes, the
+// collection documentation that count leaves out, the private interpreter,
+// and each target tool's source and files. It reads no bytes.
 func presentFiles(ctx context.Context, area prerequisites.BundleArea, record catalogRecord, tools []prerequisites.ToolDefinition) (prerequisites.BundleInspection, error) {
 	if err := ctx.Err(); err != nil {
 		return prerequisites.BundleInspection{}, err
@@ -93,16 +94,46 @@ func presentFiles(ctx context.Context, area prerequisites.BundleArea, record cat
 			toolsReady = toolsReady && present(file.Path, -1)
 		}
 	}
+	documentation := documentationPaths()
+	files, size := projectedTotals(entries, documentation)
+	ready = ready && documentationPresent(entries, documentation) && files == record.Bootstrap.FileCount && size == record.Bootstrap.ExpandedBytes
+	return prerequisites.BundleInspection{Ready: ready, ToolsReady: toolsReady, Recoverable: true}, nil
+}
+
+// projectedTotals counts the published projection's files and bytes the way
+// its identity does: without the retained sources, the target tools or the
+// collection documentation.
+func projectedTotals(entries map[string]prerequisites.BundleEntry, documentation []string) (int, int64) {
 	files, size := 0, int64(0)
 	for name, entry := range entries {
-		if entry.Directory || strings.HasPrefix(name, "sources/") || strings.HasPrefix(name, "tools/") {
+		if entry.Directory || strings.HasPrefix(name, "sources/") || strings.HasPrefix(name, "tools/") || slices.Contains(documentation, name) {
 			continue
 		}
 		files++
 		size += entry.Size
 	}
-	ready = ready && files == record.Bootstrap.FileCount && size == record.Bootstrap.ExpandedBytes
-	return prerequisites.BundleInspection{Ready: ready, ToolsReady: toolsReady, Recoverable: true}, nil
+	return files, size
+}
+
+// documentationPresent reports whether the area holds every documentation
+// path as attributable documentation.
+func documentationPresent(entries map[string]prerequisites.BundleEntry, documentation []string) bool {
+	for _, name := range documentation {
+		entry, found := entries[name]
+		if !found || !attributableDocumentation(entry) {
+			return false
+		}
+	}
+	return true
+}
+
+// attributableDocumentation admits collection documentation an area holds at
+// its projected path: a regular, non-executable file within the member bound.
+// Its size and bytes are never compared, because documentation leaves the
+// automation digest, so a bundle published under an earlier release's README
+// still carries this executable's automation.
+func attributableDocumentation(entry prerequisites.BundleEntry) bool {
+	return !entry.Directory && !entry.Executable && entry.Size >= 0 && entry.Size <= maxMemberBytes
 }
 
 // retainedSource reads one approved source from a sealed area this host already
@@ -232,6 +263,9 @@ func (m *Manager) Prepare(ctx context.Context, area, retained prerequisites.Bund
 			return prerequisites.BundleInspection{}, err
 		}
 	}
+	if err := publishDocumentation(ctx, area, projected, entries); err != nil {
+		return prerequisites.BundleInspection{}, err
+	}
 	report("verifying the published bundle")
 	after, _, err := inspectFiles(ctx, area, record, definition.Tools)
 	if err != nil {
@@ -245,6 +279,27 @@ func (m *Manager) Prepare(ctx context.Context, area, retained prerequisites.Bund
 		return prerequisites.BundleInspection{}, err
 	}
 	return after, nil
+}
+
+// publishDocumentation writes the collection documentation the area lacks,
+// after the projected files. Attributable documentation the area already holds
+// stays, whatever release wrote it, because no check compares its bytes.
+func publishDocumentation(ctx context.Context, area prerequisites.BundleArea, projected *projection, entries map[string]prerequisites.BundleEntry) error {
+	for _, name := range projected.documentationNames() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if existing, found := entries[name]; found {
+			if !attributableDocumentation(existing) {
+				return bundleFailure("existing bundle file changed during preparation")
+			}
+			continue
+		}
+		if err := area.Write(ctx, name, projected.documentation[name], false); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func validateDefinition(definition prerequisites.Definition) (catalogRecord, error) {
@@ -512,6 +567,12 @@ func inspectFiles(ctx context.Context, area prerequisites.BundleArea, record cat
 		if err := ctx.Err(); err != nil {
 			return prerequisites.BundleInspection{}, entries, err
 		}
+		if _, documented := projected.documentation[name]; documented {
+			if !attributableDocumentation(entry) {
+				return prerequisites.BundleInspection{}, entries, nil
+			}
+			continue
+		}
 		if entry.Directory {
 			if !directories[name] {
 				return prerequisites.BundleInspection{}, entries, nil
@@ -537,7 +598,7 @@ func inspectFiles(ctx context.Context, area prerequisites.BundleArea, record cat
 	if allBaseline && !projected.matches(record.Bootstrap) {
 		return prerequisites.BundleInspection{}, entries, bundleFailure("retained bootstrap sources differ from the frozen projection")
 	}
-	ready := allBaseline
+	ready := allBaseline && documentationPresent(entries, projected.documentationNames())
 	for name := range projected.files {
 		_, exists := entries[name]
 		ready = ready && exists

@@ -5,108 +5,101 @@
   "exitCode": 0,
   "result": {
     "context": {
-      "Name": "lab",
-      "Revision": "rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f"
+      "name": "lab",
+      "mode": "ready"
     },
     "setupChecks": [
       {
-        "ID": "controller-binding",
-        "Status": "ready"
+        "id": "controller-binding",
+        "status": "ready"
       },
       {
-        "ID": "dependency-bundle",
-        "Status": "ready"
+        "id": "dependency-bundle",
+        "status": "ready"
       }
     ],
     "desired": {
-      "Revision": "rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f",
-      "Environment": "lab-rhel",
-      "Files": 14,
-      "Objects": 14
+      "revision": "rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f",
+      "environment": "lab-rhel",
+      "counts": {
+        "filesSeen": 14,
+        "objectsDecoded": 14
+      }
     },
     "clusters": [
       {
-        "Name": "ocp-01",
-        "Kind": "ContainerCluster",
-        "Status": "unsupported"
+        "name": "ocp-01",
+        "kind": "ContainerCluster",
+        "status": "unsupported"
       }
     ],
     "storageClusters": [
       {
-        "Name": "ceph-01",
-        "Kind": "StorageCluster",
-        "Status": "unsupported"
+        "name": "ceph-01",
+        "kind": "StorageCluster",
+        "status": "unsupported"
       }
     ],
     "shared": [
       {
-        "Kind": "ArtifactServer",
-        "Name": "lab-artifacts",
-        "Machine": "controller",
-        "Status": "done"
+        "kind": "ArtifactServer",
+        "name": "lab-artifacts",
+        "machine": "controller",
+        "status": "done"
       },
       {
-        "Kind": "DNSServer",
-        "Name": "lab-dns",
-        "Machine": "controller",
-        "Status": "unsupported"
+        "kind": "DNSServer",
+        "name": "lab-dns",
+        "machine": "controller",
+        "status": "unsupported"
       }
     ],
     "secrets": {
-      "Declared": 3,
-      "Bound": 3
+      "declared": 3,
+      "bound": 3
     },
     "nextSteps": [
       "bootwright apply",
       "bootwright destroy"
     ],
     "lifecycle": {
-      "Operation": "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a",
-      "Verb": "apply",
-      "State": "failed",
-      "Next": "continue-apply",
-      "Blocks": [
+      "operation": "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a",
+      "verb": "apply",
+      "state": "failed",
+      "next": "continue-apply",
+      "blocks": [
         {
-          "ID": "artifact-server-lab-artifacts",
-          "Description": "serve artifacts for lab-artifacts on controller",
-          "Stage": "infra-components",
-          "State": "done",
-          "Outcome": "",
-          "Attempts": 0,
-          "Groups": null
+          "id": "artifact-server-lab-artifacts",
+          "description": "serve artifacts for lab-artifacts on controller",
+          "stage": "infra-components",
+          "state": "done",
+          "attempts": 1
         },
         {
-          "ID": "substrate-host-lab-libvirt",
-          "Description": "realize the libvirt host of lab-libvirt on controller",
-          "Stage": "substrates",
-          "State": "done",
-          "Outcome": "",
-          "Attempts": 0,
-          "Groups": null
+          "id": "substrate-host-lab-libvirt",
+          "description": "realize the libvirt host of lab-libvirt on controller",
+          "stage": "substrates",
+          "state": "done",
+          "attempts": 1
         },
         {
-          "ID": "machine-rhel-01",
-          "Description": "realize the virtual machine rhel-01 and its controller",
-          "Stage": "machines",
-          "State": "failed",
-          "Outcome": "",
-          "Attempts": 0,
-          "Groups": null
+          "id": "machine-rhel-01",
+          "description": "realize the virtual machine rhel-01 and its controller",
+          "stage": "machines",
+          "state": "failed",
+          "attempts": 2
         },
         {
-          "ID": "os-install-rhel-01",
-          "Description": "install the operating system of rhel-01",
-          "Stage": "machines",
-          "State": "pending",
-          "Outcome": "",
-          "Attempts": 0,
-          "Groups": null
+          "id": "os-install-rhel-01",
+          "description": "install the operating system of rhel-01",
+          "stage": "machines",
+          "state": "pending",
+          "attempts": 0
         }
       ],
-      "Logs": [
+      "logs": [
         "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/logs/operation.jsonl"
-      ],
-      "Executable": "1.4.0 (9f2c1ab)"
+      ]
     }
   },
   "diagnostics": [],

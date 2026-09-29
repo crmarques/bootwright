@@ -253,8 +253,14 @@ func cliGoldens() []cliGolden {
 		return result
 	}
 	status := func() *lifecycle.StatusResult {
+		// Each block reports the attempts its record counts: the failed one
+		// was retried once, and the pending one never started.
+		attempted := blocks("failed")
+		for index, attempts := range []int{1, 1, 2, 0} {
+			attempted[index].Attempts = attempts
+		}
 		return &lifecycle.StatusResult{
-			Context:         lifecycle.ContextIdentity{Name: "lab", Revision: revision},
+			Context:         lifecycle.ContextIdentity{Name: "lab", Revision: revision, Mode: "ready"},
 			SetupChecks:     []lifecycle.SetupCheck{{ID: "controller-binding", Status: "ready"}, {ID: "dependency-bundle", Status: "ready"}},
 			Desired:         lifecycle.DesiredSummary{Revision: revision, Environment: "lab-rhel", Files: 14, Objects: 14},
 			Clusters:        []lifecycle.ClusterSummary{{Name: "ocp-01", Kind: "ContainerCluster", Status: "unsupported"}},
@@ -266,10 +272,24 @@ func cliGoldens() []cliGolden {
 			Secrets:   lifecycle.SecretSummary{Declared: 3, Bound: 3},
 			NextSteps: []string{"bootwright apply", "bootwright destroy"},
 			Lifecycle: &lifecycle.LifecycleSummary{
-				Operation: operationID, Verb: "apply", State: "failed", Next: "continue-apply", Blocks: blocks("failed"),
+				Operation: operationID, Verb: "apply", State: "failed", Next: "continue-apply", Blocks: attempted,
 				Logs: []string{operationID + "/logs/operation.jsonl"}, Executable: "1.4.0 (9f2c1ab)",
 			},
 			LogLocation: logs,
+		}
+	}
+	// A context no operation has touched: an unbound controller, no cluster
+	// roots, and a status that offers the first operation.
+	idle := func() *lifecycle.StatusResult {
+		return &lifecycle.StatusResult{
+			Context:         lifecycle.ContextIdentity{Name: "lab", Revision: revision, Mode: "ready"},
+			SetupChecks:     []lifecycle.SetupCheck{{ID: "controller-binding", Status: "not-ready"}, {ID: "dependency-bundle", Status: "ready"}},
+			Desired:         lifecycle.DesiredSummary{Revision: revision, Environment: "lab-rhel", Files: 14, Objects: 14},
+			Clusters:        []lifecycle.ClusterSummary{},
+			StorageClusters: []lifecycle.ClusterSummary{},
+			Shared:          []lifecycle.ServiceSummary{{Kind: "ArtifactServer", Name: "lab-artifacts", Machine: "controller", Status: "pending"}},
+			Secrets:         lifecycle.SecretSummary{Declared: 3},
+			NextSteps:       []string{"bootwright plan", "bootwright apply"},
 		}
 	}
 	validation := func() *compilation.Report {
@@ -294,11 +314,6 @@ func cliGoldens() []cliGolden {
 			Field:  "$.spec.network.adresses",
 		},
 	}}
-	// Secret check and list JSON carry sequence and currentSequence 0 even
-	// where a version applies, because their presentation drops the ordinal
-	// (displaySecretCheck and displaySecretList in output_secrets.go), while
-	// specs/cli/output.md asks for it. These goldens pin that deviation, which
-	// is reported rather than fixed here, so its fix shows as a golden change.
 	checked := func() *custody.CheckResult {
 		return &custody.CheckResult{Context: secretContext, Secrets: []custody.CheckRow{
 			{Name: "lab-bmc-credentials", Type: "usernamePassword", Source: "generated", Parts: []secrets.Part{secrets.UsernamePart, secrets.PasswordPart}, Status: "available", Version: version("ver-4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d"), Sequence: 1},
@@ -414,7 +429,10 @@ func cliGoldens() []cliGolden {
 		}},
 
 		// Lifecycle: a staged preview, a completed apply, a settled destroy,
-		// an apply that ran and failed, and a refusal that registered nothing.
+		// a settled apply that first completed an interrupted finalization, a
+		// settled destroy that first released what an interrupted registration
+		// left, an apply that ran and failed, and a refusal that registered
+		// nothing.
 		{golden: "cli-plan", args: "plan --stage infra-components,substrates", record: func(r *dispatchRecord) {
 			r.result.lifecyclePlan = &lifecycle.PlanResult{
 				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply",
@@ -435,6 +453,19 @@ func cliGoldens() []cliGolden {
 				Receipt: lifecycle.Receipt{Operation: "none", Verb: "destroy", State: "done", Next: "none"},
 			}
 		}},
+		{golden: "cli-apply-finalized", args: "apply --yes", record: func(r *dispatchRecord) {
+			result := operation("done")
+			result.Logs, result.LogLocation = nil, ""
+			result.Settled, result.Recovered = true, lifecycle.RecoveredFinalization
+			r.result.lifecycleOperation = result
+		}},
+		{golden: "cli-destroy-released", args: "destroy --yes", record: func(r *dispatchRecord) {
+			r.result.lifecycleOperation = &lifecycle.OperationResult{
+				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "destroy",
+				Settled: true, Recovered: lifecycle.RecoveredRelease,
+				Receipt: lifecycle.Receipt{Operation: "none", Verb: "destroy", State: "done", Next: "none"},
+			}
+		}},
 		{
 			golden: "cli-apply-failed", args: "apply --yes", code: 1,
 			record: func(r *dispatchRecord) {
@@ -447,15 +478,13 @@ func cliGoldens() []cliGolden {
 			args: "apply --yes --authorize data-loss --stage machines", code: 1, record: func(r *dispatchRecord) { r.err = unauthorized },
 			stderr: "[FAIL] lifecycle.authorization: this plan has data-loss consequences that are not authorized: os-install-rhel-01; next: review the plan's impacts and repeat the command with --authorize data-loss\n",
 		},
-		// Status JSON still carries Go field names in its nested objects, a
-		// deviation specs/cli/output.md records as item B11; this golden is
-		// what B11's tagged DTOs will visibly change. Human status departs from
-		// the JSON membership that spec asks it to present, and the text golden
-		// pins every omission its B11 line lists: the fixture fills the context
-		// mode, desired state, cluster rows, secrets and lifecycle operation,
-		// none of which is rendered, and only the first next step is shown.
+		// Status: an apply that failed, whose every section is populated, and
+		// an idle context, whose empty row sections are omitted from text and
+		// whose lifecycle is null.
 		{golden: "cli-status", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = status() }},
 		{golden: "cli-status-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = status() }},
+		{golden: "cli-status-idle", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = idle() }},
+		{golden: "cli-status-idle-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = idle() }},
 
 		// Desired state: warnings reach standard error in text and the
 		// envelope's diagnostics in JSON; a failed validate has no result.
@@ -559,10 +588,10 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-media-list-json", args: "media list --checksums --output json", record: func(r *dispatchRecord) { r.result.mediaList = stored() }},
 
 		// Machines. A power verb's service also reports where its run's
-		// output is kept, through a reporter outside this boundary: that Logs
-		// line precedes the JSON document in the real executable
-		// (specs/cli/output.md, item B11), so B11 adds its own wiring-level
-		// test and these goldens hold what the Runner writes.
+		// output is kept, through a reporter outside this boundary, which a
+		// JSON invocation silences: TestAJSONInvocationWritesNoProgress in
+		// cmd/bootwright proves that wiring, and these goldens hold what the
+		// Runner writes.
 		{golden: "cli-machine-list", args: "machine list --power-status", record: func(r *dispatchRecord) { r.result.machines = machines(true) }},
 		{golden: "cli-machine-list-json", args: "machine list --power-status --output json", record: func(r *dispatchRecord) { r.result.machines = machines(true) }},
 		{golden: "cli-machine-list-silent", args: "machine list --silent", record: func(r *dispatchRecord) { r.result.machines = machines(false) }},

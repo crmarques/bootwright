@@ -93,12 +93,23 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 		}
 		return code
 	}
+	process, hooks := interactiveProcess(classification, stdout, stderr, route)
+	services, release := wireServices(process)
+	defer release()
+	return runServices(ctx, args, stdout, stderr, services, hooks)
+}
+
+// interactiveProcess builds what an interactive invocation reports through. A
+// JSON invocation writes exactly one document, so its lifecycle and power
+// reporting writes nothing; the elevated child re-enters with the same
+// arguments and selects the same way.
+func interactiveProcess(classification cli.InvocationClass, stdout, stderr io.Writer, route controller.Route) (processDependencies, invocationHooks) {
 	confirmer := cli.NewConfirmation(readStdin, stderr, stdinTerminal)
 	// A terminal gets its running progress row rewritten in place within the
 	// width it can erase; a pipe or file receives every row appended.
 	columns := terminalColumns(stdout)
 	controllerPresenter := cli.NewControllerPresenter(stdout, columns)
-	lifecycleProgress := cli.NewLifecycleProgressPresenter(stdout, columns)
+	lifecycleProgress := cli.NewInvocationProgress(stdout, columns, classification.JSON)
 	process := processDependencies{
 		Confirmer:          confirmer,
 		SessionConfirmer:   confirmer,
@@ -116,9 +127,7 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 		controllerPresenter.Finish()
 		lifecycleProgress.Finish()
 	}}
-	services, release := wireServices(process)
-	defer release()
-	return runServices(ctx, args, stdout, stderr, services, hooks)
+	return process, hooks
 }
 
 // invocationHooks carries what only an interactive process supplies to the

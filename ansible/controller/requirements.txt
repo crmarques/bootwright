@@ -1,6 +1,6 @@
 # Historical reproducible bootstrap qualification fixture.
-# Production setup resolves Environment dependencyVersions through the isolated
-# maintained resolver; this file does not select production dependency versions.
+# Production setup resolves the latest patch of the qualified ansible-core minor
+# through the isolated maintained resolver; this file selects nothing.
 ansible-core==2.21.4 --hash=sha256:ebe74d9c8fadcb41ad2151e031bf1e785e3098aaa015019b4e19a0a96f0dcc4f
 cffi==2.1.1 --hash=sha256:a931079504ecc49efed7744c476a5c343a92fabf66dec2db95edb1b2fdc770e2
 cryptography==50.0.1 --hash=sha256:51afcfceb15597cf2635068e4ac9a56b2abde622edde17f37d85fd7b5306497a

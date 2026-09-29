@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"strconv"
@@ -226,7 +225,7 @@ func writeLifecycleOperation(out io.Writer, result *lifecycle.OperationResult) e
 	text.headline(status, verb+" "+escapeDisplayLine(result.Receipt.State))
 	if result.Settled {
 		text.section("")
-		text.lines([]string{settledNote(result.Verb)})
+		text.lines([]string{settledNote(result.Verb, result.Recovered)})
 	}
 	if len(result.Blocks) != 0 {
 		text.section("Result")
@@ -246,9 +245,19 @@ func writeLifecycleOperation(out io.Writer, result *lifecycle.OperationResult) e
 	return writeReceipt(out, result.Receipt)
 }
 
-// settledNote says why an operation performed nothing. Without it a result
-// listing only completed blocks reads as though this invocation did that work.
-func settledNote(verb string) string {
+// settledNote says why an operation performed nothing, and names what it
+// completed first when that was all it did. Without it a result listing only
+// completed blocks reads as though this invocation did that work.
+func settledNote(verb, recovered string) string {
+	switch recovered {
+	case lifecycle.RecoveredFinalization:
+		if verb == "destroy" {
+			return "Nothing to remove: this invocation only completed an interrupted finalization."
+		}
+		return "Nothing to do: this invocation only completed an interrupted finalization."
+	case lifecycle.RecoveredRelease:
+		return "Nothing to remove: this invocation only released what an interrupted registration left."
+	}
 	if verb == "destroy" {
 		return "Nothing to remove: this context owns no realized state."
 	}
@@ -276,93 +285,4 @@ func blockStatusToken(state string) string {
 		return "[UNKNOWN]"
 	}
 	return "[FAIL]"
-}
-
-func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMode bool) error {
-	if jsonMode {
-		encoder := json.NewEncoder(out)
-		encoder.SetEscapeHTML(false)
-		return encoder.Encode(commandEnvelope{
-			SchemaVersion: "v1alpha1", Command: "status", OK: true, ExitCode: 0,
-			Result: lifecycleStatusJSON(result), Diagnostics: []diagnostic{}, Logs: []string{},
-		})
-	}
-	var text display
-	text.headline("OK", "Context "+escapeDisplayLine(result.Context.Name))
-	if len(result.SetupChecks) != 0 {
-		text.section("Setup")
-		rows := make([][]string, 0, len(result.SetupChecks))
-		for _, check := range result.SetupChecks {
-			rows = append(rows, []string{setupStatusToken(check.Status), escapeDisplayLine(check.ID)})
-		}
-		text.rows(rows)
-	}
-	if len(result.Shared) != 0 {
-		text.section("Shared services")
-		rows := make([][]string, 0, len(result.Shared))
-		for _, service := range result.Shared {
-			rows = append(rows, []string{setupStatusToken(service.Status), escapeDisplayLine(service.Kind + "/" + service.Name)})
-		}
-		text.rows(rows)
-	}
-	if result.Lifecycle != nil {
-		text.section("Lifecycle")
-		rows := make([][]string, 0, len(result.Lifecycle.Blocks))
-		for _, block := range result.Lifecycle.Blocks {
-			rows = append(rows, []string{blockStatusToken(block.State), escapeDisplayLine(block.Description)})
-		}
-		text.rows(rows)
-	}
-	var tail []field
-	// A removal is planned from what the registering build froze, so the
-	// operator reads which build that was before meeting a refusal that names
-	// it as the remedy.
-	if result.Lifecycle != nil && result.Lifecycle.Executable != "" {
-		tail = append(tail, field{Label: "Registered by", Value: escapeDisplayLine(result.Lifecycle.Executable)})
-	}
-	if result.LogLocation != "" {
-		tail = append(tail, field{Label: logLocationLabel, Value: escapeDisplayLine(result.LogLocation)})
-	}
-	if len(result.NextSteps) != 0 {
-		tail = append(tail, field{Label: "Next", Value: escapeDisplayLine(result.NextSteps[0])})
-	}
-	if len(tail) != 0 {
-		text.section("")
-		text.fields(tail...)
-	}
-	return text.writeTo(out)
-}
-
-func setupStatusToken(status string) string {
-	switch status {
-	case "ready", "done":
-		return "[OK]"
-	case "pending", "incomplete":
-		return "[PENDING]"
-	case "unknown":
-		return "[UNKNOWN]"
-	case "unsupported":
-		return "[SKIPPED]"
-	}
-	return "[FAIL]"
-}
-
-type statusEnvelope struct {
-	Context         lifecycle.ContextIdentity   `json:"context"`
-	SetupChecks     []lifecycle.SetupCheck      `json:"setupChecks"`
-	Desired         lifecycle.DesiredSummary    `json:"desired"`
-	Clusters        []lifecycle.ClusterSummary  `json:"clusters"`
-	StorageClusters []lifecycle.ClusterSummary  `json:"storageClusters"`
-	Shared          []lifecycle.ServiceSummary  `json:"shared"`
-	Secrets         lifecycle.SecretSummary     `json:"secrets"`
-	NextSteps       []string                    `json:"nextSteps"`
-	Lifecycle       *lifecycle.LifecycleSummary `json:"lifecycle"`
-}
-
-func lifecycleStatusJSON(result *lifecycle.StatusResult) statusEnvelope {
-	return statusEnvelope{
-		Context: result.Context, SetupChecks: result.SetupChecks, Desired: result.Desired,
-		Clusters: result.Clusters, StorageClusters: result.StorageClusters, Shared: result.Shared,
-		Secrets: result.Secrets, NextSteps: result.NextSteps, Lifecycle: result.Lifecycle,
-	}
 }

@@ -188,6 +188,8 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		if bmc.Has("enabled") && !bmc.Get("enabled").Bool() {
 			issues = add(issues, issue("$.spec.libvirt.bmcEmulationDefaults.enabled", "libvirt BMC emulation must be enabled"))
 		}
+		issues = add(issues, validateEmulatedListener(bmc)...)
+		issues = add(issues, requirePositiveCapacity(arm, variant, "libvirt")...)
 		first, last, ranged := bmcPortRange(o, c)
 		if ranged && last > 65535 {
 			issues = add(issues, issue("$.spec.libvirt.bmcEmulationDefaults.port", "the emulated BMC port range must end at or below 65535"))
@@ -218,14 +220,9 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 				issues = add(issues, issue("$.spec.vsphere.nodeNetworking", "multiple topology networks require nodeNetworking"))
 			}
 		}
+		issues = add(issues, requirePositiveCapacity(arm, variant, "vSphere")...)
 		for index, profile := range arm.Get("machineProfiles").Items() {
 			path := fmt.Sprintf("$.spec.vsphere.machineProfiles[%d]", index)
-			for _, size := range []string{"cpu", "memoryMiB", "diskGiB"} {
-				value := profile.Get(size)
-				if value.Type() != api.Integer || value.Text() == "0" || strings.HasPrefix(value.Text(), "-") {
-					issues = add(issues, issue(path+"."+size, "vSphere machine profiles require a positive capacity"))
-				}
-			}
 			if !profile.Has("failureDomainRef") && len(domains) > 1 {
 				issues = add(issues, issue(path+".failureDomainRef", "multiple failure domains require an explicit profile selection"))
 			} else if profile.Has("failureDomainRef") {
@@ -258,6 +255,44 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		}
 	}
 	return issues[:min(len(issues), 999)]
+}
+
+// NameableListener reports whether an emulated BMC may listen on address: one
+// IPv4 unicast address that every hosted Machine's controller endpoint, and
+// the socket key its listener claims, can name. A wildcard, multicast or the
+// broadcast address names no one listener. Every IPv6 literal refuses, mapped
+// ones included, because the endpoint concatenates the address without the
+// brackets an IPv6 literal needs.
+func NameableListener(address string) bool {
+	parsed, err := netip.ParseAddr(address)
+	return err == nil && parsed.Is4() && !parsed.IsUnspecified() && !parsed.IsMulticast() && parsed != netip.AddrFrom4([4]byte{255, 255, 255, 255})
+}
+
+// validateEmulatedListener judges only an address that is present: the schema
+// already refuses an absent one, and a second diagnostic would say it twice.
+func validateEmulatedListener(bmc api.Value) []api.Issue {
+	address := bmc.Get("bindAddress")
+	if !address.Present() || NameableListener(address.Text()) {
+		return nil
+	}
+	return []api.Issue{issue("$.spec.libvirt.bmcEmulationDefaults.bindAddress",
+		"the emulated BMC listens on one IPv4 unicast address its controller endpoints can name; an IPv6 listener is refused until the endpoint brackets it")}
+}
+
+// requirePositiveCapacity refuses a profile size its arm cannot create a
+// machine with. The schema materializes 0 for an omitted size, so an omitted
+// size refuses here too.
+func requirePositiveCapacity(arm api.Value, variant, label string) []api.Issue {
+	issues := []api.Issue{}
+	for index, profile := range arm.Get("machineProfiles").Items() {
+		for _, size := range []string{"cpu", "memoryMiB", "diskGiB"} {
+			value := profile.Get(size)
+			if value.Type() != api.Integer || value.Text() == "0" || strings.HasPrefix(value.Text(), "-") {
+				issues = add(issues, issue(fmt.Sprintf("$.spec.%s.machineProfiles[%d].%s", variant, index, size), label+" machine profiles require a positive capacity"))
+			}
+		}
+	}
+	return issues
 }
 
 // bmcPortRange is the contiguous range a provider's emulated BMCs claim: one

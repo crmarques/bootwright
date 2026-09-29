@@ -124,7 +124,7 @@ spec:
       nicRef: eth0
     management:
       bmc:
-        address: redfish-virtualmedia+https://bmc-edge-a-01.example.com/redfish/v1/Systems/1
+        address: https://bmc-edge-a-01.example.com/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef: ocp-bmc-credentials
         tls:
@@ -180,7 +180,7 @@ spec:
       nicRef: eth0
     management:
       bmc:
-        address: redfish-virtualmedia+https://bmc-edge-a-02.example.com/redfish/v1/Systems/1
+        address: https://bmc-edge-a-02.example.com/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef: ocp-bmc-credentials
         tls:
@@ -236,7 +236,7 @@ spec:
       nicRef: eth0
     management:
       bmc:
-        address: redfish-virtualmedia+https://bmc-edge-a-03.example.com/redfish/v1/Systems/1
+        address: https://bmc-edge-a-03.example.com/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef: ocp-bmc-credentials
         tls:
@@ -292,7 +292,7 @@ spec:
       nicRef: eth0
     management:
       bmc:
-        address: redfish-virtualmedia+https://bmc-edge-b-01.example.com/redfish/v1/Systems/1
+        address: https://bmc-edge-b-01.example.com/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef: ocp-bmc-credentials
         tls:
@@ -348,7 +348,7 @@ spec:
       nicRef: eth0
     management:
       bmc:
-        address: redfish-virtualmedia+https://bmc-edge-b-02.example.com/redfish/v1/Systems/1
+        address: https://bmc-edge-b-02.example.com/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef: ocp-bmc-credentials
         tls:
@@ -404,7 +404,7 @@ spec:
       nicRef: eth0
     management:
       bmc:
-        address: redfish-virtualmedia+https://bmc-edge-b-03.example.com/redfish/v1/Systems/1
+        address: https://bmc-edge-b-03.example.com/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef: ocp-bmc-credentials
         tls:
@@ -1056,7 +1056,7 @@ spec:
       nicRef: eth0
     management:
       bmc:
-        address: redfish-virtualmedia+https://bmc-storage-a-01.example.com/redfish/v1/Systems/1
+        address: https://bmc-storage-a-01.example.com/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef: ceph-bmc-credentials
         tls:
@@ -1139,7 +1139,7 @@ spec:
       nicRef: eth0
     management:
       bmc:
-        address: redfish-virtualmedia+https://bmc-storage-a-02.example.com/redfish/v1/Systems/1
+        address: https://bmc-storage-a-02.example.com/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef: ceph-bmc-credentials
         tls:
@@ -1222,7 +1222,7 @@ spec:
       nicRef: eth0
     management:
       bmc:
-        address: redfish-virtualmedia+https://bmc-storage-a-03.example.com/redfish/v1/Systems/1
+        address: https://bmc-storage-a-03.example.com/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef: ceph-bmc-credentials
         tls:
@@ -1305,7 +1305,7 @@ spec:
       nicRef: eth0
     management:
       bmc:
-        address: redfish-virtualmedia+https://bmc-storage-b-01.example.com/redfish/v1/Systems/1
+        address: https://bmc-storage-b-01.example.com/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef: ceph-bmc-credentials
         tls:
@@ -1388,7 +1388,7 @@ spec:
       nicRef: eth0
     management:
       bmc:
-        address: redfish-virtualmedia+https://bmc-storage-b-02.example.com/redfish/v1/Systems/1
+        address: https://bmc-storage-b-02.example.com/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef: ceph-bmc-credentials
         tls:
@@ -1471,7 +1471,7 @@ spec:
       nicRef: eth0
     management:
       bmc:
-        address: redfish-virtualmedia+https://bmc-storage-b-03.example.com/redfish/v1/Systems/1
+        address: https://bmc-storage-b-03.example.com/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef: ceph-bmc-credentials
         tls:

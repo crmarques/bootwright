@@ -22,6 +22,8 @@ type mediaRowPresentation struct {
 	Verified string `json:"verified"`
 }
 
+func (mediaListPresentation) documentedResult() {}
+
 func validMediaMutation(result *media.MutationResult) bool {
 	if result == nil || result.Name == "" || result.Size < 0 {
 		return false

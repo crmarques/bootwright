@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import ctypes
+import functools
 import gzip
 import hashlib
 import io
@@ -22,6 +24,13 @@ MAX_SOURCE = 1 << 30
 MAX_EXPANDED = 2 << 30
 MAX_ENTRIES = 4096
 MAX_BUNDLE = 8 << 30
+MAX_DEADLINE = 7200
+CHUNK = 64 << 10
+DOWNLOAD_SECONDS = 300
+AT_EMPTY_PATH = 0x1000
+# A released oc names its release in its bytes: the version, NUL-terminated,
+# overwrites the head of this marker. An unstamped oc carries it whole.
+RELEASE_MARKER = b"\x00_RELEASE_VERSION_LOCATION_\x00" + b"X" * 64 + b"\x00"
 DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 FILE_FLAGS = os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | os.O_CLOEXEC
 REDIRECT_HOSTS = frozenset(
@@ -213,10 +222,13 @@ def trusted_roots():
     return context
 
 
-def download(source, egress):
-    """Read only exact approved bytes using explicit routing and system trust."""
-    # Action workers execute in a dedicated process. Preserve any earlier
-    # Ansible alarm while bounding DNS, TLS, headers and slow streaming together.
+@contextlib.contextmanager
+def alarm(seconds):
+    """Bound DNS, TLS, headers and slow streaming together for seconds.
+
+    Action workers execute in a dedicated process. Any earlier Ansible alarm is
+    preserved: the sooner of the two fires, and the earlier one is re-armed with
+    what remains of it."""
     started = time.monotonic()
     prior_handler = signal.getsignal(signal.SIGALRM)
     prior_timer = signal.getitimer(signal.ITIMER_REAL)
@@ -227,11 +239,10 @@ def download(source, egress):
     try:
         signal.signal(signal.SIGALRM, expired)
         signal.setitimer(
-            signal.ITIMER_REAL, min(300, prior_timer[0]) if prior_timer[0] else 300
+            signal.ITIMER_REAL,
+            min(seconds, prior_timer[0]) if prior_timer[0] else seconds,
         )
-        return _download(source, egress)
-    except Exception:
-        raise Refused("approved source acquisition was refused or incomplete") from None
+        yield
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, prior_handler)
@@ -243,7 +254,37 @@ def download(source, egress):
             )
 
 
+def download(source, egress):
+    """Read only exact approved bytes using explicit routing and system trust."""
+    try:
+        with alarm(DOWNLOAD_SECONDS):
+            return _download(source, egress)
+    except Exception:
+        raise Refused("approved source acquisition was refused or incomplete") from None
+
+
 def _download(source, egress):
+    deadline = time.monotonic() + DOWNLOAD_SECONDS
+
+    def collect(response):
+        data = bytearray()
+        stream_copy(
+            functools.partial(response.read, decode_content=False),
+            source["bytes"],
+            deadline,
+            observers=(data.extend,),
+        )
+        verify_source(source, data)
+        return bytes(data)
+
+    return respond(source, egress, deadline, collect)
+
+
+def respond(source, egress, deadline, consume):
+    """Route one approved source and hand its checked response to consume.
+
+    Every redirect, header, status and declared length is checked here, once,
+    for a download and a streamed acquisition alike."""
     source_identity(source)
     current = source["url"]
     original = endpoint(current)
@@ -251,7 +292,6 @@ def _download(source, egress):
     import urllib3  # Included in the immutable execution closure.
 
     trust = trusted_roots()
-    deadline = time.monotonic() + 300
     for _redirect_index in range(6):
         if time.monotonic() > deadline:
             raise Refused("acquisition deadline")
@@ -304,23 +344,116 @@ def _download(source, egress):
                 not declared.isdecimal() or int(declared) != source["bytes"]
             ):
                 raise Refused("source size")
-            data = bytearray()
-            while len(data) <= source["bytes"]:
-                if time.monotonic() > deadline:
-                    raise Refused("acquisition deadline")
-                block = response.read(
-                    min(65536, source["bytes"] + 1 - len(data)), decode_content=False
-                )
-                if not block:
-                    break
-                data.extend(block)
-            verify_source(source, data)
-            return bytes(data)
+            return consume(response)
         finally:
             if response is not None:
                 response.close()
             manager.clear()
     raise Refused("redirect count")
+
+
+def stream_copy(read, size, deadline=None, descriptor=None, observers=()):
+    """Copy exactly size bytes from read, one chunk at a time, and digest them.
+
+    Each chunk is hashed, observed and written before the next read, and no read
+    or write exceeds CHUNK, so nothing larger than one chunk is ever held."""
+    digest = hashlib.sha256()
+    copied = 0
+    while copied <= size:
+        if deadline is not None and time.monotonic() > deadline:
+            raise Refused("acquisition deadline")
+        block = read(min(CHUNK, size + 1 - copied))
+        if not block:
+            break
+        copied += len(block)
+        if copied > size:
+            raise Refused("stream size")
+        digest.update(block)
+        for observe in observers:
+            observe(block)
+        if descriptor is not None:
+            write_all(descriptor, block)
+    if copied != size:
+        raise Refused("stream size")
+    return digest.hexdigest()
+
+
+def write_all(descriptor, block):
+    remaining = memoryview(block)
+    while remaining:
+        count = os.write(descriptor, remaining[:CHUNK])
+        if count <= 0:
+            raise Refused("artifact write")
+        remaining = remaining[count:]
+
+
+class PatternCount:
+    """Count a pattern in a stream fed chunk by chunk, each occurrence once.
+
+    The last len(pattern) - 1 bytes carry over, so an occurrence split across
+    chunks is found, and one that ends in the carried bytes cannot fit in them
+    whole, so it is never found twice."""
+
+    def __init__(self, pattern):
+        self.pattern = pattern
+        self.count = 0
+        self.carried = b""
+
+    def update(self, block):
+        window = self.carried + block
+        found = window.find(self.pattern)
+        while found >= 0:
+            self.count += 1
+            found = window.find(self.pattern, found + 1)
+        keep = len(self.pattern) - 1
+        self.carried = window[len(window) - keep:] if keep < len(window) else window
+
+
+class ReleaseStamp:
+    """Read the release an oc executable names without executing it."""
+
+    def __init__(self, version):
+        if not isinstance(version, str) or len(version) >= len(RELEASE_MARKER) - 1:
+            raise Refused("openshift client release")
+        stamp = version.encode("ascii") + b"\x00" + RELEASE_MARKER[len(version) + 1:]
+        self.stamped = PatternCount(stamp)
+        self.unstamped = PatternCount(RELEASE_MARKER)
+
+    def update(self, block):
+        self.stamped.update(block)
+        self.unstamped.update(block)
+
+    def verify(self):
+        if self.stamped.count != 1 or self.unstamped.count:
+            raise Refused("openshift client release")
+
+
+def acquire(bundle, source, egress, seconds):
+    """Stream one approved tool source into the bundle under its own deadline.
+
+    Both the alarm and the transfer check use this source's deadline, never the
+    fixed one download keeps. Only a complete, digest-verified source gains a
+    name; an interrupted one stays an unlinked file the kernel reclaims."""
+    source_identity(source)
+    name = "sources/" + source["id"]
+    bundle.writable()
+    bundle.capacity(name, source["bytes"])
+    deadline = time.monotonic() + seconds
+
+    def store(response):
+        with bundle.staged(name, 0o600) as staged:
+            digest = stream_copy(
+                functools.partial(response.read, decode_content=False),
+                source["bytes"],
+                deadline,
+                staged[0],
+            )
+            if digest != source["sha256"]:
+                raise Refused("source integrity")
+            bundle.link(name, staged, source["bytes"], digest)
+
+    with alarm(seconds):
+        respond(source, egress, deadline, store)
 
 
 def identity(value):
@@ -347,6 +480,23 @@ def read_exact(descriptor, size):
     if len(data) != size:
         raise Refused("file size")
     return bytes(data)
+
+
+def link_at(descriptor, parent, leaf):
+    """Give an unlinked file its first name, which must not exist yet."""
+    library = ctypes.CDLL(None, use_errno=True)
+    linkat = library.linkat
+    linkat.argtypes = (
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+    )
+    linkat.restype = ctypes.c_int
+    if linkat(descriptor, b"", parent, leaf.encode("ascii"), AT_EMPTY_PATH) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error))
 
 
 class Bundle:
@@ -457,17 +607,29 @@ class Bundle:
             os.close(descriptor)
             raise
 
-    def read(self, name, maximum, mode):
+    @contextlib.contextmanager
+    def opened(self, name, maximum, mode):
+        """Yield one file's descriptor and size, or None when it is absent.
+
+        The file must be a private regular file with a single name. Its identity
+        must hold across everything done with the descriptor, so a file changed
+        while it was read is refused when the block ends."""
         self.verify()
         try:
             parent, leaf = self.parent(name)
         except FileNotFoundError:
-            return None
+            parent = None
+        if parent is None:
+            yield None
+            return
         try:
             try:
                 descriptor = os.open(leaf, FILE_FLAGS, dir_fd=parent)
             except FileNotFoundError:
-                return None
+                descriptor = None
+            if descriptor is None:
+                yield None
+                return
             try:
                 before = os.fstat(descriptor)
                 if (
@@ -478,7 +640,7 @@ class Bundle:
                     or not 0 <= before.st_size <= maximum
                 ):
                     raise Refused("bundle file metadata")
-                data = read_exact(descriptor, before.st_size)
+                yield descriptor, before.st_size
                 after = os.stat(leaf, dir_fd=parent, follow_symlinks=False)
                 if identity(before) != identity(os.fstat(descriptor)) or identity(
                     before
@@ -487,72 +649,70 @@ class Bundle:
             finally:
                 os.close(descriptor)
             self.verify()
-            return data
         finally:
             os.close(parent)
 
-    def publish(self, name, data, mode):
-        if len(data) > MAX_SOURCE or mode not in (0o600, 0o700):
+    def present(self, name, maximum, mode):
+        with self.opened(name, maximum, mode) as found:
+            return found is not None
+
+    def digest(self, name, maximum, mode):
+        """The streamed digest and size of one file, or None when it is absent."""
+        with self.opened(name, maximum, mode) as found:
+            if found is None:
+                return None
+            size = found[1]
+            return stream_copy(functools.partial(os.read, found[0]), size), size
+
+    @contextlib.contextmanager
+    def staged(self, name, mode):
+        """Yield an unlinked file in name's directory; only link names it.
+
+        However the block ends, the file is closed, so one never linked leaves
+        nothing behind."""
+        if mode not in (0o600, 0o700):
             raise Refused("publication bounds")
-        previous = self.read(name, len(data), mode)
-        if previous is not None:
-            if previous != data:
-                raise Refused("existing bundle file differs")
-            return False
         self.writable()
-        self.capacity(name, len(data))
         parent, leaf = self.parent(name, create=True)
-        temporary = None
         try:
             temporary = os.open(
                 ".", os.O_TMPFILE | os.O_RDWR | os.O_CLOEXEC, mode, dir_fd=parent
             )
-            os.fchmod(temporary, mode)
-            remaining = memoryview(data)
-            while remaining:
-                count = os.write(temporary, remaining[:65536])
-                if count <= 0:
-                    raise Refused("artifact write")
-                remaining = remaining[count:]
-            os.fsync(temporary)
-            created = os.fstat(temporary)
-            if (
-                not stat.S_ISREG(created.st_mode)
-                or stat.S_IMODE(created.st_mode) != mode
-                or created.st_nlink != 0
-                or created.st_size != len(data)
-                or (created.st_uid, created.st_gid, created.st_dev) != self.owner
-            ):
-                raise Refused("temporary artifact metadata")
-            self.writable()
-            current_parent, _leaf = self.parent(name)
             try:
-                before, current = os.fstat(parent), os.fstat(current_parent)
-                if (before.st_dev, before.st_ino) != (current.st_dev, current.st_ino):
-                    raise Refused("publication parent changed")
+                os.fchmod(temporary, mode)
+                yield temporary, parent, leaf, mode
             finally:
-                os.close(current_parent)
-            library = ctypes.CDLL(None, use_errno=True)
-            linkat = library.linkat
-            linkat.argtypes = (
-                ctypes.c_int,
-                ctypes.c_char_p,
-                ctypes.c_int,
-                ctypes.c_char_p,
-                ctypes.c_int,
-            )
-            linkat.restype = ctypes.c_int
-            if linkat(temporary, b"", parent, leaf.encode("ascii"), 0x1000) != 0:
-                error = ctypes.get_errno()
-                raise OSError(error, os.strerror(error))
-            os.fsync(parent)
-        finally:
-            if temporary is not None:
                 os.close(temporary)
+        finally:
             os.close(parent)
-        if self.read(name, len(data), mode) != data:
+
+    def link(self, name, staged, size, digest):
+        """Name one complete staged file, then prove the name by its digest."""
+        temporary, parent, leaf, mode = staged
+        if relative(name)[-1] != leaf:
+            raise Refused("publication name")
+        os.fsync(temporary)
+        created = os.fstat(temporary)
+        if (
+            not stat.S_ISREG(created.st_mode)
+            or stat.S_IMODE(created.st_mode) != mode
+            or created.st_nlink != 0
+            or created.st_size != size
+            or (created.st_uid, created.st_gid, created.st_dev) != self.owner
+        ):
+            raise Refused("temporary artifact metadata")
+        self.writable()
+        current_parent, _leaf = self.parent(name)
+        try:
+            before, current = os.fstat(parent), os.fstat(current_parent)
+            if (before.st_dev, before.st_ino) != (current.st_dev, current.st_ino):
+                raise Refused("publication parent changed")
+        finally:
+            os.close(current_parent)
+        link_at(temporary, parent, leaf)
+        os.fsync(parent)
+        if self.digest(name, size, mode) != (digest, size):
             raise Refused("published artifact integrity")
-        return True
 
     def capacity(self, name, size):
         totals = {"bytes": 0, "sources": 0, "targets": 0, "entries": 0}
@@ -690,15 +850,61 @@ def tool_files(tool):
     return files
 
 
-def project(tool, data):
-    files = tool_files(tool)
-    verify_source(tool["source"], data)
-    if tool["archive"] == "binary":
-        return {files[0]["path"]: data}
-    selected = {file["member"] for file in files}
+class Staging:
+    """The unlinked member files of one projection, open until it ends.
+
+    Their bytes count against the bundle's capacity although no walk sees them
+    before they are linked."""
+
+    def __init__(self, bundle, stack):
+        self.bundle = bundle
+        self.stack = stack
+        self.pending = 0
+
+    def stage(self, path, size):
+        self.bundle.writable()
+        self.bundle.capacity(path, self.pending + size)
+        staged = self.stack.enter_context(self.bundle.staged(path, 0o700))
+        self.pending += size
+        return staged
+
+    def copy(self, path, member):
+        """Stage a member's own copy for another name, never a second link:
+        a file with two names is refused by every later read and walk."""
+        source = member["staged"][0]
+        os.lseek(source, 0, os.SEEK_SET)
+        staged = self.stage(path, member["bytes"])
+        digest = stream_copy(
+            functools.partial(os.read, source), member["bytes"], descriptor=staged[0]
+        )
+        if digest != member["digest"]:
+            raise Refused("staged member changed")
+        return staged
+
+    def link(self, path, staged, member):
+        self.bundle.link(path, staged, member["bytes"], member["digest"])
+        self.pending -= member["bytes"]
+
+
+def stream_member(staging, path, read, size, stamp):
+    """Digest one member from its stream, staging it for path when staging is
+    given and scanning it for the release stamp when stamp is."""
+    staged = staging.stage(path, size) if staging is not None else None
+    digest = stream_copy(
+        read,
+        size,
+        descriptor=staged[0] if staged is not None else None,
+        observers=(stamp.update,) if stamp is not None else (),
+    )
+    return {"digest": digest, "bytes": size, "staged": staged, "stamp": stamp}
+
+
+def archive_members(tool, files, source, staging):
+    """Stream a tar.gz source's selected regular members and read its links."""
+    selected = {file["member"]: file["path"] for file in files}
     regular, links, seen = {}, {}, set()
     expanded = 0
-    with gzip.GzipFile(fileobj=io.BytesIO(data), mode="rb") as compressed:
+    with gzip.GzipFile(fileobj=source, mode="rb") as compressed:
         with tarfile.open(fileobj=LimitedReader(compressed), mode="r|") as archive:
             for member in archive:
                 name = member.name.removesuffix("/") if member.isdir() else member.name
@@ -719,11 +925,16 @@ def project(tool, data):
                     if name in selected:
                         if not member.size or not member.mode & 0o111:
                             raise Refused("archive executable")
-                        regular[name] = archive.extractfile(member).read(
-                            member.size + 1
+                        stamp = None
+                        if tool["kind"] == "openshift-clients":
+                            stamp = ReleaseStamp(tool["version"])
+                        regular[name] = stream_member(
+                            staging,
+                            selected[name],
+                            archive.extractfile(member).read,
+                            member.size,
+                            stamp,
                         )
-                        if len(regular[name]) != member.size:
-                            raise Refused("archive executable size")
                 elif member.issym() or member.islnk():
                     relative(member.linkname)
                     target = (
@@ -737,7 +948,13 @@ def project(tool, data):
                     links[name] = target
                 else:
                     raise Refused("archive member type")
-    result = {}
+    return regular, links
+
+
+def resolve(files, links, regular):
+    """Each file's path to whether it is its regular member's own name, and to
+    that member, following the archive's links."""
+    resolved = {}
     for file in files:
         name = file["member"]
         depth = 0
@@ -748,41 +965,97 @@ def project(tool, data):
             depth += 1
         if name not in regular:
             raise Refused("archive required executable")
-        result[file["path"]] = regular[name]
-    return result
+        resolved[file["path"]] = (name == file["member"], regular[name])
+    return resolved
 
 
-def prepare_tool(location, tool, egress, inspect_only=False):
+def settle_members(bundle, staging, resolved, inspect_only):
+    """Prove every published member by its streamed digest, then name each
+    missing one. Nothing is named until every existing member is proved."""
+    missing = []
+    for path, (owned, member) in sorted(resolved.items()):
+        published = bundle.digest(path, member["bytes"], 0o700)
+        if published is None and staging is not None:
+            missing.append((path, owned, member))
+        elif published != (member["digest"], member["bytes"]):
+            if inspect_only or published is None:
+                raise Refused("target executable postcondition")
+            raise Refused("existing bundle file differs")
+    for path, owned, member in missing:
+        staged = member["staged"] if owned else staging.copy(path, member)
+        staging.link(path, staged, member)
+    return bool(missing)
+
+
+def project(bundle, tool, inspect_only):
+    """Project a retained source's fixed members, streaming, and return their
+    manifest and whether any was published.
+
+    The source is digested and then read again for its members under one
+    identity check. Only after both passes is an oc release proved and any
+    member named; inspection stages and writes nothing."""
     files = tool_files(tool)
+    source = tool["source"]
+    stage = not inspect_only and not all(
+        bundle.present(file["path"], MAX_SOURCE, 0o700) for file in files
+    )
+    with contextlib.ExitStack() as stack:
+        staging = Staging(bundle, stack) if stage else None
+        with bundle.opened("sources/" + source["id"], source["bytes"], 0o600) as found:
+            if found is None:
+                raise Refused("required retained source is missing")
+            descriptor, size = found
+            digest = stream_copy(functools.partial(os.read, descriptor), size)
+            if (digest, size) != (source["sha256"], source["bytes"]):
+                raise Refused("source integrity")
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            with io.FileIO(descriptor, "r", closefd=False) as reader:
+                if tool["archive"] == "binary":
+                    member = stream_member(staging, files[0]["path"], reader.read, size, None)
+                    regular, links = {files[0]["member"]: member}, {}
+                else:
+                    regular, links = archive_members(tool, files, reader, staging)
+        resolved = resolve(files, links, regular)
+        if tool["kind"] == "openshift-clients":
+            oc = next(file["path"] for file in files if file["member"] == "oc")
+            resolved[oc][1]["stamp"].verify()
+        changed = settle_members(bundle, staging, resolved, inspect_only)
+    manifest = [
+        {"path": path, "sha256": member["digest"], "bytes": member["bytes"]}
+        for path, (_owned, member) in sorted(resolved.items())
+    ]
+    return manifest, changed
+
+
+def prepare_tool(location, tool, egress, deadline, inspect_only=False):
+    """Acquire one frozen tool's source when it is missing, then project it.
+
+    A missing source streams under the acquisition deadline its request froze,
+    in seconds; no downloaded tool is ever executed."""
+    files = tool_files(tool)
+    if (
+        not isinstance(deadline, int)
+        or isinstance(deadline, bool)
+        or not 0 < deadline <= MAX_DEADLINE
+    ):
+        raise Refused("acquisition deadline")
     proxy_for(egress, endpoint(tool["source"]["url"]))
     bundle = Bundle(location)
     changed = False
     try:
         name = "sources/" + tool["source"]["id"]
-        data = bundle.read(name, tool["source"]["bytes"], 0o600)
-        if data is None:
+        if not bundle.present(name, tool["source"]["bytes"], 0o600):
             if inspect_only:
                 raise Refused("required retained source is missing")
             bundle.writable()
             for file in files:
-                if bundle.read(file["path"], MAX_SOURCE, 0o700) is not None:
+                if bundle.present(file["path"], MAX_SOURCE, 0o700):
                     raise Refused("unattributed target without retained source")
-            data = download(tool["source"], egress)
-        projected = project(tool, data)
-        if not inspect_only:
-            changed = bundle.publish(name, data, 0o600) or changed
-        manifest = []
-        for path, content in sorted(projected.items()):
-            if inspect_only:
-                if bundle.read(path, len(content), 0o700) != content:
-                    raise Refused("target executable postcondition")
-            else:
-                changed = bundle.publish(path, content, 0o700) or changed
-            manifest.append(
-                {"path": path, "sha256": sha256(content), "bytes": len(content)}
-            )
+            acquire(bundle, tool["source"], egress, deadline)
+            changed = True
+        manifest, published = project(bundle, tool, inspect_only)
         return {
-            "changed": changed,
+            "changed": changed or published,
             "evidence": {
                 "source": tool["source"]["id"],
                 "sha256": tool["source"]["sha256"],

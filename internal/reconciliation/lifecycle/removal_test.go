@@ -64,6 +64,44 @@ func TestARemovalPlansTheBlocksItsApplyFrozeAndNotWhatThisBuildDerives(t *testin
 	}
 }
 
+// A block's content digest travels with the block and is never compared on
+// continuation: a removal keeps the one its apply froze, so a removal left
+// unknown by one build is resolved by a later build whose derivation moved,
+// under the digest its apply froze, and the operation it continues is its own.
+func TestAContinuedRemovalKeepsTheContentDigestItsApplyFroze(t *testing.T) {
+	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("artifacts")})
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	h.capability.definitions = []reconciliation.BlockDefinition{moved("artifacts")}
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("the seeded unproved removal did not fire")
+	}
+	unknown, _ := durableOperation(t, h)
+	if unknown.Verb != reconciliation.Destroy {
+		t.Fatalf("the unproved operation is a %s", unknown.Verb)
+	}
+	h.capability.calls, h.capability.executions = nil, nil
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil {
+		t.Fatalf("a removal registered before the derivation moved was not continued: %v", err)
+	}
+	if result.Receipt.Operation != unknown.ID || result.Receipt.State != string(reconciliation.OperationDone) {
+		t.Fatalf("the continuation ended %s as %s; want %s done", result.Receipt.Operation, result.Receipt.State, unknown.ID)
+	}
+	if !slices.Equal(h.capability.calls, []string{"observe-removal:artifacts"}) {
+		t.Fatalf("the continuation called %v", h.capability.calls)
+	}
+	if len(h.capability.executions) != 1 {
+		t.Fatalf("the continuation recorded %d executions; want exactly the one resolution", len(h.capability.executions))
+	}
+	if got := h.capability.executions[0].Block.ContentDigest; got != strings.Repeat("c", 64) {
+		t.Fatalf("the removal was resolved under content digest %s, not the one its apply froze", got)
+	}
+}
+
 // The words and impacts of a removal come from its capability reading the
 // frozen request, so a plan describes removing rather than creating.
 func TestARemovalIsPlannedInTheWordsOfWhatItRemoves(t *testing.T) {

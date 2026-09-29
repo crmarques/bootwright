@@ -2,12 +2,14 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 // proxyEnvironment replaces every spelling of the route variables, so the
@@ -76,5 +78,34 @@ func TestAnUnqualifiedRouteRefusesOnlyContextFreeAcquisition(t *testing.T) {
 		if !test.refuses && (out.Len() != 0 || errOut.Len() != 0) {
 			t.Errorf("%v: stdout %q, stderr %q", test.args, out.String(), errOut.String())
 		}
+	}
+}
+
+// A JSON invocation writes exactly one document, so what its services report
+// while they work, a power verb's log location included, reaches no stream;
+// the same command in text mode names that location as its own field.
+func TestAJSONInvocationWritesNoProgress(t *testing.T) {
+	ctx := context.Background()
+	const location = "/var/lib/bootwright/contexts/lab/state/runs/run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9a"
+	start := []string{"machine", "start", "--name", "rhel-01"}
+	classification := cli.ClassifyInvocation(append(slices.Clone(start), "--output", "json"))
+	if !classification.JSON {
+		t.Fatalf("classification = %+v, want JSON", classification)
+	}
+	var out, errOut bytes.Buffer
+	process, hooks := interactiveProcess(classification, &out, &errOut, controller.Route{})
+	process.LifecycleProgress.ReportLogLocation(ctx, location)
+	process.LifecycleProgress.ReportProgress(ctx, lifecycle.ProgressEvent{
+		Block: "machine-power-rhel-01", Description: "start rhel-01", Status: "running", Position: 1, Total: 1,
+	})
+	hooks.finish()
+	if out.Len() != 0 || errOut.Len() != 0 {
+		t.Fatalf("a JSON invocation reported progress: stdout %q, stderr %q", out.String(), errOut.String())
+	}
+	process, hooks = interactiveProcess(cli.ClassifyInvocation(start), &out, &errOut, controller.Route{})
+	process.LifecycleProgress.ReportLogLocation(ctx, location)
+	hooks.finish()
+	if want := "\n  Logs  " + location + "\n"; out.String() != want || errOut.Len() != 0 {
+		t.Fatalf("a text invocation reported stdout %q, stderr %q, want stdout %q", out.String(), errOut.String(), want)
 	}
 }

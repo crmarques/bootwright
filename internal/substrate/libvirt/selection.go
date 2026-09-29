@@ -14,19 +14,19 @@ import (
 // Unsupported lists every selected object this contract cannot realize: an
 // arm no capability implements, which the substrate root owns so that adding
 // one narrows the refusal in a single place, and a libvirt provider whose
-// controllers would bind a wildcard address no consumer can name.
+// controllers would listen on an address their endpoints cannot name.
+// Admission refuses the same provider; this keeps the refusal for state that
+// did not pass through it.
 func Unsupported(catalog api.Catalog) []string {
 	found := substrate.Unrealizable(catalog)
 	for _, provider := range substrate.ProvidersOn(catalog, substrate.ArmLibvirt) {
-		if address := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text(); wildcard(address) {
+		if address := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text(); !substrate.NameableListener(address) {
 			found = append(found, provider.Identity())
 		}
 	}
 	slices.Sort(found)
 	return slices.Compact(found)
 }
-
-func wildcard(address string) bool { return address == "" || address == "0.0.0.0" || address == "::" }
 
 // HostRequests derives one frozen request per libvirt provider host, in
 // canonical object order. It reads no host, endpoint or Secret material.

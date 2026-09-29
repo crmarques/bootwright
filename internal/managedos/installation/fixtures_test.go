@@ -71,8 +71,8 @@ func artifactServer(fields ...api.FieldValue) api.Object {
 	return api.NewObject(api.ArtifactServer, "lab-artifacts", api.Value{}, spec)
 }
 
-// servicesHost is an operator-provided Machine reached over SSH. It declares
-// every access field a lifecycle placement freezes, so a server placed on it
+// servicesHost is an operator-provided Machine reached over SSH as root. It
+// declares every field a lifecycle placement freezes, so a server placed on it
 // populates the whole SSH arm.
 func servicesHost() api.Object {
 	return api.NewObject(api.Machine, "services", api.Value{}, api.MapValue(
@@ -83,9 +83,9 @@ func servicesHost() api.Object {
 			api.MapValue(text("name", "ip"), text("address", "192.0.2.2")),
 		)))),
 		field("access", api.MapValue(field("ssh", api.MapValue(
-			text("addressRef", "ip"), number("port", "2222"), text("user", "operator"),
+			text("addressRef", "ip"), number("port", "2222"), text("user", "root"),
 			field("auth", api.MapValue(text("privateKeyRef", "services-ssh-key"))),
-			text("sudoPasswordRef", "services-sudo-password"), text("knownHostsRef", "services-known-hosts"),
+			text("knownHostsRef", "services-known-hosts"),
 		)))),
 	))
 }

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import contextlib
+import hashlib
 import io
 import os
 from pathlib import Path
 import tarfile
 import tempfile
+import tracemalloc
 import types
 import unittest
 from unittest import mock
@@ -14,6 +17,72 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 )
 
 EGRESS = {"httpProxy": "", "httpsProxy": "", "noProxy": []}
+DEADLINE = 600
+RELEASE = "4.20.8"
+
+
+def stamped(version=RELEASE, body=b"client executable"):
+    """An oc body naming its release the way an operator observed a published
+    one to: openshift-client-linux-amd64-rhel9-4.21.11.tar.gz (sha256
+    92a17002cafdd5513abcea27ff497f5e1c8d1532ddc6f2551bdd1b1ca31a16b1) holds an oc
+    with exactly one b"4.21.11\\x00" + marker[8:], no whole marker, one bare
+    marker head followed by other bytes and one "!"-led copy of the marker."""
+    head = files.RELEASE_MARKER[:28]
+    return (
+        body
+        + head
+        + b"other bytes"
+        + b"!"
+        + files.RELEASE_MARKER[1:]
+        + version.encode()
+        + b"\x00"
+        + files.RELEASE_MARKER[len(version) + 1:]
+        + b"tail"
+    )
+
+
+class Response:
+    """A 200 response whose body is served in reads, never held whole."""
+
+    def __init__(self, size, produce, advance=None, log=None):
+        self.status = 200
+        self.headers = {"Content-Length": str(size)}
+        self.size, self.offset = size, 0
+        self.produce, self.advance, self.log = produce, advance, log
+
+    def read(self, amount, decode_content):
+        block = self.produce(self.offset, min(amount, self.size - self.offset))
+        self.offset += len(block)
+        if self.log is not None:
+            self.log.append(("read", amount, len(block)))
+        if self.advance is not None:
+            self.advance()
+        return block
+
+    def close(self):
+        pass
+
+
+def body(data, **kwargs):
+    return Response(len(data), lambda offset, amount: data[offset:offset + amount], **kwargs)
+
+
+@contextlib.contextmanager
+def serve(response):
+    manager = types.SimpleNamespace(
+        request=lambda *args, **kwargs: response, clear=lambda: None
+    )
+    library = types.SimpleNamespace(
+        PoolManager=lambda **kwargs: manager, Timeout=lambda **kwargs: kwargs
+    )
+    with mock.patch.dict("sys.modules", urllib3=library), mock.patch.object(
+        files, "trusted_roots", return_value=object()
+    ):
+        yield
+
+
+def refuse_acquisition(reason):
+    return mock.patch.object(files, "acquire", side_effect=AssertionError(reason))
 
 
 def tool(data, kind="kubectl", compatibility="", version="v1.36.1"):
@@ -68,24 +137,43 @@ class ControllerFilesTests(unittest.TestCase):
             "sealed": False,
         }
 
+    def retain(self, definition, data, root=None):
+        sources = (root or self.root) / "sources"
+        sources.mkdir(mode=0o700, exist_ok=True)
+        retained = sources / definition["source"]["id"]
+        retained.write_bytes(data)
+        retained.chmod(0o600)
+
+    def published(self, root=None):
+        root = root or self.root
+        return sorted(
+            path.relative_to(root).as_posix()
+            for path in root.rglob("*")
+            if path.is_file()
+        )
+
+    def another_bundle(self, name):
+        root = self.root / name
+        root.mkdir(mode=0o700)
+        observed = root.stat()
+        location = dict(
+            self.location, path=str(root), device=observed.st_dev, inode=observed.st_ino
+        )
+        return root, location
+
     def test_first_publication_replay_and_partial_recovery(self):
         data = b"qualified executable"
         definition = tool(data)
-        with mock.patch.object(files, "download", return_value=data) as download:
-            first = files.prepare_tool(self.location, definition, EGRESS)
+        with serve(body(data)):
+            first = files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
         self.assertTrue(first["changed"])
-        download.assert_called_once()
         paths = {
             path.relative_to(self.root).as_posix(): path.stat().st_ino
             for path in self.root.rglob("*")
             if path.is_file()
         }
-        with mock.patch.object(
-            files,
-            "download",
-            side_effect=AssertionError("retained replay acquired source"),
-        ):
-            second = files.prepare_tool(self.location, definition, EGRESS)
+        with refuse_acquisition("retained replay acquired source"):
+            second = files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
             self.assertFalse(second["changed"])
             self.assertEqual(first["evidence"], second["evidence"])
             self.assertEqual(
@@ -99,8 +187,10 @@ class ControllerFilesTests(unittest.TestCase):
             executable = self.root / definition["files"][0]["path"]
             executable.unlink()
             with self.assertRaises(files.Refused):
-                files.prepare_tool(self.location, definition, EGRESS, inspect_only=True)
-            recovered = files.prepare_tool(self.location, definition, EGRESS)
+                files.prepare_tool(
+                    self.location, definition, EGRESS, DEADLINE, inspect_only=True
+                )
+            recovered = files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
             self.assertTrue(recovered["changed"])
             self.assertEqual(executable.read_bytes(), data)
         self.assertEqual(
@@ -112,28 +202,26 @@ class ControllerFilesTests(unittest.TestCase):
 
     def test_interrupted_atomic_source_write_leaves_no_named_partial_file(self):
         definition = tool(b"complete source")
-        with mock.patch.object(files, "download", return_value=b"complete source"):
+        with serve(body(b"complete source")):
             with mock.patch.object(
                 files.os, "write", side_effect=OSError("injected interruption")
             ):
                 with self.assertRaises(OSError):
-                    files.prepare_tool(self.location, definition, EGRESS)
-        self.assertEqual([path for path in self.root.rglob("*") if path.is_file()], [])
+                    files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
+        self.assertEqual(self.published(), [])
         self.assertFalse(any("tmp" in path.name for path in self.root.rglob("*")))
 
     def test_sealed_missing_target_is_never_refilled(self):
         definition = tool(b"complete source")
-        with mock.patch.object(files, "download", return_value=b"complete source"):
-            files.prepare_tool(self.location, definition, EGRESS)
+        with serve(body(b"complete source")):
+            files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
         executable = self.root / definition["files"][0]["path"]
         executable.unlink()
         for writable, sealed in ((False, True), (True, True), (False, False)):
             location = dict(self.location, writable=writable, sealed=sealed)
-            with mock.patch.object(
-                files, "download", side_effect=AssertionError("sealed download")
-            ):
+            with refuse_acquisition("sealed download"):
                 with self.assertRaises(files.Refused):
-                    files.prepare_tool(location, definition, EGRESS)
+                    files.prepare_tool(location, definition, EGRESS, DEADLINE)
             self.assertFalse(executable.exists())
 
     def test_unattributed_target_and_changed_existing_target_are_refused(self):
@@ -146,19 +234,16 @@ class ControllerFilesTests(unittest.TestCase):
             directory.chmod(0o700)
         target.write_bytes(b"complete source")
         target.chmod(0o700)
-        with mock.patch.object(
-            files,
-            "download",
-            side_effect=AssertionError("unattributed source acquisition"),
-        ):
+        with refuse_acquisition("unattributed source acquisition"):
             with self.assertRaises(files.Refused):
-                files.prepare_tool(self.location, definition, EGRESS)
+                files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
         target.unlink()
-        with mock.patch.object(files, "download", return_value=b"complete source"):
-            files.prepare_tool(self.location, definition, EGRESS)
+        with serve(body(b"complete source")):
+            files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
         target.write_bytes(b"changed content")
-        with self.assertRaises(files.Refused):
-            files.prepare_tool(self.location, definition, EGRESS)
+        with self.assertRaises(files.Refused) as refused:
+            files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
+        self.assertEqual(str(refused.exception), "existing bundle file differs")
         self.assertEqual(target.read_bytes(), b"changed content")
 
     def test_directory_substitution_and_symlink_escape_are_refused(self):
@@ -167,38 +252,42 @@ class ControllerFilesTests(unittest.TestCase):
             files.Bundle(wrong)
         definition = tool(b"bytes")
         (self.root / "sources").symlink_to("/tmp", target_is_directory=True)
-        with mock.patch.object(
-            files, "download", side_effect=AssertionError("unsafe acquisition")
-        ):
+        with refuse_acquisition("unsafe acquisition"):
             with self.assertRaises(OSError):
-                files.prepare_tool(self.location, definition, EGRESS)
+                files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
 
     def test_selected_archive_alias_is_flattened_and_unsafe_members_refused(self):
-        data = archive(
-            [("oc", b"client executable", "file"), ("kubectl", "oc", "symlink")]
-        )
-        definition = tool(data, "openshift-clients", "openshift", "4.20.8")
-        projected = files.project(definition, data)
-        self.assertEqual(set(projected.values()), {b"client executable"})
+        data = archive([("oc", stamped(), "file"), ("kubectl", "oc", "symlink")])
+        definition = tool(data, "openshift-clients", "openshift", RELEASE)
+        self.retain(definition, data)
+        with refuse_acquisition("retained source acquired"):
+            files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
+        for file in definition["files"]:
+            self.assertEqual((self.root / file["path"]).read_bytes(), stamped())
         for members in (
-            [("oc", b"ok", "file"), ("kubectl", "../oc", "symlink")],
+            [("oc", stamped(), "file"), ("kubectl", "../oc", "symlink")],
             [
-                ("oc", b"ok", "file"),
+                ("oc", stamped(), "file"),
                 ("kubectl", "outside", "symlink"),
                 ("outside", b"ok", "file"),
             ],
             [
-                ("oc", b"ok", "file"),
-                ("oc", b"again", "file"),
+                ("oc", stamped(), "file"),
+                ("oc", stamped(body=b"again"), "file"),
                 ("kubectl", "oc", "hardlink"),
             ],
             [("oc", "kubectl", "symlink"), ("kubectl", "oc", "symlink")],
             [("../outside", b"bad", "file")],
         ):
-            data = archive(members)
-            with self.assertRaises(files.Refused):
-                files.project(
-                    tool(data, "openshift-clients", "openshift", "4.20.8"), data
+            with self.subTest(members=[member[0] for member in members]):
+                root, location = self.another_bundle(str(len(list(self.root.iterdir()))))
+                data = archive(members)
+                definition = tool(data, "openshift-clients", "openshift", RELEASE)
+                self.retain(definition, data, root)
+                with self.assertRaises(files.Refused):
+                    files.prepare_tool(location, definition, EGRESS, DEADLINE)
+                self.assertEqual(
+                    self.published(root), ["sources/" + definition["source"]["id"]]
                 )
 
     def test_invalid_projection_and_integrity_fail_before_download(self):
@@ -212,29 +301,26 @@ class ControllerFilesTests(unittest.TestCase):
         ):
             definition = tool(b"bytes")
             change(definition)
-            with mock.patch.object(
-                files,
-                "download",
-                side_effect=AssertionError("invalid input read network"),
-            ):
+            with refuse_acquisition("invalid input read network"):
                 with self.assertRaises(files.Refused):
-                    files.prepare_tool(self.location, definition, EGRESS)
-        with mock.patch.object(files, "download", return_value=b"wrong"):
-            with self.assertRaises(files.Refused):
-                files.prepare_tool(self.location, tool(b"bytes"), EGRESS)
+                    files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
+        for deadline in (0, True, files.MAX_DEADLINE + 1, "600"):
+            with refuse_acquisition("an invalid deadline read network"):
+                with self.assertRaises(files.Refused):
+                    files.prepare_tool(self.location, tool(b"bytes"), EGRESS, deadline)
         self.assertEqual(list(self.root.iterdir()), [])
+        with serve(body(b"wrong")):
+            with self.assertRaises(files.Refused):
+                files.prepare_tool(self.location, tool(b"bytes"), EGRESS, DEADLINE)
+        self.assertEqual(self.published(), [])
 
     def test_frozen_tool_requires_exact_stable_release(self):
         for version in ("latest", "v1.2.3-rc.1", "1.02.3", "1.2.3+build"):
             with self.subTest(version=version):
                 definition = tool(b"bytes", "virtctl", "kubevirt", version)
-                with mock.patch.object(
-                    files,
-                    "download",
-                    side_effect=AssertionError("invalid release read network"),
-                ):
+                with refuse_acquisition("invalid release read network"):
                     with self.assertRaises(files.Refused):
-                        files.prepare_tool(self.location, definition, EGRESS)
+                        files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
         self.assertEqual(list(self.root.iterdir()), [])
 
     def test_proxy_bypass_never_uses_ambient_routing(self):
@@ -348,19 +434,261 @@ class ControllerFilesTests(unittest.TestCase):
 
     def test_bundle_and_archive_capacity_bounds_precede_publication(self):
         definition = tool(b"complete source")
-        with mock.patch.object(files, "download", return_value=b"complete source"):
+        with serve(body(b"complete source")):
             with mock.patch.object(files, "MAX_BUNDLE", 1):
                 with self.assertRaises(files.Refused):
-                    files.prepare_tool(self.location, definition, EGRESS)
+                    files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
         self.assertEqual(list(self.root.iterdir()), [])
-        data = archive([("oc", b"client", "file"), ("kubectl", "oc", "symlink")])
-        definition = tool(data, "openshift-clients", "openshift", "4.20.8")
-        with mock.patch.object(files, "MAX_ENTRIES", 1):
+        data = archive([("oc", stamped(), "file"), ("kubectl", "oc", "symlink")])
+        definition = tool(data, "openshift-clients", "openshift", RELEASE)
+        self.retain(definition, data)
+        for bound, value in (("MAX_ENTRIES", 1), ("MAX_EXPANDED", 512)):
+            with mock.patch.object(files, bound, value):
+                with self.assertRaises(files.Refused):
+                    files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
+            self.assertEqual(self.published(), ["sources/" + definition["source"]["id"]])
+
+    def test_each_acquired_chunk_is_written_before_the_next_read(self):
+        data = bytes(range(256)) * (5 * files.CHUNK // 256) + b"tail"
+        definition = tool(data)
+        log = []
+        write = os.write
+
+        def recorded(descriptor, block):
+            log.append(("write", len(block)))
+            return write(descriptor, block)
+
+        with serve(body(data, log=log)), mock.patch.object(files.os, "write", recorded):
+            files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
+        self.assertTrue(all(entry[1] <= files.CHUNK for entry in log))
+        # The response's last read ends the acquisition; later writes project
+        # the retained source.
+        last = max(index for index, entry in enumerate(log) if entry[0] == "read")
+        acquisition = log[: last + 1]
+        expected = []
+        for entry in acquisition:
+            if entry[0] == "read":
+                expected += ["read", "write"] if entry[2] else ["read"]
+        self.assertEqual([entry[0] for entry in acquisition], expected)
+        self.assertEqual(
+            sum(entry[1] for entry in acquisition if entry[0] == "write"), len(data)
+        )
+        self.assertEqual((self.root / definition["files"][0]["path"]).read_bytes(), data)
+
+    def test_neither_a_source_nor_a_member_is_ever_held_whole(self):
+        pattern = hashlib.sha256(b"block").digest() * (files.CHUNK // 32)
+        size = 16 << 20
+        digest = hashlib.sha256()
+        for _index in range(size // len(pattern)):
+            digest.update(pattern)
+        definition = tool(b"")
+        definition["source"].update(bytes=size, sha256=digest.hexdigest())
+        streamed = Response(
+            size, lambda offset, amount: pattern[offset % len(pattern):][:amount]
+        )
+        oc = stamped(body=pattern * (size // len(pattern)))
+        data = archive([("oc", oc, "file"), ("kubectl", "oc", "symlink")])
+        del oc
+        clients = tool(data, "openshift-clients", "openshift", RELEASE)
+        root, location = self.another_bundle("clients")
+        self.retain(clients, data, root)
+        del data
+        for name, prepare in (
+            ("acquisition", lambda: files.prepare_tool(self.location, definition, EGRESS, DEADLINE)),
+            ("projection", lambda: files.prepare_tool(location, clients, EGRESS, DEADLINE)),
+        ):
+            with self.subTest(name), serve(streamed):
+                tracemalloc.start()
+                try:
+                    prepare()
+                    peak = tracemalloc.get_traced_memory()[1]
+                finally:
+                    tracemalloc.stop()
+                self.assertLess(peak, 2 << 20)
+        self.assertEqual((root / clients["files"][1]["path"]).stat().st_size, size + len(stamped(body=b"")))
+
+    def test_a_source_deadline_replaces_the_fixed_one(self):
+        data = bytes(8 * files.CHUNK)
+        now = [1000.0]
+
+        def advance():
+            now[0] += 100
+
+        with mock.patch.object(files.time, "monotonic", lambda: now[0]):
+            with serve(body(data, advance=advance)):
+                files.prepare_tool(self.location, tool(data), EGRESS, 1000)
+            root, location = self.another_bundle("short")
+            with serve(body(data, advance=advance)):
+                with self.assertRaises(files.Refused) as refused:
+                    files.prepare_tool(location, tool(data), EGRESS, 10)
+            self.assertEqual(str(refused.exception), "acquisition deadline")
+            self.assertEqual(self.published(root), [])
+            with serve(body(data, advance=advance)):
+                with self.assertRaises(files.Refused):
+                    files.download(tool(data)["source"], EGRESS)
+        self.assertEqual(
+            (self.root / tool(data)["files"][0]["path"]).read_bytes(), data
+        )
+
+    def test_the_alarm_takes_the_source_deadline_and_keeps_a_sooner_prior_one(self):
+        # No real timer is armed: setitimer only records, and the clock moves
+        # 10 seconds per response read, so a prior alarm's re-arm is exact.
+        data = bytes(3 * files.CHUNK)
+        handler = files.signal.getsignal(files.signal.SIGALRM)
+        for prior, tool_armed, download_armed in (
+            (0.0, 1000, files.DOWNLOAD_SECONDS),
+            (500.0, 500.0, files.DOWNLOAD_SECONDS),
+            (50.0, 50.0, 50.0),
+        ):
+            now, armed = [1000.0], []
+
+            def advance():
+                now[0] += 10
+
+            def record(which, seconds, interval=0.0):
+                armed.append((which, seconds, interval, now[0]))
+
+            root, location = self.another_bundle("alarm-%d" % prior)
+            with self.subTest(prior=prior), mock.patch.object(
+                files.time, "monotonic", lambda: now[0]
+            ), mock.patch.object(
+                files.signal, "getitimer", return_value=(prior, 0.0)
+            ), mock.patch.object(files.signal, "setitimer", record):
+                for path, expected in (
+                    (lambda: files.prepare_tool(location, tool(data), EGRESS, 1000), tool_armed),
+                    (lambda: files.download(tool(data)["source"], EGRESS), download_armed),
+                ):
+                    del armed[:]
+                    with serve(body(data, advance=advance)):
+                        path()
+                    real = files.signal.ITIMER_REAL
+                    self.assertEqual(armed[0][:2], (real, expected))
+                    self.assertEqual(armed[1][:2], (real, 0))
+                    if prior:
+                        elapsed = armed[2][3] - armed[0][3]
+                        self.assertGreater(elapsed, 0)
+                        self.assertEqual(armed[2][:3], (real, prior - elapsed, 0.0))
+                    self.assertEqual(len(armed), 3 if prior else 2)
+                    self.assertIs(files.signal.getsignal(files.signal.SIGALRM), handler)
+            self.assertEqual(
+                (root / tool(data)["files"][0]["path"]).read_bytes(), data
+            )
+
+    def test_the_stamp_scanner_counts_each_split_occurrence_once(self):
+        stamp = RELEASE.encode() + b"\x00" + files.RELEASE_MARKER[len(RELEASE) + 1:]
+        for pattern, stamped_count, unstamped_count in (
+            (stamp, 1, 0),
+            (files.RELEASE_MARKER, 0, 1),
+        ):
+            data = b"head" + pattern + b"tail"
+            for offset in range(1, len(data)):
+                for chunks in (
+                    (data[:offset], data[offset:]),
+                    (data[:offset], b"", data[offset:offset + 1], data[offset + 1:]),
+                ):
+                    scanner = files.ReleaseStamp(RELEASE)
+                    for chunk in chunks:
+                        scanner.update(chunk)
+                    self.assertEqual(
+                        (scanner.stamped.count, scanner.unstamped.count),
+                        (stamped_count, unstamped_count),
+                        "split at %d" % offset,
+                    )
+            scanner = files.ReleaseStamp(RELEASE)
+            for index in range(len(data)):
+                scanner.update(data[index:index + 1])
+            self.assertEqual(
+                (scanner.stamped.count, scanner.unstamped.count),
+                (stamped_count, unstamped_count),
+            )
+        scanner = files.ReleaseStamp(RELEASE)
+        scanner.update(stamped())
+        scanner.verify()
+        for content in (
+            b"no release" + files.RELEASE_MARKER[28:],
+            stamped() + files.RELEASE_MARKER,
+            stamped(version="4.20.9"),
+            stamped() + stamped(),
+        ):
+            scanner = files.ReleaseStamp(RELEASE)
+            scanner.update(content)
             with self.assertRaises(files.Refused):
-                files.project(definition, data)
-        with mock.patch.object(files, "MAX_EXPANDED", 512):
-            with self.assertRaises(files.Refused):
-                files.project(definition, data)
+                scanner.verify()
+        with self.assertRaises(files.Refused):
+            files.ReleaseStamp("4" * 92)
+        files.ReleaseStamp("4" * 91)
+
+    def test_a_stamped_oc_publishes_both_clients_however_kubectl_is_archived(self):
+        oc, kubectl = stamped(), b"separate kubectl executable"
+        for kind, members, published in (
+            ("regular", [("oc", oc, "file"), ("kubectl", kubectl, "file")], kubectl),
+            ("hard link", [("oc", oc, "file"), ("kubectl", "oc", "hardlink")], oc),
+            ("symlink", [("kubectl", "oc", "symlink"), ("oc", oc, "file")], oc),
+        ):
+            with self.subTest(kind):
+                root, location = self.another_bundle(kind.replace(" ", "-"))
+                data = archive(members)
+                definition = tool(data, "openshift-clients", "openshift", RELEASE)
+                self.retain(definition, data, root)
+                result = files.prepare_tool(location, definition, EGRESS, DEADLINE)
+                paths = {file["member"]: root / file["path"] for file in definition["files"]}
+                self.assertEqual(paths["oc"].read_bytes(), oc)
+                self.assertEqual(paths["kubectl"].read_bytes(), published)
+                for path in paths.values():
+                    self.assertEqual((path.stat().st_nlink, path.stat().st_mode & 0o7777), (1, 0o700))
+                manifest = [
+                    {"path": file["path"], "sha256": files.sha256(content), "bytes": len(content)}
+                    for file, content in sorted(
+                        zip(definition["files"], (oc, published)),
+                        key=lambda pair: pair[0]["path"],
+                    )
+                ]
+                self.assertTrue(result["changed"])
+                self.assertEqual(result["evidence"]["files"], files.sha256(files.canonical(manifest)))
+                replay = files.prepare_tool(location, definition, EGRESS, DEADLINE, inspect_only=True)
+                self.assertEqual(replay, dict(result, changed=False))
+
+    def test_an_unproved_oc_release_publishes_neither_client(self):
+        for name, oc in (
+            ("unstamped", b"client executable" + files.RELEASE_MARKER),
+            ("another release", stamped(version="4.20.9")),
+            ("stamped twice", stamped() + stamped()),
+        ):
+            with self.subTest(name):
+                root, location = self.another_bundle(name.replace(" ", "-"))
+                data = archive([("oc", oc, "file"), ("kubectl", "oc", "hardlink")])
+                definition = tool(data, "openshift-clients", "openshift", RELEASE)
+                with serve(body(data)):
+                    with self.assertRaises(files.Refused) as refused:
+                        files.prepare_tool(location, definition, EGRESS, DEADLINE)
+                self.assertEqual(str(refused.exception), "openshift client release")
+                self.assertEqual(self.published(root), ["sources/" + definition["source"]["id"]])
+
+    def test_inspection_refuses_a_changed_member_and_an_unstamped_retained_oc(self):
+        data = archive([("oc", stamped(), "file"), ("kubectl", "oc", "symlink")])
+        definition = tool(data, "openshift-clients", "openshift", RELEASE)
+        self.retain(definition, data)
+        files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
+        oc = self.root / definition["files"][0]["path"]
+        oc.write_bytes(stamped(body=b"client executablf"))
+        with self.assertRaises(files.Refused) as refused:
+            files.prepare_tool(self.location, definition, EGRESS, DEADLINE, inspect_only=True)
+        self.assertEqual(str(refused.exception), "target executable postcondition")
+        unstamped = b"client executable" + b"\x00" * len(stamped(body=b""))
+        root, location = self.another_bundle("unstamped")
+        data = archive([("oc", unstamped, "file"), ("kubectl", "oc", "symlink")])
+        definition = tool(data, "openshift-clients", "openshift", RELEASE)
+        self.retain(definition, data, root)
+        for file in definition["files"]:
+            target = root / file["path"]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            for directory in target.relative_to(root).parents:
+                (root / directory).chmod(0o700)
+            target.write_bytes(unstamped)
+            target.chmod(0o700)
+        with self.assertRaises(files.Refused) as refused:
+            files.prepare_tool(location, definition, EGRESS, DEADLINE, inspect_only=True)
+        self.assertEqual(str(refused.exception), "openshift client release")
 
 
 if __name__ == "__main__":

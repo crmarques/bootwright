@@ -955,3 +955,60 @@ race` and `./scripts/ansible-check --suite units`, `sanity`, `integration` and
 B29, B32, B39, B67, B73 and B96; the emulated labs repeat their rows on a build
 with X19, destroying lab-sno contexts applied before it with their own
 executable. The upstream Redfish citations were not re-fetched.
+
+### X22 — operator contract
+
+**Owner:** CLI, with Desired state, Machine, Controller and State
+reconciliation. Integrated on local `main` on 2026-09-29 as one commit, beside
+X19, on explicit request. **Items:** B11 (was F5), B12 (was F6), B13 (was F15),
+B14 (was Y2), B15 (was S7 (rest)), B16 (was Z2 (digest attribution)).
+
+**Outcome:** every `--output json` result is a CLI-owned document, JSON mode
+writes no progress, human `status` presents the JSON membership with every
+next step and each block's attempts, secret JSON carries its sequence
+ordinals, and a settled verb names a finalization or release it completed
+(B11). Admission refuses what only a consumer refused: BMC addresses outside
+one byte-exact http or https grammar (the metal3 schemes included), an emulated
+BMC with no bind address or one that is not a nameable IPv4 unicast address,
+non-positive libvirt sizes, IPv4-compatible endpoint addresses and name-only
+endpoint slots (B12). OpenShift client downloads stream to disk under deadlines
+scaled to their sizes within a derived client-stage ceiling, and `oc`'s
+release stamp is checked (B13). ansible-core is the latest patch of the
+qualified 2.21 minor, the controller Python the newest qualified minor (D20),
+`requires_ansible` is bounded and a Python 3.9 floor test parses every
+collection module (B14). A lifecycle placement host connects as root and never
+escalates, and an escalation secret is never bound (B15, D7). The collection's
+README and CHANGELOG leave the automation digest together with every
+comparison of it (B16, D14).
+
+**Guard tests:** `TestEveryJSONResultIsCLIOwned`,
+`TestJSONModeProgressWritesNothing`, `TestStatusReportsEachBlocksAttempts`,
+`TestStatusTextEscapesOnce`, `TestEveryAuthoredBMCAddressNamesOneExactSystem`,
+`TestAnEmulatedBMCListensOnOneNameableUnicastAddress`,
+`TestAnIPv4CompatibleEndpointAddressIsRefused`,
+`TestAnAcquisitionDeadlineScalesWithItsSourceBytes`,
+`TestAClientClosureBeyondTheCeilingRefusesBeforeAnsibleStarts`,
+`TestAnsibleLatestIsTheNewestQualifiedPatch`,
+`TestPythonLatestIsTheNewestQualifiedMinor`,
+`TestALifecyclePlacementHostConnectsAsRoot`,
+`TestAPlacementNeverBindsAnEscalationSecret`,
+`TestDocumentationLeavesTheAutomationDigest`,
+`TestTheRunnerComparesOnlyTheDigestedAutomation`, and the collection tests
+`test_modules_parse_under_the_remote_python_floor` and
+`test_each_tool_is_given_its_own_frozen_seconds`.
+
+**Review:** five findings; one in scope, a new Not yet met line that
+overstated a continuation's refusal, fixed; one real gap that predates X22
+recorded as B115; three rejected.
+
+**Gates:** on the integrated slice and again on the squashed commit over X19,
+`make check-offline tidy-check modules-check vulncheck docs-check race` and
+`./scripts/ansible-check --suite units`, `sanity`, `integration` and `lint`
+pass. No real-host run.
+
+**Constraints left behind:** new items B114 to B122 and clauses on B9, B37,
+B45 and B47; B61's first run on this build confirms the client release stamp.
+Operator inputs that use a metal3 BMC scheme or omit an emulated BMC's bind
+address now fail `validate`. The automation digest moves, so finish or destroy
+in-flight operations with the build that registered them, then run `setup`; a
+retained 2.19 or 2.20 resolution is resolved fresh.

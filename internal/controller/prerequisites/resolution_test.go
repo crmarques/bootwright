@@ -138,24 +138,71 @@ func TestLatestSetupResolvesOnceAndReusesRetainedNoop(t *testing.T) {
 	}
 }
 
-func TestRetainedLatestBelowRaisedMinimumResolvesFresh(t *testing.T) {
+// unqualifiedFirstSetup completes a first setup whose latest resolution an
+// earlier build could have written: a valid record at ansible-core 2.20.9,
+// below the qualified minor but above the recorded floor. The resolver then
+// offers the qualified release it would select today.
+func unqualifiedFirstSetup(t *testing.T) (*fixture, *resolvingFixture) {
+	t.Helper()
 	f, r := dynamicFixture(t)
+	qualified := r.bootstrap
+	earlier, err := ansibleRecordedAt(qualified, "2.20.9")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.bootstrap = earlier
 	if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
-	retained := f.store.state.Receipt.Definition
-	retained.AnsibleVersion, retained.Bootstrap.AnsibleVersion = "2.18.0", "2.18.0"
+	if receipt := f.store.state.Receipt; receipt.Status != "complete" || receipt.Definition == nil || receipt.Definition.AnsibleVersion != "2.20.9" {
+		t.Fatalf("the first setup recorded no complete 2.20.9 resolution: %#v", receipt)
+	}
+	r.bootstrap = qualified
+	return f, r
+}
+
+func TestRetainedLatestOutsideTheQualifiedSetResolvesFresh(t *testing.T) {
+	f, r := unqualifiedFirstSetup(t)
+	// The fake bundle is not keyed by resolution; a fresh resolution's bundle
+	// does not exist until setup publishes it.
+	f.bundle.ready, f.bundle.sealed = false, false
 	report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
-	if err != nil || r.bootstrapCalls != 2 || r.nativeCalls != 2 {
-		t.Fatalf("superseded latest resolution was reused: %#v %v bootstrap=%d native=%d", report, err, r.bootstrapCalls, r.nativeCalls)
+	if err != nil || report.Outcome != "changed" || r.bootstrapCalls != 2 || f.store.state.Receipt.Definition == nil || f.store.state.Receipt.Definition.AnsibleVersion != "2.21.4" {
+		t.Fatalf("an unqualified latest resolution was reused: %#v %v bootstrap=%d", report, err, r.bootstrapCalls)
 	}
 	for _, value := range []struct {
-		intent, version string
-		superseded      bool
-	}{{"latest", "2.18.0", true}, {"latest", MinimumBootstrapAnsibleVersion, false}, {"2.18.0", "2.18.0", false}} {
-		if supersededLatest(Definition{Versions: controller.DependencyVersions{Ansible: value.intent}, AnsibleVersion: value.version}) != value.superseded {
-			t.Fatalf("%s intent at %s: superseded != %v", value.intent, value.version, value.superseded)
+		ansibleIntent, ansible, python string
+		superseded                     bool
+	}{
+		{"latest", "2.19.0", "3.14.7", true},
+		{"latest", "2.20.9", "3.14.7", true},
+		{"latest", "2.22.0", "3.14.7", true},
+		{"latest", "2.21.4", "3.11.9", true},
+		{"latest", "2.21.4", "3.15.0", true},
+		{"latest", "2.21.0", "3.14.7", false},
+		{"latest", "2.21.4", "3.14.7", false},
+		{"2.18.0", "2.18.0", "3.14.7", false},
+		{"latest", "2.21.4", "3.12.0", false},
+	} {
+		definition := Definition{Versions: controller.DependencyVersions{Python: "latest", Ansible: value.ansibleIntent}, PythonVersion: value.python, AnsibleVersion: value.ansible}
+		if supersededLatest(definition) != value.superseded {
+			t.Fatalf("Ansible %s intent at %s on Python %s: superseded != %v", value.ansibleIntent, value.ansible, value.python, value.superseded)
 		}
+	}
+}
+
+// A record outside the qualified set whose automation also moved is resolved
+// fresh: carrying it forward would keep a release this build does not select.
+func TestSupersededAutomationNeverCarriesAnUnqualifiedRelease(t *testing.T) {
+	f, r := unqualifiedFirstSetup(t)
+	previous := f.store.state.Receipt.CatalogDigest
+	superseded := errors.Join(ErrBootstrapIncompatible, ErrAutomationSuperseded, failure("controller.setup", "superseded automation", ""))
+	f.service.bundle = obsoleteBundle{BundleManager: &f.bundle, digest: previous, err: superseded}
+	f.bundle.ready, f.bundle.sealed = false, false
+	f.bundle.automation = strings.Repeat("9", 64)
+	report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+	if err != nil || report.Outcome != "changed" || r.bootstrapCalls != 2 || f.bundle.rebases != 0 || f.store.state.Receipt.Definition == nil || f.store.state.Receipt.Definition.AnsibleVersion != "2.21.4" {
+		t.Fatalf("an unqualified release was carried forward: %#v %v bootstrap=%d rebases=%d", report, err, r.bootstrapCalls, f.bundle.rebases)
 	}
 }
 

@@ -39,7 +39,6 @@ type RunRequest struct {
 	// MaterialValues are non-secret values the adapter needs beside the
 	// material paths, such as a certificate fingerprint a probe compares.
 	MaterialValues map[string]string
-	Sudo           string
 	Launch         prerequisites.PythonLaunch
 	Bundle         prerequisites.BundleLocation
 	Area           prerequisites.BundleArea
@@ -99,7 +98,6 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 		Placement:      invocation.Placement,
 		Materials:      append(slices.Clone(invocation.Materials), Materials(invocation.Placement)...),
 		MaterialValues: invocation.Values,
-		Sudo:           invocation.Placement.SudoPasswordRef,
 		Launch:         execution.Launch,
 		Bundle:         execution.Bundle,
 		Area:           execution.Area,

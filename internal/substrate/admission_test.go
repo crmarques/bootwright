@@ -26,7 +26,7 @@ func obj(kind api.Kind, name string, spec api.Value) api.Object {
 }
 func list(v ...api.Value) api.Value { return api.ListValue(v...) }
 func TestProviderVariantsAndNormalization(t *testing.T) {
-	bmc := m("enabled", true, "port", api.IntegerValue("8000"), "bindAddress", "0.0.0.0", "auth", m("credentialsRef", "bmc"))
+	bmc := m("enabled", true, "port", api.IntegerValue("8000"), "bindAddress", "192.0.2.1", "auth", m("credentialsRef", "bmc"))
 	domain := m("name", "zone-a", "server", "vcenter.example.test", "region", "region", "zone", "zone", "topology", m("datacenter", "dc", "computeCluster", "cluster", "datastore", "store", "networks", api.StringList("network")))
 	providers := map[string]api.Value{
 		"baremetal": m("baremetal", m("defaults", m("bmc", m("credentialsRef", "bmc")))),
@@ -90,7 +90,7 @@ func TestProviderContradictions(t *testing.T) {
 }
 func TestLibvirtBMCPortRangesDoNotOverlapOnOneHost(t *testing.T) {
 	provider := func(name, port string) api.Object {
-		return obj(api.InfraProvider, name, m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulationDefaults", m("port", api.IntegerValue(port), "bindAddress", "0.0.0.0", "auth", m("credentialsRef", "bmc")))))
+		return obj(api.InfraProvider, name, m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulationDefaults", m("port", api.IntegerValue(port), "bindAddress", "192.0.2.1", "auth", m("credentialsRef", "bmc")))))
 	}
 	machine := func(name, provider string) api.Object {
 		return obj(api.Machine, name, m("substrate", m("providerRef", provider)))
@@ -106,5 +106,67 @@ func TestLibvirtBMCPortRangesDoNotOverlapOnOneHost(t *testing.T) {
 	c := provider("c", "65535")
 	if issues := Validate(c, api.NewCatalog([]api.Object{c, host, machine("one", "c"), machine("two", "c")})); len(issues) == 0 {
 		t.Fatal("range beyond the last port accepted")
+	}
+}
+
+// An emulated BMC listens where every hosted Machine's controller endpoint can
+// name it: one IPv4 unicast address. An absent address is the schema's to
+// refuse, so this rule says nothing about it.
+func TestAnEmulatedBMCListensOnOneNameableUnicastAddress(t *testing.T) {
+	const field = "$.spec.libvirt.bmcEmulationDefaults.bindAddress"
+	host := obj(api.Machine, "host", m("capabilities", api.StringList("libvirt")))
+	provider := func(defaults api.Value) api.Object {
+		return obj(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulationDefaults", defaults)))
+	}
+	for address, nameable := range map[string]bool{
+		"0.0.0.0": false, "::": false, "::0": false, "0:0:0:0:0:0:0:0": false, "::ffff:0.0.0.0": false,
+		"::ffff:192.0.2.1": false, "2001:db8::1": false, "::1": false, "fe80::1": false, "ff02::1": false,
+		"224.0.0.1": false, "255.255.255.255": false,
+		"192.0.2.1": true, "127.0.0.1": true, "169.254.1.1": true,
+	} {
+		t.Run(address, func(t *testing.T) {
+			o := provider(m("port", api.IntegerValue("8000"), "bindAddress", address, "auth", m("credentialsRef", "bmc")))
+			issues := Validate(o, api.NewCatalog([]api.Object{o, host}))
+			refused := len(issues) == 1 && issues[0].Field == field && issues[0].Code == "api.invariant"
+			if nameable && len(issues) != 0 || !nameable && !refused {
+				t.Fatalf("nameable = %v, issues = %v", nameable, issues)
+			}
+		})
+	}
+	absent := provider(m("port", api.IntegerValue("8000"), "auth", m("credentialsRef", "bmc")))
+	if issues := Validate(absent, api.NewCatalog([]api.Object{absent, host})); len(issues) != 0 {
+		t.Fatal("an absent address was judged beside the schema's refusal", issues)
+	}
+}
+
+// A libvirt profile creates a machine of its own size, so a size that cannot
+// is refused where it is declared instead of at planning. KubeVirt keeps the
+// materialized zero.
+func TestLibvirtProfilesRequirePositiveCapacity(t *testing.T) {
+	host := obj(api.Machine, "host", m("capabilities", api.StringList("libvirt")))
+	positive := m("name", "large", "cpu", api.IntegerValue("4"), "memoryMiB", api.IntegerValue("8192"), "diskGiB", api.IntegerValue("60"))
+	libvirt := func(profiles ...api.Value) api.Object {
+		return obj(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system",
+			"bmcEmulationDefaults", m("port", api.IntegerValue("8000"), "bindAddress", "192.0.2.1", "auth", m("credentialsRef", "bmc")),
+			"machineProfiles", list(profiles...))))
+	}
+	if o := libvirt(positive); len(Validate(o, api.NewCatalog([]api.Object{o, host}))) != 0 {
+		t.Fatal("a positive profile was refused")
+	}
+	for _, size := range []string{"cpu", "memoryMiB", "diskGiB"} {
+		for _, value := range []string{"0", "-1"} {
+			t.Run(size+"="+value, func(t *testing.T) {
+				o := libvirt(positive, positive.With("name", api.StringValue("small")).With(size, api.IntegerValue(value)))
+				issues := Validate(o, api.NewCatalog([]api.Object{o, host}))
+				if len(issues) != 1 || issues[0].Field != "$.spec.libvirt.machineProfiles[1]."+size || issues[0].Message != "libvirt machine profiles require a positive capacity" {
+					t.Fatal(issues)
+				}
+			})
+		}
+	}
+	zero := m("name", "small", "cpu", api.IntegerValue("0"), "memoryMiB", api.IntegerValue("0"), "diskGiB", api.IntegerValue("0"))
+	kubevirt := obj(api.InfraProvider, "cluster", m("kubevirt", m("kubeconfigRef", "host-access", "namespace", "workloads", "machineProfiles", list(zero))))
+	if issues := Validate(kubevirt, api.NewCatalog([]api.Object{kubevirt})); len(issues) != 0 {
+		t.Fatal("a KubeVirt profile was held to libvirt sizes", issues)
 	}
 }

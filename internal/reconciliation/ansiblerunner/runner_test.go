@@ -29,11 +29,9 @@ func sshRequest() lifecycle.RunRequest {
 	request := localRequest()
 	request.Placement = machineref.Placement{
 		Address: "192.0.2.9", Connection: "ssh", KnownHostsRef: "host-key",
-		Machine: "services", Port: 2222, PrivateKeyRef: "services-key",
-		SudoPasswordRef: "services-sudo", User: "operator",
+		Machine: "services", Port: 2222, PrivateKeyRef: "services-key", User: "root",
 	}
 	request.Materials = append(slices.Clone(request.Materials), lifecycle.Materials(request.Placement)...)
-	request.Sudo = "services-sudo"
 	return request
 }
 
@@ -116,11 +114,15 @@ func TestMaterialBytesRefuseMissingOrUnusableParts(t *testing.T) {
 	}
 }
 
+// A placement frozen before placements stopped escalating still names its
+// escalation Secret, and its material may still be bound: neither reaches the
+// adapter, so nothing it runs can escalate.
 func TestVariablesCarryPathsNotMaterial(t *testing.T) {
-	paths := map[string]string{"tls.crt": "/job/tls.crt", "tls.key": "/job/tls.key"}
-	request := localRequest()
+	paths := map[string]string{"tls.crt": "/job/tls.crt", "tls.key": "/job/tls.key", "id": "/job/id", "known_hosts": "/job/known_hosts"}
+	request := sshRequest()
+	request.Placement.SudoPasswordRef = "services-sudo"
 	request.MaterialValues = map[string]string{"fingerprint": strings.Repeat("f", 64)}
-	values, err := variables(request, paths, "escalate")
+	values, err := variables(request, paths)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +130,7 @@ func TestVariablesCarryPathsNotMaterial(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, forbidden := range []string{"CERTIFICATE", "PRIVATE", "BEGIN"} {
+	for _, forbidden := range []string{"CERTIFICATE", "PRIVATE", "BEGIN", "SSHKEY", "ansible_become_password", "escalate"} {
 		if strings.Contains(string(encoded), forbidden) {
 			t.Fatalf("the variables carry %q", forbidden)
 		}
@@ -136,26 +138,8 @@ func TestVariablesCarryPathsNotMaterial(t *testing.T) {
 	if !strings.Contains(string(encoded), "/job/tls.key") {
 		t.Fatal("the variables do not name the prepared material file")
 	}
-	if !strings.Contains(string(encoded), `"ansible_become_password":"escalate"`) {
-		t.Fatal("the escalation password did not reach the variables file")
-	}
 	if values["bootwright_artifact_server_digest"] != strings.Repeat("d", 64) {
 		t.Fatal("the frozen request digest was not passed to the adapter")
-	}
-}
-
-func TestBecomePasswordRequiresItsBoundSecret(t *testing.T) {
-	value, err := becomePassword(sshRequest())
-	if err != nil || value != "escalate" {
-		t.Fatalf("password = %q (%v)", value, err)
-	}
-	missing := sshRequest()
-	missing.Material = map[string]secrets.Material{}
-	if _, err := becomePassword(missing); err == nil {
-		t.Fatal("a missing escalation secret was accepted")
-	}
-	if value, err := becomePassword(localRequest()); err != nil || value != "" {
-		t.Fatalf("a request without escalation returned %q (%v)", value, err)
 	}
 }
 
@@ -163,7 +147,7 @@ func TestInventoryPinsTheSSHIdentityAndHostKey(t *testing.T) {
 	paths := map[string]string{"id": "/job/id", "known_hosts": "/job/known_hosts"}
 	value := inventory(sshRequest().Placement, "/interpreter", paths)
 	host := value["all"].(map[string]any)["children"].(map[string]any)["bootwright_target"].(map[string]any)["hosts"].(map[string]any)["services"].(map[string]any)
-	if host["ansible_connection"] != "ssh" || host["ansible_host"] != "192.0.2.9" || host["ansible_port"] != 2222 || host["ansible_user"] != "operator" {
+	if host["ansible_connection"] != "ssh" || host["ansible_host"] != "192.0.2.9" || host["ansible_port"] != 2222 || host["ansible_user"] != "root" {
 		t.Fatalf("ssh host = %+v", host)
 	}
 	if host["ansible_ssh_private_key_file"] != "/job/id" {

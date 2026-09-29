@@ -208,6 +208,9 @@ Requires cell as `owner decision: <question>`.
 - **D6** (2026-09-26): the first proved UUID and serial are pinned and a
   mismatch refuses.
 - **D7** (2026-09-26): non-root SSH accounts refuse at admission for now.
+  Read on 2026-09-29 by the session, pending the owner's review, as applying
+  to lifecycle placement hosts: the machines managed services and libvirt
+  providers name (X22).
 - **D8** (2026-09-26): the cluster identity is the build's kubeconfig trust
   anchor, refined on 2026-09-27 (S26) to its admin client certificate, which
   the installer's install-complete rewrite keeps.
@@ -229,3 +232,7 @@ Requires cell as `owner decision: <question>`.
   first add-on packages.
 - **D19** (2026-09-28): M5 integrates OpenShift with a Ceph cluster M4 manages;
   an external Ceph cluster is parked as [B107](#b107).
+- **D20** (2026-09-29, taken by the session under the owner's instruction to
+  proceed with recommendations; pending review): the controller CPython is
+  the latest patch of the newest minor the qualified ansible-core supports as
+  a controller, and `latest` ignores a newer minor (X22).

@@ -7,6 +7,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 )
 
 // Unsupported lists every artifact server this capability cannot realize, in
@@ -55,7 +56,7 @@ func requestFor(catalog api.Catalog, server api.Object, controllerMachine, conte
 	if !found {
 		return Request{}, refusal("api.reference", "the artifact server's placement Machine is not in the selected graph", "declare "+spec.Get("machineRef").Text()+" or change the reference")
 	}
-	placement, err := placementFor(machine, controllerMachine)
+	placement, err := machineref.PlacementFor(machine, controllerMachine)
 	if err != nil {
 		return Request{}, err
 	}
@@ -108,45 +109,6 @@ func requestFor(catalog api.Catalog, server api.Object, controllerMachine, conte
 }
 
 func BlockID(service string) string { return "artifact-server-" + service }
-
-func placementFor(machine api.Object, controllerMachine string) (Placement, error) {
-	if machine.Name() == controllerMachine {
-		return Placement{Connection: connectionLocal, Machine: machine.Name()}, nil
-	}
-	ssh := machine.Spec().Get("access", "ssh")
-	if !ssh.Present() {
-		return Placement{}, refusal("lifecycle.state", "a managed service host must be the controller or declare SSH access", "place the service on the controller Machine, or author access.ssh on "+machine.Identity())
-	}
-	if ssh.Has("auth", "operatorIdentity") {
-		return Placement{}, refusal("lifecycle.state", "operator SSH identity is unsupported for managed service placement", "author access.ssh.auth.privateKeyRef on "+machine.Identity())
-	}
-	if ssh.Has("auth", "passwordRef") {
-		return Placement{}, refusal("lifecycle.state", "password SSH authentication is unsupported for managed service placement", "author access.ssh.auth.privateKeyRef on "+machine.Identity())
-	}
-	if !ssh.Has("auth", "privateKeyRef") {
-		return Placement{}, refusal("lifecycle.state", "managed service placement requires an SSH private key reference", "author access.ssh.auth.privateKeyRef on "+machine.Identity())
-	}
-	if !ssh.Has("knownHostsRef") {
-		return Placement{}, refusal("lifecycle.state", "managed service placement requires a bound SSH host key", "author access.ssh.knownHostsRef on "+machine.Identity())
-	}
-	address, err := machineAddress(machine, ssh.Get("addressRef").Text())
-	if err != nil {
-		return Placement{}, err
-	}
-	port := 22
-	if value, ok := ssh.Get("port").Int64(); ok && value > 0 {
-		port = int(value)
-	}
-	user := ssh.Get("user").Text()
-	if user == "" {
-		user = "root"
-	}
-	return Placement{
-		Address: address, Connection: connectionSSH, KnownHostsRef: ssh.Get("knownHostsRef").Text(),
-		Machine: machine.Name(), Port: port, PrivateKeyRef: ssh.Get("auth", "privateKeyRef").Text(),
-		SudoPasswordRef: ssh.Get("sudoPasswordRef").Text(), User: user,
-	}, nil
-}
 
 // machineAddress resolves a Machine-local address reference to the value a
 // consumer receives: the host IP without its prefix, or the DNS name.

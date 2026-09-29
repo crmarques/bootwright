@@ -58,7 +58,7 @@ resolved reference and its `usernamePassword` type.
 | `spec.libvirt.bmcEmulationDefaults.enabled` | boolean | no | `true` | Current contract accepts only the enabled form. |
 | `spec.libvirt.bmcEmulationDefaults.protocol` | string | no | `redfish` | `redfish`. |
 | `spec.libvirt.bmcEmulationDefaults.emulator` | string | no | `sushy-tools` | `sushy-tools`. |
-| `spec.libvirt.bmcEmulationDefaults.bindAddress` | string | no | `0.0.0.0` today, which is always refused (not yet met) | Listener address; a unicast address every hosted Machine's controller endpoint can name, never a wildcard. |
+| `spec.libvirt.bmcEmulationDefaults.bindAddress` | string | yes | — | Listener address; an IPv4 address that is not unspecified, multicast or `255.255.255.255`, so that every hosted Machine's controller endpoint names it; loopback is admitted, and an IPv6 listener is refused while the endpoint does not bracket it. |
 | `spec.libvirt.bmcEmulationDefaults.port` | integer | no | `8000` | `1..65535`; the first port of the contiguous range the provider's emulated BMCs listen on. |
 | `spec.libvirt.bmcEmulationDefaults.auth.credentialsRef` | string | yes | — | `usernamePassword` `Secret`; required while emulation is enabled. |
 | `spec.libvirt.bmcEmulationDefaults.disableCertificateVerification` | boolean | no | `false` | Explicit TLS verification opt-out. |
@@ -73,11 +73,6 @@ host do not overlap. The retired `vMediaPort` is rejected: the emulator fetches
 media from the artifact server and opens no second listener.
 [Substrates](../substrates.md#machine-realization) owns the controller each
 Machine receives.
-
-Not yet met: admission neither refuses a wildcard `bindAddress` nor stops
-defaulting it to `0.0.0.0`, so a provider that omits it validates and then
-refuses at `plan` and `apply`, before registration; tracked as
-[B12](../milestones/m1.md#b12).
 
 ### Refused arms
 
@@ -104,9 +99,8 @@ shape; the vSphere-only `template` and `failureDomainRef` fields belong to the
 | `tpm` | object | no | — | Libvirt/KubeVirt only; its presence requests TPM 2.0. |
 | `tpm.persistent` | boolean | KubeVirt only | `true` | Forbidden for libvirt, whose emulated TPM state is already persistent. |
 
-Not yet met: admission requires positive sizes only for vSphere and
-materializes `0` for an omitted libvirt size, which libvirt planning refuses;
-tracked as [B12](../milestones/m1.md#b12).
+A libvirt or vSphere profile therefore sets all three sizes: an omitted one
+materializes `0`, which admission refuses at that profile's size.
 
 `networkAttachments[]` names are unique. Each entry has required `name` and
 exactly one arm matching the provider's selected substrate; the `vsphere` and
@@ -163,10 +157,12 @@ Every non-provided machine has `substrate.providerRef`. Bare metal forbids
 not provided. A selected profile resolves only in its provider.
 
 A bare-metal non-provided machine has at least one NIC; every NIC has a MAC;
-`boot.nicRef` resolves locally; BMC address and credentials are present; the
-address selects one exact `/redfish/v1/Systems/<id>` ComputerSystem; and root
-device hints contain `deviceName` or `wwn`. These declarations identify an
-install target but do not authorize a destructive operation.
+`boot.nicRef` resolves locally; BMC address and credentials are present; and
+root device hints contain `deviceName` or `wwn`. Its BMC address, like every
+authored one, selects one exact `/redfish/v1/Systems/<id>` ComputerSystem in
+the [one spelling](#bmc-and-root-device-shape) the realized target sends. These
+declarations identify an install target but do not authorize a destructive
+operation.
 
 A bare-metal Bootwright-installed machine also names `os.install.hostKeyRef`,
 because a physical machine offers no out-of-band channel to read back what it
@@ -187,13 +183,26 @@ lowercase colon-separated EUI-48 values.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `address` | string | with the BMC block | — | Redfish endpoint; a bare-metal install address selects one exact ComputerSystem. |
+| `address` | string | with the BMC block | — | Redfish endpoint naming one exact ComputerSystem, in the one canonical spelling below, on every Machine that authors it. |
 | `protocol` | string | no | `redfish` | `redfish`. |
 | `credentialsRef` | string | resolved with the BMC block | configured provider default | `usernamePassword` `Secret`; machine-local values take precedence. |
 | `tls.verify` | boolean | no | `true` | Controls the controller-to-BMC TLS leg. |
 | `virtualMedia.tls.trust` | string | no | `disable-verification` | `disable-verification`, `import-certificate`, or `established`; controls the BMC-to-artifact-server leg. |
 | `virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | `true` | Only with `disable-verification`. |
 | `virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Only with `import-certificate`. |
+
+`address` is what a destructive operation is aimed at, so it has one spelling:
+admission accepts only that spelling, and nothing rewrites it before the
+controller claim and every request are derived from it. It starts with exactly
+`http://` or `https://`, is an absolute URL with no userinfo, query, fragment
+or percent-encoding, even an empty one, and every byte is printable ASCII other
+than space. Its host is a lowercase DNS name whose last label is not all
+digits, or an IP literal in the form Go's `netip` prints (an IPv6 literal
+bracketed); its port, when present, is `1..65535` with no empty or leading-zero
+spelling; and its path is exactly `/redfish/v1/Systems/<id>`, where `<id>` is
+one or more RFC 3986 unreserved characters (`A-Z`, `a-z`, `0-9`, `-`, `.`, `_`,
+`~`) and is not `.` or `..`. A collection, a child resource, a trailing slash
+and every `redfish+` or `redfish-virtualmedia+` scheme are refused.
 
 If `virtualMedia.tls` is authored, it sets at least one option. The two TLS
 legs stay independent; no BMC verification opt-out changes artifact-server
@@ -359,17 +368,32 @@ installer-provisioned machine, omission means no Bootwright login.
 | --- | --- | --- | --- | --- |
 | `addressRef` | string | normalized | `ssh`, else `fqdn` | Machine-local `network.addresses[].name`; no arbitrary only-address fallback. |
 | `port` | integer | no | `22` | `1..65535` effective. |
-| `user` | string | no | operator user for operator identity, otherwise `root` | POSIX user name; required explicitly with password auth. |
+| `user` | string | no | operator user for operator identity, otherwise `root` | POSIX user name; required explicitly with password auth; `root` on a [lifecycle placement host](#addresses-and-access). |
 | `auth.operatorIdentity` | empty object | union | — | Use the invoking operator's existing SSH identity. |
 | `auth.privateKeyRef` | string | union | — | `sshKeyPair` `Secret`. |
 | `auth.passwordRef` | string | union | — | `usernamePassword` `Secret`; requires authored `user`. |
-| `sudoPasswordRef` | string | no | — | `usernamePassword` `Secret` for escalation. |
+| `sudoPasswordRef` | string | no | — | `usernamePassword` `Secret`; refused on a [lifecycle placement host](#addresses-and-access), and no consumer escalates with it. |
 | `knownHostsRef` | string | no | [context-managed trust](../contexts.md#storage-locking-and-publication) | `opaque` `Secret` containing one exact OpenSSH `known_hosts` entry. |
 
 Exactly one SSH `auth` arm is present. `access.rootLogin` is `keep` by default
 or `revoke`. `revoke` requires authored SSH access and a non-root replacement
 identity supplied by the managed storage-cluster relationship; it is invalid
 on a Bootwright-installed machine or a machine without that successor login.
+
+A lifecycle placement host connects as root and never escalates
+([owner decision D7](../milestones/backlog.md#decisions)). A Machine with
+`access.ssh` is a lifecycle placement host when a `management: managed`
+infrastructure service names it as `spec.machineRef`, or an `InfraProvider`
+names it as `spec.libvirt.machineRef`. On such a host an effective
+`access.ssh.user` other than `root` refuses with `api.invariant` at
+`$.spec.access.ssh.user`, and an authored `access.ssh.sudoPasswordRef` refuses
+at `$.spec.access.ssh.sudoPasswordRef`. The effective user of a
+Bootwright-installed machine is `bootwright`, so one named as a placement host
+refuses. An operator-identity host that authors no user has no effective user
+here; its placement refuses before planning under the
+[SSH arm](../infrastructure-services.md#placement-arms-and-credentials).
+Machines that are only cluster nodes, storage nodes or session targets keep
+any account.
 
 The `knownHostsRef` Secret's resolved material is UTF-8 text containing exactly
 one data line and one host key. Its host token is the effective SSH address for

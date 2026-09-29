@@ -65,7 +65,8 @@ client. Supporting Python wheels and native package dependencies are resolved
 as a complete compatible closure; they are not individually configurable.
 An incompatible or unavailable exact request fails with a dependency
 diagnostic rather than silently substituting another root version.
-The controller adapter requires Ansible Core 2.19 or newer, a
+The controller adapter runs the qualified `ansible-core` minor that
+[development](../../docs/development.md#qualified-hosts-and-images) records, a
 [host prerequisite](../controller.md#supported-host-and-dependency-selection)
 no Environment versions.
 

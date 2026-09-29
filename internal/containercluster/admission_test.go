@@ -150,6 +150,45 @@ func TestSingleNodeSourceDerivationAndAuthoredRestrictions(t *testing.T) {
 	}
 }
 
+// Resolution before boot proves only a slot that froze an address, so a slot
+// the cluster or the operator answers owns one; a DNS name alone satisfies
+// none, whatever the topology.
+func TestAnEndpointWithoutAnAddressIsRefused(t *testing.T) {
+	for name, nodes := range map[string]int{"single-node": 1, "multi-node platform none": 3} {
+		t.Run(name, func(t *testing.T) {
+			o, c := fixture("kubevirt", nodes, false)
+			named := m("dnsName", "api.cluster.clusters.example.test", "source", m("type", "external"))
+			for endpoint, admitted := range map[string]bool{"a DNS name alone": false, "an address": true} {
+				slot := named
+				if admitted {
+					slot = named.With("address", api.StringValue("192.0.2.2"))
+				}
+				effective, _ := Normalize(o.WithSpec(o.Spec().WithPath(slot, "install", "endpoints", "api")), c)
+				issues := Validate(effective, c)
+				if refused := hasIssue(issues, "$.spec.install.endpoints.api.address", "requires an IP address"); refused == admitted || admitted && len(issues) != 0 {
+					t.Fatal(endpoint, issues)
+				}
+			}
+		})
+	}
+}
+
+// An address in ::/96 freezes in netip's spelling, which glibc prints another
+// way, so resolution before boot could never match it. Every other IPv6
+// address, IPv4-mapped included, is judged by the ordinary rules alone.
+func TestAnIPv4CompatibleEndpointAddressIsRefused(t *testing.T) {
+	o, c := fixture("kubevirt", 3, false)
+	for address, refused := range map[string]bool{"::192.0.2.1": true, "::1": true, "::": true, "2001:db8::10": false, "::ffff:192.0.2.10": false} {
+		t.Run(address, func(t *testing.T) {
+			effective, _ := Normalize(o.WithSpec(o.Spec().WithPath(api.StringValue(address), "install", "endpoints", "api", "address")), c)
+			issues := Validate(effective, c)
+			if hasIssue(issues, "$.spec.install.endpoints.api.address", "IPv4-compatible IPv6 endpoint address (::/96)") != refused {
+				t.Fatalf("want refused = %v: %v", refused, issues)
+			}
+		})
+	}
+}
+
 func TestAPIInternalCopiesOnlyAddressAndSource(t *testing.T) {
 	o, c := fixture("vsphere", 4, false)
 	apiEndpoint := o.Spec().Get("install", "endpoints", "api").With("dnsName", api.StringValue("api.example.test")).With("port", api.IntegerValue("6443")).With("scheme", api.StringValue("https")).With("prefixLength", api.IntegerValue("24")).With("interfaceNetworks", api.StringList("192.0.2.7/24"))

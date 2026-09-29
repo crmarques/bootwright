@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"maps"
+	"path"
 	"slices"
 	"strings"
 	"testing"
@@ -126,6 +128,67 @@ func TestRebaseKeepsEveryRetainedIdentityAndOnlyMovesTheAutomation(t *testing.T)
 	if area.writes != 0 {
 		t.Fatal("rebasing wrote to the retained bundle")
 	}
+}
+
+// A resolution retained before documentation left the digest recorded it over
+// every embedded file under the first domain version. No such digest equals
+// this build's, so its definition is superseded before any identity written
+// under the old rule is compared, and rebasing carries it forward under the
+// narrowed projection: two files and their bytes fewer than a projection that
+// still counted documentation.
+func TestRebaseCarriesAV1DigestForwardUnderTheV2Identity(t *testing.T) {
+	retained, area := retainedBootstrap(t)
+	retained.AutomationDigest = automationDigestV1(ansible.Assets())
+	retained, err := prerequisites.CanonicalBootstrap(retained)
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, err := prerequisites.NewResolvedDefinition(retained, *resolvedDefinitionFixture(t).Native)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := validateDefinition(definition); !errors.Is(err, prerequisites.ErrAutomationSuperseded) {
+		t.Fatalf("a definition retained under the first digest domain was not superseded: %v", err)
+	}
+	rebased, err := New(nil).Rebase(t.Context(), area, retained)
+	if err != nil {
+		t.Fatal(err)
+	}
+	counted := newProjection()
+	counted.site = retained.SitePackages
+	assets := ansible.Assets()
+	for _, name := range slices.Sorted(maps.Keys(assets)) {
+		if err := counted.add(path.Join("automation", name), assets[name], false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for index, source := range retained.Sources {
+		if err := projectSource(t.Context(), counted, index, area.files[sourcePath(source)].data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	documented := int64(0)
+	for _, data := range ansible.Documentation() {
+		documented += int64(len(data))
+	}
+	if rebased.AutomationDigest != ansible.Digest() || rebased.FileCount != len(counted.files)-2 || rebased.ExpandedBytes != counted.bytes-documented {
+		t.Fatalf("rebased %s over %d files and %d bytes; want %s over %d and %d",
+			rebased.AutomationDigest, rebased.FileCount, rebased.ExpandedBytes, ansible.Digest(), len(counted.files)-2, counted.bytes-documented)
+	}
+}
+
+// automationDigestV1 is the automation digest as builds before this one
+// recorded it: every embedded file under the first domain version.
+func automationDigestV1(files map[string][]byte) string {
+	digest := sha256.New()
+	digest.Write([]byte("bootwright.controller.automation-v1\x00"))
+	for _, name := range slices.Sorted(maps.Keys(files)) {
+		digest.Write([]byte(name))
+		digest.Write([]byte{0})
+		content := sha256.Sum256(files[name])
+		digest.Write(content[:])
+	}
+	return hex.EncodeToString(digest.Sum(nil))
 }
 
 // The retained bundle is evidence, not authority: bytes that are no longer the

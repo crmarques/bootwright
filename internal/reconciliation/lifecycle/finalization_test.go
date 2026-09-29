@@ -206,7 +206,7 @@ func TestAnInterruptedRemovalFinalizationIsCompletedByTheNextDestroy(t *testing.
 			current, directories := operations(t, w)
 			presented, effects := len(run.rig.harness.presenter.presented), maps.Clone(run.snapshot.host.effects)
 			result, err := service.Destroy(ctx, DestroyRequest{ContextName: testContextName})
-			if err != nil || !result.Settled || result.Receipt.State != "done" || result.Receipt.Operation != current {
+			if err != nil || !result.Settled || result.Recovered != RecoveredFinalization || result.Receipt.State != "done" || result.Receipt.Operation != current {
 				t.Fatalf("the next destroy = %+v (%v)", result, err)
 			}
 			requireRepaired(t, run, host, presented, effects, current, directories)
@@ -233,7 +233,7 @@ func TestAReservationHeldBesideACompletedRemovalIsReleasedByTheNextDestroy(t *te
 	current, directories := operations(t, w)
 	presented, effects := len(run.rig.harness.presenter.presented), maps.Clone(run.snapshot.host.effects)
 	result, err := service.Destroy(ctx, DestroyRequest{ContextName: testContextName})
-	if err != nil || !result.Settled || result.Receipt.Operation != current {
+	if err != nil || !result.Settled || result.Recovered != RecoveredFinalization || result.Receipt.Operation != current {
 		t.Fatalf("the next destroy = %+v (%v)", result, err)
 	}
 	if len(w.reservations) != 0 || !bytes.Equal(w.evidence, pristine) {
@@ -341,7 +341,7 @@ func TestAnInterruptedApplyFinalizationIsCompletedByTheRepeatedApply(t *testing.
 			h.service.options.Confirmer = nil
 			applies, presented, mutations := len(h.capability.applies), len(h.presenter.presented), h.workspace.mutations
 			result, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName})
-			if err != nil || !result.Settled || result.Receipt.Operation != first.Receipt.Operation {
+			if err != nil || !result.Settled || result.Recovered != RecoveredFinalization || result.Receipt.Operation != first.Receipt.Operation {
 				t.Fatalf("the repeated apply = %+v (%v)", result, err)
 			}
 			if applied := evidenceBytes(t, reconciliation.Apply, reconciliation.OperationDone); !bytes.Equal(h.workspace.evidence, applied) {
@@ -369,7 +369,7 @@ func TestARunningOperationWhoseBlocksAreAllDoneIsFinalized(t *testing.T) {
 		current, directories := operations(t, run.snapshot.workspace)
 		presented, effects := len(run.rig.harness.presenter.presented), maps.Clone(run.snapshot.host.effects)
 		result, err := service.Apply(ctx, ApplyRequest{ContextName: testContextName})
-		if err != nil || !result.Settled || result.Receipt.Operation != current {
+		if err != nil || !result.Settled || result.Recovered != RecoveredFinalization || result.Receipt.Operation != current {
 			t.Fatalf("the apply = %+v (%v)", result, err)
 		}
 		requireRepaired(t, run, host, presented, effects, current, directories)
@@ -397,7 +397,7 @@ func TestARunningOperationWhoseBlocksAreAllDoneIsFinalized(t *testing.T) {
 		current, directories := operations(t, run.snapshot.workspace)
 		presented, effects := len(run.rig.harness.presenter.presented), maps.Clone(run.snapshot.host.effects)
 		result, err := service.Destroy(ctx, DestroyRequest{ContextName: testContextName})
-		if err != nil || !result.Settled || result.Receipt.Operation != current {
+		if err != nil || !result.Settled || result.Recovered != RecoveredFinalization || result.Receipt.Operation != current {
 			t.Fatalf("the destroy = %+v (%v)", result, err)
 		}
 		requireRepaired(t, run, host, presented, effects, current, directories)
@@ -477,7 +477,7 @@ func TestAnUnknownOperationWhoseBlocksAreAllDoneIsFinalizedByItsOwnVerb(t *testi
 		h.service.options.Confirmer = nil
 		applies, observes, presented := len(h.capability.applies), len(h.capability.observes), len(h.presenter.presented)
 		result, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName})
-		if err != nil || !result.Settled || result.Receipt.State != "done" || result.Receipt.Operation != applied {
+		if err != nil || !result.Settled || result.Recovered != RecoveredFinalization || result.Receipt.State != "done" || result.Receipt.Operation != applied {
 			t.Fatalf("the apply = %+v, %+v (%v)", result, diagnostics.Of(err), err)
 		}
 		requireRecordedWithEveryBlockDone(t, h, reconciliation.Apply, reconciliation.OperationDone)
@@ -520,7 +520,7 @@ func TestAnUnknownOperationWhoseBlocksAreAllDoneIsFinalizedByItsOwnVerb(t *testi
 		h.service.options.Confirmer = nil
 		destroys, observes, presented := len(h.capability.destroys), len(h.capability.observes), len(h.presenter.presented)
 		result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName})
-		if err != nil || !result.Settled || result.Receipt.State != "done" || result.Receipt.Operation != removal {
+		if err != nil || !result.Settled || result.Recovered != RecoveredFinalization || result.Receipt.State != "done" || result.Receipt.Operation != removal {
 			t.Fatalf("the destroy = %+v, %+v (%v)", result, diagnostics.Of(err), err)
 		}
 		requireRecordedWithEveryBlockDone(t, h, reconciliation.Destroy, reconciliation.OperationDone)
@@ -823,7 +823,7 @@ func TestASettledVerbWithCompleteFinalizationOpensNoTransaction(t *testing.T) {
 		}
 		mutations, asked := h.workspace.mutations, h.confirmer.asked
 		result, err := invoke(verb, false)
-		if err != nil || !result.Settled {
+		if err != nil || !result.Settled || result.Recovered != "" {
 			t.Fatalf("the repeated %s = %+v (%v)", verb, result, err)
 		}
 		if h.workspace.mutations != mutations || h.confirmer.asked != asked {

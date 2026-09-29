@@ -95,6 +95,49 @@ def preparation(request, observed):
     return value
 
 
+def frozen_request(request):
+    """The frozen request's shape: its exact keys, version, operation, identity
+    and tools, and one acquisition deadline per tool, in the tools' order."""
+    required = {
+        "version",
+        "operation",
+        "identity",
+        "platform",
+        "bundle",
+        "publicationBundle",
+        "packages",
+        "native",
+        "tools",
+        "acquisition",
+        "egress",
+    }
+    if not required <= set(request) or set(request) - required - {"preparation"}:
+        raise ValueError("request")
+    if (
+        request["version"] != "controller-prerequisites-v4"
+        or request["operation"] not in ("setup", "recover")
+        or re.fullmatch(r"[a-f0-9]{64}", request["identity"]) is None
+    ):
+        raise ValueError("request")
+    tools, acquisition = request["tools"], request["acquisition"]
+    if not isinstance(tools, list) or len(tools) > 128:
+        raise ValueError("tools")
+    if not isinstance(acquisition, list) or [
+        entry["source"] for entry in acquisition
+    ] != [tool["source"]["id"] for tool in tools]:
+        raise ValueError("acquisition")
+    for entry in acquisition:
+        seconds = entry["seconds"]
+        if (
+            set(entry) != {"source", "seconds"}
+            or not isinstance(seconds, int)
+            or isinstance(seconds, bool)
+            or not 1 <= seconds <= 7200
+        ):
+            raise ValueError("acquisition")
+    return request
+
+
 class ActionModule(ActionBase):
     TRANSFERS_FILES = False
     _supports_check_mode = False
@@ -121,31 +164,7 @@ class ActionModule(ActionBase):
                 }
             if set(args) != expected_args:
                 raise ValueError("request")
-            request = args["request"]
-            required = {
-                "version",
-                "operation",
-                "identity",
-                "platform",
-                "bundle",
-                "publicationBundle",
-                "packages",
-                "native",
-                "tools",
-                "egress",
-            }
-            if not required <= set(request) or set(request) - required - {
-                "preparation"
-            }:
-                raise ValueError("request")
-            if (
-                request["version"] != "controller-prerequisites-v3"
-                or request["operation"] not in ("setup", "recover")
-                or re.fullmatch(r"[a-f0-9]{64}", request["identity"]) is None
-            ):
-                raise ValueError("request")
-            if not isinstance(request["tools"], list) or len(request["tools"]) > 128:
-                raise ValueError("tools")
+            request = frozen_request(args["request"])
             observed = inventory(args["inventory"])
             if phase == "prepared":
                 proof = preparation(request, observed)

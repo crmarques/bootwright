@@ -208,9 +208,7 @@ API, internal API and applications endpoint slot the plan froze an address for
 and the zone) through the controller's own resolver, for every address family
 the controller is configured for. It proves that each name answers with its own
 slot's address and nothing else, because any other answer is one the installer
-may poll instead of the cluster. A slot with no address, such as a single-node
-slot satisfied by a `dnsName` alone, freezes no name, and nothing here proves
-how the controller resolves it ([B12](milestones/m1.md#b12)). When the applications slot froze an address,
+may poll instead of the cluster. When the applications slot froze an address,
 its name is a wildcard, so one more name beneath it is held to that address
 too: its label is `bootwright-` followed by the cluster name, cut to 63
 characters and to no trailing hyphen, so it is deterministic and names nothing

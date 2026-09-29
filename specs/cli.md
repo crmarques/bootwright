@@ -365,7 +365,6 @@ Its result says in one line that nothing is left to do and, when it first
 completed an interrupted finalization or a `destroy` first released what an
 interrupted registration left, that it did only that, so a table of completed
 blocks is never read as work this invocation performed.
-Not yet met: the line does not yet name a finalization it completed or a release it performed; tracked as [B11](milestones/m1.md#b11).
 
 `apply` and `destroy` present the frozen plan, then any required
 authorizations, then the ordinary confirmation. The

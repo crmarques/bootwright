@@ -25,16 +25,18 @@ every other command `bootwright --help` lists returns the
 | [M6](milestones/m6.md) | Provision and destroy OpenShift clusters over OpenShift Virtualization | M3 | not started | nothing until M3 |
 | [M7](milestones/m7.md) | Add-ons ACM, Argo CD and GitLab | M5 | not started | nothing until M5 |
 
-X22 is active.
+No slice is active.
 
-- **Next for agents:** deliver X22; open X20.
+- **Next for agents:** X20, the next planned slice of M1.
 - **Next for operator:** on a clean build that contains X19, run
   [lab-rhel](../examples/lab-rhel/README.md#run-it) for
   [B72](milestones/m4.md#b72) and [lab-sno](../examples/lab-sno/README.md) for
   [B61](milestones/m3.md#b61), and record each in the
   [acceptance ledger](../docs/acceptance.md) as the
   [operator guide](../docs/operator-guide.md) describes, after destroying any
-  lab-sno context applied before X19 with its own executable. [B73](milestones/m4.md#b73)'s rehearsal waits for B9 and its host-key
+  lab-sno context applied before X19 with its own executable; X22 moves the
+  automation digest, so run `setup` after finishing or destroying every
+  in-flight operation with the build that registered it. [B73](milestones/m4.md#b73)'s rehearsal waits for B9 and its host-key
   repair.
 
 ## Scope rules

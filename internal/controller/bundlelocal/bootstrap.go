@@ -17,6 +17,7 @@ import (
 	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 const pythonMetadataURL = "https://raw.githubusercontent.com/astral-sh/uv/main/crates/uv-python/download-metadata.json"
@@ -40,13 +41,8 @@ func (c *BootstrapCatalog) Resolve(ctx context.Context, platform prerequisites.P
 	if c == nil || c.metadata == nil || c.fetch == nil || c.resolve == nil {
 		return prerequisites.BootstrapDefinition{}, bundleFailure("bootstrap resolver adapters are unavailable")
 	}
-	if versions.Python != "latest" && !stableBootstrapVersion.MatchString(versions.Python) || versions.Ansible != "latest" && !stableBootstrapVersion.MatchString(versions.Ansible) {
-		return prerequisites.BootstrapDefinition{}, bundleFailure("bootstrap version intent must be latest or an exact stable release")
-	}
-	if versions.Ansible != "latest" {
-		if err := prerequisites.ValidateBootstrapAnsibleVersion(versions.Ansible); err != nil {
-			return prerequisites.BootstrapDefinition{}, err
-		}
+	if err := qualifiedIntent(versions); err != nil {
+		return prerequisites.BootstrapDefinition{}, err
 	}
 	if _, err := explicitProxy(egress); err != nil {
 		return prerequisites.BootstrapDefinition{}, err
@@ -145,6 +141,26 @@ func (c *BootstrapCatalog) Resolve(ctx context.Context, platform prerequisites.P
 	return prerequisites.CanonicalBootstrap(value)
 }
 
+// qualifiedIntent refuses, before any publisher is contacted, an exact
+// release this build does not qualify. No input sets one today; the rule
+// holds the same set that latest selects from.
+func qualifiedIntent(versions controller.DependencyVersions) error {
+	if versions.Python != "latest" && !stableBootstrapVersion.MatchString(versions.Python) || versions.Ansible != "latest" && !stableBootstrapVersion.MatchString(versions.Ansible) {
+		return bundleFailure("bootstrap version intent must be latest or an exact stable release")
+	}
+	if versions.Python != "latest" && !prerequisites.QualifiedControllerPython(versions.Python) {
+		return unqualifiedPython()
+	}
+	if versions.Ansible != "latest" {
+		return prerequisites.ValidateQualifiedAnsibleVersion(versions.Ansible)
+	}
+	return nil
+}
+
+func unqualifiedPython() error {
+	return diagnostics.NewFailureWithRemediation("controller.unsupported", "controller automation is qualified for CPython "+strings.Join(prerequisites.QualifiedControllerPythons(), ", ")+" only", "", "use a Bootwright build that qualifies this Python minor")
+}
+
 // These package owners accompany the exact signed loader/glibc/libgcc ELF
 // profiles. Native solving may not replace their files beneath the retained
 // bootstrap; establishing a different provided profile needs new qualification.
@@ -178,11 +194,11 @@ func selectPythonArtifact(data []byte, requested string) (string, prerequisites.
 	}
 	var selected pythonArtifact
 	for _, candidate := range records {
-		if candidate.Name != "cpython" || candidate.OS != "linux" || candidate.Libc != "gnu" || candidate.Arch.Family != "x86_64" || candidate.Arch.Variant != nil || candidate.Variant != nil || candidate.Prerelease != "" || candidate.Major != 3 || candidate.Minor < 10 || candidate.Minor > 99 || candidate.Patch < 0 || candidate.Patch > 9999 || !pythonBuildDate.MatchString(candidate.Build) {
+		if candidate.Name != "cpython" || candidate.OS != "linux" || candidate.Libc != "gnu" || candidate.Arch.Family != "x86_64" || candidate.Arch.Variant != nil || candidate.Variant != nil || candidate.Prerelease != "" || candidate.Major != 3 || candidate.Patch < 0 || candidate.Patch > 9999 || !pythonBuildDate.MatchString(candidate.Build) {
 			continue
 		}
 		version := strconv.Itoa(candidate.Major) + "." + strconv.Itoa(candidate.Minor) + "." + strconv.Itoa(candidate.Patch)
-		if requested != "latest" && requested != version {
+		if !prerequisites.QualifiedControllerPython(version) || requested != "latest" && requested != version {
 			continue
 		}
 		if selected.URL != "" && candidate.Minor == selected.Minor && candidate.Patch == selected.Patch && candidate.Build == selected.Build && (candidate.URL != selected.URL || candidate.SHA256 != selected.SHA256) {
@@ -203,24 +219,62 @@ func selectPythonArtifact(data []byte, requested string) (string, prerequisites.
 	return version, prerequisites.DependencySource{ID: "python-" + version + "-" + selected.Build, URL: selected.URL, SHA256: selected.SHA256}, nil
 }
 
+type ansibleReleaseFile struct {
+	Filename    string `json:"filename"`
+	PackageType string `json:"packagetype"`
+	Yanked      bool   `json:"yanked"`
+}
+
+// selectAnsibleRelease picks the highest stable patch of the qualified minor
+// that publishes a live pure wheel. Python compatibility is not judged here:
+// pip's exact-root resolve enforces Requires-Python, so an incompatible
+// release refuses rather than yielding to an older one.
 func selectAnsibleRelease(data []byte, requested, python string) (string, error) {
+	if !prerequisites.QualifiedControllerPython(python) {
+		return "", unqualifiedPython()
+	}
 	var record struct {
 		Info struct {
-			Version     string   `json:"version"`
-			Classifiers []string `json:"classifiers"`
+			Version string `json:"version"`
 		} `json:"info"`
+		Releases map[string][]ansibleReleaseFile `json:"releases"`
 	}
-	if len(data) > 8<<20 || json.Unmarshal(data, &record) != nil || !stableBootstrapVersion.MatchString(record.Info.Version) || requested != "latest" && requested != record.Info.Version {
+	if len(data) > 8<<20 || json.Unmarshal(data, &record) != nil {
 		return "", bundleFailure("requested Ansible release has no valid publisher metadata")
 	}
-	if err := prerequisites.ValidateBootstrapAnsibleVersion(record.Info.Version); err != nil {
+	version := record.Info.Version
+	if requested == "latest" {
+		version = latestQualifiedAnsible(record.Releases)
+		if version == "" {
+			return "", bundleFailure("Ansible publisher metadata lists no stable ansible-core " + prerequisites.QualifiedAnsibleMinor + " release with a live wheel")
+		}
+	} else if !stableBootstrapVersion.MatchString(version) || requested != version {
+		return "", bundleFailure("requested Ansible release has no valid publisher metadata")
+	}
+	if err := prerequisites.ValidateQualifiedAnsibleVersion(version); err != nil {
 		return "", err
 	}
-	minor := python[:strings.LastIndex(python, ".")]
-	if !slices.Contains(record.Info.Classifiers, "Programming Language :: Python :: "+minor) {
-		return "", bundleFailure("selected Ansible release does not declare support for the selected Python version; set compatible Environment dependencyVersions")
+	return version, nil
+}
+
+func latestQualifiedAnsible(releases map[string][]ansibleReleaseFile) string {
+	selected, selectedPatch := "", -1
+	for version, files := range releases {
+		if prerequisites.ValidateQualifiedAnsibleVersion(version) != nil || !qualifiedWheel(version, files) {
+			continue
+		}
+		patch, err := strconv.Atoi(version[strings.LastIndex(version, ".")+1:])
+		if err == nil && patch > selectedPatch {
+			selected, selectedPatch = version, patch
+		}
 	}
-	return record.Info.Version, nil
+	return selected
+}
+
+func qualifiedWheel(version string, files []ansibleReleaseFile) bool {
+	return slices.ContainsFunc(files, func(file ansibleReleaseFile) bool {
+		return file.PackageType == "bdist_wheel" && !file.Yanked && file.Filename == "ansible_core-"+version+"-py3-none-any.whl"
+	})
 }
 
 func bootstrapMetadataSource(prefix, endpoint string, data []byte) prerequisites.DependencySource {

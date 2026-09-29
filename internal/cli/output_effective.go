@@ -10,6 +10,15 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 )
 
+// effectiveResult carries the canonical effective-state array exactly as its
+// encoder wrote it.
+type effectiveResult struct {
+	Counts         admissionCounts `json:"counts"`
+	EffectiveState json.RawMessage `json:"effectiveState"`
+}
+
+func (effectiveResult) documentedResult() {}
+
 func writeEffective(ctx context.Context, out io.Writer, command string, result *compilation.EffectiveResult, jsonMode bool, encode func(context.Context, api.Catalog) ([]byte, error)) error {
 	if err := ctx.Err(); err != nil {
 		return encodingFailure(ctx, err)
@@ -28,10 +37,7 @@ func writeEffective(ctx context.Context, out io.Writer, command string, result *
 		return &resultFailure{"runtime.encode", "effective state encoder returned an invalid representation", 1}
 	}
 	if jsonMode {
-		payload := struct {
-			Counts         compilation.Counts `json:"counts"`
-			EffectiveState json.RawMessage    `json:"effectiveState"`
-		}{Counts: result.Counts, EffectiveState: json.RawMessage(data)}
+		payload := effectiveResult{Counts: displayCounts(result.Counts), EffectiveState: json.RawMessage(data)}
 		var encoded bytes.Buffer
 		encoder := json.NewEncoder(&encoded)
 		encoder.SetEscapeHTML(false)

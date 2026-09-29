@@ -28,13 +28,14 @@ var ErrBootstrapIncompatible = errors.New("retained bootstrap is incompatible wi
 // again. It always accompanies ErrBootstrapIncompatible, never replaces it.
 var ErrAutomationSuperseded = errors.New("retained bootstrap automation is superseded by the current executable")
 
-// MinimumBootstrapAnsibleVersion is required by the collection's templating
-// trust and strict Boolean semantics. Latest resolution does not lower it.
-const MinimumBootstrapAnsibleVersion = "2.19.0"
+// MinimumRecordedAnsibleVersion is the oldest ansible-core a retained
+// resolution may name: the collection's templating trust and strict Boolean
+// semantics begin there. It judges records only. What setup selects is the
+// narrower qualified minor, so a record an earlier build wrote stays readable
+// until setup supersedes it.
+const MinimumRecordedAnsibleVersion = "2.19.0"
 
-// ValidateBootstrapAnsibleVersion checks the collection's minimum independently
-// of publisher availability and Python compatibility.
-func ValidateBootstrapAnsibleVersion(version string) error {
+func validateRecordedAnsibleVersion(version string) error {
 	if len(version) <= 80 && bootstrapVersion.MatchString(version) {
 		parts := strings.Split(version, ".")
 		major, majorErr := strconv.ParseUint(parts[0], 10, 64)
@@ -43,7 +44,7 @@ func ValidateBootstrapAnsibleVersion(version string) error {
 			return nil
 		}
 	}
-	return diagnostics.NewFailure("controller.unsupported", "controller automation requires stable ansible-core "+MinimumBootstrapAnsibleVersion+" or newer for templating trust and strict Boolean semantics; set a compatible Environment dependencyVersions.ansible", "")
+	return diagnostics.NewFailure("controller.unsupported", "the retained resolution names an ansible-core below the recorded minimum "+MinimumRecordedAnsibleVersion, "")
 }
 
 // BootstrapDefinition freezes one authenticated publisher resolution. Source
@@ -106,7 +107,7 @@ func CanonicalBootstrap(value BootstrapDefinition) (BootstrapDefinition, error) 
 		value.ExpandedBytes < 1 || value.ExpandedBytes > 256<<20 || !bootstrapHash(value.ProjectionSHA256) || !bootstrapHash(value.AutomationDigest) {
 		return invalid()
 	}
-	if err := ValidateBootstrapAnsibleVersion(value.AnsibleVersion); err != nil {
+	if err := validateRecordedAnsibleVersion(value.AnsibleVersion); err != nil {
 		return BootstrapDefinition{}, err
 	}
 	minor := value.PythonVersion[:strings.LastIndex(value.PythonVersion, ".")]

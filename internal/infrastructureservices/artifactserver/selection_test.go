@@ -124,7 +124,7 @@ func TestSSHPlacementRequiresKeyAndHostKey(t *testing.T) {
 		return api.NewObject(api.Machine, "services", api.Value{}, spec)
 	}
 	complete := api.MapValue(
-		text("addressRef", "ip"), number("port", "2222"), text("user", "operator"),
+		text("addressRef", "ip"), number("port", "2222"), text("user", "root"),
 		field("auth", api.MapValue(text("privateKeyRef", "services-key"))),
 		text("knownHostsRef", "services-host-key"),
 	)
@@ -134,7 +134,7 @@ func TestSSHPlacementRequiresKeyAndHostKey(t *testing.T) {
 		t.Fatalf("ssh placement = %v", err)
 	}
 	placement := requests[0].Placement
-	if placement.Connection != connectionSSH || placement.Address != "192.0.2.1" || placement.Port != 2222 || placement.User != "operator" {
+	if placement.Connection != connectionSSH || placement.Address != "192.0.2.1" || placement.Port != 2222 || placement.User != "root" {
 		t.Fatalf("placement = %+v", placement)
 	}
 	for name, auth := range map[string]api.Value{
@@ -142,16 +142,35 @@ func TestSSHPlacementRequiresKeyAndHostKey(t *testing.T) {
 		"password":          complete.With("auth", api.MapValue(text("passwordRef", "services-password"))),
 		"no key":            complete.With("auth", api.MapValue()),
 		"no host key":       complete.Without("knownHostsRef"),
+		"non-root user":     complete.With("user", api.StringValue("operator")),
+		"escalation secret": complete.With("sudoPasswordRef", api.StringValue("services-sudo")),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := Requests(catalogOf(host(auth), server), "controller", testContext); err == nil {
-				t.Fatal("an unsupported SSH posture produced a request")
+			_, err := Requests(catalogOf(host(auth), server), "controller", testContext)
+			reported := diagnostics.Of(err)
+			if err == nil || len(reported) != 1 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "lifecycle placement") {
+				t.Fatalf("an unsupported SSH posture was not refused as a lifecycle placement: %+v", reported)
 			}
 		})
 	}
 	bare := api.NewObject(api.Machine, "services", api.Value{}, controller().Spec().Without("access"))
 	if _, err := Requests(catalogOf(bare, server), "controller", testContext); err == nil {
 		t.Fatal("a host with neither controller nor SSH access produced a request")
+	}
+}
+
+// A request frozen before placements stopped escalating still names its
+// escalation Secret; the operation binds the placement's own list, without it.
+func TestAPlacementNeverBindsAnEscalationSecret(t *testing.T) {
+	request := Request{
+		TLS: &TLS{Secret: "artifact-server-tls"},
+		Placement: Placement{
+			Address: "192.0.2.2", Connection: connectionSSH, KnownHostsRef: "services-host-key", Machine: "services",
+			Port: 22, PrivateKeyRef: "services-key", SudoPasswordRef: "services-sudo", User: "root",
+		},
+	}
+	if got := request.secretReferences(); !slices.Equal(got, []string{"artifact-server-tls", "services-host-key", "services-key"}) {
+		t.Fatalf("secret references = %v", got)
 	}
 }
 

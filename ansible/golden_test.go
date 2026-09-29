@@ -128,18 +128,20 @@ func lineDiff(want, got string) string {
 }
 
 // The automation digest names an approved bundle's automation, and setup,
-// the lifecycle runner and bundle inspection compare it, so the bytes digestOf
-// produces are pinned over a fixed map that includes collection documentation.
+// the lifecycle runner and bundle inspection compare it, so the bytes it
+// produces are pinned: digestOf over the automation half of a fixed map whose
+// collection documentation the split leaves out.
 // TestAutomationDigestCoversEveryEmbeddedFile owns which files the real digest
 // covers; this pins only how the digest is computed from them.
 func TestAutomationDigestFormatMatchesItsGolden(t *testing.T) {
-	data, err := json.Marshal(struct {
-		AutomationDigest string `json:"automationDigest"`
-	}{digestOf(map[string][]byte{
+	automation, _ := split(map[string][]byte{
 		"ansible.cfg": []byte("[defaults]\ncollections_path = collections\n"),
 		"collections/ansible_collections/bootwright/core/README.md": []byte("# Bootwright core\n"),
 		"controller/requirements.txt":                               []byte("ansible-core\n"),
-	})})
+	})
+	data, err := json.Marshal(struct {
+		AutomationDigest string `json:"automationDigest"`
+	}{digestOf(automation)})
 	if err != nil {
 		t.Fatal(err)
 	}

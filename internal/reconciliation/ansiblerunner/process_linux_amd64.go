@@ -98,11 +98,7 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	sudo, err := becomePassword(request)
-	if err != nil {
-		return lifecycle.RunResult{}, err
-	}
-	values, err := variables(request, paths, sudo)
+	values, err := variables(request, paths)
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
@@ -398,13 +394,14 @@ with open(path, 'rb') as stream:
 exec(code, {'__name__': '__main__', '__file__': path})
 `
 
-// verifyAutomation proves the approved bundle carries exactly this
-// executable's embedded collection before any of it runs.
+// verifyAutomation proves the approved bundle carries exactly the automation
+// this executable's digest names before any of it runs. Documentation runs
+// nothing and leaves the digest, so it is not compared.
 func verifyAutomation(ctx context.Context, request lifecycle.RunRequest) error {
 	if request.Area == nil {
 		return failure("controller.identity", "the approved execution bundle is unavailable", setupRemediation)
 	}
-	for name, expected := range ansible.Assets() {
+	for name, expected := range ansible.Automation() {
 		actual, err := request.Area.Read(ctx, "automation/"+name, len(expected)+1)
 		if err != nil || !slices.Equal(actual, expected) {
 			return failure("controller.identity", "the embedded automation does not match the approved execution bundle", setupRemediation)

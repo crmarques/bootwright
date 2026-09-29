@@ -136,6 +136,18 @@ Executed native installation is not covered by any of these; it is a manual
 `internal/controller/bundlelocal/catalog.json` records exact dependency
 artifacts for those releases only, and any other release refuses.
 
+Setup's private runtime is qualified for `ansible-core` 2.21 at its latest
+stable patch, on controller CPython 3.12, 3.13 or 3.14 at the latest patch of
+the newest. Managed hosts run Python 3.9 through 3.14, the target versions in
+ansible-core 2.21's
+[test matrix](https://github.com/ansible/ansible/blob/stable-2.21/test/lib/ansible_test/_util/target/common/constants.py),
+so the collection's modules and module utilities keep to 3.9 grammar. The
+minor is one constant, in `internal/controller/prerequisites/qualified.go`.
+`TestQualifiedAnsibleMinorAgreesEverywhere` holds every statement of it
+together: the collection's `requires_ansible`, both `ansible-core` pins, the
+ansible-lint supported list, the sanity ignore file, the compiled catalog and
+this paragraph. Qualifying another minor changes all of them in one commit.
+
 Each managed service runs one container image pinned by content digest in its
 capability's `catalog.go`. All four were resolved from their publisher's
 current stable tag and qualified by hand against podman 5.8.4 on Fedora 43 on

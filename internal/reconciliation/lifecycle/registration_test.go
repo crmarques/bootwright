@@ -394,7 +394,7 @@ func TestAFailedRegistrationWithReservationsKeepsItsEvidence(t *testing.T) {
 	delete(h.workspace.area.fail, plan)
 	h.service.options.Confirmer = nil
 	result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName})
-	if err != nil || !result.Settled {
+	if err != nil || !result.Settled || result.Recovered != RecoveredRelease {
 		t.Fatalf("the destroy = %+v (%v)", result, err)
 	}
 	if len(h.workspace.reservations) != 0 || !bytes.Equal(h.workspace.evidence, killPristine(t)) {
@@ -606,7 +606,7 @@ func TestADestroyReleasesWhatAnInterruptedRegistrationLeft(t *testing.T) {
 			j := journaled(h)
 			h.service.options.Confirmer = nil
 			result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName})
-			if err != nil || !result.Settled || result.Receipt.Operation != "none" || result.Receipt.State != "done" {
+			if err != nil || !result.Settled || result.Recovered != RecoveredRelease || result.Receipt.Operation != "none" || result.Receipt.State != "done" {
 				t.Fatalf("the destroy = %+v (%v)", result, err)
 			}
 			if len(h.presenter.presented) != 0 || len(h.workspace.reservations) != 0 || !bytes.Equal(h.workspace.evidence, pristine) {
@@ -1056,7 +1056,7 @@ func TestADestroyOverOnlyAStrandedBindingSettles(t *testing.T) {
 	h := newHarness(t, "alpha")
 	strand(t, h)
 	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
-	if err != nil || !result.Settled || h.workspace.mutations != 0 || len(h.binder.released) != 0 {
+	if err != nil || !result.Settled || result.Recovered != "" || h.workspace.mutations != 0 || len(h.binder.released) != 0 {
 		t.Fatalf("the destroy = %+v (%v) after %d transactions, released %v", result, err, h.workspace.mutations, h.binder.released)
 	}
 }

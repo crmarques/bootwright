@@ -193,7 +193,9 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	states, err := store.BlockStates(ctx, operation.ID, plan)
+	// A block retried after it failed again reads the state it found, so only
+	// its record's count shows the retry.
+	states, attempts, err := blockRecords(ctx, store, operation.ID, plan)
 	if err != nil {
 		return nil, err
 	}
@@ -201,9 +203,13 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	if err != nil {
 		logs = nil
 	}
+	blocks := blockResults(plan, states)
+	for index := range blocks {
+		blocks[index].Attempts = attempts[blocks[index].ID]
+	}
 	summary := &LifecycleSummary{
 		Operation: operation.ID, Verb: string(operation.Verb), State: string(operation.State),
-		Next: nextAction(operation.Verb, operation.State), Blocks: blockResults(plan, states), Logs: logs,
+		Next: nextAction(operation.Verb, operation.State), Blocks: blocks, Logs: logs,
 		Executable: executableIdentity(operation.Executable),
 	}
 	if summary.Logs == nil {
@@ -225,16 +231,15 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	return result, nil
 }
 
-// setupChecks reports what the stored controller evidence already proves. It
-// performs no host probe, so an unverified check is reported, never guessed.
+// setupChecks reports what the stored controller evidence already proves, in
+// the controller's readiness vocabulary. It performs no host probe, so a check
+// the evidence does not prove ready is not-ready, never guessed either way.
 func setupChecks(view View) []SetupCheck {
 	controller := view.Controller()
-	binding, bundle := "missing", "missing"
+	binding, bundle := "not-ready", "not-ready"
 	if controller.Exists && controller.Initialized {
 		if controller.State.Receipt.Status == "complete" {
 			bundle = "ready"
-		} else {
-			bundle = "incomplete"
 		}
 		for _, item := range controller.State.Bindings {
 			if item.Context == view.Identity().Name {

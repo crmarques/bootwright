@@ -12,7 +12,6 @@ import (
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 const (
@@ -105,8 +104,9 @@ func inventory(placement machineref.Placement, interpreter string, paths map[str
 }
 
 // variables carries the frozen request and the paths its material was written
-// to. Material values themselves never enter this file.
-func variables(request lifecycle.RunRequest, paths map[string]string, sudo string) (map[string]any, error) {
+// to. Material values themselves never enter this file, and neither does an
+// escalation password: a placement connects as root and never escalates.
+func variables(request lifecycle.RunRequest, paths map[string]string) (map[string]any, error) {
 	decoded := map[string]any{}
 	if err := json.Unmarshal(request.Canonical, &decoded); err != nil {
 		return nil, failure("lifecycle.state", "the frozen adapter request could not be prepared", "")
@@ -120,32 +120,11 @@ func variables(request lifecycle.RunRequest, paths map[string]string, sudo strin
 	for name, value := range request.MaterialValues {
 		material[name] = value
 	}
-	values := map[string]any{
+	return map[string]any{
 		request.Variable + "_request":  decoded,
 		request.Variable + "_digest":   request.Digest,
 		request.Variable + "_material": material,
-	}
-	if sudo != "" {
-		values["ansible_become_password"] = sudo
-	}
-	return values, nil
-}
-
-// becomePassword reads the bound escalation secret into the variables file
-// rather than an argument or environment variable.
-func becomePassword(request lifecycle.RunRequest) (string, error) {
-	if request.Sudo == "" {
-		return "", nil
-	}
-	bound, ok := request.Material[request.Sudo]
-	if !ok {
-		return "", failure("secret.store", "the bound escalation password is not available to this attempt", bindingRemediation)
-	}
-	value, ok := bound.Part(secrets.PasswordPart)
-	if !ok || len(value) == 0 || len(value) > maxMaterialBytes {
-		return "", failure("secret.part", "the bound escalation password has no usable password part", bindingRemediation)
-	}
-	return strings.TrimRight(string(value), "\n"), nil
+	}, nil
 }
 
 func materialBytes(request lifecycle.RunRequest) (map[string][]byte, error) {

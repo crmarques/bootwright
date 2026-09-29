@@ -33,11 +33,44 @@ func Assets() map[string][]byte {
 	return files
 }
 
-// Digest identifies the embedded automation. It covers every file Assets
-// returns, documentation included, because each check of an approved bundle's
-// automation compares every one of those files byte for byte: a file the digest
-// skipped could differ under an equal digest. specs/controller.md owns the rule.
-func Digest() string { return digestOf(Assets()) }
+// documentationPaths are the collection's root README and CHANGELOG. They run
+// nothing, so they stay in every bundle but leave the automation digest.
+var documentationPaths = []string{
+	"collections/ansible_collections/bootwright/core/CHANGELOG.rst",
+	"collections/ansible_collections/bootwright/core/README.md",
+}
+
+// Automation is every embedded file the automation digest covers: Assets
+// without the collection's documentation.
+func Automation() map[string][]byte {
+	automation, _ := split(Assets())
+	return automation
+}
+
+// Documentation is exactly the collection's root README and CHANGELOG.
+func Documentation() map[string][]byte {
+	_, documentation := split(Assets())
+	return documentation
+}
+
+func split(files map[string][]byte) (automation, documentation map[string][]byte) {
+	automation, documentation = make(map[string][]byte, len(files)), make(map[string][]byte, len(documentationPaths))
+	for name, data := range files {
+		if slices.Contains(documentationPaths, name) {
+			documentation[name] = data
+		} else {
+			automation[name] = data
+		}
+	}
+	return automation, documentation
+}
+
+// Digest identifies the embedded automation: every file Automation returns,
+// under a domain version of its own, so no digest that covered documentation
+// equals one that does not. Each check of an approved bundle's automation
+// compares exactly these files byte for byte, so a documentation-only build
+// keeps the digest and the bundle it names. specs/controller.md owns the rule.
+func Digest() string { return digestOf(Automation()) }
 
 func digestOf(files map[string][]byte) string {
 	names := make([]string, 0, len(files))
@@ -46,7 +79,7 @@ func digestOf(files map[string][]byte) string {
 	}
 	slices.Sort(names)
 	digest := sha256.New()
-	digest.Write([]byte("bootwright.controller.automation-v1\x00"))
+	digest.Write([]byte("bootwright.controller.automation-v2\x00"))
 	for _, name := range names {
 		digest.Write([]byte(name))
 		digest.Write([]byte{0})

@@ -18,7 +18,7 @@ func New(execution prerequisites.PythonExecutionGuard) Installer {
 	return Installer{ExecutionGuard: execution}
 }
 
-const requestVersion = "controller-prerequisites-v3"
+const requestVersion = "controller-prerequisites-v4"
 
 type capabilityRequest struct {
 	Version           string                            `json:"version"`
@@ -30,6 +30,7 @@ type capabilityRequest struct {
 	Packages          []prerequisites.NativePackage     `json:"packages"`
 	Native            *prerequisites.NativeResolvedPlan `json:"native"`
 	Tools             []prerequisites.ToolDefinition    `json:"tools"`
+	Acquisition       []toolAcquisition                 `json:"acquisition"`
 	Egress            prerequisites.SetupEgress         `json:"egress"`
 	Preparation       *prerequisites.NativePreparation  `json:"preparation,omitempty"`
 }
@@ -109,7 +110,7 @@ func (installer Installer) request(ctx context.Context, execution, target prereq
 	if execution == nil {
 		return capabilityRequest{}, failure("controller.setup", "the Ansible controller adapter is incomplete")
 	}
-	for name, expected := range ansible.Assets() {
+	for name, expected := range ansible.Automation() {
 		actual, err := execution.Read(ctx, "automation/"+name, len(expected)+1)
 		if err != nil || !slices.Equal(actual, expected) {
 			return capabilityRequest{}, failure("controller.identity", "the embedded controller automation does not match the approved execution bundle")
@@ -152,6 +153,10 @@ func (installer Installer) request(ctx context.Context, execution, target prereq
 	}
 	if request.Tools == nil {
 		request.Tools = []prerequisites.ToolDefinition{}
+	}
+	request.Acquisition = make([]toolAcquisition, 0, len(request.Tools))
+	for _, tool := range request.Tools {
+		request.Acquisition = append(request.Acquisition, toolAcquisition{Source: tool.Source.ID, Seconds: int64(acquisitionDeadline(tool.Source.Bytes).Seconds())})
 	}
 	if !validSHA(request.Identity) || preparation != nil && !validPreparation(*preparation, request) {
 		return capabilityRequest{}, failure("controller.identity", "the frozen Ansible request or recovery proof is invalid")

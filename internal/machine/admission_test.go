@@ -30,7 +30,7 @@ func list(v ...api.Value) api.Value { return api.ListValue(v...) }
 func fixture() (api.Object, api.Catalog) {
 	provider := object(api.InfraProvider, "metal", m("baremetal", m("defaults", m("bmc", m("credentialsRef", "bmc", "tls", m("verify", false), "virtualMedia", m("tls", m("trust", "established"))))), "networkAttachments", list(m("name", "net", "baremetal", m()))))
 	network := object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")), "routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-interface", "eth0"))))))
-	machine := object(api.Machine, "node", m("substrate", m("providerRef", "metal"), "os", m("provided", false, "install", m("rootDeviceHints", m("deviceName", "/dev/sda"))), "hardware", m("nics", list(m("name", "eth0", "macAddress", "02-00-00-00-00-01")), "boot", m("nicRef", "eth0"), "management", m("bmc", m("address", "redfish-virtualmedia+https://bmc.example.test/redfish/v1/Systems/1"))), "network", m("configRef", "net", "addresses", list(m("name", "primary", "address", "192.0.2.11/24", "interface", "eth0")))))
+	machine := object(api.Machine, "node", m("substrate", m("providerRef", "metal"), "os", m("provided", false, "install", m("rootDeviceHints", m("deviceName", "/dev/sda"))), "hardware", m("nics", list(m("name", "eth0", "macAddress", "02-00-00-00-00-01")), "boot", m("nicRef", "eth0"), "management", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1"))), "network", m("configRef", "net", "addresses", list(m("name", "primary", "address", "192.0.2.11/24", "interface", "eth0")))))
 	env := object(api.Environment, "env", m("domains", m("base", "example.test")))
 	return machine, api.NewCatalog([]api.Object{machine, network, provider, env})
 }
@@ -168,9 +168,6 @@ func TestAccessLifecycleAndGlobalIdentities(t *testing.T) {
 	if got := validateHardware(o, api.NewCatalog([]api.Object{o, peer}), "baremetal"); len(got) == 0 {
 		t.Fatal("duplicate MAC admitted")
 	}
-	if validBMC("https://bmc.example.test/redfish/v1/Systems/", true) || validBMC("https://bmc.example.test/redfish/v1/Systems/1/Actions", true) {
-		t.Fatal("non-exact ComputerSystem accepted")
-	}
 }
 
 func TestNetworkConfigurationCanonicalUniqueness(t *testing.T) {
@@ -184,14 +181,33 @@ func TestNetworkConfigurationCanonicalUniqueness(t *testing.T) {
 	}
 }
 
-func TestBMCComputerSystemRejectsDotAndWhitespaceIdentifiers(t *testing.T) {
-	for _, identifier := range []string{".", "..", "a b", "a\tb", "%2e", "a%20b"} {
-		if validBMC("https://bmc.example.test/redfish/v1/Systems/"+identifier, true) {
-			t.Fatalf("ambiguous ComputerSystem identifier accepted: %q", identifier)
+// Every authored BMC address is held to the one grammar the realized target
+// reads, whether or not anything installs the Machine, and one address raises
+// one issue.
+func TestEveryAuthoredBMCAddressNamesOneExactSystem(t *testing.T) {
+	const field = "$.spec.hardware.management.bmc.address"
+	installed, catalog := fixture()
+	provided := object(api.Machine, "bastion", m("os", m("provided", true),
+		"hardware", m("management", m("bmc", m("address", "https://bastion-bmc.example.test/redfish/v1/Systems/1", "credentialsRef", "bmc")))))
+	for name, machine := range map[string]api.Object{"bare-metal installation": installed, "provider-less": provided} {
+		with := func(address string) []api.Issue {
+			edited := machine.WithSpec(machine.Spec().WithPath(api.StringValue(address), "hardware", "management", "bmc", "address"))
+			normalized, _ := Normalize(edited, catalog)
+			return Validate(normalized, catalog)
 		}
-	}
-	if !validBMC("redfish-virtualmedia+https://bmc.example.test/redfish/v1/Systems/node-1", true) {
-		t.Fatal("exact ComputerSystem rejected")
+		t.Run(name, func(t *testing.T) {
+			if issues := with(machine.Spec().Get("hardware", "management", "bmc", "address").Text()); len(issues) != 0 {
+				t.Fatal("a canonical address was refused", issues)
+			}
+			for _, address := range []string{
+				"redfish-virtualmedia+https://bmc.example.test/redfish/v1/Systems/1",
+				"https://bmc.example.test/redfish/v1/Systems/1/",
+			} {
+				if issues := with(address); len(issues) != 1 || issues[0].Field != field {
+					t.Fatalf("%q: issues = %v", address, issues)
+				}
+			}
+		})
 	}
 }
 

@@ -314,18 +314,62 @@ func writeEncryptionStatus(out io.Writer, command string, result *encryption.Sta
 	return text.writeTo(out)
 }
 
-func displaySecretCheck(result *custody.CheckResult) *custody.CheckResult {
-	out := &custody.CheckResult{Context: displaySecretContext(result.Context), Secrets: make([]custody.CheckRow, len(result.Secrets))}
+type secretCheckResult struct {
+	Context resultContext    `json:"context"`
+	Secrets []secretCheckRow `json:"secrets"`
+}
+
+func (secretCheckResult) documentedResult() {}
+
+type secretCheckRow struct {
+	Name     string   `json:"name"`
+	Type     string   `json:"type"`
+	Source   string   `json:"source"`
+	Parts    []string `json:"parts"`
+	Status   string   `json:"status"`
+	Version  *string  `json:"version"`
+	Sequence int      `json:"sequence"`
+}
+
+type secretListResult struct {
+	Context resultContext   `json:"context"`
+	Secrets []secretListRow `json:"secrets"`
+}
+
+func (secretListResult) documentedResult() {}
+
+type secretListRow struct {
+	Name            string   `json:"name"`
+	Type            string   `json:"type"`
+	Source          string   `json:"source"`
+	Parts           []string `json:"parts"`
+	State           string   `json:"state"`
+	CurrentVersion  *string  `json:"currentVersion"`
+	CurrentSequence int      `json:"currentSequence"`
+	BoundVersions   int      `json:"boundVersions"`
+}
+
+func displaySecretCheck(result *custody.CheckResult) secretCheckResult {
+	out := secretCheckResult{Context: displaySecretContext(result.Context), Secrets: make([]secretCheckRow, len(result.Secrets))}
 	for i, row := range sortedSecretCheckRows(result.Secrets) {
-		out.Secrets[i] = custody.CheckRow{Name: escapeDisplayLine(row.Name), Type: escapeDisplayLine(row.Type), Source: escapeDisplayLine(row.Source), Parts: displaySecretPartValues(row.Parts), Status: escapeDisplayLine(row.Status), Version: displayOptionalIdentifierPointer(row.Version)}
+		out.Secrets[i] = secretCheckRow{
+			Name: escapeDisplayLine(row.Name), Type: escapeDisplayLine(row.Type), Source: escapeDisplayLine(row.Source),
+			Parts: displaySecretPartValues(row.Parts), Status: escapeDisplayLine(row.Status),
+			Version: displayOptionalIdentifierPointer(row.Version), Sequence: row.Sequence,
+		}
 	}
 	return out
 }
 
-func displaySecretList(result *custody.ListResult) *custody.ListResult {
-	out := &custody.ListResult{Context: displaySecretContext(result.Context), Secrets: make([]custody.ListRow, len(result.Secrets))}
+func displaySecretList(result *custody.ListResult) secretListResult {
+	out := secretListResult{Context: displaySecretContext(result.Context), Secrets: make([]secretListRow, len(result.Secrets))}
 	for i, row := range sortedSecretListRows(result.Secrets) {
-		out.Secrets[i] = custody.ListRow{Name: escapeDisplayLine(row.Name), Type: escapeDisplayLine(row.Type), Source: escapeDisplayLine(row.Source), Parts: displaySecretPartValues(row.Parts), State: escapeDisplayLine(row.State), CurrentVersion: displayOptionalIdentifierPointer(row.CurrentVersion), BoundVersions: row.BoundVersions}
+		out.Secrets[i] = secretListRow{
+			Name: escapeDisplayLine(row.Name), Type: escapeDisplayLine(row.Type), Source: escapeDisplayLine(row.Source),
+			Parts: displaySecretPartValues(row.Parts), State: escapeDisplayLine(row.State),
+			CurrentVersion: displayOptionalIdentifierPointer(row.CurrentVersion), CurrentSequence: row.CurrentSequence,
+			BoundVersions: row.BoundVersions,
+		}
 	}
 	return out
 }
@@ -342,8 +386,8 @@ func sortedSecretListRows(rows []custody.ListRow) []custody.ListRow {
 	return rows
 }
 
-func displaySecretContext(value secretstore.Context) secretstore.Context {
-	return secretstore.Context{Name: escapeDisplayLine(value.Name), Mode: escapeDisplayLine(value.Mode)}
+func displaySecretContext(value secretstore.Context) resultContext {
+	return resultContext{Name: escapeDisplayLine(value.Name), Mode: escapeDisplayLine(value.Mode)}
 }
 
 func displaySecretParts(parts []secrets.Part) string {
@@ -351,17 +395,13 @@ func displaySecretParts(parts []secrets.Part) string {
 	if len(values) == 0 {
 		return "-"
 	}
-	text := make([]string, len(values))
-	for i, value := range values {
-		text[i] = string(value)
-	}
-	return strings.Join(text, ",")
+	return strings.Join(values, ",")
 }
 
-func displaySecretPartValues(parts []secrets.Part) []secrets.Part {
-	values := make([]secrets.Part, len(parts))
+func displaySecretPartValues(parts []secrets.Part) []string {
+	values := make([]string, len(parts))
 	for i, part := range parts {
-		values[i] = secrets.Part(escapeDisplayLine(string(part)))
+		values[i] = escapeDisplayLine(string(part))
 	}
 	slices.Sort(values)
 	return values
@@ -402,20 +442,43 @@ type encryptionStatusResult struct {
 	Initialized    bool                  `json:"initialized"`
 	Implementation *implementationStatus `json:"implementation"`
 	ActiveKey      *string               `json:"activeKey"`
-	Keys           []secretstore.Key     `json:"keys"`
-	Items          encryption.ItemStatus `json:"items"`
+	Keys           []encryptionKey       `json:"keys"`
+	Items          encryptionItems       `json:"items"`
+}
+
+func (encryptionStatusResult) documentedResult() {}
+
+type encryptionKey struct {
+	ID    string `json:"id"`
+	State string `json:"state"`
+	Seals uint64 `json:"seals"`
+}
+
+type encryptionItems struct {
+	CurrentVersions   int  `json:"currentVersions"`
+	BoundVersions     int  `json:"boundVersions"`
+	MaterialParts     int  `json:"materialParts"`
+	RetainedArtifacts int  `json:"retainedArtifacts"`
+	CleanupRequired   bool `json:"cleanupRequired"`
 }
 
 func displayEncryptionStatus(result *encryption.StatusResult) *encryptionStatusResult {
-	out := &encryptionStatusResult{Initialized: result.Initialized, ActiveKey: displayOptionalIdentifierPointer(result.ActiveKey), Keys: make([]secretstore.Key, len(result.Keys)), Items: result.Items}
+	items := result.Items
+	out := &encryptionStatusResult{
+		Initialized: result.Initialized, ActiveKey: displayOptionalIdentifierPointer(result.ActiveKey), Keys: make([]encryptionKey, len(result.Keys)),
+		Items: encryptionItems{
+			CurrentVersions: items.CurrentVersions, BoundVersions: items.BoundVersions, MaterialParts: items.MaterialParts,
+			RetainedArtifacts: items.RetainedArtifacts, CleanupRequired: items.CleanupRequired,
+		},
+	}
 	if result.Implementation != nil {
 		implementation := result.Implementation
 		out.Implementation = &implementationStatus{Type: escapeDisplayLine(implementation.Type), Store: displayComponent(implementation.Store), KeyCustody: displayComponent(implementation.KeyCustody), State: escapeDisplayLine(implementation.State)}
 	}
 	for i, key := range result.Keys {
-		out.Keys[i] = secretstore.Key{ID: escapeDisplayLine(key.ID), State: escapeDisplayLine(key.State), Seals: key.Seals}
+		out.Keys[i] = encryptionKey{ID: escapeDisplayLine(key.ID), State: escapeDisplayLine(key.State), Seals: key.Seals}
 	}
-	slices.SortStableFunc(out.Keys, func(a, b secretstore.Key) int { return strings.Compare(a.ID, b.ID) })
+	slices.SortStableFunc(out.Keys, func(a, b encryptionKey) int { return strings.Compare(a.ID, b.ID) })
 	return out
 }
 

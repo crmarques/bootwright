@@ -3,6 +3,9 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -156,6 +159,34 @@ func TestSettledOperationSaysItDidNothing(t *testing.T) {
 	if !strings.Contains(out.String(), "Nothing to remove: this context owns no realized state.") {
 		t.Fatalf("a settled destroy did not say it removed nothing: %q", out.String())
 	}
+	// A settled invocation that first completed an interrupted finalization,
+	// or a destroy that first released what an interrupted registration left,
+	// says it did only that, in place of the note that it did nothing at all.
+	for _, test := range []struct {
+		verb, recovered, note, plain string
+	}{
+		{"apply", lifecycle.RecoveredFinalization, "Nothing to do: this invocation only completed an interrupted finalization.", "Nothing to do: this context already holds the state it declares."},
+		{"destroy", lifecycle.RecoveredFinalization, "Nothing to remove: this invocation only completed an interrupted finalization.", "Nothing to remove: this context owns no realized state."},
+		{"destroy", lifecycle.RecoveredRelease, "Nothing to remove: this invocation only released what an interrupted registration left.", "Nothing to remove: this context owns no realized state."},
+	} {
+		t.Run(test.verb+" after a "+test.recovered, func(t *testing.T) {
+			var out bytes.Buffer
+			result := &lifecycle.OperationResult{
+				Context: lifecycle.ContextIdentity{Name: "lab"}, Verb: test.verb, Settled: true, Recovered: test.recovered,
+				Receipt: lifecycle.Receipt{Operation: "op-abc", Verb: test.verb, State: "done", Next: "none"},
+			}
+			if err := writeLifecycleOperation(&out, result); err != nil {
+				t.Fatal(err)
+			}
+			rendered := out.String()
+			if !strings.Contains(rendered, "  "+test.note+"\n") {
+				t.Fatalf("the settled %s did not name its %s: %q", test.verb, test.recovered, rendered)
+			}
+			if strings.Contains(rendered, test.plain) {
+				t.Fatalf("the settled %s also said it did nothing: %q", test.verb, rendered)
+			}
+		})
+	}
 }
 
 // A block occupies one row: each group opens it with the work in flight and
@@ -211,10 +242,10 @@ func TestLifecycleOutputEscapesUntrustedText(t *testing.T) {
 
 func TestStatusRendersTextAndJSON(t *testing.T) {
 	result := &lifecycle.StatusResult{
-		Context:     lifecycle.ContextIdentity{Name: "lab", Revision: "rev-1"},
+		Context:     lifecycle.ContextIdentity{Name: "lab", Revision: "rev-1", Mode: "ready"},
 		SetupChecks: []lifecycle.SetupCheck{{ID: "controller-binding", Status: "ready"}},
 		Shared:      []lifecycle.ServiceSummary{{Kind: "ArtifactServer", Name: "lab", Machine: "controller", Status: "done"}},
-		NextSteps:   []string{"bootwright destroy"},
+		NextSteps:   []string{"bootwright apply", "bootwright destroy"},
 		Lifecycle: &lifecycle.LifecycleSummary{
 			Operation: "op-abc", Verb: "apply", State: "done", Next: "destroy",
 			Blocks:     []lifecycle.BlockResult{{ID: "artifact-server-lab", Description: "serve artifacts", State: "done"}},
@@ -228,9 +259,15 @@ func TestStatusRendersTextAndJSON(t *testing.T) {
 	}
 	// The build that registered the operation is what a removal is planned
 	// from, so a refusal naming it as the remedy is readable in advance.
-	for _, want := range []string{"Context lab", "controller-binding", "ArtifactServer/lab", "bootwright destroy", "Registered by", "1.4.0 (9f2c1ab)"} {
+	for _, want := range []string{"Context lab", "  Mode  ready\n", "controller-binding", "ArtifactServer/lab", "Registered by", "1.4.0 (9f2c1ab)"} {
 		if !strings.Contains(text.String(), want) {
 			t.Fatalf("status text = %q, missing %q", text.String(), want)
+		}
+	}
+	// Every next step is an action the operator may take, so none is dropped.
+	for _, step := range result.NextSteps {
+		if !strings.Contains(text.String(), "  "+step+"\n") {
+			t.Fatalf("status text = %q, missing next step %q", text.String(), step)
 		}
 	}
 	var encoded bytes.Buffer
@@ -238,7 +275,7 @@ func TestStatusRendersTextAndJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	line := encoded.String()
-	if !strings.HasPrefix(line, `{"schemaVersion":"v1alpha1","command":"status","ok":true,"exitCode":0,"result":{"context":`) {
+	if !strings.HasPrefix(line, `{"schemaVersion":"v1alpha1","command":"status","ok":true,"exitCode":0,"result":{"context":{"name":"lab","mode":"ready"},`) {
 		t.Fatalf("status JSON envelope = %q", line)
 	}
 	for _, want := range []string{`"setupChecks":`, `"desired":`, `"clusters":`, `"storageClusters":`, `"shared":`, `"secrets":`, `"nextSteps":`, `"lifecycle":`} {
@@ -388,6 +425,106 @@ func TestStatusNamesTheLogOfAnIncompleteOperation(t *testing.T) {
 	}
 	if !strings.Contains(text.String(), "bootwright apply") {
 		t.Fatalf("status dropped its next step: %q", text.String())
+	}
+}
+
+// Display escapes each value once, so every status value reads in text exactly
+// as the safe display text JSON encodes it. Each input carries one backslash
+// under a label no other input ends with, so a value escaped twice, or never,
+// cannot pass for another.
+func TestStatusTextEscapesOnce(t *testing.T) {
+	raw := func(label string) string { return label + `\x` }
+	shown := func(label string) string { return label + `\\x` }
+	result := &lifecycle.StatusResult{
+		Context:         lifecycle.ContextIdentity{Name: raw("ctx"), Revision: raw("rev"), Mode: raw("mode")},
+		SetupChecks:     []lifecycle.SetupCheck{{ID: raw("check"), Status: raw("readiness")}},
+		Desired:         lifecycle.DesiredSummary{Revision: raw("rev"), Environment: raw("env")},
+		Clusters:        []lifecycle.ClusterSummary{{Name: raw("cname"), Kind: raw("ckind"), Status: raw("cstatus")}},
+		StorageClusters: []lifecycle.ClusterSummary{{Name: raw("sname"), Kind: raw("skind"), Status: raw("sstatus")}},
+		Shared:          []lifecycle.ServiceSummary{{Kind: raw("vkind"), Name: raw("vname"), Machine: raw("machine"), Status: raw("vstatus")}},
+		NextSteps:       []string{raw("step")},
+		Lifecycle: &lifecycle.LifecycleSummary{
+			Operation: raw("operation"), Verb: raw("verb"), State: raw("opstate"), Next: raw("next"),
+			Blocks:     []lifecycle.BlockResult{{ID: raw("block"), Description: raw("description"), Stage: raw("stage"), State: raw("bstate")}},
+			Logs:       []string{raw("log")},
+			Executable: raw("build"),
+		},
+		LogLocation: raw("location"),
+	}
+	var text bytes.Buffer
+	if err := writeLifecycleStatus(&text, result, false); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(text.String(), `\\\\`) {
+		t.Fatalf("status text escaped a value twice: %q", text.String())
+	}
+	for _, want := range []string{
+		"[OK] Context " + shown("ctx") + "\n", "  Mode  " + shown("mode") + "\n", "  [UNKNOWN]  " + shown("check") + "\n",
+		"  Revision         " + shown("rev") + "\n", "  Environment      " + shown("env") + "\n",
+		"  [FAIL]  " + shown("ckind") + "/" + shown("cname") + "\n", "  [FAIL]  " + shown("skind") + "/" + shown("sname") + "\n",
+		"  [FAIL]  " + shown("vkind") + "/" + shown("vname") + "  " + shown("machine") + "\n", "  " + shown("step") + "\n",
+		"  Operation  " + shown("operation") + "\n", "  Verb       " + shown("verb") + "\n",
+		"  State      " + shown("opstate") + "\n", "  Next       " + shown("next") + "\n",
+		"  [FAIL]  " + shown("description") + "\n",
+		"  Registered by  " + shown("build") + "\n", "  Logs           " + shown("location") + "\n",
+	} {
+		if !strings.Contains(text.String(), want) {
+			t.Fatalf("status text = %q, missing %q", text.String(), want)
+		}
+	}
+	var encoded bytes.Buffer
+	if err := writeLifecycleStatus(&encoded, result, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(encoded.String(), `"setupChecks":[{"id":"check\\\\x","status":"readiness\\\\x"}]`) {
+		t.Fatalf("status JSON = %q, want the check as check\\\\x", encoded.String())
+	}
+	var envelope struct {
+		Result any `json:"result"`
+	}
+	if err := json.Unmarshal(encoded.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	collectJSONStrings("", envelope.Result, got)
+	want := map[string]string{}
+	for path, label := range map[string]string{
+		"context.name": "ctx", "context.mode": "mode",
+		"setupChecks[0].id": "check", "setupChecks[0].status": "readiness",
+		"desired.revision": "rev", "desired.environment": "env",
+		"clusters[0].name": "cname", "clusters[0].kind": "ckind", "clusters[0].status": "cstatus",
+		"storageClusters[0].name": "sname", "storageClusters[0].kind": "skind", "storageClusters[0].status": "sstatus",
+		"shared[0].kind": "vkind", "shared[0].name": "vname", "shared[0].machine": "machine", "shared[0].status": "vstatus",
+		"nextSteps[0]":        "step",
+		"lifecycle.operation": "operation", "lifecycle.verb": "verb", "lifecycle.state": "opstate", "lifecycle.next": "next",
+		"lifecycle.blocks[0].id": "block", "lifecycle.blocks[0].description": "description",
+		"lifecycle.blocks[0].stage": "stage", "lifecycle.blocks[0].state": "bstate",
+		"lifecycle.logs[0]": "log",
+	} {
+		want[path] = shown(label)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("status JSON strings = %q, want %q", got, want)
+	}
+}
+
+// collectJSONStrings records every string a decoded JSON value holds under its
+// path, so a test can require each one and admit no other.
+func collectJSONStrings(path string, value any, into map[string]string) {
+	switch typed := value.(type) {
+	case string:
+		into[path] = typed
+	case map[string]any:
+		for key, element := range typed {
+			if path != "" {
+				key = path + "." + key
+			}
+			collectJSONStrings(key, element, into)
+		}
+	case []any:
+		for index, element := range typed {
+			collectJSONStrings(path+"["+strconv.Itoa(index)+"]", element, into)
+		}
 	}
 }
 

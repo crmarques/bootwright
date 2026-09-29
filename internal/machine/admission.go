@@ -3,10 +3,8 @@ package machine
 import (
 	"fmt"
 	"net/netip"
-	"net/url"
 	"slices"
 	"strings"
-	"unicode"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
@@ -319,14 +317,15 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	if s.Get("access", "rootLogin").Text() == "revoke" && (installed(o) || !successorLogin(o, c)) {
 		issues = appendIssues(issues, invariant("$.spec.access.rootLogin", "revoking root login requires a managed storage-cluster non-root successor login"))
 	}
+	issues = appendIssues(issues, validatePlacementHost(o, c)...)
 	issues = appendIssues(issues, validateHostKey(o, c)...)
 	issues = appendIssues(issues, substrate.ValidateBMCDefaults(s.Get("hardware", "management", "bmc"), "$.spec.hardware.management.bmc", false)...)
 	if bmc := s.Get("hardware", "management", "bmc"); bmc.Present() {
 		if !bmc.Has("credentialsRef") {
 			issues = appendIssues(issues, invariant("$.spec.hardware.management.bmc.credentialsRef", "BMC credentials are required after provider inheritance"))
 		}
-		if bmc.Has("address") && !validBMC(bmc.Get("address").Text(), false) {
-			issues = appendIssues(issues, invariant("$.spec.hardware.management.bmc.address", "BMC address must be an absolute Redfish endpoint without embedded credentials"))
+		if _, ok := substrate.NormalizeControllerEndpoint(bmc.Get("address").Text()); bmc.Has("address") && !ok {
+			issues = appendIssues(issues, invariant("$.spec.hardware.management.bmc.address", "the BMC address must be a canonical absolute http or https URL naming exactly one /redfish/v1/Systems/<id> ComputerSystem"))
 		}
 	}
 	return issues
@@ -382,11 +381,8 @@ func validateBaremetal(o api.Object) []api.Issue {
 	if _, ok := namedValue(s.Get("hardware", "nics"), s.Get("hardware", "boot", "nicRef").Text()); !ok {
 		issues = appendIssues(issues, reference("$.spec.hardware.boot.nicRef", "bare-metal boot requires a declared NIC"))
 	}
-	bmc := s.Get("hardware", "management", "bmc")
-	if !bmc.Present() {
+	if !s.Get("hardware", "management", "bmc").Present() {
 		issues = appendIssues(issues, invariant("$.spec.hardware.management.bmc", "bare-metal installation requires a BMC"))
-	} else if !validBMC(bmc.Get("address").Text(), true) {
-		issues = appendIssues(issues, invariant("$.spec.hardware.management.bmc.address", "bare-metal BMC address must select one exact Redfish ComputerSystem"))
 	}
 	// A physical machine offers no channel to read back what it holds, so the
 	// key it will answer with is declared here and delivered by the
@@ -616,25 +612,6 @@ func inherit(local, defaults api.Value) api.Value {
 		}
 	}
 	return local
-}
-func validBMC(raw string, system bool) bool {
-	invalidCharacter := func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }
-	if strings.IndexFunc(raw, invalidCharacter) >= 0 {
-		return false
-	}
-	u, err := url.Parse(raw)
-	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" || !slices.Contains([]string{"http", "https", "redfish+http", "redfish+https", "redfish-virtualmedia+http", "redfish-virtualmedia+https"}, u.Scheme) {
-		return false
-	}
-	if !system {
-		return true
-	}
-	const prefix = "/redfish/v1/Systems/"
-	if !strings.HasPrefix(u.Path, prefix) {
-		return false
-	}
-	id := strings.TrimPrefix(u.Path, prefix)
-	return id != "" && id != "." && id != ".." && !strings.Contains(id, "/") && strings.IndexFunc(id, invalidCharacter) < 0 && u.RawPath == ""
 }
 func validDNS(s string) bool {
 	if len(s) == 0 || len(s) > 253 || strings.HasSuffix(s, ".") {

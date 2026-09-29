@@ -132,8 +132,20 @@ type OperationResult struct {
 	// already proves it. Its blocks are what an earlier operation completed,
 	// never what this invocation did.
 	Settled bool
-	Receipt Receipt
+	// Recovered names the only thing a settled invocation did before it
+	// settled: RecoveredFinalization or RecoveredRelease, or empty when it did
+	// nothing at all. It is never set on a result that performed work.
+	Recovered string
+	Receipt   Receipt
 }
+
+// What a settled invocation may have done before it settled. Either performs
+// no effect: a finalization records what the block records already prove, and
+// a release returns what an interrupted registration left unowned.
+const (
+	RecoveredFinalization = "finalization"
+	RecoveredRelease      = "release"
+)
 
 // Progress phases, in the order an operation runs them. A check proves a
 // precondition while no operation exists yet, so it has no log to follow and

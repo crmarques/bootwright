@@ -53,7 +53,6 @@ func longFunctionsAwaitingSplit() []string {
 		"internal/secrets/localkeyring/initialization.go.resumeInitialization",
 		"internal/secrets/localkeyring/mutations.go.publish",
 		"internal/secrets/material/files_linux_amd64.go.readFileParts",
-		"internal/substrate/admission.go.Validate",
 		"internal/workspace/contextfs/controller_records.go.validateControllerState",
 		"internal/workspace/contextfs/initialization_linux_amd64.go.Reserve",
 		"internal/workspace/contextfs/records.go.fitsJSON",

@@ -284,7 +284,7 @@ func (w *testWorkspace) MutateLifecycle(ctx context.Context, name string, callba
 type testView struct{ workspace *testWorkspace }
 
 func (v *testView) Identity() ContextIdentity {
-	return ContextIdentity{Name: testContextName, Revision: v.workspace.revision}
+	return ContextIdentity{Name: testContextName, Revision: v.workspace.revision, Mode: "ready"}
 }
 func (v *testView) Inputs() desiredstate.Sources { return v.workspace.inputs }
 
@@ -2221,6 +2221,9 @@ func TestStatusReportsDurableStateWithoutProbing(t *testing.T) {
 	if err != nil || before.Lifecycle != nil {
 		t.Fatalf("status before apply = %+v (%v)", before, err)
 	}
+	if before.Context != (ContextIdentity{Name: testContextName, Revision: testRevision, Mode: "ready"}) {
+		t.Fatalf("status context = %+v, want the view's identity", before.Context)
+	}
 	if len(before.SetupChecks) != 2 || before.SetupChecks[0].Status != "ready" {
 		t.Fatalf("setup checks = %+v", before.SetupChecks)
 	}
@@ -2238,6 +2241,63 @@ func TestStatusReportsDurableStateWithoutProbing(t *testing.T) {
 	}
 	if len(after.Lifecycle.Blocks) != 1 || after.Lifecycle.Blocks[0].State != "done" {
 		t.Fatalf("status blocks = %+v", after.Lifecycle.Blocks)
+	}
+}
+
+// Status reports each setup check in the controller's readiness vocabulary:
+// what stored evidence proves is ready, and anything it does not prove, a
+// missing record or an incomplete receipt alike, is not-ready.
+func TestStatusSetupChecksUseTheReadinessVocabulary(t *testing.T) {
+	for name, test := range map[string]struct {
+		prepare         func(*prerequisites.StorageView)
+		binding, bundle string
+	}{
+		"a bound context with a complete receipt": {prepare: func(*prerequisites.StorageView) {}, binding: "ready", bundle: "ready"},
+		"an unbound context": {
+			prepare: func(view *prerequisites.StorageView) { view.State.Bindings = nil },
+			binding: "not-ready", bundle: "ready",
+		},
+		"no controller record, so no binding and no bundle": {
+			prepare: func(view *prerequisites.StorageView) { view.Exists, view.Initialized = false, false },
+			binding: "not-ready", bundle: "not-ready",
+		},
+		"an incomplete receipt": {
+			prepare: func(view *prerequisites.StorageView) { view.State.Receipt.Status = "pending" },
+			binding: "ready", bundle: "not-ready",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t, "artifact-server-lab")
+			test.prepare(&h.workspace.controller)
+			status, err := h.service.Status(context.Background(), StatusRequest{ContextName: "lab"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []SetupCheck{{ID: "controller-binding", Status: test.binding}, {ID: "dependency-bundle", Status: test.bundle}}
+			if !slices.Equal(status.SetupChecks, want) {
+				t.Fatalf("setup checks = %+v, want %+v", status.SetupChecks, want)
+			}
+		})
+	}
+}
+
+// A block retried by another invocation that failed again reads the state it
+// found, so status reports the attempts its record counts.
+func TestStatusReportsEachBlocksAttempts(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.capability.outcomeFor = map[string]Result{"artifact-server-lab": {Outcome: reconciliation.OutcomeFailed}}
+	for attempt := range 2 {
+		if result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil || result.Receipt.State != "failed" {
+			t.Fatalf("apply %d = %+v (%v)", attempt+1, result, err)
+		}
+	}
+	status, err := h.service.Status(context.Background(), StatusRequest{ContextName: "lab"})
+	if err != nil || status.Lifecycle == nil {
+		t.Fatalf("status = %+v (%v)", status, err)
+	}
+	blocks := status.Lifecycle.Blocks
+	if len(blocks) != 1 || blocks[0].State != "failed" || blocks[0].Attempts != 2 {
+		t.Fatalf("status blocks = %+v, want one failed block attempted twice", blocks)
 	}
 }
 

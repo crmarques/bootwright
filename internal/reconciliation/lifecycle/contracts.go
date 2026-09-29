@@ -16,9 +16,13 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
+// ContextIdentity names the context a lifecycle read resolved. Mode is the
+// context record's mode, which a lifecycle read admits only while it is ready;
+// status reports it and no capability reads it.
 type ContextIdentity struct {
 	Name     string
 	Revision string
+	Mode     string
 }
 
 // View is a coherent read of everything an operation reasons about, taken

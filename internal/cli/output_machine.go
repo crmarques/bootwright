@@ -37,6 +37,9 @@ type machinePowerPresentation struct {
 	Changed  bool   `json:"changed"`
 }
 
+func (machineListPresentation) documentedResult()  {}
+func (machinePowerPresentation) documentedResult() {}
+
 // A row is presentable when it names the Machine and where this context's own
 // operations left it. A power reading is the controller's answer, so an empty
 // one is a Machine no controller answered for and never a defective row.

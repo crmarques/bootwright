@@ -1,32 +1,80 @@
 package prerequisites
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-func TestBootstrapAnsibleMinimum(t *testing.T) {
-	for _, version := range []string{"2.19.0", "2.21.4", "3.0.0"} {
-		if err := ValidateBootstrapAnsibleVersion(version); err != nil {
-			t.Fatalf("compatible stable release %s rejected: %v", version, err)
+func TestQualifiedAnsibleVersion(t *testing.T) {
+	for _, version := range []string{"2.21.0", "2.21.4", "2.21.10"} {
+		if err := ValidateQualifiedAnsibleVersion(version); err != nil {
+			t.Fatalf("qualified release %s rejected: %v", version, err)
 		}
 	}
-	for _, version := range []string{"1.99.99", "2.18.99", "2.19.0rc1", "02.19.0", "latest"} {
-		diagnostics := diagnostics.Of(ValidateBootstrapAnsibleVersion(version))
-		if len(diagnostics) != 1 || !strings.Contains(diagnostics[0].Message, MinimumBootstrapAnsibleVersion) {
-			t.Fatalf("incompatible release %s lacks minimum-version diagnostic: %+v", version, diagnostics)
+	for _, version := range []string{"2.20.9", "2.22.0", "3.0.0", "2.21.0rc1", "02.21.0", "2.21", "latest"} {
+		found := diagnostics.Of(ValidateQualifiedAnsibleVersion(version))
+		if len(found) != 1 || found[0].Code != "controller.unsupported" || !strings.Contains(found[0].Message, "ansible-core "+QualifiedAnsibleMinor+" ") ||
+			strings.Contains(found[0].Message+found[0].Remediation, "Environment") {
+			t.Fatalf("unqualified release %s lacks the qualified-minor diagnostic: %+v", version, found)
 		}
 	}
+}
+
+func TestQualifiedControllerPython(t *testing.T) {
+	for _, version := range []string{"3.12.0", "3.13.15", "3.14.7"} {
+		if !QualifiedControllerPython(version) {
+			t.Fatalf("qualified controller Python %s rejected", version)
+		}
+	}
+	for _, version := range []string{"3.11.9", "3.15.0", "3.14", "03.14.7"} {
+		if QualifiedControllerPython(version) {
+			t.Fatalf("unqualified controller Python %s accepted", version)
+		}
+	}
+}
+
+// ansibleRecordedAt re-canonicalizes a bootstrap at another ansible-core
+// release, moving its wheel and that wheel's source with it, so a refusal can
+// only come from a version rule.
+func ansibleRecordedAt(value BootstrapDefinition, version string) (BootstrapDefinition, error) {
+	value.Sources, value.Wheels = slices.Clone(value.Sources), slices.Clone(value.Wheels)
+	value.AnsibleVersion = version
+	for index, wheel := range value.Wheels {
+		if wheel.Name == "ansible-core" {
+			id := "ansible-" + version
+			value.Wheels[index].Version, value.Wheels[index].SourceID = version, id
+			value.Sources[index+1].ID = id
+			value.Sources[index+1].URL = "https://files.pythonhosted.org/packages/ansible_core-" + version + "-py3-none-any.whl"
+		}
+	}
+	return CanonicalBootstrap(value)
+}
+
+// A record an earlier build wrote under the recorded floor stays readable on
+// every path a controller-record read takes, although setup would no longer
+// select its release; only a release below the floor refuses.
+func TestRecordedAnsibleFloorKeepsEarlierRecordsReadable(t *testing.T) {
 	_, fixture := dynamicFixture(t)
-	value := fixture.bootstrap
-	value.AnsibleVersion = "2.18.99"
-	value.AnsibleIntent = "latest"
-	_, err := CanonicalBootstrap(value)
-	diagnostics := diagnostics.Of(err)
-	if len(diagnostics) != 1 || !strings.Contains(diagnostics[0].Message, MinimumBootstrapAnsibleVersion) {
-		t.Fatalf("frozen bootstrap accepted unsupported Ansible: %+v", diagnostics)
+	for _, version := range []string{"2.19.0", "2.20.9"} {
+		bootstrap, err := ansibleRecordedAt(fixture.bootstrap, version)
+		if err != nil || bootstrap.AnsibleIntent != "latest" {
+			t.Fatalf("a latest record at %s is unreadable: %+v", version, diagnostics.Of(err))
+		}
+		definition, err := NewResolvedDefinition(bootstrap, fixture.native)
+		if err != nil {
+			t.Fatalf("a latest record at %s cannot be bound: %+v", version, diagnostics.Of(err))
+		}
+		if err := ValidateResolvedDefinition(definition); err != nil {
+			t.Fatalf("a retained definition at %s is unreadable: %+v", version, diagnostics.Of(err))
+		}
+	}
+	_, err := ansibleRecordedAt(fixture.bootstrap, "2.18.99")
+	found := diagnostics.Of(err)
+	if len(found) != 1 || !strings.Contains(found[0].Message, MinimumRecordedAnsibleVersion) || strings.Contains(found[0].Message+found[0].Remediation, "Environment") {
+		t.Fatalf("a record below the floor lacks the recorded-minimum diagnostic: %+v", found)
 	}
 }
 

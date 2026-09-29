@@ -1,0 +1,261 @@
+package cli
+
+import (
+	"encoding/json"
+	"io"
+	"strconv"
+
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+)
+
+type statusResult struct {
+	Context         resultContext    `json:"context"`
+	SetupChecks     []statusCheck    `json:"setupChecks"`
+	Desired         statusDesired    `json:"desired"`
+	Clusters        []statusCluster  `json:"clusters"`
+	StorageClusters []statusCluster  `json:"storageClusters"`
+	Shared          []statusService  `json:"shared"`
+	Secrets         statusSecrets    `json:"secrets"`
+	NextSteps       []string         `json:"nextSteps"`
+	Lifecycle       *statusLifecycle `json:"lifecycle"`
+}
+
+func (statusResult) documentedResult() {}
+
+type statusCheck struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+}
+
+type statusDesired struct {
+	Revision    string          `json:"revision"`
+	Environment string          `json:"environment"`
+	Counts      admissionCounts `json:"counts"`
+}
+
+type statusCluster struct {
+	Name   string `json:"name"`
+	Kind   string `json:"kind"`
+	Status string `json:"status"`
+}
+
+type statusService struct {
+	Kind    string `json:"kind"`
+	Name    string `json:"name"`
+	Machine string `json:"machine"`
+	Status  string `json:"status"`
+}
+
+type statusSecrets struct {
+	Declared int `json:"declared"`
+	Bound    int `json:"bound"`
+}
+
+// statusLifecycle leaves out the registering build and the host log directory,
+// which only a person reads.
+type statusLifecycle struct {
+	Operation string        `json:"operation"`
+	Verb      string        `json:"verb"`
+	State     string        `json:"state"`
+	Next      string        `json:"next"`
+	Blocks    []statusBlock `json:"blocks"`
+	Logs      []string      `json:"logs"`
+}
+
+type statusBlock struct {
+	ID          string `json:"id"`
+	Description string `json:"description"`
+	Stage       string `json:"stage"`
+	State       string `json:"state"`
+	Attempts    int    `json:"attempts"`
+}
+
+func displayStatus(result *lifecycle.StatusResult) statusResult {
+	out := statusResult{
+		Context:     resultContext{Name: escapeDisplayLine(result.Context.Name), Mode: escapeDisplayLine(result.Context.Mode)},
+		SetupChecks: make([]statusCheck, 0, len(result.SetupChecks)),
+		Desired: statusDesired{
+			Revision: escapeDisplayLine(result.Desired.Revision), Environment: escapeDisplayLine(result.Desired.Environment),
+			Counts: admissionCounts{FilesSeen: result.Desired.Files, ObjectsDecoded: result.Desired.Objects},
+		},
+		Clusters:        displayStatusClusters(result.Clusters),
+		StorageClusters: displayStatusClusters(result.StorageClusters),
+		Shared:          make([]statusService, 0, len(result.Shared)),
+		Secrets:         statusSecrets{Declared: result.Secrets.Declared, Bound: result.Secrets.Bound},
+		NextSteps:       displayLines(result.NextSteps),
+	}
+	for _, check := range result.SetupChecks {
+		out.SetupChecks = append(out.SetupChecks, statusCheck{ID: escapeDisplayLine(check.ID), Status: escapeDisplayLine(check.Status)})
+	}
+	for _, service := range result.Shared {
+		out.Shared = append(out.Shared, statusService{
+			Kind: escapeDisplayLine(service.Kind), Name: escapeDisplayLine(service.Name),
+			Machine: escapeDisplayLine(service.Machine), Status: escapeDisplayLine(service.Status),
+		})
+	}
+	if summary := result.Lifecycle; summary != nil {
+		blocks := make([]statusBlock, 0, len(summary.Blocks))
+		for _, block := range summary.Blocks {
+			blocks = append(blocks, statusBlock{
+				ID: escapeDisplayLine(block.ID), Description: escapeDisplayLine(block.Description),
+				Stage: escapeDisplayLine(block.Stage), State: escapeDisplayLine(block.State), Attempts: block.Attempts,
+			})
+		}
+		out.Lifecycle = &statusLifecycle{
+			Operation: escapeDisplayLine(summary.Operation), Verb: escapeDisplayLine(summary.Verb),
+			State: escapeDisplayLine(summary.State), Next: escapeDisplayLine(summary.Next),
+			Blocks: blocks, Logs: displayLines(summary.Logs),
+		}
+	}
+	return out
+}
+
+func displayStatusClusters(clusters []lifecycle.ClusterSummary) []statusCluster {
+	out := make([]statusCluster, 0, len(clusters))
+	for _, cluster := range clusters {
+		out = append(out, statusCluster{
+			Name: escapeDisplayLine(cluster.Name), Kind: escapeDisplayLine(cluster.Kind), Status: escapeDisplayLine(cluster.Status),
+		})
+	}
+	return out
+}
+
+// writeLifecycleStatus presents the JSON membership in the JSON order. The
+// human text passes raw values, because display escapes each one it writes.
+func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMode bool) error {
+	if jsonMode {
+		encoder := json.NewEncoder(out)
+		encoder.SetEscapeHTML(false)
+		return encoder.Encode(commandEnvelope{
+			SchemaVersion: "v1alpha1", Command: "status", OK: true, ExitCode: 0,
+			Result: displayStatus(result), Diagnostics: []diagnostic{}, Logs: []string{},
+		})
+	}
+	var text display
+	text.headline("OK", "Context "+result.Context.Name)
+	text.section("")
+	text.fields(field{Label: "Mode", Value: statusValue(result.Context.Mode)})
+	writeStatusSetup(&text, result.SetupChecks)
+	writeStatusDesired(&text, result.Desired)
+	writeStatusClusters(&text, "Clusters", result.Clusters)
+	writeStatusClusters(&text, "Storage clusters", result.StorageClusters)
+	writeStatusShared(&text, result.Shared)
+	text.section("Secrets")
+	text.fields(
+		field{Label: "Declared", Value: strconv.Itoa(result.Secrets.Declared)},
+		field{Label: "Bound", Value: strconv.Itoa(result.Secrets.Bound)},
+	)
+	if len(result.NextSteps) != 0 {
+		text.section("Next steps")
+		text.lines(result.NextSteps)
+	}
+	writeStatusLifecycle(&text, result)
+	return text.writeTo(out)
+}
+
+// statusValue shows an empty field as absent. It leaves every other value raw
+// for display to escape once.
+func statusValue(value string) string {
+	if value == "" {
+		return "-"
+	}
+	return value
+}
+
+func writeStatusSetup(text *display, checks []lifecycle.SetupCheck) {
+	if len(checks) == 0 {
+		return
+	}
+	text.section("Setup")
+	rows := make([][]string, 0, len(checks))
+	for _, check := range checks {
+		rows = append(rows, []string{checkToken(check.Status), check.ID})
+	}
+	text.rows(rows)
+}
+
+func writeStatusDesired(text *display, desired lifecycle.DesiredSummary) {
+	text.section("Desired")
+	text.fields(
+		field{Label: "Revision", Value: statusValue(desired.Revision)},
+		field{Label: "Environment", Value: statusValue(desired.Environment)},
+		field{Label: "Files seen", Value: strconv.Itoa(desired.Files)},
+		field{Label: "Objects decoded", Value: strconv.Itoa(desired.Objects)},
+	)
+}
+
+func writeStatusClusters(text *display, title string, clusters []lifecycle.ClusterSummary) {
+	if len(clusters) == 0 {
+		return
+	}
+	text.section(title)
+	rows := make([][]string, 0, len(clusters))
+	for _, cluster := range clusters {
+		rows = append(rows, []string{serviceStatusToken(cluster.Status), cluster.Kind + "/" + cluster.Name})
+	}
+	text.rows(rows)
+}
+
+func writeStatusShared(text *display, services []lifecycle.ServiceSummary) {
+	if len(services) == 0 {
+		return
+	}
+	text.section("Shared services")
+	rows := make([][]string, 0, len(services))
+	for _, service := range services {
+		rows = append(rows, []string{serviceStatusToken(service.Status), service.Kind + "/" + service.Name, statusValue(service.Machine)})
+	}
+	text.rows(rows)
+}
+
+// writeStatusLifecycle adds what JSON leaves out: the build that registered
+// the operation, which a removal is planned from and a refusal names as its
+// remedy, and the host directory of its logs.
+func writeStatusLifecycle(text *display, result *lifecycle.StatusResult) {
+	summary := result.Lifecycle
+	if summary == nil {
+		return
+	}
+	text.section("Lifecycle")
+	text.fields(
+		field{Label: "Operation", Value: statusValue(summary.Operation)},
+		field{Label: "Verb", Value: statusValue(summary.Verb)},
+		field{Label: "State", Value: statusValue(summary.State)},
+		field{Label: "Next", Value: statusValue(summary.Next)},
+	)
+	if len(summary.Blocks) != 0 {
+		text.section("")
+		rows := make([][]string, 0, len(summary.Blocks))
+		for _, block := range summary.Blocks {
+			rows = append(rows, []string{blockStatusToken(block.State), block.Description})
+		}
+		text.rows(rows)
+	}
+	var tail []field
+	if summary.Executable != "" {
+		tail = append(tail, field{Label: "Registered by", Value: summary.Executable})
+	}
+	if result.LogLocation != "" {
+		tail = append(tail, field{Label: logLocationLabel, Value: result.LogLocation})
+	}
+	if len(tail) != 0 {
+		text.section("")
+		text.fields(tail...)
+	}
+}
+
+// serviceStatusToken presents a cluster or shared service status: unsupported,
+// pending, done or unknown.
+func serviceStatusToken(status string) string {
+	switch status {
+	case "done":
+		return "[OK]"
+	case "pending":
+		return "[PENDING]"
+	case "unknown":
+		return "[UNKNOWN]"
+	case "unsupported":
+		return "[SKIPPED]"
+	}
+	return "[FAIL]"
+}

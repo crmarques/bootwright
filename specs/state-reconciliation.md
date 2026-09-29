@@ -319,9 +319,16 @@ Secret bindings do not yet say it completed; a running or unknown one only by
 its own verb.
 
 Changed desired state never turns continuation into reconciliation. A
-continuation verifies the operation kind, context identity, frozen-input
-digest, plan digest, every selected implementation and execution-dependency
-digest, and required ownership evidence before doing work.
+continuation verifies, before doing work, the operation's verb, its context
+identity and input revision, the frozen-input digest, the plan digest its
+record names, the block states and attempt counts it read (unchanged since the
+command read them), that this executable embeds the automation the operation
+registered under, and the host binding with completed setup. Each block then
+runs the capability this executable offers under the implementation identity
+the block froze. A block whose implementation this executable does not offer
+refuses before its attempt or resolution starts. A block's content digest
+travels with the block and is not compared, because a removal keeps the one
+its apply froze.
 
 The four tables below state the transition code exactly:
 `TestTransitionTablesMatchSpec` drives that code with every row, so a row
@@ -611,6 +618,19 @@ operation cannot be established, refuse before the affected observation or
 effect and report the recovery requirement. Preserve the plan and ownership
 evidence; never silently upgrade, substitute a dependency, or discard recovery
 state.
+
+Not yet met: an operation does not freeze its execution bundle, so a
+continuation runs from whichever bundle the host's setup receipt names now. Of
+a moved bundle it refuses only when this executable's automation digest differs
+from the one the operation registered under
+(`TestContinuationRefusesDriftedInputExecutableOrHost`), or when that bundle's
+automation differs from this executable's
+(`TestTheRunnerComparesOnlyTheDigestedAutomation`), and then without naming the
+bundle it needs. A bundle that moved to another native, Python or Ansible
+closure under the same automation, as when `setup` re-solves a missing native
+root or a later build with another compiled execution foundation re-resolves
+Python and Ansible, is used silently, which the rule above forbids; tracked as
+[B45](milestones/m1.md#b45).
 
 ### Attempts and unknown outcomes
 

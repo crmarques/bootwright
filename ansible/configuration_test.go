@@ -26,6 +26,17 @@ func TestSSHConnectionsShareNoControlConnection(t *testing.T) {
 	}
 }
 
+// ansible-core only warns by default when it loads a collection whose
+// requires_ansible excludes it. The collection is qualified for one minor, so
+// running it under another is refused instead. That the pinned ansible-core
+// loads the collection under this setting is proved by
+// ./scripts/ansible-check --suite syntax, not here.
+func TestRequiresAnsibleMismatchIsAnError(t *testing.T) {
+	if value, ok := configured(t, "defaults", "collections_on_ansible_version_mismatch"); !ok || value != "error" {
+		t.Fatalf("ansible.cfg sets collections_on_ansible_version_mismatch to %q, so an unqualified ansible-core only warns", value)
+	}
+}
+
 // configured reads one key from one section of the embedded ansible.cfg.
 func configured(t *testing.T, section, key string) (string, bool) {
 	t.Helper()
