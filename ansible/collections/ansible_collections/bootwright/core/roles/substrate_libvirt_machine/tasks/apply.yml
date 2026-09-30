@@ -320,7 +320,22 @@
   retries: 30
   delay: 2
   until: (substrate_libvirt_machine_controller.power | default('')) | length > 0
+  failed_when: false
   no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# the controller's own refusal of the last read is reported here, where no
+# credential is.
+- name: Stop at a controller that never answered
+  ansible.builtin.assert:
+    that:
+      - (substrate_libvirt_machine_controller.power | default('')) | length > 0
+    fail_msg: >-
+      the management controller of Machine {{ bootwright_substrate_machine_request.identity.object }}
+      reported no power state before its wait ended:
+      {{ (substrate_libvirt_machine_controller.msg | default('it answered with none') | string
+          | bootwright.core.printable)[:512] }}
+    quiet: true
 
 - name: Report controller verification completion
   bootwright.core.substrate_machine_protocol:

@@ -35,7 +35,7 @@
 - name: Resolve every name this cluster answers at
   ansible.builtin.command:
     argv:
-      - getent
+      - /usr/bin/getent
       - ahosts
       - '{{ item.name }}'
   loop: '{{ containercluster_install_agent_probes }}'

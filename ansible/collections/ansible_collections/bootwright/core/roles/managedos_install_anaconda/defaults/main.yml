@@ -1,6 +1,9 @@
 ---
 # Derived from the frozen request only. Nothing here is authored by desired
 # state, and no value selects an executable, a role or a task file.
+# The area the installer image is built in. An attempt killed part way leaves
+# it behind, so an apply clears it before its first write and a removal takes
+# it back; the inspection reports it for both.
 managedos_install_anaconda_work: /var/tmp/bootwright-install
 managedos_install_anaconda_media: /var/lib/bootwright/media
 # The executables this block needs, proved by path. The controller stage
@@ -13,8 +16,13 @@ managedos_install_anaconda_boot_media: >-
 managedos_install_anaconda_tree_media: >-
   {{ managedos_install_anaconda_media }}/{{ bootwright_os_install_request.treeMedia.name | default('') }}
 managedos_install_anaconda_image_dir: '{{ bootwright_os_install_request.image.path | dirname }}'
+# Where the package tree is extracted beside its published location before the
+# rename publishes it whole, and nothing when the request hosts no tree. An
+# apply killed while it extracted leaves it beneath the served root, so an
+# apply clears it before extracting and a removal takes it back.
 managedos_install_anaconda_staged_tree: >-
-  {{ bootwright_os_install_request.tree.path | default('/dev/null') }}.staging
+  {{ (bootwright_os_install_request.tree.path ~ '.staging')
+     if bootwright_os_install_request.tree is defined else '' }}
 # Every store entry this installation reads, so each is proved present before
 # the first attempt to use one.
 managedos_install_anaconda_required_media: >-

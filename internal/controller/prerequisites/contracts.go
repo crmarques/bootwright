@@ -31,7 +31,7 @@ type DependencyCatalog interface {
 type BundleManager interface {
 	Inspect(context.Context, BundleArea, Definition, bool) (BundleInspection, error)
 	// Prepare publishes the approved closure into the first area. The second is
-	// a sealed area this host already holds, or nil: every approved source is
+	// a retained area this host already holds, or nil: every approved source is
 	// read there before its publisher is contacted, so a resolution carried
 	// onto new automation acquires nothing again. A source that area cannot
 	// serve is acquired exactly as it would be without it. It returns the
@@ -39,7 +39,7 @@ type BundleManager interface {
 	// qualified once rather than once by the adapter and again by its caller.
 	Prepare(context.Context, BundleArea, BundleArea, Definition, SetupEgress, func(ProgressEvent)) (BundleInspection, error)
 	// Rebase reprojects a retained resolution under the automation the running
-	// executable embeds, reading its sources from the sealed area that holds
+	// executable embeds, reading its sources from the retained area that holds
 	// them. It contacts no publisher and changes no release, byte count or
 	// signer; only the projection identity that carries the automation moves.
 	Rebase(context.Context, BundleArea, BootstrapDefinition) (BootstrapDefinition, error)
@@ -47,9 +47,11 @@ type BundleManager interface {
 
 // RuntimeInstaller reports the phase of its native transaction and each target
 // tool through the progress callback; the caller supplies the action identity.
+// The RunOutput receives what the Ansible it starts prints, and a nil one
+// discards it.
 type RuntimeInstaller interface {
-	Prepare(context.Context, BundleArea, Platform, Definition, SetupEgress, func(context.Context, NativePreparation) error, func(ProgressEvent)) (ActionResult, error)
-	Recover(context.Context, BundleArea, Platform, Definition, SetupEgress, NativePreparation, func(ProgressEvent)) (ActionResult, error)
+	Prepare(context.Context, BundleArea, Platform, Definition, SetupEgress, func(context.Context, NativePreparation) error, func(ProgressEvent), RunOutput) (ActionResult, error)
+	Recover(context.Context, BundleArea, Platform, Definition, SetupEgress, NativePreparation, func(ProgressEvent), RunOutput) (ActionResult, error)
 }
 
 // WithPython verifies and holds the execution foundation under the native
@@ -115,6 +117,29 @@ type StorageTransaction interface {
 	// so an interruption leaves an area that is never read rather than one the
 	// record still presents as usable.
 	RetireBundles(context.Context, []string) error
+	// RetireResolutions drops retained resolutions, named by resolution
+	// digest, of a bundle that stays. It refuses the receipt's own and any
+	// whose bundle no other retained resolution would still name, so every
+	// execution bundle stays identifiable as one.
+	RetireResolutions(context.Context, []string) error
+	// OpenRun creates the next setup run while an action of the receipt holds
+	// its durable intent, removing the oldest runs first so no more than the
+	// retention bound are ever kept. It publishes nothing and changes no
+	// record, so a caller treats its failure as retention it does not have.
+	OpenRun(context.Context) (SetupRun, error)
+}
+
+// SetupRun keeps what one controller Ansible run of setup prints, so an
+// operator can read what setup did when its receipt does not say. It is
+// troubleshooting material only: nothing reads it back, a write past its bound
+// is dropped, and neither a failed write nor a failed Close changes a setup
+// outcome or its receipt.
+type SetupRun interface {
+	RunOutput
+	// Location names the run's own directory on this host, for an operator to
+	// open; it is built for reading, never opened through.
+	Location() string
+	Close() error
 }
 
 // BundleArea confines the qualified bundle adapter to one catalog namespace.
@@ -162,4 +187,7 @@ type RunOutput interface {
 // a reporting failure never changes an effect or its recorded outcome.
 type ProgressReporter interface {
 	ReportProgress(context.Context, ProgressEvent)
+	// ReportLogLocation names where a setup run keeps what its Ansible prints,
+	// before that Ansible starts, so the run can be followed while it happens.
+	ReportLogLocation(context.Context, string)
 }

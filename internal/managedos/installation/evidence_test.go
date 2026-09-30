@@ -27,6 +27,7 @@ func TestNoEffectRequiresAPoweredOffMachineWithNothingPublished(t *testing.T) {
 		"image published":  {Image: true, Power: "Off", Request: "digest"},
 		"tree published":   {Power: "Off", Request: "digest", Tree: true},
 		"tree unmarked":    {Power: "Off", Request: "digest", TreeContent: true},
+		"tree staged":      {Power: "Off", Request: "digest", TreeStaging: true},
 		"no power reading": {Request: "digest"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -37,17 +38,37 @@ func TestNoEffectRequiresAPoweredOffMachineWithNothingPublished(t *testing.T) {
 	}
 }
 
+// The work area is never served, so an apply stopped with nothing else left
+// had no effect a machine could fetch; its removal still takes the area back.
+func TestAWorkAreaAloneProvesNoEffectButNotAbsence(t *testing.T) {
+	work := Evidence{Power: "Off", Request: "digest", Work: true}
+	if err := ValidateNoEffect(encode(t, work), "digest"); err != nil {
+		t.Fatalf("an apply that left only its work area was refused as no effect: %v", err)
+	}
+	if err := ValidatePartial(encode(t, work), "digest", "{}"); err == nil {
+		t.Fatal("an apply that left only its work area was accepted as partial")
+	}
+	if err := ValidateWithdrawn(encode(t, Evidence{Request: "digest", Work: true}), "digest"); err == nil {
+		t.Fatal("a removal that left the work area was accepted as withdrawn")
+	}
+	if err := ValidateWithdrawalUnfinished(encode(t, Evidence{Request: "digest", Work: true}), "digest"); err != nil {
+		t.Fatalf("a removal that left the work area was not unfinished: %v", err)
+	}
+}
+
 func TestAbsenceRequiresPositiveRemovalOfPublishedContent(t *testing.T) {
 	gone := Evidence{Absent: true, Postcondition: true, Request: "digest"}
 	if err := ValidateAbsence(encode(t, gone), "digest"); err != nil {
 		t.Fatalf("removal evidence was refused: %v", err)
 	}
 	for name, evidence := range map[string]Evidence{
-		"not absent":       {Postcondition: true, Request: "digest"},
-		"no postcondition": {Absent: true, Request: "digest"},
-		"image remains":    {Absent: true, Postcondition: true, Image: true, Request: "digest"},
-		"tree remains":     {Absent: true, Postcondition: true, Request: "digest", Tree: true},
-		"tree unmarked":    {Absent: true, Postcondition: true, Request: "digest", TreeContent: true},
+		"not absent":        {Postcondition: true, Request: "digest"},
+		"no postcondition":  {Absent: true, Request: "digest"},
+		"image remains":     {Absent: true, Postcondition: true, Image: true, Request: "digest"},
+		"tree remains":      {Absent: true, Postcondition: true, Request: "digest", Tree: true},
+		"tree unmarked":     {Absent: true, Postcondition: true, Request: "digest", TreeContent: true},
+		"tree staged":       {Absent: true, Postcondition: true, Request: "digest", TreeStaging: true},
+		"work area remains": {Absent: true, Postcondition: true, Request: "digest", Work: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := ValidateAbsence(encode(t, evidence), "digest"); err == nil {
@@ -67,6 +88,7 @@ func TestPartialRequiresThisOperationsOwnUnfinishedWork(t *testing.T) {
 		"image published, guest never booted": {Image: true, Power: "Off", Request: "digest"},
 		"tree published, guest never booted":  {Power: "Off", Request: "digest", Tree: true},
 		"tree unmarked, guest never booted":   {Power: "Off", Request: "digest", TreeContent: true},
+		"tree staged, guest never booted":     {Power: "Off", Request: "digest", TreeStaging: true},
 		"installed, media still inserted":     {Marker: "{}", Media: "http://ip/os/m/install.iso", Power: "On", Image: true, Request: "digest"},
 		"installed, content withdrawn":        {Marker: "{}", Power: "On", Request: "digest"},
 	} {

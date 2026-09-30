@@ -273,6 +273,68 @@ func TestARepeatedMaterialRefusesBeforeAnyJobExists(t *testing.T) {
 	}
 }
 
+// A material file is written at its name joined to the job, and the adapter
+// finds its path beside the material values in one variable map. A name that
+// is not one safe segment, or that the runner gives a job entry itself, and a
+// value named as a file's variable each refuse as a repeated material does:
+// before the runner touches its run directories. Every name a capability
+// writes today stays admitted.
+func TestAnUnsafeMaterialNameOrValueRefusesBeforeAnyJobExists(t *testing.T) {
+	named := func(name string, values map[string]string) func(*lifecycle.RunRequest) {
+		return func(request *lifecycle.RunRequest) {
+			request.Materials = []lifecycle.MaterialFile{{Name: name, Part: secrets.CertificatePart, Secret: "artifact-server-tls", Variable: "certificate"}}
+			request.MaterialValues = values
+		}
+	}
+	refused := map[string]func(*lifecycle.RunRequest){
+		"an empty name":                  named("", nil),
+		"a name with a separator":        named("keys/tls.crt", nil),
+		"a name that climbs out":         named("../tls.crt", nil),
+		"an absolute name":               named("/etc/tls.crt", nil),
+		"a dot segment":                  named("..", nil),
+		"a hidden name":                  named(".tls.crt", nil),
+		"a name with a NUL":              named("tls\x00.crt", nil),
+		"a name beyond a segment's size": named(strings.Repeat("a", maxMaterialName+1), nil),
+		"a value named as a file's variable": named("tls.crt", map[string]string{
+			"fingerprint": strings.Repeat("f", 64), "certificate": "/etc/pki/tls/certs/ca-bundle.crt",
+		}),
+	}
+	for _, entry := range jobEntries {
+		refused["the runner's own "+entry] = named(entry, nil)
+	}
+	for name, change := range refused {
+		t.Run(name, func(t *testing.T) {
+			started := false
+			runner := sweepingRunner(t, func() *exec.Cmd { started = true; return completing() })
+			plantJob(t, runner.jobParent, jobPrefix+"4242")
+			before := trees(t, runner.jobParent, runner.scratchParent)
+			var output bytes.Buffer
+			request := adapterRequest(t, &output)
+			change(&request)
+			request.Material = map[string]secrets.Material{"artifact-server-tls": secrets.NewMaterial(map[secrets.Part][]byte{
+				secrets.CertificatePart: []byte("CERTIFICATE"),
+			})}
+			_, err := runner.Run(context.Background(), request)
+			if code, _ := codeOf(err); code != "lifecycle.state" || started {
+				t.Fatalf("%v, started=%t", err, started)
+			}
+			if after := trees(t, runner.jobParent, runner.scratchParent); !slices.Equal(after, before) {
+				t.Fatalf("the refused run changed its run directories from %v to %v", before, after)
+			}
+		})
+	}
+	for _, name := range []string{
+		"id", "known_hosts", "tls.crt", "tls.key", "host-key", "host-key.pub", "fleet-id", "artifact-ca", "pull-secret",
+		"trust-0", "bmc-user", "bmc-password", "bmc-ca", "bmc-ca-0", "bmc-password-" + strings.Repeat("m", 63),
+	} {
+		request := adapterRequest(t, &bytes.Buffer{})
+		named(name, map[string]string{"fingerprint": strings.Repeat("f", 64)})(&request)
+		if err := checkMaterials(request); err != nil {
+			t.Fatalf("the material file %q was refused: %v", name, err)
+		}
+	}
+}
+
 // Only the runner's own entries are swept: exact names, private directories of
 // its owner, whose lock and record are private regular files with one link. A
 // link is never followed, even to a stale-looking job it could reach, and a job

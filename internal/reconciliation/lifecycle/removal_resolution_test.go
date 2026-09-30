@@ -35,7 +35,7 @@ func TestAnUnknownDestroyBlockResolvesByWhatItsRemovalProves(t *testing.T) {
 		{"a proved removal completes", reconciliation.EffectCompleted, reconciliation.OperationDone, reconciliation.BlockDone,
 			"", "", []string{"bind-1"}},
 		{"an unproved removal stays unknown", reconciliation.EffectUnknown, reconciliation.OperationUnknown, reconciliation.BlockUnknown,
-			"lifecycle.unknown", "the frozen effect could not be resolved from live evidence", nil},
+			"lifecycle.unknown", "the outcome of " + block + " is still unknown: its observation proved neither the effect nor its absence", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newHarness(t, block)

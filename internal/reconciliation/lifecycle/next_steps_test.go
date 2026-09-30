@@ -40,14 +40,6 @@ func TestStatusOffersOnlyTheVerbsTheRecordsAllow(t *testing.T) {
 			steps: []string{}, next: "continue-apply",
 		},
 		{
-			name: "a failed apply whose blocks are all done",
-			arrange: func(t *testing.T, h *harness) {
-				applyChained(t, h, failed)
-				rewriteState(t, h, path.Join(currentOperation(t, h), "blocks", "charlie", "state.json"), string(reconciliation.BlockDone))
-			},
-			steps: []string{}, next: "continue-apply",
-		},
-		{
 			name: "a dependency not done beside a dependent that started",
 			arrange: func(t *testing.T, h *harness) {
 				applyChained(t, h, failed)
@@ -213,6 +205,13 @@ func TestStatusAndPlanNameTheSameNextAction(t *testing.T) {
 		},
 		"an unknown apply whose blocks are all done":   {arrange: unknownApplyWithEveryBlockDone, next: "continue-apply"},
 		"an unknown destroy whose blocks are all done": {arrange: unknownDestroyWithEveryBlockDone, next: "continue-destroy"},
+		"a failed apply whose blocks are all done": {
+			arrange: func(t *testing.T) *harness {
+				h, _ := laggingApply(t)
+				return h
+			},
+			next: "continue-apply",
+		},
 		"a failed destroy whose blocks are all done": {
 			arrange: func(t *testing.T) *harness {
 				h, _ := failedRemovalWithEveryBlockDone(t)

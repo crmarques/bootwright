@@ -31,6 +31,9 @@ type StorageView struct {
 	// areas alike, in canonical order. Each counts against MaxRetainedBundles
 	// until a retirement removes it.
 	Areas []HeldArea
+	// SetupRuns reports that the controller directory keeps setup runs, which
+	// every build that predates them refuses as state it does not know.
+	SetupRuns bool
 }
 
 // MaxRetainedBundles bounds both the bundle areas a host holds and the
@@ -93,8 +96,9 @@ type ControllerBinding struct {
 
 // HostReservation records the host resources one context's locally hosted
 // service claims. Workspace stores the keys and compares them through
-// ConflictingContext, which reads no key beyond a socket's address and port;
-// only the owning capability knows what a key means. Setup reserves nothing.
+// ConflictingContext, which reads no key beyond its class and a socket's
+// address and port; only the owning capability knows what a key means. Setup
+// reserves nothing.
 // A shared claim is held by any number of contexts at once and conflicts with
 // nothing; it records that a resource is still in use rather than who owns it.
 type HostReservation struct {

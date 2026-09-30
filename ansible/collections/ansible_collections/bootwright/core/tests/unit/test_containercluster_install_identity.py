@@ -18,7 +18,7 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.action import containercluster_install_protocol as protocol
-from ansible_collections.bootwright.core.plugins.modules.containercluster_install_inspect import KUBECONFIG, observe
+from ansible_collections.bootwright.core.plugins.modules.containercluster_install_inspect import KEPT, KUBECONFIG, keep, observe
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "containercluster_install_agent"
 LOADER = DataLoader()
@@ -103,7 +103,8 @@ def test_the_cluster_is_read_through_the_kubeconfig_the_identity_is_taken_from()
     defaults = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
     defaults["bootwright_cluster_install_request"] = {"workRoot": "/var/lib/bootwright-clusters/lab/sno"}
     rendered = Templar(loader=LOADER, variables=defaults).template(defaults["containercluster_install_agent_kubeconfig"])
-    assert rendered == os.path.join("/var/lib/bootwright-clusters/lab/sno", KUBECONFIG)
+    assert rendered == os.path.join("/var/lib/bootwright-clusters/lab/sno", KEPT)
+    assert rendered != os.path.join("/var/lib/bootwright-clusters/lab/sno", KUBECONFIG)
 
 
 # What oc prints on stderr, through StandardErrorMessage in
@@ -223,10 +224,12 @@ DIGEST = "1" * 64
 
 
 def inspected(root, config):
-    """What the inspection names over a work area holding one kubeconfig."""
+    """What an apply's inspection names over a work area whose installer wrote one kubeconfig."""
     (root / "auth").mkdir(parents=True)
     (root / KUBECONFIG).write_text(config)
-    return observe({"workRoot": str(root), "image": {"path": str(root / "served"), "url": "https://192.0.2.1:8443"}})
+    request = {"workRoot": str(root), "image": {"path": str(root / "served"), "url": "https://192.0.2.1:8443"}}
+    keep(request)
+    return observe(request)
 
 
 def resolved(observation):
@@ -283,3 +286,80 @@ def test_after_the_install_complete_rewrite_a_completed_cluster_still_proves_thi
     assert found["identity"] == found["cluster"] == IDENTITY
     assert found["postcondition"] is True
     assert protocol.unproved(found) == []
+
+
+INSPECT = "bootwright.core.containercluster_install_inspect"
+
+
+def apply_tasks():
+    return trusted(ROLE / "tasks" / "apply.yml")
+
+
+def only(entries, predicate):
+    matches = [index for index, task in enumerate(entries) if predicate(task)]
+    assert len(matches) == 1, matches
+    return matches[0]
+
+
+# Only an apply keeps the installer's kubeconfig. An observation, a removal's
+# included, is read-only against the frozen request and reads the copy the last
+# apply kept.
+def test_only_an_apply_keeps_the_installers_kubeconfig():
+    assert [task[INSPECT].get("keep") for task in apply_tasks() if INSPECT in task] == [True, True]
+    for name in ("observe.yml", "destroy.yml"):
+        found = [task for task in trusted(ROLE / "tasks" / name) if INSPECT in task]
+        assert found and not [task for task in found if task[INSPECT].get("keep", False)], name
+
+
+def refused(observation):
+    """Whether the apply's refusal fires over what its first inspection named, and its message."""
+    refusal = one("apply.yml", lambda task: "ansible.builtin.fail" in task)
+    templar = Templar(loader=LOADER, variables={
+        "bootwright_cluster_install_request": {"identity": {"cluster": "sno", "context": "lab"}},
+        "containercluster_install_agent_before": {"observation": observation},
+    })
+    return templar.evaluate_conditional(refusal["when"]), templar.template(refusal["ansible.builtin.fail"]["msg"])
+
+
+# The copy every read goes through is kept before the first effect, and an
+# apply with none naming this build refuses there, before it reads, marks the
+# work area or boots a node, naming the remedy.
+def test_the_apply_keeps_its_kubeconfig_and_refuses_without_one_before_its_first_effect():
+    entries = apply_tasks()
+    kept = only(entries, lambda task: task.get("register") == "containercluster_install_agent_before")
+    refusal = only(entries, lambda task: "ansible.builtin.fail" in task)
+    first_read = min(i for i, task in enumerate(entries) if task.get("ansible.builtin.import_tasks") == "state.yml")
+    mark = only(entries, lambda task: str((task.get("ansible.builtin.copy") or {}).get("dest", "")).endswith(
+        "/.bootwright-booted"))
+    boot = only(entries, lambda task: task.get("ansible.builtin.include_tasks") == "boot.yml")
+    assert entries[kept][INSPECT]["keep"] is True
+    assert kept < refusal < first_read < mark < boot
+    assert refused({"identity": IDENTITY})[0] is False
+    fires, message = refused({"identity": ""})
+    assert fires is True
+    assert "cluster sno" in message and "Nothing was changed" in message
+    assert "bootwright destroy --context lab" in message
+
+
+# A first apply over an installer file an interrupted rewrite cut short keeps
+# nothing and refuses, rather than booting nodes it could never prove.
+def test_an_apply_over_a_truncated_installer_file_with_no_kept_copy_refuses(tmp_path):
+    observation = inspected(tmp_path / "work", REWRITTEN[:-10])
+    assert observation["identity"] == ""
+    assert not (tmp_path / "work" / KEPT).exists()
+    assert refused(observation)[0] is True
+
+
+# The installation wait rewrites the installer's file; the apply keeps that
+# rewrite, when it is whole, before the read that proves completion and the
+# copy offered for custody, whether or not this attempt waited.
+def test_the_rewrite_the_waits_leave_is_kept_before_the_final_read_and_the_custody_copy():
+    entries = apply_tasks()
+    keeps = [index for index, task in enumerate(entries) if (task.get(INSPECT) or {}).get("keep") is True]
+    wait = only(entries, lambda task: task.get("ansible.builtin.include_tasks") == "wait.yml"
+                and "install-complete" in str(task.get("vars")))
+    last_read = max(i for i, task in enumerate(entries) if task.get("ansible.builtin.import_tasks") == "state.yml")
+    custody = only(entries, lambda task: "bootwright_cluster_install_output" in str(task.get("ansible.builtin.copy", "")))
+    assert len(keeps) == 2
+    assert wait < keeps[1] < last_read < custody
+    assert "when" not in entries[keeps[1]]

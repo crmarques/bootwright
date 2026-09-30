@@ -7,7 +7,10 @@ https://raw.githubusercontent.com/openshift/installer/release-4.21/cmd/openshift
 The identity is therefore a domain-separated digest of the client certificate
 in that kubeconfig, which `agent wait-for install-complete` leaves unchanged
 when it rewrites the file, and the cluster answers with it only when a read
-through the same kubeconfig verifies and authenticates.
+through the same kubeconfig verifies and authenticates. That kubeconfig is the
+copy the installation keeps of the installer's file while it is whole, so the
+installer's in-place rewrite can neither grow it past the read bound nor leave
+it cut short.
 """
 
 from __future__ import annotations
@@ -15,10 +18,13 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
+import stat
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.modules.containercluster_install_inspect import observe
+from ansible_collections.bootwright.core.plugins.modules.containercluster_install_inspect import (
+    KEPT, MAX_KUBECONFIG, keep, named, observe)
 
 
 def pem(kind, body):
@@ -146,11 +152,17 @@ def work_area(root, config):
     return root
 
 
+def request(tmp_path, work):
+    return {"workRoot": str(work), "image": {"path": str(tmp_path / "served"), "url": "https://192.0.2.1:8443"}}
+
+
 def observed(tmp_path, config=None, metadata=None):
+    """What an apply's first inspection names: it keeps the installer's file, then observes."""
     work = work_area(tmp_path / "work", kubeconfig() if config is None else config)
     if metadata is not None:
         (work / "metadata.json").write_text(json.dumps(metadata))
-    return observe({"workRoot": str(work), "image": {"path": str(tmp_path / "served"), "url": "https://192.0.2.1:8443"}})
+    keep(request(tmp_path, work))
+    return observe(request(tmp_path, work))
 
 
 def anchor(client=CLIENT):
@@ -182,15 +194,117 @@ def test_the_install_complete_rewrite_leaves_the_identity_unchanged(tmp_path):
     assert identities == dict.fromkeys(forms, anchor())
 
 
-# Each run prepends the router bundle again, so the identity outlives only as
-# many rewrites as fit within the 64 KiB the inspection reads; a file one
-# rewrite past that bound, in the same shape, names none.
+# Each run prepends the router bundle again, so an installer's file is kept
+# only while it fits within the 64 KiB the inspection reads; a file one rewrite
+# past that bound, in the same shape, is never kept and names none.
 def test_the_identity_outlives_rewrites_only_within_the_read_bound(tmp_path):
     times = 2
     while len(rewritten(times + 1).encode()) <= 64 * 1024:
         times += 1
     assert observed(tmp_path / "within", rewritten(times))["identity"] == anchor()
     assert observed(tmp_path / "past", rewritten(times + 1))["identity"] == ""
+
+
+def last_within_the_bound():
+    times = 1
+    while len(rewritten(times + 1).encode()) <= MAX_KUBECONFIG:
+        times += 1
+    return times
+
+
+# A retried installation wait runs install-complete again after each give-up it
+# resumes, and a later apply runs it again, each run prepending the router
+# bundle to the installer's file once more. The kept copy follows each rewrite
+# while it fits the bound and then stays at the last one that did, so every
+# read goes through a file within the bound and keeps naming this build.
+def test_reads_stay_within_the_bound_over_repeated_waits(tmp_path):
+    work = work_area(tmp_path / "work", kubeconfig())
+    installer, kept = work / "auth" / "kubeconfig", work / KEPT
+    assert keep(request(tmp_path, work)) is True
+    assert kept.read_text() == kubeconfig()
+    last = last_within_the_bound()
+    for times in range(1, last + 6):
+        installer.write_text(rewritten(times))
+        assert keep(request(tmp_path, work)) is (times <= last), times
+        assert observe(request(tmp_path, work))["identity"] == anchor(), times
+        assert kept.stat().st_size <= MAX_KUBECONFIG, times
+        assert kept.read_text() == rewritten(min(times, last)), times
+    assert installer.stat().st_size > MAX_KUBECONFIG
+
+
+# clientcmd.WriteToFile writes through os.WriteFile, which truncates the file
+# before it writes, so a budget kill during the installer's rewrite leaves any
+# prefix of the new file. No proper prefix names an identity, and none replaces
+# the copy an earlier inspection kept, which keeps naming this build.
+@pytest.mark.parametrize("config", [kubeconfig(), rewritten(), kubeconfig(tail="preferences: {}\n")],
+                         ids=["as built", "rewritten", "with empty preferences"])
+def test_a_truncated_file_refuses_rather_than_misreads(tmp_path, config):
+    data = config.encode()
+    assert named(data) == anchor()
+    prefixes = [data[:length] for length in range(len(data))]
+    assert not [prefix for prefix in prefixes if named(prefix)]
+    work = work_area(tmp_path / "work", kubeconfig())
+    assert keep(request(tmp_path, work)) is True
+    installer, kept = work / "auth" / "kubeconfig", work / KEPT
+    for prefix in prefixes[::7] + [data[:data.rindex(b"\n", 0, len(data) - 1) + 1], data[:-1]]:
+        installer.write_bytes(prefix)
+        assert keep(request(tmp_path, work)) is False
+        assert kept.read_text() == kubeconfig()
+        assert observe(request(tmp_path, work))["identity"] == anchor()
+
+
+# The cut the inspection once misread: a prefix ending inside the client key at
+# a base64 boundary kept every line the shape check read, so it named this
+# build's identity from a file no read could authenticate with. The same cut
+# with a newline after it is refused too, by the key's own end line.
+@pytest.mark.parametrize("newline", [b"", b"\n"], ids=["as cut", "with a newline after the cut"])
+def test_a_file_cut_inside_the_client_key_names_no_identity(tmp_path, newline):
+    data = rewritten().encode()
+    key = data.rindex(b"client-key-data: ") + len(b"client-key-data: ")
+    cut = data[:key + 4 * ((len(data) - key - 1) // 8)] + newline
+    assert len(cut) - len(newline) > key and cut != data
+    assert named(cut) == ""
+    assert observed(tmp_path, cut.decode())["identity"] == ""
+
+
+def test_the_first_kept_copy_is_the_whole_installer_file_private_to_its_owner(tmp_path):
+    work = work_area(tmp_path / "work", rewritten())
+    assert keep(request(tmp_path, work)) is True
+    kept = work / KEPT
+    assert kept.read_text() == rewritten()
+    assert stat.S_IMODE(kept.stat().st_mode) == 0o600
+    assert sorted(os.listdir(work)) == sorted([".openshift_install_state.json", KEPT, "agent.x86_64.iso", "auth",
+                                               "rendezvousIP"])
+    assert keep(request(tmp_path, work)) is False
+
+
+# A kept copy is never replaced by a file naming another identity, and a kept
+# copy that names none is never replaced at all: the copy anchors the identity
+# every read proves, so losing it refuses rather than adopting another.
+@pytest.mark.parametrize("before, expected", [
+    (kubeconfig(client=pem("CERTIFICATE", "b3RoZXI=")), anchor(client=pem("CERTIFICATE", "b3RoZXI="))),
+    ("", ""),
+    (kubeconfig()[:-40], ""),
+], ids=["another identity", "empty", "cut short"])
+def test_a_kept_copy_changes_only_to_the_identity_it_names(tmp_path, before, expected):
+    work = work_area(tmp_path / "work", rewritten())
+    (work / KEPT).write_text(before)
+    assert keep(request(tmp_path, work)) is False
+    assert (work / KEPT).read_text() == before
+    assert observe(request(tmp_path, work))["identity"] == expected
+
+
+def test_an_observation_keeps_nothing_and_reads_only_the_kept_copy(tmp_path):
+    work = work_area(tmp_path / "work", rewritten())
+    assert observe(request(tmp_path, work)) == {"identity": "", "kubeconfig": False, "url": ""}
+    assert not (work / KEPT).exists()
+
+
+def test_check_mode_reports_the_copy_it_would_keep_and_writes_nothing(tmp_path):
+    work = work_area(tmp_path / "work", kubeconfig())
+    assert keep(request(tmp_path, work), check_mode=True) is True
+    assert sorted(os.listdir(work)) == sorted([".openshift_install_state.json", "agent.x86_64.iso", "auth",
+                                               "rendezvousIP"])
 
 
 def test_only_another_client_certificate_names_another_identity(tmp_path):

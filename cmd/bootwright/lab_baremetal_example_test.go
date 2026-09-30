@@ -95,8 +95,9 @@ func TestLabBaremetalExampleRefusesItsInstallation(t *testing.T) {
 	if !ok {
 		t.Fatal("the installation capability reports nothing it cannot realize")
 	}
-	if unsupported := reporter.Unsupported(input.State); !slices.Equal(unsupported, []string{"Machine/metal-01"}) {
-		t.Fatalf("unsupported = %v", unsupported)
+	unsupported := reporter.Unsupported(input.State)
+	if !slices.Equal(lifecycle.Identities(unsupported), []string{"Machine/metal-01"}) {
+		t.Fatalf("unsupported = %+v", unsupported)
 	}
 	_, err := capability.Plan(context.Background(), input)
 	reported := diagnostics.Of(err)
@@ -107,6 +108,11 @@ func TestLabBaremetalExampleRefusesItsInstallation(t *testing.T) {
 	if !strings.Contains(reported[0].Remediation, "Machine/metal-01") ||
 		!strings.Contains(reported[0].Remediation, "physical managed-OS installation is disabled until private delivery is repaired") {
 		t.Fatalf("remediation = %q", reported[0].Remediation)
+	}
+	// Selection refuses with the reason and remedy the plan would give, so
+	// the operator reads the same refusal before registration.
+	if unsupported[0].Reason != reported[0].Message || unsupported[0].Remediation != reported[0].Remediation {
+		t.Fatalf("selection refused %+v, the plan %+v", unsupported[0], reported[0])
 	}
 }
 

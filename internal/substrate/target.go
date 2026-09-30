@@ -411,21 +411,34 @@ func ProvidersOn(catalog api.Catalog, arm string) []api.Object {
 	return found
 }
 
+// Unrealized is one selected object this executable cannot realize, why, and
+// what the operator changes.
+type Unrealized struct {
+	Object      api.Object
+	Reason      string
+	Remediation string
+}
+
 // Unrealizable lists every selected object this executable cannot realize, in
 // canonical order: a provider on an arm no capability implements, and every
 // non-provided Machine hosted on one. It has one owner so that adding an arm
 // narrows the refusal in exactly one place.
-func Unrealizable(catalog api.Catalog) []string {
-	var found []string
+func Unrealizable(catalog api.Catalog) []Unrealized {
+	realized := "a " + strings.Join(Realized(), " or ") + " provider"
+	var found []Unrealized
 	for _, provider := range catalog.OfKind(api.InfraProvider) {
 		if slices.Contains(Realized(), Variant(provider)) {
 			continue
 		}
-		found = append(found, provider.Identity())
+		reason := "this executable realizes no provider on the substrate it declares"
+		found = append(found, Unrealized{Object: provider, Reason: reason,
+			Remediation: "remove " + provider.Identity() + " and the Machines it hosts from the selected Environment, or declare them on " + realized})
 		for _, machine := range HostedMachines(catalog, provider.Name()) {
-			found = append(found, machine.Identity())
+			found = append(found, Unrealized{Object: machine,
+				Reason:      "its provider " + provider.Identity() + " is on a substrate this executable does not realize",
+				Remediation: "host " + machine.Identity() + " on " + realized + ", declare its operating system provided, or remove it from the selected Environment"})
 		}
 	}
-	slices.Sort(found)
-	return slices.Compact(found)
+	slices.SortFunc(found, func(x, y Unrealized) int { return strings.Compare(x.Object.Identity(), y.Object.Identity()) })
+	return found
 }

@@ -162,7 +162,7 @@ func TestAcquireRejectsInvalidInputShapesBeforeReading(t *testing.T) {
 		input       secrets.Input
 		code        string
 	}{
-		{"wrong source", secrets.Declaration{Type: "token", Source: "file"}, secrets.Input{ValueStdin: true}, "secret.source"},
+		{"wrong source", secrets.Declaration{Type: "token", Source: "generated"}, secrets.Input{ValueStdin: true}, "secret.source"},
 		{"neither", secrets.Declaration{Type: "token", Source: "contextStore"}, secrets.Input{}, "secret.input"},
 		{"both", secrets.Declaration{Type: "token", Source: "contextStore"}, secrets.Input{ValueFile: "unused", ValueStdin: true}, "secret.input"},
 		{"extra", secrets.Declaration{Type: "caBundle", Source: "contextStore"}, secrets.Input{CertificateFile: "unused", ValueStdin: true}, "secret.input"},
@@ -312,38 +312,6 @@ func TestValidateDockerJSONIsClosedDuplicateFreeAndHasAuths(t *testing.T) {
 	}
 }
 
-func TestUsernamePasswordJSONRequiresExactCaseSensitiveFields(t *testing.T) {
-	validUsername, validPassword, err := usernamePassword([]byte(`{"username":"operator","password":"secret"}`))
-	if err != nil || string(validUsername) != "operator" || string(validPassword) != "secret" {
-		t.Fatalf("valid usernamePassword was not decoded: %v", err)
-	}
-	clear(validUsername)
-	clear(validPassword)
-	escapedUsername, escapedPassword, err := usernamePassword([]byte(`{"user\u006eame":"operator","pass\u0077ord":"secret"}`))
-	if err != nil || string(escapedUsername) != "operator" || string(escapedPassword) != "secret" {
-		t.Fatalf("escaped usernamePassword field names were not decoded: %v", err)
-	}
-	clear(escapedUsername)
-	clear(escapedPassword)
-	for _, data := range []string{
-		`{"Username":"operator","password":"secret"}`,
-		`{"username":"operator","PASSWORD":"secret"}`,
-		`{"username":"operator","USERNAME":"alias","password":"secret"}`,
-		`{"username":"operator","user\u006eame":"alias","password":"secret"}`,
-		`{"username":"operator","password":"secret","pass\u0077ord":"alias"}`,
-		`{"username":"operator","password":"secret","extra":true}`,
-		`{"username":1,"password":"secret"}`,
-		`{"username":"operator","password":null}`,
-	} {
-		t.Run(data, func(t *testing.T) {
-			username, password, err := usernamePassword([]byte(data))
-			clear(username)
-			clear(password)
-			assertFailureCode(t, err, "secret.input")
-		})
-	}
-}
-
 func TestValidatePartsLimitsCancellationAndNonDisclosure(t *testing.T) {
 	service := New(nil)
 	err := service.Validate(context.Background(), secrets.Declaration{Type: "token", Source: "contextStore"}, secrets.NewMaterial(map[secrets.Part][]byte{
@@ -402,9 +370,6 @@ func FuzzSecretJSONParsers(f *testing.F) {
 		}
 		_ = validateUniqueJSON(data)
 		_ = dockerConfig(data)
-		username, password, _ := usernamePassword(data)
-		clear(username)
-		clear(password)
 	})
 }
 

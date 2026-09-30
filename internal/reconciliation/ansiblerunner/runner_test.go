@@ -172,10 +172,11 @@ func TestInventoryPinsTheSSHIdentityAndHostKey(t *testing.T) {
 	}
 }
 
-func TestProtocolAcceptsOnlyItsThreeBoundedPhases(t *testing.T) {
+func TestProtocolAcceptsOnlyItsBoundedPhases(t *testing.T) {
 	valid := strings.Join([]string{
 		`{"phase":"loaded"}`,
 		`{"phase":"group","group":"pull-image","status":"running"}`,
+		`{"phase":"refused","reason":"identity-mismatch"}`,
 		`{"phase":"completed","outcome":"changed","evidence":{"absent":false}}`,
 	}, "\n")
 	messages := make(chan protocolMessage, 8)
@@ -188,19 +189,25 @@ func TestProtocolAcceptsOnlyItsThreeBoundedPhases(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(phases, []string{"loaded", "group", "completed"}) {
+	if !slices.Equal(phases, []string{"loaded", "group", "refused", "completed"}) {
 		t.Fatalf("phases = %v", phases)
 	}
 	for name, line := range map[string]string{
-		"unknown phase":   `{"phase":"native"}`,
-		"unknown field":   `{"phase":"loaded","extra":1}`,
-		"loaded evidence": `{"phase":"loaded","evidence":{"a":1}}`,
-		"group no status": `{"phase":"group","group":"pull-image"}`,
-		"bad outcome":     `{"phase":"completed","outcome":"done","evidence":{"a":1}}`,
-		"no evidence":     `{"phase":"completed","outcome":"changed"}`,
-		"not json":        `not json`,
-		"closing brace":   `{"phase":"loaded"}}`,
-		"closing bracket": `{"phase":"loaded"}]`,
+		"unknown phase":     `{"phase":"native"}`,
+		"unknown field":     `{"phase":"loaded","extra":1}`,
+		"loaded evidence":   `{"phase":"loaded","evidence":{"a":1}}`,
+		"loaded reason":     `{"phase":"loaded","reason":"identity-mismatch"}`,
+		"group no status":   `{"phase":"group","group":"pull-image"}`,
+		"group reason":      `{"phase":"group","group":"pull-image","status":"running","reason":"identity-mismatch"}`,
+		"bad outcome":       `{"phase":"completed","outcome":"done","evidence":{"a":1}}`,
+		"no evidence":       `{"phase":"completed","outcome":"changed"}`,
+		"completed reason":  `{"phase":"completed","outcome":"changed","evidence":{"a":1},"reason":"identity-mismatch"}`,
+		"refused no reason": `{"phase":"refused"}`,
+		"refused outcome":   `{"phase":"refused","reason":"identity-mismatch","outcome":"changed"}`,
+		"refused group":     `{"phase":"refused","reason":"identity-mismatch","group":"read-state"}`,
+		"not json":          `not json`,
+		"closing brace":     `{"phase":"loaded"}}`,
+		"closing bracket":   `{"phase":"loaded"}]`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			drain := make(chan protocolMessage, 8)

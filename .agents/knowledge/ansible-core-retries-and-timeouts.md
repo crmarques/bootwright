@@ -42,3 +42,16 @@ are guarded this way.
 
 The install role's waits (X16, Z2 cluster budgets) follow all three
 ([container clusters](../../specs/container-clusters.md)).
+
+`failed_when: false` decides even a poll that runs out. Re-run on 2026-09-30
+against `localhost` with a `no_log` file task that failed at every attempt:
+registered with `failed_when: false`, `retries: 2` and an `until` it never
+met, it reported `ok`, `failed: false`, `attempts: 2` and the module's own
+`msg`; ending its poll on `attempts` instead, it reported `attempts: 3`. A
+hidden single step that failed registered its `msg` the same way, and a
+success registered none. That is what lets a hidden task hand its refusal to a
+separate step outside `no_log`, as the
+[security rule](../../specs/security.md#logs-output-and-diagnostics) requires
+of a management controller's refusal; the collection's
+[structural rules](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_role_boundaries.py)
+hold every role to it.

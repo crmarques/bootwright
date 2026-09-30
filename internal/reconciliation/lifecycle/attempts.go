@@ -184,9 +184,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 			"the frozen effect is partly realized and owned by this context",
 			"repeat the operation to converge it, or destroy what it owns")
 	}
-	return state, failure("lifecycle.unknown",
-		"the frozen effect could not be resolved from live evidence",
-		"repeat the operation once the target is reachable, or restore the host it ran against")
+	return state, unresolvedFailure(block.ID, s.explain(block, observation.Evidence))
 }
 
 // invoke runs the capability inside the private Python execution boundary,

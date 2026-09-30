@@ -146,7 +146,10 @@ resolution is kept. A retained resolution the running executable cannot use,
 or whose `latest` Python or Ansible release lies outside the qualified set,
 older or newer, is superseded by a fresh resolution, never carried forward; a
 resolution an earlier build recorded stays readable. An incomplete setup
-reuses its exact frozen resolution without metadata refresh.
+reuses its exact frozen resolution without metadata refresh. A setup that
+failed or was canceled is settled like a completed one: the next setup
+publishes a new receipt rather than resuming it, so the resolution it recorded
+is superseded or carried forward exactly as a completed setup's is.
 
 [The controller stage](#the-controller-stage) resolves target clients under the
 version intent the Environment's
@@ -162,7 +165,7 @@ client to a newer release requires declaring that release in
 
 A retained resolution that differs from the running executable only by the
 automation it carries is not superseded: it is carried forward. Setup reads
-that resolution's own approved sources from the sealed bundle holding them,
+that resolution's own approved sources from the retained bundle holding them,
 projects them again under the embedded automation, and publishes the result as
 the new bundle that identity names. Every release, byte count, signer and
 publisher origin is preserved, no publisher or repository is consulted, and the
@@ -191,11 +194,14 @@ completed: a setup that refuses, fails or previews retires nothing then,
 because what may be retired is decided by what the new bundle now holds. The
 one earlier retirement is a setup at the bound, below. A bundle is retired
 only when it is positively identified as a superseded execution bundle, which
-is one a retained resolution names and that the receipt does not. That receipt
+is one a retained resolution names and that the receipt does not, or when an
+interrupted retirement already marked its area as retiring. That receipt
 is a settled one, whose setup completed, failed or was canceled; a pending
 receipt admits no retirement. Everything else is left untouched, including
 every [client area](#the-controller-stage), which is shared host state no
-context uninstalls, and any area this record does not account for.
+context uninstalls, and any area this record does not account for; the
+[store refuses](contexts/controller-record.md#bundles-and-client-areas) to
+retire either, whatever setup names.
 
 Retirement is safe because a completed setup leaves nothing behind that needed
 the bundles it replaces. Publication writes every source into the bundle it
@@ -222,6 +228,15 @@ again under the mutation that publishes:
   bundle, and every area an interrupted retirement left marked as retiring,
   except the bundle the receipt names and the one its
   [carried-forward resolution](#supported-host-and-dependency-selection) reads.
+  It also retires every superseded resolution of the bundles it keeps, which
+  are those two and the new one: a retry after a failed setup, or a solve
+  against a changed package inventory, names the same bundle under a new
+  resolution, so one kept bundle can come to hold every resolution the host
+  may retain. Of those only the receipt's own, the one this setup publishes
+  and the latest naming each kept bundle stay, so every kept bundle stays
+  named by a resolution, and no area is removed for them; the
+  [store refuses](contexts/controller-record.md#bundles-and-client-areas) to
+  drop the receipt's own or the last resolution naming a bundle.
   The plan names that retirement. It then publishes and completes, and the
   retirement after completion follows as usual. Retirement is never undone,
   so a setup that fails after it still leaves that room.
@@ -240,8 +255,12 @@ pending that no setup could complete.
 
 Retirement records its intent before it removes anything, so an interruption
 leaves an area marked as retiring rather than an area the record still presents
-as usable. Repeating the command completes it. A partially removed area is
-never readable, published into, or counted as retained.
+as usable. Recording that intent already retires the resolutions those areas
+carry, so no resolution names them afterwards: `setup --purge-old-bundles`
+also retires every area marked as retiring, except the bundle the receipt
+names, and repeating the command once completes an interrupted retirement. A
+partially removed area is never readable, published into, or counted as
+retained.
 
 ## Selection and command journeys
 
@@ -449,8 +468,10 @@ constants.
 
 Because the stage is a lifecycle block, what its Ansible prints is retained as
 that block's [attempt output](cli/output.md#private-operation-logs), exactly as
-every other adapter run's is. Local setup retains nothing: it allocates no
-operation identity, so it has nowhere of its own to put it.
+every other adapter run's is. Local setup allocates no operation identity, so
+its own Ansible keeps what it prints in a
+[setup run](cli/output.md#setup-run-output) beneath the controller directory
+instead.
 
 The closure is shared host state. Two contexts selecting the same clients prove
 the same sealed files, a different closure gets its own area, and removing a
@@ -526,7 +547,9 @@ Local privilege is where this route is qualified. The unprivileged invocation
 reads and admits it before `sudo` can prompt, then forwards exactly the
 canonical variables to the elevated child, which `env_reset` would otherwise
 drop. A sudoers rule that permits neither `SETENV` nor `ALL` refuses that
-forwarding; running as root reads the environment directly. Child processes
+forwarding, and a human invocation's refusal names the `SETENV` tag as its
+remedy ([local privilege](cli.md#local-privilege-and-user-identity)); running as
+root reads the environment directly. Child processes
 still receive no proxy variable of their own: the route reaches the download
 client, package resolution and automation as request data, exactly as a
 declared route does.
@@ -608,6 +631,10 @@ Setup has a private durable receipt, separate from lifecycle operation state
 and logs. Before the first installation or bundle-publication effect, record
 the verified host, selected implementation and complete immutable local action
 plan in the [controller record](contexts/controller-record.md#record-and-receipt).
+What its controller Ansible prints, for a preparation or a recovery, is kept
+beside that record in a [setup run](cli/output.md#setup-run-output), which is
+troubleshooting material only: the receipt never names a run, and neither
+keeping one nor failing to changes a setup outcome or its receipt.
 
 Each action has attributable before-state, fixed request, postcondition and
 outcome. Record intent durably before starting it; record success only after
@@ -666,7 +693,11 @@ one `Checks` row per host check as it is verified. Real setup adds one
 transaction or target tool in flight as its detail and, while it acquires them,
 the share of its sources already published. Host fingerprints, private paths,
 credentials, environment dumps and raw native-tool output are not public
-results. Neither has JSON output, a lifecycle receipt or a private operation log.
+results. The one private path setup names is the directory of the
+[setup run](cli/output.md#setup-run-output) keeping its controller Ansible's
+output, as a `Logs` field before that Ansible starts and again with the
+result; what that Ansible printed stays in the run. Neither command has JSON
+output, a lifecycle receipt or a private operation log.
 What setup's dependency resolution read but did not refuse, such as a
 publisher page of a newer Index API minor, is a `[WARN]` diagnostic on standard
 error with the result, whether that setup completes or stops; it never changes

@@ -36,14 +36,32 @@ type Requirements struct {
 // Unsupported lists every selected cluster this contract cannot install, in
 // canonical order, so an operation refuses before it registers anything.
 func Unsupported(catalog api.Catalog) []string {
-	var found []string
+	return lifecycle.Identities(Refusals(catalog))
+}
+
+// Refusals refuses every selected cluster this contract cannot install, with
+// the reason and remedy its request derivation would give, so an operation
+// refuses before registration saying why and what to change.
+func Refusals(catalog api.Catalog) []lifecycle.Refusal {
+	var found []lifecycle.Refusal
 	for _, cluster := range catalog.OfKind(api.ContainerCluster) {
-		if reason, _ := unsupportedReason(catalog, cluster); reason != "" {
-			found = append(found, cluster.Identity())
+		if reason, remediation := refusedCluster(catalog, cluster); reason != "" {
+			found = append(found, lifecycle.RefusalOf(cluster, reason, remediation))
 		}
 	}
-	slices.Sort(found)
-	return slices.Compact(found)
+	return lifecycle.SortRefusals(found)
+}
+
+// refusedCluster says why one cluster is not installable and what an operator
+// changes, or nothing when it is installable. Correcting the cluster is the
+// remedy unless the reason names another object to change, so selection and
+// derivation give the one remedy the refusal table states.
+func refusedCluster(catalog api.Catalog, cluster api.Object) (reason, remediation string) {
+	reason, remediation = unsupportedReason(catalog, cluster)
+	if reason != "" && remediation == "" {
+		remediation = "correct " + cluster.Identity()
+	}
+	return reason, remediation
 }
 
 // unsupportedReason says why one cluster is not installable, or nothing when
@@ -206,10 +224,7 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 	if !substrate.SafeSegment(name) {
 		return empty(refusal("lifecycle.state", "the cluster name is not a safe host identifier", "rename "+cluster.Identity()))
 	}
-	if reason, remediation := unsupportedReason(catalog, cluster); reason != "" {
-		if remediation == "" {
-			remediation = "correct " + cluster.Identity()
-		}
+	if reason, remediation := refusedCluster(catalog, cluster); reason != "" {
 		return empty(refusal("lifecycle.unsupported", reason, remediation))
 	}
 	needs := Requirements{}

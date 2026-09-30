@@ -339,13 +339,17 @@ func TestObservationMapsEvidenceToTheEffectItProves(t *testing.T) {
 	fresh, _ := json.Marshal(Evidence{Power: "Off", Request: "digest"})
 	foreign, _ := json.Marshal(Evidence{Marker: string(other), Power: "On", Request: "digest"})
 	absenceForm, _ := json.Marshal(Evidence{Absent: true, Postcondition: true, Request: "digest"})
+	staged, _ := json.Marshal(Evidence{Power: "Off", Request: "digest", TreeStaging: true, Work: true})
 	for name, test := range map[string]struct {
 		runner *fakeRunner
 		want   reconciliation.EffectState
 	}{
-		"complete":       {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: completeEvidence(request, "digest", string(marker))}}, reconciliation.EffectCompleted},
-		"nothing yet":    {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: fresh}}, reconciliation.EffectNoEffect},
-		"another marker": {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: foreign}}, reconciliation.EffectUnknown},
+		"complete":    {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: completeEvidence(request, "digest", string(marker))}}, reconciliation.EffectCompleted},
+		"nothing yet": {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: fresh}}, reconciliation.EffectNoEffect},
+		// An apply killed while it extracted the tree left a partial copy
+		// beneath the served root, which is an effect this operation owns.
+		"killed while staging the tree": {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: staged}}, reconciliation.EffectPartial},
+		"another marker":                {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: foreign}}, reconciliation.EffectUnknown},
 		// The absence form reports no power, so it can never prove that an
 		// apply stopped before it published anything had no effect; the
 		// observation publishes the presence form, which carries the power.
@@ -393,6 +397,8 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 		"content read alone, none left":  {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Request: "digest"})}}, reconciliation.EffectCompleted},
 		"content read alone, image left": {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Image: true, Request: "digest"})}}, reconciliation.EffectPartial},
 		"tree left without its marker":   {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Request: "digest", TreeContent: true})}}, reconciliation.EffectPartial},
+		"staging tree left":              {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Request: "digest", TreeStaging: true})}}, reconciliation.EffectPartial},
+		"work area left":                 {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Power: "Off", Request: "digest", Work: true})}}, reconciliation.EffectPartial},
 		"another request":                {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Absent: true, Postcondition: true, Request: "another"})}}, reconciliation.EffectUnknown},
 		"failed":                         {&fakeRunner{err: errors.New("unreachable")}, reconciliation.EffectUnknown},
 	} {
@@ -499,6 +505,49 @@ func TestAFrozenRefusedInstallationRefusesOnlyItsApply(t *testing.T) {
 	}
 }
 
+// The operation binds the artifact server's serving certificate Secret whole,
+// because the server's own block writes its key, but every run of an
+// installation that fetches privately from that server is lent only the
+// certificate it verifies the fetch against, and of every other Secret only
+// the parts its material files name.
+func TestAnInstallationRunIsLentOnlyTheServingCertificateOfTheServersSecret(t *testing.T) {
+	for _, operation := range []string{"apply", "destroy", "observe"} {
+		t.Run(operation, func(t *testing.T) {
+			call, request := execution(t, "digest")
+			request.Private = &Publication{Path: "private/os/rhel-01", URL: "https://artifacts.lab.example.test/private/os/rhel-01"}
+			request.Target.HostKeyRef, request.TLSCertificateRef = "rhel-01-host-key", "lab-artifacts-tls"
+			call.Material = fleetMaterial()
+			call.Material["lab-bmc-credentials"] = secrets.NewMaterial(map[secrets.Part][]byte{
+				secrets.UsernamePart: []byte("admin"), secrets.PasswordPart: []byte("BMC PASSWORD"),
+			})
+			call.Material["rhel-01-host-key"] = secrets.NewMaterial(map[secrets.Part][]byte{
+				secrets.PrivateKeyPart: []byte("HOST KEY"), secrets.PublicKeyPart: []byte("ssh-ed25519 AAAAHOST\n"),
+			})
+			call.Material["lab-artifacts-tls"] = secrets.NewMaterial(map[secrets.Part][]byte{
+				secrets.CertificatePart: []byte("-----BEGIN CERTIFICATE-----\nSERVING\n-----END CERTIFICATE-----\n"),
+				secrets.PrivateKeyPart:  []byte("-----BEGIN PRIVATE KEY-----\nSERVING KEY\n-----END PRIVATE KEY-----\n"),
+			})
+			marker, _ := MarkerFor(request, "digest")
+			runner := &fakeRunner{}
+			capability := New(runner)
+			if _, err := capability.run(context.Background(), call, operation, request, marker, ""); err != nil {
+				t.Fatalf("run: %v", diagnostics.Of(err))
+			}
+			sent := runner.requests[0]
+			if parts := sent.Material["lab-artifacts-tls"].Parts(); !slices.Equal(parts, []secrets.Part{secrets.CertificatePart}) {
+				t.Fatalf("the serving certificate Secret is lent as %v", parts)
+			}
+			for name, material := range sent.Material {
+				for _, part := range material.Parts() {
+					if !slices.ContainsFunc(sent.Materials, func(file lifecycle.MaterialFile) bool { return file.Secret == name && file.Part == part }) {
+						t.Fatalf("the run is lent the %s part of %s, which no material file names", part, name)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestAnUnconfiguredCapabilityRefusesBeforeAnyEffect(t *testing.T) {
 	call, _ := execution(t, "digest")
 	if _, err := New(nil).Apply(context.Background(), call); err == nil {
@@ -528,7 +577,12 @@ func TestUnsupportedReadsTheCompiledStateOrNothing(t *testing.T) {
 		field("installer", api.MapValue(field("templateClone", api.MapValue()))),
 	)))
 	unsupported := New(nil).Unsupported(compilation.NewState(catalog, catalog, nil))
-	if !slices.Equal(unsupported, []string{"Machine/rhel-01"}) {
-		t.Fatalf("unsupported = %v", unsupported)
+	want := []lifecycle.Refusal{{
+		Kind: "Machine", Name: "rhel-01",
+		Reason:      "this executable installs an operating system only through the anaconda installer, which the install profile does not select",
+		Remediation: "select spec.installer.anaconda on MachineInstallProfile/rhel-9-8",
+	}}
+	if !slices.Equal(unsupported, want) {
+		t.Fatalf("unsupported = %+v, want %+v", unsupported, want)
 	}
 }

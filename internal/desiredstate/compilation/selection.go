@@ -197,35 +197,4 @@ func validateSourcePaths(record *objectRecord, sources desiredstate.Sources, ds 
 			}
 		}
 	}
-	if record.object.Kind() != api.Secret {
-		return
-	}
-	for _, field := range record.object.Spec().Get("source", "file").Fields() {
-		value := field.Value.Text()
-		if value == "" {
-			continue
-		}
-		if strings.ContainsAny(value, "\x00\r\n") || strings.TrimSpace(value) != value {
-			ds.issue(record, api.Issue{Code: "api.value", Field: "$.spec.source.file." + field.Name, Message: "Secret path has invalid whitespace or characters"})
-			continue
-		}
-		if value == "~" || strings.HasPrefix(value, "~/") {
-			continue
-		}
-		resolved := value
-		if !filepath.IsAbs(resolved) {
-			resolved = filepath.Join(filepath.Dir(record.path), resolved)
-		}
-		resolved = filepath.Clean(resolved)
-		for _, root := range roots {
-			if resolved != root && !pathWithin(resolved, root) {
-				continue
-			}
-			rel, _ := filepath.Rel(root, resolved)
-			parts := strings.Split(filepath.ToSlash(rel), "/")
-			if !slices.Contains(parts[:max(0, len(parts)-1)], "secrets") {
-				ds.issue(record, api.Issue{Code: "api.invariant", Field: "$.spec.source.file." + field.Name, Message: "a Secret payload inside an input tree must be below a secrets directory", Remediation: "use a secrets directory relative to the recipient declaration or an external payload path"})
-			}
-		}
-	}
 }

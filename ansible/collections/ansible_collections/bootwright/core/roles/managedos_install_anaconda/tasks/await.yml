@@ -20,7 +20,25 @@
   retries: '{{ bootwright_os_install_request.budgets.installer.attempts | int }}'
   delay: '{{ bootwright_os_install_request.budgets.installer.delaySeconds | int }}'
   until: (managedos_install_anaconda_installer.power | default('')) == 'Off'
+  failed_when: false
   no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# what ended the wait is reported here, where no credential is: the power
+# state the controller last reported, or its own refusal of the last read.
+- name: Stop at an installer that did not finish within its budget
+  ansible.builtin.assert:
+    that:
+      - (managedos_install_anaconda_installer.power | default('')) == 'Off'
+    fail_msg: >-
+      the installer did not power Machine {{ bootwright_os_install_request.identity.object }}
+      off within its budget of {{ bootwright_os_install_request.budgets.installer.attempts | int }}
+      attempts {{ bootwright_os_install_request.budgets.installer.delaySeconds | int }} seconds apart;
+      its management controller last answered
+      {{ ('power ' ~ (managedos_install_anaconda_installer.power | string | bootwright.core.printable)[:32])
+         if managedos_install_anaconda_installer.power is defined
+         else (managedos_install_anaconda_installer.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
 
 - name: Eject the installer image now that the installation is written
   bootwright.core.redfish_boot:
@@ -33,7 +51,19 @@
     restore_verification: '{{ managedos_install_anaconda_media_trust.restoreVerification }}'
     remove_certificate: '{{ managedos_install_anaconda_media_trust.removeCertificate }}'
     certificate: '{{ managedos_install_anaconda_certificate }}'
+  register: managedos_install_anaconda_released
+  failed_when: false
   no_log: true
+
+- name: Stop at an eject the management controller did not complete
+  ansible.builtin.assert:
+    that:
+      - managedos_install_anaconda_released.msg is not defined
+    fail_msg: >-
+      ejecting the installer image from Machine {{ bootwright_os_install_request.identity.object }}
+      failed:
+      {{ (managedos_install_anaconda_released.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
 
 - name: Boot the installed disk of a machine this substrate created
   ansible.builtin.include_role:

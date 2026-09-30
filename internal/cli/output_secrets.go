@@ -45,7 +45,7 @@ func validSecretIdentity(secretType, source string) bool {
 		return false
 	}
 	switch source {
-	case "contextStore", "file", "generated":
+	case "contextStore", "generated":
 		return true
 	default:
 		return false
@@ -65,7 +65,7 @@ func validSecretCheck(result *custody.CheckResult) bool {
 		}
 		seen[row.Name] = true
 		switch row.Status {
-		case "available", "missing", "stale", "invalid", "unreadable":
+		case "available", "missing", "stale", "invalid":
 		default:
 			return false
 		}
@@ -103,7 +103,7 @@ func validSecretList(result *custody.ListResult) bool {
 	}
 	seen := make(map[string]bool, len(result.Secrets))
 	for _, row := range result.Secrets {
-		if row.Name == "" || seen[row.Name] || !validSecretIdentity(row.Type, row.Source) || row.Source == "file" || len(row.Parts) == 0 || !validSecretParts(row.Parts) || !validOptionalIdentifier(row.CurrentVersion) || row.BoundVersions < 0 {
+		if row.Name == "" || seen[row.Name] || !validSecretIdentity(row.Type, row.Source) || len(row.Parts) == 0 || !validSecretParts(row.Parts) || !validOptionalIdentifier(row.CurrentVersion) || row.BoundVersions < 0 {
 			return false
 		}
 		seen[row.Name] = true

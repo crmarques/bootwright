@@ -64,11 +64,17 @@ type statusLifecycle struct {
 }
 
 type statusBlock struct {
-	ID          string `json:"id"`
-	Description string `json:"description"`
-	Stage       string `json:"stage"`
-	State       string `json:"state"`
-	Attempts    int    `json:"attempts"`
+	ID          string            `json:"id"`
+	Description string            `json:"description"`
+	Stage       string            `json:"stage"`
+	State       string            `json:"state"`
+	Attempts    int               `json:"attempts"`
+	Unresolved  *statusUnresolved `json:"unresolved,omitempty"`
+}
+
+type statusUnresolved struct {
+	Reason string `json:"reason"`
+	Remedy string `json:"remedy"`
 }
 
 func displayStatus(result *lifecycle.StatusResult) statusResult {
@@ -98,10 +104,14 @@ func displayStatus(result *lifecycle.StatusResult) statusResult {
 	if summary := result.Lifecycle; summary != nil {
 		blocks := make([]statusBlock, 0, len(summary.Blocks))
 		for _, block := range summary.Blocks {
-			blocks = append(blocks, statusBlock{
+			row := statusBlock{
 				ID: escapeDisplayLine(block.ID), Description: escapeDisplayLine(block.Description),
 				Stage: escapeDisplayLine(block.Stage), State: escapeDisplayLine(block.State), Attempts: block.Attempts,
-			})
+			}
+			if block.Unresolved != nil {
+				row.Unresolved = &statusUnresolved{Reason: escapeDisplayLine(block.Unresolved.Reason), Remedy: escapeDisplayLine(block.Unresolved.Remedy)}
+			}
+			blocks = append(blocks, row)
 		}
 		out.Lifecycle = &statusLifecycle{
 			Operation: escapeDisplayLine(summary.Operation), Verb: escapeDisplayLine(summary.Verb),
@@ -238,6 +248,16 @@ func writeStatusLifecycle(text *display, result *lifecycle.StatusResult) {
 	if len(tail) != 0 {
 		text.section("")
 		text.fields(tail...)
+	}
+	for _, block := range summary.Blocks {
+		if block.Unresolved == nil {
+			continue
+		}
+		text.section("Unresolved " + block.ID)
+		text.fields(
+			field{Label: "Reason", Value: block.Unresolved.Reason},
+			field{Label: "Remedy", Value: block.Unresolved.Remedy},
+		)
 	}
 }
 

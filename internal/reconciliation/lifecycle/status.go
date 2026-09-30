@@ -21,14 +21,20 @@ func (s Service) Status(ctx context.Context, request StatusRequest) (*StatusResu
 		return nil, err
 	}
 	var result *StatusResult
+	var frozen frozenReopen
 	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
 		value, err := s.status(ctx, view)
 		result = value
+		if err != nil {
+			return err
+		}
+		frozen, err = frozenReopenOf(ctx, s.store(view))
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
+	s.nameLostBinding(ctx, name, result, frozen)
 	return result, nil
 }
 
@@ -218,6 +224,9 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	for index := range blocks {
 		blocks[index].Attempts = attempts[blocks[index].ID]
 	}
+	if err := s.explainUnproved(ctx, store, operation.ID, plan, blocks); err != nil {
+		return nil, err
+	}
 	summary := &LifecycleSummary{
 		Operation: operation.ID, Verb: string(operation.Verb), State: string(operation.State),
 		Next: nextAction(operation, plan, states), Blocks: blocks, Logs: logs,
@@ -230,7 +239,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	result.LogLocation = store.LogDirectory(operation.ID)
 	result.Secrets.Bound = len(operation.Bindings)
 	result.Shared = applyBlockStatus(result.Shared, plan, states)
-	if result.NextSteps, err = offered(ctx, store, operation, plan, states, summary.Next, result.Contradictions); err != nil {
+	if result.NextSteps, err = offered(ctx, store, operation, plan, summary.Next, result.Contradictions); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -245,12 +254,12 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 // started: each contradiction status names for it refuses that removal. A
 // completed apply admits a removal too, but naming it there reads as an
 // instruction to undo what just succeeded.
-func offered(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, next string, contradicted []string) ([]string, error) {
+func offered(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, next string, contradicted []string) ([]string, error) {
 	steps := []string{}
 	if operation.State == reconciliation.OperationDone {
 		return steps, nil
 	}
-	refused, err := uncontinuable(ctx, store, operation, frozen, states)
+	refused, err := uncontinuable(ctx, store, operation, frozen)
 	if err != nil {
 		return nil, err
 	}

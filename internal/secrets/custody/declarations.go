@@ -60,13 +60,6 @@ func (s Service) resolve(ctx context.Context, name string) (secretstore.Context,
 func declarationOf(object api.Object, origin diagnostics.SourceLocation) secrets.Declaration {
 	spec := object.Spec()
 	d := secrets.Declaration{Name: object.Name(), Type: spec.Get("type").Text(), Source: "contextStore", Origin: origin.Path, Document: origin.Document}
-	if file := spec.Get("source", "file"); file.Present() {
-		d.Source = "file"
-		d.Files = secrets.FileSource{Path: file.Get("path").Text(), Certificate: file.Get("cert").Text(), PrivateKey: file.Get("privateKey").Text(), PublicKey: file.Get("publicKey").Text()}
-		if d.Type == "tlsCertificate" {
-			d.Files.PrivateKey = file.Get("key").Text()
-		}
-	}
 	if g := spec.Get("source", "generated"); g.Present() {
 		d.Source = "generated"
 		d.Generation = secrets.Generation{Username: g.Get("username").Text(), CommonName: g.Get("commonName").Text(), DNSNames: g.Get("dnsNames").Strings(), IPAddresses: g.Get("ipAddresses").Strings(), KeyType: g.Get("keyType").Text(), Comment: g.Get("comment").Text()}

@@ -47,6 +47,9 @@ type transition struct {
 	// unclaimed marks a destroy of a context holding no operation whose
 	// running evidence or reservations an interrupted registration left.
 	unclaimed bool
+	// idle marks a destroy that settles beside a claim that holds nothing,
+	// which only a transaction of its own reclaims.
+	idle      bool
 	verb      reconciliation.Verb
 	operation operationstore.Operation
 	plan      reconciliation.Plan
@@ -171,7 +174,13 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	// bound, so a release lowered it since and that apply refuses at its
 	// re-proof rather than register the binding. A removal's finalization this
 	// invocation completed already collected what it listed after this one.
+	// A claim that holds nothing beside it is what an apply stopped before its
+	// running evidence landed leaves, and it is reclaimed in a transaction that
+	// does nothing else.
 	if decided.noop {
+		if decided.idle {
+			s.reclaimIdle(ctx, name)
+		}
 		if verb == reconciliation.Destroy && !finalized {
 			s.collect(ctx, name, stranded, nil)
 		}
@@ -180,6 +189,9 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 			recovered = RecoveredFinalization
 		}
 		return settled(identity, decided, recovered), nil
+	}
+	if err := s.refuseLostBinding(ctx, name, decided, decided.basis); err != nil {
+		return nil, err
 	}
 	if err := authorize(decided.plan, authorizations); err != nil {
 		return nil, err
@@ -297,7 +309,7 @@ func (s Service) decideOver(ctx context.Context, view View, store OperationStore
 				"an incomplete "+string(operation.Verb)+" must be continued before another operation",
 				"run "+string(operation.Verb)+" to continue it")
 		}
-		if err := refuseUncontinuable(ctx, store, operation, frozen, states); err != nil {
+		if err := refuseUncontinuable(ctx, store, operation, frozen); err != nil {
 			return transition{}, err
 		}
 		if verb == reconciliation.Apply {
@@ -333,10 +345,10 @@ func (s Service) decideOver(ctx context.Context, view View, store OperationStore
 	if unfinished := unfinishedBlocks(frozen, states); len(unfinished) != 0 {
 		return transition{}, failure("lifecycle.state",
 			"the completed destroy "+operation.ID+" records no block completion for these blocks, so nothing proves their effects removed: "+strings.Join(unfinished, ", "),
-			"review its durable state with bootwright status")
+			deletionExit(view))
 	}
 	if verb == reconciliation.Destroy {
-		return transition{noop: true, verb: verb, operation: operation, plan: frozen, states: states}, nil
+		return settledDestroy(ctx, store, transition{noop: true, verb: verb, operation: operation, plan: frozen, states: states}), nil
 	}
 	decided, err := s.freshApply(ctx, view, selection)
 	if err != nil {
@@ -517,8 +529,8 @@ func supersedable(operation operationstore.Operation) bool {
 // owns no effect. An apply registers before its first block starts, so one that
 // stopped before starting any is still running or paused. A completed apply's
 // blocks are all done, a failed or unknown apply holds the block that made it
-// so, and a failed removal whose blocks are all done is finalized before any
-// decision reaches here.
+// so or, lagging behind them, blocks that are all done, and a failed removal
+// whose blocks are all done is finalized before any decision reaches here.
 func mayHaveStartedNothing(operation operationstore.Operation) bool {
 	return operation.Verb == reconciliation.Apply &&
 		(operation.State == reconciliation.OperationRunning || operation.State == reconciliation.OperationPaused)
@@ -843,6 +855,9 @@ func (s Service) bind(ctx context.Context, name string, decided transition) (str
 	}
 	bound, err := s.binder.Reopen(ctx, custody.BindingRequest{ContextName: name, BindingID: identity})
 	if err != nil {
+		if frozen := frozenBinding(decided); frozen != "" {
+			err = s.unreopenable(ctx, name, decided, frozen, err)
+		}
 		return identity, nil, err
 	}
 	material := make(map[string]secrets.Material, len(bound))
@@ -996,8 +1011,8 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 	var unresolved error
 	if len(remaining) != 0 {
 		unresolved = failure("lifecycle.unknown",
-			"this removal cannot prove what these effects left behind: "+strings.Join(remaining, ", "),
-			"restore the host they ran against and repeat the removal")
+			"this removal cannot prove what these effects left behind, so it registered nothing: "+strings.Join(remaining, ", "),
+			"do what the diagnostic of each reports, then repeat bootwright destroy")
 	}
 	return withCause(fault, withCause(cause, unresolved))
 }
@@ -1310,6 +1325,10 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		}
 		identity = allocated
 	}
+	closure, err := executionClosure(tx.Controller())
+	if err != nil {
+		return fail(err)
+	}
 	if err := s.reserve(ctx, tx, decided); err != nil {
 		return fail(err)
 	}
@@ -1323,10 +1342,11 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		bindings = append(bindings, binding)
 	}
 	operation := operationstore.Operation{
-		Version: 1, ID: identity, Verb: decided.verb,
+		Version: operationstore.OperationVersion, ID: identity, Verb: decided.verb,
 		Context: tx.Identity().Name, Revision: tx.Identity().Revision,
 		InputDigest: inputDigest(tx), PlanDigest: digest, AutomationDigest: s.automation.CatalogDigest(),
 		Executable: operationstore.Executable{Version: s.options.Executable.Version, Commit: s.options.Executable.Commit},
+		Closure:    &closure,
 		Source:     decided.source, Bindings: bindings, State: reconciliation.OperationRunning,
 		Created: stamp, Updated: stamp,
 	}
@@ -1446,18 +1466,84 @@ func (s Service) verifyContinuation(ctx context.Context, tx Transaction, operati
 	if operation.InputDigest != inputDigest(tx) {
 		return failure("lifecycle.state", "the frozen input no longer matches this operation", "restore the exact input revision this operation froze")
 	}
+	registered := registeredWith(operation.Executable)
+	if operation.Closure == nil && tx.Controller().SetupRuns {
+		return failure("lifecycle.state", "this operation was registered by an earlier build that froze no Python and Ansible closure, and "+
+			registered+" cannot read this host's controller directory, which now keeps setup runs", earlierBuildGone(tx, operation))
+	}
 	if operation.AutomationDigest != s.automation.CatalogDigest() {
-		remediation := "install the compatible executable and run bootwright setup"
+		remediation := "install " + registered + ", which registered this operation, and run bootwright setup"
 		if supersedable(operation) {
-			remediation = "destroy what this operation owns under this executable, or install the one it registered under"
+			remediation = "destroy what this operation owns under this executable, or install " + registered + ", which registered it"
 		}
 		return failure("lifecycle.state", "this executable's automation differs from the one this operation froze", remediation)
+	}
+	if operation.Closure == nil {
+		remediation := "continue it with " + registered + ", which registered it"
+		if supersedable(operation) {
+			remediation = "destroy what this operation owns under this executable, or " + remediation
+		}
+		return failure("lifecycle.state", "this operation was registered by an earlier build that froze no Python and Ansible closure", remediation)
 	}
 	host, err := s.host.Identity(ctx)
 	if err != nil {
 		return err
 	}
-	return verifyHostBinding(tx.Controller(), identity, host)
+	if err := verifyHostBinding(tx.Controller(), identity, host); err != nil {
+		return err
+	}
+	current, err := executionClosure(tx.Controller())
+	if err != nil {
+		return err
+	}
+	if current != *operation.Closure {
+		frozen := *operation.Closure
+		remediation := "restore the execution bundle of Python " + frozen.Python + " and ansible-core " + frozen.Ansible +
+			" that " + registered + " registered this operation with"
+		if supersedable(operation) {
+			remediation = "destroy what this operation owns under the approved bundle, or " + remediation
+		}
+		return failure("lifecycle.state", "the approved execution bundle holds another Python and Ansible closure (Python "+
+			current.Python+", ansible-core "+current.Ansible+") than the one this operation registered with", remediation)
+	}
+	return nil
+}
+
+// earlierBuildGone is the remedy for an operation whose registering build
+// froze no closure once setup kept a run on this host. Every such build
+// predates setup runs and refuses a controller directory that keeps them, so
+// no remedy can name it: a removal under this executable supersedes the
+// operation where one may, and otherwise only deleting the context remains.
+func earlierBuildGone(view View, operation operationstore.Operation) string {
+	if supersedable(operation) {
+		return "destroy what this operation owns under this executable"
+	}
+	return deletionExit(view)
+}
+
+// executionClosure is the Python and Ansible closure of the execution bundle
+// the retained setup approves, which every effect of an operation runs in.
+// The native packages setup installs beside it are the host's: the package
+// manager may update them, so they are no part of it.
+func executionClosure(view prerequisites.StorageView) (operationstore.Closure, error) {
+	definition := view.State.Receipt.Definition
+	if definition == nil || definition.Bootstrap == nil {
+		return operationstore.Closure{}, failure("controller.state", "the retained controller setup has no execution definition", "run bootwright setup")
+	}
+	digest, err := prerequisites.ClosureDigest(*definition.Bootstrap)
+	if err != nil {
+		return operationstore.Closure{}, err
+	}
+	return operationstore.Closure{Digest: digest, Python: definition.Bootstrap.PythonVersion, Ansible: definition.Bootstrap.AnsibleVersion}, nil
+}
+
+// registeredWith names the build an operation registered under, as the
+// version command spells it, or the record itself when it names none.
+func registeredWith(executable operationstore.Executable) string {
+	if identity := executableIdentity(executable); identity != "" {
+		return "bootwright " + identity
+	}
+	return "the executable its operation.json records"
 }
 
 // verifyHostBinding proves this context is bound to the host the operation

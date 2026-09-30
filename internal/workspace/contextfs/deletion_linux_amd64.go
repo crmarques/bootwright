@@ -355,7 +355,7 @@ func (t *transaction) Delete(ctx context.Context, requested contexts.Record) err
 				return err
 			}
 		}
-		if err := t.dropControllerBinding(ctx, record.Name); err != nil {
+		if err := t.dropContextClaims(ctx, record.Name); err != nil {
 			return err
 		}
 		remaining := maxContextEntries
@@ -376,7 +376,7 @@ func (t *transaction) Delete(ctx context.Context, requested contexts.Record) err
 		}
 	}
 	registry := cloneRegistry(t.registry)
-	if err := t.dropControllerBinding(ctx, record.Name); err != nil {
+	if err := t.dropContextClaims(ctx, record.Name); err != nil {
 		return err
 	}
 	registry.Contexts = slices.DeleteFunc(registry.Contexts, func(item contexts.Record) bool { return item.Name == record.Name })

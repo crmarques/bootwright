@@ -14,7 +14,6 @@ import (
 	"strings"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/desiredstate"
@@ -45,9 +44,7 @@ func contextFixture(t *testing.T) (cli.Services, *contextfs.Store, string, strin
 func contextRun(t *testing.T, services cli.Services, want int, args ...string) (string, string) {
 	t.Helper()
 	var out, errOut bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	code := runServices(ctx, args, &out, &errOut, services)
+	code := runServices(t.Context(), args, &out, &errOut, services)
 	if code != want {
 		t.Fatalf("%v: code=%d want=%d\nstdout=%s\nstderr=%s", args, code, want, out.String(), errOut.String())
 	}
@@ -297,7 +294,7 @@ func TestUserSelectionRefusesAnAbsentContextAndFollowsNameReuse(t *testing.T) {
 
 func TestContextReplayAndReadOnlyEffects(t *testing.T) {
 	services, repository, input, root := contextFixture(t)
-	secret := "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: credential\nspec:\n  type: opaque\n  source:\n    file:\n      path: secrets/value\n"
+	secret := "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: credential\nspec:\n  type: opaque\n  source:\n    contextStore: {}\n"
 	if err := os.WriteFile(filepath.Join(input, "credential.yaml"), []byte(secret), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -329,7 +326,7 @@ func TestContextReplayAndReadOnlyEffects(t *testing.T) {
 	}
 	before := stateFingerprint(t, root)
 	yaml, stderr := contextRun(t, services, 0, "render", "effective")
-	if stderr != "" || !strings.Contains(yaml, "secrets/value") {
+	if stderr != "" || !strings.Contains(yaml, "name: credential") {
 		t.Fatal(yaml, stderr)
 	}
 	output, stderr := contextRun(t, services, 0, "render", "effective", "--output", "json")
@@ -465,4 +462,24 @@ func TestCompleteExampleContextRoundTrip(t *testing.T) {
 	if err := json.Unmarshal([]byte(rendered), &result); err != nil || len(result.Result.EffectiveState) != 106 || stderr != "" {
 		t.Fatalf("complete effective state: count=%d stderr=%s err=%v", len(result.Result.EffectiveState), stderr, err)
 	}
+}
+
+func TestContextRunOutlastsAHostSlowerThanAnyDeadline(t *testing.T) {
+	_, repository, input, root := contextFixture(t)
+	deps := testContextWiring(t, root)
+	deps.Selection = loadedHostSelection{deps.Selection}
+	deps.Repository, deps.Workspace = repository, repository
+	contextRun(t, assembleServices(deps), 0, "context", "init", "--name", "alpha", "--input-dir", input)
+}
+
+// loadedHostSelection stands for a host loaded past any wall-clock deadline:
+// it returns only once a bounded context expires.
+type loadedHostSelection struct{ contexts.SelectionStore }
+
+func (s loadedHostSelection) Write(ctx context.Context, selection contexts.Selection) error {
+	if _, bounded := ctx.Deadline(); bounded {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	return s.SelectionStore.Write(ctx, selection)
 }

@@ -8,20 +8,28 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 // Unsupported lists every artifact server this capability cannot realize, in
 // canonical order. Kinds no capability claims at all are the engine's own
 // refusal, not this capability's.
 func Unsupported(catalog api.Catalog) []string {
-	var found []string
+	return lifecycle.Identities(Refusals(catalog))
+}
+
+// Refusals refuses every artifact server this capability cannot realize, with
+// its reason and remedy.
+func Refusals(catalog api.Catalog) []lifecycle.Refusal {
+	var found []lifecycle.Refusal
 	for _, server := range catalog.OfKind(api.ArtifactServer) {
 		if server.Spec().Get("management").Text() == "managed" && server.Spec().Get("retention").Text() == "install-only" {
-			found = append(found, server.Identity())
+			found = append(found, lifecycle.RefusalOf(server,
+				"this executable serves no managed artifact server with install-only retention",
+				"declare spec.retention: persistent on "+server.Identity()+", or omit it"))
 		}
 	}
-	slices.Sort(found)
-	return slices.Compact(found)
+	return lifecycle.SortRefusals(found)
 }
 
 // Requests derives one frozen request per managed artifact server, in

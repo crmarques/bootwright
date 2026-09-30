@@ -1,5 +1,6 @@
 [OK] Context deleted
 
-  Name               retired
-  Current cleared    false
-  Orphans abandoned  true
+  Name                   retired
+  Current cleared        false
+  Orphans abandoned      true
+  Reservations released  libvirt-domain:bootwright-lab-rhel-01, socket:192.0.2.1:8000

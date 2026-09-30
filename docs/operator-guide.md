@@ -113,6 +113,24 @@ Machine it would take back is down, so stop any running one with
 `bootwright machine stop` before it; the refusal names each Machine and the
 command that stops it, and nothing is registered until they are.
 
+When that resolution still proves nothing, the removal refuses having
+registered nothing, and the refusal and `status` name, for each such effect,
+why: a foreign object at its target, a host or endpoint that did not answer,
+or a listener with nothing of the target behind it, with what to do about it.
+Do that and repeat `destroy`, which observes the effect again and goes on. The
+only other way out is `bootwright context delete --name <context> --purge
+--allow-orphans`, which abandons what the context may own and releases the
+host reservations it held.
+
+An operation is continued and removed with the Secret versions it bound, so a
+context whose keyring lost that binding, or can no longer read its material,
+can do neither: `apply` and `destroy` refuse before any effect, naming
+the operation, the binding and every object it owns, and `status` offers only
+the deletion. Restore the context's keyring from a complete backup and repeat
+the command, or run `bootwright context delete --name <context> --purge
+--allow-orphans` and remove the objects the refusal names by hand. Nothing
+re-binds the current Secrets in the lost binding's place.
+
 Changing a frozen block's Go request or plan shape changes its digests, so an
 operation registered by an earlier build can be neither continued nor removed
 by this one. Destroy or purge any live context before switching builds.

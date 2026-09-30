@@ -297,13 +297,13 @@ func (InstallCapability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.
 	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its nodes are probed in this removal"}, nil
 }
 
-// Unsupported names every selected cluster this capability cannot install, so
-// the operation refuses before registration.
-func (InstallCapability) Unsupported(state *compilation.State) []string {
+// Unsupported refuses every selected cluster this capability cannot install,
+// with its reason and remedy, so the operation refuses before registration.
+func (InstallCapability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 	if state == nil {
 		return nil
 	}
-	return Unsupported(state.Effective())
+	return Refusals(state.Effective())
 }
 
 func (c InstallCapability) prepare(ctx context.Context, execution lifecycle.Execution, operation string) (InstallRequest, error) {

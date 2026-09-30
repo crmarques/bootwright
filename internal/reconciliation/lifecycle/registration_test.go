@@ -16,6 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore/areadouble"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
@@ -602,7 +603,7 @@ func TestADestroyReleasesWhatAnInterruptedRegistrationLeft(t *testing.T) {
 			if test.reserved {
 				h.workspace.reservations = reservationOf("alpha")
 			}
-			if err := operationstore.New(h.workspace.area, killClock).Claim(context.Background(), "op-"+strings.Repeat("0e", 16)); err != nil {
+			if err := operationstore.New(h.workspace.area, killClock).Claim(context.Background(), "op-"+strings.Repeat("0e", 16), reconciliation.Plan{}); err != nil {
 				t.Fatal(err)
 			}
 			stranded := ""
@@ -899,7 +900,7 @@ func TestAnApplyRefusesWhenAnotherClaimRaisedTheEvidenceAgain(t *testing.T) {
 			t.Fatalf("the destroy = %+v (%v)", result, err)
 		}
 		h.workspace.evidence = slices.Clone(running)
-		if err := operationstore.New(h.workspace.area, killClock).Claim(ctx, "op-"+strings.Repeat("0f", 16)); err != nil {
+		if err := operationstore.New(h.workspace.area, killClock).Claim(ctx, "op-"+strings.Repeat("0f", 16), reconciliation.Plan{}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -923,7 +924,7 @@ func TestAnApplyRefusesWhenReclaimsAndNewerClaimsKeepTheCount(t *testing.T) {
 	running := evidenceBytes(t, reconciliation.Apply, reconciliation.OperationRunning)
 	// An apply killed after its claim and its raise left both.
 	h.workspace.evidence = slices.Clone(running)
-	if err := store.Claim(ctx, "op-"+strings.Repeat("0e", 16)); err != nil {
+	if err := store.Claim(ctx, "op-"+strings.Repeat("0e", 16), reconciliation.Plan{}); err != nil {
 		t.Fatal(err)
 	}
 	start := h.workspace.mutations
@@ -940,7 +941,7 @@ func TestAnApplyRefusesWhenReclaimsAndNewerClaimsKeepTheCount(t *testing.T) {
 		}
 		h.workspace.evidence = slices.Clone(running)
 		for _, claim := range []string{"0c", "0d"} {
-			if err := store.Claim(ctx, "op-"+strings.Repeat(claim, 16)); err != nil {
+			if err := store.Claim(ctx, "op-"+strings.Repeat(claim, 16), reconciliation.Plan{}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -987,6 +988,182 @@ func TestRefusedFreshAppliesReclaimTheirClaims(t *testing.T) {
 	if record, _ := durableOperation(t, h); record.Verb != reconciliation.Destroy || record.State != reconciliation.OperationDone {
 		t.Fatalf("the removal after the refused applies is %s %s", record.Verb, record.State)
 	}
+}
+
+// A fresh apply whose first pass, and its removal's, the operation area could
+// not hold beside the entries it keeps for later attempts refuses at its
+// claim, at the retained-operation bound, before it raises evidence, binds a
+// Secret or runs a block, and leaves no directory. With one retained entry
+// fewer, the same apply claims, registers and completes.
+func TestAFreshApplyRefusesAtItsClaimWhenTheAreaCannotHoldItsFirstPass(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, "alpha")
+	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{definition("alpha")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	records := operationstore.MaxEntries - operationstore.ReservedEntries - 2*operationstore.FirstPassEntries(plan)
+	for index := range records {
+		h.workspace.area.files[fmt.Sprintf("retained/record-%d", index)] = []byte("{}\n")
+	}
+	_, err = h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+	refused := diagnostics.Of(err)
+	if len(refused) != 1 || refused[0].Code != "lifecycle.state" || !strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations") {
+		t.Fatalf("an apply the area cannot hold reported %+v (%v), want the lifecycle.state retained-operation refusal", refused, err)
+	}
+	if current, directories := operations(t, h.workspace); current != "" || !slices.Equal(directories, []string{"retained"}) {
+		t.Fatalf("the refused apply left operation %q and directories %v", current, directories)
+	}
+	if !bytes.Equal(h.workspace.evidence, killPristine(t)) || len(h.binder.bound) != 0 || len(h.capability.applies) != 0 {
+		t.Fatalf("the refused apply left evidence %q, bound %v and applied %v", h.workspace.evidence, h.binder.bound, h.capability.applies)
+	}
+	delete(h.workspace.area.files, "retained/record-0")
+	result, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if err != nil || result.Receipt.State != "done" {
+		t.Fatalf("the apply the area admits = %+v (%v)", result, err)
+	}
+}
+
+// The removal of the last apply the operation area admits registers and
+// completes beside what that apply left, although the apply's own retry drew
+// on the entries both keep for later attempts: the removal needs no more than
+// its first pass and one entry for the writes that complete it. A one-block
+// removal's pass fits within the kept entries alone, so the room an apply is
+// admitted with for its removal's pass is shown by
+// TestTheRemovalOfAnApplyLargerThanTheReserveRegistersAtTheLine.
+func TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheLine(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, "alpha")
+	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{definition("alpha")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range operationstore.MaxEntries - operationstore.ReservedEntries - 2*operationstore.FirstPassEntries(plan) - 1 {
+		h.workspace.area.files[fmt.Sprintf("retained/record-%d", index)] = []byte("{}\n")
+	}
+	h.capability.applyErr = failure("lifecycle.state", "the server did not start", "")
+	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
+		t.Fatal("an apply whose block failed reported success")
+	}
+	h.capability.applyErr = nil
+	if result, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil || result.Receipt.State != "done" {
+		t.Fatalf("the retried apply at the line = %+v (%v)", result, err)
+	}
+	if len(h.capability.applies) != 2 {
+		t.Fatalf("the apply at the line ran its block %d times, want a failed attempt and its retry", len(h.capability.applies))
+	}
+	result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if err != nil || result.Receipt.State != "done" {
+		t.Fatalf("the removal of the last apply the area admits = %+v (%v)", result, err)
+	}
+	if record, _ := durableOperation(t, h); record.Verb != reconciliation.Destroy || record.State != reconciliation.OperationDone || !slices.Equal(h.capability.destroys, []string{"alpha"}) {
+		t.Fatalf("the removal at the line is %s %s after removing %v", record.Verb, record.State, h.capability.destroys)
+	}
+}
+
+// An apply whose removal's first pass is larger than the entries it keeps for
+// later attempts is admitted only with room for that pass too, so its removal
+// registers and completes beside what the apply left even when the apply was
+// admitted with no entry to spare. Admitted with its own first pass and the
+// kept entries alone, the removal would refuse at its registration.
+func TestTheRemovalOfAnApplyLargerThanTheReserveRegistersAtTheLine(t *testing.T) {
+	ctx := context.Background()
+	blocks := make([]string, 175)
+	definitions := make([]reconciliation.BlockDefinition, len(blocks))
+	for index := range blocks {
+		blocks[index] = fmt.Sprintf("block-%03d", index)
+		definitions[index] = definition(blocks[index])
+	}
+	h := newHarness(t, blocks...)
+	plan, err := reconciliation.NewPlan(reconciliation.Apply, definitions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	removal, err := plan.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if operationstore.AdmissionEntries(removal) <= operationstore.ReservedEntries {
+		t.Fatalf("the removal of %d blocks needs %d entries, which the %d kept entries alone would hold", len(blocks), operationstore.AdmissionEntries(removal), operationstore.ReservedEntries)
+	}
+	line := operationstore.MaxEntries - operationstore.AdmissionEntries(plan)
+	for index := range line {
+		h.workspace.area.files[fmt.Sprintf("filled/record-%d", index)] = []byte("{}\n")
+	}
+	_, err = h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "lifecycle.state" || !strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations") {
+		t.Fatalf("an apply one entry past its line reported %+v (%v), want the lifecycle.state retained-operation refusal", refused, err)
+	}
+	delete(h.workspace.area.files, "filled/record-0")
+	if held := areaEntries(h.workspace.area, ""); held != line {
+		t.Fatalf("the area holds %d entries before the apply, want its line %d", held, line)
+	}
+	if result, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil || result.Receipt.State != "done" {
+		t.Fatalf("the apply at its line = %+v (%v)", result, err)
+	}
+	if len(h.capability.applies) != len(blocks) {
+		t.Fatalf("the apply at its line ran %d blocks, want %d", len(h.capability.applies), len(blocks))
+	}
+	result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if err != nil || result.Receipt.State != "done" {
+		t.Fatalf("the removal of the apply admitted at its line = %+v (%v: %+v)", result, err, diagnostics.Of(err))
+	}
+	if record, _ := durableOperation(t, h); record.Verb != reconciliation.Destroy || record.State != reconciliation.OperationDone || len(h.capability.destroys) != len(blocks) {
+		t.Fatalf("the removal at the line is %s %s after removing %d blocks", record.Verb, record.State, len(h.capability.destroys))
+	}
+}
+
+// A removal the operation area cannot hold refuses at its registration, at
+// the retained-operation bound, and leaves the apply it would take back as it
+// was: its evidence, its binding and its effects, with no directory added.
+// With one entry more free, the same destroy registers and completes.
+func TestADestroyTheAreaCannotHoldRefusesAtItsRegistration(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, "alpha")
+	if err := killInvoke(ctx, h.service, reconciliation.Apply); err != nil {
+		t.Fatal(err)
+	}
+	applied, bound := slices.Clone(h.workspace.evidence), slices.Clone(h.binder.bound)
+	current, directories := operations(t, h.workspace)
+	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{definition("alpha")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	removal, err := plan.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range operationstore.MaxEntries - areaEntries(h.workspace.area, "") - operationstore.AdmissionEntries(removal) {
+		h.workspace.area.files[fmt.Sprintf("filled/record-%d", index)] = []byte("{}\n")
+	}
+	_, err = h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+	refused := diagnostics.Of(err)
+	if len(refused) != 1 || refused[0].Code != "lifecycle.state" || !strings.Contains(refused[0].Message, "this removal needs 14 more") {
+		t.Fatalf("a removal the area cannot hold reported %+v (%v), want the lifecycle.state retained-operation refusal", refused, err)
+	}
+	if now, after := operations(t, h.workspace); now != current || !slices.Equal(slices.DeleteFunc(after, func(name string) bool { return name == "filled" }), directories) {
+		t.Fatalf("the refused removal left operation %q and directories %v, want %q and %v", now, after, current, directories)
+	}
+	if !bytes.Equal(h.workspace.evidence, applied) || len(h.binder.released) != 0 || !slices.Equal(h.binder.bound, bound) || len(h.capability.destroys) != 0 {
+		t.Fatalf("the refused removal left evidence %q, released %v, bound %v and removed %v", h.workspace.evidence, h.binder.released, h.binder.bound, h.capability.destroys)
+	}
+	delete(h.workspace.area.files, "filled/record-0")
+	if result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil || result.Receipt.State != "done" {
+		t.Fatalf("the removal the area admits = %+v (%v)", result, err)
+	}
+}
+
+// areaEntries counts the entries beneath target as the operation area's entry
+// bound counts them.
+func areaEntries(area *memoryArea, target string) int {
+	count := 0
+	for _, entry := range areadouble.Entries[operationstore.Entry](area.files, area.directories, target) {
+		count++
+		if entry.Directory {
+			count += areaEntries(area, path.Join(target, entry.Name))
+		}
+	}
+	return count
 }
 
 // A fresh apply refused beside a reservation no operation owns keeps the
@@ -1143,7 +1320,9 @@ func (tx pristineFailing) PublishEvidence(ctx context.Context, data []byte) erro
 // A context holding no operation beside evidence no interrupted registration
 // leaves, or beside an operation directory with block records, holds state no
 // index accounts for, so its destroy refuses before it opens a transaction,
-// naming each, even beside pristine evidence and no reservation.
+// naming each, even beside pristine evidence and no reservation. Its only exit
+// is deleting the context, which acknowledges orphans unless the evidence is
+// pristine.
 func TestADestroyOverUnindexedRecordsRefuses(t *testing.T) {
 	lost := "op-" + strings.Repeat("0a", 16)
 	for name, test := range map[string]struct {
@@ -1152,18 +1331,19 @@ func TestADestroyOverUnindexedRecordsRefuses(t *testing.T) {
 		reserved bool
 		started  bool
 		named    string
+		remedy   string
 	}{
 		"running evidence beside an operation whose index was lost": {
 			verb: reconciliation.Apply, state: reconciliation.OperationRunning, reserved: true, started: true,
-			named: "the operation directory " + lost + " lists block records",
+			named: "the operation directory " + lost + " lists block records", remedy: orphanedDeletion,
 		},
 		"pristine evidence beside an operation whose index was lost": {
 			verb: reconciliation.Destroy, state: reconciliation.OperationDone, started: true,
-			named: "the operation directory " + lost + " lists block records",
+			named: "the operation directory " + lost + " lists block records", remedy: plainDeletion,
 		},
 		"failed evidence": {
 			verb: reconciliation.Apply, state: reconciliation.OperationFailed, reserved: true,
-			named: "the mutation evidence reads failed and retained",
+			named: "the mutation evidence reads failed and retained", remedy: orphanedDeletion,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -1182,7 +1362,7 @@ func TestADestroyOverUnindexedRecordsRefuses(t *testing.T) {
 			reported := diagnostics.Of(err)
 			if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
 				reported[0].Message != "the context holds operation records or evidence that no index names: "+test.named ||
-				reported[0].Remediation != "review its durable state with bootwright status" {
+				reported[0].Remediation != test.remedy {
 				t.Fatalf("the destroy = %+v (%v)", reported, err)
 			}
 			if !sameFiles(h.workspace.area, records) || !bytes.Equal(h.workspace.evidence, evidence) || h.workspace.mutations != mutations ||
@@ -1221,6 +1401,70 @@ func TestADestroyOverOnlyAStrandedBindingSettlesAndReleasesIt(t *testing.T) {
 				t.Fatalf("released %v; %s was stranded and %s issued after the listing", h.binder.released[released:], stranded, late)
 			}
 		})
+	}
+}
+
+// A destroy that settles over pristine evidence beside a claim that holds
+// nothing, as an apply stopped before its running evidence landed leaves over
+// no operation or a completed removal, reclaims that claim in one transaction
+// of its own and still reports only that it settled. With nothing left to
+// reclaim, the next one opens no transaction.
+func TestADestroyThatSettlesBesideAnIdleClaimReclaimsIt(t *testing.T) {
+	ctx := context.Background()
+	for name, removed := range map[string]bool{"no operation": false, "a completed removal": true} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t, "alpha")
+			if removed {
+				for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
+					if err := killInvoke(ctx, h.service, verb); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			current, recorded := operations(t, h.workspace)
+			if err := operationstore.New(h.workspace.area, killClock).Claim(ctx, "op-"+strings.Repeat("0e", 16), reconciliation.Plan{}); err != nil {
+				t.Fatal(err)
+			}
+			for _, transactions := range []int{1, 0} {
+				mutations := h.workspace.mutations
+				result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+				if err != nil || !result.Settled || result.Recovered != "" || h.workspace.mutations != mutations+transactions {
+					t.Fatalf("the destroy = %+v (%v) after %d transactions, want %d", result, err, h.workspace.mutations-mutations, transactions)
+				}
+				if now, found := operations(t, h.workspace); now != current || !slices.Equal(found, recorded) || !bytes.Equal(h.workspace.evidence, killPristine(t)) {
+					t.Fatalf("the settling destroy left %s %v under evidence %s, want %s %v", now, found, h.workspace.evidence, current, recorded)
+				}
+			}
+		})
+	}
+}
+
+// A settling destroy reclaims only while the evidence still reads pristine
+// under the lock. A fresh apply that claimed and raised it between the
+// destroy's decision and that transaction makes every claim a proof again, so
+// the destroy keeps them all and changes nothing.
+func TestADestroyThatSettlesKeepsIdleClaimsUnderEvidenceRaisedSince(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, "alpha")
+	store := operationstore.New(h.workspace.area, killClock)
+	idle, newer := "op-"+strings.Repeat("0e", 16), "op-"+strings.Repeat("0f", 16)
+	if err := store.Claim(ctx, idle, reconciliation.Plan{}); err != nil {
+		t.Fatal(err)
+	}
+	running := evidenceBytes(t, reconciliation.Apply, reconciliation.OperationRunning)
+	h.workspace.beforeMutation = func() {
+		h.workspace.beforeMutation = nil
+		if err := store.Claim(ctx, newer, reconciliation.Plan{}); err != nil {
+			t.Fatal(err)
+		}
+		h.workspace.evidence = slices.Clone(running)
+	}
+	result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if err != nil || !result.Settled || result.Recovered != "" || h.workspace.mutations != 1 {
+		t.Fatalf("the destroy = %+v (%v) after %d transactions", result, err, h.workspace.mutations)
+	}
+	if _, found := operations(t, h.workspace); !slices.Equal(found, []string{idle, newer}) || !bytes.Equal(h.workspace.evidence, running) {
+		t.Fatalf("the settling destroy left %v under evidence %s", found, h.workspace.evidence)
 	}
 }
 

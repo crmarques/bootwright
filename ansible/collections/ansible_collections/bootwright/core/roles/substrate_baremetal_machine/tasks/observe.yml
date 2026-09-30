@@ -23,6 +23,8 @@
   failed_when: false
   no_log: true
 
+# Not censored, as the apply's proof is not: it reads no bound material and
+# its refusal names no reported value.
 - name: Publish bounded machine observation
   bootwright.core.substrate_physical_protocol:
     phase: completed
@@ -31,4 +33,3 @@
     observation: '{{ substrate_baremetal_machine_observed.observation | default({}) }}'
     endpoint: '{{ bootwright_substrate_physical_request.controller.endpoint }}'
     expected: '{{ substrate_baremetal_machine_expected }}'
-  no_log: true

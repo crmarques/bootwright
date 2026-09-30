@@ -25,7 +25,22 @@
     password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_password) }}'
     verify: '{{ substrate_libvirt_machine_boot_verify }}'
     operation: power-off
+  register: substrate_libvirt_machine_boot_stopped
+  failed_when: false
   no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# each of the controller's own refusals is reported by a step of its own,
+# where no credential is.
+- name: Stop at a power-off the management controller did not complete
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_machine_boot_stopped.msg is not defined
+    fail_msg: >-
+      powering the machine off through the management controller at
+      {{ substrate_libvirt_machine_boot_endpoint }} failed:
+      {{ (substrate_libvirt_machine_boot_stopped.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
 
 - name: Select the inserted media for an installer that powers the machine off
   bootwright.core.redfish_boot:
@@ -35,8 +50,20 @@
     verify: '{{ substrate_libvirt_machine_boot_verify }}'
     operation: boot
     target: Cd
+  register: substrate_libvirt_machine_boot_selected
+  failed_when: false
   no_log: true
   when: substrate_libvirt_machine_boot_installer_powers_off | bool
+
+- name: Stop at a media selection the management controller did not complete
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_machine_boot_selected.msg is not defined
+    fail_msg: >-
+      selecting the inserted media through the management controller at
+      {{ substrate_libvirt_machine_boot_endpoint }} failed:
+      {{ (substrate_libvirt_machine_boot_selected.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
 
 - name: Power the machine on and poll it to running
   bootwright.core.redfish_boot:
@@ -45,4 +72,16 @@
     password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_password) }}'
     verify: '{{ substrate_libvirt_machine_boot_verify }}'
     operation: power-on
+  register: substrate_libvirt_machine_boot_started
+  failed_when: false
   no_log: true
+
+- name: Stop at a power-on the management controller did not complete
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_machine_boot_started.msg is not defined
+    fail_msg: >-
+      powering the machine on through the management controller at
+      {{ substrate_libvirt_machine_boot_endpoint }} failed:
+      {{ (substrate_libvirt_machine_boot_started.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true

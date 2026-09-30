@@ -106,6 +106,9 @@ func writeContextDelete(out, errOut io.Writer, result *contexts.DeleteResult) er
 	if result.OrphansAbandoned {
 		fields = append(fields, field{Label: "Orphans abandoned", Value: "true"})
 	}
+	if len(result.ReleasedReservations) != 0 {
+		fields = append(fields, field{Label: "Reservations released", Value: strings.Join(result.ReleasedReservations, ", ")})
+	}
 	text.fields(fields...)
 	return text.writeTo(out)
 }

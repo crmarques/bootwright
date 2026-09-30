@@ -15,7 +15,22 @@
     verify: '{{ substrate_libvirt_machine_disk_verify }}'
     operation: boot
     target: Hdd
+  register: substrate_libvirt_machine_disk_selected
+  failed_when: false
   no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# each of the controller's own refusals is reported by a step of its own,
+# where no credential is.
+- name: Stop at a disk selection the management controller did not complete
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_machine_disk_selected.msg is not defined
+    fail_msg: >-
+      selecting the installed disk through the management controller at
+      {{ substrate_libvirt_machine_disk_endpoint }} failed:
+      {{ (substrate_libvirt_machine_disk_selected.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
 
 - name: Power the installed system on and poll it to running
   bootwright.core.redfish_boot:
@@ -24,5 +39,17 @@
     password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_disk_password) }}'
     verify: '{{ substrate_libvirt_machine_disk_verify }}'
     operation: power-on
+  register: substrate_libvirt_machine_disk_started
+  failed_when: false
   no_log: true
   when: substrate_libvirt_machine_disk_power_on | bool
+
+- name: Stop at a power-on the management controller did not complete
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_machine_disk_started.msg is not defined
+    fail_msg: >-
+      powering the installed system on through the management controller at
+      {{ substrate_libvirt_machine_disk_endpoint }} failed:
+      {{ (substrate_libvirt_machine_disk_started.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true

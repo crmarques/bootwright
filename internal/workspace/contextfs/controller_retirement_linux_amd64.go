@@ -48,18 +48,70 @@ func (t *controllerTransaction) RetireBundles(ctx context.Context, ids []string)
 	return err
 }
 
+// RetireResolutions drops superseded retained resolutions of a bundle that
+// stays, in one publication that leaves every area as it is. The record keeps
+// no kind per area, so an execution bundle is known by the resolutions naming
+// it: the store refuses to drop the last of them, as it refuses the one the
+// receipt carries, and a resolution it does not hold is already gone.
+func (t *controllerTransaction) RetireResolutions(ctx context.Context, digests []string) error {
+	if err := t.available(ctx); err != nil {
+		return err
+	}
+	if t.stored.data == nil {
+		return state("controller retirement requires an initialized record")
+	}
+	receipt := t.stored.value.Receipt
+	if receipt.ID == "" || receipt.Incomplete() {
+		return state("controller retirement requires a settled setup receipt")
+	}
+	for _, digest := range digests {
+		if !validControllerDigest(digest) {
+			return state("retired controller resolution identity is invalid")
+		}
+		if receipt.Definition != nil && digest == receipt.Definition.ResolutionDigest {
+			return state("the resolution this receipt carries may not be retired")
+		}
+	}
+	value := cloneControllerState(t.stored.value)
+	held := value.RetainedDefinitions
+	value.RetainedDefinitions = slices.DeleteFunc(slices.Clone(held),
+		func(definition prerequisites.Definition) bool {
+			return slices.Contains(digests, definition.ResolutionDigest)
+		})
+	if len(value.RetainedDefinitions) == len(held) {
+		return nil
+	}
+	for _, definition := range held {
+		if slices.Contains(digests, definition.ResolutionDigest) && !slices.ContainsFunc(value.RetainedDefinitions,
+			func(other prerequisites.Definition) bool { return other.CatalogDigest == definition.CatalogDigest }) {
+			return state("a retained controller resolution may not be retired while no other names its bundle")
+		}
+	}
+	_, err := t.publishValue(ctx, value, t.stored.bundles)
+	return err
+}
+
 func retired(retiring []controllerBundleReservation, id string) bool {
 	return id != "" && slices.ContainsFunc(retiring,
 		func(item controllerBundleReservation) bool { return item.ID == id })
 }
 
 // plannedRetirement decides what this store will remove. Which areas are
-// superseded execution bundles is the caller's judgement, read from the
-// resolutions it retains; what the store refuses on its own is the bundle its
-// receipt names and every client closure, because neither is ever superseded
-// by a setup. A receipt whose setup completed, failed or was canceled admits a
-// retirement; a pending one does not, because its setup resumes it exactly. An
-// area it does not hold is already gone.
+// superseded is the caller's judgement; the store itself refuses the bundle its
+// receipt names and every area it cannot prove is an execution bundle, so no
+// caller can remove a client area. The record keeps no kind per area: an
+// execution bundle is one a retained resolution names, or one an earlier
+// retirement marked retiring when it dropped that resolution, and a client
+// area is named by a closure no resolution names. A receipt whose setup
+// completed, failed or was canceled admits a retirement; a pending one does
+// not, because its setup resumes it exactly. An area it does not hold is
+// already gone.
+//
+// A retiring entry keeps the identity its removal is verified against and a
+// reserved one records none, so a reserved area is attributed first, as a
+// resumed publication adopts it. With no directory nothing is left to remove:
+// its reservation is dropped with the intent, and returned so that its
+// resolution is retired with it.
 func (t *controllerTransaction) plannedRetirement(ids []string) ([]controllerBundleReservation, []controllerBundleReservation, error) {
 	if receipt := t.stored.value.Receipt; receipt.ID == "" || receipt.Incomplete() {
 		return nil, nil, state("controller retirement requires a settled setup receipt")
@@ -74,16 +126,25 @@ func (t *controllerTransaction) plannedRetirement(ids []string) ([]controllerBun
 		if id == current {
 			return nil, nil, state("the execution bundle this receipt names may not be retired")
 		}
-		// A client closure is shared host state no context uninstalls, so the
-		// store refuses one whatever it is asked to retire.
-		if slices.ContainsFunc(t.stored.value.RetainedDefinitions, func(definition prerequisites.Definition) bool {
-			return len(definition.Tools) != 0 && prerequisites.ToolsDigest(definition.Tools) == id
-		}) {
-			return nil, nil, state("a client closure may not be retired")
-		}
 		index := slices.IndexFunc(next, func(item controllerBundleReservation) bool { return item.ID == id })
 		if index < 0 || retired(retiring, id) {
 			continue
+		}
+		if next[index].Mode != "retiring" && !slices.ContainsFunc(t.stored.value.RetainedDefinitions,
+			func(definition prerequisites.Definition) bool { return definition.CatalogDigest == id }) {
+			return nil, nil, state("a client area, or any area no retained resolution names, may not be retired")
+		}
+		if next[index].Mode == "reserved" {
+			identity, err := t.reservedDirectory(id)
+			if err != nil {
+				return nil, nil, err
+			}
+			if identity == nil {
+				retiring = append(retiring, next[index])
+				next = slices.Delete(next, index, index+1)
+				continue
+			}
+			next[index].DirectoryDevice, next[index].DirectoryInode = uint64(identity.Dev), identity.Ino
 		}
 		next[index].Mode = "retiring"
 		retiring = append(retiring, next[index])
@@ -91,9 +152,47 @@ func (t *controllerTransaction) plannedRetirement(ids []string) ([]controllerBun
 	return retiring, next, nil
 }
 
-// removeBundleArea empties one bundle area and unlinks it. Every entry is
-// proved to be this store's own bundle content before it is removed, so a
-// substituted tree refuses rather than being deleted.
+// reservedDirectory reads what an interrupted publication left under a
+// reserved area: nothing, or the empty directory it created before recording
+// its identity. Content arrives only after attribution, so a directory
+// holding any refuses, as adopting it would.
+func (t *controllerTransaction) reservedDirectory(id string) (*syscall.Stat_t, error) {
+	owner, err := openControllerDirectory(t.base.root, t.base.registry)
+	if err != nil {
+		return nil, err
+	}
+	defer owner.file.Close()
+	parent, err := openDirectory(owner, "bundles")
+	if errors.Is(err, syscall.ENOENT) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer parent.file.Close()
+	dir, err := openDirectory(parent, id)
+	if errors.Is(err, syscall.ENOENT) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer dir.file.Close()
+	entries, err := directoryNames(dir, 1)
+	if err != nil {
+		return nil, err
+	}
+	if len(entries) != 0 {
+		return nil, state("a reserved controller bundle directory holds content this store did not publish, so it may not be retired")
+	}
+	identity := dir.identity
+	return &identity, nil
+}
+
+// removeBundleArea empties one bundle area and unlinks it. Only a directory
+// whose identity the record proves is removed, and every entry is proved to be
+// this store's own bundle content before it is removed, so a substituted tree
+// refuses rather than being deleted.
 func (t *controllerTransaction) removeBundleArea(ctx context.Context, reservation controllerBundleReservation) error {
 	owner, err := openControllerDirectory(t.base.root, t.base.registry)
 	if err != nil {
@@ -116,8 +215,8 @@ func (t *controllerTransaction) removeBundleArea(ctx context.Context, reservatio
 		return err
 	}
 	identity := dir.identity
-	if reservation.DirectoryInode != 0 &&
-		(reservation.DirectoryInode != identity.Ino || reservation.DirectoryDevice != uint64(identity.Dev)) {
+	if reservation.DirectoryInode == 0 ||
+		reservation.DirectoryInode != identity.Ino || reservation.DirectoryDevice != uint64(identity.Dev) {
 		dir.file.Close()
 		return state("retired controller bundle directory is unattributable or replaced")
 	}

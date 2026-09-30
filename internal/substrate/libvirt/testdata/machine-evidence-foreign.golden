@@ -1,0 +1,21 @@
+{
+  "absent": false,
+  "answered": true,
+  "controller": "",
+  "disks": [
+    {
+      "name": "root",
+      "present": false,
+      "sizeGiB": 0
+    }
+  ],
+  "domain": "bootwright-lab-rhel-01",
+  "listener": false,
+  "owned": false,
+  "postcondition": false,
+  "power": "",
+  "request": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "state": "running",
+  "system": "0f5c6d7e-8a9b-4c0d-9e1f-2a3b4c5d6e7f",
+  "unit": ""
+}

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func TestCatalogIsClosedAndItsNamespaceBindsNativeSelection(t *testing.T) {
@@ -178,5 +179,33 @@ func TestPreparationRejectsUnapprovedBytesBeforeFilePublication(t *testing.T) {
 	}
 	if len(area.files) != 0 {
 		t.Fatal("published an unapproved artifact")
+	}
+}
+
+// TestBundleFailureRemedyNamesOnlyWhatSetupAccepts drives a real setup bundle
+// failure. Setup selects no context and consumes no --context value, so its
+// remedy repeats setup as it is invoked.
+func TestBundleFailureRemedyNamesOnlyWhatSetupAccepts(t *testing.T) {
+	definition, err := (Catalog{}).Select(prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, prerequisites.NativeRequirements{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{
+		fetch: func(context.Context, prerequisites.DependencySource, prerequisites.SetupEgress) ([]byte, error) {
+			return []byte("changed upstream payload"), nil
+		},
+		probe: func(context.Context, prerequisites.BundleArea, prerequisites.Definition) error { return nil },
+	}
+	_, err = m.Prepare(t.Context(), newMemoryArea(), nil, definition, prerequisites.SetupEgress{}, nil)
+	found := diagnostics.Of(err)
+	if len(found) != 1 || found[0].Code != "controller.setup" || found[0].Message != "dependency source changed before bundle publication" {
+		t.Fatalf("setup bundle failure: %+v", found)
+	}
+	remedy := found[0].Remediation
+	if !strings.Contains(remedy, "bootwright setup") || strings.Contains(remedy, "context") {
+		t.Fatalf("remedy asks setup for an input it does not consume: %q", remedy)
+	}
+	if remedy != "Restore approved dependency sources or the exact retained bundle, then rerun bootwright setup." {
+		t.Fatalf("remedy: %q", remedy)
 	}
 }

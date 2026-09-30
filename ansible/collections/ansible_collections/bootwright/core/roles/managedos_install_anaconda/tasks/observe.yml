@@ -12,9 +12,13 @@
     phase: loaded
   no_log: true
 
+# Read before this observation creates the work area an identity read may need,
+# so the work area it reports is one it found.
 - name: Observe what this installation publishes
   bootwright.core.managedos_install_inspect:
     request: '{{ bootwright_os_install_request }}'
+    staging: '{{ managedos_install_anaconda_staged_tree }}'
+    work: '{{ managedos_install_anaconda_work }}'
   register: managedos_install_anaconda_observed
 
 # A removal's resolution reads only the published content, which is all the

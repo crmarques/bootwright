@@ -799,10 +799,6 @@ func validateDeclaration(declaration secrets.Declaration) bool {
 		if !reflect.DeepEqual(declaration.Files, secrets.FileSource{}) || !reflect.DeepEqual(declaration.Generation, secrets.Generation{}) {
 			return false
 		}
-	case "file":
-		if reflect.DeepEqual(declaration.Files, secrets.FileSource{}) || !reflect.DeepEqual(declaration.Generation, secrets.Generation{}) {
-			return false
-		}
 	case "generated":
 		if !reflect.DeepEqual(declaration.Files, secrets.FileSource{}) {
 			return false

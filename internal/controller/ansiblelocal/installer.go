@@ -12,10 +12,16 @@ import (
 
 type Installer struct {
 	ExecutionGuard prerequisites.PythonExecutionGuard
+	runner         ansibleRunner
 }
 
+// ansibleRunner starts one frozen Ansible request with the output its caller
+// retains. New always runs the process itself; a test replaces it to prove
+// what each operation hands that Ansible.
+type ansibleRunner func(context.Context, prerequisites.PythonLaunch, capabilityRequest, func() error, func(context.Context, prerequisites.NativePreparation) error, func(prerequisites.ProgressEvent), prerequisites.RunOutput) (prerequisites.ActionResult, error)
+
 func New(execution prerequisites.PythonExecutionGuard) Installer {
-	return Installer{ExecutionGuard: execution}
+	return Installer{ExecutionGuard: execution, runner: run}
 }
 
 const requestVersion = "controller-prerequisites-v4"
@@ -47,13 +53,13 @@ func location(value prerequisites.BundleLocation) bundleLocation {
 	return bundleLocation{value.Path, value.Device, value.Inode, value.Writable, value.Sealed}
 }
 
-func (installer Installer) Prepare(ctx context.Context, area prerequisites.BundleArea, platform prerequisites.Platform, definition prerequisites.Definition, egress prerequisites.SetupEgress, publish func(context.Context, prerequisites.NativePreparation) error, progress func(prerequisites.ProgressEvent)) (prerequisites.ActionResult, error) {
-	return installer.invoke(ctx, area, platform, definition, egress, publish, nil, progress)
+func (installer Installer) Prepare(ctx context.Context, area prerequisites.BundleArea, platform prerequisites.Platform, definition prerequisites.Definition, egress prerequisites.SetupEgress, publish func(context.Context, prerequisites.NativePreparation) error, progress func(prerequisites.ProgressEvent), output prerequisites.RunOutput) (prerequisites.ActionResult, error) {
+	return installer.invoke(ctx, area, platform, definition, egress, publish, nil, progress, output)
 }
 
-func (installer Installer) Recover(ctx context.Context, area prerequisites.BundleArea, platform prerequisites.Platform, definition prerequisites.Definition, egress prerequisites.SetupEgress, preparation prerequisites.NativePreparation, progress func(prerequisites.ProgressEvent)) (prerequisites.ActionResult, error) {
+func (installer Installer) Recover(ctx context.Context, area prerequisites.BundleArea, platform prerequisites.Platform, definition prerequisites.Definition, egress prerequisites.SetupEgress, preparation prerequisites.NativePreparation, progress func(prerequisites.ProgressEvent), output prerequisites.RunOutput) (prerequisites.ActionResult, error) {
 	preparation.AddedSources = slices.Clone(preparation.AddedSources)
-	return installer.invoke(ctx, area, platform, definition, egress, nil, &preparation, progress)
+	return installer.invoke(ctx, area, platform, definition, egress, nil, &preparation, progress, output)
 }
 
 // Clients installs one context's selected client closure inside an execution
@@ -65,17 +71,19 @@ func (installer Installer) Clients(ctx context.Context, installation prerequisit
 	if err := ctx.Err(); err != nil {
 		return result, err
 	}
-	if installation.Target == nil || installation.Publish == nil || installation.Release == nil {
+	if installer.runner == nil || installation.Target == nil || installation.Publish == nil || installation.Release == nil {
 		return result, failure("controller.setup", "the Ansible controller adapter is incomplete")
 	}
 	request, err := installer.request(ctx, installation.Execution, installation.Target, "setup", installation.Platform, installation.Definition, installation.Egress, nil)
 	if err != nil {
 		return result, err
 	}
-	return run(ctx, installation.Launch, request, installation.Release, installation.Publish, installation.Progress, installation.Output)
+	return installer.runner(ctx, installation.Launch, request, installation.Release, installation.Publish, installation.Progress, installation.Output)
 }
 
-func (installer Installer) invoke(ctx context.Context, area prerequisites.BundleArea, platform prerequisites.Platform, definition prerequisites.Definition, egress prerequisites.SetupEgress, publish func(context.Context, prerequisites.NativePreparation) error, preparation *prerequisites.NativePreparation, progress func(prerequisites.ProgressEvent)) (prerequisites.ActionResult, error) {
+// invoke runs setup's own Ansible, whose output goes to the setup run the
+// caller opened for it, or nowhere when it could open none.
+func (installer Installer) invoke(ctx context.Context, area prerequisites.BundleArea, platform prerequisites.Platform, definition prerequisites.Definition, egress prerequisites.SetupEgress, publish func(context.Context, prerequisites.NativePreparation) error, preparation *prerequisites.NativePreparation, progress func(prerequisites.ProgressEvent), output prerequisites.RunOutput) (prerequisites.ActionResult, error) {
 	result := actionResult("failed", false)
 	if preparation != nil {
 		result = actionResult("unknown", true)
@@ -83,7 +91,7 @@ func (installer Installer) invoke(ctx context.Context, area prerequisites.Bundle
 	if err := ctx.Err(); err != nil {
 		return result, err
 	}
-	if installer.ExecutionGuard == nil || publish == nil && preparation == nil {
+	if installer.ExecutionGuard == nil || installer.runner == nil || publish == nil && preparation == nil {
 		return result, failure("controller.setup", "the Ansible controller adapter is incomplete")
 	}
 	operation := "setup"
@@ -96,7 +104,7 @@ func (installer Installer) invoke(ctx context.Context, area prerequisites.Bundle
 	}
 	err = installer.ExecutionGuard.WithPython(ctx, area, definition.Execution, func(launch prerequisites.PythonLaunch, release func() error) error {
 		var runErr error
-		result, runErr = run(ctx, launch, request, release, publish, progress, nil)
+		result, runErr = installer.runner(ctx, launch, request, release, publish, progress, output)
 		return runErr
 	})
 	return result, err

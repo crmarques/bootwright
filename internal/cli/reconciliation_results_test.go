@@ -473,7 +473,10 @@ func TestStatusTextEscapesOnce(t *testing.T) {
 		NextSteps:       []string{raw("step")},
 		Lifecycle: &lifecycle.LifecycleSummary{
 			Operation: raw("operation"), Verb: raw("verb"), State: raw("opstate"), Next: raw("next"),
-			Blocks:     []lifecycle.BlockResult{{ID: raw("block"), Description: raw("description"), Stage: raw("stage"), State: raw("bstate")}},
+			Blocks: []lifecycle.BlockResult{{
+				ID: raw("block"), Description: raw("description"), Stage: raw("stage"), State: raw("bstate"),
+				Unresolved: &lifecycle.Unresolved{Reason: raw("reason"), Remedy: raw("remedy")},
+			}},
 			Logs:       []string{raw("log")},
 			Executable: raw("build"),
 		},
@@ -497,6 +500,7 @@ func TestStatusTextEscapesOnce(t *testing.T) {
 		"  [FAIL]  " + shown("description") + "\n",
 		"  Registered by  " + shown("build") + "\n", "  Logs           " + shown("location") + "\n",
 		"Contradictions\n  " + shown("contradiction") + "\n",
+		"Unresolved " + shown("block") + "\n  Reason  " + shown("reason") + "\n  Remedy  " + shown("remedy") + "\n",
 	} {
 		if !strings.Contains(text.String(), want) {
 			t.Fatalf("status text = %q, missing %q", text.String(), want)
@@ -529,6 +533,7 @@ func TestStatusTextEscapesOnce(t *testing.T) {
 		"lifecycle.operation": "operation", "lifecycle.verb": "verb", "lifecycle.state": "opstate", "lifecycle.next": "next",
 		"lifecycle.blocks[0].id": "block", "lifecycle.blocks[0].description": "description",
 		"lifecycle.blocks[0].stage": "stage", "lifecycle.blocks[0].state": "bstate",
+		"lifecycle.blocks[0].unresolved.reason": "reason", "lifecycle.blocks[0].unresolved.remedy": "remedy",
 		"lifecycle.logs[0]": "log",
 		"contradictions[0]": "contradiction",
 	} {

@@ -53,6 +53,20 @@ Alias cell.
 | [B200](#b200) | new, 2026-09-30 (X29) | enabling | Substrate | Autostart replays report what they change | Parked under the 2026-09-30 triage rule: replay fidelity |
 | [B201](#b201) | new, 2026-09-30 (X29) | enabling | State reconciliation and Workspace | Remediations that match the next command | Parked under the 2026-09-30 triage rule: wording |
 | [B202](#b202) | new, 2026-09-30 (X29) | enabling | Controller setup | Resolution warnings in the plan and on failure | Needs an owner decision on the plan |
+| [B222](#b222) | new, 2026-09-30 (X31) | enabling | State reconciliation and CLI | Status next steps over delete exits and lost bindings | Parked under the 2026-09-30 triage rule; one part needs an owner decision |
+| [B223](#b223) | new, 2026-09-30 (X31) | enabling | State reconciliation, with each capability's owner | Unknown-block reasons for every capability | Parked under the 2026-09-30 triage rule |
+| [B224](#b224) | new, 2026-09-30 (X31) | enabling | Each spec's owner | Wording X31 left | Parked under the 2026-09-30 triage rule: wording |
+| [B225](#b225) | new, 2026-09-30 (X31) | enabling | Workspace | Operation-area capacity scans and shared bounds | Parked under the 2026-09-30 triage rule: performance |
+| [B226](#b226) | new, 2026-09-30 (X31) | enabling | State reconciliation | Status over a revision that no longer compiles | Parked under the 2026-09-30 triage rule |
+| [B227](#b227) | new, 2026-09-30 (X31) | enabling | State reconciliation | A continuation over a reprojected bundle refuses first | Parked under the 2026-09-30 triage rule: no effect runs |
+| [B228](#b228) | new, 2026-09-30 (X31) | enabling | Controller setup | Setup runs: harness, remedy, guide and size | Parked under the 2026-09-30 triage rule; the size needs an owner decision |
+| [B229](#b229) | new, 2026-09-30 (X31) | enabling | Architecture | Knowledge lessons X31 left | Parked under the 2026-09-30 triage rule: knowledge |
+| [B230](#b230) | new, 2026-09-30 (X31) | enabling | Each test's owner | Tests X31 left narrower than they read | Parked under the 2026-09-30 triage rule: test depth |
+| [B231](#b231) | new, 2026-09-30 (X31) | enabling | Controller setup | A completed purge also retires the kept bundle's superseded resolutions | Parked under the 2026-09-30 triage rule |
+| [B232](#b232) | new, 2026-09-30 (X31) | safety | State reconciliation and Secrets | Each block's execution holds only its own parts | The key stays in the operation's memory while the server shares the operation; needs a port |
+| [B233](#b233) | new, 2026-09-30 (X31) | enabling | Each capability spec's owner | Refusal tables X31 left | Parked under the 2026-09-30 triage rule |
+| [B234](#b234) | new, 2026-09-30 (X31) | enabling | Architecture, with each role's owner | Collection rules X31 left | Parked under the 2026-09-30 triage rule |
+| [B235](#b235) | new, 2026-09-30 (X31) | enabling | CLI and Desired state | Refusals for objects that are not API objects | Parked under the 2026-09-30 triage rule |
 
 ### B94
 
@@ -228,6 +242,8 @@ After a refused setup, the result's Next line always says `bootwright setup`, wh
 
 The contextfs retirement fixture sets retained definitions that `Publish` ignores, so its kept-resolution assertion always passes; the controller storage memory double keeps no receipt's resolution append-only and refuses no replaced one, so the storage suite cannot require that retirement drops a retired bundle's resolution; and the kill harness's workspace clone does not copy the journey double's client files (found in X30). **Exit evidence:** fixtures and doubles that fail when the rule breaks.
 
+Since X31 the contextfs retirement fixture holds real resolutions, so its kept-resolution check is meaningful; the memory double also retires an area no resolution names, which the store refuses.
+
 ### B181
 
 A bounded run's rebind is limited to three bindings rather than closed, which a binding that names its consumer would close; that is a keyring format change (left by B139 in X30). **Exit evidence:** a binding format that names its consumer, and a rebind test that refuses any other.
@@ -271,6 +287,62 @@ A failed destroy's remediation still says to repeat the operation to continue it
 ### B202
 
 Since X29 a newer Index API minor warns in setup's result, but the plan shown before confirmation does not show it, and a failure after a warning-bearing selection drops the warning from its report (found in X29). **Exit evidence:** plan and failure goldens that carry the warning.
+
+### B222
+
+Status offers no next step over the two states whose refusal names a delete; it cannot see a keyring whose listing a missing part file breaks, so it still offers apply and destroy there; and over a failed apply whose blocks are all done with a lost binding it offers only the delete, though `apply` would finalize it, which D37's wording chose (found in X31). **Exit evidence:** status goldens for each state.
+
+### B223
+
+Since X31 only the libvirt machine explains why a block stayed unknown; the libvirt host, bare-metal machine, managed services, artifact server, managed-OS installation, cluster install and controller clients give the general reason. Status also shows a null evidence's reason rather than the error an observation that could not run reported, and no command test deletes a context whose controller record holds reservations (found in X31). **Exit evidence:** a reason per capability and the command test.
+
+### B224
+
+The destroy row of the command catalog lists no housekeeping; the dependency-safety section still says destroy uses the exact frozen dependencies although a fresh destroy runs under the build in hand; the architecture spec could name the frozen execution closure; and comments still call a carry source a sealed area and describe cluster reads through the installer's kubeconfig (found in X31). **Exit evidence:** the texts corrected.
+
+### B225
+
+The operation area re-measures its whole subtree, re-verifying each directory's ancestors, before every record write and log append, about a third of a second per write at its entry bound on this host; and the runs and SSH-trust areas share its entry and byte bounds while the bounds table names only the operation area (found in X31). **Exit evidence:** an incremental measure with a bound test, and the table rows.
+
+### B226
+
+Status compiles the imported revision and refuses when it no longer compiles, so a context imported with a retired field, since X31 a Secret file source, loses status until `context update`, although its destroy still works (found in X31). **Exit evidence:** status over such a revision reporting its records.
+
+### B227
+
+A continuation run by its registering build over a bundle a later build reprojected passes the closure check and is refused only per attempt by the runner, after its log is restored and it is marked running; comparing the receipt's automation digest before the restore would refuse first (found in X31). **Exit evidence:** a continuation test that refuses before any record changes.
+
+### B228
+
+Setup runs are not driven by the contextfs checkpoint harness; a failure their output explains does not point its remedy at `run.output`; the operator guide does not mention them or that reading them needs root; their output keeps 8 MiB where a bounded run truncates at 4 MiB, although D42 names one limit; and the runner relies on each output writer swallowing its own errors (found in X31). **Exit evidence:** a harness scenario, the remedy, the guide text, one size, and a swallowing wrapper.
+
+### B229
+
+A knowledge page keyed on `SyntaxWarning: invalid decimal literal` for the ansible-check area name (B203), and the carry-forward page citing the test that carries a settled receipt forward (found in X31). **Exit evidence:** the pages.
+
+### B230
+
+No test pins the pre-plan refusal of a pending receipt whose bundle is incompatible; the lifecycle test double's held area lets a removal skip its closed and read-only checks; and no runner test pins a partial record waiting at the drain after a failed exit, whose outcome X31 made unknown (found in X31). **Exit evidence:** each test.
+
+### B231
+
+After a completed setup, `--purge-old-bundles` retires superseded areas but leaves the superseded resolutions of the receipt's own bundle until a setup at the bound needs their room (found in X31). **Exit evidence:** a purge test that retires them.
+
+### B232
+
+Since X31 a run request lends a block only the Secret parts it writes, but each attempt's execution and quiescence probe still hand the capability's Go code the whole reopened operation map, the artifact server's key included (found in X31). **Exit evidence:** a port through which a capability declares its blocks' parts, with a test that another block's key is absent.
+
+### B233
+
+The managed service's list of unsupported names no longer satisfies the port and is dead; two agent-install checks cannot fire through admitted input; `make docs-check` does not run the refusal-table tests; and the engine's refusal of kinds no capability claims has no table (found in X31). **Exit evidence:** each settled.
+
+### B234
+
+No structural rule checks that a rescue ends in an unconditional fail, so one could swallow a refusal (the only rescue today does end so); and the libvirt host's pool template is rendered by no task but stays in the automation digest (found in X31). **Exit evidence:** the rule, and the template removed or rendered.
+
+### B235
+
+The lost-binding refusal names its operation and binding only in its message, because a diagnostic's object is an API object; and a refusal inherited from an Environment default gets the generic inherited-field remedy in place of its own, so a file source from a default names `secret set` only in its message (found in X31). **Exit evidence:** a diagnostic shape for such objects and inherited remedies kept.
 
 ## Retired
 

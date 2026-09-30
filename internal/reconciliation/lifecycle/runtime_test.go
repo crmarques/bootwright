@@ -180,7 +180,7 @@ func TestABoundedConsumerWhoseHeldBindingCannotBeReopenedFails(t *testing.T) {
 func TestWithRuntimeRetainsWhatItsAdapterPrinted(t *testing.T) {
 	h := newHarness(t)
 	var identity string
-	err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName},
+	err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName, RetainOutput: true},
 		func(ctx context.Context, runtime Runtime) error {
 			const runs = "contexts/" + testContextName + "/state/runs/"
 			if len(runtime.Logs) != 1 || !strings.HasPrefix(runtime.Logs[0], runs) || !strings.HasSuffix(runtime.Logs[0], "/"+runOutputName) {
@@ -220,7 +220,7 @@ func TestARunRefusedAdmissionRetainsNothing(t *testing.T) {
 	h := newHarness(t)
 	refusal := errors.New("a native package transaction prevents coherent dependency execution")
 	h.service.guard = refusingGuard{refusal}
-	err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName},
+	err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName, RetainOutput: true},
 		func(context.Context, Runtime) error {
 			t.Fatal("a run refused admission reached its call")
 			return nil
@@ -232,6 +232,80 @@ func TestARunRefusedAdmissionRetainsNothing(t *testing.T) {
 	defer h.workspace.runArea.mutex.Unlock()
 	if len(h.workspace.runArea.files) != 0 || len(h.workspace.runArea.directories) != 0 {
 		t.Fatalf("a run refused admission left %v and %v", h.workspace.runArea.files, h.workspace.runArea.directories)
+	}
+}
+
+// A reading names no retained output, so the run it asks for keeps none: its
+// adapter is handed nothing to write into, nothing is named for it, and the
+// run area stays empty.
+func TestARunThatRetainsNoOutputLeavesNoRunFile(t *testing.T) {
+	h := newHarness(t)
+	called := false
+	err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName},
+		func(_ context.Context, runtime Runtime) error {
+			called = true
+			if runtime.Output != nil || runtime.LogLocation != "" || len(runtime.Logs) != 0 || runtime.OutputRemediation != "" {
+				t.Fatalf("a run that retains nothing was given %v, %q, %v and %q",
+					runtime.Output, runtime.LogLocation, runtime.Logs, runtime.OutputRemediation)
+			}
+			return nil
+		})
+	if err != nil || !called {
+		t.Fatalf("the run = %v, called %t", err, called)
+	}
+	h.workspace.runArea.mutex.Lock()
+	defer h.workspace.runArea.mutex.Unlock()
+	if len(h.workspace.runArea.files) != 0 || len(h.workspace.runArea.directories) != 0 {
+		t.Fatalf("a run that retains nothing left %v and %v", h.workspace.runArea.files, h.workspace.runArea.directories)
+	}
+}
+
+// A run that cannot keep its file names none and never reaches its adapter,
+// so the directory it made for that file goes too, whether its creation, the
+// file's or an interrupt between them stopped it.
+func TestARunWhoseOutputCannotBeKeptLeavesNoDirectory(t *testing.T) {
+	identity := "run-" + strings.Repeat("2a", 16)
+	injected := errors.New("the retained output could not be created")
+	for _, test := range []struct {
+		name string
+		arm  func(*memoryArea, context.CancelFunc)
+	}{
+		{"its directory fails once it exists", func(area *memoryArea, _ context.CancelFunc) {
+			area.failAfter["ensure "+identity] = injected
+		}},
+		{"its file cannot be created", func(area *memoryArea, _ context.CancelFunc) {
+			area.fail["write "+identity+"/"+runOutputName] = injected
+		}},
+		{"an interrupt lands before its file", func(area *memoryArea, cancel context.CancelFunc) {
+			area.landing = func(operation, _ string, _ map[string][]byte) error {
+				if operation != "write" {
+					return nil
+				}
+				cancel()
+				return injected
+			}
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			h := newHarness(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			test.arm(h.workspace.runArea, cancel)
+			h.entropy[0] = 0x2a
+			err := h.service.WithRuntime(ctx, RuntimeRequest{ContextName: testContextName, RetainOutput: true},
+				func(context.Context, Runtime) error {
+					t.Fatal("a run whose output could not be kept reached its adapter")
+					return nil
+				})
+			if !errors.Is(err, injected) {
+				t.Fatalf("the run reported %v, not the injected failure", err)
+			}
+			h.workspace.runArea.mutex.Lock()
+			defer h.workspace.runArea.mutex.Unlock()
+			if len(h.workspace.runArea.files) != 0 || len(h.workspace.runArea.directories) != 0 {
+				t.Fatalf("a run whose output could not be kept left %v and %v", h.workspace.runArea.files, h.workspace.runArea.directories)
+			}
+		})
 	}
 }
 

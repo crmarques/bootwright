@@ -40,7 +40,9 @@ func TestFreshPlanAndApplyShareOneDecision(t *testing.T) {
 		{name: "a valid selection", definitions: nestedDefinitions(), stages: []string{"substrates"}},
 		{
 			name: "an unsupported shape", definitions: nestedDefinitions(), refusal: "lifecycle.unsupported",
-			prepare: func(h *harness) { h.capability.unsupported = []string{"ContainerCluster/sno", "Machine/guest"} },
+			prepare: func(h *harness) {
+				h.capability.unsupported = []Refusal{{Kind: "ContainerCluster", Name: "sno", Reason: "unsupported"}}
+			},
 		},
 		{
 			name: "an unclaimed kind", definitions: nestedDefinitions(), refusal: "lifecycle.unsupported",
@@ -58,6 +60,21 @@ func TestFreshPlanAndApplyShareOneDecision(t *testing.T) {
 				h.capability.reservations = append(reservationOf("alpha"), prerequisites.HostReservation{
 					Context: testContextName, Kind: "proxy", Service: "beta", Keys: []string{"socket:0.0.0.0:3128", "socket:192.0.2.1:3128"},
 				})
+			},
+		},
+		{
+			name: "its own sockets in conflict on one SSH host", definitions: nestedDefinitions(), refusal: "api.invariant",
+			prepare: func(h *harness) { h.capability.sshClaims = sshSockets("services", "services") },
+		},
+		{
+			name: "one socket on two SSH hosts", definitions: nestedDefinitions(),
+			prepare: func(h *harness) { h.capability.sshClaims = sshSockets("services", "storage") },
+		},
+		{
+			name: "an SSH host's socket that the controller also claims", definitions: nestedDefinitions(),
+			prepare: func(h *harness) {
+				h.capability.reservations = reservationOf("alpha")
+				h.capability.sshClaims = []SSHReservation{{Machine: "services", Reservation: reservationOf("beta")[0]}}
 			},
 		},
 	}
@@ -107,6 +124,46 @@ func TestAPlanWhoseOwnSocketsConflictNamesBoth(t *testing.T) {
 	}
 }
 
+// sshSockets is two of one context's own services at one port, the first bound
+// to a wildcard, each placed on the SSH host its Machine names.
+func sshSockets(first, second string) []SSHReservation {
+	return []SSHReservation{
+		{Machine: first, Reservation: prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma", Keys: []string{"socket:0.0.0.0:3128"}}},
+		{Machine: second, Reservation: prerequisites.HostReservation{Context: testContextName, Kind: "dns", Service: "delta", Keys: []string{"socket:192.0.2.9:3128"}}},
+	}
+}
+
+// Two of one context's own blocks placed on one SSH host whose sockets
+// conflict are refused while the context plans, naming both, the socket each
+// claims and that host, and a plan with conflicts on two hosts names the first
+// host in name order.
+func TestAPlanWhoseOwnSocketsConflictOnAnSSHHostNamesTheHost(t *testing.T) {
+	h := newPlannedHarness(t, nestedDefinitions())
+	h.capability.sshClaims = append(sshSockets("storage", "storage"), sshSockets("services", "services")...)
+	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "api.invariant" ||
+		reported[0].Message != "this context's proxy gamma at 0.0.0.0:3128 and dns delta at 192.0.2.9:3128 cannot both listen on the SSH host Machine/services" ||
+		reported[0].Remediation != "give one of them another bind address or port" {
+		t.Fatalf("refusal = %+v (%v)", reported, err)
+	}
+}
+
+// An SSH host's claims are compared within the context and never published,
+// because two contexts targeting one SSH host are not coordinated: the apply
+// reserves its controller claims alone.
+func TestAnApplyPublishesOnlyItsControllerClaims(t *testing.T) {
+	h := newPlannedHarness(t, nestedDefinitions())
+	h.capability.reservations = reservationOf("alpha")
+	h.capability.sshClaims = sshSockets("services", "storage")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(h.workspace.reservations, reservationOf("alpha")) {
+		t.Fatalf("published %+v, want the controller's claims alone", h.workspace.reservations)
+	}
+}
+
 // A completed destroy leaves the context where the next plan is fresh again,
 // so the preview it offers is the same decision the next apply takes.
 func TestAFreshPlanAfterADestroyRefusesAsItsApplyDoes(t *testing.T) {
@@ -117,7 +174,7 @@ func TestAFreshPlanAfterADestroyRefusesAsItsApplyDoes(t *testing.T) {
 	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
-	h.capability.unsupported = []string{"Machine/guest"}
+	h.capability.unsupported = []Refusal{{Kind: "Machine", Name: "guest", Reason: "unsupported"}}
 	mutations, files := h.workspace.mutations, len(h.workspace.area.files)
 	_, previewErr := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
 	if h.workspace.mutations != mutations || len(h.workspace.area.files) != files {

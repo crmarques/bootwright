@@ -8,8 +8,10 @@ import (
 	"slices"
 	"strings"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -99,7 +101,8 @@ func (s Service) Read(ctx context.Context, contextName string, names []string) (
 	// table, and one that refuses reports its own diagnostic, so a path to an
 	// adapter log would be noise in the one case and the wrong answer in the
 	// other: nothing here is an operation an operator resumes or inspects. Its
-	// request therefore carries no remediation pointing at that output.
+	// request therefore retains no output, so its run keeps no file and carries
+	// no remediation pointing at one.
 	err = s.runtime.WithRuntime(ctx, lifecycle.RuntimeRequest{ContextName: name, Secrets: references}, func(inner context.Context, runtime lifecycle.Runtime) error {
 		for _, survey := range surveys {
 			answered, err := s.observe(inner, runtime, survey)
@@ -215,7 +218,7 @@ func (s Service) execute(ctx context.Context, name string, frozen Request, pin m
 		references = append(references, frozen.Controller.TrustBundleRef)
 	}
 	var result, retained *Result
-	err = s.runtime.WithRuntime(ctx, lifecycle.RuntimeRequest{ContextName: name, Secrets: references}, func(inner context.Context, runtime lifecycle.Runtime) error {
+	err = s.runtime.WithRuntime(ctx, lifecycle.RuntimeRequest{ContextName: name, Secrets: references, RetainOutput: true}, func(inner context.Context, runtime lifecycle.Runtime) error {
 		retained = &Result{LogLocation: runtime.LogLocation, Logs: slices.Clone(runtime.Logs)}
 		// The location is named before the adapter runs, because a run that
 		// refuses reports a diagnostic rather than this result, and its output
@@ -270,7 +273,7 @@ func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, dig
 		materials = append(materials,
 			lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: frozen.Controller.TrustBundleRef, Variable: "controllerCA"})
 	}
-	return lifecycle.RunRequest{
+	request := lifecycle.RunRequest{
 		Implementation:    Implementation,
 		Operation:         Operation,
 		Variable:          Variable,
@@ -286,6 +289,33 @@ func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, dig
 		Output:            runtime.Output,
 		OutputRemediation: runtime.OutputRemediation,
 	}
+	if pin.Present() {
+		request.Refusals = map[string]error{identityMismatch: identityRefusal(frozen, runtime.OutputRemediation)}
+	}
+	return request
+}
+
+// identityMismatch is the refusal a power run names when the machine's
+// controller answers as another system than the one its pin records, before
+// any power request. Only a run that carries a pin can name it.
+const identityMismatch = "identity-mismatch"
+
+// identityRefusal is what that refusal reports: the Machine, that its
+// controller answers as another system, and what to change. The identities are
+// what a controller reported, so they are printed bounded and printable in the
+// run's retained output alone, which the remedy points at.
+func identityRefusal(frozen Request, output string) error {
+	identity := string(api.Machine) + "/" + frozen.Identity.Object
+	remediation := "correct spec.hardware.management.bmc.address on " + identity + ", or destroy and apply this context so the machine is proved again"
+	if output != "" {
+		remediation += "; " + output + " for both identities"
+	}
+	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
+		Severity: "error", Code: "lifecycle.state", Remediation: remediation,
+		Message: "the management controller at " + frozen.Controller.Endpoint +
+			" answers as another system than the one this context's current apply proved, so no power request was sent",
+		Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: frozen.Identity.Object},
+	}}}
 }
 
 // pinValues carries a proved identity to the adapter encoded, under the keys a

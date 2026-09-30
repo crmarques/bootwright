@@ -24,6 +24,13 @@ options:
     description: The status a progress phase reports for its group.
     type: str
     required: false
+  reason:
+    description:
+      - The refusal a refused phase names to the runner before the run fails,
+        which the runner reports as its caller's own diagnostic for it. The
+        one a power run names is C(identity-mismatch).
+    type: str
+    required: false
   outcome:
     description: The terminal outcome a completion phase publishes.
     type: str

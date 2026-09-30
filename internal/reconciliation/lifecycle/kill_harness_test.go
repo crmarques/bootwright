@@ -52,9 +52,10 @@ const (
 	// apply observes every unproved block before it registers (Resolution
 	// outcomes) and then removes every block the apply started, failed or done
 	// alike (Continuation and removal), all in one invocation, and a destroy
-	// over no operation releases what an interrupted registration left in the
-	// same invocation (Lifecycle unit): no rule leaves anything for a second
-	// one.
+	// over no operation releases what an interrupted registration left, or
+	// reclaims the claim an apply killed before its running evidence left, in
+	// the same invocation (Lifecycle unit): no rule leaves anything for a
+	// second one.
 	killBoundSupersede = 1
 	// killBoundSettled is one apply. Over a completed apply no block is
 	// unproved, failed or pending, so an apply of unchanged input is the verb
@@ -70,6 +71,35 @@ const (
 	// reclaim was killed part way still holds nothing and goes with the
 	// destroy's.
 	killBoundReclaim = 1
+	// killBoundLagging is one apply. An apply over a failed apply whose blocks
+	// are all done only finalizes it (Lifecycle unit): it records the
+	// operation done and then publishes its projection, and an apply over what
+	// a kill before either write left finalizes the rest before it settles.
+	killBoundLagging = 1
+	// killBoundReplacement is two destroys, as killBoundDestroy is. A destroy
+	// over that failed apply replaces it with a removal of its whole frozen
+	// plan (Continuation and removal), so a kill before one of that removal's
+	// effects leaves the block running with the target present, which the
+	// next destroy observes, finds not removed and leaves failed, and only the
+	// one after retries it.
+	killBoundReplacement = 2
+	// killBoundPartial is two destroys, as killBoundDestroy is. A fresh
+	// destroy over an apply whose lost attempt left its target part way
+	// realized resolves that block to failed before it registers (Resolution
+	// outcomes) and then removes it with every other block the apply started,
+	// so a kill before or inside that resolution leaves it for the next
+	// destroy to observe again. A kill before the removal's effect on it
+	// leaves it running with the target still part way there, which the next
+	// destroy observes, finds not removed and leaves failed, and only the one
+	// after retries it.
+	killBoundPartial = 2
+	// killBoundUnraised is one destroy. An apply killed after its claim and
+	// before its running evidence landed leaves that claim under pristine
+	// evidence, and a destroy that settles beside it reclaims it in a
+	// transaction of its own (Lifecycle unit, Context mutation evidence). A
+	// reclaim killed part way leaves a claim that still holds nothing, which
+	// the next settling destroy reclaims.
+	killBoundUnraised = 1
 )
 
 // killLedger names every kill point whose store fails the harness today, by
@@ -93,16 +123,29 @@ type killHost struct {
 	effects map[string]int
 	// failures is how many more applies of a block fail with a typed failure.
 	failures map[string]int
+	// lost is how many more applies of a block lose their result after
+	// realizing it part way, as an adapter whose process died does.
+	lost map[string]int
+	// partial holds each block realized part way and this context's own,
+	// foreign each block whose target a foreign object of the same identity
+	// holds, and silent each block whose host does not answer an observation.
+	partial, foreign, silent map[string]bool
 }
 
 func newKillHost(definitions []reconciliation.BlockDefinition) *killHost {
-	return &killHost{definitions: definitions, realized: map[string]bool{}, effects: map[string]int{}, failures: map[string]int{}}
+	return &killHost{
+		definitions: definitions, realized: map[string]bool{}, effects: map[string]int{}, failures: map[string]int{},
+		lost: map[string]int{}, partial: map[string]bool{}, foreign: map[string]bool{}, silent: map[string]bool{},
+	}
 }
 
 func (h *killHost) clone() *killHost {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
-	return &killHost{definitions: h.definitions, realized: maps.Clone(h.realized), effects: maps.Clone(h.effects), failures: maps.Clone(h.failures)}
+	return &killHost{
+		definitions: h.definitions, realized: maps.Clone(h.realized), effects: maps.Clone(h.effects), failures: maps.Clone(h.failures),
+		lost: maps.Clone(h.lost), partial: maps.Clone(h.partial), foreign: maps.Clone(h.foreign), silent: maps.Clone(h.silent),
+	}
 }
 
 func (h *killHost) Plan(context.Context, PlanInput) (CapabilityPlan, error) {
@@ -143,14 +186,23 @@ func (h *killHost) effect(ctx context.Context, execution Execution, verb reconci
 	h.mutex.Lock()
 	h.effects[string(verb)+" "+block]++
 	refused := verb == reconciliation.Apply && h.failures[block] > 0
-	if refused {
+	lost := verb == reconciliation.Apply && !refused && h.lost[block] > 0
+	switch {
+	case refused:
 		h.failures[block]--
-	} else {
+	case lost:
+		h.lost[block]--
+		h.partial[block] = true
+	default:
 		h.realized[block] = verb == reconciliation.Apply
+		delete(h.partial, block)
 	}
 	h.mutex.Unlock()
 	if refused {
 		return Result{Outcome: reconciliation.OutcomeFailed}, failure("lifecycle.state", "the host refused "+block, "")
+	}
+	if lost {
+		return Result{Outcome: reconciliation.OutcomeUnknown}, nil
 	}
 	killLog(ctx, execution, "converged")
 	return Result{Outcome: reconciliation.OutcomeChanged, Evidence: killEvidence(block, verb == reconciliation.Apply), Produced: killProduced(block, true)}, nil
@@ -170,33 +222,82 @@ func killProduced(block string, realized bool) []Produced {
 }
 
 // Observe answers an apply's resolution from the host alone: a realized block
-// is the apply's completion and one not realized is its absence of effect.
+// is the apply's completion, one realized part way is a partial realization
+// and one not realized is its absence of effect. A host that does not answer,
+// and a foreign object at the block's target, prove none of them.
 func (h *killHost) Observe(_ context.Context, execution Execution) (Observation, error) {
 	block := execution.Block.ID
+	if observation, unproved := h.unproved(block); unproved {
+		return observation, nil
+	}
 	h.mutex.Lock()
-	realized := h.realized[block]
+	realized, partial := h.realized[block], h.partial[block]
 	h.mutex.Unlock()
-	if realized {
+	switch {
+	case realized:
 		return Observation{Effect: reconciliation.EffectCompleted, Evidence: killEvidence(block, true), Produced: killProduced(block, true)}, nil
+	case partial:
+		return Observation{Effect: reconciliation.EffectPartial, Evidence: killEvidence(block, false)}, nil
 	}
 	return Observation{Effect: reconciliation.EffectNoEffect, Evidence: killEvidence(block, false)}, nil
 }
 
 // ObserveRemoval answers a destroy's resolution from the host alone, as a
 // production capability's removal observation does: a block no longer
-// realized is the removal's completion, and one still realized is its absence
-// of effect.
+// realized is the removal's completion, one realized part way is a partial
+// removal and one still realized is its absence of effect.
 func (h *killHost) ObserveRemoval(_ context.Context, execution Execution) (Observation, error) {
 	block := execution.Block.ID
+	if observation, unproved := h.unproved(block); unproved {
+		return observation, nil
+	}
 	h.mutex.Lock()
-	realized := h.realized[block]
+	realized, partial := h.realized[block], h.partial[block]
 	h.mutex.Unlock()
-	if realized {
+	switch {
+	case realized:
 		return Observation{Effect: reconciliation.EffectNoEffect, Evidence: killEvidence(block, true)}, nil
+	case partial:
+		return Observation{Effect: reconciliation.EffectPartial, Evidence: killEvidence(block, false)}, nil
 	}
 	return Observation{Effect: reconciliation.EffectCompleted, Evidence: killEvidence(block, false)}, nil
 }
 
+// unproved is an observation of a host that does not answer, which returns no
+// evidence, or of a foreign object at the block's target, which it names.
+func (h *killHost) unproved(block string) (Observation, bool) {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+	switch {
+	case h.silent[block]:
+		return Observation{Effect: reconciliation.EffectUnknown}, true
+	case h.foreign[block]:
+		return Observation{Effect: reconciliation.EffectUnknown, Evidence: json.RawMessage(fmt.Sprintf(`{"block":%q,"foreign":true}`, block))}, true
+	}
+	return Observation{}, false
+}
+
+// Unresolved explains the two observations the host proves nothing from.
+func (h *killHost) Unresolved(block reconciliation.Block, evidence json.RawMessage) (Unresolved, bool) {
+	if len(evidence) == 0 {
+		return killSilent(block.ID), true
+	}
+	if bytes.Contains(evidence, []byte(`"foreign":true`)) {
+		return killForeign(block.ID), true
+	}
+	return Unresolved{}, false
+}
+
+func killSilent(block string) Unresolved {
+	return Unresolved{Reason: "the host of " + block + " did not answer", Remedy: "restore the host of " + block}
+}
+
+func killForeign(block string) Unresolved {
+	return Unresolved{Reason: "a foreign object holds the target of " + block, Remedy: "remove the foreign object at the target of " + block}
+}
+
+// realizedBlocks names every block the host holds, and each it holds part
+// way as partly.
 func (h *killHost) realizedBlocks() []string {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
@@ -205,6 +306,9 @@ func (h *killHost) realizedBlocks() []string {
 		if realized {
 			out = append(out, block)
 		}
+	}
+	for block := range h.partial {
+		out = append(out, block+" (partly)")
 	}
 	slices.Sort(out)
 	return out
@@ -464,9 +568,10 @@ type killState struct {
 	// issues its own.
 	secretBindings int
 	// idleClaims counts the directories a claim that never registered, or a
-	// reclaim killed part way, leaves: every registration and pristine
-	// publication reclaims them (Context mutation evidence), so a retry that
-	// makes one leaves none.
+	// reclaim killed part way, leaves: every registration, pristine
+	// publication and destroy that settles beside one reclaims them (Context
+	// mutation evidence), so a retry that makes or settles beside one leaves
+	// none.
 	idleClaims int
 }
 
@@ -691,10 +796,27 @@ type killJourney struct {
 // apply killed there leaves a claim that holds nothing.
 const killClaimed = "publish secret binding#1"
 
+// killUnraised is the running evidence a fresh apply publishes right after it
+// claims its operation directory, in the same transaction, so an apply killed
+// there leaves a claim that holds nothing under pristine evidence.
+const killUnraised = "publish evidence#1"
+
 // killReclaim is every write of a reclaim of one claim, children before the
 // claim (specs/state-reconciliation.md, Context mutation evidence).
 func killReclaim() []string {
 	return []string{"remove <op>/blocks#1", "remove <op>/logs#1", "remove <op>#1"}
+}
+
+// killApplyAt makes what an apply killed at point left the rig's own.
+func killApplyAt(ctx context.Context, t *testing.T, rig *killRig, point string) {
+	t.Helper()
+	points := &killPoints{counts: map[string]int{}, key: point}
+	rig.arm(points)
+	_ = killInvoke(ctx, rig.harness.service, reconciliation.Apply)
+	if points.snapshot == nil {
+		t.Fatalf("the apply a journey starts from was not killed at %s: %v", point, points.keys)
+	}
+	rig.adopt(points.snapshot)
 }
 
 func killJourneys() []killJourney {
@@ -713,13 +835,30 @@ func killJourneys() []killJourney {
 	}
 	claimed := func(ctx context.Context, t *testing.T, rig *killRig) {
 		t.Helper()
-		points := &killPoints{counts: map[string]int{}, key: killClaimed}
-		rig.arm(points)
-		_ = killInvoke(ctx, rig.harness.service, reconciliation.Apply)
-		if points.snapshot == nil {
-			t.Fatalf("the apply a reclaim starts from was not killed at %s: %v", killClaimed, points.keys)
+		killApplyAt(ctx, t, rig, killClaimed)
+	}
+	unraised := func(ctx context.Context, t *testing.T, rig *killRig) {
+		t.Helper()
+		applied(ctx, t, rig)
+		if err := killInvoke(ctx, rig.harness.service, reconciliation.Destroy); err != nil {
+			t.Fatalf("the removal an unraised claim starts beside failed: %v", err)
 		}
-		rig.adopt(points.snapshot)
+		killApplyAt(ctx, t, rig, killUnraised)
+		if w := rig.harness.workspace; !bytes.Equal(w.evidence, killPristine(t)) || killIdleClaims(w) != 1 || killRest(w) != "removed" {
+			t.Fatalf("the killed apply left %d idle claims beside %s under evidence %s", killIdleClaims(w), killRest(w), w.evidence)
+		}
+	}
+	lagging := func(ctx context.Context, t *testing.T, rig *killRig) {
+		t.Helper()
+		applied(ctx, t, rig)
+		leaveFailedWithEveryBlockDone(t, rig.harness)
+	}
+	lostPartly := func(ctx context.Context, t *testing.T, rig *killRig) {
+		t.Helper()
+		rig.host.lost["b"] = 1
+		if err := killInvoke(ctx, rig.harness.service, reconciliation.Apply); err == nil || rig.host.lost["b"] != 0 || !rig.host.partial["b"] {
+			t.Fatal("the apply a partial resolution starts from did not lose b part way")
+		}
 	}
 	return []killJourney{
 		{name: "a", bound: killBoundFreshApply, run: reconciliation.Apply, retry: reconciliation.Apply},
@@ -728,7 +867,33 @@ func killJourneys() []killJourney {
 		{name: "d", bound: killBoundSupersede, run: reconciliation.Apply, retry: reconciliation.Destroy, finish: reconciliation.Destroy},
 		{name: "e", bound: killBoundSettled, run: reconciliation.Apply, retry: reconciliation.Apply, completed: true},
 		{name: "f", bound: killBoundReclaim, start: claimed, run: reconciliation.Apply, retry: reconciliation.Destroy, finish: reconciliation.Destroy, reaches: killReclaim()},
+		{name: "g", bound: killBoundLagging, start: lagging, run: reconciliation.Apply, retry: reconciliation.Apply, reaches: killFinalization()},
+		{name: "h", bound: killBoundReplacement, start: lagging, run: reconciliation.Destroy, retry: reconciliation.Destroy},
+		{name: "i", bound: killBoundPartial, start: lostPartly, run: reconciliation.Destroy, retry: reconciliation.Destroy, reaches: killRemovalResolution()},
+		{name: "j", bound: killBoundUnraised, start: unraised, run: reconciliation.Destroy, retry: reconciliation.Destroy, reaches: killReclaim()},
 	}
+}
+
+// killRemovalResolution is every write of a removal's resolution of one
+// unproved block before it registers, in order: the resolution record it
+// allocates, its log, its outcome, the block it moves, and the replaced apply
+// recorded in the state its blocks give it (specs/state-reconciliation.md,
+// Attempts and unknown outcomes).
+func killRemovalResolution() []string {
+	return []string{
+		"write <op>/blocks/b/attempt-000001-resolution-000001.json#1",
+		"append <op>/logs/blocks/b/attempt-000001-resolution-000001.jsonl#1",
+		"replace <op>/blocks/b/attempt-000001-resolution-000001.json#1",
+		"replace <op>/blocks/b/state.json#1",
+		"replace <op>/operation.json#1",
+	}
+}
+
+// killFinalization is every write of an apply's finalization, in order: the
+// operation's completed record, then its projection (specs/state-reconciliation.md,
+// Lifecycle unit).
+func killFinalization() []string {
+	return []string{"replace <op>/operation.json#1", "publish evidence#1"}
 }
 
 // begin builds a fresh rig at the journey's starting state.
@@ -871,16 +1036,14 @@ func killEvaluate(ctx context.Context, journey killJourney, rig *killRig, snapsh
 		return nil
 	}
 	outcome.needed = journey.bound + 1
-	state, settled := killStateOf(snapshot.workspace, snapshot.binder, snapshot.host), false
-	transactions := snapshot.workspace.mutations
+	state := killStateOf(snapshot.workspace, snapshot.binder, snapshot.host)
 	for retry := 0; retry <= journey.bound; retry++ {
 		if retry != 0 {
 			_ = killInvoke(ctx, service, journey.retry)
 			outcome.failures = append(outcome.failures, killInvariants(snapshot, pristine)...)
 			state = killStateOf(snapshot.workspace, snapshot.binder, snapshot.host)
-			settled = snapshot.workspace.mutations == transactions
 		}
-		if killConverged(state, end, settled) {
+		if state == end {
 			outcome.needed = retry
 			break
 		}
@@ -893,20 +1056,6 @@ func killEvaluate(ctx context.Context, journey killJourney, rig *killRig, snapsh
 	watch.Unlock()
 	outcome.failures = killDistinct(outcome.failures)
 	return outcome
-}
-
-// killConverged reports whether a state the kill or its retries left is the
-// journey's end. A verb that settles opens no transaction
-// (specs/state-reconciliation.md, Lifecycle unit), so a claim that holds
-// nothing outlasts retries that all settled, until a registration or pristine
-// publication reclaims it (Context mutation evidence). Idle claims are
-// therefore compared except in a state that retries left, every one of which
-// settled.
-func killConverged(state, end killState, settled bool) bool {
-	if settled {
-		state.idleClaims = end.idleClaims
-	}
-	return state == end
 }
 
 // killDistinct keeps the first report of each failure, because a rule broken

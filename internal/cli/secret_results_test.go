@@ -32,14 +32,14 @@ func runSecretResult(args []string, record *dispatchRecord) (int, string, string
 }
 
 func TestSecretCheckAndListResultsAreCanonical(t *testing.T) {
-	version := "ver-2"
+	version, generated := "ver-2", "ver-3"
 	check := &custody.CheckResult{Context: secretResultContext(), Secrets: []custody.CheckRow{
-		{Name: "zeta", Type: "sshKeyPair", Source: "file", Parts: []secrets.Part{secrets.PublicKeyPart, secrets.PrivateKeyPart}, Status: "available"},
+		{Name: "zeta", Type: "sshKeyPair", Source: "generated", Parts: []secrets.Part{secrets.PublicKeyPart, secrets.PrivateKeyPart}, Status: "available", Version: &generated, Sequence: 1},
 		{Name: "alpha", Type: "token", Source: "contextStore", Parts: []secrets.Part{secrets.ValuePart}, Status: "available", Version: &version, Sequence: 2},
 	}}
 	record := &dispatchRecord{result: commandResult{secretCheck: check}}
 	code, out, errOut := runSecretResult([]string{"secret", "check", "--output", "json"}, record)
-	want := "{\"schemaVersion\":\"v1alpha1\",\"command\":\"secret check\",\"ok\":true,\"exitCode\":0,\"result\":{\"context\":{\"name\":\"example\",\"mode\":\"ready\"},\"secrets\":[{\"name\":\"alpha\",\"type\":\"token\",\"source\":\"contextStore\",\"parts\":[\"value\"],\"status\":\"available\",\"version\":\"ver-2\",\"sequence\":2},{\"name\":\"zeta\",\"type\":\"sshKeyPair\",\"source\":\"file\",\"parts\":[\"private-key\",\"public-key\"],\"status\":\"available\",\"version\":null,\"sequence\":0}]},\"diagnostics\":[],\"logs\":[]}\n"
+	want := "{\"schemaVersion\":\"v1alpha1\",\"command\":\"secret check\",\"ok\":true,\"exitCode\":0,\"result\":{\"context\":{\"name\":\"example\",\"mode\":\"ready\"},\"secrets\":[{\"name\":\"alpha\",\"type\":\"token\",\"source\":\"contextStore\",\"parts\":[\"value\"],\"status\":\"available\",\"version\":\"ver-2\",\"sequence\":2},{\"name\":\"zeta\",\"type\":\"sshKeyPair\",\"source\":\"generated\",\"parts\":[\"private-key\",\"public-key\"],\"status\":\"available\",\"version\":\"ver-3\",\"sequence\":1}]},\"diagnostics\":[],\"logs\":[]}\n"
 	if code != 0 || out != want || errOut != "" || record.calls != 1 {
 		t.Fatalf("check code=%d stdout=%q stderr=%q calls=%d", code, out, errOut, record.calls)
 	}
@@ -317,5 +317,16 @@ func TestSecretMetadataResultsRejectUnsupportedShapes(t *testing.T) {
 	code, out, errOut := runSecretResult([]string{"secret", "list", "--output", "json"}, record)
 	if code != 1 || strings.Contains(out, "hidden") || !strings.Contains(out, "runtime.internal") || errOut != "" {
 		t.Fatalf("file-backed list code=%d stdout=%q stderr=%q", code, out, errOut)
+	}
+	for name, row := range map[string]custody.CheckRow{
+		"retired file source": {Name: "hidden", Type: "token", Source: "file", Parts: []secrets.Part{secrets.ValuePart}, Status: "available"},
+		"live-read status":    {Name: "hidden", Type: "token", Source: "contextStore", Parts: []secrets.Part{secrets.ValuePart}, Status: "unreadable"},
+	} {
+		check := &custody.CheckResult{Context: secretResultContext(), Secrets: []custody.CheckRow{row}}
+		record := &dispatchRecord{result: commandResult{secretCheck: check}}
+		code, out, errOut := runSecretResult([]string{"secret", "check", "--output", "json"}, record)
+		if code != 1 || strings.Contains(out, "hidden") || !strings.Contains(out, "runtime.internal") || errOut != "" {
+			t.Fatalf("%s: check code=%d stdout=%q stderr=%q", name, code, out, errOut)
+		}
 	}
 }

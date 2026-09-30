@@ -19,7 +19,7 @@ import (
 
 const (
 	maxOperationSegments = 6
-	maxOperationEntries  = 8192
+	maxOperationEntries  = operationstore.MaxEntries
 	maxOperationBytes    = 64 << 20
 	maxOperationRecord   = 1 << 20
 	maxOperationLog      = 8 << 20

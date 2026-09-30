@@ -23,6 +23,8 @@
 - name: Observe what this installation published before removing it
   bootwright.core.managedos_install_inspect:
     request: '{{ bootwright_os_install_request }}'
+    staging: '{{ managedos_install_anaconda_staged_tree }}'
+    work: '{{ managedos_install_anaconda_work }}'
   register: managedos_install_anaconda_before
 
 - name: Remove the subtree this installation owns beneath the served root
@@ -31,6 +33,17 @@
     state: absent
   register: managedos_install_anaconda_image_removed
 
+# The file module deletes a directory in the order it lists its entries, so a
+# removal stopped part way could leave the marker over a partial tree, which
+# the inspection and the next apply take as a tree published whole. Withdrawn
+# first, the marker is gone from whatever tree a stopped removal leaves.
+- name: Withdraw the package tree's marker before the tree itself
+  ansible.builtin.file:
+    path: '{{ bootwright_os_install_request.tree.path }}/.treeinfo'
+    state: absent
+  when: bootwright_os_install_request.tree is defined
+  register: managedos_install_anaconda_tree_marker_removed
+
 - name: Remove the published package tree
   ansible.builtin.file:
     path: '{{ bootwright_os_install_request.tree.path }}'
@@ -38,12 +51,29 @@
   when: bootwright_os_install_request.tree is defined
   register: managedos_install_anaconda_tree_removed
 
+# An apply killed while it extracted the tree leaves the staging copy beside
+# it, served beneath the same root, so it leaves with the tree.
+- name: Remove the staging tree an interrupted apply left beside it
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_staged_tree }}'
+    state: absent
+  when: bootwright_os_install_request.tree is defined
+  register: managedos_install_anaconda_staging_removed
+
 - name: Remove the private subtree this block owns
   ansible.builtin.file:
     path: '{{ managedos_install_anaconda_private_root }}'
     state: absent
   when: managedos_install_anaconda_delivers_key | bool
   register: managedos_install_anaconda_private_removed
+
+# An attempt killed part way leaves the area it built the image in, with the
+# rendered Kickstart and any image it wrote.
+- name: Remove the work area an interrupted attempt left
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_work }}'
+    state: absent
+  register: managedos_install_anaconda_work_removed
 
 - name: Report published content removal completion
   bootwright.core.managedos_install_protocol:
@@ -62,6 +92,8 @@
 - name: Prove every published file is gone
   bootwright.core.managedos_install_inspect:
     request: '{{ bootwright_os_install_request }}'
+    staging: '{{ managedos_install_anaconda_staged_tree }}'
+    work: '{{ managedos_install_anaconda_work }}'
   register: managedos_install_anaconda_after
 
 - name: Report absence verification completion
@@ -77,8 +109,11 @@
     outcome: >-
       {{ 'changed'
          if (managedos_install_anaconda_image_removed is changed
+             or managedos_install_anaconda_tree_marker_removed is changed
              or managedos_install_anaconda_tree_removed is changed
-             or managedos_install_anaconda_private_removed is changed)
+             or managedos_install_anaconda_staging_removed is changed
+             or managedos_install_anaconda_private_removed is changed
+             or managedos_install_anaconda_work_removed is changed)
          else 'unchanged' }}
     digest: '{{ bootwright_os_install_digest }}'
     observation: '{{ managedos_install_anaconda_after.observation }}'

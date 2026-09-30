@@ -133,7 +133,7 @@ func (s Service) protect(ctx context.Context, name string, decided transition, r
 		if err != nil {
 			return err
 		}
-		if err := store.Claim(ctx, identity); err != nil {
+		if err := store.Claim(ctx, identity, decided.plan); err != nil {
 			claimed, listed := store.Claimed(recordingContext(ctx))
 			record.raised = listed != nil || slices.Contains(claimed, identity)
 			return err
@@ -265,7 +265,7 @@ func (s Service) restoreEvidence(ctx context.Context, name string, record *regis
 // the claim that raised the evidence again after a release stays listed while
 // that evidence stands, and an apply in flight still refuses on it.
 // Reclaiming is housekeeping, so one that fails refuses nothing and leaves the
-// rest for the next pristine publication or registration.
+// rest for the next pristine publication, settling destroy or registration.
 func reclaim(ctx context.Context, tx Transaction, store OperationStore) {
 	pristine, err := projection(reconciliation.Destroy, reconciliation.OperationDone)
 	if err != nil || !bytes.Equal(tx.Evidence(), pristine) {
@@ -330,13 +330,39 @@ func unclaimed(ctx context.Context, view View, store OperationStore) (transition
 	}
 	evidence := view.Evidence()
 	if bytes.Equal(evidence, pristine) && !holdsReservation(view) {
-		return transition{noop: true, verb: reconciliation.Destroy}, nil
+		return settledDestroy(ctx, store, transition{noop: true, verb: reconciliation.Destroy}), nil
 	}
 	return transition{unclaimed: true, verb: reconciliation.Destroy, basis: basis{evidence: evidence}}, nil
 }
 
+// settledDestroy marks a destroy that settles beside a claim that holds
+// nothing. An apply stopped after its claim and before its running evidence
+// landed leaves one under pristine evidence that no restoration follows, so
+// without this only a later registration would reclaim it, and applies refused
+// at the retained-operation bound register nothing. A listing that fails marks
+// nothing, because reclaiming is housekeeping no verb is refused for.
+func settledDestroy(ctx context.Context, store OperationStore, decided transition) transition {
+	idle, err := store.Idle(ctx)
+	decided.idle = err == nil && len(idle) != 0
+	return decided
+}
+
+// reclaimIdle gives a destroy that settled beside a claim that holds nothing a
+// transaction that only reclaims, once the evidence still reads pristine under
+// the lock. It changes no evidence, reservation or binding, so the destroy
+// still reports only that it settled, and a transaction or reclaim that fails
+// refuses nothing and leaves the claim for the next one.
+func (s Service) reclaimIdle(ctx context.Context, name string) {
+	_ = s.workspace.MutateLifecycle(ctx, name, func(tx Transaction) error {
+		reclaim(ctx, tx, s.store(tx))
+		return nil
+	})
+}
+
 // refuseUnindexed refuses what a context holding no operation holds that no
 // index accounts for, before a verb over it settles, releases or registers.
+// Neither verb has a way on from there, so the refusal names the deletion of
+// the context.
 func refuseUnindexed(ctx context.Context, view View, store OperationStore) error {
 	entries, err := unindexed(ctx, view, store)
 	if err != nil || len(entries) == 0 {
@@ -344,7 +370,7 @@ func refuseUnindexed(ctx context.Context, view View, store OperationStore) error
 	}
 	return failure("lifecycle.state",
 		"the context holds operation records or evidence that no index names: "+strings.Join(entries, ", "),
-		"review its durable state with bootwright status")
+		deletionExit(view))
 }
 
 // unindexed names, beside no operation, evidence that neither reads pristine

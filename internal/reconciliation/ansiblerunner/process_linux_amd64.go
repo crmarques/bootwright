@@ -5,6 +5,7 @@ package ansiblerunner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"maps"
 	"os"
 	"os/exec"
@@ -115,14 +116,14 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if outputs != nil {
 		values[request.Variable+"_output"] = outputs
 	}
-	interpreter := filepath.Join(job, "interpreter")
+	interpreter := filepath.Join(job, interpreterName)
 	if err := os.WriteFile(interpreter, []byte(request.Launch.InterpreterScript()), 0700); err != nil {
 		return lifecycle.RunResult{}, failure("lifecycle.state", "the pinned module interpreter could not be published", "")
 	}
-	if err := writeJSON(job, "inventory.json", inventory(request.Placement, interpreter, paths)); err != nil {
+	if err := writeJSON(job, inventoryName, inventory(request.Placement, interpreter, paths)); err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	if err := writeJSON(job, "request.json", values); err != nil {
+	if err := writeJSON(job, requestName, values); err != nil {
 		return lifecycle.RunResult{}, err
 	}
 	result, err := r.execute(ctx, job, scratch, lock, playbook, request)
@@ -137,6 +138,63 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	}
 	result.Produced = produced
 	return result, nil
+}
+
+// The entries the runner writes into a job beside its lock, its record and its
+// outputs directory, and the longest name one Linux path segment takes.
+const (
+	interpreterName = "interpreter"
+	inventoryName   = "inventory.json"
+	requestName     = "request.json"
+	localTemp       = "local"
+	remoteTemp      = "remote"
+	maxMaterialName = 255
+)
+
+// jobEntries are every name the runner itself gives an entry of a job. A
+// material file is written into the job too, so it may take none of them.
+var jobEntries = []string{lockName, recordName, outputsDirectory, interpreterName, inventoryName, requestName, localTemp, remoteTemp}
+
+// checkMaterials refuses a material list before anything is written: each file
+// is written once and its value cleared, so a name listed twice would be
+// rewritten with the cleared bytes, and a variable bound twice would name only
+// one of its files. A file is written at its name joined to the job, so the
+// name must be one safe segment the runner does not write itself; and the
+// adapter finds the files' paths and the material values in one variable map,
+// where a value named as a file's variable would replace that file's path.
+func checkMaterials(request lifecycle.RunRequest) error {
+	names := make(map[string]bool, len(request.Materials))
+	bound := make(map[string]bool, len(request.Materials))
+	for _, file := range request.Materials {
+		if !materialName(file.Name) {
+			return failure("lifecycle.state", "a material file is named by an unsafe name, or by one the runner's job already uses", "")
+		}
+		if names[file.Name] || bound[file.Variable] {
+			return failure("lifecycle.state", "a material file is named twice, or two material files bind one variable", "")
+		}
+		names[file.Name], bound[file.Variable] = true, true
+	}
+	for name := range request.MaterialValues {
+		if bound[name] {
+			return failure("lifecycle.state", "a material value is named as a material file's variable", "")
+		}
+	}
+	return nil
+}
+
+// materialName admits one segment of lowercase letters, digits, dots,
+// underscores and hyphens that does not begin with a dot: never a separator, a
+// dot segment or a hidden name, and never a name in jobEntries.
+func materialName(name string) bool {
+	if name == "" || len(name) > maxMaterialName || name[0] == '.' || slices.Contains(jobEntries, name) {
+		return false
+	}
+	for _, c := range []byte(name) {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '.' || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 func (r Runner) materialize(job string, request lifecycle.RunRequest) (map[string]string, error) {
@@ -190,14 +248,14 @@ func (r Runner) execute(ctx context.Context, job, scratch string, lock *os.File,
 	// invocation; a controller run never passes it.
 	arguments := append(slices.Clone(request.Launch.Arguments), "-u", "-I", "-B", "-S", "-c", entrypoint,
 		filepath.Join(collection, "plugins/module_utils/controller_supervisor.py"), "--lifecycle",
-		"-i", filepath.Join(job, "inventory.json"), "--extra-vars", "@"+filepath.Join(job, "request.json"),
+		"-i", filepath.Join(job, inventoryName), "--extra-vars", "@"+filepath.Join(job, requestName),
 		filepath.Join(collection, "playbooks", playbook))
 	command := r.command(request.Launch.Loader, arguments...)
 	command.Dir = automation
 	command.Env = append(slices.Clone(request.Launch.Environment),
 		"ANSIBLE_CONFIG="+filepath.Join(automation, "ansible.cfg"),
 		"ANSIBLE_COLLECTIONS_PATH="+filepath.Join(automation, "collections"),
-		"ANSIBLE_LOCAL_TEMP="+filepath.Join(job, "local"), "ANSIBLE_REMOTE_TEMP="+filepath.Join(job, "remote"),
+		"ANSIBLE_LOCAL_TEMP="+filepath.Join(job, localTemp), "ANSIBLE_REMOTE_TEMP="+filepath.Join(job, remoteTemp),
 		"ANSIBLE_NOCOLOR=1", "ANSIBLE_FORCE_COLOR=0", "ANSIBLE_LOAD_CALLBACK_PLUGINS=0",
 		"TMPDIR="+scratch, "PATH=/usr/bin:/usr/sbin")
 	output, childOutput, err := os.Pipe()
@@ -279,6 +337,11 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, waited <-chan er
 	var result lifecycle.RunResult
 	var operationErr error
 	loaded, completed, canceled := false, false, false
+	// exited marks an operationErr that is only the adapter's failed exit. A
+	// record the adapter wrote before it exited can be read after that exit,
+	// and is judged as if it had been read first: the refusal it names, or a
+	// record the runner refuses, then replaces the failure.
+	exited := false
 	var drain <-chan time.Time
 	var timer *time.Timer
 	defer func() {
@@ -342,44 +405,73 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, waited <-chan er
 			arm()
 			if waitErr != nil && operationErr == nil {
 				operationErr = failure("lifecycle.state", "the adapter operation did not complete", request.OutputRemediation)
+				exited = true
 			}
 		case message, open := <-messages:
 			if !open {
 				messages = nil
 				if err := <-readResult; err != nil {
-					if operationErr == nil {
-						operationErr = failure("lifecycle.unknown", "the adapter structured result was incomplete", request.OutputRemediation)
+					// A read the drain's close ends is the runner's own and no
+					// record the adapter wrote, so it leaves the failed exit. A
+					// record the reader took before that close is still judged
+					// as if it had been read first.
+					if operationErr == nil || exited && !errors.Is(err, os.ErrClosed) {
+						operationErr, exited = failure("lifecycle.unknown", "the adapter structured result was incomplete", request.OutputRemediation), false
 					}
 					stop()
 				}
 				continue
 			}
-			valid := !completed && operationErr == nil && !canceled
+			// A record read after the failed exit is judged as if it had been
+			// read first. A valid one leaves that failure, except the named
+			// refusal, which replaces it.
+			valid := !completed && (operationErr == nil || exited) && !canceled
 			switch message.Phase {
 			case "loaded":
 				valid = valid && !loaded
 				loaded = valid
 			case "group":
 				valid = valid && loaded
-				if valid && request.Progress != nil {
+				if valid && !exited && request.Progress != nil {
 					request.Progress(ctx, message.Group, message.Status)
 				}
 				// A record the log could not keep is the engine's log fault: its
 				// callback latches it and cancels this run, which ends below.
-				if valid && request.Log != nil {
+				if valid && !exited && request.Log != nil {
 					_ = request.Log(ctx, operationstore.LogRecord{Event: "group", Group: message.Group, Detail: message.Status})
 				}
 			case "completed":
 				valid = valid && loaded
 				if valid {
 					completed = true
+				}
+				if valid && !exited {
 					result = lifecycle.RunResult{Outcome: message.Outcome, Evidence: slices.Clone(message.Evidence)}
+				}
+			case "refused":
+				// The adapter names a refusal its caller remedies by name, then
+				// fails. The caller's own failure for it replaces the adapter's.
+				named := request.Refusals[message.Reason]
+				valid = valid && loaded && named != nil
+				if valid {
+					operationErr, exited = named, false
 				}
 			default:
 				valid = false
 			}
-			if !valid && operationErr == nil {
-				operationErr = failure("lifecycle.unknown", "the adapter capability protocol was invalid", request.OutputRemediation)
+			if !valid {
+				// A record the runner refuses breaks the protocol whichever of
+				// it and the failed exit is read first, so it replaces that
+				// failure, and the outcome is unknown in either order.
+				if operationErr == nil || exited {
+					operationErr = failure("lifecycle.unknown", "the adapter capability protocol was invalid", request.OutputRemediation)
+				}
+				exited = false
+			}
+			if valid && message.Phase == "refused" {
+				// The adapter prints what it refused into its retained output
+				// as it fails, so it is left to end on its own.
+				continue
 			}
 			if operationErr != nil || canceled {
 				stop()

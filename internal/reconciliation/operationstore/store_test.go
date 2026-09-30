@@ -7,6 +7,8 @@ import (
 	"errors"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore/areadouble"
 	"maps"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -57,10 +59,11 @@ func testOperation(t *testing.T, plan reconciliation.Plan) Operation {
 		t.Fatal(err)
 	}
 	return Operation{
-		Version: 1, ID: "op-" + strings.Repeat("ab", 16), Verb: plan.Verb,
+		Version: OperationVersion, ID: "op-" + strings.Repeat("ab", 16), Verb: plan.Verb,
 		Context: "example", Revision: "rev-" + strings.Repeat("ef", 16),
 		InputDigest: strings.Repeat("1", 64), PlanDigest: digest, AutomationDigest: strings.Repeat("2", 64),
 		Executable: Executable{Version: "devel", Commit: "abcdef1"},
+		Closure:    &Closure{Digest: strings.Repeat("3", 64), Python: "3.14.7", Ansible: "2.21.4"},
 		Bindings:   []string{}, State: reconciliation.OperationRunning,
 		Created: "2026-09-11T12:00:00Z", Updated: "2026-09-11T12:00:00Z",
 	}
@@ -149,6 +152,12 @@ func TestRegisterRefusesInconsistentOperations(t *testing.T) {
 		"unsorted bindings": func(o Operation) Operation { o.Bindings = []string{"b", "a"}; return o },
 		"missing context":   func(o Operation) Operation { o.Context = ""; return o },
 		"local timestamp":   func(o Operation) Operation { o.Created = "2026-09-11T12:00:00+02:00"; return o },
+		"earlier version":   func(o Operation) Operation { o.Version, o.Closure = 1, nil; return o },
+		"no closure":        func(o Operation) Operation { o.Closure = nil; return o },
+		"short closure": func(o Operation) Operation {
+			o.Closure = &Closure{Digest: strings.Repeat("3", 63), Python: "3.14.7", Ansible: "2.21.4"}
+			return o
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			store, _ := newStore(t)
@@ -213,9 +222,80 @@ func TestStoredRecordsMustBeCanonical(t *testing.T) {
 	if err := store.Register(ctx, operation, plan); err != nil {
 		t.Fatal(err)
 	}
-	area.files[operation.ID+"/operation.json"] = []byte(`{"version":2}` + "\n")
+	area.files[operation.ID+"/operation.json"] = []byte(`{"version":3}` + "\n")
 	if _, err := New(area, fixedClock()).ReadOperation(ctx, operation.ID); err == nil {
 		t.Fatal("an unsupported operation version decoded")
+	}
+}
+
+// A version 1 record, which a build before the execution closure was frozen
+// wrote, carries no closure and still reads back and updates as itself, so a
+// fresh verb and status can read the context it belongs to. Its bytes are the
+// ones that build published, kept in operation-apply-v1.golden, which no
+// -update rewrites. Every other pairing of version and closure refuses.
+func TestAnEarlierVersionOperationRecordStaysReadable(t *testing.T) {
+	ctx := context.Background()
+	plan := goldenPlan(t)
+	earlier := testOperation(t, plan)
+	earlier.Version, earlier.Closure, earlier.Bindings = 1, nil, []string{"bind-" + strings.Repeat("cd", 16)}
+	store, area := newStore(t)
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Register(ctx, testOperation(t, plan), plan); err != nil {
+		t.Fatal(err)
+	}
+	indented, err := os.ReadFile(filepath.Join("testdata", "operation-apply-v1.golden"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var published bytes.Buffer
+	if err := json.Compact(&published, indented); err != nil {
+		t.Fatal(err)
+	}
+	target := earlier.ID + "/operation.json"
+	area.files[target] = append(published.Bytes(), '\n')
+	reader := New(area, fixedClock())
+	stored, err := reader.ReadOperation(ctx, earlier.ID)
+	if err != nil || !reflect.DeepEqual(stored, earlier) {
+		t.Fatalf("the version 1 record read back as %+v (%v)", stored, diagnostics.Of(err))
+	}
+	stored.State = reconciliation.OperationDone
+	if err := reader.UpdateOperation(ctx, stored); err != nil {
+		t.Fatalf("updating the version 1 record: %v", diagnostics.Of(err))
+	}
+	if updated := area.files[target]; !bytes.HasPrefix(updated, []byte(`{"version":1,`)) || bytes.Contains(updated, []byte(`"closure"`)) {
+		t.Fatalf("the update rewrote the version 1 record as %s", updated)
+	}
+	current := testOperation(t, plan)
+	for name, mutate := range map[string]func(Operation) Operation{
+		"version 1 with a closure":  func(o Operation) Operation { o.Version = 1; return o },
+		"version 2 with no closure": func(o Operation) Operation { o.Closure = nil; return o },
+		"an uppercase digest": func(o Operation) Operation {
+			o.Closure = &Closure{Digest: strings.Repeat("A", 64), Python: "3.14.7", Ansible: "2.21.4"}
+			return o
+		},
+		"a Python intent": func(o Operation) Operation {
+			o.Closure = &Closure{Digest: strings.Repeat("3", 64), Python: "latest", Ansible: "2.21.4"}
+			return o
+		},
+		"an ansible-core minor only": func(o Operation) Operation {
+			o.Closure = &Closure{Digest: strings.Repeat("3", 64), Python: "3.14.7", Ansible: "2.21"}
+			return o
+		},
+		"a later version": func(o Operation) Operation { o.Version = OperationVersion + 1; return o },
+	} {
+		t.Run(name, func(t *testing.T) {
+			data, err := json.Marshal(mutate(current))
+			if err != nil {
+				t.Fatal(err)
+			}
+			area.files[target] = append(data, '\n')
+			_, err = New(area, fixedClock()).ReadOperation(ctx, current.ID)
+			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.state" {
+				t.Fatalf("the record read back (%v)", err)
+			}
+		})
 	}
 }
 
@@ -804,7 +884,7 @@ func TestAClaimedOperationRegistersIntoItsDirectory(t *testing.T) {
 	store, area := newStore(t)
 	plan := testPlan(t, "alpha")
 	operation := testOperation(t, plan)
-	if err := store.Claim(ctx, operation.ID); err != nil {
+	if err := store.Claim(ctx, operation.ID, plan); err != nil {
 		t.Fatal(err)
 	}
 	for _, directory := range []string{operation.ID, operation.ID + "/blocks", operation.ID + "/logs"} {
@@ -821,14 +901,14 @@ func TestAClaimedOperationRegistersIntoItsDirectory(t *testing.T) {
 	if started, err := store.Started(ctx, operation.ID); err != nil || started {
 		t.Fatalf("a claimed directory reads started %t (%v)", started, err)
 	}
-	if err := store.Claim(ctx, operation.ID); err == nil {
+	if err := store.Claim(ctx, operation.ID, plan); err == nil {
 		t.Fatal("a claim took an identity that already has a directory")
 	}
 	for index := range MaxOperations - 1 {
 		area.directories["slot-"+FormatIndex(index)] = true
 	}
 	other := "op-" + strings.Repeat("cd", 16)
-	if err := store.Claim(ctx, other); err == nil || area.directories[other] {
+	if err := store.Claim(ctx, other, plan); err == nil || area.directories[other] {
 		t.Fatal("a claim exceeded the retained operation bound")
 	}
 	if _, err := store.Index(ctx); err != nil {
@@ -857,19 +937,20 @@ func TestAClaimedOperationRegistersIntoItsDirectory(t *testing.T) {
 // interrupted part way left, and keeps the current operation even once its
 // records were lost, a registration's directory once its plan landed, a claim
 // whose blocks/ or logs/ holds anything and every name that is no operation
-// identity. A reclaimed claim no longer counts toward the retention bound, so
-// a claim refused there then succeeds.
+// identity. Idle names exactly those claims first and removes none. A
+// reclaimed claim no longer counts toward the retention bound, so a claim
+// refused there then succeeds.
 func TestAReclaimRemovesOnlyClaimsThatHoldNothing(t *testing.T) {
 	ctx := context.Background()
 	store, area := newStore(t)
+	plan := testPlan(t, "alpha")
 	claim := func(id string) string {
 		id = "op-" + strings.Repeat(id, 16)
-		if err := store.Claim(ctx, id); err != nil {
+		if err := store.Claim(ctx, id, plan); err != nil {
 			t.Fatal(err)
 		}
 		return id
 	}
-	plan := testPlan(t, "alpha")
 	current := testOperation(t, plan)
 	if _, err := store.Index(ctx); err != nil {
 		t.Fatal(err)
@@ -889,8 +970,12 @@ func TestAReclaimRemovesOnlyClaimsThatHoldNothing(t *testing.T) {
 		area.directories["slot-"+FormatIndex(index)] = true
 	}
 	next := "op-" + strings.Repeat("0f", 16)
-	if err := store.Claim(ctx, next); err == nil {
+	if err := store.Claim(ctx, next, plan); err == nil {
 		t.Fatal("a claim exceeded the retained operation bound")
+	}
+	idle, err := store.Idle(ctx)
+	if err != nil || !slices.Equal(idle, []string{empty, partial}) || !area.directories[empty+"/blocks"] || !area.directories[partial] {
+		t.Fatalf("idle %v (%v), want %v with nothing removed", idle, err, []string{empty, partial})
 	}
 	reclaimed, err := store.Reclaim(ctx)
 	if err != nil || !slices.Equal(reclaimed, []string{empty, partial}) {
@@ -906,12 +991,87 @@ func TestAReclaimRemovesOnlyClaimsThatHoldNothing(t *testing.T) {
 			t.Fatalf("the reclaim removed %s", kept)
 		}
 	}
-	if err := store.Claim(ctx, next); err != nil {
+	if err := store.Claim(ctx, next, plan); err != nil {
 		t.Fatalf("a claim refused once a reclaim freed the bound: %v", err)
 	}
 	area.fail["remove "+next+"/blocks"] = errors.New("the directory could not be removed")
 	if reclaimed, err := store.Reclaim(ctx); err == nil || len(reclaimed) != 0 || !area.directories[next] {
 		t.Fatalf("a failed removal reclaimed %v (%v)", reclaimed, err)
+	}
+}
+
+// Admission holds what a new operation needs within the area's entry bound,
+// counting every entry the area holds and the plan the operation will
+// register. An apply needs its first pass, its removal's and ReservedEntries.
+// With the area holding exactly what admits one more one-block apply, a claim
+// for two blocks refuses and creates nothing, the one-block claim is
+// admitted, and its registration does not count the claimed directory it
+// fills a second time. An apply registration without a claim then refuses,
+// naming what the area holds and what the apply needs, while the removal of
+// the registered apply is admitted with its own first pass and the one entry
+// its later writes need, and refuses, naming both, once one entry fewer is
+// free.
+func TestAdmissionKeepsTheFirstPassWithinTheAreaEntries(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	plan := testPlan(t, "alpha")
+	operation := testOperation(t, plan)
+	removalPlan, err := plan.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if FirstPassEntries(plan) != 13 || FirstPassEntries(testPlan(t, "alpha", "bravo")) != 19 {
+		t.Fatalf("first passes of one and two blocks count %d and %d entries, want 13 and 19", FirstPassEntries(plan), FirstPassEntries(testPlan(t, "alpha", "bravo")))
+	}
+	if AdmissionEntries(plan) != 2*13+ReservedEntries || AdmissionEntries(removalPlan) != 13+1 {
+		t.Fatalf("a one-block apply and its removal are admitted with %d and %d entries free, want %d and 14", AdmissionEntries(plan), AdmissionEntries(removalPlan), 2*13+ReservedEntries)
+	}
+	for index := range MaxEntries - ReservedEntries - 2*FirstPassEntries(plan) - 1 {
+		area.files["retained/record-"+FormatIndex(index)] = []byte("{}\n")
+	}
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	refusedAtTheBound := func(err error, id string) {
+		t.Helper()
+		refused := diagnostics.Of(err)
+		if len(refused) != 1 || refused[0].Code != "lifecycle.state" || !strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations") {
+			t.Fatalf("admission beyond the entry bound reported %+v, want the lifecycle.state retained-operation refusal", refused)
+		}
+		if areadouble.IsDirectory(area.files, area.directories, id) {
+			t.Fatalf("the refused admission created %s", id)
+		}
+	}
+	refusedAtTheBound(store.Claim(ctx, operation.ID, testPlan(t, "alpha", "bravo")), operation.ID)
+	if err := store.Claim(ctx, operation.ID, plan); err != nil {
+		t.Fatalf("the claim the area admits refused: %v", err)
+	}
+	if err := store.Register(ctx, operation, plan); err != nil {
+		t.Fatalf("the claimed operation did not register into its directory: %v", err)
+	}
+	other := testOperation(t, plan)
+	other.ID = "op-" + strings.Repeat("cd", 16)
+	err = store.Register(ctx, other, plan)
+	refusedAtTheBound(err, other.ID)
+	if message := diagnostics.Of(err)[0].Message; !strings.Contains(message, "holds 7148 of its 8192 entries") ||
+		!strings.Contains(message, "this apply needs 1050 more: 26 for its first attempts and those of the removal that takes it back, and the 1024") {
+		t.Fatalf("the refusal reads %q, want what the area holds and what the apply needs", message)
+	}
+	removal := testOperation(t, removalPlan)
+	removal.ID, removal.Source = other.ID, operation.ID
+	held := 7148
+	for index := range MaxEntries - AdmissionEntries(removalPlan) - held {
+		area.files["filled/record-"+FormatIndex(index)] = []byte("{}\n")
+	}
+	err = store.Register(ctx, removal, removalPlan)
+	refusedAtTheBound(err, removal.ID)
+	if message := diagnostics.Of(err)[0].Message; !strings.Contains(message, "holds 8179 of its 8192 entries") ||
+		!strings.Contains(message, "this removal needs 14 more for its first attempts and the writes that complete them") {
+		t.Fatalf("the refusal reads %q, want what the area holds and what the removal needs", message)
+	}
+	delete(area.files, "filled/record-0")
+	if err := store.Register(ctx, removal, removalPlan); err != nil {
+		t.Fatalf("the removal of the registered apply did not register with its first pass free: %v", err)
 	}
 }
 

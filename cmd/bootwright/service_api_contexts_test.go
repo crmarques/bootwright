@@ -15,7 +15,7 @@ import (
 func TestRetiredServiceAndTrustSnapshotCanBeReplacedWithoutLosingSecrets(t *testing.T) {
 	services, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("retained-token", "token", "  source: {generated: {}}\n"))
-	addSecretInput(t, input, "ca.yaml", secretDocument("install-ca", "caBundle", "  source: {file: {path: secrets/never-opened.pem}}\n"))
+	addSecretInput(t, input, "ca.yaml", secretDocument("install-ca", "caBundle", ""))
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	contextRun(t, services, 0, "secret", "generate", "--name", "retained-token")
 	material, _ := contextRun(t, services, 0, "secret", "show", "--name", "retained-token", "--part", "value")

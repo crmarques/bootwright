@@ -1,0 +1,64 @@
+{
+  "beside pristine evidence": {
+    "status": {
+      "operation": "operation-1",
+      "verb": "destroy",
+      "state": "done",
+      "next": "none",
+      "blocks": [
+        "alpha (done, 1 attempts)",
+        "bravo (pending, 0 attempts)"
+      ],
+      "contradictions": [
+        "bravo (pending)"
+      ],
+      "nextSteps": []
+    },
+    "plan": {
+      "code": "lifecycle.state",
+      "message": "the completed destroy operation-1 records no block completion for these blocks, so nothing proves their effects removed: bravo (pending)",
+      "remediation": "delete the context with bootwright context delete --name lab --purge"
+    },
+    "apply": {
+      "code": "lifecycle.state",
+      "message": "the completed destroy operation-1 records no block completion for these blocks, so nothing proves their effects removed: bravo (pending)",
+      "remediation": "delete the context with bootwright context delete --name lab --purge"
+    },
+    "destroy": {
+      "code": "lifecycle.state",
+      "message": "the completed destroy operation-1 records no block completion for these blocks, so nothing proves their effects removed: bravo (pending)",
+      "remediation": "delete the context with bootwright context delete --name lab --purge"
+    }
+  },
+  "beside protected evidence": {
+    "status": {
+      "operation": "operation-1",
+      "verb": "destroy",
+      "state": "done",
+      "next": "none",
+      "blocks": [
+        "alpha (done, 1 attempts)",
+        "bravo (pending, 0 attempts)"
+      ],
+      "contradictions": [
+        "bravo (pending)"
+      ],
+      "nextSteps": []
+    },
+    "plan": {
+      "code": "lifecycle.state",
+      "message": "the completed destroy operation-1 records no block completion for these blocks, so nothing proves their effects removed: bravo (pending)",
+      "remediation": "delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own"
+    },
+    "apply": {
+      "code": "lifecycle.state",
+      "message": "the completed destroy operation-1 records no block completion for these blocks, so nothing proves their effects removed: bravo (pending)",
+      "remediation": "delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own"
+    },
+    "destroy": {
+      "code": "lifecycle.state",
+      "message": "the completed destroy operation-1 records no block completion for these blocks, so nothing proves their effects removed: bravo (pending)",
+      "remediation": "delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own"
+    }
+  }
+}

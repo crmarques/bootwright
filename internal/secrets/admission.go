@@ -35,11 +35,16 @@ func Normalize(object api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 }
 
 func ValidateAuthored(object api.Object, catalog api.Catalog) []api.Issue {
-	return validate(object, true)
+	return validate(object, true, false)
 }
-func Validate(object api.Object, catalog api.Catalog) []api.Issue { return validate(object, false) }
+func ValidatePartial(object api.Object, catalog api.Catalog) []api.Issue {
+	return validate(object, true, true)
+}
+func Validate(object api.Object, catalog api.Catalog) []api.Issue {
+	return validate(object, false, false)
+}
 
-func validate(object api.Object, partial bool) []api.Issue {
+func validate(object api.Object, partial, kindDefault bool) []api.Issue {
 	if object.Kind() != api.Secret {
 		return nil
 	}
@@ -49,33 +54,14 @@ func validate(object api.Object, partial bool) []api.Issue {
 	}
 	spec := object.Spec()
 	kind := spec.Get("type").Text()
-	if kind == "" {
-		return nil
-	}
 	source := spec.Get("source")
-	if file := source.Get("file"); file.Present() {
-		var required, optional []string
-		switch kind {
-		case "opaque", "token", "usernamePassword", "dockerConfigJson", "caBundle":
-			required = []string{"path"}
-		case "tlsCertificate":
-			required = []string{"cert", "key"}
-		case "sshKeyPair":
-			required = []string{"privateKey"}
-			optional = []string{"publicKey"}
-		default:
-			return nil
-		}
-		for _, field := range required {
-			if !partial && !file.Has(field) {
-				add("source.file."+field, "Secret type requires this source path")
-			}
-		}
-		for _, field := range file.Fields() {
-			if !slices.Contains(required, field.Name) && !slices.Contains(optional, field.Name) {
-				add("source.file."+field.Name, "source path is not accepted by the declared Secret type")
-			}
-		}
+	if source.Get("file").Present() {
+		issues = append(issues, api.Issue{Code: "api.field", Field: "$.spec.source.file",
+			Message:     "the Secret file source is retired: Secret material is read only from context custody, which bootwright secret set loads",
+			Remediation: fileSourceRemedy(object.Name(), kind, kindDefault)})
+	}
+	if kind == "" {
+		return issues
 	}
 	if generated := source.Get("generated"); generated.Present() {
 		allowed := []string{}
@@ -94,7 +80,7 @@ func validate(object api.Object, partial bool) []api.Issue {
 		case "opaque", "dockerConfigJson":
 			add("source.generated", "the declared Secret type does not permit generation")
 		default:
-			return nil
+			return issues
 		}
 		for _, field := range generated.Fields() {
 			if !slices.Contains(allowed, field.Name) {
@@ -113,4 +99,38 @@ func validate(object api.Object, partial bool) []api.Issue {
 		}
 	}
 	return issues
+}
+
+func fileSourceRemedy(name, kind string, kindDefault bool) string {
+	flags := setFileFlags(kind)
+	if kindDefault {
+		remedy := "replace source.file in the Environment's Secret kind default with source: {contextStore: {}}, then for each Secret that inherits it run bootwright secret set --name <name> with the file flags of its type"
+		if flags != "" {
+			remedy += " (" + flags + " for " + kind + ")"
+		}
+		return remedy
+	}
+	if !api.ValidLexical("name", name) {
+		name = "<name>"
+	}
+	if flags == "" {
+		flags = "with the file flags of its type"
+	}
+	return "declare source: {contextStore: {}} and run bootwright secret set --name " + name + " " + flags
+}
+
+func setFileFlags(kind string) string {
+	switch kind {
+	case "opaque", "token", "dockerConfigJson":
+		return "--value-file <path>"
+	case "usernamePassword":
+		return "--username <username> --password-file <path>"
+	case "caBundle":
+		return "--certificate-file <path>"
+	case "tlsCertificate":
+		return "--certificate-file <path> --private-key-file <path>"
+	case "sshKeyPair":
+		return "--private-key-file <path> [--public-key-file <path>]"
+	}
+	return ""
 }

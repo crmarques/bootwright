@@ -459,13 +459,14 @@ func recordObservationFailure(ctx context.Context, execution lifecycle.Execution
 	}
 }
 
-// Unsupported names every selected installation this capability cannot
-// realize, so the operation refuses before registration.
-func (Capability) Unsupported(state *compilation.State) []string {
+// Unsupported refuses every selected installation this capability cannot
+// realize, with its reason and remedy, so the operation refuses before
+// registration.
+func (Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 	if state == nil {
 		return nil
 	}
-	return Unsupported(state.Effective())
+	return Refusals(state.Effective())
 }
 
 // Quiescent is derived rather than probed. This block owns published installer

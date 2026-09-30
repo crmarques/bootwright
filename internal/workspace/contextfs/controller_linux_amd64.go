@@ -21,6 +21,7 @@ type controllerStored struct {
 	bundles  []controllerBundleReservation
 	data     []byte
 	identity syscall.Stat_t
+	runs     bool
 }
 
 func controllerFailure(code, message string) error {
@@ -61,7 +62,7 @@ func readControllerStored(ctx context.Context, root *directory, registry context
 		return controllerStored{}, err
 	}
 	defer dir.file.Close()
-	names, err := directoryNames(dir, maxControllerStages+2)
+	names, _, err := controllerNames(dir)
 	if err != nil {
 		return controllerStored{}, err
 	}
@@ -77,6 +78,12 @@ func readControllerStored(ctx context.Context, root *directory, registry context
 			child.file.Close()
 			continue
 		}
+		if name == setupRunsName {
+			if _, err := verifyControllerRuns(ctx, dir); err != nil {
+				return controllerStored{}, err
+			}
+			continue
+		}
 		if !pendingInitialRegistryName(name) {
 			return controllerStored{}, state("controller directory contains unsupported state")
 		}
@@ -88,6 +95,9 @@ func readControllerStored(ctx context.Context, root *directory, registry context
 	if errors.Is(err, syscall.ENOENT) && registry.Controller.Mode == "initializing" {
 		if slices.Contains(names, "bundles") {
 			return controllerStored{}, state("uninitialized controller contains unattributable bundles")
+		}
+		if slices.Contains(names, setupRunsName) {
+			return controllerStored{}, state("uninitialized controller contains unattributable setup runs")
 		}
 		return controllerStored{}, nil
 	}
@@ -104,7 +114,7 @@ func readControllerStored(ctx context.Context, root *directory, registry context
 	if err := verifyControllerBundleReservations(ctx, dir, bundles); err != nil {
 		return controllerStored{}, err
 	}
-	return controllerStored{value: value, bundles: bundles, data: data, identity: identity}, nil
+	return controllerStored{value: value, bundles: bundles, data: data, identity: identity, runs: slices.Contains(names, setupRunsName)}, nil
 }
 
 func controllerSnapshot(ctx context.Context, root *directory, registry contexts.Registry, name string) (prerequisites.StorageView, controllerStored, error) {
@@ -112,7 +122,7 @@ func controllerSnapshot(ctx context.Context, root *directory, registry contexts.
 	if err != nil {
 		return prerequisites.StorageView{}, controllerStored{}, err
 	}
-	view := prerequisites.StorageView{Exists: true, Initialized: registry.Controller.Mode == "ready", State: cloneControllerState(stored.value), Areas: heldAreas(stored.bundles)}
+	view := prerequisites.StorageView{Exists: true, Initialized: registry.Controller.Mode == "ready", State: cloneControllerState(stored.value), Areas: heldAreas(stored.bundles), SetupRuns: stored.runs}
 	if name == "" {
 		return view, stored, nil
 	}
@@ -569,8 +579,8 @@ func (t *controllerTransaction) publishValue(ctx context.Context, value prerequi
 }
 
 func (s *Store) replaceControllerRecord(ctx context.Context, dir *directory, expected controllerStored, data []byte) (prerequisites.Publication, error) {
-	names, err := directoryNames(dir, maxControllerStages+2)
-	if err != nil || len(names) >= maxControllerStages+2 {
+	_, counted, err := controllerNames(dir)
+	if err != nil || counted >= maxControllerStages+2 {
 		return prerequisites.NotCommitted, state("controller publication stages exceed their bound")
 	}
 	outcome, err := s.publishStage(ctx, dir, "state.json", data, stagedPublication{
@@ -654,7 +664,31 @@ func (t *transaction) checkControllerPublication(ctx context.Context, name strin
 	return nil
 }
 
-func (t *transaction) dropControllerBinding(ctx context.Context, name string) error {
+// HostReservations names every host resource key the controller record
+// reserves for one context, which its deletion releases.
+func (t *transaction) HostReservations(ctx context.Context, name string) ([]string, error) {
+	if err := t.available(ctx); err != nil {
+		return nil, err
+	}
+	stored, err := readControllerStored(ctx, t.root, t.registry)
+	if err != nil || stored.data == nil {
+		return nil, err
+	}
+	keys := []string{}
+	for _, reservation := range stored.value.Reservations {
+		if reservation.Context == name {
+			keys = append(keys, reservation.Keys...)
+		}
+	}
+	slices.Sort(keys)
+	return slices.Compact(keys), nil
+}
+
+// dropContextClaims removes what the controller record holds for a context
+// being deleted: its binding and its host reservations. A deleted context can
+// hold neither, and a reservation it kept would refuse every other context the
+// keys it names, with no context left to release them.
+func (t *transaction) dropContextClaims(ctx context.Context, name string) error {
 	if err := t.checkControllerRecovery(ctx, name); err != nil {
 		return err
 	}
@@ -664,7 +698,8 @@ func (t *transaction) dropControllerBinding(ctx context.Context, name string) er
 	}
 	value := cloneControllerState(stored.value)
 	value.Bindings = slices.DeleteFunc(value.Bindings, func(binding prerequisites.ControllerBinding) bool { return binding.Context == name })
-	if len(value.Bindings) == len(stored.value.Bindings) {
+	value.Reservations = slices.DeleteFunc(value.Reservations, func(reservation prerequisites.HostReservation) bool { return reservation.Context == name })
+	if len(value.Bindings) == len(stored.value.Bindings) && len(value.Reservations) == len(stored.value.Reservations) {
 		return nil
 	}
 	dir, err := openControllerDirectory(t.root, t.registry)

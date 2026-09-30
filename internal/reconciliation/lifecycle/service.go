@@ -95,15 +95,20 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 		return nil, err
 	}
 	var result *PlanResult
+	var decided transition
+	var read basis
 	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
-		previewed, err := s.preview(ctx, view, selection)
+		previewed, from, durable, err := s.preview(ctx, view, selection)
 		if err != nil {
 			return err
 		}
-		result = previewed
+		result, decided, read = previewed, from, durable
 		return nil
 	})
 	if err != nil {
+		return nil, err
+	}
+	if err := s.refuseLostBinding(ctx, name, decided, read); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -113,11 +118,13 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 // verb takes, so it refuses exactly where that verb refuses and otherwise shows
 // the plan the verb then presents. Where a finalization is due it decides as
 // the verb does once that finalization is done, without performing it. It
-// stops at the decision: it allocates no identity and writes nothing.
-func (s Service) preview(ctx context.Context, view View, selection reconciliation.StageSelection) (*PlanResult, error) {
+// stops at the decision: it allocates no identity and writes nothing. It also
+// returns that decision and the durable state it was read from, before any
+// finalization it previews.
+func (s Service) preview(ctx context.Context, view View, selection reconciliation.StageSelection) (*PlanResult, transition, basis, error) {
 	verb, err := s.previewed(ctx, view)
 	if err != nil {
-		return nil, err
+		return nil, transition{}, basis{}, err
 	}
 	// A destroy accepts no stage selection, so its decision takes none, as
 	// Destroy passes none.
@@ -127,16 +134,16 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 	}
 	decided, err := s.decide(ctx, view, verb, decideSelection)
 	if err != nil {
-		return nil, err
+		return nil, transition{}, basis{}, err
 	}
 	marked, finalizes := decided, decided.finalize
 	if finalizes {
 		if decided, err = s.afterFinalization(ctx, view, verb, decideSelection, decided); err != nil {
-			return nil, err
+			return nil, transition{}, basis{}, err
 		}
 	}
 	if verb == reconciliation.Destroy && len(selection) != 0 {
-		return nil, failure("lifecycle.stage",
+		return nil, transition{}, basis{}, failure("lifecycle.stage",
 			"the next operation is a destroy, which accepts no stage selection",
 			"repeat bootwright plan without --stage")
 	}
@@ -157,7 +164,7 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 		result.Receipt = Receipt{Operation: decided.operation.ID, Verb: "plan", State: "preview", Next: nextAction(decided.operation, decided.plan, decided.states)}
 	}
 	result.Context = view.Identity()
-	return &result, nil
+	return &result, decided, marked.basis, nil
 }
 
 // previewed is the verb a preview decides as: a fresh apply over no operation

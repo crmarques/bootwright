@@ -13,8 +13,11 @@ from ansible_collections.bootwright.core.plugins.module_utils.controller_channel
     emit,
 )
 
-PHASES = ("loaded", "group", "completed")
+PHASES = ("loaded", "group", "refused", "completed")
 GROUP_STATUSES = ("running", "ok", "failed", "skipped")
+# The refusals a power run names to its runner before it fails, each one the
+# runner reports as its caller's own diagnostic (internal/machine/power).
+REFUSALS = ("identity-mismatch",)
 OUTCOMES = ("changed", "unchanged")
 REPORTED = {"On": "on", "Off": "off", "": ""}
 READINGS = {"On": "on", "Off": "off"}
@@ -111,6 +114,12 @@ class ActionModule(ActionBase):
                 if status not in GROUP_STATUSES:
                     raise ValueError("group status")
                 emit({"phase": "group", "group": str(arguments.get("group")), "status": status})
+                return {"changed": False}
+            if phase == "refused":
+                reason = arguments.get("reason")
+                if reason not in REFUSALS:
+                    raise ValueError("refusal reason")
+                emit({"phase": "refused", "reason": reason})
                 return {"changed": False}
             outcome = arguments.get("outcome")
             if outcome not in OUTCOMES:

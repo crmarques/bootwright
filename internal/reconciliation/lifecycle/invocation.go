@@ -15,7 +15,8 @@ import (
 )
 
 // MaterialFile names one operation-scoped file a bound Secret part is written
-// to. Anything not listed never leaves bounded memory.
+// to. Anything not listed never leaves bounded memory, and is not lent to the
+// run at all.
 type MaterialFile struct {
 	Name     string
 	Part     secrets.Part
@@ -48,8 +49,9 @@ func ClearProduced(produced []Produced) {
 // RunRequest is one authorized adapter invocation, in terms every capability
 // shares. Implementation selects the automation, so two implementations of one
 // kind never run each other's playbook. Material is bounded memory owned by the
-// caller; the adapter writes it only to operation-scoped files it removes, and
-// never to arguments, environment, evidence or logs.
+// caller, lent as exactly the parts Materials names; the adapter writes it only
+// to operation-scoped files it removes, and never to arguments, environment,
+// evidence or logs.
 type RunRequest struct {
 	Implementation string
 	Operation      string
@@ -74,6 +76,11 @@ type RunRequest struct {
 	// operator to read. Only the caller knows where the output is named, and a
 	// run that names none offers none.
 	OutputRemediation string
+	// Refusals are the adapter refusals this run's caller remedies by name. An
+	// adapter that names one of these reasons before it fails fails the run
+	// with the caller's diagnostic for it, which says what the refusal is about
+	// and what to change; a reason not listed here breaks the protocol.
+	Refusals map[string]error
 	// Deadline bounds the run: the capability derives it from the waits its
 	// frozen request budgets, and the runner holds it to MaxDeadline. Zero
 	// keeps the runner's default.
@@ -118,6 +125,7 @@ type Invocation struct {
 // assembles one itself, so none can widen what crosses the boundary or
 // substitute an identity the attempt did not freeze.
 func RunFor(execution Execution, invocation Invocation) RunRequest {
+	materials := append(slices.Clone(invocation.Materials), Materials(invocation.Placement)...)
 	return RunRequest{
 		Implementation:    invocation.Implementation,
 		Operation:         invocation.Operation,
@@ -125,19 +133,38 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 		Digest:            execution.Block.RequestDigest,
 		Canonical:         invocation.Canonical,
 		Placement:         invocation.Placement,
-		Materials:         append(slices.Clone(invocation.Materials), Materials(invocation.Placement)...),
+		Materials:         materials,
 		MaterialValues:    invocation.Values,
 		Outputs:           slices.Clone(invocation.Outputs),
 		Launch:            execution.Launch,
 		Bundle:            execution.Bundle,
 		Area:              execution.Area,
-		Material:          execution.Material,
+		Material:          lend(execution.Material, materials),
 		Log:               execution.Log,
 		Progress:          execution.Progress,
 		Output:            execution.Output,
 		Deadline:          invocation.Deadline,
 		OutputRemediation: attemptOutputRemediation,
 	}
+}
+
+// lend is the bound material one run is lent: of each Secret its material
+// files name, exactly the parts they name, and nothing of any other Secret. An
+// operation binds whole versions, so without it a Secret one block needs whole,
+// such as an artifact server's serving certificate and key, would reach every
+// consumer that verifies a listener against its certificate alone.
+func lend(bound map[string]secrets.Material, files []MaterialFile) map[string]secrets.Material {
+	named := map[string][]secrets.Part{}
+	for _, file := range files {
+		named[file.Secret] = append(named[file.Secret], file.Part)
+	}
+	lent := make(map[string]secrets.Material, len(named))
+	for name, parts := range named {
+		if material, ok := bound[name]; ok {
+			lent[name] = material.Lend(parts...)
+		}
+	}
+	return lent
 }
 
 // attemptOutputRemediation points an adapter failure at the output an attempt

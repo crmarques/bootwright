@@ -8,6 +8,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -18,14 +19,24 @@ import (
 // Admission refuses the same provider; this keeps the refusal for state that
 // did not pass through it.
 func Unsupported(catalog api.Catalog) []string {
-	found := substrate.Unrealizable(catalog)
+	return lifecycle.Identities(Refusals(catalog))
+}
+
+// Refusals refuses what Unsupported lists, with each object's reason and
+// remedy.
+func Refusals(catalog api.Catalog) []lifecycle.Refusal {
+	var found []lifecycle.Refusal
+	for _, unrealized := range substrate.Unrealizable(catalog) {
+		found = append(found, lifecycle.RefusalOf(unrealized.Object, unrealized.Reason, unrealized.Remediation))
+	}
 	for _, provider := range substrate.ProvidersOn(catalog, substrate.ArmLibvirt) {
 		if address := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text(); !substrate.NameableListener(address) {
-			found = append(found, provider.Identity())
+			found = append(found, lifecycle.RefusalOf(provider,
+				"an emulated BMC listens on one unicast address its controller endpoints can name, and this provider's bindAddress is not one",
+				"set spec.libvirt.bmcEmulationDefaults.bindAddress on "+provider.Identity()+" to one unicast host address"))
 		}
 	}
-	slices.Sort(found)
-	return slices.Compact(found)
+	return lifecycle.SortRefusals(found)
 }
 
 // HostRequests derives one frozen request per libvirt provider host, in

@@ -2,7 +2,9 @@ package operationstore
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
+	"regexp"
 	"slices"
 	"time"
 	"unicode/utf8"
@@ -16,11 +18,47 @@ const (
 	MaxOperationBytes = 1 << 20
 	MaxPlanBytes      = 1 << 20
 	MaxAttemptBytes   = 64 << 10
-	MaxOperations     = 4096
+	MaxOperations     = 1024
 	MaxBindings       = 64
 	maxTimestamp      = 32
 	maxIdentifier     = 256
 )
+
+// MaxEntries bounds the entries one context's operation area holds: every
+// directory and record beneath it, the index included. The Workspace area
+// refuses a record or log write unless one entry is free, and admission keeps
+// what a new operation needs within it.
+const MaxEntries = 8192
+
+// ReservedEntries is what admission leaves free beyond the first passes an
+// apply is admitted with, for the index and for the later attempts and
+// resolutions of that apply and of the removal that takes it back, since only
+// the current operation writes again.
+const ReservedEntries = 1024
+
+// FirstPassEntries is what an operation of plan holds once each of its blocks
+// ran one attempt: its directory, blocks/, logs/, plan.json, operation.json,
+// logs/operation.jsonl and logs/blocks/, and for each block its record
+// directory, block record, attempt record, log directory, attempt log and
+// retained adapter output.
+func FirstPassEntries(plan reconciliation.Plan) int {
+	return 7 + 6*len(plan.Blocks)
+}
+
+// AdmissionEntries is what the area must hold free, beside what it holds, to
+// admit an operation of plan. An apply needs its own first pass, that of the
+// removal that takes it back, which carries at most the blocks the apply
+// froze, and ReservedEntries beside both. A removal needs its own first pass
+// and the one entry every later write needs free: the apply it takes back was
+// admitted with room for that pass, and the later attempts of both share what
+// that apply left of the reserve. The removal of an admitted apply therefore
+// registers unless that apply's own later attempts used the reserve up.
+func AdmissionEntries(plan reconciliation.Plan) int {
+	if plan.Verb == reconciliation.Destroy {
+		return FirstPassEntries(plan) + 1
+	}
+	return 2*FirstPassEntries(plan) + ReservedEntries
+}
 
 type Index struct {
 	Version int    `json:"version"`
@@ -32,9 +70,30 @@ type Executable struct {
 	Commit  string `json:"commit"`
 }
 
+// OperationVersion is the operation record every registration writes. A
+// version 1 record, which an earlier build wrote, carries no Closure; it stays
+// readable, and only a continuation refuses it, because nothing says which
+// closure its effects ran in.
+const OperationVersion = 2
+
+// Closure is the Python and Ansible closure of the execution bundle an
+// operation registered with: its content identity, and the releases a refusal
+// names so an operator knows which bundle a continuation needs.
+type Closure struct {
+	Digest  string `json:"digest"`
+	Python  string `json:"python"`
+	Ansible string `json:"ansible"`
+}
+
+// maxRelease bounds each release a closure names, as a retained resolution
+// bounds its ansible-core release.
+const maxRelease = 80
+
+var closureRelease = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
+
 // Operation binds an operation to everything a continuation must re-prove
-// before it does work: the exact context, input, plan, implementations and
-// executable that registered it.
+// before it does work: the exact context, input, plan, implementations,
+// executable and execution closure that registered it.
 type Operation struct {
 	Version          int                           `json:"version"`
 	ID               string                        `json:"id"`
@@ -45,6 +104,7 @@ type Operation struct {
 	PlanDigest       string                        `json:"planDigest"`
 	AutomationDigest string                        `json:"automationDigest"`
 	Executable       Executable                    `json:"executable"`
+	Closure          *Closure                      `json:"closure,omitempty"`
 	Source           string                        `json:"source"`
 	Bindings         []string                      `json:"bindings"`
 	State            reconciliation.OperationState `json:"state"`
@@ -123,7 +183,16 @@ func validateIndex(index Index) error {
 }
 
 func validateOperation(operation Operation) error {
-	if operation.Version != 1 {
+	switch operation.Version {
+	case 1:
+		if operation.Closure != nil {
+			return recordError("a version 1 lifecycle operation carries no execution closure")
+		}
+	case OperationVersion:
+		if err := validateClosure(operation.Closure); err != nil {
+			return err
+		}
+	default:
 		return recordError("lifecycle operation version is unsupported")
 	}
 	if !reconciliation.ValidOperationID(operation.ID) {
@@ -161,6 +230,32 @@ func validateOperation(operation Operation) error {
 		return recordError("lifecycle operation bindings must be unique")
 	}
 	return validateTimestamps(operation.Created, operation.Updated)
+}
+
+// validateRegistration holds a new operation to the record version this build
+// writes, so every registration names the closure its effects run in.
+func validateRegistration(operation Operation) error {
+	if operation.Version != OperationVersion {
+		return recordError("a lifecycle operation registers only at the current record version")
+	}
+	return validateOperation(operation)
+}
+
+// validateClosure admits only a closure a registration could have taken from
+// a validated resolution, so what a refusal names is a digest and two releases
+// rather than text a record smuggled in.
+func validateClosure(closure *Closure) error {
+	if closure == nil {
+		return recordError("lifecycle operation names no execution closure")
+	}
+	decoded, err := hex.DecodeString(closure.Digest)
+	if err != nil || len(decoded) != 32 || hex.EncodeToString(decoded) != closure.Digest {
+		return recordError("lifecycle operation execution closure identity is invalid")
+	}
+	if len(closure.Python) > maxRelease || len(closure.Ansible) > maxRelease || !closureRelease.MatchString(closure.Python) || !closureRelease.MatchString(closure.Ansible) {
+		return recordError("lifecycle operation execution closure releases are invalid")
+	}
+	return nil
 }
 
 func validateBlock(record BlockRecord) error {

@@ -59,7 +59,21 @@
     image: '{{ bootwright_os_install_request.image.url }}'
     trust: '{{ managedos_install_anaconda_media_trust.trust }}'
     certificate: '{{ managedos_install_anaconda_certificate }}'
+  register: managedos_install_anaconda_inserted
+  failed_when: false
   no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# the controller's own refusal is reported here, where no credential is.
+- name: Stop at an insert the management controller did not complete
+  ansible.builtin.assert:
+    that:
+      - managedos_install_anaconda_inserted.msg is not defined
+    fail_msg: >-
+      inserting the installer image into Machine {{ bootwright_os_install_request.identity.object }}
+      failed:
+      {{ (managedos_install_anaconda_inserted.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
 
 - name: Boot a machine this substrate created from that media
   ansible.builtin.include_role:

@@ -5,6 +5,7 @@ package contextfs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"slices"
 	"strconv"
@@ -51,6 +52,28 @@ func retirable(view p.StorageView, carried, target string) []string {
 	return ids
 }
 
+// supersededResolutions is what a setup at the bound gives up of the bundles it
+// keeps: every resolution naming the bundle the receipt names, the one the
+// carry-forward reads or the new one, except the receipt's own, the new one
+// and the latest naming each of them.
+func supersededResolutions(view p.StorageView, carried string, definition p.Definition) []string {
+	kept := []string{view.State.Receipt.CatalogDigest, carried, definition.CatalogDigest}
+	needed := []string{definition.ResolutionDigest}
+	if view.State.Receipt.Definition != nil {
+		needed = append(needed, view.State.Receipt.Definition.ResolutionDigest)
+	}
+	var digests []string
+	for index, retained := range view.State.RetainedDefinitions {
+		if !slices.Contains(kept, retained.CatalogDigest) || slices.Contains(needed, retained.ResolutionDigest) {
+			continue
+		}
+		if slices.ContainsFunc(view.State.RetainedDefinitions[index+1:], func(later p.Definition) bool { return later.CatalogDigest == retained.CatalogDigest }) {
+			digests = append(digests, retained.ResolutionDigest)
+		}
+	}
+	return digests
+}
+
 // publishRevision drives one setup of a resolution through the store in the
 // order setup takes: with purge, room first, then the new receipt under its
 // durable intent, the bundle it names, and completion. Each step skips what an
@@ -70,6 +93,11 @@ func publishRevision(t *testing.T, store *Store, definition p.Definition, carrie
 				// the snapshot must already present the areas as gone.
 				if held := len(tx.Snapshot().Areas); held != len(view.Areas)-len(ids) {
 					return errors.New("the snapshot still presents " + strconv.Itoa(held) + " areas after a retirement")
+				}
+			}
+			if digests := supersededResolutions(tx.Snapshot(), carried, definition); purge && len(digests) != 0 {
+				if err := tx.RetireResolutions(ctx, digests); err != nil {
+					return err
 				}
 			}
 			if _, err := tx.Publish(ctx, revisionReceipt(t, definition)); err != nil {
@@ -316,13 +344,75 @@ func TestARetryAfterAFailedSetupAtTheBoundCompletesAfterRetiringSupersededAreas(
 	}
 }
 
+// sameBundleRevision is what a retry after a failed setup solves against the
+// package inventory attempt names: the synthetic resolution's bundle under a
+// resolution of its own.
+func sameBundleRevision(t *testing.T, attempt int) p.Definition {
+	t.Helper()
+	base := syntheticResolution(t)
+	native := *base.Native
+	native.BeforeSHA256 = fmt.Sprintf("%064x", attempt+1)
+	native.AfterSHA256 = native.BeforeSHA256
+	native, err := p.CanonicalNativePlan(native)
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, err := p.NewResolvedDefinition(*base.Bootstrap, native)
+	if err != nil || definition.CatalogDigest != base.CatalogDigest || definition.ResolutionDigest == base.ResolutionDigest {
+		t.Fatalf("attempt %d does not name the same bundle under a new resolution: %v", attempt, err)
+	}
+	return definition
+}
+
+// Each retry after a failed setup can name the bundle the failed receipt
+// keeps under a new resolution, until every resolution the host may retain
+// names that one bundle. The store refuses the next retry's receipt, admits
+// the retirement of every resolution of that bundle but the receipt's own,
+// retires no area, and the retry then publishes and completes over it.
+func TestARetryAtTheResolutionBoundOfOneBundleCompletesAfterRetiringItsSupersededResolutions(t *testing.T) {
+	store, _ := fixture(t)
+	var resolutions []string
+	for attempt := range maxControllerBundles {
+		definition := sameBundleRevision(t, attempt)
+		failRevision(t, store, definition)
+		resolutions = append(resolutions, definition.ResolutionDigest)
+	}
+	bundle, next := sameBundleRevision(t, 0).CatalogDigest, sameBundleRevision(t, maxControllerBundles)
+	if err := publishRevision(t, store, next, "", false); err == nil {
+		t.Fatal("a resolution beyond the bound was admitted")
+	}
+	if receipt := controllerReceipt(t, store); receipt.Status != "failed" || receipt.Definition.ResolutionDigest != resolutions[len(resolutions)-1] {
+		t.Fatalf("the refused retry moved the failed receipt: %#v", receipt)
+	}
+	if err := publishRevision(t, store, next, "", true); err != nil {
+		t.Fatalf("the retry did not complete after retiring the superseded resolutions: %#v", diagnostics.Of(err))
+	}
+	if receipt := controllerReceipt(t, store); receipt.Status != "complete" || receipt.Definition.ResolutionDigest != next.ResolutionDigest {
+		t.Fatalf("the retry did not become the receipt: %#v", receipt)
+	}
+	readableBundle(t, store, bundle, "after the retry")
+	err := store.ReadController(context.Background(), "", func(view p.StorageView) error {
+		var retained []string
+		for _, definition := range view.State.RetainedDefinitions {
+			retained = append(retained, definition.ResolutionDigest)
+		}
+		if !slices.Equal(view.Areas, []p.HeldArea{{ID: bundle}}) || !slices.Equal(retained, []string{resolutions[len(resolutions)-1], next.ResolutionDigest}) {
+			t.Fatalf("areas=%#v resolutions=%v", view.Areas, retained)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // A receipt naming a bundle the store could never reserve would stay pending
 // with nothing able to complete or replace it. The store refuses it while the
 // record still holds the completed receipt, however the bound was reached.
 func TestAReceiptWhoseBundleCannotBeReservedIsRefused(t *testing.T) {
 	store, _ := fixture(t)
 	for digit := range maxControllerBundles {
-		publishBundle(t, store, strings.Repeat(strconv.FormatInt(int64(digit), 16), 64), nil)
+		publishBundle(t, store, strings.Repeat(strconv.FormatInt(int64(digit), 16), 64))
 	}
 	before := controllerReceipt(t, store)
 	value := syntheticControllerState(t, p.SetupContext{})

@@ -32,7 +32,21 @@
     ca_data: '{{ machine_power_redfish_ca_data }}'
     media: false
   register: machine_power_redfish_before
+  failed_when: false
   no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# each of the controller's own refusals is reported by a step of its own,
+# where no credential is.
+- name: Stop at a read the management controller did not answer
+  ansible.builtin.assert:
+    that:
+      - machine_power_redfish_before.msg is not defined
+    fail_msg: >-
+      reading the power state of Machine/{{ bootwright_machine_power_request.identity.object }}
+      failed:
+      {{ (machine_power_redfish_before.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
 
 - name: Publish the state that was read
   bootwright.core.machine_power_protocol:
@@ -54,9 +68,33 @@
     verify: '{{ bootwright_machine_power_request.controller.tlsVerify }}'
     ca_data: '{{ machine_power_redfish_ca_data }}'
   register: machine_power_redfish_identity
+  failed_when: false
   when: >-
     (bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length > 0)
     or (bootwright_machine_power_material.pinnedSerialBase64 | default('') | length > 0)
+  no_log: true
+
+- name: Stop at an identity read the management controller did not answer
+  ansible.builtin.assert:
+    that:
+      - machine_power_redfish_identity.msg is not defined
+    fail_msg: >-
+      reading the identity of Machine/{{ bootwright_machine_power_request.identity.object }}
+      failed, so no power request was sent:
+      {{ (machine_power_redfish_identity.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
+
+# The runner is told of the refusal before the run fails, so the operator's
+# diagnostic names the Machine, the refusal and its remedy rather than only the
+# output below; the identities themselves stay in that output.
+- name: Name the refusal of a machine that answers as another system to the runner
+  bootwright.core.machine_power_protocol:
+    phase: refused
+    reason: identity-mismatch
+  when: >-
+    ((bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length > 0)
+    or (bootwright_machine_power_material.pinnedSerialBase64 | default('') | length > 0))
+    and not (machine_power_redfish_answers_as_pinned | bool)
   no_log: true
 
 # The refusal prints what a management controller reported, then or now, and
@@ -67,14 +105,7 @@
 - name: Refuse a machine that answers as another system
   ansible.builtin.assert:
     that:
-      - >-
-        (bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length == 0)
-        or ((machine_power_redfish_identity.observation.uuid | default('') | trim | lower)
-        == (bootwright_machine_power_material.pinnedUUIDBase64 | b64decode | trim | lower))
-      - >-
-        (bootwright_machine_power_material.pinnedSerialBase64 | default('') | length == 0)
-        or ((machine_power_redfish_identity.observation.serial | default('') | trim)
-        == (bootwright_machine_power_material.pinnedSerialBase64 | b64decode | trim))
+      - machine_power_redfish_answers_as_pinned | bool
     quiet: true
     fail_msg: >-
       Machine/{{ bootwright_machine_power_request.identity.object }} answers at
@@ -113,7 +144,18 @@
     ca_data: '{{ machine_power_redfish_ca_data }}'
     media: false
   register: machine_power_redfish_after
+  failed_when: false
   no_log: true
+
+- name: Stop at a settled read the management controller did not answer
+  ansible.builtin.assert:
+    that:
+      - machine_power_redfish_after.msg is not defined
+    fail_msg: >-
+      reading the power state Machine/{{ bootwright_machine_power_request.identity.object }}
+      settled at failed:
+      {{ (machine_power_redfish_after.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
 
 - name: Publish bounded power evidence
   bootwright.core.machine_power_protocol:

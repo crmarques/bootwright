@@ -44,6 +44,21 @@ func (m Material) Parts() []Part {
 }
 
 func (m Material) Part(part Part) ([]byte, bool) { b, ok := m.parts[part]; return slices.Clone(b), ok }
+
+// Lend narrows this material to the named parts for a consumer that reads only
+// those. The view shares these bytes rather than copying them, so it leaves no
+// copy behind and clearing this material clears it too; only the lender clears
+// it. A part this material does not hold stays absent.
+func (m Material) Lend(parts ...Part) Material {
+	lent := Material{parts: make(map[Part][]byte, len(parts))}
+	for _, part := range parts {
+		if value, ok := m.parts[part]; ok {
+			lent.parts[part] = value
+		}
+	}
+	return lent
+}
+
 func (m Material) Size() int {
 	n := 0
 	for _, b := range m.parts {
@@ -73,6 +88,8 @@ type Generation struct {
 	Bytes        int      `json:"bytes"`
 }
 
+// FileSource is always empty now that the file source is retired. It stays in
+// the Declaration encoding every stored version's fingerprint was computed over.
 type FileSource struct {
 	Path        string `json:"path"`
 	Certificate string `json:"certificate"`

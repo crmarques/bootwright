@@ -118,13 +118,13 @@ func conclude(run elevationRun, stderr *startFilter) Outcome {
 	case run.json && stderr.started:
 		return Outcome{ExitCode: 1, Diagnostic: &diagnostics.Diagnostic{Severity: "error", Code: "runtime.internal", Message: "the elevated command exited with status " + strconv.Itoa(run.code) + " without a result"}}
 	case run.json:
-		return authorizationRefusal()
+		return authorizationRefusal(nil)
 	case stderr.started || stderr.other:
 		return Outcome{ExitCode: run.code}
 	case run.interrupted:
 		return interruption()
 	case run.code == 1 && stderr.count != 0:
-		return authorizationRefusal()
+		return authorizationRefusal(stderr.held)
 	}
 	return Outcome{ExitCode: run.code}
 }
@@ -133,8 +133,33 @@ func interruption() Outcome {
 	return Outcome{ExitCode: 130, Diagnostic: &diagnostics.Diagnostic{Severity: "error", Code: "runtime.interrupted", Message: "operation interrupted"}}
 }
 
-func authorizationRefusal() Outcome {
-	return Outcome{ExitCode: 1, Diagnostic: &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: "sudo authorization could not be obtained; authenticate to sudo or run Bootwright as root"}}
+// environmentRefusal opens the line sudo's sudoers policy logs when the rule
+// that matched lets no command-line assignment through (validate_env_vars in
+// plugins/sudoers/env.c). The supervisor runs sudo under the C locale, so the
+// line is never translated.
+const environmentRefusal = "sorry, you are not allowed to set the following environment variables"
+
+// authorizationRefusal reports that sudo refused before the child started. The
+// report replaces the lines a human invocation held, so it carries them as its
+// reason, and a rule that refused the forwarded route names the tag it lacks.
+func authorizationRefusal(held []byte) Outcome {
+	message := "sudo authorization could not be obtained"
+	remediation := "authenticate to sudo, or run Bootwright as root"
+	var reasons []string
+	for _, line := range strings.Split(string(held), "\n") {
+		reason := strings.TrimPrefix(line, sudoLinePrefix)
+		if reason == "" {
+			continue
+		}
+		reasons = append(reasons, reason)
+		if strings.HasPrefix(reason, environmentRefusal) {
+			remediation = "add the SETENV tag to the sudoers rule that runs Bootwright, or run Bootwright as root"
+		}
+	}
+	if len(reasons) != 0 {
+		message += ": " + strings.Join(reasons, "; ")
+	}
+	return Outcome{ExitCode: 1, Diagnostic: &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: message, Remediation: remediation}}
 }
 
 // Admit verifies the invoking account before any root state is touched and

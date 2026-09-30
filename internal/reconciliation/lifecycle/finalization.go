@@ -14,32 +14,30 @@ import (
 // finalization marks an operation whose block records already prove it
 // complete while its record, evidence, reservations or Secret bindings do not
 // yet say so, which is what an invocation interrupted between its last outcome
-// and its last write leaves. A running or unknown operation or a failed
-// removal is finalized only by its own verb, because the other verb over it
-// decides for itself: a destroy supersedes an incomplete apply and an apply
-// refuses an incomplete destroy. An unknown one whose blocks are all done has
-// a record that lags behind them, as a removal stopped after its resolution
-// proved an unknown apply's block and before it recorded the apply leaves it,
-// so its blocks prove completion exactly as a running one's do. A failed
-// removal whose blocks are all done lags the same way: a removal superseding
-// it records nothing of it before it resolves the running block a failed retry
-// start left, so one stopped after that resolution leaves it failed beside
-// done blocks. A completed one is finalized under either verb, since only its
-// own bookkeeping is left. Records that hold a block that is not done prove no
-// completion, so they are never finalized, and neither is a failed apply,
-// which records failed only while a block does. Anything else returns no mark
-// and keeps its decision.
+// and its last write leaves. A running, unknown or failed operation is
+// finalized only by its own verb, because the other verb over it decides for
+// itself: a destroy supersedes an incomplete apply, removing every block it
+// started, and an apply refuses an incomplete destroy. An unknown one whose
+// blocks are all done has a record that lags behind them, as a removal stopped
+// after its resolution proved an unknown apply's block and before it recorded
+// the apply leaves it, so its blocks prove completion exactly as a running
+// one's do. A failed removal whose blocks are all done lags the same way: a
+// removal superseding it records nothing of it before it resolves the running
+// block a failed retry start left, so one stopped after that resolution leaves
+// it failed beside done blocks. A failed apply whose blocks are all done lags
+// as well, as a removal an executable before 4513e123 stopped after resolving
+// the running block of a failed retry start left it, because that executable
+// did not first record the apply in the state its blocks gave it. A completed
+// one is finalized under either verb, since only its own bookkeeping is left.
+// Records that hold a block that is not done prove no completion, so they are
+// never finalized. Anything else returns no mark and keeps its decision.
 func finalization(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (transition, error) {
 	if pendingRemains(frozen, states) {
 		return transition{}, nil
 	}
 	switch operation.State {
-	case reconciliation.OperationRunning, reconciliation.OperationUnknown:
+	case reconciliation.OperationRunning, reconciliation.OperationUnknown, reconciliation.OperationFailed:
 		if operation.Verb != verb {
-			return transition{}, nil
-		}
-	case reconciliation.OperationFailed:
-		if operation.Verb != reconciliation.Destroy || verb != reconciliation.Destroy {
 			return transition{}, nil
 		}
 	case reconciliation.OperationDone:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from ansible_collections.bootwright.core.plugins.action import machine_power_protocol
@@ -137,3 +139,31 @@ def test_a_refusal_that_reports_no_state_at_all_is_unknown():
 def test_a_reading_outside_its_own_grammar_is_refused(published):
     with pytest.raises(ValueError):
         machine_power_protocol.reading_evidence_for(published)
+
+
+def run(values, monkeypatch):
+    published = []
+    monkeypatch.setattr(machine_power_protocol, "emit", lambda message, **kwargs: published.append(message))
+    module = machine_power_protocol.ActionModule.__new__(machine_power_protocol.ActionModule)
+    module._task = SimpleNamespace(args=values)
+    return module.run(task_vars={}), published
+
+
+# A power run names to its runner the one refusal the power service remedies
+# by name, so the operator's diagnostic carries the Machine and the remedy.
+def test_the_identity_refusal_is_named_to_the_runner(monkeypatch):
+    result, published = run({"phase": "refused", "reason": "identity-mismatch"}, monkeypatch)
+    assert result == {"changed": False}
+    assert published == [{"phase": "refused", "reason": "identity-mismatch"}]
+
+
+# A reason the runner has no remedy for would break its protocol, so the task
+# fails before it publishes anything.
+@pytest.mark.parametrize("reason", [None, "", "release-stamp", "identity-mismatch "])
+def test_a_refusal_the_power_service_does_not_name_is_never_published(reason, monkeypatch):
+    values = {"phase": "refused"}
+    if reason is not None:
+        values["reason"] = reason
+    result, published = run(values, monkeypatch)
+    assert result == {"failed": True, "msg": "the machine power result could not be published"}
+    assert not published

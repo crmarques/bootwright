@@ -13,3 +13,16 @@ machine_power_redfish_attempts: 150
 machine_power_redfish_ca_data: >-
   {{ lookup('ansible.builtin.file', bootwright_machine_power_material.controllerCA)
      if bootwright_machine_power_material.controllerCA | default('') | length > 0 else '' }}
+
+# Whether the machine answers as the system this context's current apply
+# proved: each identity the pin records is the one its controller reports now.
+# It is read only once that identity has been read (tasks/power.yml), and both
+# the refusal the runner is told of and the refusal the run prints decide from
+# this one comparison.
+machine_power_redfish_answers_as_pinned: >-
+  {{ ((bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length == 0)
+      or ((machine_power_redfish_identity.observation.uuid | default('') | trim | lower)
+          == (bootwright_machine_power_material.pinnedUUIDBase64 | b64decode | trim | lower)))
+     and ((bootwright_machine_power_material.pinnedSerialBase64 | default('') | length == 0)
+      or ((machine_power_redfish_identity.observation.serial | default('') | trim)
+          == (bootwright_machine_power_material.pinnedSerialBase64 | b64decode | trim))) }}

@@ -50,11 +50,36 @@
     status: ok
   no_log: true
 
-- name: Observe what this installation already recorded
+# Every read of the cluster goes through the copy of the installer's
+# kubeconfig this installation keeps, which follows the installer's file only
+# while that file is whole, within the inspection's bound and names the same
+# identity. It is taken here, before any effect, so every later read of this
+# attempt and of any resolution after it has one to go through.
+- name: Keep the installer's kubeconfig while it is whole and observe what this installation already recorded
   bootwright.core.containercluster_install_inspect:
     request: '{{ bootwright_cluster_install_request }}'
+    keep: true
   register: containercluster_install_agent_before
   no_log: true
+
+# Without a kept copy naming this build's identity no read of the cluster can
+# prove it, so booting a node would start an installation nothing could ever
+# prove complete. This refuses before the first effect instead.
+- name: Refuse an installation with no whole kubeconfig to read its cluster through
+  ansible.builtin.fail:
+    msg: >-
+      the work area of cluster {{ bootwright_cluster_install_request.identity.cluster }}
+      holds no whole administrator kubeconfig naming this installation's
+      identity to read the cluster through: either the copy an earlier attempt
+      kept names none, or none was kept and the installer's own file is
+      missing, cut short by an interrupted write, larger than the 64 KiB the
+      inspection reads, or not in the form the installer writes. Nothing was
+      changed. Destroy the
+      cluster's installation first: bootwright destroy --context
+      {{ bootwright_cluster_install_request.identity.context }} ejects its
+      media and discards the work area, and the apply after it builds the image
+      afresh
+  when: (containercluster_install_agent_before.observation.identity | default('')) | length == 0
 
 - name: Read the cluster and its nodes back
   ansible.builtin.import_tasks: state.yml
@@ -198,6 +223,17 @@
     phase: group
     group: release-media
     status: ok
+  no_log: true
+
+# The installation wait rewrites the installer's file, prepending the router CA
+# to its certificate authority. The kept copy follows that rewrite only when it
+# is whole, within the bound and names the same identity, so the access offered
+# for custody below carries it, while a file the rewrite cut short or grew past
+# the bound leaves the copy as it was.
+- name: Keep the kubeconfig the installer's waits left while it is whole
+  bootwright.core.containercluster_install_inspect:
+    request: '{{ bootwright_cluster_install_request }}'
+    keep: true
   no_log: true
 
 # The identity is the admin client certificate the image was built with, so

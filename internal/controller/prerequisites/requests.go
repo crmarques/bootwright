@@ -67,6 +67,11 @@ type Report struct {
 	// Warnings are what dependency resolution read but did not refuse, such as
 	// a publisher page of a newer Index API minor. They never change Outcome.
 	Warnings []diagnostics.Diagnostic
+	// LogLocation names on this host the directory of the setup run that kept
+	// what this invocation's controller Ansible printed. It is empty when no
+	// Ansible started or its output could not be retained, and never changes
+	// Outcome.
+	LogLocation string
 }
 
 // PendingScope names the narrowest scope that has an unmet check, so a result

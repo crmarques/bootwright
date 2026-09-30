@@ -63,12 +63,12 @@ creates the serving certificate, the fleet key and `metal-01-host-key`.
 account, until `secret set` stores it with `--username` and `--password-stdin`;
 nothing in this block reads it.
 
-`plan` refuses with `lifecycle.unsupported`: a delivered host key would be
-readable from the publicly served installer image, and the remediation names
-`Machine/metal-01`. `apply` refuses with the same code before it asks for
-confirmation or registers anything, naming `Machine/metal-01` as what this
-executable cannot realize; a `--stage` selection refuses the same way. `status`
-still lists every managed service as pending, because nothing was registered.
+`plan` refuses with `lifecycle.unsupported` for `Machine/metal-01`: a delivered
+host key would be readable from the publicly served installer image, and the
+remediation names `Machine/metal-01`. `apply` refuses with the same diagnostic
+before it asks for confirmation or registers anything; a `--stage` selection
+refuses the same way. `status` still lists every managed service as pending,
+because nothing was registered.
 `TestLabBaremetalExampleRefusesItsInstallation` holds that refusal in-tree.
 
 A run of this block is an observation, not B73's operator gate: the gate is the

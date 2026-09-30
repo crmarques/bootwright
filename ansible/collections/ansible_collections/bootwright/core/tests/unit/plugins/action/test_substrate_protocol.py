@@ -233,6 +233,21 @@ def test_a_tree_left_without_its_marker_is_content_a_removal_still_takes_back():
     assert managedos_install_protocol.presence(install_arguments(), DIGEST)["treeContent"] is False
 
 
+# An apply killed part way leaves the staging tree beneath the served root and
+# its work area. Each is carried as evidence, keeps a removal's absence
+# unproved and is named, so a removal that did not take one back fails.
+@pytest.mark.parametrize("remnant", ["treeStaging", "work"])
+def test_what_a_killed_apply_leaves_is_content_a_removal_still_takes_back(remnant):
+    left = {"observation": {"image": False, "tree": False, remnant: True}}
+    assert managedos_install_protocol.presence(dict(install_arguments(), **left), DIGEST)[remnant] is True
+    assert managedos_install_protocol.presence(install_arguments(), DIGEST)[remnant] is False
+    evidence = managedos_install_protocol.absence(left, DIGEST)
+    assert not evidence["postcondition"]
+    assert evidence[remnant] is False
+    assert managedos_install_protocol.remaining(left) == [remnant]
+    assert managedos_install_protocol.absence({"observation": {remnant: False}}, DIGEST)["postcondition"]
+
+
 def test_an_unmet_installation_names_what_is_unproved():
     assert managedos_install_protocol.unproved(
         managedos_install_protocol.presence(install_arguments(), DIGEST)

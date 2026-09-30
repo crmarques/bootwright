@@ -85,7 +85,9 @@ and `fromMedia` name entries of the media store. A profile selecting
 `initialPassword`, `diskEncryption`, an enabled `fips`, a top-level
 `subscription`, `fromSubscription`, `mirror` or `templateClone` refuses before
 registration. These shapes carry secret bytes or effects this contract does not
-prove. A Machine whose installation delivers private material refuses
+prove. Every refusal names the Machine that selects the installation, with the
+reason and remedy the [refusal table](#refusal-table) states. A Machine whose
+installation delivers private material refuses
 `disable-verification` virtual-media trust before registration, ahead of its
 [delivered-key refusal](#physical-installation), because a controller that
 fetches the installer without verifying the artifact server boots whatever
@@ -106,9 +108,8 @@ arm stays refused until it is separately specified.
 
 The Environment's
 [rescue declaration](api/environment.md#lifecycle-rescue-declaration) is
-admitted and validated, and no lifecycle yet requires or consumes it. Whether
-it becomes a requirement, a refusal or is retired is an open owner decision,
-recorded in [B40](milestones/m1.md#b40).
+refused at admission, because no rescue journey exists yet; the schema keeps
+it for a later one, and no lifecycle requires or consumes it.
 
 **Derived installation.** Planning derives the complete Kickstart from
 effective state alone: text mode; the accepted license; the install source;
@@ -151,6 +152,13 @@ the media check removed from every boot entry; and, for `hostedTree`, the DVD's
 complete tree at `os/<profile>/tree/`, copied once from the frozen image with
 its `.treeinfo` and repositories intact, identified by the DVD's digest, and
 published by atomic rename so a fetching installer never sees a partial tree.
+The tree is extracted beside that path, at `os/<profile>/tree.staging`, and the
+image is built in a work area outside the served root. An attempt stopped part
+way leaves either behind, and a removal stopped part way leaves the tree's
+directory without its `.treeinfo`, which is never a complete tree and which the
+rename cannot replace. An apply therefore clears its work area before its first
+write, and, when it publishes the tree, the staging tree and any such tree
+directory before it extracts.
 The tooling that builds the image and extracts the tree is a prerequisite of
 the artifact server's placement Machine: on the controller it is a
 [context prerequisite](controller.md#the-controller-stage) the controller block
@@ -230,8 +238,12 @@ realization to be destroyed and applied again. A powered-off Machine with no
 marker installs.
 
 **Inverse.** Destroy removes the published image, the private subtree when one was
-published, and, when no other block of the same operation still needs it, the
-published package tree, then proves each absent. The installed system leaves
+published, the work area, and, when no other block of the same operation still
+needs it, the published package tree with the staging tree beside it, then
+proves each absent. It withdraws the tree's `.treeinfo` before the rest of the
+tree, so a removal stopped part way never leaves the marker over a partial
+tree, which the inspection and the next apply would take as published whole.
+The installed system leaves
 the host with the Machine's disks, so this block consumes no authorization of
 its own on removal. Destroy touches no management controller: a virtual-media
 trust an interrupted attempt left set, a certificate imported or verification
@@ -257,8 +269,12 @@ none left is its completion; the whole completion, which content alone never
 proves, is positive no effect; and any content left is a positive partial
 realization. The package tree counts as
 content left whenever anything is at its published path, because a removal
-stopped while it deleted the tree can leave the directory without the
-`.treeinfo` that marks it complete.
+withdraws the `.treeinfo` that marks it complete before the rest, so one
+stopped while it deleted the tree leaves the directory without it. Anything at
+the staging tree's path counts too, since it is served part way extracted. The
+work area is never served, so an
+apply that left only it still had no effect, but a removal takes it back and
+counts it as left.
 
 **Quiescence and cancellation.** This block owns published installer content,
 which an installed Machine no longer reads, so its quiescence follows the
@@ -335,6 +351,32 @@ This is the private path the rest of this contract was shaped to admit. The
 profile arms that carry secret bytes remain refused, and promoting one is now a
 question of what it delivers through this path rather than of whether a path
 exists.
+
+### Refusal table
+
+Each row is one refusal of the installation capability, and
+`TestManagedOSRefusalTableMatchesUnsupported` holds its `Unsupported` to it.
+The refused object is always the Machine whose installation is refused; a
+target row is checked before a profile row, and only the first a Machine meets
+is reported. Its reason and remedy are the diagnostic's message and
+remediation, in which `<machine>` is that Machine, `<profile>` the
+`MachineInstallProfile` it selects and `<hints>` every root-device hint it
+declares other than `deviceName`, as `spec.os.install.rootDeviceHints.<hint>`
+in name order, separated by `, `.
+
+| Refusal | Path | Reason | Remedy |
+| --- | --- | --- | --- |
+| A physical Machine naming no root device | no `spec.os.install.rootDeviceHints.deviceName` on a Machine on a `baremetal` provider, a `wwn` alone included | `a physical installation erases only a root device named by path, and the Machine names none` | `set spec.os.install.rootDeviceHints.deviceName on <machine>; a wwn-only selection is not yet supported` |
+| A root-device hint other than deviceName | any `spec.os.install.rootDeviceHints` field but `deviceName` | `a managed-OS installation selects its root disk by deviceName alone and cannot carry the other root-device hints the Machine declares` | `remove <hints> from <machine>` |
+| An unverified fetch of private material | `spec.hardware.management.bmc.virtualMedia.tls.trust: disable-verification` on a Machine whose installation delivers private material | `a Machine that delivers private material through its installation cannot let its controller fetch without verifying the artifact server` | `declare hardware.management.bmc.virtualMedia.tls.trust: import-certificate on <machine>, or established when its controller already trusts the server` |
+| A delivered host key | a Machine on a `baremetal` provider, whose installation delivers its host key | `a delivered host key would be readable from the publicly served installer image` | `physical managed-OS installation is disabled until private delivery is repaired; remove <machine> from the selected Environment or install its operating system outside Bootwright` |
+| Another installer | a profile's `spec.installer` without `anaconda`, such as `templateClone` | `this executable installs an operating system only through the anaconda installer, which the install profile does not select` | `select spec.installer.anaconda on <profile>` |
+| A package mirror | a profile's `spec.installer.anaconda.packageSource.mirror` | `the install profile selects spec.installer.anaconda.packageSource.mirror, which carries secret bytes or effects this executable does not prove` | `remove spec.installer.anaconda.packageSource.mirror from <profile>` |
+| Packages from a subscription | a profile's `spec.installer.anaconda.packageSource.fromSubscription` | `the install profile selects spec.installer.anaconda.packageSource.fromSubscription, which carries secret bytes or effects this executable does not prove` | `remove spec.installer.anaconda.packageSource.fromSubscription from <profile>` |
+| A subscription | a profile's `spec.subscription` | `the install profile selects spec.subscription, which carries secret bytes or effects this executable does not prove` | `remove spec.subscription from <profile>` |
+| An initial password | a profile's `spec.customizations.ssh.initialPassword` | `the install profile selects spec.customizations.ssh.initialPassword, which carries secret bytes or effects this executable does not prove` | `remove spec.customizations.ssh.initialPassword from <profile>` |
+| Disk encryption | a profile's `spec.customizations.security.diskEncryption` | `the install profile selects spec.customizations.security.diskEncryption, which carries secret bytes or effects this executable does not prove` | `remove spec.customizations.security.diskEncryption from <profile>` |
+| FIPS | a profile's `spec.customizations.security.fips.enabled: true` | `the install profile enables FIPS, which carries effects this executable does not prove` | `disable spec.customizations.security.fips on <profile>` |
 
 ## Adapter boundary
 

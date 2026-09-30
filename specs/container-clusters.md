@@ -28,30 +28,55 @@ mode through direct access, whose nodes are all virtual Machines on a realized
 substrate with `os.provided: false` and no install profile. A single-node
 cluster resolves its three endpoint slots from that node; a multi-node cluster
 resolves them from authored or load-balancer addresses. Every other declaration
-refuses before operation registration with one diagnostic naming the cluster:
-`okd`, `disconnected` mode, a release pinned by image alone, an installation
-proxy, `security.fips`, `security.diskEncryption`,
-`install.servingCertificates`, `install.registries`, a multi-node cluster on
-the `vsphere` or `external` platform (one on `baremetal`, on `none` or with no
-declared platform is accepted), a node on a substrate this
-executable does not realize, a node whose management controller would have
-to be taught a new certificate, a virtual node whose provider host is not the
-Machine the selected artifact server is placed on, because its emulated
-controller fetches the private [boot image](#boot-media) without verifying the
-server, a node that selects an install profile,
-because managed OS and the cluster installer would both write its disk, a
-node whose realized target is physical, because physical cluster installation
-is not yet qualified ([B67](milestones/m3.md#b67) lifts that refusal after
-in-tree tests and an emulated rehearsal, with real-hardware acceptance before
-support is claimed), a node whose
-`deviceName` the agent installer cannot name, which is anything but
-`/dev/<name>` or `/dev/disk/by-path/<name>`, and a node
-whose `minSizeGigabytes` exceeds 9007199254740991, the largest integer the
-frozen input carries exactly. The placement, install-profile and physical-node
-refusals and the two root-device refusals name the bound Machine in the
-remediation the refusal carries, because it is what the operator changes. Node
-`labels` and `taints` are accepted and reach no installer input, because they
-are post-installation placement intent rather than install configuration.
+refuses before operation registration, in `plan` as in `apply`, with one
+diagnostic whose object is the cluster and which carries why it is refused and
+the remedy, as the [refusal table](#refusal-table) states row by row. A
+multi-node cluster on `baremetal`, on `none` or with no declared platform is
+accepted. A node whose realized target is physical refuses because physical
+cluster installation is not yet qualified ([B67](milestones/m3.md#b67) lifts
+that refusal after in-tree tests and an emulated rehearsal, with real-hardware
+acceptance before support is claimed). A virtual node whose provider host is
+not the Machine the selected artifact server is placed on refuses because its
+emulated controller fetches the private [boot image](#boot-media) without
+verifying the server. The placement, install-profile and physical-node refusals
+and the two root-device refusals name the bound Machine in the remediation the
+refusal carries, because it is what the operator changes. Node `labels` and
+`taints` are accepted and reach no installer input, because they are
+post-installation placement intent rather than install configuration.
+
+### Refusal table
+
+Each row is one refusal of both blocks' capabilities, and
+`TestContainerClusterRefusalTableMatchesUnsupported` holds their `Unsupported`
+to it. Its reason and remedy are the diagnostic's message and remediation, in
+which `<cluster>` is the refused cluster, `<machine>` the Machine of the node
+refused, `<provider>` and `<provider host>` that Machine's provider and the
+Machine the provider runs on, and `<server>` and `<server host>` the selected
+artifact server and its placement Machine.
+
+| Refusal | Path | Reason | Remedy |
+| --- | --- | --- | --- |
+| An OKD cluster | `spec.distribution.type: okd` | `this executable installs no OKD cluster` | `correct <cluster>` |
+| A release pinned by image alone | `spec.distribution.release` without `version` | `a cluster pinned to a release image alone names no version for its installer to match` | `correct <cluster>` |
+| A disconnected cluster | `spec.install.mode: disconnected` | `this executable installs no disconnected cluster` | `correct <cluster>` |
+| A FIPS cluster | `spec.security.fips.enabled: true` | `a FIPS cluster needs an installer this executable does not publish` | `correct <cluster>` |
+| An installation proxy | `spec.install.proxy` other than `direct` | `this executable installs no cluster through a proxy` | `correct <cluster>` |
+| Disk encryption | `spec.security.diskEncryption` | `this executable does not install security.diskEncryption` | `correct <cluster>` |
+| Serving certificates | `spec.install.servingCertificates` | `this executable does not install install.servingCertificates` | `correct <cluster>` |
+| A registry policy | `spec.install.registries` | `this executable does not install install.registries` | `correct <cluster>` |
+| Several nodes on another platform | `spec.install.platform.type: vsphere` or `external` with more than one of `spec.nodes` | `this executable installs no multi-node cluster on the declared platform` | `correct <cluster>` |
+| More nodes than the run ceiling fits | more than 9 `spec.nodes`, whose installation [deadline](#installation) passes the 6-hour ceiling | `installing <nodes> nodes needs a run deadline of <deadline>, past the 6h0m0s every adapter run is held to` | `declare at most 9 nodes on <cluster>` |
+| A node with an install profile | `spec.os.installProfileRef` on a node's Machine | `a declared node selects an install profile, so two installations would write its disk` | `remove spec.os.installProfileRef from <machine> or drop it from <cluster>` |
+| A node on an unrealized substrate | a node's Machine whose provider declares a substrate this executable does not realize | `a declared node is on a substrate this executable does not realize` | `correct <cluster>` |
+| A physical node | a node's Machine on a `baremetal` provider | `physical cluster nodes are not supported until an emulated rehearsal qualifies them` | `<machine> is physical; declare <cluster> on virtual nodes` |
+| A root device the installer cannot name | a node's `spec.os.install.rootDeviceHints.deviceName` other than `/dev/<name>` or `/dev/disk/by-path/<name>` | `the agent installer names a root device only as /dev/<name> or /dev/disk/by-path/<name>` | `set spec.os.install.rootDeviceHints.deviceName on <machine> to such a path` |
+| A root device size the frozen input cannot carry | a node whose `minSizeGigabytes` exceeds 9007199254740991, the largest integer the frozen input carries exactly, at `spec.os.install.rootDeviceHints` on its Machine | `a node's minSizeGigabytes is larger than the frozen installer input carries exactly` | `declare spec.os.install.rootDeviceHints.minSizeGigabytes on <machine> as at most 9007199254740991` |
+| A node off the artifact server's host | a virtual node whose provider's `spec.libvirt.machineRef` is not the selected server's `spec.machineRef` | `an emulated controller fetches the boot image without verifying its server, so the server is placed on the provider host that controller runs on` | `<machine> is booted through a controller on <provider host> and <server> is placed on <server host>; place <provider> and <server> on the same Machine` |
+
+A node whose management controller would have to import a certificate refuses
+as well, with `importing a certificate into a management controller is not
+implemented`; no node reaches it today, because only a physical node's
+controller imports one and a physical node is refused first.
 
 ## Installer inputs
 
@@ -273,6 +298,12 @@ stall, the block fails as that stall and adds that the budget stopped the
 attempt after it. A wait is thus diagnosed as a host in error first, then as a
 stall, then as the budget spent, and only then as the installer's own timeout.
 
+Not yet met: a stall fails the block naming no node, because the two installer
+give-ups it is recognized by, a cluster that stayed ready without starting to
+install and one that failed to prepare its installation, name no host, and
+nothing else the wait reads names a node that never registered; tracked as
+[B32](milestones/m1.md#b32).
+
 **Budgets.** Each long phase of a cluster's two blocks is bounded in wall-clock
 time by a budget its frozen request carries, never by a value the adapter
 chooses: the media request's build budget of 1,800 seconds, and the install
@@ -310,31 +341,38 @@ runner's 6-hour ceiling, more than 9 nodes with these budgets, refuses before
 registration, naming that deadline and how many nodes fit, rather than being
 cut short part way through its installation.
 
-Not yet met: `plan` and `apply` report that refusal without its reason and
-remedy, because the lifecycle's unsupported-shape refusal drops each object's
-reason; tracked as [B32](milestones/m1.md#b32).
-
 **The access it produces.** The installer writes the cluster administrator
 kubeconfig and the initial administrator password into the work area when it
 builds the image, beside the state it keeps there, and a completed installation
 is what they then grant access to. That area is root-owned, `0700` and never
-served. Once an apply's attempt proves the installation complete, or a
-resolution of an apply's block reads it complete, including a destroy's
-resolution of an incomplete apply, the role copies the kubeconfig into a
-private output file of its run and the engine keeps it in the context's
+served. The installer rewrites its own kubeconfig in place: each run of
+`agent wait-for install-complete` prepends the router CA to it again (see
+Completion), so it grows past any bound, and a budget kill during that write
+can leave it cut short. The installation therefore keeps its own copy of that
+file in the same work area, and every read of the cluster, before and after
+completion is proved, goes through the kept copy, never the installer's file.
+Only an apply keeps it: before any effect, and again after its waits, it
+takes the installer's file as the kept copy, in one rename and private to
+root, when that file is whole, within the inspection's 64 KiB read bound and
+names an identity, and the kept copy is missing or names that same identity.
+A file cut short, one grown past the bound, or one naming another identity is
+never kept, so the kept copy stays at the last whole rewrite within the bound,
+and a kept copy that names no identity is never replaced. An observation keeps
+nothing. An apply that then holds no kept copy naming an identity refuses
+before any effect, naming the destroy that discards the work area as the
+remedy, rather than booting nodes no read could prove. Once an apply's attempt
+proves the installation complete, or a resolution of an apply's block reads it
+complete, including a destroy's resolution of an incomplete apply, the role
+copies the kept kubeconfig into a private output file of its run and the
+engine keeps it in the context's
 [custody](secrets.md#produced-material), keyed by this block and `kubeconfig`,
 before it records the block done; a copy of equal bytes publishes nothing. A
 removal offers nothing. The custodied copy is withdrawn when the context's
 removal completes, not with this block's inverse, so a destroy that stops part
 way keeps the only access, and `cluster kubeconfig` reveals it until then
 ([administrator access export](cli.md#administrator-access-export)). The
-initial administrator password stays in the work area. Every read of the
-cluster, before and after completion is proved, uses the installer's own file,
-which keeps its hazards: each rerun of `agent wait-for install-complete`
-prepends the router CA to that file again, growing it toward the inspection's
-64 KiB read bound, and a budget kill during the installer's in-place write of
-it could truncate it. Neither copy is ever written to evidence, progress output or a
-log.
+initial administrator password stays in the work area. No copy is ever
+written to evidence, progress output or a log.
 
 **Releasing the media.** Once the installation has completed, and only then,
 each node's virtual media is ejected and its controller is pointed at the
@@ -357,15 +395,18 @@ image was built, so it names the cluster that image installs and no other.
 `agent wait-for install-complete` rewrites the kubeconfig once the cluster
 initializes, and again on each later run, prepending the router CA bundle to its
 certificate authority and adding `apiVersion` and `kind`, but leaves the client
-certificate unchanged, so each rewrite leaves the identity unchanged while the
-file stays within the 64 KiB the inspection reads. Each run grows the file by
-the encoded bundle, about 3 KiB when it is the ingress operator's RSA-2048
-wildcard certificate and CA, so the bound holds for roughly 18 rewrites. The
-agent installer records no other identity. A work area without that kubeconfig
-names none, and so does one whose kubeconfig exceeds that bound, is in neither
-form the installer writes, lacks an embedded certificate authority, disables
-verification or authenticates any other way. The cluster answers with the
-identity only when its `ClusterVersion` is read through that kubeconfig with the
+certificate unchanged, so each rewrite leaves the identity unchanged. Each run
+grows the file by the encoded bundle, about 3 KiB when it is the ingress
+operator's RSA-2048 wildcard certificate and CA, so it passes the 64 KiB the
+inspection reads after roughly 18 rewrites; the kept copy stops following it
+there and keeps naming the identity. The agent installer records no other
+identity. The identity is taken from the kept copy alone. An installation
+without one names none, and so does a kept copy that exceeds that bound, is
+not whole (it lacks its final newline, its client key or the end line of a
+certificate or key it embeds), is in neither form the installer writes, lacks
+an embedded certificate authority, disables verification or authenticates any
+other way. The cluster answers with the identity only when its
+`ClusterVersion` is read through the kept copy with the
 serving certificate verified against its certificate authority and the request
 authenticated by that client certificate. An API that answers but rejects that
 kubeconfig, with a certificate the authority does not verify or a 401 or 403,

@@ -376,15 +376,17 @@ probe. Its result orders these fields:
 | `shared` | Ordered `{kind, name, machine, status}` rows for selected shared services. `status` is `unsupported`, `pending`, `done` or `unknown`, derived from the frozen plan and its durable evidence. |
 | `secrets` | `declared` and `bound` counts. |
 | `nextSteps` | Ordered command strings whose decision would pass over the records `status` read, as the [lifecycle receipt](../cli.md#lifecycle-receipt) states; empty when none would. |
-| `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe paths relative to the state root, in the order and form the envelope's [`logs`](#private-operation-logs) list them. |
-| `contradictions` | Ordered strings naming what the context's durable records contradict, each worded as the [refusal](../state-reconciliation.md#continuation-and-removal) that points at `status` names it; empty when nothing does. |
+| `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe paths relative to the state root, in the order and form the envelope's [`logs`](#private-operation-logs) list them. A block that is `unknown` or `running` adds `unresolved`, `{reason, remedy}`: why its outcome is unproved and what the operator does before repeating a verb, as its [resolution](../state-reconciliation.md#attempts-and-unknown-outcomes) names them; every other block omits it. |
+| `contradictions` | Ordered strings naming what the context's durable records contradict, each worded as the [refusal](../state-reconciliation.md#continuation-and-removal) over those records names it, and last an operation whose continuation or removal reopens a frozen Secret binding the context's keyring no longer lists; empty when nothing does. |
 
 Rows sort by their documented key: checks and blocks in frozen order,
 contradictions in the order their refusal names them, everything else in
 ascending bytewise name order. Human `status` presents the same membership and
 order, omitting empty sections.
 Its Lifecycle section also names the build that registered the operation and
-the host directory of its logs, which JSON leaves out.
+the host directory of its logs, which JSON leaves out, and an `Unresolved
+<block>` section follows it for each block that carries `unresolved`, with its
+`Reason` and `Remedy`.
 
 ## Diagnostic taxonomy and order
 
@@ -503,12 +505,14 @@ Help, completion, `version`, every `validate`, `render effective`, `plan`, and
 local list/current/status reads create no cache, temporary file, state record,
 output path, or log. Other render commands create only their declared
 artifacts. Preflight, local setup, sensitive export, and access handoff allocate
-no lifecycle identity or log. Setup uses only its
+no lifecycle identity or log. Setup uses its
 [private recovery receipt](../controller.md#publication-and-interrupted-setup),
-separate from the lifecycle receipt and operation logs. Only lifecycle effects
-and unknown-effect resolution use the state-owned operation, block, and attempt
-log tree below; a [bounded run](#bounded-run-output) retains what its own
-adapter printed and nothing else.
+separate from the lifecycle receipt and operation logs, and keeps what its
+controller Ansible printed in a [setup run](#setup-run-output) and nothing
+else. Only lifecycle effects and unknown-effect resolution use the state-owned
+operation, block, and attempt log tree below; a
+[bounded run](#bounded-run-output) retains what its own adapter printed and
+nothing else.
 
 Managed operations use this tree:
 
@@ -600,9 +604,11 @@ while the run produces it, under the same masking obligation: every adapter
 task that reads bound material marks itself `no_log`, so a retained run carries
 none. Neither retaining it nor failing to changes what the run reports. An
 adapter failure that its output explains points its remediation at this file,
-as an attempt's points at the output beside that attempt's log; a
-[reading](../cli.md#resource-inspection-and-explicit-access), which names no
-retained output, points at none.
+as an attempt's points at the output beside that attempt's log. A
+[reading](../cli.md#resource-inspection-and-explicit-access) names no retained
+output, so it keeps none: it allocates no `<run-id>`, creates nothing in the
+context's runs area, discards what its adapter printed and points no
+remediation at output.
 
 Human output names the run's own directory as the same `Logs` field, before the
 adapter runs and again after the result, for the same reason an operation names
@@ -617,7 +623,47 @@ canceled or past its deadline. A run that fails before that admission lists
 none, as its human output names no directory, and keeps none: the file is
 created only once the runtime is admitted, so a refused admission, such as a
 native package transaction holding its lock, or an interrupt, cancellation or
-deadline that lands first leaves no unnamed file behind.
+deadline that lands first leaves no unnamed file behind. A run whose directory
+or file cannot be created, including one an interrupt stops between the two,
+fails before its adapter runs, names neither and removes the directory it
+made.
+
+### Setup run output
+
+Local `setup` registers no lifecycle operation and selects no context, so the
+Ansible that installs or recovers its container runtime has neither an attempt
+log nor a context's run area to sit beside. A confirmed setup that starts that
+Ansible, for a preparation or a recovery, first creates a run of its own
+beneath the controller directory and keeps exactly one file there:
+
+```text
+/var/lib/bootwright/controller/runs/<setup-run-id>/
+  run.output
+```
+
+`<setup-run-id>` is `setup-` and six digits, numbered upward from
+`setup-000001`. The
+[controller record](../contexts/controller-record.md#setup-runs) owns its
+grammar, modes, byte bound, admission and retention: only the newest runs are
+kept, and the oldest is removed before a new one is created. The run and its
+file are created exclusively beneath the held controller directory handle,
+never through a link and never over an existing name. The file exists before
+the Ansible starts and keeps its standard output and error, raw and unparsed,
+while it runs, under the masking obligation a bounded run's output has: every
+task that reads bound material marks itself `no_log`. It is truncated at its
+bound without a marker. Like every retained output it is troubleshooting
+material only: the receipt never names it and nothing reads it back.
+
+A dry run, a no-op setup, a setup whose approved actions start no Ansible and
+the dependency helpers that resolve before the plan create no run. Neither
+creating, writing nor removing a run ever changes a setup outcome or its
+receipt: a run that cannot be created leaves that Ansible's output discarded,
+exactly as a setup kept none.
+
+Human setup output names the run's directory on this host as the same `Logs`
+field, once before the Ansible starts and once with the result, for the reason
+an operation names its log tree twice. Setup has no JSON output, so no `logs`
+member names it.
 
 ## Multi-machine presentation
 

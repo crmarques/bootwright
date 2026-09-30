@@ -1,0 +1,112 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "status",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": {
+      "name": "lab",
+      "mode": "ready"
+    },
+    "setupChecks": [
+      {
+        "id": "controller-binding",
+        "status": "ready"
+      },
+      {
+        "id": "dependency-bundle",
+        "status": "ready"
+      }
+    ],
+    "desired": {
+      "revision": "rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f",
+      "environment": "lab-rhel",
+      "counts": {
+        "filesSeen": 14,
+        "objectsDecoded": 14
+      }
+    },
+    "clusters": [
+      {
+        "name": "ocp-01",
+        "kind": "ContainerCluster",
+        "status": "unsupported"
+      }
+    ],
+    "storageClusters": [
+      {
+        "name": "ceph-01",
+        "kind": "StorageCluster",
+        "status": "unsupported"
+      }
+    ],
+    "shared": [
+      {
+        "kind": "ArtifactServer",
+        "name": "lab-artifacts",
+        "machine": "controller",
+        "status": "done"
+      },
+      {
+        "kind": "DNSServer",
+        "name": "lab-dns",
+        "machine": "controller",
+        "status": "unsupported"
+      }
+    ],
+    "secrets": {
+      "declared": 3,
+      "bound": 3
+    },
+    "nextSteps": [
+      "bootwright apply",
+      "bootwright destroy"
+    ],
+    "lifecycle": {
+      "operation": "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a",
+      "verb": "apply",
+      "state": "unknown",
+      "next": "resolve",
+      "blocks": [
+        {
+          "id": "artifact-server-lab-artifacts",
+          "description": "serve artifacts for lab-artifacts on controller",
+          "stage": "infra-components",
+          "state": "done",
+          "attempts": 1
+        },
+        {
+          "id": "substrate-host-lab-libvirt",
+          "description": "realize the libvirt host of lab-libvirt on controller",
+          "stage": "substrates",
+          "state": "done",
+          "attempts": 1
+        },
+        {
+          "id": "machine-rhel-01",
+          "description": "realize the virtual machine rhel-01 and its controller",
+          "stage": "machines",
+          "state": "unknown",
+          "attempts": 1,
+          "unresolved": {
+            "reason": "domain bootwright-lab-rhel-01 on Machine hypervisor at 192.0.2.5 does not carry this context's ownership",
+            "remedy": "remove or rename domain bootwright-lab-rhel-01 on Machine hypervisor at 192.0.2.5, which this context does not own"
+          }
+        },
+        {
+          "id": "os-install-rhel-01",
+          "description": "install the operating system of rhel-01",
+          "stage": "machines",
+          "state": "pending",
+          "attempts": 0
+        }
+      ],
+      "logs": [
+        "contexts/lab/state/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/logs/operation.jsonl"
+      ]
+    },
+    "contradictions": []
+  },
+  "diagnostics": [],
+  "logs": []
+}

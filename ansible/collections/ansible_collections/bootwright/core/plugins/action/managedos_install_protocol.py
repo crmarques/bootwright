@@ -21,7 +21,9 @@ MAX_HOST_KEY = 4096
 # Every piece of content this installation publishes, as its inspection names
 # it; treeContent is anything left at the package tree's path, which a removal
 # stopped part way can leave without the marker that makes the tree complete.
-CONTENT = ("image", "private", "tree", "treeContent")
+# treeStaging and work are what an attempt killed part way leaves: the tree it
+# was extracting beneath the served root and the area it built the image in.
+CONTENT = ("image", "private", "tree", "treeContent", "treeStaging", "work")
 HEX = set("0123456789abcdef")
 
 
@@ -57,6 +59,8 @@ def presence(arguments, request_digest):
         "request": digest(request_digest),
         "tree": bool(observation.get("tree")),
         "treeContent": bool(observation.get("treeContent")),
+        "treeStaging": bool(observation.get("treeStaging")),
+        "work": bool(observation.get("work")),
     }
     evidence["postcondition"] = bool(
         evidence["marker"] and evidence["hostKey"] and evidence["address"]
@@ -109,6 +113,8 @@ def absence(arguments, request_digest):
         "request": digest(request_digest),
         "tree": False,
         "treeContent": False,
+        "treeStaging": False,
+        "work": False,
     }
 
 

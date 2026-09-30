@@ -433,3 +433,64 @@ func TestControllerScopeNamesTheAcquisitionRoute(t *testing.T) {
 		}
 	}
 }
+
+// A setup that starts its controller Ansible names the run keeping that
+// Ansible's output twice: as a field before the Ansible starts, so it can be
+// followed while it runs, and on the result, so it survives in the
+// scrollback. The whole stream is pinned, from the scope to the result.
+func TestControllerSetupNamesItsRunBeforeItsAnsibleAndOnTheResultGolden(t *testing.T) {
+	ctx := context.Background()
+	const location = "/var/lib/bootwright/controller/runs/setup-000003"
+	var out, errOut bytes.Buffer
+	presenter := &ControllerPresenter{progress: progressPresenter{out: &out, clock: newManualClock().clock()}}
+	report := &prerequisites.Report{
+		Platform: prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, Route: "direct", Outcome: "planned",
+		Checks: []prerequisites.Check{
+			{ID: "host", Required: "fedora 43/amd64", Observed: "fedora 43/amd64", Status: "ready", Scope: prerequisites.HostScope},
+			{ID: "execution-bundle", Required: "qualified Python and Ansible", Observed: "qualified", Status: "ready", Scope: prerequisites.HostScope},
+			{ID: "container-runtime", Required: "5.8.2", Observed: "missing", Status: "not-ready", Scope: prerequisites.HostScope},
+		},
+		Actions:      []string{"Install the baseline native packages with Ansible"},
+		Dependencies: []string{"podman-5.8.2-1.fc43.x86_64.rpm"},
+	}
+	record := &dispatchRecord{afterCall: func() {
+		if err := presenter.PresentControllerScope(ctx, prerequisites.InspectionPhase, *report); err != nil {
+			t.Fatal(err)
+		}
+		for _, check := range report.Checks {
+			status := "ok"
+			if check.Status != "ready" {
+				status = "failed"
+			}
+			presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.InspectionPhase, Action: check.ID, Status: status, Detail: check.Summary()})
+		}
+		if err := presenter.PresentControllerPlan(ctx, *report); err != nil {
+			t.Fatal(err)
+		}
+		step := prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "container-runtime", Step: 1, Steps: 1}
+		for _, event := range []prerequisites.ProgressEvent{{Status: "running"}, {Status: "running", Detail: "starting the private Ansible runtime"}, {Status: "running", Detail: "installing 3 native packages"}, {Status: "changed"}} {
+			if event.Detail == "starting the private Ansible runtime" {
+				presenter.ReportLogLocation(ctx, location)
+			}
+			event.Phase, event.Action, event.Step, event.Steps = step.Phase, step.Action, step.Step, step.Steps
+			presenter.ReportProgress(ctx, event)
+		}
+	}}
+	record.result.controller = &prerequisites.Report{
+		Platform: report.Platform, Route: report.Route, Outcome: "changed", PlanPresented: true, ProgressPresented: true,
+		Checks:      []prerequisites.Check{report.Checks[0], report.Checks[1], {ID: "container-runtime", Required: "5.8.2", Observed: "5.8.2", Status: "ready", Scope: prerequisites.HostScope}},
+		Actions:     report.Actions,
+		Progress:    []prerequisites.ActionProgress{{ID: "container-runtime", Phase: "observed", Outcome: "changed"}},
+		LogLocation: location,
+	}
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record), FinishProgress: presenter.Finish}).Run(ctx, []string{"setup", "--yes"})
+	if code != 0 || errOut.Len() != 0 {
+		t.Fatalf("setup exited %d with %q", code, errOut.String())
+	}
+	rendered := out.String()
+	if strings.Count(rendered, location) != 2 || strings.Index(rendered, location) > strings.Index(rendered, "starting the private Ansible runtime") ||
+		strings.LastIndex(rendered, location) < strings.Index(rendered, "Outcome") {
+		t.Fatalf("setup did not name its run before its Ansible and on its result:\n%s", rendered)
+	}
+	matchesTextGolden(t, "controller-setup-logs", out.Bytes())
+}

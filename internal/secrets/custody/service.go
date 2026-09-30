@@ -178,17 +178,7 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*CheckResult,
 			row := CheckRow{Name: d.Name, Type: d.Type, Source: d.Source, Parts: d.Parts(), Status: "available"}
 			var material secrets.Material
 			var err error
-			if d.Source == "file" {
-				material, err = s.material.File(ctx, d)
-				if err != nil {
-					row.Status = "unreadable"
-					for _, diagnostic := range diagnostics.Of(err) {
-						if diagnostic.Code == "secret.input" {
-							row.Status = "invalid"
-						}
-					}
-				}
-			} else if version, exists := currentVersion(snapshot, d.Name); !exists {
+			if version, exists := currentVersion(snapshot, d.Name); !exists {
 				row.Status = "missing"
 			} else {
 				id := version.ID
@@ -253,6 +243,8 @@ func (s Service) List(ctx context.Context, request ListRequest) (*ListResult, er
 			d := v.Declaration
 			// Produced material belongs to the lifecycle block that captured
 			// it, never to a Secret declaration, so no secret command lists it.
+			// A version an earlier build froze from the retired file source
+			// belongs only to the binding that still holds it.
 			if d.Source == "file" || d.Source == "produced" {
 				continue
 			}
@@ -314,10 +306,6 @@ func (s Service) Show(ctx context.Context, request ShowRequest) (*RevealResult, 
 	}
 	var material secrets.Material
 	err = s.access.View(ctx, selected, true, func(session secretstore.StoreSession, _ secretstore.Selection) error {
-		if d.Source == "file" {
-			material, err = s.material.File(ctx, d)
-			return err
-		}
 		if session == nil {
 			return secretstore.Failure("store.uninitialized", "secret store is not initialized")
 		}

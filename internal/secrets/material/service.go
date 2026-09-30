@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	cryptorand "crypto/rand"
-	"encoding/json"
 	"errors"
 	"io"
 	"slices"
@@ -68,7 +67,7 @@ func (s *Service) Acquire(ctx context.Context, declaration secrets.Declaration, 
 		return secrets.Material{}, err
 	}
 	defer clearParts(literal)
-	parts, err := s.readFileParts(ctx, requests, "", false)
+	parts, err := s.readFileParts(ctx, requests)
 	if err != nil {
 		return secrets.Material{}, err
 	}
@@ -84,43 +83,6 @@ func (s *Service) Acquire(ctx context.Context, declaration secrets.Declaration, 
 		parts[stdinRequest.Part] = value
 	}
 	if declaration.Type == "sshKeyPair" && input.PublicKeyFile == "" {
-		public, err := deriveSSHPublic(parts[secrets.PrivateKeyPart])
-		if err != nil {
-			return secrets.Material{}, err
-		}
-		parts[secrets.PublicKeyPart] = public
-	}
-	return s.finish(ctx, declaration, parts)
-}
-
-func (s *Service) File(ctx context.Context, declaration secrets.Declaration) (secrets.Material, error) {
-	if err := ctx.Err(); err != nil {
-		return secrets.Material{}, err
-	}
-	if declaration.Source != "file" {
-		return secrets.Material{}, failure("source", "material does not use a file source", "")
-	}
-	requests, structured, derivePublic, err := declarationFiles(declaration)
-	if err != nil {
-		return secrets.Material{}, err
-	}
-	parts, err := s.readFileParts(ctx, requests, declaration.Origin, true)
-	if err != nil {
-		return secrets.Material{}, err
-	}
-	defer clearParts(parts)
-	if structured {
-		value := parts[secrets.ValuePart]
-		delete(parts, secrets.ValuePart)
-		username, password, err := usernamePassword(value)
-		clear(value)
-		if err != nil {
-			return secrets.Material{}, err
-		}
-		parts[secrets.UsernamePart] = username
-		parts[secrets.PasswordPart] = password
-	}
-	if derivePublic {
 		public, err := deriveSSHPublic(parts[secrets.PrivateKeyPart])
 		if err != nil {
 			return secrets.Material{}, err
@@ -265,16 +227,11 @@ func (s *Service) readInput(ctx context.Context, encoding transportEncoding) ([]
 	return value, nil
 }
 
-// Bound both decoded parts and an optional password LF, with maximal JSON
-// escaping of strings/member names, delimiters and a final document LF.
-const maxUsernamePasswordJSONBytes = 6*(secrets.MaxVersionBytes+1+len("username")+len("password")) + 13 + 1
-
 type transportEncoding uint8
 
 const (
 	transportExact transportEncoding = iota
 	transportOptionalFinalLF
-	transportUsernamePasswordJSON
 )
 
 func (encoding transportEncoding) maximumBytes() (int, bool) {
@@ -283,8 +240,6 @@ func (encoding transportEncoding) maximumBytes() (int, bool) {
 		return secrets.MaxPartBytes, true
 	case transportOptionalFinalLF:
 		return secrets.MaxPartBytes + 1, true
-	case transportUsernamePasswordJSON:
-		return maxUsernamePasswordJSONBytes, true
 	default:
 		return 0, false
 	}
@@ -378,84 +333,6 @@ func acquisition(declaration secrets.Declaration, input secrets.Input) ([]fileRe
 		return nil, nil, partRequest{}, failure("declaration", "secret declaration has an unsupported type", "")
 	}
 	return requests, literal, stdinRequest, nil
-}
-
-func declarationFiles(declaration secrets.Declaration) ([]fileRequest, bool, bool, error) {
-	files := declaration.Files
-	requests := []fileRequest{}
-	structured, derivePublic := false, false
-	switch declaration.Type {
-	case "opaque", "token", "dockerConfigJson", "caBundle", "usernamePassword":
-		if files.Path == "" || files.Certificate != "" || files.PrivateKey != "" || files.PublicKey != "" {
-			return nil, false, false, failure("source", "file declaration does not provide exactly the paths required by its type", "")
-		}
-		part := secrets.ValuePart
-		if declaration.Type == "caBundle" {
-			part = secrets.CertificatePart
-		}
-		structured = declaration.Type == "usernamePassword"
-		encoding := transportExact
-		if declaration.Type == "token" {
-			encoding = transportOptionalFinalLF
-		}
-		if structured {
-			encoding = transportUsernamePasswordJSON
-		}
-		requests = append(requests, fileRequest{Part: part, Path: files.Path, Encoding: encoding})
-	case "tlsCertificate":
-		if files.Path != "" || files.Certificate == "" || files.PrivateKey == "" || files.PublicKey != "" {
-			return nil, false, false, failure("source", "TLS file declaration requires exactly certificate and private-key paths", "")
-		}
-		requests = append(requests, fileRequest{Part: secrets.CertificatePart, Path: files.Certificate}, fileRequest{Part: secrets.PrivateKeyPart, Path: files.PrivateKey})
-	case "sshKeyPair":
-		if files.Path != "" || files.Certificate != "" || files.PrivateKey == "" {
-			return nil, false, false, failure("source", "SSH file declaration requires a private-key path and accepts one public-key path", "")
-		}
-		requests = append(requests, fileRequest{Part: secrets.PrivateKeyPart, Path: files.PrivateKey})
-		if files.PublicKey == "" {
-			derivePublic = true
-		} else {
-			requests = append(requests, fileRequest{Part: secrets.PublicKeyPart, Path: files.PublicKey})
-		}
-	default:
-		return nil, false, false, failure("declaration", "secret declaration has an unsupported type", "")
-	}
-	return requests, structured, derivePublic, nil
-}
-
-func usernamePassword(data []byte) ([]byte, []byte, error) {
-	if !utf8.Valid(data) {
-		return nil, nil, failure("input", "usernamePassword file is not valid UTF-8 JSON", "")
-	}
-	if err := validateUniqueJSON(data); err != nil {
-		return nil, nil, err
-	}
-	var document map[string]json.RawMessage
-	if err := json.Unmarshal(data, &document); err != nil || len(document) != 2 {
-		return nil, nil, failure("input", "usernamePassword file must be a closed object with username and password strings", "")
-	}
-	usernameJSON, usernameExists := document["username"]
-	passwordJSON, passwordExists := document["password"]
-	if !usernameExists || !passwordExists {
-		return nil, nil, failure("input", "usernamePassword file must be a closed object with username and password strings", "")
-	}
-	var usernameRaw, passwordRaw any
-	if json.Unmarshal(usernameJSON, &usernameRaw) != nil || json.Unmarshal(passwordJSON, &passwordRaw) != nil {
-		return nil, nil, failure("input", "usernamePassword file must be a closed object with username and password strings", "")
-	}
-	usernameValue, usernameIsString := usernameRaw.(string)
-	passwordValue, passwordIsString := passwordRaw.(string)
-	if !usernameIsString || !passwordIsString {
-		return nil, nil, failure("input", "usernamePassword file must be a closed object with username and password strings", "")
-	}
-	if len(usernameValue) > secrets.MaxPartBytes {
-		return nil, nil, failure("store.limit", "usernamePassword file username exceeds the part byte limit", "")
-	}
-	if len(passwordValue) > secrets.MaxPartBytes &&
-		(len(passwordValue) != secrets.MaxPartBytes+1 || passwordValue[len(passwordValue)-1] != '\n') {
-		return nil, nil, failure("store.limit", "usernamePassword file password exceeds the normalized part byte limit", "")
-	}
-	return []byte(usernameValue), []byte(passwordValue), nil
 }
 
 func normalizeLines(declaration secrets.Declaration, parts map[secrets.Part][]byte) {

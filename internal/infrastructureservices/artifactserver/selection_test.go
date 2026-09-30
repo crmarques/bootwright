@@ -7,6 +7,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 const testContext = "lab"
@@ -251,6 +252,13 @@ func TestUnsupportedArtifactServersAreListedInCanonicalOrder(t *testing.T) {
 	found := Unsupported(catalogOf(controller(), cluster, managedProxy, external, installOnly, artifactServer()))
 	if !slices.Equal(found, []string{"ArtifactServer/temp"}) {
 		t.Fatalf("unsupported = %v", found)
+	}
+	want := []lifecycle.Refusal{{
+		Kind: "ArtifactServer", Name: "temp", Reason: "this executable serves no managed artifact server with install-only retention",
+		Remediation: "declare spec.retention: persistent on ArtifactServer/temp, or omit it",
+	}}
+	if refused := Refusals(catalogOf(controller(), installOnly)); !slices.Equal(refused, want) {
+		t.Fatalf("refusals = %+v, want %+v", refused, want)
 	}
 	if len(Unsupported(catalogOf(controller(), artifactServer()))) != 0 {
 		t.Fatal("a supported graph reported unsupported objects")

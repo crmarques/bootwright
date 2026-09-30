@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "id": "op-cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
   "verb": "destroy",
   "context": "example",
@@ -10,6 +10,11 @@
   "executable": {
     "version": "devel",
     "commit": "abcdef1"
+  },
+  "closure": {
+    "digest": "3333333333333333333333333333333333333333333333333333333333333333",
+    "python": "3.14.7",
+    "ansible": "2.21.4"
   },
   "source": "op-abababababababababababababababab",
   "bindings": [

@@ -1298,7 +1298,7 @@ written before it refuses, so such contexts are destroyed with the build that
 applied them before `setup` runs with this one. The import flow is proved only
 in-tree ([B73](m4.md#b73)); the media probe names the controller's file because
 media blocks run only on the controller; and every cluster read still uses the
-installer's kubeconfig ([B170](m1.md#b170)). New items B168 to B170 entered M1,
+installer's kubeconfig (B170 ([X31](#x31--recovery-setup-custody-refusals-and-adapter-defects))). New items B168 to B170 entered M1,
 B171 was parked, and B67 records the refusal its physical nodes lift.
 
 ### X30 — setup at the bundle bound, storage suites and reclaim
@@ -1333,9 +1333,9 @@ pass on the squashed commit. No real-host run.
 
 **Constraints left behind:** a host a build before X30 left with a pending
 receipt at the bound stays stuck until [B175](m1.md#b175) decides its recovery;
-repeating an interrupted retirement ([B172](m1.md#b172)), a failed receipt
-after a moved automation digest ([B176](m1.md#b176)) and resolutions of a kept
-bundle ([B177](m1.md#b177)) can still stop setup. New items B172 to B178
+repeating an interrupted retirement (B172 ([X31](#x31--recovery-setup-custody-refusals-and-adapter-defects))), a failed receipt
+after a moved automation digest (B176 ([X31](#x31--recovery-setup-custody-refusals-and-adapter-defects))) and resolutions of a kept
+bundle (B177 ([X31](#x31--recovery-setup-custody-refusals-and-adapter-defects))) can still stop setup. New items B172 to B178
 entered M1, and B179 to B181 were parked.
 
 ### X29 — defects and decided items
@@ -1381,7 +1381,7 @@ integration replaced two citations of the test B141 removed.
 race` and `./scripts/ansible-check --suite units`, `sanity`, `integration` and
 `lint` pass on the integrated slice and on the squashed commit; on the squashed
 commit `sanity` first failed in validate-modules with status 3 and no
-diagnostic, then passed on an unchanged rerun ([B192](m1.md#b192)). No
+diagnostic, then passed on an unchanged rerun (B192 ([X31](#x31--recovery-setup-custody-refusals-and-adapter-defects))). No
 real-host run.
 
 **Constraints left behind:** a context holding a cluster media block frozen as
@@ -1395,3 +1395,65 @@ clock tick is not caught (D46). A removal-scoped observation reports fields it
 did not read as empty. New items B182 to B192 entered M1 (B188 needs an owner
 decision), B193 to B202 were parked, and B17, B19, B39, B61 and B73 gained
 clauses.
+
+### X31 — recovery, setup, custody, refusals and adapter defects
+
+**Owner:** State reconciliation, Controller setup, Workspace, Secrets,
+Container cluster, Substrate, Managed OS, Infrastructure services, Architecture
+and CLI. Integrated on local `main` on 2026-09-30 as one commit. **Items:**
+B136, B43, B42, B178, B138, B41, B45, B46, B192, B176, B172, B191, B174, B173,
+B177, B168, B170, B40, B39, B182, B189, B183, B190, B184, B186, B187, B185.
+**Decisions:** D29, D36 to D39, D41, D42.
+
+**Outcome:** the slice also advanced B32, which stays open. A failed apply
+whose blocks are all done is finalized or replaced,
+and the two record states that still refuse name a delete (B136, D39); an
+unknown block's refusal and `status` say why it stayed unknown, and a context
+delete releases its host reservations (B43, D38); a lost frozen binding refuses
+before any effect and names its exits (B42, D37); a settling destroy reclaims
+an empty claim (B178); the retained-operation bound is 1024, admitted only with
+entry room for the removal (B138); the Secret file source is retired (B41,
+D36); an operation record freezes its Python and Ansible closure and a
+continuation refuses when it moves (B45, D41); setup keeps its Ansible output in
+bounded runs, the newest eight (B46, D42); setup survives a failed receipt with
+a moved automation digest, a repeated purge finishes an interrupted retirement,
+and the store refuses to retire a client area, keeps a retired reserved area
+readable and retires superseded resolutions of kept bundles at the bound
+(B176, B172, B174, B173, B177); bundle failures name a remedy setup accepts
+(B191); a run is lent only the Secret parts it writes (B168); cluster reads use
+a kept kubeconfig copy (B170); refusals carry object, reason and remedy except
+the parts B32 keeps; each capability spec has a refusal table and an
+Environment's `spec.lifecycle.rescue` refuses (B40, D29); the collection's
+structural rules hold with the fixes they guard (B39); a managed-OS tree's
+remnants are taken back (B182); a managed service left on its earlier files
+restarts (B189); the runner refuses unsafe or colliding material names (B183);
+run areas keep only output a result names (B190); bare-metal refusals reach the
+retained output (B184); the libvirt texts match the code (B186); a host removal
+reads no effect from what it takes back (B187); a context's own socket conflicts
+on one SSH host refuse (B185); and the example round trip no longer depends on
+host load (B192).
+
+**Review:** four findings, two confirmed and fixed: the entry bound was still
+reached before the retained-operation bound by operations that ran blocks, and
+B45's remedy for a version 1 record named a build that cannot read a host once
+setup keeps runs. The checks found a flaky runner test and a reserve that
+refused the last apply's removal, both fixed; the last check left one optional
+test, for a partial record waiting at the drain, parked as
+[B230](backlog.md#b230).
+
+**Gates:** `make check-offline tidy-check modules-check vulncheck docs-check
+race` and `./scripts/ansible-check --suite units`, `sanity`, `integration` and
+`lint` pass on the integrated slice and on the squashed commit. No real-host
+run.
+
+**Constraints left behind:** a context retains at most 1024 operations; a
+Secret declaring `source.file` refuses, and a context imported with one loses
+`status` until `context update`; continuing an operation an earlier build
+registered refuses, and once this build's setup keeps runs no earlier build
+reads the host, so contexts are destroyed with their build before `setup`; a
+context whose install block an earlier build applied has no kept kubeconfig
+copy and resolves unknown under this build; an Environment declaring
+`spec.lifecycle.rescue` refuses; the automation digest moves. B32 keeps the
+stall hint, lifecycle-role refusals and the JSON sudo reason. New items B203 to
+B221 entered M1 (B206, B208 and B220 need owner decisions), B222 to B235 were
+parked, and B17, B19, B73 and B180 gained clauses.

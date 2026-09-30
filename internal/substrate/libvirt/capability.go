@@ -167,12 +167,14 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 		}
 		plan.Definitions = append(plan.Definitions, definition)
 		plan.Secrets = append(plan.Secrets, request.SecretReferences()...)
+		claim := prerequisites.HostReservation{
+			Context: input.Context.Name, Kind: "substrate-machine", Service: request.Identity.Object, Keys: request.ReservationKeys(),
+		}
 		if !request.Placement.Local() {
+			plan.SSHReservations = append(plan.SSHReservations, lifecycle.SSHReservation{Machine: request.Placement.Machine, Reservation: claim})
 			continue
 		}
-		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
-			Context: input.Context.Name, Kind: "substrate-machine", Service: request.Identity.Object, Keys: request.ReservationKeys(),
-		})
+		plan.Reservations = append(plan.Reservations, claim)
 	}
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)
@@ -316,21 +318,23 @@ func (c HostCapability) Observe(ctx context.Context, execution lifecycle.Executi
 	})
 }
 
-// ObserveRemoval reads the same observation for what a removal proves: none of
-// the owned networks, the pool and its directory present, through a URI and
-// drivers that answered, is its completion; all of them present is positive no
-// effect; and some of them is a positive partial removal the next attempt
-// converges. A connection or driver that does not answer proves none of them
-// absent, so it stays unknown. The hypervisor closure it never removes proves
-// nothing either way.
+// ObserveRemoval reads the same observation for what a removal takes back, not
+// for readiness: none of the owned networks, the pool and its directory
+// present, through a URI and drivers that answered, is its completion; every
+// owned network and the pool active and the directory present is positive no
+// effect, whatever the driver daemons, the closure or a network's definition
+// show; and some of them, or one of them stopped, is a positive partial removal
+// the next attempt converges, whatever the apply's postcondition says. A
+// connection or driver that does not answer proves none of them absent, so it
+// stays unknown.
 func (c HostCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	return c.observe(ctx, execution, func(evidence []byte, request HostRequest, digest string) reconciliation.EffectState {
 		switch {
 		case ValidateHostAbsence(evidence, digest) == nil:
 			return reconciliation.EffectCompleted
-		case ValidateHostPresence(evidence, request, digest) == nil:
+		case ValidateHostUnremoved(evidence, request, digest) == nil:
 			return reconciliation.EffectNoEffect
-		case ValidateHostPartial(evidence, digest) == nil:
+		case ValidateHostRemovalUnfinished(evidence, request, digest) == nil:
 			return reconciliation.EffectPartial
 		}
 		return reconciliation.EffectUnknown
@@ -524,13 +528,14 @@ func recordObservationFailure(ctx context.Context, execution lifecycle.Execution
 	}
 }
 
-// Unsupported names every selected object neither capability can realize, so
-// the operation refuses before registration instead of part way through.
-func (HostCapability) Unsupported(state *compilation.State) []string {
+// Unsupported refuses every selected object neither capability can realize,
+// with its reason and remedy, so the operation refuses before registration
+// instead of part way through.
+func (HostCapability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 	if state == nil {
 		return nil
 	}
-	return Unsupported(state.Effective())
+	return Refusals(state.Effective())
 }
 
 // Quiescent is derived rather than probed. The networks and pool this block

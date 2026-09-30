@@ -13,7 +13,20 @@
       {{ lookup('ansible.builtin.file', substrate_baremetal_machine_target_ca)
          if substrate_baremetal_machine_target_ca | length > 0 else '' }}
   register: substrate_baremetal_machine_target
+  failed_when: false
   no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# the controller's own refusal is reported here, where no credential is.
+- name: Stop at a read the management controller did not answer
+  ansible.builtin.assert:
+    that:
+      - substrate_baremetal_machine_target.msg is not defined
+    fail_msg: >-
+      reading the machine at {{ substrate_baremetal_machine_target_endpoint }} failed, so it must
+      not be erased:
+      {{ (substrate_baremetal_machine_target.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
 
 - name: Refuse a machine that is not the one this Machine declares
   ansible.builtin.assert:

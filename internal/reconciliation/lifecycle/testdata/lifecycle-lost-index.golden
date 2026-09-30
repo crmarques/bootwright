@@ -1,0 +1,60 @@
+{
+  "beside pristine evidence": {
+    "status": {
+      "operation": "",
+      "verb": "",
+      "state": "",
+      "next": "",
+      "blocks": [],
+      "contradictions": [
+        "the operation directory operation-1 lists block records",
+        "the operation directory operation-2 lists block records"
+      ],
+      "nextSteps": []
+    },
+    "plan": {
+      "code": "lifecycle.state",
+      "message": "the context holds operation records or evidence that no index names: the operation directory operation-1 lists block records, the operation directory operation-2 lists block records",
+      "remediation": "delete the context with bootwright context delete --name lab --purge"
+    },
+    "apply": {
+      "code": "lifecycle.state",
+      "message": "the context holds operation records or evidence that no index names: the operation directory operation-1 lists block records, the operation directory operation-2 lists block records",
+      "remediation": "delete the context with bootwright context delete --name lab --purge"
+    },
+    "destroy": {
+      "code": "lifecycle.state",
+      "message": "the context holds operation records or evidence that no index names: the operation directory operation-1 lists block records, the operation directory operation-2 lists block records",
+      "remediation": "delete the context with bootwright context delete --name lab --purge"
+    }
+  },
+  "beside protected evidence": {
+    "status": {
+      "operation": "",
+      "verb": "",
+      "state": "",
+      "next": "",
+      "blocks": [],
+      "contradictions": [
+        "the mutation evidence reads applied and retained",
+        "the operation directory operation-1 lists block records"
+      ],
+      "nextSteps": []
+    },
+    "plan": {
+      "code": "lifecycle.state",
+      "message": "the context holds operation records or evidence that no index names: the mutation evidence reads applied and retained, the operation directory operation-1 lists block records",
+      "remediation": "delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own"
+    },
+    "apply": {
+      "code": "lifecycle.state",
+      "message": "the context holds operation records or evidence that no index names: the mutation evidence reads applied and retained, the operation directory operation-1 lists block records",
+      "remediation": "delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own"
+    },
+    "destroy": {
+      "code": "lifecycle.state",
+      "message": "the context holds operation records or evidence that no index names: the mutation evidence reads applied and retained, the operation directory operation-1 lists block records",
+      "remediation": "delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own"
+    }
+  }
+}

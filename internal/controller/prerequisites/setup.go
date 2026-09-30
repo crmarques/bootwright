@@ -67,7 +67,7 @@ func (i inspection) matchesActions(actions []SetupAction) bool {
 	return true
 }
 
-// retainedArea opens the sealed bundle a carried resolution was reprojected
+// retainedArea opens the bundle a carried resolution was reprojected
 // from, so preparation can read its approved sources instead of acquiring them
 // again. It is an optimization and never a prerequisite: an area that is absent
 // or cannot be opened simply leaves every source to its publisher.
@@ -157,7 +157,9 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 				return err
 			}
 			progress(ProgressEvent{Status: "running", Detail: "recovering the recorded native transaction"})
-			result, err := s.runtime.Recover(ctx, area, current.platform, current.definition, current.route(), preparation, progress)
+			output, release := s.retain(ctx, tx, &current.report)
+			result, err := s.runtime.Recover(ctx, area, current.platform, current.definition, current.route(), preparation, progress, output)
+			release()
 			if err != nil {
 				return err
 			}
@@ -215,6 +217,7 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 					}
 					if err == nil {
 						var result ActionResult
+						output, release := s.retain(ctx, tx, &current.report)
 						result, err = s.runtime.Prepare(ctx, area, current.platform, current.definition, current.route(), func(call context.Context, preparation NativePreparation) error {
 							encoded := EncodeNativePreparation(preparation)
 							if _, err := ReadNativePreparation(encoded, current.definition); err != nil {
@@ -225,7 +228,8 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 							}
 							action.Preparation = encoded
 							return publish(call, tx, state)
-						}, progress)
+						}, progress, output)
+						release()
 						if err == nil && len(result.Evidence) > 2 {
 							evidence = result.Evidence
 						}
@@ -287,6 +291,22 @@ func (s Service) report(ctx context.Context, report *Report, event ProgressEvent
 	}
 	report.ProgressPresented = true
 	s.options.Progress.ReportProgress(ctx, event)
+}
+
+// retain opens the run the controller Ansible about to start writes to, and
+// names it first so it can be followed while it runs. The receipt never
+// records a run, so a run that cannot be opened, written or closed leaves that
+// output discarded and changes nothing else.
+func (s Service) retain(ctx context.Context, tx StorageTransaction, report *Report) (RunOutput, func()) {
+	run, err := tx.OpenRun(ctx)
+	if err != nil || run == nil {
+		return nil, func() {}
+	}
+	report.LogLocation = run.Location()
+	if s.options.Progress != nil && ctx.Err() == nil && report.LogLocation != "" {
+		s.options.Progress.ReportLogLocation(ctx, report.LogLocation)
+	}
+	return run, func() { _ = run.Close() }
 }
 
 func publish(ctx context.Context, tx StorageTransaction, state HostState) error {

@@ -1,0 +1,20 @@
+[Unit]
+Description=Bootwright managed time service time
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+ContainerName=bootwright-lab-rhel-ntp-server-chrony-time
+Network=host
+User=0
+Entrypoint=/usr/sbin/chronyd
+Exec=-d -x -f /etc/chrony/chrony.conf
+Volume=/var/lib/bootwright-services/lab-rhel/ntp-server-chrony/time/config/chrony.conf:/etc/chrony/chrony.conf:ro,Z
+
+[Service]
+Restart=always
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

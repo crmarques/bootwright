@@ -148,10 +148,8 @@ Manifest integrity failures never fall back to the original source directory.
 
 Logical compiler paths are original input directory plus manifest-relative
 path. This preserves resource selection, counts, diagnostics and field-level
-provenance through recompilation. Relative Secret file references, including
-inherited defaults, remain anchored at the original recipient descriptor's
-directory. Import does not rebase references or copy, inspect or expand their
-payload paths. Authored `~` spelling remains unchanged during admission.
+provenance through recompilation. Import does not rebase typed payload
+references or copy, inspect or expand the paths they name.
 
 ## Storage, locking and publication
 
@@ -177,6 +175,8 @@ confirmed setup:
     bundles/<catalog-digest>/
       sources/
       python/
+    runs/<setup-run-id>/
+      run.output
   media/
     <filename.iso>
     <filename.iso>.json
@@ -389,7 +389,8 @@ Secrets limits additionally bound their trees.
 | Active or reserved context names | 4096 | `maxContexts` in `internal/workspace/contextfs/store.go` |
 | Revisions per context | 4096 | `maxRevisions` in `internal/workspace/contextfs/store.go` |
 | Retained [controller bundle namespaces](contexts/controller-record.md#bounds) | 16 | `maxControllerBundles` in `internal/workspace/contextfs/controller_records.go` |
-| Lifecycle operations one context retains | 4096 | `MaxOperations` in `internal/reconciliation/operationstore/records.go` |
+| Lifecycle operations one context retains | 1024 | `MaxOperations` in `internal/reconciliation/operationstore/records.go` |
+| Entries in one context's lifecycle operation area | 8192 | `MaxEntries` in `internal/reconciliation/operationstore/records.go` |
 | One lifecycle adapter invocation whose request states no deadline | 2 hours | `invocationTimeout` in `internal/reconciliation/ansiblerunner/process_linux_amd64.go` |
 | The longest deadline a lifecycle adapter request may state | 6 hours | `MaxDeadline` in `internal/reconciliation/lifecycle/invocation.go` |
 | One controller Ansible run: setup, its recovery or the base of a controller-stage client installation | 10 minutes | `runTimeout` in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
@@ -398,6 +399,7 @@ Secrets limits additionally bound their trees.
 | Installer media images one host holds | 64 | `MaxMediaEntries` in `internal/managedos/media.go` |
 | Bytes in an installer media name | 250 | `MaxMediaName` in `internal/managedos/media.go` |
 | Installer media stages at once, live, retained or abandoned | 16 | `maxStagedMedia` in `internal/workspace/contextfs/media_linux_amd64.go` |
+| [Setup runs](contexts/controller-record.md#setup-runs) the controller directory keeps | 8 | `maxSetupRuns` in `internal/workspace/contextfs/controller_runs_linux_amd64.go` |
 
 `TestDocumentedBoundsMatchCode` compares each value with its code, and each
 deadline with the one its runner passes to `context.WithTimeout`: the lifecycle
@@ -407,6 +409,30 @@ alone for a run without target clients, and otherwise the base plus each
 client source's [acquisition deadline](controller.md#the-controller-stage)
 clamped to the client-installation ceiling; a closure past that ceiling is
 refused before Ansible starts, so the clamp never shortens a run it admits.
+
+A claim or registration refuses `lifecycle.state` at the retained-operation
+bound once the context holds as many operation directories as the table
+states, or once the operation area could not hold what the new operation
+needs. A first pass is what an
+[operation directory](state-reconciliation.md#operation-records) holds once
+each block of its frozen plan ran one attempt: seven entries of its own and six
+for each block. A fresh apply needs its own first pass and the first pass of
+the removal that takes it back, which carries at most the blocks the apply
+froze, and must still keep 1024 entries free. A removal needs its own first
+pass and one entry more, because every record or log write needs one entry
+free. Operations that ran their blocks therefore reach the bound while fewer
+directories are retained, and the next fresh apply refuses at its claim,
+before it raises evidence or binds anything, never at one of its block writes,
+while the removal of the last apply admitted still registers and completes
+(`TestTheOperationAreaAdmitsEveryRetainedOperation`,
+`TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheLine`). The free entries
+hold the index and the later attempts and resolutions of the current apply and
+of its removal, the only operations that write again. That removal therefore
+refuses at its registration only once the apply's own later attempts used them
+up, and it then leaves the apply's evidence, binding and effects as they were
+(`TestADestroyTheAreaCannotHoldRefusesAtItsRegistration`). A record or log
+write that would take the area past its entries or its 64 MiB refuses
+`context.state`.
 
 Missing registry in a nonempty root is
 corruption, except that explicit init may finish publication when the root's
@@ -538,9 +564,19 @@ nothing else keeps: export it first with `bootwright cluster kubeconfig --name
 <cluster>`. The orphan confirmation names that custodied access and the
 export command, with the context, beside the abandoned objects.
 
+Deletion also drops what the controller record holds for the context: its
+[host binding](#controller-relationship-and-host-binding) and every host
+reservation it still holds, which a completed removal would have released and
+an abandoning deletion otherwise strands, because no context is left to release
+them. The result names the released reservation keys, so another context may
+reserve them. It releases only the record's claims: an abandoned object that
+still holds such a resource on the host is left in place, as abandonment
+states.
+
 After proof and ordinary confirmation, durably mark the exact context deleting
-before removing any file. Remove only verified objects through bounded held
-handles; preserve identifying state until the remaining children are removed.
+before removing any file or claim. Remove only verified objects through bounded
+held handles; preserve identifying state until the remaining children are
+removed.
 Permanently remove imported revisions, keyring and all other disposable local
 content, then the directory. Sync its parent before removing the active
 registry entry. The name stays reserved until completion.

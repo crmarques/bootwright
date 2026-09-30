@@ -22,7 +22,7 @@ Environment fields emit in this order:
 | `spec.downloads` | object | no | source-specific | Closed download-mirror policy below. |
 | `spec.dependencyVersions` | object | no | `latest` at apply | Version intent for the prerequisites this Environment controller stage installs; closed shape below. |
 | `spec.controller` | object | yes | — | Required controller Machine selection below. |
-| `spec.lifecycle` | object | no | — | Offline-rescue input; admitted and validated, consumed by no lifecycle. |
+| `spec.lifecycle` | object | no | — | Offline-rescue input; a present `rescue` is refused until a rescue journey exists. |
 
 Omitted optional arrays remain omitted unless their owning rule declares a
 materialized default. Authored arrays reject duplicate entries by their
@@ -336,8 +336,8 @@ the artifact bytes.
 Secret source and custody declarations belong to
 [each Secret](secrets.md#source-union). `Environment` has no `secretStorage`
 setting. A default may supply an omitted Secret source, but cannot override an
-authored source or copy material. Moving operator-owned file material into
-context storage requires an explicit source migration and authorized import.
+authored source or copy material, and a retired `file` source it supplies is
+[refused](secrets.md#file-source).
 
 ## Controller Machine
 
@@ -431,9 +431,12 @@ contains exactly these required fields in order:
 
 The selected artifact server must run on a Machine with `os.provided: true` so
 it remains reachable after managed machines shut down. Validation checks the
-declaration and its references. No lifecycle yet requires or consumes the
-declaration: whether it becomes a requirement, a refusal or is retired is an
-open owner decision, recorded in [B40](../milestones/m1.md#b40).
+declaration and its references. No rescue journey exists yet, so admission
+refuses a present `rescue` with `api.invariant` at `spec.lifecycle.rescue`,
+naming that no rescue journey exists yet, with the remedy to remove it
+(`TestAdmissionRefusesARescueDeclarationUntilARescueJourneyExists`). The schema
+keeps the field, and the rules above, for a later journey; no lifecycle
+requires or consumes it.
 
 ## Aggregate invariants and read-only boundary
 

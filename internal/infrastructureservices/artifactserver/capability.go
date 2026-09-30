@@ -73,12 +73,14 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 				plan.Secrets = append(plan.Secrets, reference)
 			}
 		}
+		claim := prerequisites.HostReservation{
+			Context: input.Context.Name, Kind: "artifact-server", Service: request.Identity.Service, Keys: request.reservationKeys(),
+		}
 		if request.Placement.Connection != connectionLocal {
+			plan.SSHReservations = append(plan.SSHReservations, lifecycle.SSHReservation{Machine: request.Placement.Machine, Reservation: claim})
 			continue
 		}
-		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
-			Context: input.Context.Name, Kind: "artifact-server", Service: request.Identity.Service, Keys: request.reservationKeys(),
-		})
+		plan.Reservations = append(plan.Reservations, claim)
 	}
 	slices.Sort(plan.Secrets)
 	return plan, nil
@@ -309,13 +311,14 @@ func materials(request Request) []lifecycle.MaterialFile {
 	return files
 }
 
-// Unsupported names every selected object this capability cannot realize, so
-// the operation refuses before registration instead of part way through.
-func (Capability) Unsupported(state *compilation.State) []string {
+// Unsupported refuses every selected object this capability cannot realize,
+// with its reason and remedy, so the operation refuses before registration
+// instead of part way through.
+func (Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 	if state == nil {
 		return nil
 	}
-	return Unsupported(state.Effective())
+	return Refusals(state.Effective())
 }
 
 // Quiescent is derived rather than probed, exactly as the managed network

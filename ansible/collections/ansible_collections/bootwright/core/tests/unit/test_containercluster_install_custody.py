@@ -2,9 +2,10 @@
 
 The runner reads back one file the apply or the apply's observation leaves, and
 the engine keeps it in the context's custody before it records the block done.
-The role copies the installer's kubeconfig there only once it read the
-installation complete with this build's own identity, and the copy never
-reaches a log. A removal offers nothing.
+The role copies the kubeconfig it keeps of the installer's, the one every read
+went through, there only once it read the installation complete with this
+build's own identity, and the copy never reaches a log. A removal offers
+nothing.
 """
 
 from __future__ import annotations

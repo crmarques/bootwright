@@ -24,9 +24,22 @@ provider of each declared endpoint address that is such a host address,
 because its readiness probes that address, which cannot answer before then.
 
 An unsupported required capability refuses before operation registration, with one
-diagnostic naming every unsupported object, the reason, and a safe next action.
+diagnostic per unsupported object that names the object, the reason, and a safe
+next action.
 Refusal never registers an operation, reserves a host resource, binds a Secret
 or creates a log.
+
+### Refusal table
+
+Each row is one refusal of the artifact server capability, and
+`TestArtifactServerRefusalTableMatchesUnsupported` holds its `Unsupported` to
+it; the managed network service capabilities report no shape unsupported. Its
+reason and remedy are the diagnostic's message and remediation, in which
+`<server>` is the refused server.
+
+| Refusal | Path | Reason | Remedy |
+| --- | --- | --- | --- |
+| Install-only retention | `spec.retention: install-only` on a managed `ArtifactServer` | `this executable serves no managed artifact server with install-only retention` | `declare spec.retention: persistent on <server>, or omit it` |
 
 ## Placement arms and credentials
 
@@ -55,7 +68,8 @@ and an observed key mismatch refuses before any remote command. No SSH
 configuration, agent, ambient `known_hosts` or user identity is consulted.
 
 Two contexts targeting one SSH host are not coordinated. Only the controller
-arm claims the host reservations below.
+arm publishes the host reservations below; the sockets an SSH host's blocks
+claim are compared within their own context alone.
 
 ## Host reservations
 
@@ -83,8 +97,11 @@ by a completed destroy, or by a destroy that finds them held by no operation
 because the registration that published them was
 [interrupted](state-reconciliation.md#lifecycle-unit). An exclusive key held by
 another context refuses `controller.conflict`, naming the holding context and
-the key class without private paths. A context's own keys are replaced by its
-own apply. An interrupted apply leaves its reservation in place; the same
+the key class without private paths. Its remedy is to destroy or continue that
+context first, or, for a `socket:` or `bridge:` key this context's own
+declaration chooses, to give its service another bind address or port or its
+managed libvirt attachment another bridge. A context's own keys are replaced
+by its own apply. An interrupted apply leaves its reservation in place; the same
 context's next apply replaces it, and another context's apply keeps refusing
 until that operation is continued or destroyed. A failed registration likewise
 leaves its reservations held, and its context protected by running
@@ -93,12 +110,18 @@ releases them, or the context's next apply releases them as it finishes the
 removal they sit beside or replaces them.
 
 One context's own exclusive `socket:` keys are compared by the same rule while
-it plans a fresh apply: two of its claims whose sockets conflict refuse
-`api.invariant` before registration, naming each claim's kind, service and
-socket, because the second could never listen. One claim's keys never conflict
-with each other, and no other key class is compared within a context, because
-one context's claims may share a key by design, such as the `path:` of a
-package tree two installations of one profile publish.
+it plans a fresh apply, each qualified by the host its block is placed on: the
+controller, or the SSH host its placement Machine names. Two of its claims on
+one host whose sockets conflict refuse `api.invariant` before registration,
+naming each claim's kind, service and socket and that host, because the second
+could never listen; claims on two hosts never conflict. The socket claims of a
+managed service, an artifact server or an
+[emulated BMC](substrates.md#machine-realization) placed on an SSH host are
+compared only within their context and never published, because two contexts
+targeting one SSH host are not coordinated. One claim's keys never conflict with each other, and
+no other key class is compared within a context, because one context's claims
+may share a key by design, such as the `path:` of a package tree two
+installations of one profile publish.
 
 Dependency readiness never establishes service ownership, and
 [controller setup](controller.md#host-identity-and-shared-prerequisites)
@@ -119,7 +142,8 @@ else the executable's compiled default. Every reference resolves to an
 immutable content digest before the plan freezes; a floating tag is refused.
 Image acquisition uses the placement Machine's normalized
 [proxy choice](api/machines.md#machine-proxy) and no ambient proxy variable.
-`retention: install-only` is unsupported and refuses.
+`retention: install-only` is unsupported and refuses, as the
+[refusal table](#refusal-table) states.
 
 **Owned host state.** The capability owns exactly one content root per service,
 one server configuration, one unit definition and, when any listener is HTTPS,
@@ -150,11 +174,15 @@ managed host may run.
 
 **Replay.** An apply whose frozen request already matches the live host reports
 `completed` with the same completion evidence and no change. The differences it
-converges are the configuration bytes, which restart the service when they
-differ and do not when they are identical, and any owned unit, container or
-content root that is missing, which is created again. Everything it owns
-carries the context in its name, so a same-name object it did not create cannot
-occur without a reservation conflict refusing first.
+converges are the configuration, the unit definition and any serving material,
+each published again when its bytes differ; a running service that started
+before any of them was last published, or whose start cannot be read, which is
+restarted, because the service reads only what it started with, while one that
+started after them all is not; and any owned unit, container or content root
+that is missing, which is created again. An apply stopped between publishing a
+file and restarting the service is therefore completed by its next attempt.
+Everything it owns carries the context in its name, so a same-name object it
+did not create cannot occur without a reservation conflict refusing first.
 
 **Inverse.** Destroy stops the service, removes the unit definition, removes
 the container, removes the owned content root and then reobserves. Positive
@@ -232,8 +260,9 @@ From the placement Machine it requests the first byte of the published file
 through the selected listener, with no proxy, verifying the listener's
 certificate against the server's serving certificate as the consumer's own
 operation binds it: the consumer block names the server's certificate Secret
-among its bindings, and only that Secret's certificate part reaches its
-adapter. The copy the server installed beneath its content root is never the
+among its bindings, and its adapter runs are
+[lent](secrets.md#immutable-binding-and-contexts) that Secret's certificate
+part alone. The copy the server installed beneath its content root is never the
 authority, because it proves only itself and not the certificate a verifying
 fetcher is given. Any answer but `200` or `206` fails the block with its cause:
 the status, the connection failure, or the verification failure naming that

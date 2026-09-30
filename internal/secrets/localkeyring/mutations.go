@@ -62,7 +62,7 @@ func (s *session) PutBatch(ctx context.Context, puts []secretstore.Put) ([]secre
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if !validateDeclaration(put.Declaration) || put.Declaration.Source == "file" {
+		if !validateDeclaration(put.Declaration) {
 			return nil, secretstore.Failure("declaration", "stored secret declaration is invalid or has an inapplicable source")
 		}
 		if seenNames[put.Declaration.Name] {
@@ -150,20 +150,15 @@ func (s *session) Bind(ctx context.Context, inputs []secretstore.BoundInput) (se
 		return secretstore.Binding{}, secretstore.Failure("store.limit", "secret binding exceeds its item limit")
 	}
 	next := cloneIndex(s.index)
-	knownVersions := versionIDs(next)
 	knownBindings := bindingIDs(next)
 	identityNames, err := entryNames(ctx, s.area, "identities")
 	if err != nil {
 		return secretstore.Binding{}, err
 	}
 	for name := range identityNames {
-		id := strings.TrimSuffix(name, ".json")
-		knownVersions[id], knownBindings[id] = true, true
+		knownBindings[strings.TrimSuffix(name, ".json")] = true
 	}
-	newIdentities := []string{}
 	seenNames := make(map[string]bool, len(inputs))
-	plain := []plainPart{}
-	defer func() { clearPlain(plain) }()
 	versions := make([]string, 0, len(inputs))
 	for _, input := range inputs {
 		if err := ctx.Err(); err != nil {
@@ -176,38 +171,21 @@ func (s *session) Bind(ctx context.Context, inputs []secretstore.BoundInput) (se
 		if err := validateMaterial(input.Declaration, input.Material); err != nil {
 			return secretstore.Binding{}, err
 		}
-		if input.Version != "" {
-			version, exists := findVersion(next, input.Version)
-			if !exists || version.Declaration != input.Declaration.Summary() {
-				return secretstore.Binding{}, secretstore.Failure("source", "secret binding version does not match its declaration")
-			}
-			equal, err := s.equalVersion(ctx, version, input.Material)
-			if err != nil {
-				return secretstore.Binding{}, err
-			}
-			if !equal {
-				return secretstore.Binding{}, secretstore.Failure("source", "secret binding material does not match its immutable version")
-			}
-			versions = append(versions, version.ID)
-			continue
+		if input.Version == "" {
+			return secretstore.Binding{}, secretstore.Failure("source", "a secret binding pins only stored versions")
 		}
-		if input.Declaration.Source != "file" {
-			return secretstore.Binding{}, secretstore.Failure("source", "only a file source may create a hidden binding snapshot")
+		version, exists := findVersion(next, input.Version)
+		if !exists || version.Declaration != input.Declaration.Summary() {
+			return secretstore.Binding{}, secretstore.Failure("source", "secret binding version does not match its declaration")
 		}
-		id, err := s.implementation.uniqueID("ver-", func(id string) bool { return knownVersions[id] })
+		equal, err := s.equalVersion(ctx, version, input.Material)
 		if err != nil {
 			return secretstore.Binding{}, err
 		}
-		knownVersions[id] = true
-		newIdentities = append(newIdentities, id)
-		version := storedVersion{ID: id, Sequence: nextSequence(next, input.Declaration.Name), Declaration: input.Declaration.Summary(), Parts: make([]storedPart, 0, len(input.Declaration.Parts()))}
-		for _, part := range input.Declaration.Parts() {
-			value, _ := input.Material.Part(part)
-			version.Parts = append(version.Parts, storedPart{Part: part, Size: len(value)})
-			plain = append(plain, plainPart{version: id, part: part, data: value})
+		if !equal {
+			return secretstore.Binding{}, secretstore.Failure("source", "secret binding material does not match its immutable version")
 		}
-		next.Versions = append(next.Versions, version)
-		versions = append(versions, id)
+		versions = append(versions, version.ID)
 	}
 	slices.Sort(versions)
 	if len(slices.Compact(slices.Clone(versions))) != len(versions) {
@@ -218,7 +196,6 @@ func (s *session) Bind(ctx context.Context, inputs []secretstore.BoundInput) (se
 		return secretstore.Binding{}, err
 	}
 	binding := secretstore.Binding{ID: bindingID, Versions: slices.Clone(versions)}
-	newIdentities = append(newIdentities, bindingID)
 	next.Bindings = append(next.Bindings, binding)
 	collectVersions(&next)
 	canonicalizeIndex(&next)
@@ -229,7 +206,7 @@ func (s *session) Bind(ctx context.Context, inputs []secretstore.BoundInput) (se
 	if err != nil {
 		return secretstore.Binding{}, err
 	}
-	if err := s.publish(ctx, &next, plain, publicationKey{id: next.ActiveKey, value: key}, newIdentities); err != nil {
+	if err := s.publish(ctx, &next, nil, publicationKey{id: next.ActiveKey, value: key}, []string{bindingID}); err != nil {
 		return secretstore.Binding{}, err
 	}
 	return binding, nil

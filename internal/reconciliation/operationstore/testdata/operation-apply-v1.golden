@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "id": "op-abababababababababababababababab",
+  "verb": "apply",
+  "context": "example",
+  "revision": "rev-efefefefefefefefefefefefefefefef",
+  "inputDigest": "1111111111111111111111111111111111111111111111111111111111111111",
+  "planDigest": "e6b9211062141ac0a9b1138c193236e374a804192aaa3b76ec7e27cbd6ae9a05",
+  "automationDigest": "2222222222222222222222222222222222222222222222222222222222222222",
+  "executable": {
+    "version": "devel",
+    "commit": "abcdef1"
+  },
+  "source": "",
+  "bindings": [
+    "bind-cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+  ],
+  "state": "running",
+  "logFault": false,
+  "created": "2026-09-11T12:00:00Z",
+  "updated": "2026-09-11T12:00:00Z"
+}

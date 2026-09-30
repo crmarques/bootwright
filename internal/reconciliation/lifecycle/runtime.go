@@ -19,9 +19,13 @@ const runOutputName = "run.output"
 
 // RuntimeRequest names the context whose approved bundle a bounded operation
 // runs inside, and the Secret declarations that operation needs bound.
+// RetainOutput is set by a caller that names its run's output to an operator;
+// one that names none, such as a reading, leaves it unset, and its run keeps
+// nothing and discards what its adapter prints.
 type RuntimeRequest struct {
-	ContextName string
-	Secrets     []string
+	ContextName  string
+	Secrets      []string
+	RetainOutput bool
 }
 
 // Runtime is the private execution boundary one bounded adapter call runs in.
@@ -39,7 +43,8 @@ type Runtime struct {
 	// its result; nothing reads them back, and a retention fault never changes
 	// what the run reports. OutputRemediation is what an adapter failure its
 	// output explains tells an operator to read, for a caller that names the
-	// file; one that names none leaves it out of its request.
+	// file; one that names none leaves it out of its request. All four are
+	// empty for a run whose request retains nothing.
 	Output            prerequisites.RunOutput
 	LogLocation       string
 	Logs              []string
@@ -84,15 +89,17 @@ func (s Service) WithRuntime(ctx context.Context, request RuntimeRequest, call f
 		// caller first names it, so a run refused before then leaves no unnamed
 		// file behind.
 		return s.guard.WithPython(ctx, approved.area, approved.requirement, func(launch prerequisites.PythonLaunch, _ func() error) error {
+			runtime := Runtime{Context: view.Identity(), Launch: launch, Bundle: approved.location, Area: approved.area, Material: material}
+			if !request.RetainOutput {
+				return call(ctx, runtime)
+			}
 			output, logs, directory, err := s.retain(ctx, view)
 			if err != nil {
 				return err
 			}
 			defer func() { _ = output.Close(ctx) }()
-			return call(ctx, Runtime{
-				Context: view.Identity(), Launch: launch, Bundle: approved.location, Area: approved.area, Material: material,
-				Output: output, LogLocation: directory, Logs: logs, OutputRemediation: runOutputRemediation,
-			})
+			runtime.Output, runtime.LogLocation, runtime.Logs, runtime.OutputRemediation = output, directory, logs, runOutputRemediation
+			return call(ctx, runtime)
 		})
 	})
 }
@@ -116,12 +123,12 @@ func (s Service) retain(ctx context.Context, view RunView) (*operationstore.Adap
 	}
 	target := path.Join(identity, runOutputName)
 	if err := area.EnsureDirectory(ctx, identity); err != nil {
-		return nil, nil, "", err
+		return nil, nil, "", abandonRun(ctx, area, identity, err)
 	}
 	// Exclusive creation is what proves the name is this run's own, and it
 	// leaves the file an operator was told about already there to open.
 	if err := area.WriteExclusive(ctx, target, nil); err != nil {
-		return nil, nil, "", err
+		return nil, nil, "", abandonRun(ctx, area, identity, err)
 	}
 	directory := area.Location()
 	if directory != "" {
@@ -132,6 +139,15 @@ func (s Service) retain(ctx context.Context, view RunView) (*operationstore.Adap
 		logs = append(logs, path.Join(reference, target))
 	}
 	return s.options.Operations(area).OpenAdapterOutput(ctx, target), logs, directory, nil
+}
+
+// abandonRun removes the directory a run made for a file it could not keep,
+// since no result names either, and reports the failure that stopped the run.
+// The removal outlives an interrupt, which can land between the directory and
+// its file; a removal that fails leaves that failure as it was.
+func abandonRun(ctx context.Context, area operationstore.Area, identity string, err error) error {
+	_ = area.RemoveDirectory(context.WithoutCancel(ctx), identity)
+	return err
 }
 
 // MaterialRequest names the context whose Secret declarations one bounded

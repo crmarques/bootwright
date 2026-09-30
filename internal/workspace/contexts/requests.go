@@ -57,4 +57,7 @@ type DeleteResult struct {
 	Outcome          string
 	CurrentCleared   bool
 	OrphansAbandoned bool
+	// ReleasedReservations are the host resource keys the deleted context
+	// reserved, which another context may now reserve.
+	ReleasedReservations []string
 }

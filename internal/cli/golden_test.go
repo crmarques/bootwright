@@ -284,6 +284,21 @@ func cliGoldens() []cliGolden {
 			LogLocation:    logs,
 		}
 	}
+	// An apply whose machine attempt was lost and whose removal's
+	// observation found a domain of the same name that this context does not
+	// own: the block names why it is still unknown and what the operator does
+	// about it, and both verbs observe it again.
+	unresolved := func() *lifecycle.StatusResult {
+		result := status()
+		result.NextSteps, result.Contradictions = []string{"bootwright apply", "bootwright destroy"}, []string{}
+		result.Lifecycle.State, result.Lifecycle.Next = "unknown", "resolve"
+		result.Lifecycle.Blocks[2].State, result.Lifecycle.Blocks[2].Attempts = "unknown", 1
+		result.Lifecycle.Blocks[2].Unresolved = &lifecycle.Unresolved{
+			Reason: "domain bootwright-lab-rhel-01 on Machine hypervisor at 192.0.2.5 does not carry this context's ownership",
+			Remedy: "remove or rename domain bootwright-lab-rhel-01 on Machine hypervisor at 192.0.2.5, which this context does not own",
+		}
+		return result
+	}
 	// A context no operation has touched: an unbound controller, no cluster
 	// roots, and a status that offers the first operation.
 	idle := func() *lifecycle.StatusResult {
@@ -512,6 +527,8 @@ func cliGoldens() []cliGolden {
 		// sections are omitted from text and whose lifecycle is null.
 		{golden: "cli-status", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = status() }},
 		{golden: "cli-status-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = status() }},
+		{golden: "cli-status-unresolved", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = unresolved() }},
+		{golden: "cli-status-unresolved-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = unresolved() }},
 		{golden: "cli-status-idle", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = idle() }},
 		{golden: "cli-status-idle-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = idle() }},
 
@@ -554,7 +571,7 @@ func cliGoldens() []cliGolden {
 		{
 			golden: "cli-context-delete", args: "context delete --name retired --purge --allow-orphans --yes",
 			record: func(r *dispatchRecord) {
-				r.result.deletion = &contexts.DeleteResult{Name: "retired", Outcome: "deleted", OrphansAbandoned: true}
+				r.result.deletion = &contexts.DeleteResult{Name: "retired", Outcome: "deleted", OrphansAbandoned: true, ReleasedReservations: []string{"libvirt-domain:bootwright-lab-rhel-01", "socket:192.0.2.1:8000"}}
 			},
 			stderr: "[WARN] context.unsafe-delete: the objects this context owned were abandoned and are no longer managed\n",
 		},

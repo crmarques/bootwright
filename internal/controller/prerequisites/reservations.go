@@ -6,13 +6,20 @@ import (
 	"strings"
 )
 
-// ConflictingContext names the first context in held whose exclusive claim
-// conflicts with an exclusive claim in wanted. Two keys conflict when they are
-// equal. Socket keys are the one class compared further: a wildcard bind
-// address holds its port on every address, so a socket key at a wildcard
-// address conflicts with every socket key at that port. A shared claim
-// conflicts with nothing.
-func ConflictingContext(held, wanted []HostReservation) (string, bool) {
+// HeldClaim is the claim another context holds that a wanted one conflicts
+// with: that context, the class of the key, which is the key's leading word
+// and never the path, name or socket it carries, and what ends the conflict.
+type HeldClaim struct {
+	Context, Class, Remediation string
+}
+
+// ConflictingContext names the first claim in held whose exclusive key
+// conflicts with an exclusive claim in wanted. Two keys conflict
+// when they are equal. Socket keys are the one class compared further: a
+// wildcard bind address holds its port on every address, so a socket key at a
+// wildcard address conflicts with every socket key at that port. A shared
+// claim conflicts with nothing.
+func ConflictingContext(held, wanted []HostReservation) (HeldClaim, bool) {
 	keys := map[string]bool{}
 	ports, wildcards := map[uint16]bool{}, map[uint16]bool{}
 	for _, reservation := range wanted {
@@ -33,14 +40,29 @@ func ConflictingContext(held, wanted []HostReservation) (string, bool) {
 		}
 		for _, key := range reservation.Keys {
 			if keys[key] {
-				return reservation.Context, true
+				return heldClaim(reservation.Context, key), true
 			}
 			if socket, ok := socketKey(key); ok && (wildcards[socket.port] || socket.wildcard && ports[socket.port]) {
-				return reservation.Context, true
+				return heldClaim(reservation.Context, key), true
 			}
 		}
 	}
-	return "", false
+	return HeldClaim{}, false
+}
+
+// heldClaim names the conflict one held key makes. Its remedy is that
+// context's removal or continuation, or, for a key this context's own
+// declaration chooses, another choice of it.
+func heldClaim(context, key string) HeldClaim {
+	class, _, _ := strings.Cut(key, ":")
+	remediation := "destroy or continue context " + context + " first"
+	switch class {
+	case "socket":
+		remediation += ", or give this context's service another bind address or port"
+	case "bridge":
+		remediation += ", or give this context's managed libvirt attachment another bridge"
+	}
+	return HeldClaim{Context: context, Class: class, Remediation: remediation}
 }
 
 // SocketConflict is two of one context's own exclusive claims whose sockets

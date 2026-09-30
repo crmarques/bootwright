@@ -67,13 +67,8 @@ func secretCommandAndBindingJourney(t *testing.T, implementation string) {
 		secretDocument("ca", "caBundle", "  source: {generated: {commonName: fixture-ca, validityDays: 30}}\n"),
 		secretDocument("tls", "tlsCertificate", "  source: {generated: {commonName: fixture.example.test, dnsNames: [fixture.example.test], validityDays: 30}}\n"),
 		secretDocument("ssh", "sshKeyPair", "  source: {generated: {keyType: ed25519}}\n"),
-		secretDocument("file", "token", "  source: {file: {path: secrets/token}}\n"),
 	}
 	addSecretInput(t, input, "secret.yaml", strings.Join(declarations, "\n---\n"))
-	if err := os.Mkdir(filepath.Join(input, "secrets"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	file := addSecretInput(t, filepath.Join(input, "secrets"), "token", "synthetic-file-canary\n")
 	configuration := contexts.DefaultConfiguration("alpha")
 	configuration.SecretStore.Type = implementation
 	configPath := addSecretInput(t, t.TempDir(), "context.yaml", string(configuration.Canonical()))
@@ -128,7 +123,7 @@ func secretCommandAndBindingJourney(t *testing.T, implementation string) {
 		part secrets.Part
 		want string
 	}{
-		{"opaque", secrets.ValuePart, "synthetic-opaque-canary\x00\n"}, {"password", secrets.PasswordPart, "synthetic-password-canary"}, {"file", secrets.ValuePart, "synthetic-file-canary"},
+		{"opaque", secrets.ValuePart, "synthetic-opaque-canary\x00\n"}, {"password", secrets.PasswordPart, "synthetic-password-canary"},
 	} {
 		out, stderr := contextRun(t, services, 0, "secret", "show", "--name", check.name, "--part", string(check.part))
 		if out != check.want || stderr != "" {
@@ -149,7 +144,7 @@ func secretCommandAndBindingJourney(t *testing.T, implementation string) {
 	if !ok {
 		t.Fatal("binding capability not composed")
 	}
-	binding, err := bindings.Bind(context.Background(), custody.BindRequest{Names: []string{"opaque", "token", "file", "ca"}})
+	binding, err := bindings.Bind(context.Background(), custody.BindRequest{Names: []string{"opaque", "token", "ca"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,11 +174,8 @@ func secretCommandAndBindingJourney(t *testing.T, implementation string) {
 	contextRun(t, services, 0, "secret", "generate", "--name", "token", "--renew")
 	contextRun(t, services, 0, "secret", "delete", "--name", "opaque", "--yes")
 	contextRun(t, services, 0, "secret", "delete", "--name", "opaque", "--yes")
-	if err := os.Remove(file); err != nil {
-		t.Fatal(err)
-	}
 	// New desired state may orphan/remove names; an exact continuation still
-	// uses the whole versions pinned before replacement and live-file removal.
+	// uses the whole versions pinned before replacement.
 	addSecretInput(t, input, "secret.yaml", strings.Join(declarations[1:], "\n---\n"))
 	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
 	contextRun(t, services, 0, "secret", "encryption", "rotate", "--yes")
@@ -251,7 +243,7 @@ func secretCommandAndBindingJourney(t *testing.T, implementation string) {
 		if err != nil {
 			return err
 		}
-		for _, canary := range []string{"synthetic-opaque-canary", "synthetic-password-canary", "synthetic-file-canary", "replacement-canary", "produced-kubeconfig-canary"} {
+		for _, canary := range []string{"synthetic-opaque-canary", "synthetic-password-canary", "replacement-canary", "produced-kubeconfig-canary"} {
 			if bytes.Contains(data, []byte(canary)) {
 				t.Errorf("plaintext in store file %s", entry.Name())
 			}

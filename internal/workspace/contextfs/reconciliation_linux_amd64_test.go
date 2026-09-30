@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -386,8 +387,13 @@ func TestAWildcardSocketReservationRefusesEveryAddressAtItsPort(t *testing.T) {
 			t.Fatalf("reserving %s failed: %#v", test.held, diagnostics.Of(err))
 		}
 		err := reserve("second", test.wanted)
-		if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "controller.conflict" || !strings.Contains(reported[0].Message, record.Name) {
-			t.Fatalf("%s beside %s = %#v, want controller.conflict naming %s", test.wanted, test.held, reported, record.Name)
+		want := diagnostics.Diagnostic{
+			Severity: "error", Code: "controller.conflict",
+			Message:     "context " + record.Name + " already holds a socket reservation this context needs",
+			Remediation: "destroy or continue context " + record.Name + " first, or give this context's service another bind address or port",
+		}
+		if reported := diagnostics.Of(err); len(reported) != 1 || !reflect.DeepEqual(reported[0], want) {
+			t.Fatalf("%s beside %s = %#v, want %#v", test.wanted, test.held, reported, want)
 		}
 	}
 	if err := reserve("second", "socket:192.0.2.9:3129"); err != nil {

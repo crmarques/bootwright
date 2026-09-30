@@ -36,10 +36,10 @@ spec:
 
   defaults:
     Secret:
-      type: opaque
+      type: token
       source:
-        file:
-          path: ../secrets/material
+        generated:
+          bytes: 48
 `
 	const secret = `apiVersion: bootwright.io/v1alpha1
 kind: Secret
@@ -82,7 +82,7 @@ spec:
 		t.Fatalf("effective replay = %#v, %v", result, err)
 	}
 	material, ok := result.Effective.Find(api.Secret, "material")
-	if !ok || material.Spec().Get("source", "file", "path").Text() != "../secrets/material" {
+	if bytes, _ := material.Spec().Get("source", "generated", "bytes").Int64(); !ok || bytes != 48 {
 		t.Fatal("rendering changed the inherited Secret declaration")
 	}
 	objects := result.Effective.Objects()
@@ -94,27 +94,30 @@ spec:
 		t.Fatal("rendering erased validation warnings from a prior result")
 	}
 
-	// Relative defaults use the recipient descriptor's directory. This path is
-	// external relative to the Environment, but inside the input tree relative
-	// to the recipient, where a secrets segment is required.
-	badEnvironment := strings.Replace(environment, "../secrets/material", "../../operator-material/value", 1)
+	// A retired file source an Environment default supplies is refused for
+	// each recipient, at the default that supplied it, naming the command
+	// that loads context custody and the default to correct.
+	badEnvironment := strings.Replace(environment, "generated:\n          bytes: 48", "file:\n          path: ../secrets/material", 1)
 	input.Files[0] = desiredstate.NewSourceFile(input.Files[0].Path(), []byte(badEnvironment+controllerYAML))
 	service = compilation.New(nil, compiler(), frozenContextInputs{input})
 	failed, err := service.RenderEffective(context.Background(), compilation.EffectiveRequest{})
 	if failed != nil || err == nil {
-		t.Fatal("recipient-relative payload containment was lost")
+		t.Fatal("an inherited file source compiled")
 	}
 	found := false
 	for _, diagnostic := range diagnostics.Of(err) {
-		if diagnostic.Code == "api.invariant" && diagnostic.Field == "$.spec.source.file.path" {
+		if diagnostic.Code == "api.field" && diagnostic.Field == "$.spec.source.file" {
 			found = true
 			line := strings.Count(badEnvironment[:strings.Index(badEnvironment, "          path:")], "\n") + 1
 			if diagnostic.Source == nil || diagnostic.Source.Path != input.Files[0].Path() || diagnostic.Source.Line != line || !strings.Contains(diagnostic.Message, "Environment defaults") {
 				t.Fatal("inherited diagnostic lost original field provenance", diagnostic)
 			}
+			if !strings.Contains(diagnostic.Message, "bootwright secret set") || !strings.Contains(diagnostic.Remediation, "Environment kind default") {
+				t.Fatal("inherited refusal lost its remedy", diagnostic)
+			}
 		}
 	}
 	if !found {
-		t.Fatal("missing recipient path diagnostic", diagnostics.Of(err))
+		t.Fatal("missing inherited file source refusal", diagnostics.Of(err))
 	}
 }

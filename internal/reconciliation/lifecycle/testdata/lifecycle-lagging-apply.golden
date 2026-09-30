@@ -1,0 +1,51 @@
+{
+  "every block done": {
+    "status": {
+      "operation": "operation-1",
+      "verb": "apply",
+      "state": "failed",
+      "next": "continue-apply",
+      "blocks": [
+        "alpha (done, 1 attempts)",
+        "bravo (done, 1 attempts)",
+        "charlie (done, 1 attempts)"
+      ],
+      "contradictions": [],
+      "nextSteps": [
+        "bootwright apply",
+        "bootwright destroy"
+      ]
+    },
+    "plan": {
+      "presented": "apply",
+      "continuation": true,
+      "finalizes": true,
+      "steps": [
+        "alpha (done)",
+        "bravo (done)",
+        "charlie (done)"
+      ],
+      "operation": "operation-1",
+      "state": "preview",
+      "next": "continue-apply"
+    },
+    "apply": {
+      "settled": true,
+      "recovered": "finalization",
+      "operation": "operation-1",
+      "state": "done",
+      "next": "none"
+    },
+    "destroy": {
+      "presented": "destroy",
+      "steps": [
+        "charlie (pending)",
+        "bravo (pending)",
+        "alpha (pending)"
+      ],
+      "operation": "operation-2",
+      "state": "done",
+      "next": "none"
+    }
+  }
+}

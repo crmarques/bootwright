@@ -124,6 +124,39 @@
     request: '{{ bootwright_dns_server_request }}'
   register: infra_dns_server_dnsmasq_before
 
+# A running service keeps what it started with: its unit takes effect at a
+# start and its configuration is mounted on its own, so publishing one replaces
+# the host's file while the daemon keeps the one it read. An attempt stopped
+# between publishing and restarting leaves the service on the earlier files
+# while the next attempt finds the published ones unchanged, so a running
+# service restarts whenever a file it runs from is newer than its start.
+- name: Observe the files the service runs from
+  ansible.builtin.stat:
+    path: '{{ item }}'
+    get_checksum: false
+  loop:
+    - '{{ infra_dns_server_dnsmasq_config_dir }}/dnsmasq.conf'
+    - '{{ infra_dns_server_dnsmasq_unit_path }}'
+  register: infra_dns_server_dnsmasq_runs_from
+  when: infra_dns_server_dnsmasq_before.observation.unit == 'active'
+
+# A start that cannot be read proves nothing, so the service then restarts.
+# The format is podman's own template, handed to it as a literal.
+- name: Observe when the running service started
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - inspect
+      - --type
+      - container
+      - --format
+      - "{{ '{{.State.StartedAt.UnixNano}}' }}"
+      - '{{ bootwright_dns_server_request.unit }}'
+  register: infra_dns_server_dnsmasq_started
+  when: infra_dns_server_dnsmasq_before.observation.unit == 'active'
+  changed_when: false
+  failed_when: false
+
 - name: Start the managed service
   ansible.builtin.command:
     argv:
@@ -133,15 +166,18 @@
   when: infra_dns_server_dnsmasq_before.observation.unit != 'active'
   changed_when: infra_dns_server_dnsmasq_before.observation.unit != 'active'
 
-- name: Restart the managed service after a configuration change
+- name: Restart the managed service when a file it runs from changed since it started
   ansible.builtin.command:
     argv:
       - /usr/bin/systemctl
       - restart
       - '{{ infra_dns_server_dnsmasq_service }}'
+  register: infra_dns_server_dnsmasq_restart
   when:
     - infra_dns_server_dnsmasq_before.observation.unit == 'active'
     - infra_dns_server_dnsmasq_configuration is changed or infra_dns_server_dnsmasq_unit is changed
+      or (infra_dns_server_dnsmasq_started.stdout | default('') | trim | int)
+      < (infra_dns_server_dnsmasq_runs_from.results | map(attribute='stat.mtime') | max) * 1000000000
   changed_when: true
 
 - name: Report service start completion
@@ -188,6 +224,7 @@
          if (infra_dns_server_dnsmasq_directories is changed
              or infra_dns_server_dnsmasq_configuration is changed
              or infra_dns_server_dnsmasq_unit is changed
+             or infra_dns_server_dnsmasq_restart is changed
              or infra_dns_server_dnsmasq_pull is changed
              or infra_dns_server_dnsmasq_before.observation.unit != 'active')
          else 'unchanged' }}

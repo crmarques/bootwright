@@ -31,16 +31,30 @@ type Evidence struct {
 	Request   string `json:"request"`
 	// Tree is the published package tree complete, its .treeinfo in place, and
 	// TreeContent anything at all at the tree's published path. A removal
-	// deletes the tree in whatever order the filesystem lists it, so one
-	// stopped part way can leave the directory without its marker: content a
-	// removal still takes back, though no complete tree.
+	// withdraws the marker before the rest of the tree, so one stopped part
+	// way leaves the directory without it: content a removal still takes
+	// back, though no complete tree.
 	Tree        bool `json:"tree"`
 	TreeContent bool `json:"treeContent"`
+	// TreeStaging is anything at the path the tree is extracted at before its
+	// rename: an apply killed while it extracted leaves a partial tree there,
+	// beneath the served root. Work is the area the installer image is built
+	// in, outside the served root, which any attempt killed part way leaves.
+	TreeStaging bool `json:"treeStaging"`
+	Work        bool `json:"work"`
 }
 
-// published reports whether anything this installation publishes is left.
+// published reports whether anything this installation leaves beneath the
+// served root is there.
 func (e Evidence) published() bool {
-	return e.Image || e.Private || e.Tree || e.TreeContent
+	return e.Image || e.Private || e.Tree || e.TreeContent || e.TreeStaging
+}
+
+// left reports whether anything a removal takes back is there: the served
+// content, and the work area, which is never served and so never proves an
+// apply's effect but is still this installation's to remove.
+func (e Evidence) left() bool {
+	return e.published() || e.Work
 }
 
 // ValidatePresence accepts evidence only when it proves the guest holds exactly
@@ -102,8 +116,8 @@ func HostKeyEvidence(data []byte) (address, hostKey string, err error) {
 }
 
 // ValidateAbsence accepts evidence only when it positively proves the published
-// content is gone. The installed system stays with the Machine's disks, so this
-// block never reports anything about the guest.
+// content and the work area are gone. The installed system stays with the
+// Machine's disks, so this block never reports anything about the guest.
 func ValidateAbsence(data []byte, digest string) error {
 	evidence, err := decodeEvidence(data, digest)
 	if err != nil {
@@ -112,37 +126,37 @@ func ValidateAbsence(data []byte, digest string) error {
 	if !evidence.Postcondition || !evidence.Absent {
 		return refusal("lifecycle.state", "the installation adapter did not prove removal", "")
 	}
-	if evidence.published() {
-		return refusal("lifecycle.state", "the installation removal evidence still reports published content", "")
+	if evidence.left() {
+		return refusal("lifecycle.state", "the installation removal evidence still reports content it takes back", "")
 	}
 	return nil
 }
 
 // ValidateWithdrawn accepts evidence only when it names this request and
-// reports no published content, which is what the removal takes back. The
-// installed system stays with the Machine's disks, so neither the marker nor
-// the power state is read.
+// reports nothing left of what the removal takes back. The installed system
+// stays with the Machine's disks, so neither the marker nor the power state is
+// read.
 func ValidateWithdrawn(data []byte, digest string) error {
 	evidence, err := decodeEvidence(data, digest)
 	if err != nil {
 		return err
 	}
-	if evidence.published() {
-		return refusal("lifecycle.state", "the served root still carries this installation's content", "")
+	if evidence.left() {
+		return refusal("lifecycle.state", "the artifact server's host still carries this installation's content", "")
 	}
 	return nil
 }
 
 // ValidateWithdrawalUnfinished accepts evidence only when it names this request
-// and reports published content left, which the removal withdraws whatever the
-// guest holds, so the next attempt converges it.
+// and reports something left of what the removal takes back, which it
+// withdraws whatever the guest holds, so the next attempt converges it.
 func ValidateWithdrawalUnfinished(data []byte, digest string) error {
 	evidence, err := decodeEvidence(data, digest)
 	if err != nil {
 		return err
 	}
-	if !evidence.published() {
-		return refusal("lifecycle.state", "the served root carries none of this installation's content", "")
+	if !evidence.left() {
+		return refusal("lifecycle.state", "the artifact server's host carries none of this installation's content", "")
 	}
 	return nil
 }

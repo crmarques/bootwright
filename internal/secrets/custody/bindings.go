@@ -43,17 +43,12 @@ func (s Service) Bind(ctx context.Context, request BindRequest) (secretstore.Bin
 		}()
 		for _, name := range names {
 			d, _ := findDeclaration(declarations, name)
-			input := secretstore.BoundInput{Declaration: d}
-			if d.Source == "file" {
-				input.Material, err = s.material.File(ctx, d)
-			} else {
-				v, exists := currentVersion(snapshot, name)
-				if !exists || v.Declaration.Fingerprint != d.Fingerprint {
-					return secretstore.Failure("source", "binding requires current material matching every declaration")
-				}
-				input.Version = v.ID
-				input.Material, err = session.Read(ctx, v.ID)
+			v, exists := currentVersion(snapshot, name)
+			if !exists || v.Declaration.Fingerprint != d.Fingerprint {
+				return secretstore.Failure("source", "binding requires current material matching every declaration")
 			}
+			input := secretstore.BoundInput{Declaration: d, Version: v.ID}
+			input.Material, err = session.Read(ctx, v.ID)
 			if err != nil {
 				input.Material.Clear()
 				return err

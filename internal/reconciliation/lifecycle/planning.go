@@ -2,12 +2,13 @@ package lifecycle
 
 import (
 	"context"
+	"maps"
 	"slices"
-	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -74,6 +75,7 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 	}
 	input := PlanInput{Verb: verb, Context: view.Identity(), State: state, Controller: controller}
 	var definitions []reconciliation.BlockDefinition
+	var placed []SSHReservation
 	binding := capabilityBinding{controller: controller}
 	for _, bound := range bindings {
 		capability, ok := s.capabilities.Resolve(bound.Kind, bound.Implementation)
@@ -86,6 +88,7 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 		}
 		definitions = append(definitions, contribution.Definitions...)
 		binding.reservations = append(binding.reservations, contribution.Reservations...)
+		placed = append(placed, contribution.SSHReservations...)
 		for _, reference := range contribution.Secrets {
 			if !slices.Contains(binding.secrets, reference) {
 				binding.secrets = append(binding.secrets, reference)
@@ -93,7 +96,7 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 		}
 	}
 	slices.Sort(binding.secrets)
-	if err := refuseOwnSocketConflicts(binding.reservations); err != nil {
+	if err := refuseOwnSocketConflicts(binding.reservations, placed); err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
 	definitions = dependOnController(definitions)
@@ -110,44 +113,66 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 }
 
 // refuseOwnSocketConflicts compares the sockets this context's own blocks claim
-// on the controller as another context's are compared, so two of them that
-// could never both listen refuse before the plan exists rather than when the
-// second one starts.
-func refuseOwnSocketConflicts(reservations []prerequisites.HostReservation) error {
-	conflict, found := prerequisites.ConflictingSockets(reservations)
-	if !found {
-		return nil
+// on one host as another context's are compared on the controller, so two of
+// them that could never both listen refuse before the plan exists rather than
+// when the second one starts. A claim is qualified by the host its block is
+// placed on: the controller, or the Machine of an SSH host, and claims on two
+// hosts never conflict.
+func refuseOwnSocketConflicts(reservations []prerequisites.HostReservation, placed []SSHReservation) error {
+	if conflict, found := prerequisites.ConflictingSockets(reservations); found {
+		return socketConflict(conflict, "the controller")
 	}
+	hosts := map[string][]prerequisites.HostReservation{}
+	for _, claim := range placed {
+		hosts[claim.Machine] = append(hosts[claim.Machine], claim.Reservation)
+	}
+	for _, machine := range slices.Sorted(maps.Keys(hosts)) {
+		if conflict, found := prerequisites.ConflictingSockets(hosts[machine]); found {
+			return socketConflict(conflict, "the SSH host "+string(api.Machine)+"/"+machine)
+		}
+	}
+	return nil
+}
+
+func socketConflict(conflict prerequisites.SocketConflict, host string) error {
 	return failure("api.invariant",
 		"this context's "+conflict.First.Kind+" "+conflict.First.Service+" at "+conflict.FirstSocket+" and "+
-			conflict.Second.Kind+" "+conflict.Second.Service+" at "+conflict.SecondSocket+" cannot both listen on the controller",
+			conflict.Second.Kind+" "+conflict.Second.Service+" at "+conflict.SecondSocket+" cannot both listen on "+host,
 		"give one of them another bind address or port")
 }
 
-// refuseUnsupported names every selected object whose realization this
-// executable cannot perform, before any registration or effect. A capability
-// reports what it cannot do within its own kinds; the engine reports every
-// effect-bearing kind no capability claims at all.
+// refuseUnsupported refuses every selected object whose realization this
+// executable cannot perform, before any registration or effect, with one
+// diagnostic per object and reason that names the object, the reason and the
+// remedy. A capability reports what it cannot do within its own kinds; the
+// engine reports every effect-bearing kind no capability claims at all.
 func (s Service) refuseUnsupported(state *compilation.State) error {
-	var unsupported []string
+	var refused []Refusal
 	for _, bound := range s.capabilities.Bindings() {
 		capability, ok := s.capabilities.Resolve(bound.Kind, bound.Implementation)
 		if !ok {
 			continue
 		}
 		if reporter, ok := capability.(UnsupportedReporter); ok {
-			unsupported = append(unsupported, reporter.Unsupported(state)...)
+			refused = append(refused, reporter.Unsupported(state)...)
 		}
 	}
-	unsupported = append(unsupported, Unrealizable(state.Effective(), s.capabilityKinds())...)
-	slices.Sort(unsupported)
-	unsupported = slices.Compact(unsupported)
-	if len(unsupported) == 0 {
+	refused = SortRefusals(append(refused, Unrealizable(state.Effective(), s.capabilityKinds())...))
+	if len(refused) == 0 {
 		return nil
 	}
-	return failure("lifecycle.unsupported",
-		"this executable cannot realize "+strings.Join(unsupported, ", "),
-		"remove those objects from the selected Environment, or use an example within the supported shape such as "+supportedExample)
+	reported := make([]diagnostics.Diagnostic, 0, len(refused))
+	for _, refusal := range refused {
+		remediation := refusal.Remediation
+		if remediation == "" {
+			remediation = "correct " + refusal.identity()
+		}
+		reported = append(reported, diagnostics.Diagnostic{
+			Severity: "error", Code: "lifecycle.unsupported", Message: refusal.Reason, Remediation: remediation,
+			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: refusal.Kind, Name: refusal.Name},
+		})
+	}
+	return &diagnostics.Failure{Diagnostics: reported}
 }
 
 const supportedExample = "examples/lab-rhel"

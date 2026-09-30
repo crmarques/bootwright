@@ -52,7 +52,7 @@ type inspection struct {
 	bound      bool
 	reusable   bool
 	// carried marks a resolution this executable rebased from a closure the
-	// host already holds, and retainedDigest names the sealed bundle those
+	// host already holds, and retainedDigest names the bundle those
 	// bytes come from. Its publisher identities never changed, so it is frozen
 	// exactly like a reusable one even though its own area is still empty.
 	carried        bool
@@ -124,7 +124,8 @@ func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, erro
 }
 
 // retireSuperseded removes every execution bundle a retained resolution names
-// that the completed receipt does not. A client area is never one of them, and
+// that the completed receipt does not, and completes every retirement an
+// interruption left unfinished. A client area is never one of them, and
 // neither is an area this record does not account for.
 func (s Service) retireSuperseded(ctx context.Context, report *Report) error {
 	return s.storage.MutateController(ctx, SetupContext{}, false, func(tx StorageTransaction) error {
@@ -133,12 +134,19 @@ func (s Service) retireSuperseded(ctx context.Context, report *Report) error {
 			return nil
 		}
 		var superseded []string
-		for _, definition := range view.State.RetainedDefinitions {
-			if definition.CatalogDigest == "" || definition.CatalogDigest == view.State.Receipt.CatalogDigest {
-				continue
+		name := func(id string) {
+			if id != "" && id != view.State.Receipt.CatalogDigest && !slices.Contains(superseded, id) {
+				superseded = append(superseded, id)
 			}
-			if !slices.Contains(superseded, definition.CatalogDigest) {
-				superseded = append(superseded, definition.CatalogDigest)
+		}
+		for _, definition := range view.State.RetainedDefinitions {
+			name(definition.CatalogDigest)
+		}
+		// A retirement drops the resolutions its areas carry when it records
+		// its intent, so after an interruption only the mark still names them.
+		for _, held := range view.Areas {
+			if held.Retiring {
+				name(held.ID)
 			}
 		}
 		slices.Sort(superseded)
@@ -170,10 +178,11 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 			return err
 		})
 	}
-	// A completed receipt can outlive its executable's automation revision.
-	// Its validated definition remains historical evidence; only a fresh setup
-	// may resolve a new compatible bundle. Pending retry and corruption refuse.
-	if err != nil && (request.DryRun || s.options.Bootstrap == nil || current.view.State.Receipt.Status != "complete" || !errors.Is(err, ErrBootstrapIncompatible)) {
+	// A settled receipt, whether its setup completed, failed or was canceled,
+	// can outlive its executable's automation revision. Its validated
+	// definition remains historical evidence; only a fresh setup may resolve a
+	// new compatible bundle. Pending retry and corruption refuse.
+	if err != nil && (request.DryRun || s.options.Bootstrap == nil || current.view.State.Receipt.Incomplete() || !errors.Is(err, ErrBootstrapIncompatible)) {
 		return nil, err
 	}
 	if request.DryRun {
@@ -213,9 +222,7 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 	if err != nil {
 		return &current.report, err
 	}
-	if len(retiring) != 0 {
-		current.report.Actions = append(current.report.Actions, retirementAction(len(retiring)))
-	}
+	current.report.Actions = append(current.report.Actions, retiring.actions()...)
 	if s.options.Presenter == nil {
 		return &current.report, failure("controller.setup", "setup plan presentation is not configured", "")
 	}
@@ -287,7 +294,7 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 type inspectionResolution struct {
 	Sources    []DependencySource
 	Definition *Definition
-	// Retained names the sealed bundle a carried definition was reprojected
+	// Retained names the bundle a carried definition was reprojected
 	// from, so every later inspection of that plan keeps reading its sources
 	// from the host instead of a publisher.
 	Retained string

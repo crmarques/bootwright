@@ -110,7 +110,22 @@
             verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
             operation: insert
             image: '{{ containercluster_install_agent_url }}'
+          register: containercluster_install_agent_insertion
+          failed_when: false
           no_log: true
+
+        # ansible-core keeps nothing of a failure under no_log but that it
+        # failed, so the controller's own refusal is reported here, where no
+        # credential is.
+        - name: Stop at an insert the management controller did not complete
+          ansible.builtin.assert:
+            that:
+              - containercluster_install_agent_insertion.msg is not defined
+            fail_msg: >-
+              inserting this cluster's image into Machine {{ containercluster_install_agent_node.machine }}
+              failed:
+              {{ (containercluster_install_agent_insertion.msg | default('') | string | bootwright.core.printable)[:512] }}
+            quiet: true
 
         - name: Boot a machine this substrate created
           ansible.builtin.include_role:

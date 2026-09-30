@@ -491,10 +491,14 @@ func (s Service) Delete(ctx context.Context, request DeleteRequest) (*DeleteResu
 		if err := s.confirm(ctx, request.SkipConfirmation, deleteAction(orphans, record.Name), request.Name); err != nil {
 			return err
 		}
+		released, err := tx.HostReservations(ctx, record.Name)
+		if err != nil {
+			return err
+		}
 		if err := tx.Delete(ctx, record); err != nil {
 			return err
 		}
-		result = &DeleteResult{Name: record.Name, Outcome: "deleted", OrphansAbandoned: orphans}
+		result = &DeleteResult{Name: record.Name, Outcome: "deleted", OrphansAbandoned: orphans, ReleasedReservations: released}
 		if selected.Name == record.Name {
 			if err := s.options.Selection.Clear(ctx, selected); err != nil {
 				return StateError("context was deleted, but its current selection could not be cleared")

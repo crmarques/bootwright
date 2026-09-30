@@ -1,8 +1,12 @@
 package lifecycle
 
 import (
+	"reflect"
 	"testing"
 	"time"
+
+	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 // A capability states its run's deadline only through its invocation, and the
@@ -21,5 +25,42 @@ func TestRunForCarriesTheInvocationsDeadline(t *testing.T) {
 func TestRunForPointsAnAdapterFailureBesideTheAttemptLog(t *testing.T) {
 	if got := RunFor(Execution{}, Invocation{}).OutputRemediation; got != "read the adapter output retained beside this attempt's log" {
 		t.Fatalf("an attempt's request points an adapter failure at %q", got)
+	}
+}
+
+// An operation binds whole versions, but a run is lent only the parts its
+// material files name: a consumer that verifies a listener against a serving
+// certificate is lent that certificate and never the key beside it, a Secret
+// no file names is not lent at all, and the placement's own files are lent
+// like the capability's. The lent parts are the operation's own bytes, so
+// clearing the binding's material clears them and no copy is left behind.
+func TestRunForLendsOnlyThePartsItsMaterialFilesName(t *testing.T) {
+	bound := map[string]secrets.Material{
+		"serving": secrets.NewMaterial(map[secrets.Part][]byte{
+			secrets.CertificatePart: []byte("CERTIFICATE"), secrets.PrivateKeyPart: []byte("SERVING KEY"),
+		}),
+		"fleet": secrets.NewMaterial(map[secrets.Part][]byte{
+			secrets.PrivateKeyPart: []byte("FLEET KEY"), secrets.PublicKeyPart: []byte("FLEET PUBLIC"),
+		}),
+		"unread": secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("UNREAD")}),
+	}
+	request := RunFor(Execution{Material: bound}, Invocation{
+		Materials: []MaterialFile{{Name: "ca", Part: secrets.CertificatePart, Secret: "serving", Variable: "ca"}},
+		Placement: machineref.Placement{Connection: machineref.ConnectionSSH, Machine: "remote", PrivateKeyRef: "fleet"},
+	})
+	lent := map[string][]secrets.Part{}
+	for name, material := range request.Material {
+		lent[name] = material.Parts()
+	}
+	want := map[string][]secrets.Part{"serving": {secrets.CertificatePart}, "fleet": {secrets.PrivateKeyPart}}
+	if !reflect.DeepEqual(lent, want) {
+		t.Fatalf("the run is lent %v, want %v", lent, want)
+	}
+	if value, _ := request.Material["serving"].Part(secrets.CertificatePart); string(value) != "CERTIFICATE" {
+		t.Fatalf("the lent certificate reads %q", value)
+	}
+	bound["serving"].Clear()
+	if value, _ := request.Material["serving"].Part(secrets.CertificatePart); string(value) == "CERTIFICATE" {
+		t.Fatal("the lent certificate is a copy that clearing the binding's material does not reach")
 	}
 }

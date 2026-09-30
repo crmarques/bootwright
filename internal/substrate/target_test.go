@@ -1,6 +1,7 @@
 package substrate
 
 import (
+	"slices"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -273,9 +274,18 @@ func TestAnUnrealizedSubstrateRefuses(t *testing.T) {
 	if _, err := TargetFor(catalog, machine, "lab", "controller"); err == nil {
 		t.Fatal("an unrealized substrate was accepted")
 	}
-	unrealizable := Unrealizable(catalog)
-	if len(unrealizable) != 2 || unrealizable[0] != "InfraProvider/vc" || unrealizable[1] != "Machine/vm" {
-		t.Fatalf("unrealizable = %v", unrealizable)
+	var unrealizable [][3]string
+	for _, found := range Unrealizable(catalog) {
+		unrealizable = append(unrealizable, [3]string{found.Object.Identity(), found.Reason, found.Remediation})
+	}
+	want := [][3]string{
+		{"InfraProvider/vc", "this executable realizes no provider on the substrate it declares",
+			"remove InfraProvider/vc and the Machines it hosts from the selected Environment, or declare them on a baremetal or libvirt provider"},
+		{"Machine/vm", "its provider InfraProvider/vc is on a substrate this executable does not realize",
+			"host Machine/vm on a baremetal or libvirt provider, declare its operating system provided, or remove it from the selected Environment"},
+	}
+	if !slices.Equal(unrealizable, want) {
+		t.Fatalf("unrealizable = %q, want %q", unrealizable, want)
 	}
 	if len(Unrealizable(targetCatalog())) != 0 {
 		t.Fatal("every arm of the fixture is realized")

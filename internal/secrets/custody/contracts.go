@@ -20,7 +20,6 @@ type StoreAccess interface {
 
 type Materializer interface {
 	Acquire(context.Context, secrets.Declaration, secrets.Input) (secrets.Material, error)
-	File(context.Context, secrets.Declaration) (secrets.Material, error)
 	Generate(context.Context, secrets.Declaration) (secrets.Material, error)
 	Validate(context.Context, secrets.Declaration, secrets.Material) error
 }

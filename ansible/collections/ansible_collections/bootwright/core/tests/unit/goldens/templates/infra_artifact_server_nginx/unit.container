@@ -1,0 +1,22 @@
+[Unit]
+Description=Bootwright managed artifact server media
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+ContainerName=bootwright-lab-rhel-artifact-server-media
+Network=host
+User=0
+Entrypoint=/usr/sbin/nginx
+Exec=-g "daemon off;"
+Volume=/var/lib/bootwright-services/lab-rhel/artifact-server/media/config/nginx.conf:/etc/nginx/nginx.conf:ro,Z
+Volume=/var/lib/bootwright-services/lab-rhel/artifact-server/media/tls:/var/lib/bootwright-services/lab-rhel/artifact-server/media/tls:ro,Z
+Volume=/var/lib/bootwright-services/lab-rhel/artifact-server/media/public:/var/lib/bootwright-services/lab-rhel/artifact-server/media/public:ro,Z
+
+[Service]
+Restart=always
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

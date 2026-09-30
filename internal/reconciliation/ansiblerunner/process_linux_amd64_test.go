@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strconv"
@@ -222,8 +223,10 @@ func TestAProtocolRefusalEndsTheAdapterPromptly(t *testing.T) {
 // An adapter failure its own output explains points where the request says
 // that output is named, because only the caller knows: an attempt beside its
 // log, a bounded run in its own file, and a run that names none nowhere. Every
-// failure an adapter can provoke does so: a failed exit, an exit without a
-// result, a malformed record and a record out of order.
+// failure an adapter can provoke does so: a failed exit, one whose descendant
+// holds the channel until the drain closes it, an exit without a result, a
+// malformed record and a record out of order. The drain's close is the
+// runner's own, so the failed exit stays the failure.
 func TestAnAdapterFailureNamesTheOutputItsRequestNames(t *testing.T) {
 	child := func(mode string) func() *exec.Cmd {
 		return func() *exec.Cmd {
@@ -236,6 +239,9 @@ func TestAnAdapterFailureNamesTheOutputItsRequestNames(t *testing.T) {
 		message string
 	}{
 		{"failed-exit", func() *exec.Cmd { return exec.Command("/bin/sh", "-c", "exit 3") }, "the adapter operation did not complete"},
+		{"failed-exit-retained", func() *exec.Cmd {
+			return exec.Command("/bin/sh", "-c", "(exec >/dev/null 2>&1 4<&-; sleep 5) & exit 3")
+		}, "the adapter operation did not complete"},
 		{"no-result", func() *exec.Cmd { return exec.Command("/bin/sh", "-c", "exit 0") }, "the adapter operation has no complete result"},
 		{"malformed", child("malformed"), "the adapter structured result was incomplete"},
 		{"out-of-order", child("out-of-order"), "the adapter capability protocol was invalid"},
@@ -262,6 +268,132 @@ func TestAnAdapterFailureNamesTheOutputItsRequestNames(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// An adapter names a refusal its caller remedies by name, then fails. The run
+// fails with the caller's own diagnostic for it, which carries the object,
+// reason and remedy, whether the refusal is read before or after the failed
+// exit, and the adapter is left to print what it refused into its retained
+// output rather than stopped. A reason its caller does not name, a refusal
+// before the handoff, or a malformed record breaks the protocol instead, and
+// the attempt's outcome is unknown in either order too.
+func TestANamedRefusalFailsTheRunWithItsCallersDiagnostic(t *testing.T) {
+	named := diagnostics.NewFailureWithRemediation("lifecycle.state", "the machine answers as another system", "", "correct its address")
+	const handoff = `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `
+	// readFirst holds the adapter past its record so the runner reads the
+	// record first; readAfter leaves the record to a descendant that writes it
+	// once the adapter has exited, so the failed exit is read first.
+	readFirst := func(record string) string { return `printf '` + record + `\n' >&3; sleep 0.2; exit 2` }
+	readAfter := func(record string) string {
+		return `(exec >/dev/null 2>&1; sleep 0.05; printf '` + record + `\n' >&3) & exec 3>&- 4<&-; exit 2`
+	}
+	const (
+		unnamed = `{"phase":"refused","reason":"release-stamp"}`
+		refusal = `{"phase":"refused","reason":"identity-mismatch"}`
+		invalid = "the adapter capability protocol was invalid"
+	)
+	for _, test := range []struct {
+		name, script, message, printed string
+	}{
+		{
+			name:    "before the exit",
+			script:  handoff + `printf '{"phase":"refused","reason":"identity-mismatch"}\n' >&3; sleep 0.2; echo printed after the refusal; exit 2`,
+			message: "the machine answers as another system", printed: "printed after the refusal\n",
+		},
+		{name: "after the exit", script: handoff + readAfter(refusal), message: "the machine answers as another system"},
+		{name: "a reason its caller does not name before the exit", script: handoff + readFirst(unnamed), message: invalid},
+		{name: "a reason its caller does not name after the exit", script: handoff + readAfter(unnamed), message: invalid},
+		{name: "before the handoff and the exit", script: readFirst(refusal), message: invalid},
+		{name: "before the handoff and after the exit", script: readAfter(refusal), message: invalid},
+		{name: "a malformed record after the exit", script: handoff + readAfter("not a record"), message: "the adapter structured result was incomplete"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runner := sweepingRunner(t, func() *exec.Cmd { return exec.Command("/bin/sh", "-c", test.script) })
+			// A record written after the exit reaches the runner before the
+			// drain closes the channel, on a loaded machine too.
+			runner.drain = resultDrain
+			var output bytes.Buffer
+			request := adapterRequest(t, &output)
+			request.Refusals = map[string]error{"identity-mismatch": named}
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_, err := runner.Run(ctx, request)
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Message != test.message {
+				t.Fatalf("the run reported %+v (%v), want %q", reported, err, test.message)
+			}
+			if test.message == "the machine answers as another system" && !reflect.DeepEqual(reported, diagnostics.Of(named)) {
+				t.Fatalf("the run reported %+v, want the caller's own %+v", reported, diagnostics.Of(named))
+			}
+			if outcome := lifecycle.AttemptOutcome(err); test.message != "the machine answers as another system" && outcome != reconciliation.OutcomeUnknown {
+				t.Fatalf("a record the runner refuses left the attempt %s (%v)", outcome, err)
+			}
+			if test.printed != "" && output.String() != test.printed {
+				t.Fatalf("the adapter printed %q after its refusal, want %q", output.String(), test.printed)
+			}
+		})
+	}
+}
+
+// A record the adapter wrote before its failed exit can still wait for the
+// runner when the drain closes the channel a descendant holds. The runner
+// judges it as if it had read it first, whichever of it and the drain it takes
+// first: the named refusal gives the caller's own diagnostic, a reason its
+// caller does not name breaks the protocol, and a malformed record leaves the
+// result incomplete. Only the read that the drain's own close ends leaves the
+// failed exit. The first group record holds the runner until the adapter is
+// reaped, so the rest wait beside the failed exit and a drain that passes at
+// once, and each case runs rounds enough that the drain is taken first.
+func TestARecordWaitingAtTheDrainIsJudgedAsIfReadFirst(t *testing.T) {
+	named := diagnostics.NewFailureWithRemediation("lifecycle.state", "the machine answers as another system", "", "correct its address")
+	const group = `{"group":"boot","phase":"group","status":"running"}\n`
+	for _, test := range []struct{ name, record, message string }{
+		{"a named refusal", `{"phase":"refused","reason":"identity-mismatch"}`, "the machine answers as another system"},
+		{"a reason its caller does not name", `{"phase":"refused","reason":"release-stamp"}`, "the adapter capability protocol was invalid"},
+		{"a malformed record", "not a record", "the adapter structured result was incomplete"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			script := `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; printf '` + strings.Repeat(group, 8) + test.record +
+				`\n' >&3; (exec >/dev/null 2>&1 4<&-; sleep 5) & exit 2`
+			for round := range 6 {
+				var adapter *exec.Cmd
+				runner := sweepingRunner(t, func() *exec.Cmd {
+					adapter = exec.Command("/bin/sh", "-c", script)
+					return adapter
+				})
+				runner.drain = time.Nanosecond
+				var output bytes.Buffer
+				request := adapterRequest(t, &output)
+				request.Refusals = map[string]error{"identity-mismatch": named}
+				held := false
+				request.Progress = func(context.Context, string, string) {
+					if held {
+						return
+					}
+					held = true
+					for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+						if _, err := os.Stat(fmt.Sprintf("/proc/%d", adapter.Process.Pid)); errors.Is(err, os.ErrNotExist) {
+							break
+						}
+					}
+					time.Sleep(100 * time.Millisecond)
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				_, err := runner.Run(ctx, request)
+				cancel()
+				reported := diagnostics.Of(err)
+				if len(reported) != 1 || reported[0].Message != test.message {
+					t.Fatalf("round %d reported %+v (%v), want %q", round, reported, err, test.message)
+				}
+				if test.message == "the machine answers as another system" && !reflect.DeepEqual(reported, diagnostics.Of(named)) {
+					t.Fatalf("round %d reported %+v, want the caller's own %+v", round, reported, diagnostics.Of(named))
+				}
+				if outcome := lifecycle.AttemptOutcome(err); test.message != "the machine answers as another system" && outcome != reconciliation.OutcomeUnknown {
+					t.Fatalf("round %d left the attempt %s (%v)", round, outcome, err)
+				}
+			}
+		})
 	}
 }
 

@@ -163,3 +163,80 @@ func TestBootstrapRejectsSelfConsistentSourceAndVersionSubstitution(t *testing.T
 		})
 	}
 }
+
+// The closure identity follows what a resolution executes and nothing else.
+// Carrying it onto other automation, which moves the projection it is
+// published in, reading it from other index documents or reaching it from an
+// exact intent keeps it, although each moves the resolution's own digest. A
+// release, a source's bytes, the execution foundation or the platform moves
+// it.
+func TestClosureDigestFollowsOnlyTheExecutedClosure(t *testing.T) {
+	_, fixture := dynamicFixture(t)
+	closure := func(value BootstrapDefinition) string {
+		t.Helper()
+		digest, err := ClosureDigest(value)
+		if err != nil || !bootstrapHash(digest) {
+			t.Fatalf("closure digest = %q (%v)", digest, err)
+		}
+		return digest
+	}
+	base := closure(fixture.bootstrap)
+	canonical := func(t *testing.T, value BootstrapDefinition) BootstrapDefinition {
+		t.Helper()
+		value, err := CanonicalBootstrap(value)
+		if err != nil {
+			t.Fatalf("the changed resolution is not canonical: %+v", diagnostics.Of(err))
+		}
+		return value
+	}
+	for name, change := range map[string]func(*BootstrapDefinition){
+		"other automation": func(value *BootstrapDefinition) {
+			value.AutomationDigest, value.ProjectionSHA256 = strings.Repeat("9", 64), strings.Repeat("8", 64)
+			value.FileCount, value.ExpandedBytes = value.FileCount+1, value.ExpandedBytes+1
+		},
+		"other index documents": func(value *BootstrapDefinition) {
+			value.Metadata = slices.Clone(value.Metadata)
+			value.Metadata[0].SHA256, value.Metadata[1].SHA256 = strings.Repeat("7", 64), strings.Repeat("6", 64)
+		},
+		"exact intents": func(value *BootstrapDefinition) {
+			value.PythonIntent, value.AnsibleIntent = value.PythonVersion, value.AnsibleVersion
+		},
+	} {
+		t.Run("keeps under "+name, func(t *testing.T) {
+			value := fixture.bootstrap
+			change(&value)
+			value = canonical(t, value)
+			if value.Digest == fixture.bootstrap.Digest || closure(value) != base {
+				t.Fatalf("the resolution digest moved %t and the closure moved %t", value.Digest != fixture.bootstrap.Digest, closure(value) != base)
+			}
+		})
+	}
+	for name, change := range map[string]func(*testing.T, BootstrapDefinition) BootstrapDefinition{
+		"another ansible-core release": func(t *testing.T, value BootstrapDefinition) BootstrapDefinition {
+			moved, err := ansibleRecordedAt(value, "2.21.5")
+			if err != nil {
+				t.Fatal(err)
+			}
+			return moved
+		},
+		"other source bytes": func(t *testing.T, value BootstrapDefinition) BootstrapDefinition {
+			value.Sources = slices.Clone(value.Sources)
+			value.Sources[2].SHA256 = strings.Repeat("f", 64)
+			return canonical(t, value)
+		},
+		"another execution foundation": func(t *testing.T, value BootstrapDefinition) BootstrapDefinition {
+			value.Execution.Files = []InstalledFile{{Path: "/usr/lib64/libc.so.6", SHA256: strings.Repeat("5", 64)}}
+			return canonical(t, value)
+		},
+		"another platform release": func(t *testing.T, value BootstrapDefinition) BootstrapDefinition {
+			value.Platform.Release += "1"
+			return canonical(t, value)
+		},
+	} {
+		t.Run("moves under "+name, func(t *testing.T) {
+			if closure(change(t, fixture.bootstrap)) == base {
+				t.Fatal("the closure identity did not move")
+			}
+		})
+	}
+}

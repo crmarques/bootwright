@@ -81,7 +81,17 @@
 - name: Observe what this installation has already published
   bootwright.core.managedos_install_inspect:
     request: '{{ bootwright_os_install_request }}'
+    staging: '{{ managedos_install_anaconda_staged_tree }}'
+    work: '{{ managedos_install_anaconda_work }}'
   register: managedos_install_anaconda_before
+
+# An attempt killed part way leaves its work area, and mkksiso refuses to write
+# an image over one already there, so this attempt starts from none.
+- name: Clear the work area an interrupted attempt left
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_work }}'
+    state: absent
+  changed_when: false
 
 - name: Create the work directory this attempt owns
   ansible.builtin.file:
@@ -100,6 +110,25 @@
     group: root
     mode: '0755'
   when: managedos_install_anaconda_publish_tree | bool
+
+# A tree is published only by the rename below, so neither of these is one an
+# installer may fetch: the staging copy an apply killed while it extracted
+# leaves, and a tree directory a removal stopped while it deleted leaves
+# without its marker. xorriso would extract over the first, and the rename
+# cannot replace the second, a directory that is not empty.
+- name: Clear the staging tree an interrupted apply left
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_staged_tree }}'
+    state: absent
+  when: managedos_install_anaconda_publish_tree | bool
+
+- name: Clear the package tree an interrupted removal left without its marker
+  ansible.builtin.file:
+    path: '{{ bootwright_os_install_request.tree.path }}'
+    state: absent
+  when:
+    - managedos_install_anaconda_publish_tree | bool
+    - managedos_install_anaconda_before.observation.treeContent | bool
 
 - name: Extract the package tree beside its published location
   ansible.builtin.command:
@@ -316,7 +345,20 @@
     remove_certificate: '{{ managedos_install_anaconda_media_trust.removeCertificate }}'
     certificate: '{{ managedos_install_anaconda_certificate }}'
   register: managedos_install_anaconda_ejected
+  failed_when: false
   no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# the controller's own refusal is reported here, where no credential is.
+- name: Stop at an eject the management controller did not complete
+  ansible.builtin.assert:
+    that:
+      - managedos_install_anaconda_ejected.msg is not defined
+    fail_msg: >-
+      ejecting any installer media from Machine {{ bootwright_os_install_request.identity.object }}
+      and reading its power failed:
+      {{ (managedos_install_anaconda_ejected.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
 
 - name: Prove the installed machine answers on the exact key it reported
   ansible.builtin.include_tasks: verify.yml
@@ -328,9 +370,19 @@
     status: ok
   no_log: true
 
+# Removed before the proof below, so the evidence it publishes reports no work
+# area this completion leaves.
+- name: Remove the work directory and the rendered kickstart with it
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_work }}'
+    state: absent
+  changed_when: false
+
 - name: Prove everything this installation publishes is in place
   bootwright.core.managedos_install_inspect:
     request: '{{ bootwright_os_install_request }}'
+    staging: '{{ managedos_install_anaconda_staged_tree }}'
+    work: '{{ managedos_install_anaconda_work }}'
   register: managedos_install_anaconda_after
 
 # Material that only needed to exist for one boot does not outlive it.
@@ -340,12 +392,6 @@
     state: absent
   when: managedos_install_anaconda_delivers_key | bool
   changed_when: managedos_install_anaconda_delivers_key | bool
-
-- name: Remove the work directory and the rendered kickstart with it
-  ansible.builtin.file:
-    path: '{{ managedos_install_anaconda_work }}'
-    state: absent
-  changed_when: false
 
 - name: Publish bounded installation completion evidence
   bootwright.core.managedos_install_protocol:

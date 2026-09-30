@@ -97,7 +97,7 @@ def probes(endpoints=None, cluster="sno"):
 def registered(probe, stdout, rc=0):
     """One loop result as the command module and the task executor register it."""
     stdout = stdout.rstrip("\r\n")
-    return {"changed": False, "cmd": ["getent", "ahosts", probe["name"]], "failed": False, "item": probe,
+    return {"changed": False, "cmd": ["/usr/bin/getent", "ahosts", probe["name"]], "failed": False, "item": probe,
             "rc": rc, "stderr": "", "stderr_lines": [], "stdout": stdout, "stdout_lines": stdout.splitlines()}
 
 
@@ -134,7 +134,7 @@ def refused(*diagnoses):
 def test_every_frozen_name_and_one_beneath_the_wildcard_is_resolved_over_every_family():
     resolve = one(lambda task: "ansible.builtin.command" in task, "resolve")
     assert [str(value) for value in resolve["ansible.builtin.command"]["argv"]] == [
-        "getent", "ahosts", "{{ item.name }}"]
+        "/usr/bin/getent", "ahosts", "{{ item.name }}"]
     assert resolve["loop"] == "{{ containercluster_install_agent_probes }}"
     assert resolve["failed_when"] is False
     assert probes() == ENDPOINTS + [

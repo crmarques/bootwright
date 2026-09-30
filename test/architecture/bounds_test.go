@@ -42,6 +42,7 @@ func documentedBounds() []documentedBound {
 		contexts         = "specs/contexts.md"
 		store            = "internal/workspace/contextfs/store.go"
 		bundles          = "internal/workspace/contextfs/controller_records.go"
+		setupRuns        = "internal/workspace/contextfs/controller_runs_linux_amd64.go"
 		operations       = "internal/reconciliation/operationstore/records.go"
 		lifecycleRun     = "internal/reconciliation/ansiblerunner/process_linux_amd64.go"
 		lifecycleRequest = "internal/reconciliation/lifecycle/invocation.go"
@@ -57,7 +58,12 @@ func documentedBounds() []documentedBound {
 		{contexts, "| Revisions per context | %s |", store, "maxRevisions", nil, false},
 		{contexts, "| Retained [controller bundle namespaces](contexts/controller-record.md#bounds) | %s |", bundles, "maxControllerBundles", nil, false},
 		{"specs/contexts/controller-record.md", "There are at most %s retained bundle", bundles, "maxControllerBundles", nil, false},
+		{contexts, "| [Setup runs](contexts/controller-record.md#setup-runs) the controller directory keeps | %s |", setupRuns, "maxSetupRuns", nil, false},
+		{"specs/contexts/controller-record.md", "There are at most %s runs:", setupRuns, "maxSetupRuns", nil, false},
+		{"specs/contexts/controller-record.md", "`run.output`, which is bounded at %s.", setupRuns, "maxSetupRunOutput", nil, true},
 		{contexts, "| Lifecycle operations one context retains | %s |", operations, "MaxOperations", nil, false},
+		{contexts, "| Entries in one context's lifecycle operation area | %s |", operations, "MaxEntries", nil, false},
+		{contexts, "and must still keep %s entries free", operations, "ReservedEntries", nil, false},
 		{contexts, "| One lifecycle adapter invocation whose request states no deadline | %s |", lifecycleRun, "invocationTimeout", &application{runner: "execute"}, false},
 		{contexts, "| The longest deadline a lifecycle adapter request may state | %s |", lifecycleRequest, "MaxDeadline", &application{runner: "execute", source: lifecycleRun, ceiling: true}, false},
 		{contexts, "| One controller Ansible run: setup, its recovery or the base of a controller-stage client installation | %s |", setupRun, "runTimeout", &application{runner: "runProcess"}, false},

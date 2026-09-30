@@ -56,7 +56,20 @@
       {{ bootwright_cluster_install_material['controllerUserNode' ~ containercluster_install_agent_index] }}
     containercluster_install_agent_password: >-
       {{ bootwright_cluster_install_material['controllerPasswordNode' ~ containercluster_install_agent_index] }}
+  register: containercluster_install_agent_ejected
+  failed_when: false
   no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# each controller's own refusal is reported here, where no credential is.
+- name: Stop at an eject a management controller did not complete
+  ansible.builtin.fail:
+    msg: >-
+      {% for result in containercluster_install_agent_ejected.results | default([]) if result.msg is defined -%}
+      ejecting the media of Machine {{ result.containercluster_install_agent_node.machine }}
+      failed: {{ (result.msg | string | bootwright.core.printable)[:512] }}{{ '' if loop.last else '; ' }}
+      {%- endfor %}
+  when: containercluster_install_agent_ejected.results | default([]) | selectattr('msg', 'defined') | list | length > 0
 
 - name: Report media release completion
   bootwright.core.containercluster_install_protocol:

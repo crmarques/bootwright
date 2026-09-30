@@ -3,6 +3,7 @@ package prerequisites
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -343,6 +344,135 @@ func TestTheBoundRefusalAfterAFailedSetupNamesPurgeOldBundles(t *testing.T) {
 				t.Fatalf("the refusal moved the failed receipt: %#v", f.store.state.Receipt)
 			}
 		})
+	}
+}
+
+// inventory is the package inventory a native solve reads before an attempt,
+// distinct for each attempt.
+func inventory(attempt int) string { return fmt.Sprintf("%064x", attempt+1) }
+
+// sameBundleFailures fills a fresh host's resolution bound with one bundle. Its
+// first setup and every retry fail in their native transaction, and each retry,
+// finding the runtime still missing, solves the same podman release again
+// against the inventory the failure left, which names the same bundle under a
+// new resolution. The next solve reads yet another inventory and its native
+// transaction succeeds. It returns the bundle and the resolutions in the order
+// the store retained them.
+func sameBundleFailures(t *testing.T) (*fixture, string, []string) {
+	t.Helper()
+	f, r := dynamicFixture(t)
+	base := r.native
+	installer := &testRuntimeInstaller{owner: f, result: ActionResult{Outcome: "failed", Evidence: object(map[string]any{"installationEntered": false})}, err: failure("controller.unknown", "native inventory changed", "")}
+	f.service.runtime = installer
+	f.host.runtime = RuntimeInspection{}
+	var resolutions []string
+	for attempt := range MaxRetainedBundles {
+		upgradePodman(t, r, base, "1.2.4", inventory(attempt))
+		if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err == nil {
+			t.Fatalf("attempt %d: the failed native transaction was not reported", attempt)
+		}
+		receipt := f.store.state.Receipt
+		if receipt.Status != "failed" || receipt.Definition == nil || receipt.Definition.Native.BeforeSHA256 != inventory(attempt) {
+			t.Fatalf("attempt %d left receipt %#v", attempt, receipt)
+		}
+		resolutions = append(resolutions, receipt.Definition.ResolutionDigest)
+	}
+	bundle := f.store.state.Receipt.CatalogDigest
+	if !slices.Equal(f.store.areas, []HeldArea{{ID: bundle}}) || len(f.store.state.RetainedDefinitions) != MaxRetainedBundles ||
+		slices.ContainsFunc(f.store.state.RetainedDefinitions, func(definition Definition) bool { return definition.CatalogDigest != bundle }) {
+		t.Fatalf("the failed setups left areas %#v and %d resolutions", f.store.areas, len(f.store.state.RetainedDefinitions))
+	}
+	installer.result, installer.err = ActionResult{Outcome: "changed", Evidence: object(map[string]any{"nativePostcondition": "verified"})}, nil
+	upgradePodman(t, r, base, "1.2.4", inventory(MaxRetainedBundles))
+	f.events, f.plan = nil, Report{}
+	return f, bundle, resolutions
+}
+
+// Every retained resolution can name the one bundle a failed receipt keeps.
+// Under --purge-old-bundles the retry retires each of them but the failed
+// receipt's own, which is also the latest, retires no area, then publishes its
+// own resolution and completes.
+func TestPurgeAtTheBoundRetiresSupersededResolutionsOfTheKeptBundle(t *testing.T) {
+	f, bundle, resolutions := sameBundleFailures(t)
+	report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true, PurgeOldBundles: true})
+	if err != nil || report.Outcome != "changed" {
+		t.Fatalf("the retry at the resolution bound: %#v %v", report, diagnostics.Of(err))
+	}
+	retirements := slices.DeleteFunc(slices.Clone(f.plan.Actions), func(action string) bool { return !strings.HasPrefix(action, "Retire ") })
+	if !slices.Equal(retirements, []string{"Retire 15 superseded resolutions of kept execution bundles to make room for the new one"}) {
+		t.Fatalf("the plan presented the retirement as %q", retirements)
+	}
+	superseded := slices.Sorted(slices.Values(resolutions[:len(resolutions)-1]))
+	if !slices.Equal(f.store.retiredResolutions, superseded) || len(f.store.retired) != 0 || len(report.RetiredBundles) != 0 {
+		t.Fatalf("retired resolutions %v and bundles %v", f.store.retiredResolutions, f.store.retired)
+	}
+	receipt := f.store.state.Receipt
+	if receipt.Status != "complete" || receipt.CatalogDigest != bundle || receipt.Definition.Native.BeforeSHA256 != inventory(MaxRetainedBundles) {
+		t.Fatalf("the retry did not complete its own resolution: %#v", receipt)
+	}
+	var retained []string
+	for _, definition := range f.store.state.RetainedDefinitions {
+		retained = append(retained, definition.ResolutionDigest)
+	}
+	if !slices.Equal(retained, []string{resolutions[len(resolutions)-1], receipt.Definition.ResolutionDigest}) {
+		t.Fatalf("retained resolutions after the retry = %v", retained)
+	}
+	if !slices.Equal(f.store.areas, []HeldArea{{ID: bundle}}) {
+		t.Fatalf("areas after the retry = %#v", f.store.areas)
+	}
+}
+
+// At the bound a resolution of a kept bundle is retired unless it is the
+// receipt's own, the one this setup publishes or the latest naming its bundle,
+// which keeps that bundle identifiable. The resolutions of a retired area
+// leave with it, and those of a bundle this host holds no area for, as a
+// controller stage retains, are never named.
+func TestRoomRetiresOnlySupersededResolutionsOfKeptBundles(t *testing.T) {
+	digest := func(digit string) string { return strings.Repeat(digit, 64) }
+	receipt, carried, target, superseded, stage := digest("1"), digest("2"), digest("3"), digest("4"), digest("5")
+	resolution := func(bundle, digit string) Definition {
+		return Definition{CatalogDigest: bundle, ResolutionDigest: digest(digit)}
+	}
+	own, fresh := resolution(receipt, "b"), resolution(target, "e")
+	areas := []HeldArea{{ID: receipt}, {ID: carried}, {ID: superseded}}
+	for index := range MaxRetainedBundles - len(areas) {
+		areas = append(areas, HeldArea{ID: fmt.Sprintf("%064x", index+256)})
+	}
+	view := StorageView{Areas: areas, State: HostState{
+		Receipt: SetupReceipt{ID: "setup-" + digest("1")[:32], Status: "complete", CatalogDigest: receipt, Definition: &own},
+		RetainedDefinitions: []Definition{
+			resolution(receipt, "a"), own, resolution(receipt, "c"),
+			resolution(carried, "d"), resolution(carried, "f"),
+			fresh, resolution(target, "6"),
+			resolution(superseded, "7"), resolution(superseded, "8"),
+			resolution(stage, "9"), resolution(stage, "0"),
+		},
+	}}
+	current := inspection{definition: Definition{CatalogDigest: target, ResolutionDigest: fresh.ResolutionDigest, Bootstrap: &BootstrapDefinition{}}, retainedDigest: carried}
+	retiring, err := current.room(view, true)
+	if err != nil {
+		t.Fatalf("room at the bound: %v", err)
+	}
+	if !slices.Equal(retiring.bundles, []string{superseded}) || !slices.Equal(retiring.resolutions, []string{digest("a"), digest("d")}) {
+		t.Fatalf("retiring bundles %v and resolutions %v", retiring.bundles, retiring.resolutions)
+	}
+	if actions := retiring.actions(); !slices.Equal(actions, []string{
+		"Retire 1 superseded execution bundle to make room for the new one",
+		"Retire 2 superseded resolutions of kept execution bundles to make room for the new one",
+	}) {
+		t.Fatalf("plan actions = %q", actions)
+	}
+}
+
+// Without the flag that host refuses with the command that makes room, rather
+// than claiming that nothing may be retired.
+func TestTheBoundOfOneBundlesResolutionsNamesPurgeOldBundles(t *testing.T) {
+	f, _, resolutions := sameBundleFailures(t)
+	writes := f.store.writes
+	_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+	refusal(t, err, boundRefusal, boundRemediation)
+	if slices.Contains(f.events, "present") || f.store.writes != writes || len(f.store.retiredResolutions) != 0 || len(f.store.state.RetainedDefinitions) != len(resolutions) {
+		t.Fatalf("a refused setup acted: events=%v writes=%d retired=%v", f.events, f.store.writes-writes, f.store.retiredResolutions)
 	}
 }
 

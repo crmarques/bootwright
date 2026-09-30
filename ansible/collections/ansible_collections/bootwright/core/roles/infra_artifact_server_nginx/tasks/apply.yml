@@ -164,6 +164,42 @@
     request: '{{ bootwright_artifact_server_request }}'
   register: infra_artifact_server_nginx_before
 
+# A running server keeps what it started with: its unit takes effect at a start,
+# its configuration is mounted on its own and it reads its serving material once,
+# so publishing one replaces the host's file while nginx keeps the one it read.
+# An attempt stopped between publishing and restarting leaves the server on the
+# earlier files while the next attempt finds the published ones unchanged, so a
+# running server restarts whenever a file it runs from is newer than its start.
+- name: Observe the files the server runs from
+  ansible.builtin.stat:
+    path: '{{ item }}'
+    get_checksum: false
+  loop: >-
+    {{ [infra_artifact_server_nginx_config_dir ~ '/nginx.conf', infra_artifact_server_nginx_unit_path]
+       + ([infra_artifact_server_nginx_tls_dir ~ '/server.crt']
+          if bootwright_artifact_server_material.certificate | default('') | length > 0 else [])
+       + ([infra_artifact_server_nginx_tls_dir ~ '/server.key']
+          if bootwright_artifact_server_material.privateKey | default('') | length > 0 else []) }}
+  register: infra_artifact_server_nginx_runs_from
+  when: infra_artifact_server_nginx_before.observation.unit == 'active'
+
+# A start that cannot be read proves nothing, so the server then restarts.
+# The format is podman's own template, handed to it as a literal.
+- name: Observe when the running server started
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - inspect
+      - --type
+      - container
+      - --format
+      - "{{ '{{.State.StartedAt.UnixNano}}' }}"
+      - '{{ bootwright_artifact_server_request.unit }}'
+  register: infra_artifact_server_nginx_started
+  when: infra_artifact_server_nginx_before.observation.unit == 'active'
+  changed_when: false
+  failed_when: false
+
 - name: Start the managed service
   ansible.builtin.command:
     argv:
@@ -173,16 +209,19 @@
   when: infra_artifact_server_nginx_before.observation.unit != 'active'
   changed_when: infra_artifact_server_nginx_before.observation.unit != 'active'
 
-- name: Restart the managed service after a configuration change
+- name: Restart the managed service when a file it runs from changed since it started
   ansible.builtin.command:
     argv:
       - /usr/bin/systemctl
       - restart
       - '{{ infra_artifact_server_nginx_service }}'
+  register: infra_artifact_server_nginx_restart
   when:
     - infra_artifact_server_nginx_before.observation.unit == 'active'
     - infra_artifact_server_nginx_configuration is changed or infra_artifact_server_nginx_unit is changed
       or infra_artifact_server_nginx_certificate is changed or infra_artifact_server_nginx_key is changed
+      or (infra_artifact_server_nginx_started.stdout | default('') | trim | int)
+      < (infra_artifact_server_nginx_runs_from.results | map(attribute='stat.mtime') | max) * 1000000000
   changed_when: true
 
 - name: Report service start completion
@@ -232,6 +271,7 @@
              or infra_artifact_server_nginx_key is changed
              or infra_artifact_server_nginx_configuration is changed
              or infra_artifact_server_nginx_unit is changed
+             or infra_artifact_server_nginx_restart is changed
              or infra_artifact_server_nginx_pull is changed
              or infra_artifact_server_nginx_before.observation.unit != 'active')
          else 'unchanged' }}

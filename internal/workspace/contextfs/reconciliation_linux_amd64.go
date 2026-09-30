@@ -14,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -453,8 +454,9 @@ func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []p
 			retained = append(retained, reservation)
 		}
 	}
-	if owner, taken := prerequisites.ConflictingContext(retained, next); taken {
-		return controllerFailure("controller.conflict", "another context already reserves a host resource this service needs; destroy or continue context "+owner+" first")
+	if held, taken := prerequisites.ConflictingContext(retained, next); taken {
+		return diagnostics.NewFailureWithRemediation("controller.conflict",
+			"context "+held.Context+" already holds a "+held.Class+" reservation this context needs", "", held.Remediation)
 	}
 	combined := append(retained, next...)
 	slices.SortFunc(combined, func(x, y prerequisites.HostReservation) int {

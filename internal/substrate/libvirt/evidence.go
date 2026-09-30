@@ -152,17 +152,29 @@ func matchServices(observed []ServiceEvidence, frozen []string) error {
 	return nil
 }
 
-func matchNetworks(observed []NetworkEvidence, frozen []Network) error {
+// pairNetworks orders the observed networks as the frozen request orders its
+// own, and requires exactly one entry of the same name and management for each.
+func pairNetworks(observed []NetworkEvidence, frozen []Network) ([]NetworkEvidence, error) {
 	if len(observed) != len(frozen) {
-		return refusal("lifecycle.state", "the provider host evidence does not cover every declared network", "")
+		return nil, refusal("lifecycle.state", "the provider host evidence does not cover every declared network", "")
 	}
 	sorted := slices.Clone(observed)
 	slices.SortFunc(sorted, func(x, y NetworkEvidence) int { return strings.Compare(x.Name, y.Name) })
 	for index, network := range frozen {
-		entry := sorted[index]
-		if entry.Name != network.Name || entry.Managed != network.Managed {
-			return refusal("lifecycle.state", "the provider host evidence does not match its frozen networks", "")
+		if sorted[index].Name != network.Name || sorted[index].Managed != network.Managed {
+			return nil, refusal("lifecycle.state", "the provider host evidence does not match its frozen networks", "")
 		}
+	}
+	return sorted, nil
+}
+
+func matchNetworks(observed []NetworkEvidence, frozen []Network) error {
+	sorted, err := pairNetworks(observed, frozen)
+	if err != nil {
+		return err
+	}
+	for index, network := range frozen {
+		entry := sorted[index]
 		if !entry.Bridge {
 			return refusal("lifecycle.state", "a declared network bridge is not present on the provider host", "")
 		}
@@ -223,6 +235,80 @@ func ValidateHostAbsence(data []byte, digest string) error {
 	return nil
 }
 
+// ValidateHostUnremoved accepts observed evidence only when it proves a
+// removal of the frozen request took nothing back: the presence form, through
+// a URI that answered, reporting every managed network its driver answered for
+// with this context's ownership and active, the pool its driver answered for
+// active, and the pool directory present. The removal stops each network and
+// the pool before it undefines it, so a stopped one may be its first effect
+// and is never read as none. The hypervisor closure, the driver daemons,
+// whether a declared bridge exists and whether a network carries its frozen
+// definition are what the apply proves, not anything a removal takes back, so
+// none plays any part.
+func ValidateHostUnremoved(data []byte, request HostRequest, digest string) error {
+	evidence, err := decodeHostRemains(data, digest)
+	if err != nil {
+		return err
+	}
+	return unremoved(evidence, request)
+}
+
+// ValidateHostRemovalUnfinished accepts observed evidence only when it proves
+// a removal of the frozen request took back part of what it owns and not the
+// rest: the presence form reporting the pool, its directory or one of this
+// context's managed networks, without the whole that ValidateHostUnremoved
+// reads. The adapter's postcondition is the apply's, which leaves the pool
+// directory out, so a host holding everything else carries it proved while
+// its directory is gone; like the rest of what the apply proves it plays no
+// part here. A managed network defined without this context's ownership is
+// foreign and leaves the effect unknown.
+func ValidateHostRemovalUnfinished(data []byte, request HostRequest, digest string) error {
+	evidence, err := decodeHostRemains(data, digest)
+	if err != nil {
+		return err
+	}
+	if err := holdsOwned(evidence); err != nil {
+		return err
+	}
+	if unremoved(evidence, request) == nil {
+		return refusal("lifecycle.state", "the provider host still holds everything its removal takes back", "")
+	}
+	return nil
+}
+
+// decodeHostRemains decodes observed evidence for this request in its
+// presence form, the only form that reports what a removal has still to take
+// back.
+func decodeHostRemains(data []byte, digest string) (HostEvidence, error) {
+	evidence, err := decodeHostEvidence(data, digest)
+	if err != nil {
+		return HostEvidence{}, err
+	}
+	if evidence.Absent {
+		return HostEvidence{}, refusal("lifecycle.state", "the provider host evidence reports a removal, not what remains", "")
+	}
+	return evidence, nil
+}
+
+func unremoved(evidence HostEvidence, request HostRequest) error {
+	if !evidence.URI {
+		return refusal("lifecycle.state", "the declared libvirt connection does not answer", "")
+	}
+	if !evidence.PoolAnswered || evidence.Pool != "active" || evidence.Directory == nil || !*evidence.Directory {
+		return refusal("lifecycle.state", "the provider host no longer holds its active pool and its directory", "")
+	}
+	sorted, err := pairNetworks(evidence.Networks, request.Networks)
+	if err != nil {
+		return err
+	}
+	for _, entry := range sorted {
+		if entry.Managed && (!entry.Answered || !entry.Owned || entry.State != "active") {
+			return refusal("lifecycle.state", "the provider host no longer holds every managed network it owns active", "")
+		}
+	}
+	return nil
+}
+
 // ValidateHostPartial accepts evidence only when it positively proves this
 // context's own provider host is part way realized: its pool, its pool
 // directory or one of its owned managed networks is present while the whole
@@ -240,6 +326,13 @@ func ValidateHostPartial(data []byte, digest string) error {
 	if evidence.Postcondition || evidence.Absent {
 		return refusal("lifecycle.state", "the provider host evidence proves a settled state, not a partial one", "")
 	}
+	return holdsOwned(evidence)
+}
+
+// holdsOwned requires the evidence to report the pool, its directory or one of
+// this context's managed networks, and no managed network defined without
+// this context's ownership.
+func holdsOwned(evidence HostEvidence) error {
 	present := evidence.Pool != "" || (evidence.Directory != nil && *evidence.Directory)
 	for _, network := range evidence.Networks {
 		if !network.Managed || (network.State == "" && !network.Owned) {

@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -45,6 +46,9 @@ func TestHostRequestFreezesTheNetworksAndPoolItOwns(t *testing.T) {
 	}
 	if request.Placement.Connection != "local" || request.Placement.Machine != "controller" {
 		t.Fatalf("placement = %+v", request.Placement)
+	}
+	if request.Provisioned {
+		t.Fatal("a provider hosted on the controller installs the closure the controller stage installs")
 	}
 }
 
@@ -115,6 +119,9 @@ func TestARemoteProviderHostUsesItsOwnAuthoredAccess(t *testing.T) {
 	placement := requests[0].Placement
 	if placement.Connection != "ssh" || placement.Machine != "hypervisor" || placement.Address != "192.0.2.5" || placement.User != "root" {
 		t.Fatalf("placement = %+v", placement)
+	}
+	if !requests[0].Provisioned {
+		t.Fatal("a provider host reached over SSH does not install its own closure")
 	}
 	if !slices.Equal(requests[0].SecretReferences(), []string{"host-key", "hypervisor-key"}) {
 		t.Fatalf("secrets = %v", requests[0].SecretReferences())
@@ -247,8 +254,8 @@ func TestAnIPv6ControllerIsBracketedAndClaimsTheSharedSocketKey(t *testing.T) {
 	held := []prerequisites.HostReservation{{Context: "other", Kind: "proxy", Service: "proxy",
 		Keys: managedservice.ReservationKeys("bootwright-other-proxy", "/var/lib/bootwright-services/other/proxy", service)}}
 	wanted := []prerequisites.HostReservation{{Context: testContext, Kind: "substrate-machine", Service: "rhel-01", Keys: requests[0].ReservationKeys()}}
-	if owner, conflict := prerequisites.ConflictingContext(held, wanted); !conflict || owner != "other" {
-		t.Fatalf("conflict = %v with %q", conflict, owner)
+	if owner, conflict := prerequisites.ConflictingContext(held, wanted); !conflict || owner.Context != "other" || owner.Class != "socket" {
+		t.Fatalf("conflict = %v with %+v", conflict, owner)
 	}
 }
 
@@ -321,6 +328,21 @@ func TestUnsupportedNamesEveryObjectThisContractCannotRealize(t *testing.T) {
 	if !slices.Equal(unsupported, []string{"InfraProvider/vc", "Machine/node-01"}) {
 		t.Fatalf("unsupported = %v", unsupported)
 	}
+	// Each refusal says why and what to change, the Machine's naming the
+	// provider that makes it unrealizable.
+	var reasons []string
+	for _, refused := range Refusals(catalogOf(controller(), provider(), networkConfig(), guest("rhel-01"), vsphere, hosted, metal)) {
+		reasons = append(reasons, refused.Kind+"/"+refused.Name+": "+refused.Reason+"; "+refused.Remediation)
+	}
+	want := []string{
+		"InfraProvider/vc: this executable realizes no provider on the substrate it declares; " +
+			"remove InfraProvider/vc and the Machines it hosts from the selected Environment, or declare them on a baremetal or libvirt provider",
+		"Machine/node-01: its provider InfraProvider/vc is on a substrate this executable does not realize; " +
+			"host Machine/node-01 on a baremetal or libvirt provider, declare its operating system provided, or remove it from the selected Environment",
+	}
+	if !slices.Equal(reasons, want) {
+		t.Fatalf("refusals =\n%q\nwant\n%q", reasons, want)
+	}
 }
 
 // A controller that binds a wildcard gives its guests no endpoint a consumer
@@ -339,6 +361,16 @@ func TestAWildcardControllerAddressRefuses(t *testing.T) {
 		if unsupported := Unsupported(catalogOf(controller(), listener)); slices.Contains(unsupported, "InfraProvider/lab-libvirt") == nameable {
 			t.Fatalf("%q: nameable = %v, unsupported = %v", address, nameable, unsupported)
 		}
+	}
+	defaults := provider().Spec().Get("libvirt", "bmcEmulationDefaults").With("bindAddress", api.StringValue("0.0.0.0"))
+	listener := provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulationDefaults", defaults)))
+	want := []lifecycle.Refusal{{
+		Kind: "InfraProvider", Name: "lab-libvirt",
+		Reason:      "an emulated BMC listens on one unicast address its controller endpoints can name, and this provider's bindAddress is not one",
+		Remediation: "set spec.libvirt.bmcEmulationDefaults.bindAddress on InfraProvider/lab-libvirt to one unicast host address",
+	}}
+	if refused := Refusals(catalogOf(controller(), listener)); !slices.Equal(refused, want) {
+		t.Fatalf("refusals = %+v, want %+v", refused, want)
 	}
 }
 

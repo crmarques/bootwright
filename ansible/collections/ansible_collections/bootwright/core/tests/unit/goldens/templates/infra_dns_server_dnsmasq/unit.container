@@ -1,0 +1,20 @@
+[Unit]
+Description=Bootwright managed name resolution dns
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=registry.example.test/dns-server-dnsmasq@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+ContainerName=bootwright-lab-rhel-dns-server-dnsmasq-dns
+Network=host
+User=0
+Entrypoint=/usr/sbin/dnsmasq
+Exec=--keep-in-foreground --conf-file=/etc/dnsmasq.conf
+Volume=/var/lib/bootwright-services/lab-rhel/dns-server-dnsmasq/dns/config/dnsmasq.conf:/etc/dnsmasq.conf:ro,Z
+
+[Service]
+Restart=always
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

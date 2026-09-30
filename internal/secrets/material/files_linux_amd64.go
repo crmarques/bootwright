@@ -42,7 +42,7 @@ type secureFiles struct {
 	ownerUID    uint32
 }
 
-func (s *Service) readFileParts(ctx context.Context, requests []fileRequest, origin string, relativeToOrigin bool) (map[secrets.Part][]byte, error) {
+func (s *Service) readFileParts(ctx context.Context, requests []fileRequest) (map[secrets.Part][]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -50,9 +50,6 @@ func (s *Service) readFileParts(ctx context.Context, requests []fileRequest, ori
 		return map[secrets.Part][]byte{}, nil
 	}
 	code := "input"
-	if relativeToOrigin {
-		code = "source"
-	}
 	identity := FileIdentity{UID: os.Getuid()}
 	if s.operator != nil {
 		var err error
@@ -78,7 +75,7 @@ func (s *Service) readFileParts(ctx context.Context, requests []fileRequest, ori
 	for _, request := range requests {
 		if !filepath.IsAbs(request.Path) && request.Path != "~" && !strings.HasPrefix(request.Path, "~/") && !strings.HasPrefix(request.Path, "~") {
 			var err error
-			base, err = fileBase(ctx, origin, relativeToOrigin)
+			base, err = fileBase(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -156,15 +153,9 @@ func (s *Service) readFileParts(ctx context.Context, requests []fileRequest, ori
 	return parts, nil
 }
 
-func fileBase(ctx context.Context, origin string, relativeToOrigin bool) (string, error) {
+func fileBase(ctx context.Context) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
-	}
-	if relativeToOrigin {
-		if !canonicalAbsolute(origin) {
-			return "", failure("source", "secret declaration origin is not an absolute bounded path", "")
-		}
-		return filepath.Dir(origin), nil
 	}
 	base, err := os.Getwd()
 	if err != nil || !canonicalAbsolute(base) {

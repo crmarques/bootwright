@@ -101,13 +101,15 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 				plan.Secrets = append(plan.Secrets, reference)
 			}
 		}
-		if !request.Placement.Local() {
-			continue
-		}
-		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
+		claim := prerequisites.HostReservation{
 			Context: input.Context.Name, Kind: c.definition.Slug,
 			Service: request.Identity.Service, Keys: request.ReservationKeys(),
-		})
+		}
+		if !request.Placement.Local() {
+			plan.SSHReservations = append(plan.SSHReservations, lifecycle.SSHReservation{Machine: request.Placement.Machine, Reservation: claim})
+			continue
+		}
+		plan.Reservations = append(plan.Reservations, claim)
 	}
 	slices.Sort(plan.Secrets)
 	return plan, nil

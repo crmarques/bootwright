@@ -13,66 +13,76 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-// unsupportedCustomizations are the profile choices that carry secret bytes or
+// unsupportedSelections are the profile choices that carry secret bytes or
 // effects this contract does not prove. A selected one refuses before
 // registration rather than installing part of what was declared.
-var unsupportedCustomizations = [][]string{
+var unsupportedSelections = [][]string{
+	{"installer", "anaconda", "packageSource", "mirror"},
+	{"installer", "anaconda", "packageSource", "fromSubscription"},
+	{"subscription"},
 	{"customizations", "ssh", "initialPassword"},
 	{"customizations", "security", "diskEncryption"},
 }
 
-// refusedCustomization reports whether a profile selects an arm this contract
-// cannot install. FIPS is read rather than detected, because a profile that
-// declares it disabled has selected nothing, while one that enables it would
-// otherwise install a machine that is not in the mode it asked for.
-func refusedCustomization(spec api.Value) bool {
-	for _, path := range unsupportedCustomizations {
+// refusedProfile says why a profile selects what this contract cannot
+// install, or nothing when it can. FIPS is read rather than detected, because
+// a profile that declares it disabled has selected nothing, while one that
+// enables it would otherwise install a machine that is not in the mode it
+// asked for.
+func refusedProfile(profile api.Object) (reason, remediation string) {
+	spec := profile.Spec()
+	if !spec.Has("installer", "anaconda") {
+		return "this executable installs an operating system only through the anaconda installer, which the install profile does not select",
+			"select spec.installer.anaconda on " + profile.Identity()
+	}
+	for _, path := range unsupportedSelections {
 		if spec.Has(path...) {
-			return true
+			field := "spec." + strings.Join(path, ".")
+			return "the install profile selects " + field + ", which carries secret bytes or effects this executable does not prove",
+				"remove " + field + " from " + profile.Identity()
 		}
 	}
-	return spec.Get("customizations", "security", "fips", "enabled").Bool()
+	if spec.Get("customizations", "security", "fips", "enabled").Bool() {
+		return "the install profile enables FIPS, which carries effects this executable does not prove",
+			"disable spec.customizations.security.fips on " + profile.Identity()
+	}
+	return "", ""
 }
 
-// Unsupported lists every installation this contract cannot realize. A profile
-// arm or a target it refuses is named through the Machine that selects it,
-// because that is the object an operator removes or changes.
+// Unsupported lists every installation this contract cannot realize, through
+// the Machine that selects it.
 func Unsupported(catalog api.Catalog) []string {
+	return lifecycle.Identities(Refusals(catalog))
+}
+
+// Refusals refuses every installation this contract cannot realize. A profile
+// arm or a target it refuses is named through the Machine that selects it,
+// because that is the object an operator removes or changes, and its remedy
+// names the field to change.
+func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 	// A graph naming no controller leaves a physical target underived, and the
 	// request builder refuses it for that reason instead.
 	controllerMachine, _ := lifecycle.ControllerMachine(catalog)
-	var found []string
+	var found []lifecycle.Refusal
 	for _, machine := range InstalledMachines(catalog) {
 		// Nothing a target is refused for depends on the context, so none is
 		// named here.
 		derived, err := substrate.TargetFor(catalog, machine, "", controllerMachine)
-		if err == nil && refusedTarget(machine, derived) != nil {
-			found = append(found, machine.Identity())
-			continue
+		if err == nil {
+			if reason, remediation := refusedTarget(machine, derived); reason != "" {
+				found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
+				continue
+			}
 		}
 		profile, ok := catalog.Find(api.MachineInstallProfile, machine.Spec().Get("os", "installProfileRef").Text())
 		if !ok {
 			continue
 		}
-		if !profile.Spec().Has("installer", "anaconda") {
-			found = append(found, machine.Identity())
-			continue
-		}
-		source := profile.Spec().Get("installer", "anaconda", "packageSource")
-		if source.Has("mirror") || source.Has("fromSubscription") {
-			found = append(found, machine.Identity())
-			continue
-		}
-		if profile.Spec().Has("subscription") {
-			found = append(found, machine.Identity())
-			continue
-		}
-		if refusedCustomization(profile.Spec()) {
-			found = append(found, machine.Identity())
+		if reason, remediation := refusedProfile(profile); reason != "" {
+			found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
 		}
 	}
-	slices.Sort(found)
-	return slices.Compact(found)
+	return lifecycle.SortRefusals(found)
 }
 
 // InstalledMachines lists the Machines whose operating system Bootwright
@@ -288,8 +298,8 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 	if err != nil {
 		return Target{}, err
 	}
-	if err := refusedTarget(machine, derived); err != nil {
-		return Target{}, err
+	if reason, remediation := refusedTarget(machine, derived); reason != "" {
+		return Target{}, refusal("lifecycle.unsupported", reason, remediation)
 	}
 	target := Target{
 		Channel: derived.Identity.Channel,
@@ -327,14 +337,14 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 // refusedTarget says why this contract cannot install onto a Machine's
 // realized target, or nothing when it can. It is the one statement of that
 // refusal, so Unsupported and the request builder never disagree about it.
-func refusedTarget(machine api.Object, target substrate.Target) error {
+func refusedTarget(machine api.Object, target substrate.Target) (reason, remediation string) {
 	// A physical machine already holds whatever it holds, and an installation
 	// that names no disk leaves the installer to clear every one. A wwn is
 	// admitted as a selector but not yet derived into a device the installer
 	// and its own target proof can name.
 	if target.Physical && target.RootDeviceHints.DeviceName == "" {
-		return refusal("lifecycle.unsupported", "a physical installation erases only a root device named by path, and the Machine names none",
-			"set spec.os.install.rootDeviceHints.deviceName on "+machine.Identity()+"; a wwn-only selection is not yet supported")
+		return "a physical installation erases only a root device named by path, and the Machine names none",
+			"set spec.os.install.rootDeviceHints.deviceName on " + machine.Identity() + "; a wwn-only selection is not yet supported"
 	}
 	// The Kickstart selects its disk by name alone, so any other hint would be
 	// ignored and the disk it selected installed over regardless.
@@ -345,27 +355,26 @@ func refusedTarget(machine api.Object, target substrate.Target) error {
 		}
 	}
 	if len(uncarried) != 0 {
-		return refusal("lifecycle.unsupported",
-			"a managed-OS installation selects its root disk by deviceName alone and cannot carry the other root-device hints the Machine declares",
-			"remove "+strings.Join(uncarried, ", ")+" from "+machine.Identity())
+		return "a managed-OS installation selects its root disk by deviceName alone and cannot carry the other root-device hints the Machine declares",
+			"remove " + strings.Join(uncarried, ", ") + " from " + machine.Identity()
 	}
 	// A controller that fetches without verifying the artifact server boots
 	// whatever image answers, and the installer it boots is what receives the
 	// delivered key. Only a delivered-key target publishes privately, so this
 	// is exactly the private consumer the exception is refused for.
 	if target.Identity.Channel == substrate.ChannelDeliveredKey && target.Controller.VirtualMedia.Trust == substrate.TrustDisableVerification {
-		return refusal("lifecycle.unsupported", "a Machine that delivers private material through its installation cannot let its controller fetch without verifying the artifact server",
-			"declare hardware.management.bmc.virtualMedia.tls.trust: import-certificate on "+machine.Identity()+", or established when its controller already trusts the server")
+		return "a Machine that delivers private material through its installation cannot let its controller fetch without verifying the artifact server",
+			"declare hardware.management.bmc.virtualMedia.tls.trust: import-certificate on " + machine.Identity() + ", or established when its controller already trusts the server"
 	}
 	// A delivered key reaches the installer at a tokenized URL the Kickstart
 	// names, and the Kickstart is implanted in an installer image served
 	// without authentication, so the token would protect nothing.
 	if target.Identity.Channel == substrate.ChannelDeliveredKey {
-		return refusal("lifecycle.unsupported", "a delivered host key would be readable from the publicly served installer image",
-			"physical managed-OS installation is disabled until private delivery is repaired; remove "+machine.Identity()+
-				" from the selected Environment or install its operating system outside Bootwright")
+		return "a delivered host key would be readable from the publicly served installer image",
+			"physical managed-OS installation is disabled until private delivery is repaired; remove " + machine.Identity() +
+				" from the selected Environment or install its operating system outside Bootwright"
 	}
-	return nil
+	return "", ""
 }
 
 // mediaTrustRefusal says why the controller cannot be made to trust the server

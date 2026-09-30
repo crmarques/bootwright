@@ -240,11 +240,10 @@ func (s *memorySession) Bind(ctx context.Context, inputs []secretstore.BoundInpu
 	}
 	binding := secretstore.Binding{ID: s.implementation.id("binding"), Versions: []string{}}
 	for _, input := range inputs {
-		id := input.Version
-		if id == "" {
-			id = s.add(input.Declaration, input.Material).ID
+		if _, stored := s.state.versions[input.Version]; !stored {
+			return secretstore.Binding{}, secretstore.Failure("source", "a test binding pins only stored versions")
 		}
-		binding.Versions = append(binding.Versions, id)
+		binding.Versions = append(binding.Versions, input.Version)
 	}
 	slices.Sort(binding.Versions)
 	s.state.bindings[binding.ID] = binding

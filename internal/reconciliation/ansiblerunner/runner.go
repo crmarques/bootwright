@@ -35,6 +35,7 @@ type protocolMessage struct {
 	Status   string          `json:"status,omitempty"`
 	Outcome  string          `json:"outcome,omitempty"`
 	Evidence json.RawMessage `json:"evidence,omitempty"`
+	Reason   string          `json:"reason,omitempty"`
 }
 
 // readProtocol decodes the adapter's result channel. Every record is bounded
@@ -54,15 +55,19 @@ func readProtocol(reader io.Reader, messages chan<- protocolMessage) error {
 		}
 		switch message.Phase {
 		case "loaded":
-			if message.Group != "" || message.Status != "" || message.Outcome != "" || len(message.Evidence) != 0 {
+			if message.Group != "" || message.Status != "" || message.Outcome != "" || len(message.Evidence) != 0 || message.Reason != "" {
 				return errors.New("protocol record")
 			}
 		case "group":
-			if message.Group == "" || message.Status == "" || message.Outcome != "" || len(message.Evidence) != 0 {
+			if message.Group == "" || message.Status == "" || message.Outcome != "" || len(message.Evidence) != 0 || message.Reason != "" {
 				return errors.New("protocol record")
 			}
 		case "completed":
-			if message.Outcome != "changed" && message.Outcome != "unchanged" || len(message.Evidence) == 0 {
+			if message.Outcome != "changed" && message.Outcome != "unchanged" || len(message.Evidence) == 0 || message.Reason != "" {
+				return errors.New("protocol record")
+			}
+		case "refused":
+			if message.Reason == "" || message.Group != "" || message.Status != "" || message.Outcome != "" || len(message.Evidence) != 0 {
 				return errors.New("protocol record")
 			}
 		default:
@@ -125,22 +130,6 @@ func variables(request lifecycle.RunRequest, paths map[string]string) (map[strin
 		request.Variable + "_digest":   request.Digest,
 		request.Variable + "_material": material,
 	}, nil
-}
-
-// checkMaterials refuses a material list before anything is written: each file
-// is written once and its value cleared, so a name listed twice would be
-// rewritten with the cleared bytes, and a variable bound twice would name only
-// one of its files.
-func checkMaterials(request lifecycle.RunRequest) error {
-	names := make(map[string]bool, len(request.Materials))
-	bound := make(map[string]bool, len(request.Materials))
-	for _, file := range request.Materials {
-		if names[file.Name] || bound[file.Variable] {
-			return failure("lifecycle.state", "a material file is named twice, or two material files bind one variable", "")
-		}
-		names[file.Name], bound[file.Variable] = true, true
-	}
-	return nil
 }
 
 func materialBytes(request lifecycle.RunRequest) (map[string][]byte, error) {

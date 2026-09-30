@@ -11,5 +11,7 @@
   "reachable": false,
   "request": "1111111111111111111111111111111111111111111111111111111111111111",
   "tree": false,
-  "treeContent": false
+  "treeContent": false,
+  "treeStaging": false,
+  "work": false
 }

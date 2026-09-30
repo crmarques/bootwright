@@ -186,5 +186,5 @@ func unsupportedPlatform() error {
 }
 
 func bundleFailure(message string) error {
-	return diagnostics.NewFailureWithRemediation("controller.setup", message, "", "Restore approved dependency sources or the exact retained bundle, then rerun setup with the same explicit context.")
+	return diagnostics.NewFailureWithRemediation("controller.setup", message, "", "Restore approved dependency sources or the exact retained bundle, then rerun bootwright setup.")
 }

@@ -2,8 +2,9 @@
     wrapper, because that wrapper starts the emulator with its debugger active.
     Host networking is what makes the declared bind address the real socket.
     The emulator uploads inserted media into the provider's pool through the
-    libvirt socket, so that socket directory is the only host path it mounts,
-    and connecting to it is why its SELinux confinement is disabled. -#}
+    libvirt socket, so beside its own configuration and password file that
+    socket directory is the only host path it mounts, and connecting to it is
+    why its SELinux confinement is disabled. -#}
 [Unit]
 Description=Bootwright management controller for {{ bootwright_substrate_machine_request.identity.object }}
 After=network-online.target libvirtd.service

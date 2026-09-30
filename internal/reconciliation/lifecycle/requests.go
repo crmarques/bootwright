@@ -119,6 +119,10 @@ type BlockResult struct {
 	Outcome     string
 	Attempts    int
 	Groups      []GroupResult
+	// Unresolved is why an unproved block's outcome is still unknown and what
+	// the operator does about it. Status reports it for each unknown or
+	// running block, and it is nil for every other.
+	Unresolved *Unresolved
 }
 
 type OperationResult struct {

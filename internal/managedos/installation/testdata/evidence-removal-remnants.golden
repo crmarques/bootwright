@@ -1,0 +1,17 @@
+{
+  "absent": false,
+  "address": "198.51.100.11",
+  "hostKey": "",
+  "image": false,
+  "marker": "",
+  "media": "",
+  "postcondition": false,
+  "power": "",
+  "private": false,
+  "reachable": false,
+  "request": "1111111111111111111111111111111111111111111111111111111111111111",
+  "tree": false,
+  "treeContent": false,
+  "treeStaging": true,
+  "work": true
+}

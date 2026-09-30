@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"path"
 	"slices"
 	"strings"
@@ -86,9 +87,9 @@ func (s *Store) Index(ctx context.Context) (Index, error) {
 // interrupted registration leaves an unreferenced directory rather than a
 // current operation whose plan is missing. It registers into the directory a
 // claim created for the same identity, which is why that directory is not
-// counted against the bound a second time.
+// counted against either bound a second time.
 func (s *Store) Register(ctx context.Context, operation Operation, plan reconciliation.Plan) error {
-	if err := validateOperation(operation); err != nil {
+	if err := validateRegistration(operation); err != nil {
 		return err
 	}
 	digest, err := plan.Digest()
@@ -106,7 +107,10 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 		return err
 	}
 	if len(slices.DeleteFunc(claimed, func(directory string) bool { return directory == operation.ID })) >= MaxOperations {
-		return recordError("the context has retained the maximum number of lifecycle operations")
+		return retainedMaximum()
+	}
+	if err := s.admit(ctx, operation.ID, plan); err != nil {
+		return err
 	}
 	if err := s.ensureOperation(ctx, operation.ID); err != nil {
 		return err
@@ -142,9 +146,9 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 // fills it, so the identity is one invocation's own from then on: only a
 // reclaim removes it, while it still holds nothing, and every later claim or
 // registration allocates around it. It refuses an identity that already has a
-// directory, and refuses at the retained-operation bound exactly as a
-// registration does.
-func (s *Store) Claim(ctx context.Context, id string) error {
+// directory, and refuses at the retained-operation bound for the plan the
+// operation will register exactly as that registration does.
+func (s *Store) Claim(ctx context.Context, id string, plan reconciliation.Plan) error {
 	if !reconciliation.ValidOperationID(id) {
 		return recordError("lifecycle operation identity is invalid")
 	}
@@ -153,12 +157,72 @@ func (s *Store) Claim(ctx context.Context, id string) error {
 		return err
 	}
 	if len(claimed) >= MaxOperations {
-		return recordError("the context has retained the maximum number of lifecycle operations")
+		return retainedMaximum()
 	}
 	if slices.Contains(claimed, id) {
 		return recordError("the lifecycle operation identity already has a directory")
 	}
+	if err := s.admit(ctx, id, plan); err != nil {
+		return err
+	}
 	return s.ensureOperation(ctx, id)
+}
+
+func retainedMaximum() error {
+	return recordError("the context has retained the maximum number of lifecycle operations")
+}
+
+// admit refuses a new operation at the retained-operation bound once the area
+// could not hold what AdmissionEntries says it needs, so an area filled by
+// operations that ran their blocks refuses the next apply here, before
+// anything is raised for it, rather than at one of its block writes, and the
+// removal of the last apply it admitted still registers. The directory a
+// claim created for id is what its registration fills, so it is left out of
+// what the area holds.
+func (s *Store) admit(ctx context.Context, id string, plan reconciliation.Plan) error {
+	held, err := s.held(ctx, "", id)
+	if err != nil {
+		return err
+	}
+	needed := AdmissionEntries(plan)
+	if held+needed <= MaxEntries {
+		return nil
+	}
+	holds := fmt.Sprintf("the context has retained the maximum number of lifecycle operations: its operation area holds %d of its %d entries", held, MaxEntries)
+	if plan.Verb == reconciliation.Destroy {
+		return recordError(fmt.Sprintf("%s, and this removal needs %d more for its first attempts and the writes that complete them", holds, needed))
+	}
+	return recordError(fmt.Sprintf("%s, and this apply needs %d more: %d for its first attempts and those of the removal that takes it back, and the %d it keeps for later attempts",
+		holds, needed, needed-ReservedEntries, ReservedEntries))
+}
+
+// held counts the entries beneath target as the area's entry bound counts
+// them, leaving out skip and everything beneath it, and stops once the count
+// passes MaxEntries.
+func (s *Store) held(ctx context.Context, target, skip string) (int, error) {
+	entries, err := s.area.Entries(ctx, target)
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, entry := range entries {
+		name := path.Join(target, entry.Name)
+		if name == skip {
+			continue
+		}
+		count++
+		if entry.Directory {
+			nested, err := s.held(ctx, name, skip)
+			if err != nil {
+				return 0, err
+			}
+			count += nested
+		}
+		if count > MaxEntries {
+			break
+		}
+	}
+	return count, nil
 }
 
 // Claimed names every operation directory, in name order: each registered
@@ -186,37 +250,65 @@ func (s *Store) Claimed(ctx context.Context) ([]string, error) {
 // directory holding anything else are kept, and no record is read. It returns
 // the directories it removed.
 func (s *Store) Reclaim(ctx context.Context) ([]string, error) {
-	index, err := s.Index(ctx)
+	reclaimed := []string{}
+	err := s.eachIdle(ctx, func(id string, children []string) error {
+		for _, child := range children {
+			if err := s.area.RemoveDirectory(ctx, path.Join(id, child)); err != nil {
+				return err
+			}
+		}
+		if err := s.area.RemoveDirectory(ctx, id); err != nil {
+			return err
+		}
+		reclaimed = append(reclaimed, id)
+		return nil
+	})
+	return reclaimed, err
+}
+
+// Idle names, in name order, every operation directory a reclaim would remove
+// now, and removes nothing, so a verb that otherwise writes nothing takes the
+// exclusive lock only when a claim that holds nothing is left.
+func (s *Store) Idle(ctx context.Context) ([]string, error) {
+	idle := []string{}
+	err := s.eachIdle(ctx, func(id string, _ []string) error {
+		idle = append(idle, id)
+		return nil
+	})
 	if err != nil {
 		return nil, err
+	}
+	return idle, nil
+}
+
+// eachIdle calls visit, in name order, with every operation directory other
+// than the index's current operation that holds nothing, and the empty
+// children it holds.
+func (s *Store) eachIdle(ctx context.Context, visit func(string, []string) error) error {
+	index, err := s.Index(ctx)
+	if err != nil {
+		return err
 	}
 	claimed, err := s.Claimed(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	reclaimed := []string{}
 	for _, id := range claimed {
 		if id == index.Current || !reconciliation.ValidOperationID(id) {
 			continue
 		}
 		children, empty, err := s.holdsNothing(ctx, id)
 		if err != nil {
-			return reclaimed, err
+			return err
 		}
 		if !empty {
 			continue
 		}
-		for _, child := range children {
-			if err := s.area.RemoveDirectory(ctx, path.Join(id, child)); err != nil {
-				return reclaimed, err
-			}
+		if err := visit(id, children); err != nil {
+			return err
 		}
-		if err := s.area.RemoveDirectory(ctx, id); err != nil {
-			return reclaimed, err
-		}
-		reclaimed = append(reclaimed, id)
 	}
-	return reclaimed, nil
+	return nil
 }
 
 // holdsNothing reports whether an operation directory holds at most an empty

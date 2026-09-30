@@ -84,8 +84,7 @@ detail. Introduce abstractions and extension points only for real consumers.
 Never depend on an external location after admission: a command that admits
 input copies it into the Bootwright store, later commands read only that copy,
 and a recorded source location is provenance, never identity, uniqueness or a
-read path. Secret `file` sources are the recorded exception until
-[B41](milestones/m1.md#b41) brings them under this rule.
+read path.
 
 Before 1.0, a durable format change converts no earlier format: a record in an
 earlier format is refused, and the refusal names the remedy.

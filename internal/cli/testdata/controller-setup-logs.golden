@@ -1,0 +1,29 @@
+Controller setup
+
+  Scope     baseline
+  Platform  fedora 43/amd64
+  Route     direct
+
+Checks
+  [OK]       Host: fedora 43/amd64
+  [OK]       Execution bundle: qualified
+  [FAIL]     Container runtime: required 5.8.2; observed missing
+
+Dependencies
+  podman-5.8.2-1.fc43.x86_64.rpm
+
+Planned changes
+  1. Install the baseline native packages with Ansible
+
+Progress
+  [RUNNING]  [1/1] Container runtime
+
+  Logs  /var/lib/bootwright/controller/runs/setup-000003
+  [RUNNING]  [1/1] Container runtime: starting the private Ansible runtime
+  [RUNNING]  [1/1] Container runtime: installing 3 native packages
+  [DONE]     [1/1] Container runtime
+
+  Outcome    changed
+  Readiness  all required prerequisites verified
+  Logs       /var/lib/bootwright/controller/runs/setup-000003
+  Next       bootwright preflight controller

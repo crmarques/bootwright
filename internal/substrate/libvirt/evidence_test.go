@@ -76,6 +76,80 @@ func TestHostPresenceRequiresEveryProof(t *testing.T) {
 	}
 }
 
+// A removal took nothing back only while an observation that answered for
+// each of them shows everything it takes back, for this request and in the
+// form an observation publishes; nothing else it lacks is read as untouched.
+func TestHostUnremovedRequiresAnAnswerForEverythingTheRemovalTakesBack(t *testing.T) {
+	request := hostRequest(t)
+	for name, damage := range map[string]func(*HostEvidence){
+		"reported as gone":  func(e *HostEvidence) { e.Absent = true },
+		"uri silent":        func(e *HostEvidence) { e.URI = false },
+		"pool unanswered":   func(e *HostEvidence) { e.PoolAnswered = false },
+		"directory unread":  func(e *HostEvidence) { e.Directory = nil },
+		"network silent":    func(e *HostEvidence) { e.Networks[0].Answered = false },
+		"network dropped":   func(e *HostEvidence) { e.Networks = nil },
+		"renamed a network": func(e *HostEvidence) { e.Networks[0].Name = "bootwright-other" },
+		"another request":   func(e *HostEvidence) { e.Request = "other" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			var evidence HostEvidence
+			if err := json.Unmarshal(hostEvidence(request, "digest"), &evidence); err != nil {
+				t.Fatal(err)
+			}
+			if err := ValidateHostUnremoved(encode(t, evidence), request, "digest"); err != nil {
+				t.Fatalf("a host holding everything its removal takes back was refused: %v", err)
+			}
+			damage(&evidence)
+			if err := ValidateHostUnremoved(encode(t, evidence), request, "digest"); err == nil {
+				t.Fatal("evidence that does not prove everything still held was accepted")
+			}
+		})
+	}
+}
+
+// A removal is unfinished while an observation reports part of what it takes
+// back and not the whole, whatever postcondition the adapter's presence form
+// carries: that is the apply's, and it leaves the pool directory out. Nothing
+// this context owns, a foreign network, the whole still held, the removal's
+// own form and another request's evidence are never read as unfinished.
+func TestHostRemovalUnfinishedReadsWhatRemainsNotThePostcondition(t *testing.T) {
+	request := hostRequest(t)
+	for name, test := range map[string]struct {
+		damage     func(*HostEvidence)
+		unfinished bool
+	}{
+		"directory gone, all else proved": {func(e *HostEvidence) { e.Directory = observed(false) }, true},
+		"pool stopped":                    {func(e *HostEvidence) { e.Pool, e.Postcondition = "inactive", false }, true},
+		"network undefined":               {func(e *HostEvidence) { e.Networks[0].State, e.Networks[0].Owned, e.Postcondition = "", false, false }, true},
+		"directory alone": {func(e *HostEvidence) {
+			*e = HostEvidence{Directory: observed(true), PoolAnswered: true, Request: "digest", URI: true}
+		}, true},
+		"everything held":        {func(*HostEvidence) {}, false},
+		"everything held, drift": {func(e *HostEvidence) { e.Networks[0].Definition, e.Postcondition = false, false }, false},
+		"nothing owned": {func(e *HostEvidence) {
+			*e = HostEvidence{Directory: observed(false), PoolAnswered: true, Request: "digest", URI: true}
+		}, false},
+		"foreign network": {func(e *HostEvidence) { e.Directory, e.Networks[0].Owned = observed(false), false }, false},
+		"removal form":    {func(e *HostEvidence) { e.Directory, e.Absent = observed(false), true }, false},
+		"another request": {func(e *HostEvidence) { e.Directory, e.Request = observed(false), "other" }, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var evidence HostEvidence
+			if err := json.Unmarshal(hostEvidence(request, "digest"), &evidence); err != nil {
+				t.Fatal(err)
+			}
+			test.damage(&evidence)
+			err := ValidateHostRemovalUnfinished(encode(t, evidence), request, "digest")
+			if test.unfinished && err != nil {
+				t.Fatalf("a host holding part of what its removal takes back was refused: %v", err)
+			}
+			if !test.unfinished && err == nil {
+				t.Fatal("evidence that proves no unfinished removal was accepted")
+			}
+		})
+	}
+}
+
 func observed(value bool) *bool { return &value }
 
 // Removal is accepted only when it positively proves the owned objects are

@@ -37,9 +37,9 @@ type HostRequest struct {
 	PoolName  string               `json:"poolName"`
 	PoolPath  string               `json:"poolPath"`
 	// Provisioned is true when this block installs the closure itself through
-	// the host's own package manager. The controller stage installs only the
-	// libvirt client a provider selects, so the daemon, its emulator and the
-	// TPM helper are this block's on either placement arm.
+	// the host's own package manager, which it does only on a host reached over
+	// SSH. On the controller the controller stage installs the closure, so this
+	// block proves it present there and installs nothing.
 	Provisioned bool `json:"provisioned"`
 	// Services are the libvirt driver daemons this provider depends on, in
 	// canonical order. Each is enabled as well as started, because a network

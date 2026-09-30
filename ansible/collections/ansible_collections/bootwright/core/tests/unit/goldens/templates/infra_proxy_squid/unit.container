@@ -1,0 +1,20 @@
+[Unit]
+Description=Bootwright managed proxy egress
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=registry.example.test/proxy-squid@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+ContainerName=bootwright-lab-rhel-proxy-squid-egress
+Network=host
+User=0
+Entrypoint=/usr/sbin/squid
+Exec=-f /etc/squid/squid.conf -N
+Volume=/var/lib/bootwright-services/lab-rhel/proxy-squid/egress/config/squid.conf:/etc/squid/squid.conf:ro,Z
+
+[Service]
+Restart=always
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

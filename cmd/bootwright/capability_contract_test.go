@@ -104,9 +104,10 @@ type contractRow struct {
 	// would report.
 	removalObservesNothing string
 	// readiness names the presence field carrying what the listeners answered,
-	// for a binding whose removal's resolution reads only what the removal
-	// takes back and never the apply's readiness or postcondition:
-	// specs/infrastructure-services.md, Unknown resolution. Such a binding
+	// or a provider host's driver daemons, for a binding whose removal's
+	// resolution reads only what the removal takes back and never the apply's
+	// readiness or postcondition: specs/infrastructure-services.md, Unknown
+	// resolution, and specs/substrates.md, Evidence. Such a binding
 	// reads its presence with that field emptied, and the partial fixture,
 	// which still reports everything the removal takes back, as positive no
 	// effect.
@@ -122,6 +123,11 @@ type contractRow struct {
 // container gone beside its content root, as a removal killed after its stop
 // does.
 var contractStoppedService = map[string]any{"unit": "inactive", "container": "", "postcondition": false}
+
+// contractStoppedPool leaves a provider host's pool stopped beside its
+// networks and directory, part of what its removal takes back, since the
+// removal stops the pool before it undefines it.
+var contractStoppedPool = map[string]any{"pool": "inactive", "postcondition": false}
 
 func (r contractRow) binding() lifecycle.CapabilityBinding {
 	return lifecycle.CapabilityBinding{Kind: r.kind, Implementation: r.implementation}
@@ -139,7 +145,8 @@ func contractRows() []contractRow {
 		{kind: installation.Kind, implementation: installation.Implementation, example: "lab-rhel", presence: contractInstallationPresence, retains: true,
 			noEffect: map[string]any{"power": "Off"}},
 		{kind: libvirt.HostKind, implementation: libvirt.HostImplementation, example: "lab-rhel", presence: contractHostPresence,
-			absence: map[string]any{"uri": true, "poolAnswered": true, "directory": false}},
+			absence:   map[string]any{"uri": true, "poolAnswered": true, "directory": false},
+			readiness: "services", removalPartial: contractStoppedPool},
 		{kind: agentinstall.Kind, implementation: agentinstall.MediaImplementation, example: "lab-sno", presence: contractMediaPresence},
 		{kind: agentinstall.Kind, implementation: agentinstall.InstallImplementation, example: "lab-sno", presence: contractClusterPresence,
 			removalKeepsPresence: true},
@@ -183,7 +190,7 @@ var contractProperties = []string{
 	"observe-unproved", "quiescence-unproved",
 	"observe-removal-request", "observe-removal-unproved", "observe-removal-evidence-proves-request",
 	"observe-removal-proves-absence", "observe-removal-reads-presence", "observe-removal-reads-partial",
-	"observe-removal-ignores-readiness", "produced-only-on-proved-completion",
+	"observe-removal-ignores-readiness", "produced-only-on-proved-completion", "role-admits-request",
 }
 
 // contractRunner is a scripted runner: it records every request and answers
@@ -287,7 +294,8 @@ func (f *contractFindings) record(row contractRow, property, message string) {
 // every binding this build offers. Planning is pure, repeatable and canonical
 // and runs nothing; a removal reads only its own frozen block. Every
 // runner-driven binding sends exactly the frozen request under the block's own
-// identity and a bounded deadline, keeps a lost or unknown-flagged runner
+// identity and a bounded deadline, a request the argument specification of the
+// role entry point its playbook imports admits, keeps a lost or unknown-flagged runner
 // failure unknown, accepts no outcome whose evidence does not prove this very
 // request, and never reads a failed or empty observation, or one of another
 // request, as proof. Evidence naming another request is the binding's own
@@ -575,6 +583,9 @@ func contractRequests(row contractRow, block reconciliation.Block, capability li
 			findings.record(row, property, block.ID+" crossed other bytes than its frozen request")
 		case request.Deadline < 0 || request.Deadline > lifecycle.MaxDeadline:
 			findings.record(row, property, fmt.Sprintf("%s asked for a %s deadline", block.ID, request.Deadline))
+		}
+		for _, problem := range roleRefusals(request) {
+			findings.record(row, "role-admits-request", block.ID+" "+operation+": "+problem)
 		}
 	}
 }
@@ -969,7 +980,9 @@ func contractInstallationPresence(t *testing.T, execution lifecycle.Execution) m
 
 // contractHostPresence proves a provider host realized: the closure present,
 // every frozen driver daemon active and enabled, the URI answering, the pool
-// active and every frozen network present, managed ones active and owned.
+// active beside its directory and every frozen network present, managed ones
+// active and owned. The directory is always reported, because the adapter
+// publishes no evidence without it.
 func contractHostPresence(t *testing.T, execution lifecycle.Execution) map[string]any {
 	t.Helper()
 	request, err := libvirt.DecodeHostRequest(execution.Block.Request)
@@ -989,6 +1002,7 @@ func contractHostPresence(t *testing.T, execution lifecycle.Execution) map[strin
 	}
 	return map[string]any{
 		"postcondition": true, "hypervisor": true, "services": services, "uri": true, "pool": "active", "poolAnswered": true, "networks": networks,
+		"directory": true,
 	}
 }
 

@@ -104,6 +104,15 @@ func (p *ControllerPresenter) ReportProgress(ctx context.Context, event prerequi
 	})
 }
 
+// ReportLogLocation names the setup run its Ansible is about to write, as its
+// own field so a terminal redrawing the running row never overwrites it.
+func (p *ControllerPresenter) ReportLogLocation(ctx context.Context, location string) {
+	if p == nil || p.progress.out == nil || ctx.Err() != nil || location == "" {
+		return
+	}
+	p.progress.field(logLocationLabel, location)
+}
+
 // Finish terminates a row a terminal is still rewriting. The runner calls it
 // once the operation returns, before any result or diagnostic is written.
 func (p *ControllerPresenter) Finish() {
@@ -250,6 +259,9 @@ func controllerOutcomeFields(command string, report *prerequisites.Report) []fie
 	// rather than left for the operator to discover.
 	if len(report.RetiredBundles) != 0 {
 		fields = append(fields, field{Label: "Retired", Value: strconv.Itoa(len(report.RetiredBundles)) + " superseded execution " + bundleNoun(len(report.RetiredBundles))})
+	}
+	if report.LogLocation != "" {
+		fields = append(fields, field{Label: logLocationLabel, Value: report.LogLocation})
 	}
 	if report.Outcome != "ready" {
 		fields = append(fields, field{Label: "Next", Value: controllerNextCommand(report)})

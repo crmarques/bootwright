@@ -10,6 +10,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -679,6 +680,12 @@ func TestARootDeviceTheAgentInstallerCannotCarryRefuses(t *testing.T) {
 			catalog := singleNodeWith(test.hints...)
 			if unsupported := Unsupported(catalog); !slices.Equal(unsupported, []string{"ContainerCluster/sno"}) {
 				t.Fatalf("unsupported = %v", unsupported)
+			}
+			// The refusal plan and apply report before registration carries
+			// the cluster, the reason and the remedy naming the Machine.
+			want := []lifecycle.Refusal{{Kind: "ContainerCluster", Name: "sno", Reason: test.reason, Remediation: test.remediation}}
+			if refused := Refusals(catalog); !slices.Equal(refused, want) {
+				t.Fatalf("refusals = %+v, want %+v", refused, want)
 			}
 			_, _, _, err := Requests(catalog, "controller", testContext)
 			refusedWith(t, err, test.reason, test.remediation)

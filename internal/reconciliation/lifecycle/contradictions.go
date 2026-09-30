@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"bytes"
 	"context"
 	"slices"
 	"strings"
@@ -10,6 +11,20 @@ import (
 )
 
 const failedWithoutFailure = "the apply records failed, yet no block records the failure"
+
+// deletionExit is the remedy of the record states neither verb acts on: a lost
+// index beside what no index accounts for, and a completed removal holding a
+// block that is not done. Deleting the context is their only exit. Pristine
+// evidence admits a plain deletion; any other evidence protects the context,
+// so the deletion must acknowledge the objects it abandons.
+func deletionExit(view View) string {
+	command := "bootwright context delete --name " + view.Identity().Name + " --purge"
+	pristine, err := projection(reconciliation.Destroy, reconciliation.OperationDone)
+	if err == nil && bytes.Equal(view.Evidence(), pristine) {
+		return "delete the context with " + command
+	}
+	return "delete the context with " + command + " --allow-orphans, which abandons what it may still own"
+}
 
 // refuseContradictions refuses the removal of an incomplete apply whose records
 // prove it started a block they no longer show as started. Such a block reads
@@ -36,13 +51,15 @@ func refuseContradictions(ctx context.Context, store OperationStore, operation o
 // direct dependent of it started, since a block starts only once every
 // dependency is done and a done block never changes; a block that lost its
 // record beside an attempt of it, since a start publishes the block record
-// first; and a failed apply with no failed or unknown block and no running
-// block its record counts as retried, since an apply records failed only once
-// a block failed, a failed block changes only through a retry that first marks
-// the apply running, and a running or unknown block changes only through a
-// resolution, before which a continuation marks the apply running and a
-// removal records a failed apply in the state its blocks give it, which is
-// failed only while another block is. A retry whose start published its
+// first; and a failed apply holding a block that is not done, yet no failed or
+// unknown block and no running block its record counts as retried, since an
+// apply records failed only once a block failed, a failed block changes only
+// through a retry that first marks the apply running, and a running or unknown
+// block changes only through a resolution, before which a continuation marks
+// the apply running and a removal records a failed apply in the state its
+// blocks give it, which is failed only while another block is. A failed apply
+// whose blocks are all done is no contradiction: its record lags them, and a
+// removal takes back its whole frozen plan. A retry whose start published its
 // running record and then reported a failure leaves the apply failed beside
 // that running block, which is no contradiction: the block counts the attempt
 // it retried as well, and its outcome is unproved, so the removal resolves it
@@ -79,7 +96,7 @@ func contradictions(operation operationstore.Operation, frozen reconciliation.Pl
 			entries = append(entries, lostRecord(block.ID))
 		}
 	}
-	if operation.State == reconciliation.OperationFailed && !accounted {
+	if operation.State == reconciliation.OperationFailed && !accounted && pendingRemains(frozen, states) {
 		entries = append(entries, failedWithoutFailure)
 	}
 	return entries
@@ -92,11 +109,11 @@ func lostRecord(block string) string {
 // refuseUncontinuable refuses a continuation over records that contradict what
 // its operation started, before it restores, raises or marks anything: a block
 // that lost its record beside an attempt of it, whose start would refuse
-// rather than skip the observation an effect that may have begun requires,
-// and a failed apply whose every block is done, which leaves the continuation
-// nothing to start although no block records the failure.
-func refuseUncontinuable(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) error {
-	entries, err := uncontinuable(ctx, store, operation, frozen, states)
+// rather than skip the observation an effect that may have begun requires. A
+// failed apply whose every block is done never reaches it, because its own
+// verb finalizes it first.
+func refuseUncontinuable(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan) error {
+	entries, err := uncontinuable(ctx, store, operation, frozen)
 	if err != nil || len(entries) == 0 {
 		return err
 	}
@@ -105,17 +122,14 @@ func refuseUncontinuable(ctx context.Context, store OperationStore, operation op
 		"review its durable state with bootwright status")
 }
 
-func uncontinuable(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) ([]string, error) {
+func uncontinuable(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan) ([]string, error) {
 	lost, err := store.LostBlockRecords(ctx, operation.ID, frozen)
 	if err != nil {
 		return nil, err
 	}
-	entries := make([]string, 0, len(lost)+1)
+	entries := make([]string, 0, len(lost))
 	for _, block := range lost {
 		entries = append(entries, lostRecord(block))
-	}
-	if operation.Verb == reconciliation.Apply && operation.State == reconciliation.OperationFailed && !pendingRemains(frozen, states) {
-		entries = append(entries, failedWithoutFailure)
 	}
 	return entries, nil
 }
@@ -131,7 +145,7 @@ func recordContradictions(ctx context.Context, store OperationStore, operation o
 		return unfinishedBlocks(frozen, states), nil
 	}
 	if operation.Verb == reconciliation.Destroy {
-		return uncontinuable(ctx, store, operation, frozen, states)
+		return uncontinuable(ctx, store, operation, frozen)
 	}
 	lost, err := store.LostBlockRecords(ctx, operation.ID, frozen)
 	if err != nil {

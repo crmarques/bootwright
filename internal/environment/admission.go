@@ -45,6 +45,13 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 	}
 	issues = append(issues, validateController(object, catalog)...)
 	if rescue := spec.Get("lifecycle", "rescue"); rescue.Present() {
+		// The schema keeps the declaration for a later journey; until one
+		// exists, no lifecycle could act on it.
+		if len(issues) < 999 {
+			issues = append(issues, api.Issue{Code: "api.invariant", Field: "$.spec.lifecycle.rescue",
+				Message:     "no rescue journey exists yet, so no lifecycle can use a rescue declaration",
+				Remediation: "remove spec.lifecycle.rescue from " + object.Identity()})
+		}
 		if version := rescue.Get("os", "version").Text(); version != "" && !strings.HasPrefix(version, "9.") {
 			add("lifecycle.rescue.os.version", "rescue requires a RHEL 9 version")
 		}

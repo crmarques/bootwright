@@ -1815,9 +1815,10 @@ func checkpointRetirementScenario() checkpointScenario {
 	// specs/controller.md, Retiring superseded bundles: retirement records
 	// its intent before it removes anything, and repeating the command
 	// completes it.
-	retire := func(_ *testing.T, ctx context.Context, store *Store) error {
+	retire := func(t *testing.T, ctx context.Context, store *Store) error {
+		ids := []string{retiredBundle(t)}
 		return store.MutateController(ctx, prerequisites.SetupContext{}, false, func(tx prerequisites.StorageTransaction) error {
-			return tx.RetireBundles(ctx, []string{retiredBundleID})
+			return tx.RetireBundles(ctx, ids)
 		})
 	}
 	return checkpointControllerScenario(checkpointScenario{
@@ -1825,15 +1826,16 @@ func checkpointRetirementScenario() checkpointScenario {
 		prepare: retirementFixture,
 		operate: retire,
 		retry:   retire,
-		settled: func(_ *testing.T, ctx context.Context, store *Store) error {
-			if _, err := os.Lstat(bundlePath(store, retiredBundleID)); !errors.Is(err, os.ErrNotExist) {
+		settled: func(t *testing.T, ctx context.Context, store *Store) error {
+			superseded, current := retiredBundle(t), currentBundle(t)
+			if _, err := os.Lstat(bundlePath(store, superseded)); !errors.Is(err, os.ErrNotExist) {
 				return fmt.Errorf("the retired bundle remains (%v)", err)
 			}
 			return store.ReadController(ctx, "", func(view prerequisites.StorageView) error {
-				if slices.ContainsFunc(view.State.RetainedDefinitions, func(definition prerequisites.Definition) bool { return definition.CatalogDigest == retiredBundleID }) {
+				if slices.ContainsFunc(view.State.RetainedDefinitions, func(definition prerequisites.Definition) bool { return definition.CatalogDigest == superseded }) {
 					return errors.New("the retired bundle's resolution is retained")
 				}
-				return checkpointSealed(ctx, view, currentBundleID)
+				return checkpointSealed(ctx, view, current)
 			})
 		},
 	}, "")

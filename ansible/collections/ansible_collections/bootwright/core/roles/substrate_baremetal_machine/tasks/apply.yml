@@ -34,7 +34,20 @@
     verify: '{{ bootwright_substrate_physical_request.controller.tlsVerify }}'
     ca_data: '{{ substrate_baremetal_machine_ca_data }}'
   register: substrate_baremetal_machine_observed
+  failed_when: false
   no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# the controller's own refusal is reported here, where no credential is.
+- name: Stop at a read the management controller did not answer
+  ansible.builtin.assert:
+    that:
+      - substrate_baremetal_machine_observed.msg is not defined
+    fail_msg: >-
+      reading Machine {{ bootwright_substrate_physical_request.identity.object }} through the
+      management controller at {{ bootwright_substrate_physical_request.controller.endpoint }} failed:
+      {{ (substrate_baremetal_machine_observed.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
 
 - name: Report the controller answered
   bootwright.core.substrate_physical_protocol:
@@ -57,6 +70,9 @@
     status: ok
   no_log: true
 
+# The publication reads no bound material, and its refusal names fields, counts
+# and the controller but never a reported value, so it is not censored: that
+# refusal is what the attempt's retained output tells the operator.
 - name: Publish bounded machine proof
   bootwright.core.substrate_physical_protocol:
     phase: completed
@@ -65,4 +81,3 @@
     observation: '{{ substrate_baremetal_machine_observed.observation }}'
     endpoint: '{{ bootwright_substrate_physical_request.controller.endpoint }}'
     expected: '{{ substrate_baremetal_machine_expected }}'
-  no_log: true

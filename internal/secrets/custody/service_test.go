@@ -73,6 +73,30 @@ type serviceSession struct {
 	snapshot      secretstore.Snapshot
 	materials     map[string]secrets.Material
 	reads, writes int
+	// bound lists every input a Bind received; reopened is what Reopen serves.
+	bound    []secretstore.BoundInput
+	reopened []secretstore.BoundMaterial
+}
+
+func (s *serviceSession) Bind(_ context.Context, inputs []secretstore.BoundInput) (secretstore.Binding, error) {
+	s.writes++
+	binding := secretstore.Binding{ID: fmt.Sprintf("binding-%d", len(s.snapshot.Bindings))}
+	for _, input := range inputs {
+		s.bound = append(s.bound, secretstore.BoundInput{Declaration: input.Declaration, Version: input.Version})
+		binding.Versions = append(binding.Versions, input.Version)
+	}
+	s.snapshot.Bindings = append(s.snapshot.Bindings, binding)
+	return binding, nil
+}
+
+func (s *serviceSession) Reopen(_ context.Context, id string) ([]secretstore.BoundMaterial, error) {
+	s.reads++
+	for _, binding := range s.snapshot.Bindings {
+		if binding.ID == id {
+			return s.reopened, nil
+		}
+	}
+	return nil, secretstore.Failure("input", "secret binding does not exist")
 }
 
 func (s *serviceSession) Inspect(context.Context) (secretstore.Snapshot, error) {
@@ -128,17 +152,13 @@ func (s *serviceSession) Delete(_ context.Context, name string) (bool, error) {
 }
 
 type serviceMaterial struct {
-	acquired, files, generated, validated int
-	failAt                                int
+	acquired, generated, validated int
+	failAt                         int
 }
 
 func (m *serviceMaterial) Acquire(context.Context, secrets.Declaration, secrets.Input) (secrets.Material, error) {
 	m.acquired++
 	return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("synthetic-value")}), nil
-}
-func (m *serviceMaterial) File(context.Context, secrets.Declaration) (secrets.Material, error) {
-	m.files++
-	return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("synthetic-file")}), nil
 }
 func (m *serviceMaterial) Generate(context.Context, secrets.Declaration) (secrets.Material, error) {
 	m.generated++
@@ -158,16 +178,30 @@ func (c *serviceConfirmer) Confirm(context.Context, string, string) error { c.ca
 
 func serviceFixture(t *testing.T, secretYAML string) (*Service, *serviceAccess, *serviceMaterial, *serviceConfirmer) {
 	t.Helper()
-	content := "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: fixture\nspec:\n  controller: {machineRef: controller}\n  domains:\n    base: example.test\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: controller}\nspec:\n  os: {provided: true}\n  access: {local: true}\n" + secretYAML
-	access := &serviceAccess{snapshot: secretstore.ContextSnapshot{Context: secretstore.Context{Name: "fixture", Revision: "rev-fixture", Mode: "ready"}, Inputs: desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(content))}}}, session: &serviceSession{materials: map[string]secrets.Material{}}}
-	material := &serviceMaterial{}
-	confirmer := &serviceConfirmer{}
-	compiler := compilation.NewCompiler(yamlstream.Parser{}, nil, compilation.Rules{Normalize: secrets.Normalize, Validate: secrets.Validate})
-	service := New(access, compiler, material, confirmer)
+	service, access, material, confirmer := unresolvedFixture(secretYAML)
 	if _, _, err := service.resolve(context.Background(), ""); err != nil {
 		t.Fatalf("fixture admission: %v %+v", err, diagnostics.Of(err))
 	}
 	return service, access, material, confirmer
+}
+
+type countingCompiler struct {
+	Compiler
+	calls int
+}
+
+func (c *countingCompiler) Compile(ctx context.Context, sources desiredstate.Sources) (*compilation.State, *compilation.Report, error) {
+	c.calls++
+	return c.Compiler.Compile(ctx, sources)
+}
+
+func unresolvedFixture(secretYAML string) (*Service, *serviceAccess, *serviceMaterial, *serviceConfirmer) {
+	content := "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: fixture\nspec:\n  controller: {machineRef: controller}\n  domains:\n    base: example.test\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: controller}\nspec:\n  os: {provided: true}\n  access: {local: true}\n" + secretYAML
+	access := &serviceAccess{snapshot: secretstore.ContextSnapshot{Context: secretstore.Context{Name: "fixture", Revision: "rev-fixture", Mode: "ready"}, Inputs: desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(content))}}}, session: &serviceSession{materials: map[string]secrets.Material{}}}
+	material := &serviceMaterial{}
+	confirmer := &serviceConfirmer{}
+	compiler := &countingCompiler{Compiler: compilation.NewCompiler(yamlstream.Parser{}, nil, compilation.Rules{Normalize: secrets.Normalize, Validate: secrets.Validate})}
+	return New(access, compiler, material, confirmer), access, material, confirmer
 }
 func declarationYAML(name, source string) string {
 	return "\n---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: " + name + "\nspec:\n  type: token\n" + source
@@ -258,7 +292,7 @@ func TestStoreAccessFailuresStopCustodyBeforeMaterial(t *testing.T) {
 				if err := invoke(service); !errors.Is(err, want) {
 					t.Fatal("access failure was not preserved", err)
 				}
-				if material.acquired != 0 || material.generated != 0 || material.files != 0 || material.validated != 0 || confirmer.calls != 0 || access.session.reads != 0 || access.session.writes != 0 {
+				if material.acquired != 0 || material.generated != 0 || material.validated != 0 || confirmer.calls != 0 || access.session.reads != 0 || access.session.writes != 0 {
 					t.Fatal("access failure allowed secret material or confirmation effects")
 				}
 				if stage == "context" && access.transactions != 0 {
@@ -349,35 +383,123 @@ func TestStoredDeclarationSummaryRetainsStalenessIdentity(t *testing.T) {
 	}
 }
 
-func TestCheckNegativeResultListMetadataAndAllSourceReveal(t *testing.T) {
-	s, a, m, _ := serviceFixture(t, declarationYAML("absent", "")+declarationYAML("file", "  source: {file: {path: secrets/token}}\n"))
+// Bind, check and show read only keyring versions for every source: the one
+// acquisition that opens an operator path is secret set's.
+func TestBindCheckAndShowReadOnlyKeyringVersions(t *testing.T) {
+	s, a, m, _ := serviceFixture(t, declarationYAML("stored", "")+declarationYAML("generated", "  source: {generated: {}}\n"))
+	ctx := context.Background()
+	session := a.session
 	a.session = nil
-	result, err := s.Check(context.Background(), CheckRequest{})
-	if err == nil || result == nil || len(result.Secrets) != 2 || result.Secrets[0].Status != "missing" || result.Secrets[1].Status != "available" {
-		t.Fatal(result, err)
+	result, err := s.Check(ctx, CheckRequest{})
+	if err == nil || result == nil || len(result.Secrets) != 2 || result.Secrets[0].Status != "missing" || result.Secrets[1].Status != "missing" || m.acquired != 0 {
+		t.Fatal("an uninitialized store did not read as missing without acquisition", result, err)
 	}
-	if m.files != 1 {
-		t.Fatal("check did not read live file")
-	}
-	list, err := s.List(context.Background(), ListRequest{})
-	if err != nil || len(list.Secrets) != 0 || m.files != 1 {
-		t.Fatal("metadata list acquired file material", err)
-	}
-	show, err := s.Show(context.Background(), ShowRequest{Name: "file", Part: secrets.ValuePart})
-	if err != nil {
+	a.session = session
+	if _, err := s.Set(ctx, SetRequest{Name: "stored", Input: secrets.Input{ValueStdin: true}}); err != nil {
 		t.Fatal(err)
 	}
-	defer show.Material.Clear()
-	if m.files != 2 {
-		t.Fatal("show did not re-open live file")
+	if _, err := s.Generate(ctx, GenerateRequest{}); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := s.Show(context.Background(), ShowRequest{Name: "file", Part: secrets.PrivateKeyPart}); err == nil || m.files != 2 {
-		t.Fatal("invalid reveal part acquired material")
+	acquired, reads := m.acquired, session.reads
+	binding, err := s.Bind(ctx, BindRequest{Names: []string{"stored", "generated"}})
+	if err != nil || len(binding.Versions) != 2 {
+		t.Fatal(binding, err)
+	}
+	for _, input := range session.bound {
+		if current, exists := currentVersion(session.snapshot, input.Declaration.Name); !exists || input.Version != current.ID {
+			t.Fatalf("bind pinned %q, not the stored version of %s", input.Version, input.Declaration.Name)
+		}
+	}
+	if result, err := s.Check(ctx, CheckRequest{}); err != nil || result.Secrets[0].Status != "available" || result.Secrets[1].Status != "available" {
+		t.Fatal(result, err)
+	}
+	for _, name := range []string{"stored", "generated"} {
+		shown, err := s.Show(ctx, ShowRequest{Name: name, Part: secrets.ValuePart})
+		if err != nil {
+			t.Fatal(name, err)
+		}
+		shown.Material.Clear()
+	}
+	if m.acquired != acquired || session.reads != reads+6 {
+		t.Fatalf("bind, check and show acquired %d times and read %d stored versions", m.acquired-acquired, session.reads-reads)
+	}
+	list, err := s.List(ctx, ListRequest{})
+	if err != nil || len(list.Secrets) != 2 || m.acquired != acquired {
+		t.Fatal("metadata list acquired material", list, err)
 	}
 	a.failure = secretstore.Failure("store.corrupt", "tampered")
-	result, err = s.Check(context.Background(), CheckRequest{})
+	result, err = s.Check(ctx, CheckRequest{})
 	if err == nil || result != nil {
 		t.Fatal("corrupt store produced trustworthy partial result")
+	}
+}
+
+// A declaration that still names the retired file source refuses every
+// command at compilation, before the store is opened or a path is read.
+func TestAFileSourceRefusesEveryCommandBeforeTheStore(t *testing.T) {
+	operations := map[string]func(*Service) error{
+		"bind": func(s *Service) error {
+			_, err := s.Bind(context.Background(), BindRequest{Names: []string{"file"}})
+			return err
+		},
+		"check": func(s *Service) error {
+			_, err := s.Check(context.Background(), CheckRequest{})
+			return err
+		},
+		"show": func(s *Service) error {
+			_, err := s.Show(context.Background(), ShowRequest{Name: "file", Part: secrets.ValuePart})
+			return err
+		},
+		"set": func(s *Service) error {
+			_, err := s.Set(context.Background(), SetRequest{Name: "file", Input: secrets.Input{ValueFile: "value"}})
+			return err
+		},
+		"list": func(s *Service) error {
+			_, err := s.List(context.Background(), ListRequest{})
+			return err
+		},
+	}
+	for name, invoke := range operations {
+		t.Run(name, func(t *testing.T) {
+			service, access, material, _ := unresolvedFixture(declarationYAML("file", "  source: {file: {path: secrets/token}}\n"))
+			refused := false
+			for _, d := range diagnostics.Of(invoke(service)) {
+				refused = refused || d.Code == "api.field" && d.Field == "$.spec.source.file" && strings.Contains(d.Remediation, "secret set --name file --value-file <path>")
+			}
+			if !refused {
+				t.Fatal("the file source was not refused with its remedy")
+			}
+			if access.views != 0 || access.transactions != 0 || material.acquired != 0 || material.validated != 0 || access.session.reads != 0 {
+				t.Fatal("a refused declaration reached the store or its material")
+			}
+		})
+	}
+}
+
+// A removal reopens the binding its apply froze without compiling the desired
+// state, so a version an earlier build froze from a file source still reaches
+// it after compilation began refusing that source, and nothing is read from
+// the path it once named.
+func TestAVersionFrozenFromAFileStillReopens(t *testing.T) {
+	service, access, material, _ := unresolvedFixture(declarationYAML("file", "  source: {file: {path: secrets/token}}\n"))
+	frozen := secretstore.Version{ID: "version-file", Declaration: secrets.VersionDeclaration{Name: "file", Type: "token", Source: "file"}, Parts: []secrets.Part{secrets.ValuePart}}
+	access.session.snapshot.Bindings = []secretstore.Binding{{ID: "binding-earlier", Versions: []string{frozen.ID}}}
+	access.session.reopened = []secretstore.BoundMaterial{{Version: frozen, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("frozen-token")})}}
+	bound, err := service.Reopen(context.Background(), BindingRequest{ContextName: "fixture", BindingID: "binding-earlier"})
+	if err != nil || len(bound) != 1 || bound[0].Version.ID != frozen.ID {
+		t.Fatal(bound, err)
+	}
+	value, _ := bound[0].Material.Part(secrets.ValuePart)
+	defer clear(value)
+	if string(value) != "frozen-token" {
+		t.Fatal("reopened material differs from the frozen version")
+	}
+	if compiled := service.compiler.(*countingCompiler).calls; compiled != 0 || material.acquired != 0 || material.validated != 0 {
+		t.Fatalf("reopen compiled %d times or acquired material", compiled)
+	}
+	if _, err := service.Bind(context.Background(), BindRequest{Names: []string{"file"}}); err == nil || len(access.session.bound) != 0 {
+		t.Fatal("a new binding of the file source was made")
 	}
 }
 
@@ -443,7 +565,7 @@ func TestBindingsListsIdentitiesWithoutMaterial(t *testing.T) {
 	if err != nil || strings.Join(listed, ",") != "binding-a,binding-b" {
 		t.Fatalf("bindings = %v (%v)", listed, err)
 	}
-	if access.session.reads != 0 || access.session.writes != 0 || access.transactions != 0 || material.acquired != 0 || material.files != 0 {
+	if access.session.reads != 0 || access.session.writes != 0 || access.transactions != 0 || material.acquired != 0 {
 		t.Fatal("listing bindings read material or mutated the store")
 	}
 	if len(access.unlocks) != 1 || access.unlocks[0] {

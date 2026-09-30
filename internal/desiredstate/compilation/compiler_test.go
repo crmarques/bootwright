@@ -56,8 +56,6 @@ func TestCompilerRejectsStrictSyntaxAndScalarViolations(t *testing.T) {
 		{"integer separator", "type: token\n  source:\n    generated:\n      bytes: 3_2", "api.type"},
 		{"null", "type: opaque\n  source: null", "api.type"},
 		{"alias", "type: opaque\n  source: &source {}", "yaml.alias"},
-		{"wrong file arm", "type: token\n  source:\n    file:\n      cert: secrets/cert.pem", "api.invariant"},
-		{"payload boundary", "type: opaque\n  source:\n    file:\n      path: payload.yaml", "api.invariant"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			content := environmentYAML + "---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: material\nspec:\n  " + test.body + "\n"
@@ -90,9 +88,38 @@ func TestCompilerDefaultPrecedenceAndRecipientPaths(t *testing.T) {
 	if !object.Spec().Has("source", "contextStore") || object.Spec().Has("source", "generated") {
 		t.Fatal("explicit empty source lost suppression")
 	}
-	input.Files[1] = desiredstate.NewSourceFile("/synthetic/nested/secret.yaml", []byte(strings.Replace(secret, "source: {}", "source:\n    file:\n      path: secrets/material", 1)))
-	if _, _, err := compiler().Compile(context.Background(), input); err != nil {
-		t.Fatal(diagnostics.Of(err))
+}
+
+// The file source is retired in every type's shape: compilation refuses it,
+// names the Secret, and names the context-storage declaration and the secret
+// set flags of that type that replace it.
+func TestCompilerRefusesTheRetiredFileSourceWithItsRemedy(t *testing.T) {
+	for _, test := range []struct{ kind, shape, flags string }{
+		{"opaque", "path: /nonexistent/opaque", "--value-file <path>"},
+		{"token", "path: secrets/token", "--value-file <path>"},
+		{"dockerConfigJson", "path: payload.json", "--value-file <path>"},
+		{"usernamePassword", "path: secrets/credentials.json", "--username <username> --password-file <path>"},
+		{"caBundle", "path: secrets/ca.pem", "--certificate-file <path>"},
+		{"tlsCertificate", "cert: secrets/tls.crt, key: secrets/tls.key", "--certificate-file <path> --private-key-file <path>"},
+		{"sshKeyPair", "privateKey: secrets/id", "--private-key-file <path> [--public-key-file <path>]"},
+		{"sshKeyPair", "privateKey: secrets/id, publicKey: secrets/id.pub", "--private-key-file <path> [--public-key-file <path>]"},
+	} {
+		t.Run(test.kind+"/"+test.shape, func(t *testing.T) {
+			content := environmentYAML + "---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: material\nspec:\n  type: " + test.kind + "\n  source:\n    file: {" + test.shape + "}\n"
+			state, report, err := compiler().Compile(context.Background(), sources(content))
+			if state != nil || report != nil || err == nil {
+				t.Fatalf("a file source compiled: %#v %#v %v", state, report, err)
+			}
+			found := diagnostics.Of(err)
+			want := "declare source: {contextStore: {}} and run bootwright secret set --name material " + test.flags
+			if len(found) != 1 {
+				t.Fatalf("diagnostics = %#v", found)
+			}
+			d := found[0]
+			if d.Code != "api.field" || d.Field != "$.spec.source.file" || !strings.Contains(d.Message, "file source is retired") || d.Remediation != want || d.Object == nil || d.Object.Kind != "Secret" || d.Object.Name != "material" {
+				t.Fatalf("refusal = %#v, want remedy %q", d, want)
+			}
+		})
 	}
 }
 

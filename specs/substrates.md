@@ -23,7 +23,9 @@ is planned for every libvirt `InfraProvider` in the selected graph, and a
 machine block for every Machine on any realized provider whose effective
 `os.provided` is `false`. Provided Machines are never realized. A vSphere or
 KubeVirt provider, and every non-provided Machine on one, refuses before
-operation registration with one diagnostic naming every unsupported object.
+operation registration with one diagnostic per unsupported object, which names
+the object, why it is refused (a Machine's names its provider) and the remedy,
+as the [refusal table](#refusal-table) states.
 
 Which arm realizes a Machine is settled once, from the substrate its provider
 declares, and frozen into the realized target every consumer reads: the
@@ -41,7 +43,8 @@ must be OS-ready and reachable through one of the
 managed services use: the controller arm when it is the Environment
 controller, otherwise the SSH arm with its bound identity and host key. The
 controller arm claims the [host reservations](infrastructure-services.md#host-reservations)
-below; the SSH arm is coordinated by the context lease alone. A bare-metal
+below; the SSH arm is coordinated by the context lease alone, and its emulated
+BMC's socket is compared only with its own context's sockets on that host. A bare-metal
 provider has no host: its Machines are reached at the controllers they
 declare, always from the controller Machine.
 
@@ -50,6 +53,20 @@ cannot name, such as a wildcard, refuses at admission
 ([libvirt arm](api/machines.md#libvirt-arm)): every hosted Machine's controller
 endpoint must be one address its consumers can name. Selection keeps the same
 refusal, before registration, for state that bypassed admission.
+
+### Refusal table
+
+Each row is one refusal of the provider host capability, and
+`TestSubstrateRefusalTableMatchesUnsupported` holds its `Unsupported` to it.
+Its reason and remedy are the diagnostic's message and remediation, in which
+`<provider>` is the refused provider or the refused Machine's provider and
+`<machine>` the refused Machine. A Machine is refused beside its provider.
+
+| Refusal | Path | Reason | Remedy |
+| --- | --- | --- | --- |
+| A provider on an unrealized substrate | an `InfraProvider` whose arm is `vsphere` or `kubevirt` | `this executable realizes no provider on the substrate it declares` | `remove <provider> and the Machines it hosts from the selected Environment, or declare them on a baremetal or libvirt provider` |
+| A Machine on an unrealized substrate | a Machine with `os.provided: false` whose `spec.substrate.providerRef` names such a provider | `its provider <provider> is on a substrate this executable does not realize` | `host <machine> on a baremetal or libvirt provider, declare its operating system provided, or remove it from the selected Environment` |
+| An emulated BMC no endpoint can name | a libvirt provider's `spec.libvirt.bmcEmulationDefaults.bindAddress` that is not one unicast host address | `an emulated BMC listens on one unicast address its controller endpoints can name, and this provider's bindAddress is not one` | `set spec.libvirt.bmcEmulationDefaults.bindAddress on <provider> to one unicast host address` |
 
 ## Provider host realization
 
@@ -150,10 +167,20 @@ neither present nor absent in the same way. Evidence without the directory
 proves it neither present nor absent.
 The hypervisor closure is shared host software this block never removes, so its
 presence alone is not a partial realization. A removal's resolution reads the
-same observation for what the removal proves. None of the owned networks, the
-pool and its directory present, through a `uri` and drivers that answered, is
-its completion. All of them present is positive no effect, and some of them is a
-positive partial realization. The hypervisor closure proves nothing either way.
+same observation for what the removal takes back, not for what the apply
+proves. None of the owned networks, the pool and its directory present, through
+a `uri` and drivers that answered, is its completion. All of them present is
+positive no effect: every managed network answered for, owned and active, the
+pool answered for and active, and the directory present. The rest of what the
+apply proves, the driver daemons, the hypervisor closure, whether a declared
+bridge exists and whether a network carries its frozen definition, is nothing
+the removal takes back, so it plays no part: a drifted network or a disabled
+daemon still reads no effect. The removal stops each network and the pool
+before undefining it, so one of them stopped may be its first effect: that,
+like some of them present, is a positive partial realization. The adapter's
+postcondition is the apply's, which leaves the directory out, so it plays no
+part here either: a host holding everything the apply proves except the pool
+directory is a positive partial realization.
 
 ## Machine realization
 
@@ -203,9 +230,11 @@ system, virtual-media and power resources a physical server presents. It
 listens on the provider's `bindAddress` at the port the
 [allocation rule](api/machines.md#libvirt-arm) assigns this Machine, serves
 plain HTTP, requires the bound `auth.credentialsRef` credential through basic
-authentication with a bcrypt password file published `0600`, fetches inserted
-media into the provider's pool without verifying the artifact server's
-certificate, and mounts the host's libvirt socket and the pool. The controller
+authentication with a bcrypt password file published `0600`, and fetches
+inserted media without verifying the artifact server's certificate. It stores
+that media as a volume in the provider's pool through its libvirt connection,
+so its unit mounts no pool directory: it mounts its configuration and password
+file read-only and the host's libvirt socket directory, and nothing else. The controller
 endpoint is `http://<bindAddress>:<port>/redfish/v1/Systems/<uuid>`, with an
 IPv6 `bindAddress` bracketed (`http://[fd00::1]:8000/redfish/v1/Systems/<uuid>`),
 so it meets the controller address grammar of
@@ -252,6 +281,19 @@ removal's resolution reads the same observation for what the removal proves.
 None of the domain, its controller unit, its disks and a listener on its socket
 present is its completion. The whole machine is positive no effect, and any of
 the domain, unit or disks present is a positive partial realization.
+
+**Unresolved.** An observation that proves nothing
+[names why](state-reconciliation.md#attempts-and-unknown-outcomes), first
+match first. One that returned no evidence names the Machine the adapter runs
+on, with the address it is reached at, and its remedy is to read why in the
+resolution log and restore that host. A same-name domain without this
+context's ownership is named with that host, and its remedy is to remove or
+rename it. A hypervisor that did not answer is named by the frozen libvirt URI
+on that host, and its remedy is to restore that connection. A listener on the
+controller socket with none of the domain, its controller unit and its disks
+present is named by that socket, and its remedy is to stop what listens there.
+Evidence that names another request or does not decode is left to the general
+reason.
 
 **Hypervisor answer.** The observation and its evidence report whether the
 hypervisor answered for the domain, because a hypervisor that does not answer
@@ -350,7 +392,10 @@ taken as the operation's reservation when the operation registers, not by the
 adapter, and the block realizes nothing that could drift. The differences it
 converges are none: hardware is not converged, and a machine whose MAC set no
 longer matches fails naming what it lacks rather than adopting the new
-hardware. The
+hardware. The adapter task that publishes a proof or an observation reads no
+bound material and is not `no_log`, so its refusal, which names fields, counts
+and the controller endpoint but never a reported value, is printed in the
+attempt's [retained output](cli/output.md#private-operation-logs). The
 `UUID` and `SerialNumber` recorded by the apply attempt that proved the machine,
 or by the [resolution](state-reconciliation.md#resolution-outcomes) that proved
 it after an attempt whose outcome was not proved, are its pin while that apply

@@ -681,20 +681,27 @@ phases:
 | `group` | lifecycle | adapter → runner | `phase`, `group`, `status` | none | after `loaded` | Progress only; a settled status advances completion only for a group the frozen block declares. |
 | `completed` | both | adapter → runner | `phase`, `outcome`, non-empty `evidence` | none | last, once | Absent when the channel closes, the run has no result. |
 | `refused` | controller | adapter → runner | `phase`, `reason`: `release-stamp` | none | last, once, in place of `completed`, while an `openshift-clients` tool is being installed | The run fails with the [release-stamp refusal](controller.md#selection-and-command-journeys) instead of the generic adapter failure, even when the adapter's failed exit is read first. |
+| `refused` | lifecycle | adapter → runner | `phase`, `reason`: one the run's request names, `identity-mismatch` for a [pinned power run](cli.md#machine-power-operations) | none | last, once, after `loaded`, in place of `completed` | The run fails with the diagnostic its caller gave that reason instead of the generic adapter failure, even when the adapter's failed exit is read first; the adapter is left to end on its own. |
 
 `outcome` is `changed` or `unchanged`, and the controller runner refuses
 `unchanged` after an authorized `native`. `status` is `running`, `ok`, `failed`
 or `skipped`, and every status but `running` settles its group. Go alone derives
 `failed`, `unknown` and `canceled`; they never cross the channel. `reason`
-names the one adapter refusal Go remedies by name; the outcome is still Go's.
+names an adapter refusal Go remedies by name; the outcome is still Go's, and
+the diagnostic is the one Go gives that reason, carrying the object, what was
+refused and the remedy.
 
 Both runners refuse a malformed or oversized record, an unknown, repeated or
 out-of-order phase, a record after `completed`, and more records than their
 bound: 64 for the lifecycle runner, 132 for the controller runner (`loaded`,
 `prepared`, `native`, `completed` or `refused`, and a `continue` per tool). The
 controller runner also refuses a `refused` record with another reason or for
-another tool kind. A refusal, or a channel that cannot be read, ends the
-protocol at once: the runner closes the
+another tool kind, and the lifecycle runner a `refused` record whose reason the
+run's request does not name. The lifecycle runner judges a record it reads
+after the adapter's failed exit as if it had read that record first, so a
+record it refuses fails the run as a protocol breach, with an unknown outcome,
+whichever of the two it reads first. A record the runner refuses, or a channel
+that cannot be read, ends the protocol at once: the runner closes the
 acknowledgement channel, so an adapter waiting for one fails instead of waiting
 out the deadline, and the lifecycle runner kills the adapter's process group.
 The controller runner kills nothing on a refusal: the adapter fails at its next
@@ -819,6 +826,30 @@ reviewers retain semantic judgments that source checks cannot prove.
 - Verify the complete Ansible lock closure, fixed inventory/inputs, privilege,
   no unapproved shell/command/raw/script/role/plugin content, sensitive output,
   replay, interruption, and structured failure/evidence.
+- The collection's structural tests hold every role to the rules a play cannot
+  check: an entry point hands the runner `loaded` once, before anything but an
+  assertion; a task that receives bound material, and every completion, runs
+  under `no_log`, but for the exact list of completions that read no bound
+  material and whose refusal the attempt's retained output carries, today the
+  bare-metal proof and observation publications
+  ([Physical machine realization](substrates.md#physical-machine-realization));
+  material crosses an include only as a path; a command
+  runs from `argv` an executable its exact allowlist names, `timeout`'s own
+  command included, and never through a shell; a container unit names its
+  entrypoint and nothing passes `--debug`; a poll reads its result only
+  through a default, so a failed read spends an attempt; a task that reaches a
+  management controller under `no_log` never fails itself, and the next task,
+  with only the protocol's group records between them, either refuses outside
+  `no_log` with the controller's own message, deciding on that task's result
+  alone and stopping the play whenever the controller refused, or publishes
+  the result as an unproved observation; every template
+  renders the same bytes twice and its golden's; and every action plugin's
+  `run()` is driven with what surrounds it stubbed. Go holds every request
+  this build sends, request version included, to the argument specification of
+  the role entry point that receives it: the capability contract suite for
+  each lifecycle operation, and the power and controller tests for theirs;
+  `TestRoleVersionAssertionsMatchTheirArgumentSpecs` holds each role's version
+  assertion to that specification.
 - Cover public serialization, artifacts, commands, streams, help, exit codes,
   and graph composition with applicable golden and end-to-end tests.
 - Keep every allowlist and registry a fitness check reads exact: an entry that

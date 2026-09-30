@@ -65,12 +65,26 @@ Since X21 (B10) the context's custody keeps a copy of the kubeconfig that the
 install block takes once it proves the installation complete, or once a
 resolution of an apply reads it complete, and `cluster kubeconfig` reveals that
 copy ([container clusters](../../specs/container-clusters.md#installation)).
-The copy does not remove either hazard above: every read of the cluster, each
-state read and a retried apply's settled decision included, still reads the
+That copy did not remove either hazard above: every read of the cluster, each
+state read and a retried apply's settled decision included, still read the
 installer's own file, so its growth past the 64 KiB bound and a
-truncation by a budget kill during the installer's in-place write still leave
-the identity unproved there. What custody changes is only what an operator
+truncation by a budget kill during the installer's in-place write still left
+the identity unproved there. What custody changed was only what an operator
 exports: the bytes read at a proved completion, kept after the destroy that
 takes the work area and withdrawn only when the context's removal completes.
 Lesson: a copy taken downstream of a hazard protects its consumers, not the
 reads that happen before it exists.
+
+B170 (X31) moved the copy upstream of every read. `clientcmd.WriteToFile`
+writes through `os.WriteFile`, which truncates before it writes (the client-go
+[loader.go](https://github.com/openshift/installer/blob/release-4.21/vendor/k8s.io/client-go/tools/clientcmd/loader.go)
+the installer vendors), so any prefix of the file can survive a kill. The
+install block keeps its own copy beside the installer's file, taken by an
+apply alone, in one rename, and only from a file that is whole, within the
+bound and names the identity the copy already names; every read and the
+custody copy use it. The old shape check had accepted a prefix cut inside the
+client key, because it never required that line whole, so it would have named
+the identity of a file no read could authenticate with. Lesson: a check that a
+file is in the writer's shape must also prove the file is all there, and a
+reader of a file another process rewrites in place must read a copy that
+process never writes.

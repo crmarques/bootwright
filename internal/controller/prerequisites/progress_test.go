@@ -9,13 +9,19 @@ import (
 )
 
 type recordingProgress struct {
-	owner  *fixture
-	events []ProgressEvent
+	owner     *fixture
+	events    []ProgressEvent
+	locations []string
 }
 
 func (r *recordingProgress) ReportProgress(_ context.Context, event ProgressEvent) {
 	r.events = append(r.events, event)
 	r.owner.events = append(r.owner.events, "progress:"+event.Phase)
+}
+
+func (r *recordingProgress) ReportLogLocation(_ context.Context, location string) {
+	r.locations = append(r.locations, location)
+	r.owner.events = append(r.owner.events, "logs:"+location)
 }
 
 // Resolution is the longest silent stretch of a fresh setup, so every

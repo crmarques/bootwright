@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -283,6 +284,40 @@ func TestTheProbeVerifiesTheListenerAgainstTheBoundServingCertificate(t *testing
 	authority := "{{ " + mediaVariablePrefix + "_material." + want.Variable + " }}"
 	if probes[0]["ca_path"] != authority || probes[0]["validate_certs"] != true {
 		t.Fatalf("the probe verifies against %v (validate_certs %v), not %s", probes[0]["ca_path"], probes[0]["validate_certs"], authority)
+	}
+}
+
+// The operation binds the server's serving certificate Secret whole, because
+// the server's own block writes its key, but the media block's run is lent
+// only the certificate it verifies against. The cluster key reaches the run as
+// its public half, a value, so no part of that Secret is lent at all.
+func TestTheMediaRunIsLentOnlyTheServingCertificateOfTheServersSecret(t *testing.T) {
+	execution, request := mediaExecution(t, testDigest)
+	execution.Material = map[string]secrets.Material{
+		request.TLSCertificateRef: secrets.NewMaterial(map[secrets.Part][]byte{
+			secrets.CertificatePart: []byte("-----BEGIN CERTIFICATE-----\nSERVING\n-----END CERTIFICATE-----\n"),
+			secrets.PrivateKeyPart:  []byte("-----BEGIN PRIVATE KEY-----\nSERVING KEY\n-----END PRIVATE KEY-----\n"),
+		}),
+		request.PullSecretRef: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(`{"auths":{}}`)}),
+		request.SSHKeyRef: secrets.NewMaterial(map[secrets.Part][]byte{
+			secrets.PublicKeyPart:  []byte("ssh-ed25519 AAAAPUBLIC cluster\n"),
+			secrets.PrivateKeyPart: []byte("CLUSTER KEY"),
+		}),
+	}
+	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: mediaEvidence(t, testDigest, nil)}}
+	if _, err := NewMedia(runner).Apply(context.Background(), execution); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	lent := map[string][]secrets.Part{}
+	for name, material := range runner.requests[0].Material {
+		lent[name] = material.Parts()
+	}
+	want := map[string][]secrets.Part{
+		request.TLSCertificateRef: {secrets.CertificatePart},
+		request.PullSecretRef:     {secrets.ValuePart},
+	}
+	if !reflect.DeepEqual(lent, want) {
+		t.Fatalf("the media run is lent %v, want %v", lent, want)
 	}
 }
 

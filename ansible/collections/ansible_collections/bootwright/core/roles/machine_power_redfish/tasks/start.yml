@@ -15,7 +15,21 @@
     ca_data: '{{ machine_power_redfish_ca_data }}'
     operation: power-on
     attempts: '{{ machine_power_redfish_attempts }}'
+  register: machine_power_redfish_started
+  failed_when: false
   no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# the controller's own refusal is reported here, where no credential is.
+- name: Stop at a power-on the management controller did not complete
+  ansible.builtin.assert:
+    that:
+      - machine_power_redfish_started.msg is not defined
+    fail_msg: >-
+      bringing Machine/{{ bootwright_machine_power_request.identity.object }} to on
+      failed:
+      {{ (machine_power_redfish_started.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
 
 - name: Publish the proved power-on
   bootwright.core.machine_power_protocol:

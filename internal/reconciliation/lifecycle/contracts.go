@@ -223,10 +223,32 @@ type CapabilityResolver interface {
 	Resolve(kind, implementation string) (Capability, bool)
 }
 
-// UnsupportedReporter lets a capability name what it cannot realize without
-// planning it. A capability that realizes everything it is given omits it.
+// UnsupportedReporter lets a capability refuse what it cannot realize without
+// planning it, naming each object, why and what the operator changes. A
+// capability that realizes everything it is given omits it.
 type UnsupportedReporter interface {
-	Unsupported(*compilation.State) []string
+	Unsupported(*compilation.State) []Refusal
+}
+
+// UnresolvedReporter lets a capability say why an observation of one of its
+// frozen blocks proved nothing, from the evidence that observation recorded,
+// which is empty when it read none. It reads what was recorded and nothing
+// else, so the refusal that follows the observation and a later status say the
+// same thing. It reports false for evidence it cannot explain, and the engine
+// then gives its own general reason. Only the words are the capability's: an
+// explained block stays unknown exactly as an unexplained one does.
+type UnresolvedReporter interface {
+	Unresolved(reconciliation.Block, json.RawMessage) (Unresolved, bool)
+}
+
+// Unresolved is why one effect's outcome stayed unknown, in the operator's
+// terms: the foreign object, named, the target that could not be read, with
+// its host or endpoint, or the listener with nothing of the target behind it.
+// Remedy is what the operator does before repeating the verb, which then
+// observes the effect again.
+type Unresolved struct {
+	Reason string
+	Remedy string
 }
 
 // OperationStore is the durable record set one operation publishes through.
@@ -234,14 +256,17 @@ type UnsupportedReporter interface {
 type OperationStore interface {
 	Index(context.Context) (operationstore.Index, error)
 	// Claim creates a fresh apply's operation directory, empty, before it binds
-	// anything; Register then fills that directory under the same identity.
-	Claim(context.Context, string) error
+	// anything, once the area admits the plan it will register; Register then
+	// fills that directory under the same identity.
+	Claim(context.Context, string, reconciliation.Plan) error
 	// Claimed names every operation directory. Only a reclaim removes one,
 	// so a directory added since a listing was taken proves a newer claim.
 	Claimed(context.Context) ([]string, error)
 	// Reclaim removes every operation directory that holds nothing, which a
 	// claim that never registered leaves, and names those it removed.
 	Reclaim(context.Context) ([]string, error)
+	// Idle names the directories a reclaim would remove now, removing none.
+	Idle(context.Context) ([]string, error)
 	// Started reports whether an operation directory lists a block record.
 	Started(context.Context, string) (bool, error)
 	Register(context.Context, operationstore.Operation, reconciliation.Plan) error
@@ -300,11 +325,22 @@ type PlanInput struct {
 
 // CapabilityPlan is what one capability contributes to an operation: its
 // blocks, the exclusive host resources they claim and the Secret declarations
-// their execution needs bound.
+// their execution needs bound. Reservations are its blocks' claims on the
+// controller, which the operation publishes; SSHReservations are its blocks'
+// claims on SSH hosts, which planning compares within this context alone.
 type CapabilityPlan struct {
-	Definitions  []reconciliation.BlockDefinition
-	Reservations []prerequisites.HostReservation
-	Secrets      []string
+	Definitions     []reconciliation.BlockDefinition
+	Reservations    []prerequisites.HostReservation
+	SSHReservations []SSHReservation
+	Secrets         []string
+}
+
+// SSHReservation is one block's claim on the SSH host its placement names,
+// qualified by that host's Machine. It is never published, because two
+// contexts targeting one SSH host are not coordinated.
+type SSHReservation struct {
+	Machine     string
+	Reservation prerequisites.HostReservation
 }
 
 // Execution is one authorized attempt against one frozen block. Material is

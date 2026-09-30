@@ -86,6 +86,9 @@ type Transaction interface {
 	// MutationState acquires and holds the context lease until transaction
 	// completion, then returns bounded Reconciliation-owned evidence bytes.
 	MutationState(context.Context, string) ([]byte, error)
+	// HostReservations names the host resource keys the controller record
+	// reserves for one context. Delete releases them with the context.
+	HostReservations(context.Context, string) ([]string, error)
 	Delete(context.Context, Record) error
 	Commit(context.Context, Registry) error
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -83,6 +84,9 @@ type memoryStorage struct {
 	mutationError   error
 	retired         []string
 	retireErr       error
+	// retiredResolutions is every resolution a retirement dropped alone, in
+	// the order it was asked for.
+	retiredResolutions []string
 	// areas is every bundle area this double holds. Bundle refuses a new one
 	// once MaxRetainedBundles are held, as the store does, and interrupted
 	// makes the next retirement stop once its intent is recorded.
@@ -91,7 +95,67 @@ type memoryStorage struct {
 	// uncertain is set by a publication whose outcome is unknown and ends
 	// every later publication of the same mutation, as the store's does.
 	uncertain bool
+	// runs are the setup runs this double keeps, oldest first. runFault
+	// refuses the next opening, and brokenRuns makes every write and close of
+	// an opened run fail.
+	runs       []*memoryRun
+	runFault   error
+	brokenRuns bool
 }
+
+// memoryRun is one setup run this double keeps.
+type memoryRun struct {
+	number int
+	output bytes.Buffer
+	closed bool
+	broken bool
+}
+
+func (r *memoryRun) Write(value []byte) (int, error) {
+	if r.broken {
+		return 0, errors.New("no space left on the device")
+	}
+	return r.output.Write(value)
+}
+
+func (r *memoryRun) Location() string {
+	return "/var/lib/bootwright/controller/runs/setup-" + fmt.Sprintf("%06d", r.number)
+}
+
+func (r *memoryRun) Close() error {
+	r.closed = true
+	if r.broken {
+		return errors.New("setup run output durability could not be established")
+	}
+	return nil
+}
+
+// OpenRun opens a run only under a durable intent and keeps the newest
+// MaxSetupRuns, numbering them upward, as the store does.
+func (m *memoryStorage) OpenRun(context.Context) (SetupRun, error) {
+	if m.uncertain {
+		return nil, errors.New("controller storage capability is no longer available")
+	}
+	if m.runFault != nil {
+		return nil, m.runFault
+	}
+	if !m.state.Receipt.Incomplete() || !slices.ContainsFunc(m.state.Receipt.Actions, func(a SetupAction) bool { return a.Phase == "intent" }) {
+		return nil, errors.New("a setup run requires a durably intended setup action")
+	}
+	number := 1
+	if len(m.runs) != 0 {
+		number = m.runs[len(m.runs)-1].number + 1
+	}
+	for len(m.runs) >= memoryRetainedRuns {
+		m.runs = m.runs[1:]
+	}
+	run := &memoryRun{number: number, broken: m.brokenRuns}
+	m.runs = append(m.runs, run)
+	return run, nil
+}
+
+// memoryRetainedRuns is the store's retention bound for setup runs.
+const memoryRetainedRuns = 8
 
 func (m *memoryStorage) view() StorageView {
 	value := StorageView{Exists: m.exists, Initialized: m.state.Host.Valid(), Context: m.scope, State: copyState(m.state), Areas: slices.Clone(m.areas)}
@@ -293,6 +357,48 @@ func (m *memoryStorage) RetireBundles(_ context.Context, ids []string) error {
 	}
 	m.retired = append(m.retired, ids...)
 	m.areas = slices.DeleteFunc(m.areas, func(held HeldArea) bool { return slices.Contains(ids, held.ID) })
+	return nil
+}
+
+// RetireResolutions drops the retained resolutions it names, exactly as the
+// store does, and refuses what the store refuses: any retirement without a
+// receipt or while it is pending, an identity that is no digest, the
+// resolution the receipt carries and one whose bundle no other retained
+// resolution would still name.
+func (m *memoryStorage) RetireResolutions(_ context.Context, digests []string) error {
+	if m.retireErr != nil {
+		return m.retireErr
+	}
+	if m.uncertain {
+		return errors.New("controller storage capability is no longer available")
+	}
+	if m.state.Receipt.ID == "" || m.state.Receipt.Incomplete() {
+		return errors.New("controller retirement requires a settled setup receipt")
+	}
+	for _, digest := range digests {
+		if decoded, err := hex.DecodeString(digest); err != nil || len(decoded) != 32 {
+			return errors.New("retired controller resolution identity is invalid")
+		}
+		if m.state.Receipt.Definition != nil && digest == m.state.Receipt.Definition.ResolutionDigest {
+			return errors.New("the resolution this receipt carries may not be retired")
+		}
+	}
+	retiring := func(definition Definition) bool { return slices.Contains(digests, definition.ResolutionDigest) }
+	kept := slices.DeleteFunc(slices.Clone(m.state.RetainedDefinitions), retiring)
+	var retired []string
+	for _, digest := range digests {
+		index := slices.IndexFunc(m.state.RetainedDefinitions, func(definition Definition) bool { return definition.ResolutionDigest == digest })
+		if index < 0 || slices.Contains(retired, digest) {
+			continue
+		}
+		bundle := m.state.RetainedDefinitions[index].CatalogDigest
+		if !slices.ContainsFunc(kept, func(other Definition) bool { return other.CatalogDigest == bundle }) {
+			return errors.New("a retained resolution may not be retired while no other names its bundle")
+		}
+		retired = append(retired, digest)
+	}
+	m.retiredResolutions = append(m.retiredResolutions, retired...)
+	m.state.RetainedDefinitions = kept
 	return nil
 }
 
@@ -646,10 +752,27 @@ type testRuntimeInstaller struct {
 	entered           int
 	beforePreparation error
 	recoveryError     error
+	// outputs is what each run was given to keep its output in, and started
+	// runs as each Ansible run starts, before it prints anything.
+	outputs []RunOutput
+	started func()
 }
 
-func (r *testRuntimeInstaller) Recover(context.Context, BundleArea, Platform, Definition, SetupEgress, NativePreparation, func(ProgressEvent)) (ActionResult, error) {
+// print is what the Ansible this double stands for writes, as a real run
+// writes its callback lines.
+func (r *testRuntimeInstaller) print(output RunOutput, line string) {
+	r.outputs = append(r.outputs, output)
+	if r.started != nil {
+		r.started()
+	}
+	if output != nil {
+		_, _ = output.Write([]byte(line))
+	}
+}
+
+func (r *testRuntimeInstaller) Recover(_ context.Context, _ BundleArea, _ Platform, _ Definition, _ SetupEgress, _ NativePreparation, _ func(ProgressEvent), output RunOutput) (ActionResult, error) {
 	r.recovers++
+	r.print(output, "TASK [recover the recorded native transaction]\n")
 	if r.recoveryError != nil {
 		return ActionResult{}, r.recoveryError
 	}
@@ -657,8 +780,9 @@ func (r *testRuntimeInstaller) Recover(context.Context, BundleArea, Platform, De
 	return ActionResult{Outcome: "unchanged", Evidence: object(map[string]any{"nativePostcondition": "verified"})}, nil
 }
 
-func (r *testRuntimeInstaller) Prepare(ctx context.Context, area BundleArea, platform Platform, definition Definition, route SetupEgress, record func(context.Context, NativePreparation) error, _ func(ProgressEvent)) (ActionResult, error) {
+func (r *testRuntimeInstaller) Prepare(ctx context.Context, area BundleArea, platform Platform, definition Definition, route SetupEgress, record func(context.Context, NativePreparation) error, _ func(ProgressEvent), output RunOutput) (ActionResult, error) {
 	r.calls++
+	r.print(output, "TASK [install the native packages]\n")
 	if area == nil || !r.owner.bundle.ready || !slices.ContainsFunc(r.owner.store.state.Receipt.Actions, func(a SetupAction) bool { return a.ID == "container-runtime" && a.Phase == "intent" }) {
 		return ActionResult{}, errors.New("runtime without qualified bundle and durable intent")
 	}
@@ -906,6 +1030,46 @@ func TestPurgeRetiresOnlySupersededBundlesOfACompletedSetup(t *testing.T) {
 	result, err = f.service.Setup(context.Background(), SetupRequest{PurgeOldBundles: true})
 	if err != nil || len(result.RetiredBundles) != 0 || len(f.store.retired) != 0 {
 		t.Fatalf("a second purge retired %v (%v)", f.store.retired, err)
+	}
+}
+
+// A retirement interrupted once its intent is recorded has already dropped the
+// resolution that named its area, so one repeat of the purge finishes it from
+// the mark alone and leaves no area retiring. A client area, which no
+// resolution names and nothing marks as retiring, stays untouched throughout.
+func TestRepeatingThePurgeCompletesAnInterruptedRetirement(t *testing.T) {
+	f := newFixture(t)
+	if result, err := f.service.Setup(context.Background(), SetupRequest{}); err != nil || result.Outcome != "changed" {
+		t.Fatalf("setup=%#v err=%v", result, err)
+	}
+	current := f.store.state.Receipt.CatalogDigest
+	superseded := supersede(f, 1)
+	client := HeldArea{ID: strings.Repeat("c", 64)}
+	f.store.areas = append(f.store.areas, client)
+	slices.SortFunc(f.store.areas, func(a, b HeldArea) int { return strings.Compare(a.ID, b.ID) })
+	f.store.interrupted = true
+	if _, err := f.service.Setup(context.Background(), SetupRequest{PurgeOldBundles: true}); err == nil {
+		t.Fatal("the interruption was not reported")
+	}
+	if f.store.interrupted || !slices.Contains(f.store.areas, HeldArea{ID: superseded[0], Retiring: true}) ||
+		slices.ContainsFunc(f.store.state.RetainedDefinitions, func(definition Definition) bool { return definition.CatalogDigest == superseded[0] }) {
+		t.Fatalf("the interruption left areas %#v and resolutions %#v", f.store.areas, f.store.state.RetainedDefinitions)
+	}
+	result, err := f.service.Setup(context.Background(), SetupRequest{PurgeOldBundles: true})
+	if err != nil || result.Outcome != "unchanged" {
+		t.Fatalf("repeat=%#v err=%v", result, err)
+	}
+	if slices.ContainsFunc(f.store.areas, func(held HeldArea) bool { return held.Retiring }) {
+		t.Fatalf("the repeat left an area retiring: %#v", f.store.areas)
+	}
+	if !slices.Equal(f.store.retired, superseded) || !slices.Equal(result.RetiredBundles, superseded) {
+		t.Fatalf("retired %v, reported %v, want %v", f.store.retired, result.RetiredBundles, superseded)
+	}
+	if !holdsReadable(f, current) {
+		t.Fatalf("the bundle the receipt names is no longer readable: %#v", f.store.areas)
+	}
+	if !slices.Contains(f.store.areas, client) || slices.Contains(f.store.retired, client.ID) || slices.Contains(result.RetiredBundles, client.ID) {
+		t.Fatalf("the purge touched a client area: areas %#v, retired %v, reported %v", f.store.areas, f.store.retired, result.RetiredBundles)
 	}
 }
 

@@ -22,6 +22,7 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.action import managedos_install_protocol as protocol
+from ansible_collections.bootwright.core.plugins.modules.managedos_install_inspect import observe
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda"
 LOADER = DataLoader()
@@ -132,3 +133,30 @@ def test_a_removal_observation_publishes_the_content_left_and_nothing_of_the_mac
     assert evidence["tree"] is False
     assert (evidence["marker"], evidence["hostKey"], evidence["power"], evidence["media"]) == ("", "", "", "")
     assert evidence["reachable"] is False
+
+
+# The observation that resolves either an apply or a removal reads the staging
+# tree and the work area through the paths the role derives, so a removal whose
+# only remnant is either one never resolves as withdrawn.
+@pytest.mark.parametrize("observes", [None, "removal"], ids=["unscoped", "removal"])
+def test_the_observation_reports_what_a_killed_apply_left(tmp_path, monkeypatch, observes):
+    tree = tmp_path / "public" / "os" / "rhel-9-8" / "tree"
+    work = tmp_path / "var" / "tmp" / "bootwright-install"
+    (tree.parent / "tree.staging" / "Packages").mkdir(parents=True)
+    work.mkdir(parents=True)
+    variables = scope(observes, managedos_install_anaconda_controller={"changed": False, "media": "", "power": "Off"})
+    variables["bootwright_os_install_request"].update({
+        "image": {"path": str(tmp_path / "public" / "os" / "rhel-01" / "install.iso")},
+        "tree": {"path": str(tree)},
+    })
+    variables["managedos_install_anaconda_staged_tree"] = defaults()["managedos_install_anaconda_staged_tree"]
+    variables["managedos_install_anaconda_work"] = str(work)
+    inspection = next(task for task in tasks() if INSPECT in task)
+    assert runs(inspection, variables)
+    arguments = Templar(loader=LOADER, variables=variables).template(inspection[INSPECT])
+    # The module's argument spec: staging defaults to empty, work is required.
+    observation = observe(arguments["request"], arguments.get("staging", ""), arguments["work"])
+    variables[inspection["register"]] = {"changed": False, "observation": observation}
+    evidence = published(variables, monkeypatch)
+    assert (evidence["treeStaging"], evidence["work"]) == (True, True)
+    assert not any(evidence[name] for name in ("image", "private", "tree", "treeContent"))

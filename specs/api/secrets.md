@@ -36,14 +36,12 @@ remains explicit.
 | Arm | Meaning |
 | --- | --- |
 | `contextStore: {}` | Material lives only in confidential per-context storage. This is the semantic default and is legal for every type. |
-| `file` | Material comes from operator-owned path fields selected by `spec.type`. |
+| `file` | Retired: compilation refuses it, naming its [replacement](#file-source). |
 | `generated` | Material is minted from type-scoped parameters; legal only for `token`, `usernamePassword`, `tlsCertificate`, `caBundle`, and `sshKeyPair`. |
 
-Each Secret owns its source. An Environment cannot change a file source into
-context storage through a custody mode. A file source continues to name
-operator-owned files; importing supplied material into Bootwright storage
-requires selecting `contextStore` and a separately authorized materialization
-operation. Changing a declaration neither imports nor generates bytes.
+Each Secret owns its source. Supplied material enters Bootwright storage only
+through `contextStore` and an explicit `secret set`. Changing a declaration
+neither imports nor generates bytes.
 
 For `contextStore`, `metadata.name` identifies the entry within the selected
 local context. A material consumer must refuse a missing entry without
@@ -55,25 +53,37 @@ source does not implement them.
 
 ### File source
 
-`source.file` contains fields in the order `path`, `cert`, `key`,
-`privateKey`, then `publicKey`. Only the fields selected by the Secret type are
-allowed:
+The `file` arm is retired under the
+[copied-input rule](../project.md#design-priorities-and-non-goals): desired
+state names no path that a lifecycle operation reads after admission.
+Compilation refuses `source.file` in every type's shape (`path`, `cert` with
+`key`, or `privateKey` with an optional `publicKey`), whether authored or
+supplied by an [Environment kind default](environment.md#kind-defaults), with
+`api.field`, before it opens any path. The refusal of an authored arm, at
+`$.spec.source.file`, names the Secret and its remedy: declare
+`source: {contextStore: {}}` and load the files with
+[`secret set`](../secrets.md#acquisition-and-commands) and the flags of the
+declared type. A name that is not a valid object name prints as `<name>`:
 
-| Secret type | Required fields | Optional fields |
-| --- | --- | --- |
-| `opaque`, `token`, `usernamePassword`, `dockerConfigJson`, `caBundle` | `path` | none |
-| `tlsCertificate` | `cert`, `key` | none |
-| `sshKeyPair` | `privateKey` | `publicKey` |
+| Secret type | Remedy after `bootwright secret set --name <n>` |
+| --- | --- |
+| `opaque`, `token`, `dockerConfigJson` | `--value-file <path>` |
+| `usernamePassword` | `--username <username> --password-file <path>` |
+| `caBundle` | `--certificate-file <path>` |
+| `tlsCertificate` | `--certificate-file <path> --private-key-file <path>` |
+| `sshKeyPair` | `--private-key-file <path> [--public-key-file <path>]` |
 
-When an SSH public-key path is omitted, a materializer derives it from the
-private key. Paths may be relative to the YAML file declaring the
-`Secret`, absolute, or `~`-rooted. After resolving location only for lexical
-containment, a path inside the environment input tree must be below an exact
-`secrets` segment so discovery excludes it before reading;
-`Environment.spec.resources` cannot override that exclusion. Secret descriptor
-objects stay outside that reserved directory. A key not used by the selected
-type is rejected. Desired-state compilation preserves authored path spelling
-without accessing the path.
+A kind default that supplies the arm is refused twice. The Environment is
+refused at `$.spec.defaults.Secret.source.file`, with the remedy to replace the
+arm in that default with `source: {contextStore: {}}`, then run
+`bootwright secret set --name <name>` with the file flags of its type for each
+Secret that inherits it; when the default declares a type, the remedy names
+that type's flags from the table. Each Secret that inherits the arm is refused
+at `$.spec.source.file`, located at the default, with the remedy of every
+inherited field: override the field on that Secret or correct its Environment
+kind default. A version an earlier build froze from a file source
+stays in the binding that holds it
+([immutable binding](../secrets.md#immutable-binding-and-contexts)).
 
 ### Generated source
 

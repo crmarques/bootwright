@@ -212,6 +212,29 @@ func ValidateBootstrap(value BootstrapDefinition) error {
 	return nil
 }
 
+// ClosureDigest identifies the Python and Ansible closure one resolution
+// executes: its platform, its interpreter release and layout, the approved
+// bytes of every source, the wheels they hold and the provided execution
+// foundation the closure was qualified against. It leaves out how the closure
+// was found and what is projected beside it: the release intents, the index
+// metadata read, the embedded automation and the projection identity, file
+// count and size that automation moves. A resolution carried onto other
+// automation, or bound to another native transaction, keeps it.
+func ClosureDigest(value BootstrapDefinition) (string, error) {
+	return definitionHash("bootwright.controller.execution-closure-v1", struct {
+		Platform          Platform
+		PythonVersion     string
+		AnsibleVersion    string
+		PythonExecutable  string
+		SitePackages      string
+		Sources           []DependencySource
+		Wheels            []BootstrapWheel
+		Execution         ExecutionRequirement
+		ExecutionPackages []string
+	}{value.Platform, value.PythonVersion, value.AnsibleVersion, value.PythonExecutable, value.SitePackages,
+		value.Sources, value.Wheels, value.Execution, value.ExecutionPackages})
+}
+
 func bootstrapHash(value string) bool {
 	decoded, err := hex.DecodeString(value)
 	return err == nil && len(decoded) == sha256.Size && hex.EncodeToString(decoded) == value

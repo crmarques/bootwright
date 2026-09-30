@@ -66,6 +66,7 @@ type repository struct {
 	cancel         context.CancelFunc
 	emptyCallback  bool
 	confirmed      string
+	reservations   map[string][]string
 }
 
 func newRepository(t *testing.T) *repository {
@@ -217,6 +218,14 @@ func (tx transaction) Publish(ctx context.Context, name, directory string, input
 	return revision, nil
 }
 
+func (tx transaction) HostReservations(ctx context.Context, name string) ([]string, error) {
+	tx.requireLock()
+	if err := tx.r.step(ctx, "reservations"); err != nil {
+		return nil, err
+	}
+	return slices.Clone(tx.r.reservations[name]), nil
+}
+
 func (tx transaction) Delete(ctx context.Context, record contexts.Record) error {
 	tx.requireLock()
 	if err := tx.r.step(ctx, "delete"); err != nil {
@@ -224,6 +233,7 @@ func (tx transaction) Delete(ctx context.Context, record contexts.Record) error 
 	}
 	tx.r.registry.Contexts = slices.DeleteFunc(tx.r.registry.Contexts, func(r contexts.Record) bool { return r.Name == record.Name })
 	delete(tx.r.configurations, record.Name)
+	delete(tx.r.reservations, record.Name)
 	return nil
 }
 
@@ -351,8 +361,7 @@ func TestInitCompilesBeforeTransactionAndPublishesOriginalAcquisition(t *testing
     Secret:
       type: opaque
       source:
-        file:
-          path: secrets/unopened
+        contextStore: {}
 `
 	input.Files[0] = desiredstate.NewSourceFile(input.Files[0].Path(), []byte(env))
 	for _, item := range []struct{ file, name, spec string }{{"declared.yaml", "material", " {}"}, {"excluded.yaml", "excluded", "\n  type: unsupported"}} {
@@ -551,7 +560,7 @@ func TestFailuresAndCancellationNeverClaimPublication(t *testing.T) {
 			"use":     {"transaction", "select"},
 			"list":    {"view"},
 			"current": {"view"},
-			"delete":  {"transaction", "lease", "guard", "confirm", "delete"},
+			"delete":  {"transaction", "lease", "guard", "confirm", "reservations", "delete"},
 		}[command]
 		for _, stage := range stages {
 			for _, cancelStage := range []bool{false, true} {
@@ -971,6 +980,31 @@ func TestOrphanAcknowledgementIsRequiredToDeleteAContextThatStillOwnsObjects(t *
 				t.Fatalf("acknowledged deletion: %#v %v %#v", got, err, r.registry.Contexts)
 			}
 		})
+	}
+}
+
+// A deleted context can hold no host reservation, so an acknowledged deletion
+// releases the keys it reserved, after its guard and with the context
+// itself, and reports them. A refused deletion releases nothing.
+func TestAnAcknowledgedDeletionReleasesAndReportsTheContextsReservations(t *testing.T) {
+	keys := []string{"libvirt-domain:lab-rhel-01", "socket:192.0.2.1:8000"}
+	r := existingRepository(t)
+	r.evidence["example"] = []byte(`{"version":1,"operation":"unknown","ownership":"retained"}`)
+	r.reservations = map[string][]string{"example": slices.Clone(keys), "other": {"unit:other"}}
+	s := service(t, r, sourceFixture("/synthetic/input"))
+	if _, err := s.Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, SkipConfirmation: true}); err == nil || len(r.reservations["example"]) != 2 {
+		t.Fatalf("a refused deletion released %v (%v)", r.reservations, err)
+	}
+	r.calls = nil
+	got, err := s.Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, AllowOrphans: true, SkipConfirmation: true})
+	if err != nil || got == nil || !got.OrphansAbandoned || !slices.Equal(got.ReleasedReservations, keys) {
+		t.Fatalf("acknowledged deletion = %#v (%v), want %v released", got, err, keys)
+	}
+	if _, held := r.reservations["example"]; held || !slices.Equal(r.reservations["other"], []string{"unit:other"}) {
+		t.Fatalf("reservations after the deletion = %v", r.reservations)
+	}
+	if !slices.Equal(r.calls, []string{"transaction", "registry", "lease", "guard", "reservations", "delete", "clear"}) {
+		t.Fatalf("deletion stages = %v", r.calls)
 	}
 }
 

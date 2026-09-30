@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -33,14 +35,22 @@ func (evidenceSource) Ownership(context.Context, string) (map[string]machine.Own
 	return realized(), nil
 }
 
+// boundary lends a runtime as the lifecycle does: a run that asks to retain
+// its output is given a file named under an identity of its own, and one that
+// does not is given none.
 type boundary struct {
 	requested []string
 	entered   int
+	retaining []bool
 }
 
 func (b *boundary) WithRuntime(ctx context.Context, request lifecycle.RuntimeRequest, call func(context.Context, lifecycle.Runtime) error) error {
 	b.entered++
 	b.requested = slices.Clone(request.Secrets)
+	b.retaining = append(b.retaining, request.RetainOutput)
+	if !request.RetainOutput {
+		return call(ctx, lifecycle.Runtime{Material: map[string]secrets.Material{}})
+	}
 	return call(ctx, lifecycle.Runtime{
 		Material: map[string]secrets.Material{}, Output: &retained{},
 		LogLocation:       "/var/lib/bootwright/contexts/lab/state/runs/run-" + strings.Repeat("a", 32),
@@ -210,6 +220,34 @@ func TestOnlyARunThatNamesItsOutputPointsAFailureAtIt(t *testing.T) {
 	}
 }
 
+// A reading names no retained output, so it asks its runtime to keep none and
+// its adapter writes into nothing; only a power run, which names its file,
+// asks for one.
+func TestOnlyARunThatNamesItsOutputAsksToRetainIt(t *testing.T) {
+	converging := &boundary{}
+	if _, err := service(converging, &adapter{power: "off"}, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(converging.retaining, []bool{true}) {
+		t.Fatalf("a power run asked to retain its output %v", converging.retaining)
+	}
+	reading, surveyor := &boundary{}, &surveyor{reports: map[string]string{"guest": machine.PowerOn}}
+	if _, err := service(reading, surveyor, nil).Read(context.Background(), "lab", selected()); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(reading.retaining, []bool{false}) {
+		t.Fatalf("a reading asked to retain its output %v", reading.retaining)
+	}
+	if len(surveyor.runs) == 0 {
+		t.Fatal("the reading crossed no adapter")
+	}
+	for _, run := range surveyor.runs {
+		if run.Output != nil {
+			t.Fatal("a reading's adapter was given a file to retain its output in")
+		}
+	}
+}
+
 // A run that fails once its runtime is lent proves no power state, but a JSON
 // invocation reports no progress, so the refusal itself must carry where that
 // output is. A refusal before the runtime is lent names no file.
@@ -344,6 +382,45 @@ func TestAProvedMachineCarriesItsIdentityToTheAdapter(t *testing.T) {
 				t.Fatalf("pins asked = %v", proved.asked)
 			}
 		})
+	}
+}
+
+// A pinned run names the one refusal its adapter may give before any power
+// request: a controller that answers as another system. The run then fails with
+// a diagnostic carrying the Machine, what was refused and the remedy, pointing
+// at the retained output for the identities themselves, which are what a
+// controller reported. A run with no pin can name no refusal at all.
+func TestAPinnedRunRefusesAnotherSystemNamingTheMachineAndTheRemedy(t *testing.T) {
+	want := []diagnostics.Diagnostic{{
+		Severity: "error", Code: "lifecycle.state",
+		Message: "the management controller at https://bmc.example.test/redfish/v1/Systems/1 answers as another system " +
+			"than the one this context's current apply proved, so no power request was sent",
+		Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: "Machine", Name: "metal"},
+		Remediation: "correct spec.hardware.management.bmc.address on Machine/metal, or destroy and apply this context so " +
+			"the machine is proved again; " + lentRemediation + " for both identities",
+	}}
+	proved := &pins{identity: machine.HardwareIdentity{UUID: "4C4C4544-0042-3510-8052-B4C04F4D4E31", Serial: "SN1"}, found: true}
+	runner := &adapter{machine: "metal", power: "off"}
+	if _, err := New(stateSource{}, evidenceSource{}, proved, &boundary{}, runner, nil, nil, nil).
+		Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "metal", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.seen.Refusals) != 1 || !reflect.DeepEqual(diagnostics.Of(runner.seen.Refusals["identity-mismatch"]), want) {
+		t.Fatalf("refusals = %+v, want identity-mismatch as %+v", runner.seen.Refusals, want)
+	}
+	refusing := &adapter{machine: "metal", err: runner.seen.Refusals["identity-mismatch"]}
+	result, err := New(stateSource{}, evidenceSource{}, proved, &boundary{}, refusing, nil, nil, nil).
+		Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "metal", SkipConfirmation: true})
+	if !reflect.DeepEqual(diagnostics.Of(err), want) || result == nil || len(result.Logs) != 1 {
+		t.Fatalf("a refused run reported %+v, %v; want %+v and its output", result, diagnostics.Of(err), want)
+	}
+	unpinned := &adapter{machine: "metal", power: "off"}
+	if _, err := New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, unpinned, nil, nil, nil).
+		Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "metal", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if unpinned.seen.Refusals != nil {
+		t.Fatalf("a run with no pin names refusals %+v", unpinned.seen.Refusals)
 	}
 }
 

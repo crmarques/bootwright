@@ -100,7 +100,7 @@ def unproved(evidence, arguments):
     """What a proof still lacks, named so the refusal can say so.
 
     These are field names and counts, never the values themselves, so naming
-    them is safe in a message `no_log` would otherwise censor with the evidence.
+    them is safe in the message the attempt's retained output carries.
     """
     observation = arguments.get("observation") or {}
     names = []

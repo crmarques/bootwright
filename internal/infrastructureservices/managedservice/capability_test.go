@@ -120,7 +120,10 @@ func TestRequestCanonicalFormIsStableAndOrdered(t *testing.T) {
 	}
 }
 
-func TestSSHPlacementRequiresKeyAndHostKeyAndReservesNothing(t *testing.T) {
+// An SSH placement publishes no controller reservation, since two contexts
+// targeting one SSH host are not coordinated, but its claims are qualified by
+// its host's Machine so its own context compares their sockets there.
+func TestSSHPlacementRequiresKeyAndHostKeyAndClaimsOnItsHostAlone(t *testing.T) {
 	remote := api.NewObject(api.Machine, "services", api.Value{}, api.MapValue(
 		field("capabilities", api.ListValue(api.StringValue("container-runtime"))),
 		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
@@ -149,6 +152,11 @@ func TestSSHPlacementRequiresKeyAndHostKeyAndReservesNothing(t *testing.T) {
 	}
 	if len(plan.Reservations) != 0 {
 		t.Fatal("an SSH placement claimed host reservations this context cannot coordinate")
+	}
+	if len(plan.SSHReservations) != 1 || plan.SSHReservations[0].Machine != "services" ||
+		plan.SSHReservations[0].Reservation.Service != "lab-proxy" ||
+		!slices.Contains(plan.SSHReservations[0].Reservation.Keys, "socket:192.0.2.9:3128") {
+		t.Fatalf("SSH claims = %+v, want lab-proxy's socket qualified by the Machine services", plan.SSHReservations)
 	}
 	if !slices.Equal(plan.Secrets, []string{"host-key", "services-key"}) {
 		t.Fatalf("secrets = %v", plan.Secrets)

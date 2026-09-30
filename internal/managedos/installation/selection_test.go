@@ -7,6 +7,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -157,36 +158,54 @@ func TestAProfileWithoutAPackageSourceInstallsFromItsMedia(t *testing.T) {
 }
 
 // Every profile arm that carries secret bytes or effects this contract cannot
-// prove is named before registration, through the Machine that selects it.
+// prove is refused before registration, through the Machine that selects it,
+// saying what the profile selects and naming the field to change on it.
 func TestUnsupportedNamesEveryProfileArmThisContractRefuses(t *testing.T) {
 	customizations := installProfile().Spec().Get("customizations")
-	for name, profile := range map[string]api.Object{
-		"from subscription": installProfile(field("installer", api.MapValue(field("anaconda", api.MapValue(
+	selected := func(field string) [2]string {
+		return [2]string{"the install profile selects " + field + ", which carries secret bytes or effects this executable does not prove",
+			"remove " + field + " from MachineInstallProfile/rhel-9-8"}
+	}
+	for name, test := range map[string]struct {
+		profile api.Object
+		refusal [2]string
+	}{
+		"from subscription": {installProfile(field("installer", api.MapValue(field("anaconda", api.MapValue(
 			text("imageRef", "rhel-9-8-boot"),
 			field("packageSource", api.MapValue(field("fromSubscription", api.MapValue(text("entitlementRef", "rhel"))))),
-		))))),
-		"mirror": installProfile(field("installer", api.MapValue(field("anaconda", api.MapValue(
+		))))), selected("spec.installer.anaconda.packageSource.fromSubscription")},
+		"mirror": {installProfile(field("installer", api.MapValue(field("anaconda", api.MapValue(
 			text("imageRef", "rhel-9-8-boot"),
 			field("packageSource", api.MapValue(field("mirror", api.MapValue(text("baseURL", "https://example.test/os"))))),
-		))))),
-		"template clone": installProfile(field("installer", api.MapValue(field("templateClone", api.MapValue(
+		))))), selected("spec.installer.anaconda.packageSource.mirror")},
+		"template clone": {installProfile(field("installer", api.MapValue(field("templateClone", api.MapValue(
 			field("seed", api.MapValue(field("cloudInit", api.MapValue()))),
-		))))),
-		"subscription": installProfile(field("subscription", api.MapValue(text("entitlementRef", "rhel")))),
-		"initial password": installProfile(field("customizations", customizations.With("ssh", api.MapValue(
+		))))), [2]string{
+			"this executable installs an operating system only through the anaconda installer, which the install profile does not select",
+			"select spec.installer.anaconda on MachineInstallProfile/rhel-9-8",
+		}},
+		"subscription": {installProfile(field("subscription", api.MapValue(text("entitlementRef", "rhel")))), selected("spec.subscription")},
+		"initial password": {installProfile(field("customizations", customizations.With("ssh", api.MapValue(
 			field("initialPassword", api.MapValue(text("secretRef", "root-password"))),
-		)))),
-		"disk encryption": installProfile(field("customizations", customizations.With("security", api.MapValue(
+		)))), selected("spec.customizations.ssh.initialPassword")},
+		"disk encryption": {installProfile(field("customizations", customizations.With("security", api.MapValue(
 			field("diskEncryption", api.MapValue(text("recoveryPassphraseRef", "luks"))),
-		)))),
-		"fips": installProfile(field("customizations", customizations.With("security", api.MapValue(
+		)))), selected("spec.customizations.security.diskEncryption")},
+		"fips": {installProfile(field("customizations", customizations.With("security", api.MapValue(
 			field("fips", api.MapValue(field("enabled", api.BoolValue(true)))),
-		)))),
+		)))), [2]string{
+			"the install profile enables FIPS, which carries effects this executable does not prove",
+			"disable spec.customizations.security.fips on MachineInstallProfile/rhel-9-8",
+		}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			unsupported := Unsupported(labCatalog(profile))
+			unsupported := Unsupported(labCatalog(test.profile))
 			if !slices.Equal(unsupported, []string{"Machine/rhel-01"}) {
 				t.Fatalf("unsupported = %v", unsupported)
+			}
+			want := []lifecycle.Refusal{{Kind: "Machine", Name: "rhel-01", Reason: test.refusal[0], Remediation: test.refusal[1]}}
+			if refused := Refusals(labCatalog(test.profile)); !slices.Equal(refused, want) {
+				t.Fatalf("refusals = %+v, want %+v", refused, want)
 			}
 		})
 	}
@@ -364,6 +383,13 @@ func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 			}
 			if reported.Remediation != test.remediation {
 				t.Fatalf("remediation = %q", reported.Remediation)
+			}
+			// Plan and apply refuse before registration with this same
+			// reason and remedy, naming the Machine.
+			name := strings.TrimPrefix(test.machine, "Machine/")
+			want := []lifecycle.Refusal{{Kind: "Machine", Name: name, Reason: reported.Message, Remediation: test.remediation}}
+			if refused := Refusals(catalog); !slices.Equal(refused, want) {
+				t.Fatalf("refusals = %+v, want %+v", refused, want)
 			}
 		})
 	}

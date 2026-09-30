@@ -1,0 +1,14 @@
+<network>
+  <name>bootwright-lab-guests</name>
+  <uuid>4c0a4300-aa43-458c-86d7-ac2256d1fc00</uuid>
+  <bridge name="virbr-lab" stp="on" delay="0" zone="trusted"/>
+  <forward mode="nat"/>
+  <dns enable="no"/>
+  <ip address="192.0.2.1" prefix="24"/>
+  <metadata>
+    <bw:owner xmlns:bw="https://bootwright.io/substrate/v1">
+      <bw:context>lab-rhel</bw:context>
+      <bw:attachment>bootwright-lab-guests</bw:attachment>
+    </bw:owner>
+  </metadata>
+</network>

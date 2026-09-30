@@ -20,19 +20,20 @@ type fixedOperator struct{ identity FileIdentity }
 
 func (f fixedOperator) FileIdentity(context.Context) (FileIdentity, error) { return f.identity, nil }
 
-func TestFileMaterialUsesInvokingAccountIdentity(t *testing.T) {
+func TestAcquiredFileUsesInvokingAccountIdentity(t *testing.T) {
 	home := t.TempDir()
 	writeSecretFile(t, home, "token.secret", []byte("operator-value\n"), 0600)
 	t.Setenv("HOME", "/untrusted-home")
 	service := New(nil, Options{Operator: fixedOperator{FileIdentity{UID: os.Getuid(), Home: home}}})
-	declaration := secrets.Declaration{Name: "token", Type: "token", Source: "file", Origin: "/input/secret.yaml", Files: secrets.FileSource{Path: "~/token.secret"}}
-	material, err := service.File(context.Background(), declaration)
+	declaration := secrets.Declaration{Name: "token", Type: "token", Source: "contextStore"}
+	input := secrets.Input{ValueFile: "~/token.secret"}
+	material, err := service.Acquire(context.Background(), declaration, input)
 	if err != nil {
 		t.Fatal("invoking-user home was not used", err)
 	}
 	material.Clear()
 	service = New(nil, Options{Operator: fixedOperator{FileIdentity{UID: os.Getuid() + 1, Home: home}}})
-	if _, err := service.File(context.Background(), declaration); err == nil {
+	if _, err := service.Acquire(context.Background(), declaration, input); err == nil {
 		t.Fatal("file belonging to a different account was accepted")
 	}
 }
@@ -65,20 +66,15 @@ func TestAcquireResolvesRelativePathsFromInvocationWorkingDirectory(t *testing.T
 	}
 }
 
-func TestFileResolvesRelativePathsFromDeclarationOriginAndAcceptsPublicDirectories(t *testing.T) {
-	root := t.TempDir()
-	directory := filepath.Join(root, "public-directory")
+func TestAcquireAcceptsPublicDirectories(t *testing.T) {
+	directory := filepath.Join(t.TempDir(), "public-directory")
 	if err := os.Mkdir(directory, 0755); err != nil {
 		t.Fatal(err)
 	}
-	path := writeSecretFile(t, directory, "credentials.json", []byte(`{"username":"operator","password":"value\n"}`), 0400)
-	declaration := secrets.Declaration{
-		Type: "usernamePassword", Source: "file", Origin: filepath.Join(root, "declaration.yaml"),
-		Files: secrets.FileSource{Path: filepath.Join(filepath.Base(directory), filepath.Base(path))},
-	}
-	value, err := New(nil).File(context.Background(), declaration)
+	path := writeSecretFile(t, directory, "password", []byte("value\n"), 0400)
+	value, err := New(nil).Acquire(context.Background(), secrets.Declaration{Type: "usernamePassword", Source: "contextStore"}, secrets.Input{Username: "operator", PasswordFile: path})
 	if err != nil {
-		t.Fatalf("File: %v (%s)", err, diagnosticMessage(err))
+		t.Fatalf("Acquire: %v (%s)", err, diagnosticMessage(err))
 	}
 	defer value.Clear()
 	username := requiredPart(t, value, secrets.UsernamePart)
@@ -86,7 +82,7 @@ func TestFileResolvesRelativePathsFromDeclarationOriginAndAcceptsPublicDirectori
 	defer clear(username)
 	defer clear(password)
 	if string(username) != "operator" || string(password) != "value" {
-		t.Fatal("structured usernamePassword parts differ from the file fields")
+		t.Fatal("usernamePassword parts differ from the flag and the file")
 	}
 }
 
@@ -171,79 +167,7 @@ func TestAcquireFileLineTransportBounds(t *testing.T) {
 	}
 }
 
-func TestFileUsernamePasswordAllowsExactWorstCaseTransportBound(t *testing.T) {
-	document := make([]byte, 0, maxUsernamePasswordJSONBytes)
-	document = append(document, `{"`...)
-	document = append(document, `\u0075\u0073\u0065\u0072\u006e\u0061\u006d\u0065`...)
-	document = append(document, `":"`...)
-	for range secrets.MaxPartBytes {
-		document = append(document, `\u0075`...)
-	}
-	document = append(document, `","`...)
-	document = append(document, `\u0070\u0061\u0073\u0073\u0077\u006f\u0072\u0064`...)
-	document = append(document, `":"`...)
-	for range secrets.MaxPartBytes {
-		document = append(document, `\u0070`...)
-	}
-	document = append(document, `\u000a"}`...)
-	document = append(document, '\n')
-	if len(document) != maxUsernamePasswordJSONBytes {
-		t.Fatalf("maximal structured document size = %d, want %d", len(document), maxUsernamePasswordJSONBytes)
-	}
-	defer clear(document)
-	root := t.TempDir()
-	path := writeSecretFile(t, root, "credentials.json", document, 0600)
-	declaration := secrets.Declaration{
-		Type: "usernamePassword", Source: "file", Origin: filepath.Join(root, "declaration.yaml"),
-		Files: secrets.FileSource{Path: path},
-	}
-	value, err := New(nil).File(context.Background(), declaration)
-	if err != nil {
-		t.Fatalf("File: %v (%s)", err, diagnosticMessage(err))
-	}
-	defer value.Clear()
-	username := requiredPart(t, value, secrets.UsernamePart)
-	password := requiredPart(t, value, secrets.PasswordPart)
-	defer clear(username)
-	defer clear(password)
-	if len(username) != secrets.MaxPartBytes || len(password) != secrets.MaxPartBytes {
-		t.Fatal("structured fields were not decoded and normalized at the exact version limit")
-	}
-}
-
-func TestFileUsernamePasswordRejectsOversizedDecodedParts(t *testing.T) {
-	tests := []struct {
-		name     string
-		username []byte
-		password []byte
-	}{
-		{name: "username", username: bytes.Repeat([]byte{'u'}, secrets.MaxPartBytes+1), password: []byte("password")},
-		{name: "password", username: []byte("operator"), password: bytes.Repeat([]byte{'p'}, secrets.MaxPartBytes+1)},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			defer clear(test.username)
-			defer clear(test.password)
-			document := make([]byte, 0, len(test.username)+len(test.password)+32)
-			document = append(document, `{"username":"`...)
-			document = append(document, test.username...)
-			document = append(document, `","password":"`...)
-			document = append(document, test.password...)
-			document = append(document, `"}`...)
-			defer clear(document)
-			root := t.TempDir()
-			path := writeSecretFile(t, root, "credentials.json", document, 0600)
-			value, err := New(nil).File(context.Background(), secrets.Declaration{
-				Type: "usernamePassword", Source: "file", Origin: filepath.Join(root, "declaration.yaml"),
-				Files: secrets.FileSource{Path: path},
-			})
-			value.Clear()
-			assertFailureCode(t, err, "secret.store.limit")
-		})
-	}
-}
-
-func TestSSHPrivateOnlyDerivesPublicForAcquireAndFile(t *testing.T) {
+func TestSSHPrivateOnlyDerivesPublicForAcquire(t *testing.T) {
 	service := New(nil, Options{Random: cryptorand.Reader, Clock: func() time.Time { return generationTime }})
 	generated, err := service.Generate(context.Background(), secrets.Declaration{Type: "sshKeyPair", Source: "generated"})
 	if err != nil {
@@ -263,21 +187,11 @@ func TestSSHPrivateOnlyDerivesPublicForAcquireAndFile(t *testing.T) {
 	if err := service.Validate(context.Background(), secrets.Declaration{Type: "sshKeyPair", Source: "contextStore"}, acquired); err != nil {
 		t.Fatalf("acquired pair: %v", err)
 	}
-
-	fromFile, err := service.File(context.Background(), secrets.Declaration{
-		Type: "sshKeyPair", Source: "file", Origin: filepath.Join(root, "desired.yaml"), Files: secrets.FileSource{PrivateKey: filepath.Base(path)},
-	})
-	if err != nil {
-		t.Fatalf("File: %v", err)
-	}
-	defer fromFile.Clear()
 	want := requiredPart(t, generated, secrets.PublicKeyPart)
 	acquiredPublic := requiredPart(t, acquired, secrets.PublicKeyPart)
-	filePublic := requiredPart(t, fromFile, secrets.PublicKeyPart)
 	defer clear(want)
 	defer clear(acquiredPublic)
-	defer clear(filePublic)
-	if !bytes.Equal(want, acquiredPublic) || !bytes.Equal(want, filePublic) {
+	if !bytes.Equal(want, acquiredPublic) {
 		t.Fatal("derived SSH public keys differ")
 	}
 }
@@ -377,15 +291,6 @@ func TestFileReaderRejectsOversizeBeforeReading(t *testing.T) {
 				return New(nil).Acquire(context.Background(), secrets.Declaration{Type: "token", Source: "contextStore"}, secrets.Input{ValueFile: path})
 			},
 		},
-		{
-			name: "structured usernamePassword", size: int64(maxUsernamePasswordJSONBytes) + 1,
-			read: func(path string) (secrets.Material, error) {
-				root := filepath.Dir(path)
-				return New(nil).File(context.Background(), secrets.Declaration{
-					Type: "usernamePassword", Source: "file", Origin: filepath.Join(root, "declaration.yaml"), Files: secrets.FileSource{Path: path},
-				})
-			},
-		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -413,7 +318,7 @@ func TestFileTransportValidationPrecedesPathAcquisition(t *testing.T) {
 	parts, err := New(nil).readFileParts(context.Background(), []fileRequest{
 		{Part: secrets.PrivateKeyPart, Path: "missing-relative-file"},
 		{Part: secrets.PublicKeyPart, Path: "missing-public-file", Encoding: transportEncoding(255)},
-	}, "", false)
+	})
 	clearParts(parts)
 	assertFailureCode(t, err, "secret.input")
 	if !strings.Contains(diagnosticMessage(err), "transport encoding") {

@@ -2,10 +2,12 @@
 # Read the cluster back through its own API, and each node through its own
 # controller. Every answer here is an observation: nothing is echoed from the
 # request, so the evidence says what is true rather than what was asked for.
-# The cluster is read through the kubeconfig the installer wrote with the
-# image, so a read that succeeds has verified the serving certificate against
-# the authority that file carries and been authenticated by its client
-# certificate, which only this build's cluster accepts.
+# The cluster is read through the copy this installation keeps of the
+# kubeconfig the installer wrote with the image, the file the inspection names
+# the identity from, so a read that succeeds has verified the serving
+# certificate against the authority that file carries and been authenticated
+# by its client certificate, which only this build's cluster accepts. The
+# installer's own file, which it rewrites in place, is never read here.
 # Every read passes --request-timeout, so an API that accepts the connection
 # and never answers ends each request oc makes rather than holding the read.
 # An observation for a removal's resolution reads none of the cluster, which
@@ -100,7 +102,19 @@
     label: '{{ item.machine }}'
     index_var: loop_index
   register: containercluster_install_agent_controllers
+  failed_when: false
   no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# each controller's own refusal is reported here, where no credential is.
+- name: Stop at a read a management controller did not answer
+  ansible.builtin.fail:
+    msg: >-
+      {% for result in containercluster_install_agent_controllers.results | default([]) if result.msg is defined -%}
+      reading Machine {{ result.item.machine }} through its management controller failed:
+      {{ (result.msg | string | bootwright.core.printable)[:512] }}{{ '' if loop.last else '; ' }}
+      {%- endfor %}
+  when: containercluster_install_agent_controllers.results | default([]) | selectattr('msg', 'defined') | list | length > 0
 
 # The cluster answers with this build's identity only when the read above
 # succeeded, and with the foreign marker when an API answered but refused the

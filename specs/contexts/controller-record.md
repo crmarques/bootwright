@@ -2,7 +2,8 @@
 
 Workspace owns the durable shared-host state on this page: the Controller
 descriptor, the Controller record with its setup receipt, bindings and
-reservations, and the bundle and client-area namespaces with their bounds.
+reservations, the bundle and client-area namespaces with their bounds, and the
+setup runs beside them.
 [Controller](../controller.md) owns what setup and the controller stage record
 in it, and [Contexts](../contexts.md#controller-relationship-and-host-binding)
 owns the relationship between a context and its host.
@@ -92,8 +93,9 @@ dependency transaction (`container-runtime`). The catalog digest binds the base
 runtime and automation assets plus the exact resolved tool definitions and
 native artifacts. Each full definition also has a resolution digest binding
 version intent, platform, Python/wheel metadata and the native transaction's
-exact before/after inventory and actions. Retained definitions are append-only
-in publication order and identified by resolution digest. The receipt's
+exact before/after inventory and actions. Retained definitions keep their
+publication order and are identified by resolution digest; only a
+[retirement](#bundles-and-client-areas) removes one. The receipt's
 definition must match one retained entry. Versions resolved from latest become
 ordinary immutable retained sources; neither exact recovery nor a later setup
 with the same intent refreshes them. A new solve with unchanged selected
@@ -162,6 +164,30 @@ existing bytes rather than overwriting them. Removal never applies: the
 closure is shared host state that outlives the context that published it, and
 no command deletes or garbage-collects one.
 
+The store upholds that itself rather than trusting the IDs a
+[retirement](../controller.md#supported-host-and-dependency-selection) names.
+The record keeps no kind per area, so the store retires only an area it can
+identify as an execution bundle: one a retained resolution's catalog digest
+names, or one already `retiring` because an earlier retirement dropped that
+resolution. A client area is named by its closure, which no resolution names.
+Naming any other area it holds, a client area included, refuses the whole
+retirement before anything changes, as naming the bundle the receipt names
+does; naming an area it does not hold removes nothing. A `retiring` entry
+keeps the directory identity its removal is verified against, and a
+`reserved` one records none, so retiring a reserved area first attributes the
+empty directory its interrupted publication left, as a resumed publication
+adopts it, or drops the reservation when no directory exists. A directory
+beside that reservation holding anything refuses the retirement before
+anything changes.
+
+A retirement may instead name retained resolutions alone, by resolution
+digest, which [setup at its bound](../controller.md#supported-host-and-dependency-selection)
+does for the superseded resolutions of a bundle it keeps. It removes no area.
+Because an execution bundle is known by the resolutions naming it, the store
+refuses to drop the last resolution naming a bundle, as it refuses the one the
+receipt carries, and either refusal changes nothing; a resolution it does not
+hold is already gone.
+
 A lifecycle operation may also extend the retained dependency evidence it
 acquires under. Before acquisition it publishes the exact source identities it
 will fetch, and the resolved native definition a selected client closure needs,
@@ -169,6 +195,33 @@ into the same atomic record. Sources remain immutable: reusing an ID with
 different bytes or origin refuses, and retained resolutions stay append-only
 and identified by resolution digest, exactly as an explicit setup publishes
 them.
+
+## Setup runs
+
+`runs/` beside the record keeps what setup's controller Ansible printed, as
+[setup run output](../cli/output.md#setup-run-output) describes. A run is a
+directory named `setup-` and six digits, from `setup-000001` upward, holding at
+most one file, `run.output`, which is bounded at 8 MiB. Directories are `0700`
+and the file `0600`, owned like every other entry. There are at most 8 runs:
+the next is numbered one past the newest, the oldest are removed before it is
+created, and a setup whose next number would need a seventh digit keeps no
+run. A run is opened only while an action of the receipt holds its durable
+intent. Its directory and file are created exclusively beneath the held
+controller directory handle without following a link, and made durable before
+the run is named, so an existing name is never reused and nothing but the
+oldest runs' own entries is removed. Neither the record nor its receipt names a
+run, and nothing reads one back.
+
+Admission accepts `runs/` only as this store leaves it, a killed run's shape
+included: a private directory holding at most 8 run directories, each empty or
+holding only its private, singly linked `run.output` within its bound. Anything
+else refuses every controller read and mutation, as any other unexpected entry
+does, and a controller that never published its first record admits no runs.
+A build that predates setup runs refuses `runs/` the same way, and no setup
+removes the directory once it exists, so after one setup kept a run no earlier
+build reads the host again. Every controller view reports whether the
+directory keeps runs, so a lifecycle refusal never names such a build as its
+remedy ([execution closure](../state-reconciliation.md#dependency-safety-during-recovery)).
 
 ## Publication and recovery
 

@@ -47,8 +47,10 @@ mutable global registry or generic option maps are permitted.
 ## Acquisition and commands
 
 Commands resolve one coherent context identity/revision/mode, frozen input and
-compiled declaration snapshot. Relative file paths retain compiler provenance.
-Mutators revalidate this token under the root lock and context lease.
+compiled declaration snapshot. Mutators revalidate this token under the root
+lock and context lease. `set` is the only command that opens an operator path:
+bind, `check`, `show` and the bounded machine commands read only keyring
+versions.
 
 `set --name` accepts only a declared contextStore Secret and these exact flags:
 
@@ -69,8 +71,8 @@ Multipart versions and generation batches publish atomically.
 `generate [--name] [--renew]` selects every effective generated declaration or
 one named generated declaration. Unknown/non-generated names fail before writes.
 Without renew, create missing/stale values; renew replaces the selected set with
-no extra prompt. `check` validates all declarations and material, including live
-bounded file reads. `list` reads metadata only; an uninitialized store is empty.
+no extra prompt. `check` validates all declarations and their current keyring
+material. `list` reads metadata only; an uninitialized store is empty.
 `delete --name` removes an active mapping, including orphans, while retaining
 bound versions; absence is unchanged, existing deletion confirms unless yes.
 
@@ -84,16 +86,12 @@ JSON. A partial writer failure emits no secondary diagnostic.
 
 Bounds: 1 MiB/part, 2 MiB/version, 64 MiB referenced material, 4096 versions and
 4096 bindings. Opaque preserves exact bytes. Tokens/passwords are nonempty UTF-8
-lines, strip one optional final LF and reject embedded CR/LF/NUL. File
-usernamePassword is closed JSON with username/password string fields. Docker
+lines, strip one optional final LF and reject embedded CR/LF/NUL. Docker
 JSON rejects duplicates/trailing data and requires a nonempty auths object.
 The limits apply to decoded, normalized parts. A token/password transport may
 carry one extra final LF; an extra non-LF byte still exceeds the part limit.
-Closed usernamePassword JSON has a transport ceiling of 12 MiB + 116 bytes,
-covering maximal JSON escaping of both bounded parts and member names, the
-optional password LF, syntax and one trailing LF. All whitespace counts toward
-this ceiling. Preflight transport bounds before reads and normalized bounds
-before material copies; this does not enlarge logical material limits.
+Preflight transport bounds before reads and normalized bounds before material
+copies; this does not enlarge logical material limits.
 CA PEM contains CA certificates; TLS validates key agreement and server-auth
 suitability. SSH accepts one unencrypted Ed25519, RSA >=3072 or API-supported
 ECDSA private key, derives/verifies public material, and rejects DSA, trailing
@@ -118,14 +116,24 @@ generation and entropy. Do not import unrelated x/crypto packages.
 
 ## Immutable binding and contexts
 
-Bind/Reopen/Release operate on whole versions with opaque IDs. File binding
-freezes one validated read without changing source or importing a named entry.
-Reopen never rereads the source. Replacement/deletion/rotation preserve bound
-versions; release drops only its references.
+Bind/Reopen/Release operate on whole versions with opaque IDs. Bind pins the
+current keyring version of each declaration, and a store refuses a binding
+input that names no version it holds. Reopen reads only the versions a binding
+holds, including one an earlier build froze from the retired
+[file source](api/secrets.md#file-source), and never reads a source path.
+Replacement/deletion/rotation preserve bound versions; release drops only its
+references.
 [State reconciliation](state-reconciliation.md#plan-and-execution) is the
 lifecycle consumer: it binds every consumed declaration before operation
 registration, reopens bound material for each attempt, and releases the binding
-only after a completed destroy has removed the effects that needed it. A
+only after a completed destroy has removed the effects that needed it. Each
+adapter run is lent, of that material, only the parts its material files name,
+as a view that copies nothing, and no Secret those files do not name. The
+binding holds whole versions, so an artifact server's serving certificate
+Secret is bound with the key the server's own block writes, and a consumer that
+verifies the server against it, under the
+[private consumer publication contract](infrastructure-services.md#private-consumer-publication),
+is lent its certificate alone. A
 registration that provably did not happen releases the binding it created, and
 one that may have happened keeps it, because the operation it may have
 registered reopens it for every later attempt and its removal. A binding no
@@ -147,6 +155,11 @@ reading any material. Binding and release occur outside the lifecycle
 operation's own store transaction, because acquisition holds the same store
 lock. [Produced material](#produced-material) is the reverse: it is published
 and withdrawn only inside that transaction, through the secret area it lends.
+A binding an operation froze that can no longer be reopened, because the
+keyring no longer lists it or cannot read its material, is never re-bound from
+current declarations or replaced by other material; the lifecycle consumer
+[refuses](state-reconciliation.md#continuation-and-removal) the operation that
+names it.
 
 Canonical non-secret declaration fingerprints cover type/source/parameters and
 provenance. Changed declarations make retained values stale/orphaned, never
@@ -315,10 +328,10 @@ import/export or FIPS claims.
 
 Check/list JSON has context (name/mode) and name-sorted secrets. Check rows:
 name/type/source/parts/status/nullable version; statuses available/missing/stale/
-invalid/unreadable. A complete negative check keeps its result and returns 1
+invalid. A complete negative check keeps its result and returns 1
 with safe diagnostics. List rows: name/type/source/parts/state/nullable
-currentVersion/boundVersions; states current/stale/orphaned. Hidden file bindings
-are never listed as imports.
+currentVersion/boundVersions; states current/stale/orphaned. A version an
+earlier build froze from a file source is never listed.
 
 Encryption status fields: initialized/nullable implementation/nullable activeKey/
 keys/items. Implementation exposes type/component references/state, no paths or

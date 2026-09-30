@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"path"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -51,7 +52,8 @@ type memoryArea struct {
 	directories map[string]bool
 	fail        map[string]error
 	// failAfter fails a write once, after its bytes landed, as a rename that
-	// succeeded before its read-back or sync failed does.
+	// succeeded before its read-back or sync failed does, and a directory's
+	// creation once it exists, as one whose parent sync failed does.
 	failAfter map[string]error
 	// landing, when set, runs as each write is about to land: after the area
 	// is held and before anything changes, with the live files. It may copy
@@ -133,7 +135,7 @@ func (a *memoryArea) EnsureDirectory(ctx context.Context, target string) error {
 	for current := target; current != "." && current != ""; current = path.Dir(current) {
 		a.directories[current] = true
 	}
-	return nil
+	return a.landed("ensure " + target)
 }
 
 func (a *memoryArea) WriteExclusive(ctx context.Context, target string, data []byte) error {
@@ -429,6 +431,13 @@ func (a *heldArea) Sync(ctx context.Context, target string) error {
 	return a.memoryArea.Sync(ctx, target)
 }
 
+func (a *heldArea) RemoveDirectory(ctx context.Context, target string) error {
+	if err := a.usable(ctx, true); err != nil {
+		return err
+	}
+	return a.memoryArea.RemoveDirectory(ctx, target)
+}
+
 // testView is a view of the workspace. One a callback holds carries the areas
 // it holds; one a test builds to inspect state reaches the areas directly.
 type testView struct {
@@ -704,8 +713,9 @@ type testCapability struct {
 	mutex        sync.Mutex
 	definitions  []reconciliation.BlockDefinition
 	reservations []prerequisites.HostReservation
+	sshClaims    []SSHReservation
 	secrets      []string
-	unsupported  []string
+	unsupported  []Refusal
 	applies      []string
 	destroys     []string
 	observes     []string
@@ -789,10 +799,10 @@ func (c *testCapability) Plan(_ context.Context, input PlanInput) (CapabilityPla
 	if c.planErr != nil {
 		return CapabilityPlan{}, c.planErr
 	}
-	return CapabilityPlan{Definitions: c.definitions, Reservations: c.reservations, Secrets: c.secrets}, nil
+	return CapabilityPlan{Definitions: c.definitions, Reservations: c.reservations, SSHReservations: c.sshClaims, Secrets: c.secrets}, nil
 }
 
-func (c *testCapability) Unsupported(*compilation.State) []string { return c.unsupported }
+func (c *testCapability) Unsupported(*compilation.State) []Refusal { return c.unsupported }
 
 func (c *testCapability) next(outcomes *[]Result) Result {
 	c.mutex.Lock()
@@ -934,6 +944,12 @@ type testBinder struct {
 	// bindingsErr fails every listing, as a custody store that cannot be read
 	// does.
 	bindingsErr error
+	// lost names bindings the store no longer lists although no Release took
+	// them, as an earlier defect or an operator's edit of the keyring leaves;
+	// unreadable fails the Reopen of a binding it still lists with the error the
+	// store gives for material it cannot read.
+	lost       []string
+	unreadable map[string]error
 	// kill runs first in every Bind and Release, and in every Produce and
 	// Withdraw that publishes, named by the point it would publish, so a test
 	// can stop an invocation there; an error it returns fails it before
@@ -1040,6 +1056,12 @@ func (b *testBinder) Reopen(_ context.Context, request custody.BindingRequest) (
 	if slices.Contains(b.released, request.BindingID) {
 		return nil, errors.New("secret binding does not exist")
 	}
+	if slices.Contains(b.lost, request.BindingID) {
+		return nil, secretstore.Failure("input", "secret binding does not exist")
+	}
+	if err := b.unreadable[request.BindingID]; err != nil {
+		return nil, err
+	}
 	out := []secretstore.BoundMaterial{}
 	for name, value := range b.material {
 		out = append(out, secretstore.BoundMaterial{
@@ -1058,7 +1080,7 @@ func (b *testBinder) Bindings(context.Context, custody.BindingsRequest) ([]strin
 	}
 	held := []string{}
 	for issued := 1; issued <= b.issued; issued++ {
-		if binding := fmt.Sprintf("bind-%d", issued); !slices.Contains(b.released, binding) {
+		if binding := fmt.Sprintf("bind-%d", issued); !slices.Contains(b.released, binding) && !slices.Contains(b.lost, binding) {
 			held = append(held, binding)
 		}
 	}
@@ -1223,7 +1245,7 @@ func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinitio
 				Host: host,
 				Receipt: prerequisites.SetupReceipt{
 					Status: "complete", CatalogDigest: strings.Repeat("b", 64),
-					Definition: &prerequisites.Definition{},
+					Definition: &prerequisites.Definition{Bootstrap: testBootstrap()},
 				},
 				Bindings: []prerequisites.ControllerBinding{{Context: testContextName, Machine: "controller", HostDigest: digest}},
 			},
@@ -1448,16 +1470,54 @@ func TestAuthorizationTokenAndBorrowedCredentialsRefuseBeforeAnyRead(t *testing.
 	}
 }
 
+// Each object a capability refuses is its own diagnostic, carrying the object,
+// the reason the capability gave and its remedy, so plan and apply say why a
+// cluster or Machine is refused and what to change rather than only naming it.
+// An object two capabilities refuse alike is reported once, and a refusal that
+// names no remedy directs the operator to the object itself.
 func TestUnsupportedObjectsRefuseBeforeRegistration(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
-	h.capability.unsupported = []string{"ContainerCluster/sno", "Machine/guest"}
+	cluster := Refusal{
+		Kind: "ContainerCluster", Name: "sno",
+		Reason:      "a declared node selects an install profile, so two installations would write its disk",
+		Remediation: "remove spec.os.installProfileRef from Machine/sno-01 or drop it from ContainerCluster/sno",
+	}
+	h.capability.unsupported = []Refusal{
+		{Kind: "Machine", Name: "guest", Reason: "the install profile selects spec.subscription"},
+		cluster, cluster,
+	}
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-	reported := diagnostics.Of(err)
-	if err == nil || len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" || !strings.Contains(reported[0].Message, "ContainerCluster/sno") || !strings.Contains(reported[0].Remediation, supportedExample) {
-		t.Fatalf("unsupported refusal = %+v", reported)
+	want := []diagnostics.Diagnostic{
+		{
+			Severity: "error", Code: "lifecycle.unsupported", Message: cluster.Reason, Remediation: cluster.Remediation,
+			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: "ContainerCluster", Name: "sno"},
+		},
+		{
+			Severity: "error", Code: "lifecycle.unsupported", Message: "the install profile selects spec.subscription", Remediation: "correct Machine/guest",
+			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: "Machine", Name: "guest"},
+		},
+	}
+	if reported := diagnostics.Of(err); !reflect.DeepEqual(reported, want) {
+		t.Fatalf("unsupported refusal = %+v, want %+v", reported, want)
 	}
 	if len(h.workspace.area.files) != 0 || h.workspace.mutations != 0 {
 		t.Fatal("an unsupported graph registered an operation")
+	}
+}
+
+// An object of a kind no capability claims is refused by the engine itself,
+// naming the object, that no capability realizes it, and the supported shape.
+func TestAnUnclaimedObjectRefusesNamingItsReasonAndRemedy(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.service.compiler = testCompiler{state: withEnabledPlaybook()}
+	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
+	want := []diagnostics.Diagnostic{{
+		Severity: "error", Code: "lifecycle.unsupported", Message: "no capability of this executable runs an enabled CustomPlaybook",
+		Remediation: "remove CustomPlaybook/tune from the selected Environment, or use an example within the supported shape such as " + supportedExample,
+		Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: "CustomPlaybook", Name: "tune"},
+	}}
+	if reported := diagnostics.Of(err); !reflect.DeepEqual(reported, want) {
+		t.Fatalf("unclaimed refusal = %+v, want %+v", reported, want)
 	}
 }
 
@@ -1652,7 +1712,7 @@ func TestAnObservationThatNeverRanReportsWhy(t *testing.T) {
 		if reported.Code == "controller.identity" && reported.Remediation == "run bootwright setup" {
 			named = true
 		}
-		if reported.Message == "the frozen effect could not be resolved from live evidence" {
+		if strings.HasPrefix(reported.Message, "the outcome of artifact-server-lab is still unknown") {
 			t.Fatalf("a failed observation was reported as an inconclusive one = %+v", reported)
 		}
 	}
@@ -3662,15 +3722,36 @@ func TestUnclaimedKindsRefuseBeforeRegistration(t *testing.T) {
 		api.NewObject(api.Proxy, "upstream", api.Value{}, api.MapValue(
 			api.FieldValue{Name: "management", Value: api.StringValue("external")},
 		)),
+		api.NewObject(api.StorageCluster, "ceph", api.Value{}, api.MapValue()),
+		api.NewObject(api.ClusterAddon, "gitops", api.Value{}, api.MapValue()),
+		api.NewObject(api.Machine, "bare", api.Value{}, api.MapValue(
+			api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "provided", Value: api.BoolValue(false)})},
+		)),
+		api.NewObject(api.Machine, "installed", api.Value{}, api.MapValue(
+			api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "provided", Value: api.BoolValue(true)})},
+		)),
 	})
 	h.service.compiler = testCompiler{state: compilation.NewState(catalog, catalog, nil)}
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-	reported := diagnostics.Of(err)
-	if len(reported) != 1 || !strings.Contains(reported[0].Message, "Proxy/lab-proxy") {
-		t.Fatalf("unclaimed refusal = %+v", reported)
+	// The external proxy is an input and a Machine whose operating system is
+	// provided needs no installation, so neither is refused. Each other object
+	// is its own diagnostic, naming itself, the kind or shape no capability
+	// realizes, and the remedy of leaving it out.
+	unclaimed := func(kind, name, reason string) diagnostics.Diagnostic {
+		return diagnostics.Diagnostic{
+			Severity: "error", Code: "lifecycle.unsupported", Message: reason,
+			Remediation: "remove " + kind + "/" + name + " from the selected Environment, or use an example within the supported shape such as " + supportedExample,
+			Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: name},
+		}
 	}
-	if strings.Contains(reported[0].Message, "Proxy/upstream") {
-		t.Fatal("an external service was reported as unrealizable")
+	want := []diagnostics.Diagnostic{
+		unclaimed("ClusterAddon", "gitops", "no capability of this executable realizes the ClusterAddon kind"),
+		unclaimed("Machine", "bare", "no capability of this executable realizes a Machine whose operating system is not provided"),
+		unclaimed("Proxy", "lab-proxy", "no capability of this executable manages the Proxy kind"),
+		unclaimed("StorageCluster", "ceph", "no capability of this executable realizes the StorageCluster kind"),
+	}
+	if reported := diagnostics.Of(err); !reflect.DeepEqual(reported, want) {
+		t.Fatalf("unclaimed refusal = %+v, want %+v", reported, want)
 	}
 }
 

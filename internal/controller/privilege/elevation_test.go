@@ -65,7 +65,7 @@ type elevationCase struct {
 	json, terminal, errorTerminal bool
 	child                         scriptedChild
 	exit                          int
-	code, message                 string
+	code, message, remediation    string
 	stderr                        string
 }
 
@@ -93,15 +93,15 @@ func (c elevationCase) check(t *testing.T, ctx context.Context) {
 	if outcome.ExitCode != c.exit {
 		t.Errorf("exit = %d, want %d", outcome.ExitCode, c.exit)
 	}
-	var code, message string
+	var code, message, remediation string
 	if outcome.Diagnostic != nil {
-		code, message = outcome.Diagnostic.Code, outcome.Diagnostic.Message
+		code, message, remediation = outcome.Diagnostic.Code, outcome.Diagnostic.Message, outcome.Diagnostic.Remediation
 		if outcome.Diagnostic.Severity != "error" {
 			t.Errorf("severity = %q", outcome.Diagnostic.Severity)
 		}
 	}
-	if code != c.code || message != c.message {
-		t.Errorf("diagnostic = %q %q, want %q %q", code, message, c.code, c.message)
+	if code != c.code || message != c.message || remediation != c.remediation {
+		t.Errorf("diagnostic = %q %q %q, want %q %q %q", code, message, remediation, c.code, c.message, c.remediation)
 	}
 	if stderr.String() != c.stderr {
 		t.Errorf("stderr = %q, want %q", stderr.String(), c.stderr)
@@ -112,11 +112,17 @@ func (c elevationCase) check(t *testing.T, ctx context.Context) {
 }
 
 const (
-	authorization  = "sudo authorization could not be obtained; authenticate to sudo or run Bootwright as root"
+	authorization  = "sudo authorization could not be obtained"
+	authenticate   = "authenticate to sudo, or run Bootwright as root"
 	passwordNeeded = "sudo: a password is required\n"
 	hostWarning    = "sudo: unable to resolve host lab-01: Name or service not known\n"
 	stateFailure   = "[FAIL] lifecycle.state: the context holds no applied revision\n"
 	denial         = "Sorry, user operator is not allowed to execute '/proc/4242/exe status' as root on lab-01.\n"
+	// setenvRefusal is what sudo's sudoers policy logs for a rule that lets no
+	// command-line assignment through (validate_env_vars in
+	// plugins/sudoers/env.c), as .agents/knowledge/sudo-command-line-environment.md
+	// records it observed with sudo 1.9.17p2.
+	setenvRefusal = "sudo: sorry, you are not allowed to set the following environment variables: HTTPS_PROXY\n"
 )
 
 // Sudo exits 1 for its own refusals and writes them on the child's standard
@@ -134,12 +140,24 @@ func TestElevationOutcomes(t *testing.T) {
 		{name: "an interactive failure stands", terminal: true, child: scriptedChild{stderr: []string{startAnnouncement, stateFailure}, code: 1}, exit: 1, stderr: stateFailure},
 		{name: "a JSON child that started and was killed", json: true, child: scriptedChild{stderr: []string{startAnnouncement}, code: 137}, exit: 1, code: "runtime.internal", message: "the elevated command exited with status 137 without a result"},
 		{name: "a JSON child that started and panicked", json: true, child: scriptedChild{stderr: []string{startAnnouncement, "panic: boom\n"}, code: 2}, exit: 1, code: "runtime.internal", message: "the elevated command exited with status 2 without a result", stderr: "panic: boom\n"},
-		{name: "a JSON refusal", json: true, child: scriptedChild{stderr: []string{passwordNeeded}, code: 1}, exit: 1, code: "runtime.privilege", message: authorization},
-		{name: "a JSON policy denial leaves standard error empty", json: true, child: scriptedChild{stderr: []string{hostWarning, denial}, code: 1}, exit: 1, code: "runtime.privilege", message: authorization},
+		{name: "a JSON refusal", json: true, child: scriptedChild{stderr: []string{passwordNeeded}, code: 1}, exit: 1, code: "runtime.privilege", message: authorization, remediation: authenticate},
+		{name: "a JSON policy denial leaves standard error empty", json: true, child: scriptedChild{stderr: []string{hostWarning, denial}, code: 1}, exit: 1, code: "runtime.privilege", message: authorization, remediation: authenticate},
 		{name: "a warning before a child's own failure", child: scriptedChild{stderr: []string{hostWarning, startAnnouncement, stateFailure}, code: 1}, exit: 1, stderr: hostWarning + stateFailure},
 		{name: "a warning before an unannounced child's own failure", child: scriptedChild{stderr: []string{hostWarning, stateFailure}, code: 1}, exit: 1, stderr: hostWarning + stateFailure},
 		{name: "a relayed remote refusal", child: scriptedChild{stderr: []string{startAnnouncement, passwordNeeded}, code: 1}, exit: 1, stderr: passwordNeeded},
-		{name: "a human refusal", child: scriptedChild{stderr: []string{hostWarning, passwordNeeded}, code: 1}, exit: 1, code: "runtime.privilege", message: authorization},
+		{
+			name: "a human refusal carries the lines it replaces", child: scriptedChild{stderr: []string{hostWarning, passwordNeeded}, code: 1}, exit: 1, code: "runtime.privilege",
+			message: authorization + ": unable to resolve host lab-01: Name or service not known; a password is required", remediation: authenticate,
+		},
+		{
+			name: "a human refusal of the forwarded route names the tag its rule lacks", child: scriptedChild{stderr: []string{setenvRefusal}, code: 1}, exit: 1, code: "runtime.privilege",
+			message:     authorization + ": sorry, you are not allowed to set the following environment variables: HTTPS_PROXY",
+			remediation: "add the SETENV tag to the sudoers rule that runs Bootwright, or run Bootwright as root",
+		},
+		{
+			name: "an unterminated refusal line is its reason", child: scriptedChild{stderr: []string{"sudo: a password is required"}, code: 1}, exit: 1, code: "runtime.privilege",
+			message: authorization + ": a password is required", remediation: authenticate,
+		},
 		{name: "a policy denial speaks for itself", child: scriptedChild{stderr: []string{denial}, code: 1}, exit: 1, stderr: denial},
 		{name: "held lines reach an unexpected status", child: scriptedChild{stderr: []string{passwordNeeded}, code: 2}, exit: 2, stderr: passwordNeeded},
 		{name: "a silent failure keeps its status", child: scriptedChild{code: 1}, exit: 1},

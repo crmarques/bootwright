@@ -151,6 +151,96 @@ func materialValue(t *testing.T, material secrets.Material, part secrets.Part) s
 	return string(value)
 }
 
+// bindAsAnEarlierBuild publishes the binding an earlier build made over the
+// retired file source: the file's bytes frozen as a version only that binding
+// holds, beside the stored versions it names. No build now makes one.
+func bindAsAnEarlierBuild(t *testing.T, h *integrationStore, stored []string, file secrets.Declaration, material secrets.Material) secretstore.Binding {
+	t.Helper()
+	var binding secretstore.Binding
+	if err := h.mutate(func(opened secretstore.StoreSession) error {
+		ctx, s := context.Background(), opened.(*session)
+		next := cloneIndex(s.index)
+		known := versionIDs(next)
+		for id := range bindingIDs(next) {
+			known[id] = true
+		}
+		identities, err := entryNames(ctx, s.area, "identities")
+		if err != nil {
+			return err
+		}
+		for name := range identities {
+			known[strings.TrimSuffix(name, ".json")] = true
+		}
+		versionID, err := s.implementation.uniqueID("ver-", func(id string) bool { return known[id] })
+		if err != nil {
+			return err
+		}
+		bindingID, err := s.implementation.uniqueID("bind-", func(id string) bool { return known[id] })
+		if err != nil {
+			return err
+		}
+		version := storedVersion{ID: versionID, Sequence: nextSequence(next, file.Name), Declaration: file.Summary()}
+		plain := []plainPart{}
+		defer func() { clearPlain(plain) }()
+		for _, part := range file.Parts() {
+			value, _ := material.Part(part)
+			version.Parts = append(version.Parts, storedPart{Part: part, Size: len(value)})
+			plain = append(plain, plainPart{version: versionID, part: part, data: value})
+		}
+		next.Versions = append(next.Versions, version)
+		binding = secretstore.Binding{ID: bindingID, Versions: append(slices.Clone(stored), versionID)}
+		slices.Sort(binding.Versions)
+		next.Bindings = append(next.Bindings, binding)
+		canonicalizeIndex(&next)
+		key, err := s.key(ctx, next.ActiveKey)
+		if err != nil {
+			return err
+		}
+		return s.publish(ctx, &next, plain, publicationKey{id: next.ActiveKey, value: key}, []string{versionID, bindingID})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return binding
+}
+
+// A binding pins only versions the store already holds: bytes read from
+// anywhere else, a file included, never become a version at bind time.
+func TestABindingPinsOnlyStoredVersions(t *testing.T) {
+	h := newIntegrationStore(t)
+	stored := declaration("credential", "opaque", "contextStore")
+	material := opaque("unstored")
+	defer material.Clear()
+	fileMaterial := certificate("read from a file")
+	defer fileMaterial.Clear()
+	for name, input := range map[string]secretstore.BoundInput{
+		"unstored material":  {Declaration: stored, Material: material},
+		"file-read material": {Declaration: declaration("operator-ca", "caBundle", "file"), Material: fileMaterial},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := h.mutate(func(session secretstore.StoreSession) error {
+				_, err := session.Bind(context.Background(), []secretstore.BoundInput{input})
+				return err
+			})
+			if diagnostics := diagnostics.Of(err); len(diagnostics) != 1 || !strings.HasPrefix(diagnostics[0].Code, "secret.") {
+				t.Fatalf("an input naming no stored version was bound: %v", err)
+			}
+			if err := h.view(func(session secretstore.StoreSession) error {
+				snapshot, err := session.Inspect(context.Background())
+				if err == nil && (len(snapshot.Versions) != 0 || len(snapshot.Bindings) != 0) {
+					t.Fatalf("a refused binding published %#v", snapshot)
+				}
+				return err
+			}); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+// The binding holds a version an earlier build froze from the retired file
+// source, so this is the removal of such a binding: it still reopens after the
+// current material is replaced and the store rotated, and its release collects
+// that version.
 func TestLocalStoreLifecycleRetainsBindingsAndRotatesLogicalVersions(t *testing.T) {
 	h := newIntegrationStore(t)
 	storedDeclaration := declaration("credential", "opaque", "contextStore")
@@ -169,17 +259,7 @@ func TestLocalStoreLifecycleRetainsBindingsAndRotatesLogicalVersions(t *testing.
 	fileDeclaration := declaration("operator-ca", "caBundle", "file")
 	fileMaterial := certificate("frozen certificate")
 	defer fileMaterial.Clear()
-	var binding secretstore.Binding
-	if err := h.mutate(func(session secretstore.StoreSession) error {
-		var err error
-		binding, err = session.Bind(context.Background(), []secretstore.BoundInput{
-			{Declaration: storedDeclaration, Version: first.ID, Material: firstMaterial},
-			{Declaration: fileDeclaration, Material: fileMaterial},
-		})
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
+	binding := bindAsAnEarlierBuild(t, h, []string{first.ID}, fileDeclaration, fileMaterial)
 	secondMaterial := opaque("second")
 	defer secondMaterial.Clear()
 	var second secretstore.Version

@@ -8,16 +8,12 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
-func (s *Service) readFileParts(ctx context.Context, requests []fileRequest, _ string, relativeToOrigin bool) (map[secrets.Part][]byte, error) {
+func (s *Service) readFileParts(ctx context.Context, requests []fileRequest) (map[secrets.Part][]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if len(requests) == 0 {
 		return map[secrets.Part][]byte{}, nil
 	}
-	code := "input"
-	if relativeToOrigin {
-		code = "source"
-	}
-	return nil, failure(code, "secret file acquisition requires Linux on amd64", "")
+	return nil, failure("input", "secret file acquisition requires Linux on amd64", "")
 }

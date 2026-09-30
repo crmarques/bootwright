@@ -16,10 +16,17 @@ import (
 
 const reviewWithStatus = "review its durable state with bootwright status"
 
+// The exits of the record states neither verb acts on: deleting the context,
+// acknowledging orphans unless its evidence is pristine.
+const (
+	plainDeletion    = "delete the context with bootwright context delete --name lab --purge"
+	orphanedDeletion = plainDeletion + " --allow-orphans, which abandons what it may still own"
+)
+
 // requireRefused runs verb over what the harness holds and requires it to
-// refuse with exactly message, pointing at status, before it takes the
-// exclusive lock, writes, binds, releases or reaches the host.
-func requireRefused(t *testing.T, h *harness, verb reconciliation.Verb, message string) {
+// refuse with exactly message and remedy before it takes the exclusive lock,
+// writes, binds, releases or reaches the host.
+func requireRefused(t *testing.T, h *harness, verb reconciliation.Verb, message, remedy string) {
 	t.Helper()
 	ctx := context.Background()
 	before, mutations := untouchedOf(h), h.workspace.mutations
@@ -30,7 +37,7 @@ func requireRefused(t *testing.T, h *harness, verb reconciliation.Verb, message 
 		_, err = h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
 	}
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != message || reported[0].Remediation != reviewWithStatus {
+	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != message || reported[0].Remediation != remedy {
 		t.Fatalf("the %s = %+v (%v), want the refusal %q", verb, reported, err, message)
 	}
 	before.require(t, h)
@@ -41,11 +48,11 @@ func requireRefused(t *testing.T, h *harness, verb reconciliation.Verb, message 
 
 // requirePreviewRefused holds a plan preview to the refusal of the verb it
 // decides as.
-func requirePreviewRefused(t *testing.T, h *harness, message string) {
+func requirePreviewRefused(t *testing.T, h *harness, message, remedy string) {
 	t.Helper()
 	before := untouchedOf(h)
 	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: testContextName})
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Message != message || reported[0].Remediation != reviewWithStatus {
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Message != message || reported[0].Remediation != remedy {
 		t.Fatalf("the preview = %+v (%v), want the refusal %q", reported, err, message)
 	}
 	before.require(t, h)
@@ -72,11 +79,15 @@ func unindexedDirectory(id string) string {
 // the context's operations started, and the evidence what they left, so a
 // fresh apply refuses rather than register beside them, a destroy refuses
 // rather than settle over them whatever the evidence reads, and status names
-// each of them as both refusals do.
+// each of them as both refusals do. Both refusals name deleting the context as
+// the exit, acknowledging orphans only beside evidence that is not pristine.
 func TestAVerbOverALostIndexRefusesAndStatusNamesWhatNoIndexAccountsFor(t *testing.T) {
 	ctx := context.Background()
-	for name, arrange := range map[string]func(*testing.T, *harness) []string{
-		"after a completed removal, beside pristine evidence": func(t *testing.T, h *harness) []string {
+	for name, test := range map[string]struct {
+		arrange func(*testing.T, *harness) []string
+		remedy  string
+	}{
+		"after a completed removal, beside pristine evidence": {remedy: plainDeletion, arrange: func(t *testing.T, h *harness) []string {
 			applied := completeApply(t, h)
 			if _, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
 				t.Fatal(err)
@@ -86,15 +97,15 @@ func TestAVerbOverALostIndexRefusesAndStatusNamesWhatNoIndexAccountsFor(t *testi
 			}
 			directories := slices.Sorted(slices.Values([]string{applied, currentOperation(t, h)}))
 			return []string{unindexedDirectory(directories[0]), unindexedDirectory(directories[1])}
-		},
-		"after a completed apply": func(t *testing.T, h *harness) []string {
+		}},
+		"after a completed apply": {remedy: orphanedDeletion, arrange: func(t *testing.T, h *harness) []string {
 			applied := completeApply(t, h)
 			return []string{"the mutation evidence reads applied and retained", unindexedDirectory(applied)}
-		},
+		}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newHarness(t, "alpha")
-			entries := arrange(t, h)
+			entries := test.arrange(t, h)
 			lose(h, "index.json")
 			if currentOperation(t, h) != "" {
 				t.Fatal("the lost index still names an operation")
@@ -102,9 +113,9 @@ func TestAVerbOverALostIndexRefusesAndStatusNamesWhatNoIndexAccountsFor(t *testi
 			h.capability.applies, h.capability.destroys = nil, nil
 			requireStatusNames(t, h, entries...)
 			message := "the context holds operation records or evidence that no index names: " + strings.Join(entries, ", ")
-			requirePreviewRefused(t, h, message)
-			requireRefused(t, h, reconciliation.Apply, message)
-			requireRefused(t, h, reconciliation.Destroy, message)
+			requirePreviewRefused(t, h, message, test.remedy)
+			requireRefused(t, h, reconciliation.Apply, message, test.remedy)
+			requireRefused(t, h, reconciliation.Destroy, message, test.remedy)
 		})
 	}
 }
@@ -112,7 +123,9 @@ func TestAVerbOverALostIndexRefusesAndStatusNamesWhatNoIndexAccountsFor(t *testi
 // A destroy completes only once every block of its plan is done, so a
 // completed one holding a block that is not done, as a lost record reads,
 // proves nothing removed that block's effect. Neither verb settles or plans
-// over it: each refuses naming the block, and status names it too.
+// over it: each refuses naming the block and, since the removal's completion
+// left pristine evidence, a plain deletion of the context as the exit, and
+// status names the block too.
 func TestACompletedDestroyHoldingABlockNotDoneRefusesEitherVerb(t *testing.T) {
 	h := newHarness(t, "alpha", "bravo")
 	completeApply(t, h)
@@ -123,9 +136,9 @@ func TestACompletedDestroyHoldingABlockNotDoneRefusesEitherVerb(t *testing.T) {
 	lose(h, path.Join(removal, "blocks", "bravo")+"/")
 	requireStatusNames(t, h, "bravo (pending)")
 	message := "the completed destroy " + removal + " records no block completion for these blocks, so nothing proves their effects removed: bravo (pending)"
-	requirePreviewRefused(t, h, message)
-	requireRefused(t, h, reconciliation.Apply, message)
-	requireRefused(t, h, reconciliation.Destroy, message)
+	requirePreviewRefused(t, h, message, plainDeletion)
+	requireRefused(t, h, reconciliation.Apply, message, plainDeletion)
+	requireRefused(t, h, reconciliation.Destroy, message, plainDeletion)
 }
 
 // failedRemovalWithEveryBlockDone leaves a failed removal whose resolution
@@ -225,8 +238,7 @@ func TestAFailedRemovalWhoseBlocksAreAllDoneIsFinalizedByTheDestroy(t *testing.T
 // refuses: a block that lost its record beside an attempt of it, which a start
 // would refuse only after the operation was marked running, including the
 // first start an executable before 83dcbebe left as an attempt beside no block
-// record, and a failed apply whose every block is done, which leaves nothing
-// to start although no stage was selected.
+// record.
 func TestAContinuationOverContradictedRecordsRefusesBeforeItMarksItsOperation(t *testing.T) {
 	ctx := context.Background()
 	for name, test := range map[string]struct {
@@ -286,15 +298,6 @@ func TestAContinuationOverContradictedRecordsRefusesBeforeItMarksItsOperation(t 
 			},
 			verb: reconciliation.Destroy, entry: lostRecord("charlie"),
 		},
-		"a failed apply whose every block is done": {
-			arrange: func(t *testing.T, h *harness) string {
-				applyChained(t, h, map[string]Result{"charlie": {Outcome: reconciliation.OutcomeFailed}})
-				current := currentOperation(t, h)
-				rewriteState(t, h, path.Join(current, "blocks", "charlie", "state.json"), string(reconciliation.BlockDone))
-				return current
-			},
-			verb: reconciliation.Apply, entry: failedWithoutFailure,
-		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newPlannedHarness(t, chainedDefinitions())
@@ -306,8 +309,8 @@ func TestAContinuationOverContradictedRecordsRefusesBeforeItMarksItsOperation(t 
 			}
 			requireStatusNames(t, h, named...)
 			message := "the incomplete " + string(test.verb) + " " + current + " holds records that contradict what it started, so it cannot be continued: " + test.entry
-			requireRefused(t, h, test.verb, message)
-			requirePreviewRefused(t, h, message)
+			requireRefused(t, h, test.verb, message, reviewWithStatus)
+			requirePreviewRefused(t, h, message, reviewWithStatus)
 		})
 	}
 }
@@ -364,7 +367,7 @@ func TestARemovalRefusesADependencyNotDoneAndARunningBlockThatMasksALostFailure(
 			current := currentOperation(t, h)
 			h.capability.applies, h.capability.destroys, h.capability.observes = nil, nil, nil
 			requireRefused(t, h, reconciliation.Destroy, "the incomplete apply "+current+
-				" holds records that contradict what it started, and a removal that skipped such a block would leave its effect in place: "+test.entry)
+				" holds records that contradict what it started, and a removal that skipped such a block would leave its effect in place: "+test.entry, reviewWithStatus)
 			requireStatusNames(t, h, test.entry)
 		})
 	}
@@ -385,7 +388,7 @@ func TestStatusNamesAnIncompleteApplyThatRecordsNoStartedBlock(t *testing.T) {
 			h := newHarness(t, "alpha")
 			applyChained(t, h, map[string]Result{"alpha": {Outcome: test.outcome}})
 			lose(h, path.Join(currentOperation(t, h), "blocks", "alpha")+"/")
-			requireRefused(t, h, reconciliation.Destroy, "the operation this removal supersedes records no block it still owns")
+			requireRefused(t, h, reconciliation.Destroy, "the operation this removal supersedes records no block it still owns", reviewWithStatus)
 			requireStatusNames(t, h, test.named...)
 		})
 	}

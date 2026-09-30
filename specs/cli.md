@@ -265,7 +265,13 @@ its document reports `runtime.interrupted` after an interrupt,
 otherwise. In a human noninteractive invocation, when the child never started
 and nothing but held lines reached standard error, the supervisor reports
 `runtime.interrupted` after an interrupt, and `runtime.privilege` only when sudo
-exited 1 having held a line. A report the supervisor writes replaces the held
+exited 1 having held a line. That `runtime.privilege` report carries the held
+lines, each without sudo's prefix, as the reason sudo refused, which a JSON
+invocation, holding nothing, cannot give. Its remedy is to authenticate to sudo
+or run as root, except when a held line is the sudoers policy refusing to set
+the forwarded [acquisition route](controller.md#the-context-free-acquisition-route)'s
+variables, whose remedy is the `SETENV` tag on the sudoers rule that runs
+Bootwright, or running as root. A report the supervisor writes replaces the held
 lines and exits `130` after an interrupt and `1` otherwise, as
 [streams and exit status](cli/output.md#streams-and-exit-status) requires;
 every other ending forwards the held lines and exits with the child's status,
@@ -489,15 +495,23 @@ records `status` read, so it never offers a command those records refuse:
 - beside no operation, `bootwright plan` and `bootwright apply`, unless it
   names records or evidence no index accounts for, which both verbs refuse, and
   then nothing;
-- over an apply that has not completed, its continuation, unless a lost block
-  record refuses it or the apply is `failed` with every block `done`, and
-  `bootwright destroy`, unless `status` names a contradiction of the apply's
+- over an apply that has not completed, its continuation, which only
+  [finalizes](state-reconciliation.md#lifecycle-unit) an apply whose blocks are
+  all `done`, a `failed` one included, unless a lost block record refuses it,
+  and `bootwright destroy`, unless `status` names a contradiction of the apply's
   records, each of which refuses that removal
   ([continuation and removal](state-reconciliation.md#continuation-and-removal));
 - over a destroy that has not completed, the `destroy` that continues,
   resolves, finalizes or replaces it, unless a lost block record refuses a
   continuation; a replacement reads no such record;
-- over a completed operation, nothing.
+- over a completed operation, nothing;
+- over an operation whose continuation or removal reopens a Secret binding the
+  context's keyring no longer lists, in place of any step above, only
+  `bootwright context delete --name <name> --purge --allow-orphans`, because
+  no verb can reopen that binding and nothing stands in for it
+  ([continuation and removal](state-reconciliation.md#continuation-and-removal));
+  a destroy whose blocks are all `done` reopens none, because the `destroy`
+  offered above finalizes it.
 
 An apply that has not completed owns every block it started, whichever state
 it stopped in, so taking them back is as legitimate a way forward as
@@ -574,7 +588,9 @@ without an answer.
 A reading names no retained output. It is an inspection, not an operation: it
 either succeeds into a listing or refuses with its own diagnostic, so there is
 nothing for an operator to resume or read afterwards, no log location is
-reported for it and no refusal of it points at retained output.
+reported for it and no refusal of it points at retained output. It therefore
+[keeps none](cli/output.md#bounded-run-output): what its adapter printed is
+discarded rather than left where nothing names it.
 
 ### Administrator access export
 
@@ -698,8 +714,13 @@ as settled.
 
 A physical Machine whose [pin](substrates.md#physical-machine-realization) the
 context's current apply recorded is held to it: a controller reporting another
-identity refuses `lifecycle.state` with exit `1` before any power request, and
-the run's retained output names the Machine and both identities. Each identity
+identity refuses `lifecycle.state` with exit `1` before any power request. The
+adapter names that refusal to its runner before it fails, so the diagnostic's
+object is the Machine, its message names the controller endpoint and that it
+answers as another system, and its remedy is to correct the Machine's
+controller address or destroy and apply the context so the machine is proved
+again, pointing at the run's retained output for the identities. That output
+names the Machine and both identities, and the diagnostic repeats neither: each
 is what a controller reported, so it is printed with every character removed
 that its [evidence](substrates.md#physical-machine-realization) refuses as not
 printable, a format character such as a bidi override included, and then cut

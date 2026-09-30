@@ -5,8 +5,10 @@ and serial its bare-metal block proved are that Machine's pin
 (specs/substrates.md, Physical machine realization). A power run receives the
 pin base64-encoded in bootwright_machine_power_material, reads the identity
 its controller reports, and asserts they are the same system before it
-includes either power task file. These cases pin that order and evaluate the
-real `when` and `that` expressions over the variables the runner writes.
+includes either power task file; when they are not, it first names the
+refusal to its runner, which reports it as the power service's own diagnostic.
+These cases pin that order and evaluate the real `when` and `that`
+expressions over the variables the runner writes.
 
 The runner passes those variables as `--extra-vars @request.json`, which
 ansible-core loads trusted as a template, so a raw value there would be
@@ -30,9 +32,11 @@ ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "machine_power_re
 LOADER = DataLoader()
 
 INSPECT = "bootwright.core.redfish_system_inspect"
+PROTOCOL = "bootwright.core.machine_power_protocol"
 ASSERT = "ansible.builtin.assert"
 INCLUDES = ("ansible.builtin.include_tasks", "ansible.builtin.import_tasks")
 IDENTITY = "machine_power_redfish_identity"
+PIN = "pinnedUUIDBase64"
 
 ENDPOINT = "https://bmc.example.test/redfish/v1/Systems/1"
 UUID = "4c4c4544-0042-3510-8052-b4c04f4d4e31"
@@ -61,8 +65,12 @@ def reading():
     return tasks()[indexed(lambda task: INSPECT in task, "read the reported identity")]
 
 
+def compares(task):
+    return ASSERT in task and IDENTITY in json.dumps(task[ASSERT]) and PIN in json.dumps(task[ASSERT])
+
+
 def refusal():
-    return tasks()[indexed(lambda task: ASSERT in task and IDENTITY in json.dumps(task[ASSERT]), "compare the pin")]
+    return tasks()[indexed(compares, "compare the pin")]
 
 
 def encoded(value):
@@ -120,11 +128,13 @@ def accepts(variables):
 def test_the_identity_is_read_and_compared_before_any_power_request():
     loaded = tasks()
     read = indexed(lambda task: INSPECT in task, "read the reported identity")
-    compared = indexed(lambda task: ASSERT in task and IDENTITY in json.dumps(task[ASSERT]), "compare the pin")
+    stopped = indexed(lambda task: ASSERT in task and IDENTITY + ".msg" in json.dumps(task[ASSERT]),
+                      "stop at a read the controller did not answer")
+    compared = indexed(compares, "compare the pin")
     before = indexed(lambda task: task.get("register") == "machine_power_redfish_before", "read the power state")
     includes = [index for index, task in enumerate(loaded) if any(action in task for action in INCLUDES)]
     assert len(includes) == 2, "the walk no longer sees both power task files included"
-    assert before < read < compared < min(includes)
+    assert before < read < stopped < compared < min(includes)
     assert loaded[read]["register"] == IDENTITY and loaded[read]["no_log"] is True
     arguments = loaded[read][INSPECT]
     assert (arguments["endpoint"], arguments["verify"]) == (
@@ -133,8 +143,13 @@ def test_the_identity_is_read_and_compared_before_any_power_request():
     assert loaded[compared][ASSERT]["quiet"] is True
     assert "no_log" not in loaded[compared]
     assert loaded[read]["when"] == loaded[compared]["when"]
-    for task in (loaded[read], loaded[compared]):
-        assert not {"failed_when", "ignore_errors"} & set(task)
+    # The read tolerates its own failure only so that the controller's message
+    # reaches the output uncensored: the step after it refuses there, so a read
+    # that failed is never compared as an empty identity.
+    assert loaded[read]["failed_when"] is False and "ignore_errors" not in loaded[read]
+    assert loaded[stopped][ASSERT]["that"] == [IDENTITY + ".msg is not defined"]
+    assert not {"failed_when", "ignore_errors", "no_log", "when"} & set(loaded[stopped])
+    assert not {"failed_when", "ignore_errors"} & set(loaded[compared])
 
 
 def test_a_material_value_is_evaluated_when_it_is_read(tmp_path):
@@ -171,6 +186,39 @@ def test_a_pinned_machine_is_compared_with_what_its_controller_reports(tmp_path,
 
 def test_a_machine_with_no_pin_compares_nothing(tmp_path):
     assert gated(scope(tmp_path)) is False
+    assert names_the_refusal(scope(tmp_path)) is False
+
+
+def naming():
+    return tasks()[indexed(lambda task: (task.get(PROTOCOL) or {}).get("phase") == "refused", "name the refusal")]
+
+
+def names_the_refusal(variables):
+    return Templar(loader=LOADER, variables=variables).evaluate_conditional(naming()["when"])
+
+
+def test_the_runner_is_told_of_the_refusal_before_the_run_fails():
+    """The runner reports a named refusal as the power service's own diagnostic,
+    which carries the Machine and the remedy (internal/machine/power), so the
+    refusal is named after the identity is read and before the assert fails. A
+    read the controller did not answer stops the run first, so its empty
+    identity is never named as another system."""
+    loaded = tasks()
+    read = indexed(lambda task: INSPECT in task, "read the reported identity")
+    stopped = indexed(lambda task: ASSERT in task and IDENTITY + ".msg" in json.dumps(task[ASSERT]),
+                      "stop at a read the controller did not answer")
+    named = indexed(lambda task: (task.get(PROTOCOL) or {}).get("phase") == "refused", "name the refusal")
+    compared = indexed(compares, "compare the pin")
+    assert read < stopped < named < compared
+    assert loaded[named][PROTOCOL] == {"phase": "refused", "reason": "identity-mismatch"}
+    assert loaded[named]["no_log"] is True
+    assert not {"failed_when", "ignore_errors", "register"} & set(loaded[named])
+
+
+@pytest.mark.parametrize("observation, pin_uuid, pin_serial, same", COMPARED.values(), ids=COMPARED.keys())
+def test_the_refusal_is_named_exactly_when_the_machine_is_refused(tmp_path, observation, pin_uuid, pin_serial, same):
+    variables = scope(tmp_path, observation, pin_uuid, pin_serial)
+    assert names_the_refusal(variables) is (not same)
 
 
 def test_the_refusal_names_the_machine_both_identities_and_the_remedy(tmp_path):

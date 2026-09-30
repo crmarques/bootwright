@@ -76,6 +76,31 @@ func TestMachinePlanRequiresItsProviderByObject(t *testing.T) {
 	}
 }
 
+// A Machine on a provider reached over SSH publishes no controller
+// reservation, but its emulated BMC's socket is claimed on that provider's
+// host Machine, so its own context compares it with the host's other sockets.
+func TestAMachineOnAnSSHHostClaimsItsBMCSocketThere(t *testing.T) {
+	arm := provider().Spec().Get("libvirt")
+	remote := provider(field("libvirt", arm.With("machineRef", api.StringValue("hypervisor")).
+		With("bmcEmulationDefaults", arm.Get("bmcEmulationDefaults").With("bindAddress", api.StringValue("192.0.2.5")))))
+	catalog := catalogOf(controller(), remoteHost(), remote, networkConfig(), guest("rhel-01"))
+	plan, err := NewMachine(nil).Plan(context.Background(), lifecycle.PlanInput{
+		Verb: reconciliation.Apply, State: compilation.NewState(catalog, catalog, nil),
+		Controller: "controller", Context: lifecycle.ContextIdentity{Name: testContext},
+	})
+	if err != nil || len(plan.Definitions) != 1 {
+		t.Fatalf("plan = %+v (%v)", plan, err)
+	}
+	if len(plan.Reservations) != 0 {
+		t.Fatalf("a Machine on an SSH host published controller reservations: %+v", plan.Reservations)
+	}
+	if len(plan.SSHReservations) != 1 || plan.SSHReservations[0].Machine != "hypervisor" ||
+		plan.SSHReservations[0].Reservation.Service != "rhel-01" ||
+		!slices.Contains(plan.SSHReservations[0].Reservation.Keys, "socket:192.0.2.5:8000") {
+		t.Fatalf("SSH claims = %+v, want rhel-01's BMC socket qualified by the Machine hypervisor", plan.SSHReservations)
+	}
+}
+
 // An emulated BMC bound to the host address of another provider's managed
 // bridge on its host cannot listen before that provider's host block creates
 // the bridge, so its machine block waits for that block too, and its removal
@@ -389,6 +414,84 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 			})
 		}
 	}
+}
+
+// A host removal takes back the owned networks, the pool and its directory and
+// nothing else, so a host that still holds all of them, active, is a removal
+// that had no effect however far it has drifted from what its apply proves: a
+// network running another definition, a driver daemon disabled or stopped, the
+// closure or a bridge gone. The apply's resolution still reads the same
+// evidence as partial, because the apply converges it. A network or the pool
+// stopped may be the removal's own first effect, so it reads partial, and a
+// same-named network without this context's ownership stays unknown. The pool
+// directory gone is part of what the removal takes back, so it reads partial
+// too, although the adapter's postcondition, the apply's, leaves it out and
+// the apply reads the same evidence as complete. Each row carries the
+// postcondition the adapter publishes for its damage.
+func TestAHostRemovalReadsWhatItTakesBackNotWhatTheApplyProves(t *testing.T) {
+	hosts, _ := HostRequests(labCatalog(), "controller", testContext)
+	canonical, _ := hosts[0].Canonical()
+	execution := lifecycle.Execution{Block: reconciliation.Block{
+		BlockDefinition: reconciliation.BlockDefinition{ID: "substrate-host-lab-libvirt", Request: canonical},
+		RequestDigest:   "digest",
+	}}
+	for name, test := range map[string]struct {
+		damage  func(*HostEvidence)
+		removal reconciliation.EffectState
+		apply   reconciliation.EffectState
+	}{
+		"network drifted":   {func(e *HostEvidence) { e.Networks[0].Definition = false }, reconciliation.EffectNoEffect, reconciliation.EffectPartial},
+		"daemon disabled":   {func(e *HostEvidence) { e.Services[0].Enabled = false }, reconciliation.EffectNoEffect, reconciliation.EffectPartial},
+		"daemon stopped":    {func(e *HostEvidence) { e.Services[0].State = "inactive" }, reconciliation.EffectNoEffect, reconciliation.EffectPartial},
+		"closure missing":   {func(e *HostEvidence) { e.Hypervisor = false }, reconciliation.EffectNoEffect, reconciliation.EffectPartial},
+		"bridge missing":    {func(e *HostEvidence) { e.Networks[0].Bridge = false }, reconciliation.EffectNoEffect, reconciliation.EffectPartial},
+		"network stopped":   {func(e *HostEvidence) { e.Networks[0].State = "inactive" }, reconciliation.EffectPartial, reconciliation.EffectPartial},
+		"network undefined": {func(e *HostEvidence) { e.Networks[0].State, e.Networks[0].Owned = "", false }, reconciliation.EffectPartial, reconciliation.EffectPartial},
+		"pool stopped":      {func(e *HostEvidence) { e.Pool = "inactive" }, reconciliation.EffectPartial, reconciliation.EffectPartial},
+		"directory gone":    {func(e *HostEvidence) { e.Directory = observed(false) }, reconciliation.EffectPartial, reconciliation.EffectCompleted},
+		"network foreign":   {func(e *HostEvidence) { e.Networks[0].Owned = false }, reconciliation.EffectUnknown, reconciliation.EffectUnknown},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var evidence HostEvidence
+			if err := json.Unmarshal(hostEvidence(hosts[0], "digest"), &evidence); err != nil {
+				t.Fatal(err)
+			}
+			test.damage(&evidence)
+			evidence.Postcondition = publishedPostcondition(evidence)
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, evidence)}}
+			for verb, resolution := range map[string]struct {
+				observe func(context.Context, lifecycle.Execution) (lifecycle.Observation, error)
+				want    reconciliation.EffectState
+			}{
+				"destroy": {NewHost(runner).ObserveRemoval, test.removal},
+				"apply":   {NewHost(runner).Observe, test.apply},
+			} {
+				observation, err := resolution.observe(context.Background(), execution)
+				if err != nil || observation.Effect != resolution.want {
+					t.Fatalf("the %s resolution read %s (%v), want %s", verb, observation.Effect, err, resolution.want)
+				}
+			}
+		})
+	}
+}
+
+// publishedPostcondition is the postcondition the adapter's presence form
+// carries, as presence() in
+// ansible/collections/ansible_collections/bootwright/core/plugins/action/substrate_host_protocol.py
+// computes it from an observation: the closure, the URI, the pool answered for
+// and active, every driver daemon active and enabled, and every declared
+// bridge present with each managed network answered for, owned, active and
+// carrying its frozen definition. The pool directory plays no part in it.
+func publishedPostcondition(evidence HostEvidence) bool {
+	complete := evidence.Hypervisor && evidence.URI && evidence.PoolAnswered && evidence.Pool == "active"
+	for _, service := range evidence.Services {
+		complete = complete && service.State == "active" && service.Enabled
+	}
+	for _, network := range evidence.Networks {
+		realized := network.Answered && network.Owned && network.State == "active" && network.Definition
+		complete = complete && network.Bridge && (!network.Managed || realized)
+	}
+	return complete
 }
 
 // silentDrivers is the absence form an adapter publishes over a host whose

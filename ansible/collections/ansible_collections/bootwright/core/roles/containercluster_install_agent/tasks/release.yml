@@ -12,7 +12,21 @@
     password: '{{ lookup("ansible.builtin.file", containercluster_install_agent_password) }}'
     verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
     operation: eject
+  register: containercluster_install_agent_released
+  failed_when: false
   no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# the controller's own refusal is reported here, where no credential is.
+- name: Stop at an eject the management controller did not complete
+  ansible.builtin.assert:
+    that:
+      - containercluster_install_agent_released.msg is not defined
+    fail_msg: >-
+      ejecting the media Machine {{ containercluster_install_agent_node.machine }} installed from
+      failed:
+      {{ (containercluster_install_agent_released.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
 
 - name: Point a machine this substrate created at its installed disk
   ansible.builtin.include_role:

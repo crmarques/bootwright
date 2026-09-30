@@ -214,7 +214,7 @@ func (s Service) resolveDependencies(ctx context.Context, before inspection) (in
 // carryForward keeps a retained resolution whose only incompatibility is the
 // automation this executable embeds. Every release, byte count and signer it
 // froze still stands, so the closure is reprojected from the sources its own
-// sealed bundle holds rather than solved again: no publisher or repository is
+// retained bundle holds rather than solved again: no publisher or repository is
 // consulted, and the native transaction is reused whenever its roots remain
 // installed. Only the projection identity, and with it the bundle this setup
 // publishes, is new.
@@ -253,7 +253,7 @@ func (s Service) carryForward(ctx context.Context, before inspection) (inspectio
 
 // rebind binds a definition produced outside shared-state locks to unchanged
 // host, input and receipt evidence, and returns the inspection whose plan is
-// presented for confirmation. Retained, when given, names the sealed bundle
+// presented for confirmation. Retained, when given, names the bundle
 // whose sources preparation may read instead of acquiring them again.
 func (s Service) rebind(ctx context.Context, before inspection, definition Definition, retained ...string) (inspection, error) {
 	frozen := inspectionResolution{Definition: &definition}

@@ -364,6 +364,51 @@ func TestSupersededAutomationCarriesTheRetainedResolutionForward(t *testing.T) {
 	}
 }
 
+// A setup that failed or was canceled is over: the next one publishes a new
+// receipt rather than resuming it. An executable whose embedded automation
+// moved carries that receipt's resolution forward exactly as it would a
+// completed one's, so the host is never left refusing every setup.
+func TestSupersededAutomationCarriesASettledReceiptForward(t *testing.T) {
+	for _, status := range []string{"failed", "canceled"} {
+		t.Run(status, func(t *testing.T) {
+			f, r := dynamicFixture(t)
+			f.host.runtime = RuntimeInspection{}
+			installer := &testRuntimeInstaller{owner: f, err: failure("controller.unsupported", "native transaction refused before effects", "prepare the required foundation"), result: ActionResult{Outcome: "failed", Evidence: object(map[string]any{"installationEntered": false})}}
+			f.service.runtime = installer
+			if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); code(err) != "controller.unsupported" || f.store.state.Receipt.Status != "failed" {
+				t.Fatalf("the first setup did not fail terminally: %v %#v", err, f.store.state.Receipt)
+			}
+			if status == "canceled" {
+				f.store.state.Receipt.Status = "canceled"
+				f.store.state.Receipt.Actions[1].Outcome = "canceled"
+			}
+			settled := f.store.state.Receipt
+			retained := CloneDefinition(*settled.Definition)
+			superseded := errors.Join(ErrBootstrapIncompatible, ErrAutomationSuperseded, failure("controller.setup", "superseded automation", ""))
+			f.service.bundle = obsoleteBundle{BundleManager: &f.bundle, digest: settled.CatalogDigest, err: superseded}
+			f.bundle.ready, f.bundle.sealed = false, false
+			f.bundle.automation = strings.Repeat("9", 64)
+			r.bootstrapError = errors.New("no publisher may be contacted for a carried resolution")
+			installer.err, installer.result = nil, ActionResult{Outcome: "changed", Evidence: object(map[string]any{"nativePostcondition": "verified"})}
+			report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+			if err != nil || report.Outcome != "changed" {
+				t.Fatalf("a %s setup refused the moved automation: %#v %v", status, report, err)
+			}
+			next := f.store.state.Receipt
+			if next.ID == settled.ID || next.Status != "complete" || next.CatalogDigest == settled.CatalogDigest || next.Definition == nil || next.Definition.Bootstrap.AutomationDigest != f.bundle.automation {
+				t.Fatalf("the %s receipt was not replaced by the carried resolution: %#v", status, next)
+			}
+			if r.bootstrapCalls != 1 || f.bundle.rebases != 1 || !slices.Contains(f.bundle.retainedSeeds, true) {
+				t.Fatalf("the resolution was not carried from the retained bundle: bootstrap=%d rebases=%d seeds=%v", r.bootstrapCalls, f.bundle.rebases, f.bundle.retainedSeeds)
+			}
+			if !slices.Equal(next.Definition.Sources, retained.Sources) || next.Definition.PythonVersion != retained.PythonVersion ||
+				next.Definition.AnsibleVersion != retained.AnsibleVersion || !reflect.DeepEqual(next.Definition.Native, retained.Native) {
+				t.Fatalf("carrying the %s resolution forward moved more than its automation: %#v", status, next.Definition)
+			}
+		})
+	}
+}
+
 // A retained resolution whose bundle cannot be read is not carried forward on
 // assumption: the closure it names has to come from somewhere.
 func TestCarryForwardRefusesWithoutTheRetainedBundleItReadsFrom(t *testing.T) {
@@ -397,10 +442,11 @@ func TestCarryForwardRefusesWithoutTheRetainedBundleItReadsFrom(t *testing.T) {
 
 // An incompatibility a reprojection cannot settle, such as a different
 // provided execution foundation, still needs a whole new resolution. Only a
-// completed receipt may be replaced that way: an unfinished or corrupt one
-// protects the setup it belongs to.
-func TestIncompatibleFoundationResolvesFreshOnlyFromACompletedReceipt(t *testing.T) {
-	for _, state := range []string{"complete", "pending", "corrupt"} {
+// settled receipt, whose setup completed, failed or was canceled, may be
+// replaced that way: an unfinished or corrupt one protects the setup it
+// belongs to.
+func TestIncompatibleFoundationResolvesFreshOnlyFromASettledReceipt(t *testing.T) {
+	for _, state := range []string{"complete", "failed", "canceled", "pending", "corrupt"} {
 		t.Run(state, func(t *testing.T) {
 			f, r := dynamicFixture(t)
 			if _, err := f.service.Setup(context.Background(), SetupRequest{}); err != nil {
@@ -408,9 +454,14 @@ func TestIncompatibleFoundationResolvesFreshOnlyFromACompletedReceipt(t *testing
 			}
 			previous := f.store.state.Receipt.CatalogDigest
 			incompatible := errors.Join(ErrBootstrapIncompatible, failure("controller.unsupported", "unqualified execution foundation", "use the original executable"))
-			if state == "pending" {
+			settled := state == "complete" || state == "failed" || state == "canceled"
+			switch state {
+			case "failed", "canceled":
+				f.store.state.Receipt.Status = state
+				f.store.state.Receipt.Actions[1].Outcome = state
+			case "pending":
 				f.store.state.Receipt.Status = "pending"
-			} else if state == "corrupt" {
+			case "corrupt":
 				incompatible = errors.New("bundle bytes changed")
 			}
 			f.service.bundle = obsoleteBundle{BundleManager: &f.bundle, digest: previous, err: incompatible}
@@ -426,8 +477,8 @@ func TestIncompatibleFoundationResolvesFreshOnlyFromACompletedReceipt(t *testing
 				t.Fatal("preflight refreshed incompatible automation")
 			}
 			report, err := f.service.Setup(context.Background(), SetupRequest{})
-			if state == "complete" {
-				if err != nil || report.Outcome != "changed" || r.bootstrapCalls != 2 || f.store.state.Receipt.CatalogDigest == previous {
+			if settled {
+				if err != nil || report.Outcome != "changed" || r.bootstrapCalls != 2 || f.store.state.Receipt.CatalogDigest == previous || f.store.state.Receipt.Status != "complete" {
 					t.Fatalf("fresh automation selection failed: %#v %v", report, err)
 				}
 			} else if err == nil || r.bootstrapCalls != 1 || f.store.writes != writes {

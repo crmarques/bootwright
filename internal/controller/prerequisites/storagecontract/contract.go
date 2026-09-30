@@ -7,6 +7,8 @@ package storagecontract
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"path"
 	"slices"
 	"strings"
 	"testing"
@@ -46,6 +48,8 @@ func Verify(t *testing.T, within Within) {
 		{"an unknown publication ends the transaction's publications", anUnknownPublicationEndsThePublications},
 		{"a retirement removes only superseded bundles", aRetirementRemovesOnlySupersededBundles},
 		{"a retirement after a failed setup keeps the bundle its receipt names", aRetirementAfterAFailedSetupKeepsItsBundle},
+		{"a setup run opens only under a durable intent and is numbered upward", aSetupRunOpensOnlyUnderADurableIntent},
+		{"a resolution retirement keeps the receipt's resolution and every bundle named", aResolutionRetirementKeepsEveryBundleNamed},
 	} {
 		t.Run(clause.name, func(t *testing.T) {
 			subject := within(t)
@@ -223,6 +227,7 @@ func anUnknownPublicationEndsThePublications(t *testing.T, s Subject) {
 			t.Fatalf("a bundle opened after an unknown publication: %v", area)
 		}
 		refuses(t, tx.RetireBundles(ctx, nil), "a retirement after an unknown publication")
+		refuses(t, tx.RetireResolutions(ctx, nil), "a resolution retirement after an unknown publication")
 	})
 	read(t, s, "", func(view prerequisites.StorageView) {
 		if view.State.Receipt.Actions[0].Phase != "planned" {
@@ -235,9 +240,8 @@ func anUnknownPublicationEndsThePublications(t *testing.T, s Subject) {
 
 func aRetirementRemovesOnlySupersededBundles(t *testing.T, s Subject) {
 	ctx := context.Background()
-	first, second := intent(t, s.Scope), next(t, s.Scope)
+	first, second := resolved(t, s.Scope, "1"), resolved(t, s.Scope, "2")
 	superseded, current, absent := first.Receipt.CatalogDigest, second.Receipt.CatalogDigest, strings.Repeat("c", 64)
-	second.Receipt.Actions[0].Phase = "intent"
 	mutate(t, s, func(tx prerequisites.StorageTransaction) {
 		publishes(t, tx, first)
 		refuses(t, tx.RetireBundles(ctx, []string{absent}), "a retirement while the receipt is pending")
@@ -270,9 +274,8 @@ func aRetirementRemovesOnlySupersededBundles(t *testing.T, s Subject) {
 // retirement as a completed one does, and still keeps the bundle it names.
 func aRetirementAfterAFailedSetupKeepsItsBundle(t *testing.T, s Subject) {
 	ctx := context.Background()
-	first, second := intent(t, s.Scope), next(t, s.Scope)
+	first, second := resolved(t, s.Scope, "1"), resolved(t, s.Scope, "2")
 	superseded, current := first.Receipt.CatalogDigest, second.Receipt.CatalogDigest
-	second.Receipt.Actions[0].Phase = "intent"
 	mutate(t, s, func(tx prerequisites.StorageTransaction) {
 		publishes(t, tx, first)
 		opens(t, tx, superseded)
@@ -296,6 +299,103 @@ func aRetirementAfterAFailedSetupKeepsItsBundle(t *testing.T, s Subject) {
 			t.Fatalf("the bundle the failed receipt names = %v (%v)", area, err)
 		}
 	})
+}
+
+// aSetupRunOpensOnlyUnderADurableIntent holds a setup run to the receipt that
+// intends the Ansible it keeps: none opens before an action's intent is
+// durable or after the receipt completes, and runs keep being numbered upward
+// once the oldest are no longer kept.
+func aSetupRunOpensOnlyUnderADurableIntent(t *testing.T, s Subject) {
+	ctx := context.Background()
+	value, intended := planned(t, s.Scope), intent(t, s.Scope)
+	mutate(t, s, func(tx prerequisites.StorageTransaction) {
+		opensNoRun(t, tx, "a run before any receipt")
+		publishes(t, tx, value)
+		opensNoRun(t, tx, "a run of a planned receipt")
+		publishes(t, tx, intended)
+		for number := 1; number <= 10; number++ {
+			run, err := tx.OpenRun(ctx)
+			if err != nil || run == nil {
+				t.Fatalf("setup run %d under a durable intent = %v (%v)", number, run, err)
+			}
+			if want := fmt.Sprintf("setup-%06d", number); path.Base(run.Location()) != want {
+				t.Fatalf("setup run %d is at %q, want a directory named %s", number, run.Location(), want)
+			}
+			if written, err := run.Write([]byte("TASK [synthetic]\n")); err != nil || written != len("TASK [synthetic]\n") {
+				t.Fatalf("setup run %d accepted %d bytes (%v)", number, written, err)
+			}
+			succeeds(t, run.Close(), "closing a setup run")
+		}
+		publishes(t, tx, complete(intended))
+		opensNoRun(t, tx, "a run of a completed receipt")
+	})
+}
+
+func opensNoRun(t *testing.T, tx prerequisites.StorageTransaction, what string) {
+	t.Helper()
+	if run, err := tx.OpenRun(context.Background()); err == nil {
+		t.Fatalf("%s opened %v", what, run.Location())
+	}
+}
+
+// A setup can name the bundle an earlier one names under a new resolution. A
+// resolution of that kept bundle is retired alone, and the area stays; the
+// store refuses the resolution the receipt carries and the last one naming a
+// bundle it holds, so that bundle stays identifiable as an execution bundle.
+func aResolutionRetirementKeepsEveryBundleNamed(t *testing.T, s Subject) {
+	ctx := context.Background()
+	first := resolved(t, s.Scope, "1")
+	second := reresolved(t, first, "2")
+	other := resolved(t, s.Scope, "3")
+	bundle, earlier, current := first.Receipt.CatalogDigest, first.Receipt.Definition.ResolutionDigest, second.Receipt.Definition.ResolutionDigest
+	mutate(t, s, func(tx prerequisites.StorageTransaction) {
+		publishes(t, tx, first)
+		refuses(t, tx.RetireResolutions(ctx, []string{earlier}), "a resolution retirement while the receipt is pending")
+		opens(t, tx, bundle)
+		publishes(t, tx, failed(first))
+		refuses(t, tx.RetireResolutions(ctx, []string{earlier}), "a retirement of the resolution the receipt carries")
+	})
+	mutate(t, s, func(tx prerequisites.StorageTransaction) {
+		publishes(t, tx, second)
+		opens(t, tx, bundle)
+		publishes(t, tx, complete(second))
+		retains(t, tx.Snapshot(), earlier, current)
+		refuses(t, tx.RetireResolutions(ctx, []string{current}), "a retirement of the resolution the receipt carries")
+		refuses(t, tx.RetireResolutions(ctx, []string{"not-a-digest"}), "a resolution retirement named by no digest")
+		succeeds(t, tx.RetireResolutions(ctx, []string{strings.Repeat("c", 64)}), "a retirement of a resolution the store does not hold")
+		retains(t, tx.Snapshot(), earlier, current)
+		succeeds(t, tx.RetireResolutions(ctx, []string{earlier}), "a retirement of a superseded resolution of the kept bundle")
+		retains(t, tx.Snapshot(), current)
+		holdsAreas(t, tx.Snapshot(), bundle)
+	})
+	mutate(t, s, func(tx prerequisites.StorageTransaction) {
+		publishes(t, tx, other)
+		opens(t, tx, other.Receipt.CatalogDigest)
+		publishes(t, tx, complete(other))
+		refuses(t, tx.RetireResolutions(ctx, []string{current}), "a retirement of the last resolution naming a held bundle")
+		retains(t, tx.Snapshot(), current, other.Receipt.Definition.ResolutionDigest)
+	})
+	read(t, s, "", func(view prerequisites.StorageView) {
+		retains(t, view, current, other.Receipt.Definition.ResolutionDigest)
+		holdsAreas(t, view, bundle, other.Receipt.CatalogDigest)
+		if area, err := view.OpenBundle(ctx, bundle); err != nil || area == nil {
+			t.Fatalf("the bundle whose superseded resolution was retired = %v (%v)", area, err)
+		}
+	})
+}
+
+// retains requires view to retain exactly the resolutions digests names, in
+// any order.
+func retains(t *testing.T, view prerequisites.StorageView, digests ...string) {
+	t.Helper()
+	retained := []string{}
+	for _, definition := range view.State.RetainedDefinitions {
+		retained = append(retained, definition.ResolutionDigest)
+	}
+	slices.Sort(retained)
+	if want := slices.Sorted(slices.Values(digests)); !slices.Equal(retained, want) {
+		t.Fatalf("retained resolutions = %v, want %v", retained, want)
+	}
 }
 
 // planned is one pending setup receipt for scope whose single action is

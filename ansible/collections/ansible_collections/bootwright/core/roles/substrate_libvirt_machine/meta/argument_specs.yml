@@ -32,6 +32,9 @@ argument_specs:
           placement:
             type: dict
             required: true
+          poolName:
+            type: str
+            required: true
           poolPath:
             type: str
             required: true
