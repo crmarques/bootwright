@@ -1,0 +1,11 @@
+package prerequisites
+
+import "testing"
+
+// NewMemoryStorage is the storage double storagecontract.Verify holds: it
+// holds the ready context scope names and no controller state.
+func NewMemoryStorage(t *testing.T, scope SetupContext) Storage {
+	f := newFixture(t)
+	f.store.scope = SetupContext{Name: scope.Name, Revision: scope.Revision}
+	return &f.store
+}

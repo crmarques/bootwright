@@ -145,11 +145,16 @@ Each is deliberate and bounded; another like it is a defect.
   [Go and Ansible boundary](#go-and-ansible-responsibility-boundary), bound only
   to `machine/access` and `trust/enrollment`.
   [Direct SSH sessions](security.md#direct-ssh-sessions) owns its security rules.
-- **Composition translation.** `machineOwnership` and `machineHostKeys` in
-  `cmd/bootwright/wiring_machine.go` present Reconciliation's evidence in
-  Machine vocabulary and decode, through `installation.HostKeyEvidence`, the
-  host key `managedos/installation` proved, which Machine packages may not
-  import.
+- **Composition translation.** Composition decodes what a package reads from
+  another it may not import. In `cmd/bootwright/wiring_machine.go`,
+  `machineOwnership` presents Reconciliation's evidence in Machine vocabulary;
+  `machineHostKeys` decodes, through `installation.HostKeyEvidence`, the host
+  key `managedos/installation` proved; and `machineIdentities`, for a power
+  operation, and `provedIdentities`, for an installation's attempt, decode
+  through `baremetal.PinnedIdentity` the hardware identity
+  `substrate/baremetal` proved. `beginSignalOperation` in
+  `cmd/bootwright/interrupts.go` reads an interrupt `privilege.Begin` received
+  as the CLI's `ErrInterrupted`.
 - **The schema registry.** `api/v1alpha1`'s `init` functions fill its
   package-global kind-to-schema map through `register`, which panics on a
   duplicate; nothing writes it afterwards, and `Schema` returns a fresh `Shape`.
@@ -253,7 +258,8 @@ has one kind, and its role in `packageRoles`
 | Command service | `internal/<context>/<capability>` | One command family. `service.go` declares `Service`, its constructor and one exported method per command; `requests.go` the request and result types the CLI consumes; `contracts.go` every interface the package consumes. A recognized but unavailable family is a stub, `service.go` alone, listed in `stubCapabilities`. | application |
 | Lifecycle capability | `internal/<context>/<capability>`, such as `managedos/installation`, `containercluster/agentinstall`, `infrastructureservices/managedservice` and `infrastructureservices/artifactserver` | The [`Capability` port](#lifecycle-ports) implementations of one substrate arm, installation method or service, or of the controller stage. `capability.go` declares a capability type and its constructor, `contracts.go` its ports, `requests.go` and `evidence.go` its frozen request and the evidence it proves, and, where it has them, `catalog.go` its kind and implementation identities and `selection.go` the objects it plans. | application |
 | Capability definition | `infrastructureservices/dnsserver`, `ntpserver` and `proxy` | One `managedservice.Definition` the shared capability runs; it consumes no other application package. | application |
-| Application store | `reconciliation/operationstore`, `secrets/secretstore` | A durable record format and its consistency over an `Area` a Workspace adapter supplies. `reconciliation/contextguard` likewise implements `workspace/contexts.ContextMutationGuard` for Reconciliation and consumes no port. `reconciliation/operationstore/areacontract` is the operation store `Area`'s shared contract suite: every implementation's tests run it, the in-memory doubles included, and no production package imports it. | application |
+| Application store | `reconciliation/operationstore`, `secrets/secretstore` | A durable record format and its consistency over an `Area` a Workspace adapter supplies. `reconciliation/contextguard` likewise implements `workspace/contexts.ContextMutationGuard` for Reconciliation and consumes no port. | application |
+| Port test support | `reconciliation/operationstore/areacontract`, `secrets/secretstore/areacontract`, `controller/prerequisites/storagecontract`, `reconciliation/lifecycle/workspacecontract`, `managedos/media/storecontract` and `reconciliation/operationstore/areadouble` | Each `contract` package, beside the port it exercises, is the shared contract suite `Verify` of one storage port a Workspace adapter implements: every implementation's tests run it, the in-memory doubles included, and it consumes only that port's package, the lifecycle workspace's also the operation areas and controller evidence its views carry. `areadouble.Admit` is what every in-memory operation store `Area` double refuses before it answers; it imports nothing first-party. Only tests import these packages. | application |
 | Driven adapter | `internal/<context>/<implementation>`, named by what it binds | One effect behind another package's contract, within what `TestAdmissionEffectBoundary` allows it. `secrets/material` and `controller/privilege` keep their consumed interfaces in `contracts.go`. | adapter |
 | Diagnostics | `internal/diagnostics` | The diagnostic and typed-failure vocabulary every layer emits; it imports nothing first-party. | technical |
 | Availability | `internal/availability` | The single unavailable-capability sentinel, `ErrNotImplemented`. | technical |
@@ -395,7 +401,9 @@ accesses the user file with that account's credentials, including a bounded
 credential-dropped subprocess when the caller is root. `controller/privilege`
 owns local account lookup and invocation-scoped sudo process supervision, and
 the elevation decisions: noninteractive mode, stream handoff, the elevated
-child's start announcement, and what each outcome reports. Only
+child's start announcement, and what each outcome reports. Its `Begin` is the
+one signal subscription, which the supervisor relays and every CLI operation's
+cancellation derives from. Only
 validated, available commands needing stored context data acquire that
 privilege boundary; informational and explicit-input validation paths remain
 effect-free. [CLI invocation](cli.md#local-privilege-and-user-identity) owns
@@ -572,7 +580,7 @@ needed paths:
 | Collection `playbooks/<domain>/<operation>.yml` | One fixed application-port entrypoint; private fragments under its `tasks/`. |
 | Collection `roles/<domain>_<capability>[_<implementation>]/` | One local or remote capability adapter with only applicable standard role directories. |
 | Collection `plugins/` | Capability adapters or effect-free product translation/evidence normalization. |
-| Collection `tests/unit/` | Collection-owned tests following `ansible-test` discovery. |
+| Collection `tests/unit/` | Collection-owned tests following `ansible-test` discovery. Their `conftest.py` installs the collection loader `ansible-test` would when no runner has, so plain pytest runs the same tests. |
 
 The first consumer selects package-native or standard lock formats; Bootwright
 does not invent a dependency resolver or lock format. Locks cover
@@ -792,11 +800,41 @@ reviewers retain semantic judgments that source checks cannot prove.
   the exact diagnostics its row reports until that item lands, which must
   refuse, so it excuses no other outcome. An ignored guidance path fails once
   no guidance outside the ignored paths cites it, and a guidance byte budget
-  once it exceeds its file's size by more than a tenth of itself. Each clause of the effect boundary is proved by
-  a fixture it refuses, and each kind of grant by the clauses it exempts and
-  the ones it leaves. A production function, in Go or in the collection's
-  plugins, stays within 100 lines; the ones already longer are listed awaiting
-  their split ([B47](milestones/m1.md#b47)).
+  once it exceeds its file's size by more than a tenth of itself; each
+  `.claude/rules` page has a budget of its own. The docs checks that list
+  production Go source, `TestDocsPackageTableNamesEveryTestOnlyPackage` and
+  `TestDiagnosticCodesMatchOutputSpec`, walk the working tree's sources,
+  tracked or not, as a build reads them.
+  `TestDocsNameEveryCheckThatWalksTheWorkingTree` keeps that list exact: it
+  follows each docs check through the functions, methods and package variables
+  of its package directory, sources and tests alike, to any call named `Glob`,
+  `ReadDir`, `Readdir`, `Readdirnames`, `Walk` or `WalkDir`, so a listing
+  reached only through another package's function is beyond it. It matches
+  calls by name, so it also reports a call of one of those names that lists
+  nothing, such as `ast.Walk`, and misses a listing through a dot import, a
+  write through an index or field, or an assignment through another package's
+  qualifier ([B148](milestones/m1.md#b148)). Every other
+  docs check that lists files reads only the files Git tracks, never an
+  untracked or ignored one: the guidance checks of
+  `test/architecture/docs_test.go`, the milestone checker of
+  `test/architecture/milestones_test.go` and the operator command lines of
+  `internal/cli/docs_commands_test.go`. A link or cited path resolves only to
+  a tracked file or a directory that holds one, a budgeted file Git does not
+  track fails, and a tracked file a check reads that the working tree lacks
+  fails until its removal is staged. Each clause of the effect boundary is
+  proved by a fixture it refuses, and each kind of grant by the clauses it
+  exempts and the ones it leaves. A production function, in Go or in the
+  collection's plugins, stays within 100 lines; the ones already longer are
+  listed awaiting their split ([B47](milestones/m1.md#b47)).
+- `make quick` tests, besides the architecture suite, each package with a
+  changed Go file and each package whose directory encloses, at any depth, a
+  changed file that is not Go source, as a `go:embed` pattern or a read of
+  `testdata` reaches it; each package that imports one, directly, through a
+  dependency or only from its tests; and each package whose tests name, as a
+  quoted path, the first path element of a changed file that is not Go source,
+  as a test reading `specs/` or `examples/` does. A change to the module files
+  tests everything, and a selected package the default build omits is named
+  and left to its own gate.
 
 Unit or fake-adapter success never qualifies a remote implementation. Every
 supported substrate/component/product/version combination needs its named

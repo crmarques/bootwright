@@ -141,7 +141,9 @@ stable patch, on controller CPython 3.12, 3.13 or 3.14 at the latest patch of
 the newest. Managed hosts run Python 3.9 through 3.14, the target versions in
 ansible-core 2.21's
 [test matrix](https://github.com/ansible/ansible/blob/stable-2.21/test/lib/ansible_test/_util/target/common/constants.py),
-so the collection's modules and module utilities keep to 3.9 grammar. The
+so the collection's modules and module utilities keep to 3.9 grammar, and the
+sanity suite imports each of them under the CPython 3.9 that
+`scripts/tools/ansible-check-floor-interpreter.json` pins. The ansible-core
 minor is one constant, in `internal/controller/prerequisites/qualified.go`.
 `TestQualifiedAnsibleMinorAgreesEverywhere` holds every statement of it
 together: the collection's `requires_ansible`, both `ansible-core` pins, the

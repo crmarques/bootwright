@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -46,6 +47,8 @@ type fakeStore struct {
 	// afterRead once a read has released the root lock.
 	duringFill func(*fakeStore)
 	afterRead  func(*fakeStore)
+	// live names every image a stage that is still open holds.
+	live map[string]bool
 }
 
 func (s *fakeStore) ReadMedia(ctx context.Context, callback func(View) error) error {
@@ -93,13 +96,21 @@ func (s *fakeStore) Retained(context.Context) ([]string, error) {
 	return names, nil
 }
 
-// Stage adopts an image's retained stage only for its recorded digest, and
-// otherwise discards it, as the store's contract requires.
+// Stage refuses a name a live stage holds, and adopts an image's retained stage
+// only for its recorded digest, otherwise discarding it, as the store's
+// contract requires.
 func (s *fakeStore) Stage(_ context.Context, name, pin string) (Stage, error) {
 	s.stages++
 	if s.stageError != nil {
 		return nil, s.stageError
 	}
+	if s.live[name] {
+		return nil, errors.New("another bootwright media add is already acquiring image " + name)
+	}
+	if s.live == nil {
+		s.live = map[string]bool{}
+	}
+	s.live[name] = true
 	if entry, found := s.retained[name]; found {
 		if pin != "" && entry.SHA256 == pin {
 			return &fakeStage{store: s, name: name, adopted: &entry}, nil
@@ -112,17 +123,24 @@ func (s *fakeStore) Stage(_ context.Context, name, pin string) (Stage, error) {
 // fakeStage refuses to be filled under the root lock, so every test that adds
 // an image proves that acquisition runs outside it.
 type fakeStage struct {
-	store    *fakeStore
-	name     string
-	staged   *Staged
-	adopted  *managedos.MediaEntry
-	verified bool
-	closed   bool
+	store     *fakeStore
+	name      string
+	data      []byte
+	staged    *Staged
+	adopted   *managedos.MediaEntry
+	verified  bool
+	mismatch  bool
+	retained  bool
+	published bool
+	closed    bool
 }
 
 func (f *fakeStage) Fill(_ context.Context, payload Payload, limit int64) (Staged, error) {
 	if f.store.locked {
 		return Staged{}, errors.New("the image was acquired while the root lock was held")
+	}
+	if f.closed || f.adopted != nil || f.staged != nil {
+		return Staged{}, errors.New("media stage is closed, adopted or already filled")
 	}
 	if f.store.duringFill != nil {
 		f.store.duringFill(f.store)
@@ -131,6 +149,10 @@ func (f *fakeStage) Fill(_ context.Context, payload Payload, limit int64) (Stage
 	if err != nil {
 		return Staged{}, err
 	}
+	if int64(len(data)) > limit {
+		return Staged{}, errors.New("the image exceeds the media store's size limit")
+	}
+	f.data = data
 	f.store.staged = data
 	f.store.writes++
 	sum := sha256.Sum256(data)
@@ -153,37 +175,91 @@ func (f *fakeStage) Verify(context.Context) (Staged, error) {
 	sum := sha256.Sum256(data)
 	f.staged = &Staged{Size: int64(len(data)), SHA256: hex.EncodeToString(sum[:])}
 	f.verified = true
+	f.mismatch = f.staged.Size != f.adopted.Size || f.staged.SHA256 != f.adopted.SHA256
 	return *f.staged, nil
 }
 
+// Retain keeps a filled stage beside the record that describes it, so the view
+// lists it and a stage pinned to its digest adopts it.
 func (f *fakeStage) Retain(_ context.Context, record []byte) error {
-	if f.staged == nil || f.closed {
-		return errors.New("an unfilled or closed stage was retained")
+	if f.staged == nil || f.closed || f.published || f.retained || f.mismatch {
+		return errors.New("media stage is not a filled, unpublished stage")
 	}
 	f.store.kept = append(f.store.kept, record)
+	if f.adopted != nil {
+		f.retained = true
+		return nil
+	}
+	entry, err := managedos.DecodeStagedMediaRecord(record)
+	if err != nil || entry.Name != f.name || entry.Size != f.staged.Size || entry.SHA256 != f.staged.SHA256 {
+		return errors.New("media retention does not describe this stage")
+	}
+	if f.store.retained == nil {
+		f.store.retained, f.store.retainedBytes = map[string]managedos.MediaEntry{}, map[string][]byte{}
+	}
+	f.store.retained[f.name], f.store.retainedBytes[f.name] = entry, f.data
+	f.retained = true
 	return nil
 }
 
+// Close releases the stage's name, and discards an adopted stage whose bytes
+// Verify found changed.
 func (f *fakeStage) Close() error {
 	if !f.closed {
 		f.closed = true
 		f.store.closed++
+		delete(f.store.live, f.name)
+		if f.mismatch {
+			delete(f.store.retained, f.name)
+			delete(f.store.retainedBytes, f.name)
+		}
 	}
 	return nil
 }
 
+// Publish installs a filled stage as the image its record describes, over a
+// stored image only when replacing, and drops the retained stage it adopted.
 func (s *fakeStore) Publish(_ context.Context, name string, stage Stage, record []byte, replace bool) error {
 	filled, ok := stage.(*fakeStage)
-	if !ok || filled.staged == nil || filled.closed || filled.name != name || filled.adopted != nil && !filled.verified {
+	if !ok || filled.staged == nil || filled.closed || filled.published || filled.mismatch || filled.name != name || filled.adopted != nil && !filled.verified {
 		return errors.New("the publication named no filled stage of this image")
 	}
+	entry, err := managedos.DecodeMediaRecord(record, name)
+	if err != nil || entry.Size != filled.staged.Size || entry.SHA256 != filled.staged.SHA256 {
+		return errors.New("media publication does not describe a filled stage of this store")
+	}
+	if !replace && slices.Contains(s.occupied, name) {
+		return errors.New("the media name is already occupied")
+	}
 	s.published, s.replaced = record, replace
+	s.remove(name)
+	s.entries, s.occupied = append(s.entries, entry), append(s.occupied, name)
+	if s.digests == nil {
+		s.digests = map[string]string{}
+	}
+	s.digests[name] = entry.SHA256
+	if filled.adopted != nil {
+		delete(s.retained, name)
+		delete(s.retainedBytes, name)
+	}
+	filled.published = true
+	delete(s.live, name)
 	return nil
 }
 
+// Delete removes the image, its record and the stage retained for it.
 func (s *fakeStore) Delete(_ context.Context, name string) error {
 	s.deleted = name
+	s.remove(name)
+	delete(s.retained, name)
+	delete(s.retainedBytes, name)
 	return nil
+}
+
+func (s *fakeStore) remove(name string) {
+	s.entries = slices.DeleteFunc(s.entries, func(entry managedos.MediaEntry) bool { return entry.Name == name })
+	s.occupied = slices.DeleteFunc(s.occupied, func(occupied string) bool { return occupied == name })
+	delete(s.digests, name)
 }
 
 type fakePayload struct{ *bytes.Reader }

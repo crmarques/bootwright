@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -19,6 +20,7 @@ const (
 	milestoneStatusHeader      = "| ID | Milestone | Requires | Delivery | Next |"
 	milestoneItemsHeader       = "| ID | Alias | Kind | Owner | Outcome | Requires | Definition | Delivery |"
 	milestoneParkedHeader      = "| ID | Alias | Kind | Owner | Outcome | Why parked |"
+	milestoneSlicesHeader      = "| Slice | Kind | Items in order | Owner decisions | Requires |"
 	milestoneItemsMarker       = "**Items:**"
 )
 
@@ -29,10 +31,14 @@ var (
 	milestoneItemSection    = regexp.MustCompile(`^### (B[0-9]+)$`)
 	milestoneItemHeading    = regexp.MustCompile(`^#+\s*B[0-9]`)
 	milestoneItemRowLike    = regexp.MustCompile(`^\|\s*\[B[0-9]+\]`)
+	milestoneSliceID        = regexp.MustCompile(`^X[0-9]+$`)
 	milestoneAlias          = regexp.MustCompile(`\([^()]*\)`)
-	milestoneDeliveredID    = regexp.MustCompile(`\bB[0-9]+\b`)
+	milestoneNamedItem      = regexp.MustCompile(`\bB[0-9]+\b`)
+	milestoneNamedSlice     = regexp.MustCompile(`\bX[0-9]+\b`)
+	milestoneNamedMilestone = regexp.MustCompile(`\bM[0-9]+\b`)
 	milestoneItemDeliveries = []string{"not started", "in progress", "awaiting operator acceptance", "blocked", "completed"}
 	milestoneDeliveries     = []string{"not started", "in progress", "done"}
+	milestoneKinds          = []string{"product", "safety", "defect", "enabling"}
 )
 
 type milestoneTableRow struct {
@@ -45,18 +51,22 @@ type milestoneItem struct {
 	path     string
 	line     int
 	delivery string
+	slice    string
 }
 
 type milestoneStatusEntry struct {
 	id       string
 	line     int
+	requires string
 	delivery string
+	next     string
 }
 
 type milestoneCheck struct {
 	sources  map[string]string
 	findings []string
 	rows     map[string][]milestoneItem
+	planned  map[string]bool
 }
 
 func (c *milestoneCheck) report(path string, line int, format string, args ...any) {
@@ -156,11 +166,17 @@ func (c *milestoneCheck) items(path, heading, header string) []milestoneItem {
 				continue
 			}
 			item := milestoneItem{id: id, path: path, line: row.line}
+			if !slices.Contains(milestoneKinds, row.cells[2]) {
+				c.report(path, row.line, "%s has Kind %q outside %s", id, row.cells[2], strings.Join(milestoneKinds, ", "))
+			}
 			if header == milestoneItemsHeader {
-				item.delivery, _, _ = strings.Cut(row.cells[len(row.cells)-1], ",")
-				item.delivery = strings.TrimSpace(item.delivery)
+				item.delivery, item.slice, _ = strings.Cut(row.cells[len(row.cells)-1], ",")
+				item.delivery, item.slice = strings.TrimSpace(item.delivery), strings.TrimSpace(item.slice)
 				if !slices.Contains(milestoneItemDeliveries, item.delivery) {
 					c.report(path, row.line, "%s has unknown Delivery %q", id, item.delivery)
+				}
+				if item.delivery == "completed" {
+					c.report(path, row.line, "%s is completed and still a row; a completed item leaves its page", id)
 				}
 			}
 			items = append(items, item)
@@ -216,7 +232,7 @@ func (c *milestoneCheck) status() map[string]milestoneStatusEntry {
 		if !slices.Contains(milestoneDeliveries, delivery) {
 			c.report(milestoneStatusPath, row.line, "M%s has unknown Delivery %q", match[1], delivery)
 		}
-		entries[page] = milestoneStatusEntry{id: "M" + match[1], line: row.line, delivery: delivery}
+		entries[page] = milestoneStatusEntry{id: "M" + match[1], line: row.line, requires: row.cells[2], delivery: delivery, next: row.cells[4]}
 	}
 	if len(entries) < milestoneMinimumStatusRows {
 		c.report(milestoneStatusPath, start, "reads %d Status rows, want at least %d", len(entries), milestoneMinimumStatusRows)
@@ -254,6 +270,86 @@ func (c *milestoneCheck) milestone(entry milestoneStatusEntry, items []milestone
 	}
 }
 
+func (c *milestoneCheck) plannedSlices(path string, items []milestoneItem) {
+	lines := strings.Split(c.sources[path], "\n")
+	start, end, found := c.section(path, lines, "## Planned slices")
+	onPage := map[string]bool{}
+	for _, item := range items {
+		onPage[item.id] = true
+	}
+	listed, rowLine := map[string][]string{}, map[string]int{}
+	if found {
+		for _, row := range c.table(path, lines, start, end, milestoneSlicesHeader) {
+			id := row.cells[0]
+			if !milestoneSliceID.MatchString(id) {
+				c.report(path, row.line, "Slice cell %q is not X<n>", id)
+				continue
+			}
+			if previous, ok := rowLine[id]; ok {
+				c.report(path, row.line, "%s already has the Planned slices row at line %d", id, previous)
+				continue
+			}
+			rowLine[id], c.planned[id] = row.line, true
+			if !slices.Contains(milestoneKinds, row.cells[1]) {
+				c.report(path, row.line, "%s has Kind %q outside %s", id, row.cells[1], strings.Join(milestoneKinds, ", "))
+			}
+			listed[id] = milestoneNamedItem.FindAllString(row.cells[2], -1)
+			for _, named := range listed[id] {
+				if !onPage[named] {
+					c.report(path, row.line, "%s names %s, which is not an item row on its page", id, named)
+				}
+			}
+		}
+	}
+	for _, item := range items {
+		if item.slice == "" {
+			continue
+		}
+		if names, ok := listed[item.slice]; !ok {
+			c.report(path, item.line, "%s Delivery names %q, which is no planned slice on its page", item.id, item.slice)
+		} else if !slices.Contains(names, item.id) {
+			c.report(path, item.line, "%s Delivery names %s, whose Planned slices row does not list %s", item.id, item.slice, item.id)
+		}
+	}
+}
+
+func (c *milestoneCheck) references(entries map[string]milestoneStatusEntry) {
+	byID := map[string]milestoneStatusEntry{}
+	for _, entry := range entries {
+		byID[entry.id] = entry
+	}
+	open := func(id string) bool {
+		return slices.ContainsFunc(c.rows[id], func(item milestoneItem) bool { return milestonePagePath.MatchString(item.path) })
+	}
+	for _, page := range slices.Sorted(maps.Keys(entries)) {
+		entry := entries[page]
+		if entry.delivery == "done" {
+			for _, required := range milestoneNamedMilestone.FindAllString(entry.requires, -1) {
+				if byID[required].delivery != "done" {
+					c.report(milestoneStatusPath, entry.line, "%s is done but requires %s, which is not done", entry.id, required)
+				}
+			}
+		}
+		for _, slice := range milestoneNamedSlice.FindAllString(entry.next, -1) {
+			if !c.planned[slice] {
+				c.report(milestoneStatusPath, entry.line, "%s Next names %s, which is no planned slice", entry.id, slice)
+			}
+		}
+		for _, id := range milestoneNamedItem.FindAllString(entry.next, -1) {
+			if !open(id) {
+				c.report(milestoneStatusPath, entry.line, "%s Next names %s, which is no item row on a milestone page", entry.id, id)
+			}
+		}
+		for _, id := range milestoneNamedMilestone.FindAllString(entry.next, -1) {
+			if other, ok := byID[id]; !ok {
+				c.report(milestoneStatusPath, entry.line, "%s Next names %s, which has no Status row", entry.id, id)
+			} else if other.delivery == "done" {
+				c.report(milestoneStatusPath, entry.line, "%s Next names %s, which is done", entry.id, id)
+			}
+		}
+	}
+}
+
 func (c *milestoneCheck) delivered() {
 	lines := strings.Split(c.sources[milestoneDeliveredPath], "\n")
 	for first := 0; first < len(lines); {
@@ -280,7 +376,7 @@ func (c *milestoneCheck) delivered() {
 			if strings.ContainsAny(field, "()") {
 				c.report(milestoneDeliveredPath, line, "Items field has an unbalanced alias: %q", field)
 			}
-			ids := milestoneDeliveredID.FindAllString(field, -1)
+			ids := milestoneNamedItem.FindAllString(field, -1)
 			if len(ids) == 0 {
 				c.report(milestoneDeliveredPath, line, "Items field names no item")
 			}
@@ -295,7 +391,7 @@ func (c *milestoneCheck) delivered() {
 }
 
 func milestoneFindings(sources map[string]string) []string {
-	c := &milestoneCheck{sources: sources, rows: map[string][]milestoneItem{}}
+	c := &milestoneCheck{sources: sources, rows: map[string][]milestoneItem{}, planned: map[string]bool{}}
 	for _, required := range []string{milestoneStatusPath, milestoneBacklogPath, milestoneDeliveredPath} {
 		if _, ok := sources[required]; !ok {
 			c.report(required, 0, "missing")
@@ -309,6 +405,7 @@ func milestoneFindings(sources map[string]string) []string {
 		}
 		items := c.items(path, "## Items", milestoneItemsHeader)
 		milestoneItems += len(items)
+		c.plannedSlices(path, items)
 		entry, ok := entries[path]
 		if !ok {
 			c.report(path, 1, "page has no Status row")
@@ -334,37 +431,57 @@ func milestoneFindings(sources map[string]string) []string {
 			c.report(rows[0].path, rows[0].line, "%s has %d rows (%s); an item is a row on exactly one page", id, len(rows), strings.Join(places, ", "))
 		}
 	}
+	c.references(entries)
 	c.delivered()
 	return c.findings
 }
 
-func milestoneRepositorySources(t *testing.T) map[string]string {
-	t.Helper()
-	root := filepath.Join("..", "..")
-	paths := []string{milestoneStatusPath}
-	entries, err := os.ReadDir(filepath.Join(root, "specs", "milestones"))
+// milestoneSources reads, under root, the status page and each milestone page
+// Git tracks, so no untracked or ignored draft decides a verdict that CI
+// reaches without it. A tracked page the working tree lacks fails.
+func milestoneSources(root string) (map[string]string, error) {
+	names, err := trackedFiles(root)
 	if err != nil {
-		t.Fatalf("list milestone pages: %v", err)
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".md") {
-			paths = append(paths, "specs/milestones/"+entry.Name())
-		}
+		return nil, err
 	}
 	sources := map[string]string{}
-	for _, path := range paths {
-		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
+	for _, name := range names {
+		if page, _ := path.Match("specs/milestones/*.md", name); !page && name != milestoneStatusPath {
+			continue
 		}
-		sources[path] = string(data)
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
+		if err != nil {
+			return nil, err
+		}
+		sources[name] = string(data)
 	}
-	return sources
+	return sources, nil
 }
 
 func TestDocsMilestonePagesAgreeWithTheirStatus(t *testing.T) {
-	for _, finding := range milestoneFindings(milestoneRepositorySources(t)) {
+	sources, err := milestoneSources(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("read milestone pages: %v", err)
+	}
+	for _, finding := range milestoneFindings(sources) {
 		t.Error(finding)
+	}
+}
+
+func TestDocsMilestoneCheckReadsOnlyTrackedPages(t *testing.T) {
+	root := t.TempDir()
+	ratchetWrite(t, root, milestoneStatusPath, "# Milestones\n", 0o644)
+	ratchetWrite(t, root, "specs/milestones/m1.md", "# M1\n", 0o644)
+	ratchetWrite(t, root, "specs/milestones/notes/draft.md", "# nested\n", 0o644)
+	ratchetGit(t, root, "init", "-q", "-b", "main")
+	ratchetGit(t, root, "add", ".")
+	ratchetWrite(t, root, "specs/milestones/m8.md", "# M8 draft\n", 0o644)
+	sources, err := milestoneSources(root)
+	if err != nil {
+		t.Fatalf("read milestone pages: %v", err)
+	}
+	if got, want := slices.Sorted(maps.Keys(sources)), []string{milestoneStatusPath, "specs/milestones/m1.md"}; !slices.Equal(got, want) {
+		t.Fatalf("read %q, want %q", got, want)
 	}
 }
 
@@ -372,8 +489,20 @@ func milestoneFixtureRow(id, delivery string) string {
 	return fmt.Sprintf("| [%s](#%s) | new | defect | Architecture | An outcome | none | Candidate | %s |", id, strings.ToLower(id), delivery)
 }
 
+func milestoneFixtureStatusLine(number int, requires, delivery, next string) string {
+	return fmt.Sprintf("| [M%d](milestones/m%d.md) | Milestone %d | %s | %s | %s |", number, number, number, requires, delivery, next)
+}
+
 func milestoneFixtureStatusRow(number int, delivery string) string {
-	return fmt.Sprintf("| [M%d](milestones/m%d.md) | Milestone %d | none | %s | next |", number, number, number, delivery)
+	next := map[int]string{1: "X2", 2: "B3's gate", 4: "B5 waits for X2 and B1", 5: "nothing until M4"}[number]
+	if next == "" {
+		next = "next"
+	}
+	return milestoneFixtureStatusLine(number, "none", delivery, next)
+}
+
+func milestoneFixtureSlice(id, kind, items string) string {
+	return fmt.Sprintf("| %s | %s | %s | none | none |", id, kind, items)
 }
 
 func milestoneFixtureStatus(deliveries ...string) string {
@@ -385,8 +514,12 @@ func milestoneFixtureStatus(deliveries ...string) string {
 		strings.Join(rows, "\n") + "\n\nX1 is active.\n\n## Scope rules\n\n- A rule.\n"
 }
 
-func milestoneFixturePage(number int, opening string, rows []string, sections ...string) string {
-	page := fmt.Sprintf("# M%d\n\nScope.%s\n\n## Planned slices\n\n| Slice | Kind |\n| --- | --- |\n| X9 | enabling |\n\n", number, opening)
+func milestoneFixturePage(number int, opening, slice string, rows []string, sections ...string) string {
+	planned := "None yet."
+	if slice != "" {
+		planned = milestoneSlicesHeader + "\n" + milestoneSeparator(5) + "\n" + slice
+	}
+	page := fmt.Sprintf("# M%d\n\nScope.%s\n\n## Planned slices\n\n%s\n\n", number, opening, planned)
 	if rows != nil {
 		page += "## Items\n\n" + milestoneItemsHeader + "\n" + milestoneSeparator(8) + "\n" + strings.Join(rows, "\n") + "\n\n"
 	}
@@ -401,14 +534,14 @@ func milestoneFixture() map[string]string {
 	row := milestoneFixtureRow
 	return map[string]string{
 		milestoneStatusPath: milestoneFixtureStatus("in progress", "in progress", "in progress", "in progress", "not started", "done", "not started"),
-		"specs/milestones/m1.md": milestoneFixturePage(1, " [X1](delivered.md#x1--first) delivered toward it.",
+		"specs/milestones/m1.md": milestoneFixturePage(1, " [X1](delivered.md#x1--first) delivered toward it.", milestoneFixtureSlice("X2", "enabling", "B1, B2"),
 			[]string{row("B1", "in progress, X2"), row("B2", "not started, X2")}, "B1", "B2"),
-		"specs/milestones/m2.md": milestoneFixturePage(2, "", []string{row("B3", "blocked")}, "B3"),
-		"specs/milestones/m3.md": milestoneFixturePage(3, "", []string{row("B4", "awaiting operator acceptance")}, "B4"),
-		"specs/milestones/m4.md": milestoneFixturePage(4, " [X3](delivered.md#x3--third) delivered toward it.", []string{}),
-		"specs/milestones/m5.md": milestoneFixturePage(5, " It follows [M4](m4.md).", []string{row("B5", "not started")}, "B5"),
-		"specs/milestones/m6.md": milestoneFixturePage(6, "", nil),
-		"specs/milestones/m7.md": milestoneFixturePage(7, "", []string{row("B6", "not started")}, "B6") +
+		"specs/milestones/m2.md": milestoneFixturePage(2, "", "", []string{row("B3", "blocked")}, "B3"),
+		"specs/milestones/m3.md": milestoneFixturePage(3, "", "", []string{row("B4", "awaiting operator acceptance")}, "B4"),
+		"specs/milestones/m4.md": milestoneFixturePage(4, " [X3](delivered.md#x3--third) delivered toward it.", "", []string{}),
+		"specs/milestones/m5.md": milestoneFixturePage(5, " It follows [M4](m4.md).", "", []string{row("B5", "not started")}, "B5"),
+		"specs/milestones/m6.md": milestoneFixturePage(6, "", "", nil),
+		"specs/milestones/m7.md": milestoneFixturePage(7, "", "", []string{row("B6", "not started")}, "B6") +
 			"\n[X1](delivered.md#x1--first) delivered toward M1.\n",
 		milestoneBacklogPath: "# Backlog\n\nParked items.\n\n## Parked\n\nA parked item gates nothing.\n\n" +
 			milestoneParkedHeader + "\n" + milestoneSeparator(6) + "\n" +
@@ -455,7 +588,7 @@ func milestoneAdd(path, content string) milestoneEdit {
 func milestoneUnstarted(t *testing.T, sources map[string]string) {
 	t.Helper()
 	for number := 1; number <= 7; number++ {
-		sources[fmt.Sprintf("specs/milestones/m%d.md", number)] = milestoneFixturePage(number, "", nil)
+		sources[fmt.Sprintf("specs/milestones/m%d.md", number)] = milestoneFixturePage(number, "", "", nil)
 	}
 	sources[milestoneStatusPath] = milestoneFixtureStatus("not started", "not started", "not started", "not started", "not started", "not started", "not started")
 }
@@ -469,6 +602,7 @@ func TestDocsMilestoneCheckFindsEachDisagreement(t *testing.T) {
 		m7 = "specs/milestones/m7.md"
 	)
 	row, status := milestoneFixtureRow, milestoneFixtureStatusRow
+	slice, statusLine := milestoneFixtureSlice, milestoneFixtureStatusLine
 	detail := "## Item detail\n"
 	cases := []struct {
 		name  string
@@ -502,25 +636,25 @@ func TestDocsMilestoneCheckFindsEachDisagreement(t *testing.T) {
 			m1 + ":16: B2 row has 0 ### B2 sections, want 1"},
 		{"a section without its row",
 			[]milestoneEdit{milestoneReplace(m5, detail, detail+"\n### B10\n\nOrphan.\n")},
-			m5 + ":19: ### B10 has no row on its page"},
+			m5 + ":17: ### B10 has no row on its page"},
 		{"two sections for one row",
 			[]milestoneEdit{milestoneReplace(m1, detail, detail+"\n### B1\n\nAgain.\n")},
 			"B1 row has 2 ### B1 sections, want 1"},
 		{"one item on two milestone pages",
 			[]milestoneEdit{milestoneReplace(m7, row("B6", "not started"), row("B6", "not started")+"\n"+row("B5", "not started")),
 				milestoneReplace(m7, detail, detail+"\n### B5\n\nAgain.\n")},
-			"B5 has 2 rows (specs/milestones/m5.md:15, specs/milestones/m7.md:16)"},
+			"B5 has 2 rows (specs/milestones/m5.md:13, specs/milestones/m7.md:14)"},
 		{"one item twice on one page",
 			[]milestoneEdit{milestoneReplace(m1, row("B2", "not started, X2"), row("B2", "not started, X2")+"\n"+row("B2", "not started, X2"))},
 			"B2 has 2 rows"},
 		{"a parked item on a milestone page",
 			[]milestoneEdit{milestoneReplace(m5, row("B5", "not started"), row("B5", "not started")+"\n"+row("B7", "not started")),
 				milestoneReplace(m5, detail, detail+"\n### B7\n\nAgain.\n")},
-			"B7 has 2 rows (specs/milestones/m5.md:16, specs/milestones/backlog.md:11)"},
+			"B7 has 2 rows (specs/milestones/m5.md:14, specs/milestones/backlog.md:11)"},
 		{"a delivered item on a wrapped line is still a row",
 			[]milestoneEdit{milestoneReplace(m5, row("B5", "not started"), row("B5", "not started")+"\n"+row("B9", "not started")),
 				milestoneReplace(m5, detail, detail+"\n### B9\n\nAgain.\n")},
-			milestoneDeliveredPath + ":5: B9 is delivered and still a row at specs/milestones/m5.md:16"},
+			milestoneDeliveredPath + ":5: B9 is delivered and still a row at specs/milestones/m5.md:14"},
 		{"an unbalanced alias",
 			[]milestoneEdit{milestoneReplace(milestoneDeliveredPath, "(was F2).", "(was F2.")},
 			"Items field has an unbalanced alias"},
@@ -558,7 +692,7 @@ func TestDocsMilestoneCheckFindsEachDisagreement(t *testing.T) {
 			[]milestoneEdit{milestoneRemove(m7)},
 			"M7 has no page specs/milestones/m7.md"},
 		{"a page without a Status row",
-			[]milestoneEdit{milestoneAdd("specs/milestones/m8.md", milestoneFixturePage(8, "", nil))},
+			[]milestoneEdit{milestoneAdd("specs/milestones/m8.md", milestoneFixturePage(8, "", "", nil))},
 			"specs/milestones/m8.md:1: page has no Status row"},
 		{"a Status row naming another page",
 			[]milestoneEdit{milestoneReplace(milestoneStatusPath, "[M2](milestones/m2.md)", "[M2](milestones/m3.md)")},
@@ -587,6 +721,58 @@ func TestDocsMilestoneCheckFindsEachDisagreement(t *testing.T) {
 		{"a missing backlog",
 			[]milestoneEdit{milestoneRemove(milestoneBacklogPath)},
 			milestoneBacklogPath + ":0: missing"},
+		{"a completed item left on its page",
+			[]milestoneEdit{milestoneReplace(m1, row("B1", "in progress, X2"), row("B1", "completed, X2"))},
+			m1 + ":15: B1 is completed and still a row; a completed item leaves its page"},
+		{"a planned slice naming an item not on its page",
+			[]milestoneEdit{milestoneReplace(m1, slice("X2", "enabling", "B1, B2"), slice("X2", "enabling", "B1, B2, B5"))},
+			m1 + ":9: X2 names B5, which is not an item row on its page"},
+		{"a Delivery naming no planned slice",
+			[]milestoneEdit{milestoneReplace(m1, row("B2", "not started, X2"), row("B2", "not started, X8"))},
+			m1 + `:16: B2 Delivery names "X8", which is no planned slice on its page`},
+		{"a Delivery naming a planned slice that does not list it",
+			[]milestoneEdit{milestoneReplace(m1, slice("X2", "enabling", "B1, B2"), slice("X2", "enabling", "B1"))},
+			m1 + ":16: B2 Delivery names X2, whose Planned slices row does not list B2"},
+		{"a done milestone whose Requires are not done",
+			[]milestoneEdit{milestoneReplace(milestoneStatusPath, status(6, "done"), statusLine(6, "M4, M5", "done", "next"))},
+			milestoneStatusPath + ":14: M6 is done but requires M5, which is not done"},
+		{"a done milestone whose Requires are done",
+			[]milestoneEdit{milestoneReplace(milestoneStatusPath, status(7, "not started"), statusLine(7, "M6", "done", "next")),
+				milestoneRemove(m7), milestoneAdd(m7, milestoneFixturePage(7, "", "", nil))},
+			""},
+		{"an item Kind outside the vocabulary",
+			[]milestoneEdit{milestoneReplace(m1, "| [B2](#b2) | new | defect |", "| [B2](#b2) | new | bug |")},
+			m1 + `:16: B2 has Kind "bug" outside product, safety, defect, enabling`},
+		{"a parked Kind outside the vocabulary",
+			[]milestoneEdit{milestoneReplace(milestoneBacklogPath, "| F1 | enabling |", "| F1 | parked |")},
+			milestoneBacklogPath + `:11: B7 has Kind "parked" outside`},
+		{"a planned slice Kind outside the vocabulary",
+			[]milestoneEdit{milestoneReplace(m1, slice("X2", "enabling", "B1, B2"), slice("X2", "hardening", "B1, B2"))},
+			m1 + `:9: X2 has Kind "hardening" outside`},
+		{"a Next naming a slice no longer planned",
+			[]milestoneEdit{milestoneReplace(milestoneStatusPath, status(1, "in progress"), statusLine(1, "none", "in progress", "X3"))},
+			milestoneStatusPath + ":9: M1 Next names X3, which is no planned slice"},
+		{"a Next naming an item no longer open",
+			[]milestoneEdit{milestoneReplace(milestoneStatusPath, status(2, "in progress"), statusLine(2, "none", "in progress", "B8's gate"))},
+			milestoneStatusPath + ":10: M2 Next names B8, which is no item row on a milestone page"},
+		{"a Next naming a parked item",
+			[]milestoneEdit{milestoneReplace(milestoneStatusPath, status(2, "in progress"), statusLine(2, "none", "in progress", "B7's gate"))},
+			milestoneStatusPath + ":10: M2 Next names B7, which is no item row on a milestone page"},
+		{"a Next waiting on a done milestone",
+			[]milestoneEdit{milestoneReplace(milestoneStatusPath, status(7, "not started"), statusLine(7, "none", "not started", "nothing until M6"))},
+			milestoneStatusPath + ":15: M7 Next names M6, which is done"},
+		{"a Next naming a milestone without a Status row",
+			[]milestoneEdit{milestoneReplace(milestoneStatusPath, status(7, "not started"), statusLine(7, "none", "not started", "nothing until M9"))},
+			milestoneStatusPath + ":15: M7 Next names M9, which has no Status row"},
+		{"a Planned slices header that differs",
+			[]milestoneEdit{milestoneReplace(m1, "| Owner decisions | Requires |", "| Decisions | Requires |")},
+			m1 + ":7: table header"},
+		{"a Slice cell that is not X<n>",
+			[]milestoneEdit{milestoneReplace(m1, "| X2 | enabling |", "| Next | enabling |")},
+			m1 + `:9: Slice cell "Next" is not X<n>`},
+		{"two Planned slices rows for one slice",
+			[]milestoneEdit{milestoneReplace(m1, slice("X2", "enabling", "B1, B2"), slice("X2", "enabling", "B1, B2")+"\n"+slice("X2", "enabling", "B1, B2"))},
+			m1 + ":10: X2 already has the Planned slices row at line 9"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -171,11 +172,13 @@ func CanonicalBootstrap(value BootstrapDefinition) (BootstrapDefinition, error) 
 				return invalid()
 			}
 		case "pypi.org":
-			expected := "/pypi/ansible-core/json"
+			// Setup selects latest from the Index API; the project JSON an
+			// earlier build selected from stays readable in its records.
+			expected := []string{"/simple/ansible-core/", "/pypi/ansible-core/json"}
 			if value.AnsibleIntent != "latest" {
-				expected = "/pypi/ansible-core/" + value.AnsibleVersion + "/json"
+				expected = []string{"/pypi/ansible-core/" + value.AnsibleVersion + "/json"}
 			}
-			if index != 1 || endpoint.Path != expected {
+			if index != 1 || !slices.Contains(expected, endpoint.Path) {
 				return invalid()
 			}
 		default:

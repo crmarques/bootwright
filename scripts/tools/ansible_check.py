@@ -2,13 +2,16 @@
 
 from importlib.metadata import PackageNotFoundError, version
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
+from xml.etree import ElementTree
 
 
 def cache_root(root: Path) -> Path:
@@ -33,6 +36,70 @@ def selected_suites(arguments: list[str]) -> set[str]:
     if len(arguments) == 2 and arguments[0] == "--suite" and arguments[1] in SUITES:
         return {arguments[1]}
     raise SystemExit("Usage: scripts/ansible-check [--suite " + "|".join(SUITES) + "]")
+
+
+def floor_interpreter(root: Path, fixtures: Path, area: Path) -> tuple[str, Path]:
+    """Extract the verified managed-host floor interpreter into the check area.
+
+    Modules and module utilities run under the managed host's own Python, and
+    the lock pins the oldest release a managed host may run. The archive is
+    verified and extracted from the same bytes on every run, so no extracted
+    tree outlives its verification.
+    """
+    lock = json.loads(
+        (root / "scripts/tools/ansible-check-floor-interpreter.json").read_text()
+    )
+    try:
+        data = (fixtures / lock["filename"]).read_bytes()
+    except OSError as failure:
+        raise SystemExit(
+            "The pinned floor interpreter is missing; run "
+            "scripts/tools/ansible_test_prepare.py first."
+        ) from failure
+    if len(data) != lock["bytes"] or hashlib.sha256(data).hexdigest() != lock["sha256"]:
+        raise SystemExit("The floor interpreter differs from its lock")
+    runtime = area / "floor"
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as bundle:
+        # "data" refuses absolute paths, parent traversal, links that escape
+        # the destination, and device or setuid members.
+        bundle.extractall(runtime, filter="data")
+    interpreter = runtime / lock["member"]
+    found = subprocess.run(
+        [
+            str(interpreter),
+            "-I",
+            "-c",
+            "import sys; print('.'.join(map(str, sys.version_info[:3])))",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    if found != lock["version"]:
+        raise SystemExit(
+            f"The floor interpreter is {found}, not the pinned {lock['version']}"
+        )
+    return found.rsplit(".", 1)[0], interpreter
+
+
+def require_imported(collection: Path, minor: str) -> None:
+    """Refuse a floor import test that ansible-test skipped instead of ran.
+
+    ansible-test reports a target Python it cannot build a virtual environment
+    for as a skipped test and still exits zero, so only its report proves the
+    import ran.
+    """
+    report = (
+        collection / f"tests/output/junit/ansible-test-sanity-import-python-{minor}.xml"
+    )
+    try:
+        cases = list(ElementTree.parse(report).getroot().iter("testcase"))
+    except (OSError, ElementTree.ParseError) as failure:
+        raise SystemExit(
+            f"The import test on Python {minor} left no report"
+        ) from failure
+    if len(cases) != 1 or len(cases[0]) != 0:
+        raise SystemExit(f"The import test on Python {minor} did not run and pass")
 
 
 def main() -> int:
@@ -206,6 +273,43 @@ def main() -> int:
                 env=environment,
                 check=True,
             )
+        if "sanity" in selected:
+            # Sanity above imports every module on the controller's Python;
+            # this imports them again under the managed-host floor, which
+            # proves what the collection's grammar test cannot, such as a
+            # name imported from a library module the floor lacks.
+            # ansible-test finds the target's real interpreter on PATH to
+            # build its environment.
+            minor, interpreter = floor_interpreter(root, fixtures, area)
+            subprocess.run(
+                ansible_test
+                + [
+                    "sanity",
+                    "--test",
+                    "import",
+                    "--junit",
+                    "--controller",
+                    "origin:python=3.13",
+                    "--target-python",
+                    f"{minor}@{interpreter}",
+                    "--color",
+                    "no",
+                ],
+                cwd=test_collection,
+                env=dict(
+                    environment,
+                    PATH=os.pathsep.join(
+                        [
+                            str(executable.parent),
+                            str(interpreter.parent),
+                            "/usr/bin",
+                            "/bin",
+                        ]
+                    ),
+                ),
+                check=True,
+            )
+            require_imported(test_collection, minor)
     return 0
 
 

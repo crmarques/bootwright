@@ -8,6 +8,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go/parser"
+	"go/token"
 	"io"
 	"os"
 	"os/exec"
@@ -271,4 +273,54 @@ func TestIgnoredHangupHelper(t *testing.T) {
 		fmt.Println("running")
 	}
 	os.Exit(0)
+}
+
+// Most operations end without a signal. Finishing one must still return, since
+// every invocation finishes its operation before it exits, and must not report
+// the operation as interrupted.
+func TestFinishingAnUninterruptedOperationReturns(t *testing.T) {
+	ctx, finish := beginSignalOperation(context.Background())
+	if ctx.Err() != nil {
+		t.Fatalf("the operation began canceled: %v", context.Cause(ctx))
+	}
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		finish()
+	}()
+	select {
+	case <-finished:
+	case <-time.After(5 * time.Second):
+		t.Fatal("finish did not return")
+	}
+	if ctx.Err() == nil {
+		t.Fatal("finish left the operation running")
+	}
+	if cause := context.Cause(ctx); errors.Is(cause, cli.ErrInterrupted) {
+		t.Fatalf("an operation finished without a signal ended with %v", cause)
+	}
+}
+
+// privilege.Begin is the one signal subscription, which the supervisor relays
+// and the CLI's operation reads as an interrupt, so the composition root holds
+// none of its own.
+func TestTheCompositionRootSubscribesToNoSignalOfItsOwn(t *testing.T) {
+	sources, err := filepath.Glob("*.go")
+	if err != nil || len(sources) == 0 {
+		t.Fatal("no composition source", err)
+	}
+	for _, source := range sources {
+		if strings.HasSuffix(source, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), source, nil, parser.ImportsOnly)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, imported := range file.Imports {
+			if imported.Path.Value == `"os/signal"` {
+				t.Errorf("%s subscribes to signals itself; derive the operation's cancellation from privilege.Begin", source)
+			}
+		}
+	}
 }

@@ -46,9 +46,12 @@ minor supports as a controller;
 [development](../docs/development.md#qualified-hosts-and-images) records both.
 `latest` ignores a newer minor of either: it is never selected and never
 refused. A yanked `ansible-core` release, or one without a pure-Python wheel,
-is not a candidate. The collection's `requires_ansible` names the same minor,
-and the embedded configuration makes a mismatch an error. No Environment
-declares their versions, because setup reads none. The
+is not a candidate. `latest` reads its candidates from the JSON form of the
+publisher's [Index API](https://peps.python.org/pep-0691/) project page and
+refuses a page of any major API version but 1; the project JSON's deprecated
+`releases` listing is never read. The collection's `requires_ansible` names
+the same minor, and the embedded configuration makes a mismatch an error. No
+Environment declares their versions, because setup reads none. The
 [Environment version policy](api/environment.md#dependency-versions) declares
 only the versions a controller stage installs. Resolve Python and Ansible
 independently, then use the
@@ -641,6 +644,8 @@ combinations, dependency/identity substitution, multi-context contention,
 protected dependencies, cancellation, package failures, uncertain publication
 and exact retry. A fake adapter proves this contract and never proves an
 executed native installer. Collection syntax, pinned lint, sanity, unit and
-local integration checks qualify the shipped Ansible entrypoints as content.
+local integration checks qualify the shipped Ansible entrypoints as content;
+sanity also imports every module and module utility under a pinned interpreter
+of the oldest Python a managed host may run.
 [Milestones](milestones.md#completion-and-verification) own the verification model and
 which acceptance remains operator-run.

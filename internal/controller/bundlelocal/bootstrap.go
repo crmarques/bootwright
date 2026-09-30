@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -21,6 +22,11 @@ import (
 )
 
 const pythonMetadataURL = "https://raw.githubusercontent.com/astral-sh/uv/main/crates/uv-python/download-metadata.json"
+
+// ansibleIndexURL is ansible-core's project page on PyPI's Index API, which
+// serves its PEP 691 JSON form only when asked for simpleIndexJSON.
+const ansibleIndexURL = "https://pypi.org/simple/ansible-core/"
+const simpleIndexJSON = "application/vnd.pypi.simple.v1+json"
 
 type bootstrapMetadataFetcher func(context.Context, string, string, prerequisites.SetupEgress) (toolMetadata, error)
 type bootstrapWheelResolver func(context.Context, *projection, prerequisites.BootstrapDefinition, prerequisites.SetupEgress) ([]byte, error)
@@ -68,7 +74,7 @@ func (c *BootstrapCatalog) Resolve(ctx context.Context, platform prerequisites.P
 		return prerequisites.BootstrapDefinition{}, err
 	}
 	source.Bytes = asset.size
-	ansibleURL := "https://pypi.org/pypi/ansible-core/json"
+	ansibleURL := ansibleIndexURL
 	if versions.Ansible != "latest" {
 		ansibleURL = "https://pypi.org/pypi/ansible-core/" + versions.Ansible + "/json"
 	}
@@ -219,11 +225,12 @@ func selectPythonArtifact(data []byte, requested string) (string, prerequisites.
 	return version, prerequisites.DependencySource{ID: "python-" + version + "-" + selected.Build, URL: selected.URL, SHA256: selected.SHA256}, nil
 }
 
-type ansibleReleaseFile struct {
-	Filename    string `json:"filename"`
-	PackageType string `json:"packagetype"`
-	Yanked      bool   `json:"yanked"`
+type ansibleIndexFile struct {
+	Filename string          `json:"filename"`
+	Yanked   json.RawMessage `json:"yanked"`
 }
+
+var indexAPIVersion = regexp.MustCompile(`^1\.(0|[1-9][0-9]*)$`)
 
 // selectAnsibleRelease picks the highest stable patch of the qualified minor
 // that publishes a live pure wheel. Python compatibility is not judged here:
@@ -233,23 +240,39 @@ func selectAnsibleRelease(data []byte, requested, python string) (string, error)
 	if !prerequisites.QualifiedControllerPython(python) {
 		return "", unqualifiedPython()
 	}
-	var record struct {
-		Info struct {
-			Version string `json:"version"`
-		} `json:"info"`
-		Releases map[string][]ansibleReleaseFile `json:"releases"`
+	invalid := bundleFailure("requested Ansible release has no valid publisher metadata")
+	if len(data) > 8<<20 {
+		return "", invalid
 	}
-	if len(data) > 8<<20 || json.Unmarshal(data, &record) != nil {
-		return "", bundleFailure("requested Ansible release has no valid publisher metadata")
-	}
-	version := record.Info.Version
+	var version string
 	if requested == "latest" {
-		version = latestQualifiedAnsible(record.Releases)
+		var page struct {
+			Meta struct {
+				APIVersion string `json:"api-version"`
+			} `json:"meta"`
+			Name  string             `json:"name"`
+			Files []ansibleIndexFile `json:"files"`
+		}
+		ok := json.Unmarshal(data, &page) == nil && indexAPIVersion.MatchString(page.Meta.APIVersion) && page.Name == "ansible-core"
+		if ok {
+			version, ok = latestQualifiedAnsible(page.Files)
+		}
+		if !ok {
+			return "", invalid
+		}
 		if version == "" {
 			return "", bundleFailure("Ansible publisher metadata lists no stable ansible-core " + prerequisites.QualifiedAnsibleMinor + " release with a live wheel")
 		}
-	} else if !stableBootstrapVersion.MatchString(version) || requested != version {
-		return "", bundleFailure("requested Ansible release has no valid publisher metadata")
+	} else {
+		var record struct {
+			Info struct {
+				Version string `json:"version"`
+			} `json:"info"`
+		}
+		if json.Unmarshal(data, &record) != nil || !stableBootstrapVersion.MatchString(record.Info.Version) || requested != record.Info.Version {
+			return "", invalid
+		}
+		version = record.Info.Version
 	}
 	if err := prerequisites.ValidateQualifiedAnsibleVersion(version); err != nil {
 		return "", err
@@ -257,10 +280,19 @@ func selectAnsibleRelease(data []byte, requested, python string) (string, error)
 	return version, nil
 }
 
-func latestQualifiedAnsible(releases map[string][]ansibleReleaseFile) string {
+// latestQualifiedAnsible reports false when a file's yank is none of the
+// shapes PEP 691 allows: absent, a Boolean, or a non-empty reason.
+func latestQualifiedAnsible(files []ansibleIndexFile) (string, bool) {
 	selected, selectedPatch := "", -1
-	for version, files := range releases {
-		if prerequisites.ValidateQualifiedAnsibleVersion(version) != nil || !qualifiedWheel(version, files) {
+	for _, file := range files {
+		var reason string
+		yanked := string(file.Yanked) == "true" || json.Unmarshal(file.Yanked, &reason) == nil && reason != ""
+		if !yanked && file.Yanked != nil && string(file.Yanked) != "false" {
+			return "", false
+		}
+		version, wheel := strings.CutPrefix(file.Filename, "ansible_core-")
+		version, pure := strings.CutSuffix(version, "-py3-none-any.whl")
+		if yanked || !wheel || !pure || prerequisites.ValidateQualifiedAnsibleVersion(version) != nil {
 			continue
 		}
 		patch, err := strconv.Atoi(version[strings.LastIndex(version, ".")+1:])
@@ -268,13 +300,7 @@ func latestQualifiedAnsible(releases map[string][]ansibleReleaseFile) string {
 			selected, selectedPatch = version, patch
 		}
 	}
-	return selected
-}
-
-func qualifiedWheel(version string, files []ansibleReleaseFile) bool {
-	return slices.ContainsFunc(files, func(file ansibleReleaseFile) bool {
-		return file.PackageType == "bdist_wheel" && !file.Yanked && file.Filename == "ansible_core-"+version+"-py3-none-any.whl"
-	})
+	return selected, true
 }
 
 func bootstrapMetadataSource(prefix, endpoint string, data []byte) prerequisites.DependencySource {
@@ -304,13 +330,20 @@ func fetchBootstrapMetadata(ctx context.Context, method, endpoint string, egress
 		return toolMetadata{}, err
 	}
 	defer closeIdle()
+	return receiveBootstrapMetadata(ctx, method, endpoint, client.Do)
+}
+
+func receiveBootstrapMetadata(ctx context.Context, method, endpoint string, send func(*http.Request) (*http.Response, error)) (toolMetadata, error) {
 	request, err := http.NewRequestWithContext(ctx, method, endpoint, nil)
 	if err != nil {
 		return toolMetadata{}, err
 	}
 	request.Header.Set("Accept-Encoding", "identity")
 	request.Header.Set("Cache-Control", "no-cache")
-	response, err := client.Do(request)
+	if endpoint == ansibleIndexURL {
+		request.Header.Set("Accept", simpleIndexJSON)
+	}
+	response, err := send(request)
 	if err != nil {
 		if ctx.Err() != nil {
 			return toolMetadata{}, ctx.Err()
@@ -318,7 +351,8 @@ func fetchBootstrapMetadata(ctx context.Context, method, endpoint string, egress
 		return toolMetadata{}, transportFailure("bootstrap publisher", endpoint, err)
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK || response.Header.Get("Content-Encoding") != "" {
+	mediaType, _, typeErr := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	if response.StatusCode != http.StatusOK || response.Header.Get("Content-Encoding") != "" || endpoint == ansibleIndexURL && (typeErr != nil || mediaType != simpleIndexJSON) {
 		return toolMetadata{}, bundleFailure("bootstrap publisher returned an unapproved response")
 	}
 	if method == http.MethodHead {

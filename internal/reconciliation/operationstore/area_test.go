@@ -3,12 +3,13 @@ package operationstore
 import (
 	"context"
 	"errors"
-	"io/fs"
 	"maps"
 	"path"
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore/areadouble"
 )
 
 // memoryArea is an in-memory Area that areacontract.Verify holds to the same
@@ -36,40 +37,8 @@ func newArea() *memoryArea {
 	return &memoryArea{files: map[string][]byte{}, directories: map[string]bool{"": true}, fail: map[string]error{}}
 }
 
-// admit refuses, before any injected failure or hook runs, what the contract
-// refuses: a cancelled context, a path outside the area, a path beneath a
-// record, and a record where a directory is named or the reverse.
 func (a *memoryArea) admit(ctx context.Context, target string, record bool) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if !(fs.ValidPath(target) && target != ".") && (record || target != "") {
-		return errors.New("path escapes the area")
-	}
-	for parent := path.Dir(target); target != "" && parent != "."; parent = path.Dir(parent) {
-		if _, isRecord := a.files[parent]; isRecord {
-			return errors.New("path lies beneath a record")
-		}
-	}
-	if _, isRecord := a.files[target]; !record && isRecord {
-		return errors.New("not a directory")
-	}
-	if record && a.isDirectory(target) {
-		return errors.New("is a directory")
-	}
-	return nil
-}
-
-func (a *memoryArea) isDirectory(target string) bool {
-	if a.directories[target] {
-		return true
-	}
-	for name := range a.files {
-		if strings.HasPrefix(name, target+"/") {
-			return true
-		}
-	}
-	return false
+	return areadouble.Admit(ctx, a.files, a.directories, target, record)
 }
 
 func (a *memoryArea) check(operation, target string) error {

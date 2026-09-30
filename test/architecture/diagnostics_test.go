@@ -21,7 +21,7 @@ func TestDiagnosticCodesMatchOutputSpec(t *testing.T) {
 	documented := documentedDiagnosticCodes(t)
 	codes := emittedDiagnosticCodes(productionSources(t))
 	for _, place := range codes.unresolved {
-		t.Errorf("%s sets a diagnostic code this test cannot resolve to a constant; use a literal or add a justified dynamicDiagnosticCodes entry", place)
+		t.Errorf("%s sets a diagnostic code, or passes on a function that sets one, which this test cannot follow to a constant; use a literal and a direct call, or add a justified dynamicDiagnosticCodes entry", place)
 	}
 	for code, places := range codes.emitted {
 		if !documented[code] {
@@ -119,18 +119,194 @@ func refuse() Diagnostic { return Diagnostic{Code: code} }`,
 		}, nil, 1},
 	} {
 		t.Run(row.name, func(t *testing.T) {
-			var sources []sourceFile
-			for _, name := range sortedKeys(row.sources) {
-				source := compositionSource(t, path.Dir(name), row.sources[name])
-				source.path = name
-				sources = append(sources, source)
-			}
-			codes := emittedDiagnosticCodes(sources)
+			codes := fixtureCodes(t, row.sources)
 			if found := sortedKeys(codes.emitted); !slices.Equal(found, row.emitted) || len(codes.unresolved) != row.unresolved {
 				t.Fatalf("emitted = %v, unresolved = %v; want %v and %d unresolved", found, codes.unresolved, row.emitted, row.unresolved)
 			}
 		})
 	}
+}
+
+// Each row is a path a code takes to a store, which the registry follows to
+// the file giving the code, or reports unresolved in the file it cannot
+// follow. A row lists each code with the file placing it, and the file of
+// each unresolved place.
+func TestDiagnosticCodesFollowEveryPathACodeTakes(t *testing.T) {
+	const diagnostic = "package fixture\ntype Diagnostic struct{ Code string }\n"
+	const other = `package fixture
+import "github.com/crmarques/bootwright/internal/other"
+`
+	const refuse = "func refuse() Diagnostic { return Diagnostic{Code: code} }\n"
+	for _, row := range []struct {
+		name       string
+		sources    map[string]string
+		emitted    []string
+		unresolved []string
+	}{
+		{"a constant another file of its package declares from a second constant", map[string]string{
+			"internal/fixture/fixture.go": diagnostic + refuse,
+			"internal/fixture/other.go":   "package fixture\nconst base = \"fixture.base\"\nconst code = base\n",
+		}, []string{"fixture.base internal/fixture/other.go"}, nil},
+		{"constants two build variants declare, read in one variant and in a file both compile", map[string]string{
+			"internal/fixture/fixture.go":     diagnostic + refuse,
+			"internal/fixture/probe_linux.go": "package fixture\nconst code = \"fixture.linux\"\nconst own = \"fixture.own\"\nfunc probe() Diagnostic { return Diagnostic{Code: own} }\n",
+			"internal/fixture/probe_other.go": "//go:build !linux\n\npackage fixture\nconst code = \"fixture.other\"\nconst own = \"fixture.unread\"\n",
+		}, []string{"fixture.linux internal/fixture/probe_linux.go", "fixture.other internal/fixture/probe_other.go", "fixture.own internal/fixture/probe_linux.go"}, nil},
+		{"a variable the second file of another package declares", map[string]string{
+			"internal/other/doc.go":       "package other\n",
+			"internal/other/refusals.go":  "package other\nvar Refused = \"other.refused\"\n",
+			"internal/fixture/fixture.go": other + "type Diagnostic struct{ Code string }\nfunc refuse() Diagnostic { return Diagnostic{Code: other.Refused} }\n",
+		}, []string{"other.refused internal/other/refusals.go"}, nil},
+		{"a variable read in another file of its package and assigned in a third", map[string]string{
+			"internal/fixture/fixture.go": diagnostic + refuse,
+			"internal/fixture/other.go":   "package fixture\nvar code = \"fixture.initial\"\n",
+			"internal/fixture/third.go":   "package fixture\nfunc configure() { code = \"fixture.configured\" }\n",
+		}, []string{"fixture.configured internal/fixture/third.go", "fixture.initial internal/fixture/other.go"}, nil},
+		{"an exported variable a package importing it assigns", map[string]string{
+			"internal/other/other.go": "package other\nvar Refused = \"other.initial\"\n",
+			"internal/fixture/fixture.go": other + `type Diagnostic struct{ Code string }
+func init() { other.Refused = "other.assigned" }
+func refuse() Diagnostic { return Diagnostic{Code: other.Refused} }`,
+		}, []string{"other.assigned internal/fixture/fixture.go", "other.initial internal/other/other.go"}, nil},
+		{"a variable another file writes by a tuple, a range clause and a taken address", map[string]string{
+			"internal/fixture/fixture.go": diagnostic + refuse,
+			"internal/fixture/other.go": `package fixture
+var code = "fixture.initial"
+func pair() (error, string) { return nil, "fixture.paired" }
+func configure(target *string) {}
+func init() { _, code = pair(); configure(&code) }
+func iterate() { for _, code = range []string{"fixture.ranged"} {} }`,
+		}, []string{"fixture.initial internal/fixture/other.go"}, []string{"internal/fixture/other.go", "internal/fixture/other.go", "internal/fixture/other.go"}},
+		{"a local variable written by a tuple, a compound assignment, a range clause and a taken address", map[string]string{
+			"internal/fixture/fixture.go": diagnostic + `func pair() (error, string) { return nil, "fixture.paired" }
+func configure(target *string) {}
+func refuse() Diagnostic {
+	code := "fixture.local"
+	_, code = pair()
+	code += ".suffix"
+	for _, code = range []string{"fixture.ranged"} {}
+	configure(&code)
+	return Diagnostic{Code: code}
+}`,
+		}, []string{"fixture.local internal/fixture/fixture.go"}, []string{"internal/fixture/fixture.go", "internal/fixture/fixture.go", "internal/fixture/fixture.go", "internal/fixture/fixture.go"}},
+		{"a local variable declared by a tuple and by a range clause", map[string]string{
+			"internal/fixture/fixture.go": diagnostic + `func pair() (error, string) { return nil, "fixture.paired" }
+func declared() Diagnostic { var _, code = pair(); return Diagnostic{Code: code} }
+func ranged() Diagnostic {
+	for _, code := range []string{"fixture.ranged"} { return Diagnostic{Code: code} }
+	return Diagnostic{Code: "fixture.empty"}
+}`,
+		}, []string{"fixture.empty internal/fixture/fixture.go"}, []string{"internal/fixture/fixture.go", "internal/fixture/fixture.go"}},
+		{"a code field written by a tuple, a compound assignment, a range clause and a taken address", map[string]string{
+			"internal/fixture/fixture.go": diagnostic + `func pair() (error, string) { return nil, "fixture.paired" }
+func configure(target *string) {}
+func refuse() (refusal Diagnostic) {
+	_, refusal.Code = pair()
+	refusal.Code += ".suffix"
+	for _, refusal.Code = range []string{"fixture.ranged"} {}
+	configure(&refusal.Code)
+	return refusal
+}`,
+		}, nil, []string{"internal/fixture/fixture.go", "internal/fixture/fixture.go", "internal/fixture/fixture.go", "internal/fixture/fixture.go"}},
+		{"a parameter written by a plain assignment, a tuple, a range clause and a taken address", map[string]string{
+			"internal/fixture/fixture.go": diagnostic + "func use() Diagnostic { return emit(\"fixture.argument\", true) }\n",
+			"internal/fixture/other.go": `package fixture
+func pair() (error, string) { return nil, "fixture.paired" }
+func configure(target *string) {}
+func emit(code string, paired bool) Diagnostic {
+	if code == "" { code = "fixture.default" }
+	if paired { _, code = pair() }
+	for _, code = range []string{"fixture.ranged"} {}
+	configure(&code)
+	return Diagnostic{Code: code}
+}`,
+		}, []string{"fixture.argument internal/fixture/fixture.go", "fixture.default internal/fixture/other.go"}, []string{"internal/fixture/other.go", "internal/fixture/other.go", "internal/fixture/other.go"}},
+		{"a function variable another package declares", map[string]string{
+			"internal/other/other.go": `package other
+type Diagnostic struct{ Code string }
+var Refuse = func(code string) Diagnostic { return Diagnostic{Code: code} }`,
+			"internal/fixture/fixture.go": other + "func refuse() other.Diagnostic { return other.Refuse(\"fixture.imported\") }\n",
+		}, []string{"fixture.imported internal/fixture/fixture.go"}, nil},
+		{"a variable another package binds to a named function of its own", map[string]string{
+			"internal/other/other.go": `package other
+type Diagnostic struct{ Code string }
+func build(code string) Diagnostic { return Diagnostic{Code: code} }
+var Refuse = build`,
+			"internal/fixture/fixture.go": other + "func refuse() other.Diagnostic { return other.Refuse(\"fixture.imported\") }\n",
+		}, []string{"fixture.imported internal/fixture/fixture.go"}, nil},
+		{"a package function variable bound to a named function or assigned one later", map[string]string{
+			"internal/fixture/fixture.go": diagnostic + `func build(code string) Diagnostic { return Diagnostic{Code: code} }
+func use() []Diagnostic { return []Diagnostic{refuse("fixture.bound"), reject("fixture.assigned")} }`,
+			"internal/fixture/other.go": `package fixture
+var refuse = build
+var reject func(string) Diagnostic
+func init() { reject = build }`,
+		}, []string{"fixture.assigned internal/fixture/fixture.go", "fixture.bound internal/fixture/fixture.go"}, nil},
+		{"a named function and a method value bound to local variables", map[string]string{
+			"internal/fixture/fixture.go": diagnostic + `type refuser struct{}
+func (refuser) refuse(code string) Diagnostic { return Diagnostic{Code: code} }
+func build(code string) Diagnostic { return Diagnostic{Code: code} }
+func use(r refuser) []Diagnostic {
+	named, method := build, r.refuse
+	return []Diagnostic{named("fixture.named"), method("fixture.method")}
+}`,
+		}, []string{"fixture.method internal/fixture/fixture.go", "fixture.named internal/fixture/fixture.go"}, nil},
+		{"a local variable that shadows a package function, bound to another function", map[string]string{
+			"internal/fixture/fixture.go": diagnostic + `func build(code string) Diagnostic { return Diagnostic{Code: code} }
+func refuse(string) Diagnostic { return Diagnostic{} }
+func use() Diagnostic { refuse := build; return refuse("fixture.shadowed") }`,
+		}, []string{"fixture.shadowed internal/fixture/fixture.go"}, nil},
+		{"a recursive closure declared before its literal, and a literal called where it is written", map[string]string{
+			"internal/fixture/fixture.go": diagnostic + `func refuse(depth int) (found []Diagnostic) {
+	var visit func(code string, depth int)
+	visit = func(code string, depth int) {
+		found = append(found, Diagnostic{Code: code})
+		if depth > 0 { visit(code, depth-1) }
+	}
+	visit("fixture.visited", depth)
+	return append(found, func(code string) Diagnostic { return Diagnostic{Code: code} }("fixture.invoked"))
+}`,
+		}, []string{"fixture.invoked internal/fixture/fixture.go", "fixture.visited internal/fixture/fixture.go"}, nil},
+		{"a function passed to a function-typed parameter by name, as a method value, through a variable or as a literal", map[string]string{
+			"internal/fixture/fixture.go": diagnostic + `type refuser struct{}
+func (refuser) refuse(code string) Diagnostic { return Diagnostic{Code: code} }
+func build(code string) Diagnostic { return Diagnostic{Code: code} }
+func run(emit func(string) Diagnostic) Diagnostic { return emit("fixture.parameter") }
+func use(r refuser) []Diagnostic {
+	held := build
+	return []Diagnostic{run(build), run(r.refuse), run(held), run(func(code string) Diagnostic { return Diagnostic{Code: code} })}
+}`,
+		}, nil, []string{"internal/fixture/fixture.go", "internal/fixture/fixture.go", "internal/fixture/fixture.go", "internal/fixture/fixture.go"}},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			codes := fixtureCodes(t, row.sources)
+			var emitted, unresolved []string
+			for code, places := range codes.emitted {
+				for _, place := range places {
+					emitted = append(emitted, code+" "+place.source.path)
+				}
+			}
+			for _, place := range codes.unresolved {
+				unresolved = append(unresolved, place.source.path)
+			}
+			slices.Sort(emitted)
+			slices.Sort(unresolved)
+			if emitted = slices.Compact(emitted); !slices.Equal(emitted, row.emitted) || !slices.Equal(unresolved, row.unresolved) {
+				t.Fatalf("emitted = %q, unresolved = %q; want %q and %q", emitted, unresolved, row.emitted, row.unresolved)
+			}
+		})
+	}
+}
+
+func fixtureCodes(t *testing.T, files map[string]string) diagnosticCodes {
+	t.Helper()
+	var sources []sourceFile
+	for _, name := range sortedKeys(files) {
+		source := compositionSource(t, path.Dir(name), files[name])
+		source.path = name
+		sources = append(sources, source)
+	}
+	return emittedDiagnosticCodes(sources)
 }
 
 const modulePath = "github.com/crmarques/bootwright/"
@@ -191,23 +367,51 @@ func (p codePlace) String() string {
 // store them. A code is stored in a Code field, which diagnostics.Diagnostic and
 // api.Issue share, or in a package field, parameter or local variable proven to
 // flow into one; a parameter that flows into a store with a literal prefix adds
-// that prefix to every argument it receives.
+// that prefix to every argument it receives. A parameter or variable holds the
+// values written to it, each placed in the file that writes it.
 type codeFlow struct {
 	packages   map[string]*codePackage
 	parameters map[*ast.Field]codeParameter
+	globals    map[*ast.Object]codeVariable
+	writes     map[codeVariable][]codeWrite
 	flowing    map[codeParameter]string
 	fields     map[string]string
 	codes      diagnosticCodes
 	seen       map[codePlace]bool
-	active     map[*ast.Object]bool
+	active     map[codeVariable]bool
 }
 
 type codePackage struct {
 	sources   []*sourceFile
 	functions map[string]*ast.FuncDecl
 	methods   map[string][]*ast.FuncDecl
-	values    map[string]ast.Expr
+	values    map[string][]codeValue
 	structs   map[string]*ast.StructType
+}
+
+// codeValue is one declaration of a package-level constant or variable: its
+// object, the file declaring it and the value it gives, nil when it gives no
+// single one. Each build variant of a package declares the name once.
+type codeValue struct {
+	object   *ast.Object
+	source   *sourceFile
+	value    ast.Expr
+	variable bool
+}
+
+// codeVariable names a constant or variable, a package-level one by its
+// package and name and a local one by its object. The zero value names none.
+type codeVariable struct {
+	object      *ast.Object
+	owner, name string
+}
+
+// codeWrite is one write to a variable: the scope making it, the expression it
+// writes through and the value it gives, nil when it gives no single value.
+type codeWrite struct {
+	scope  codeScope
+	target ast.Expr
+	value  ast.Expr
 }
 
 type codeParameter struct {
@@ -223,15 +427,23 @@ type codeScope struct {
 func emittedDiagnosticCodes(sources []sourceFile) diagnosticCodes {
 	flow := &codeFlow{
 		packages: map[string]*codePackage{}, parameters: map[*ast.Field]codeParameter{},
+		globals: map[*ast.Object]codeVariable{}, writes: map[codeVariable][]codeWrite{},
 		flowing: map[codeParameter]string{}, fields: map[string]string{"Code": ""},
 	}
 	for index := range sources {
 		flow.index(&sources[index])
 	}
+	for _, owner := range sortedKeys(flow.packages) {
+		for _, source := range flow.packages[owner].sources {
+			for _, scope := range scopesOf(source) {
+				flow.indexWrites(scope)
+			}
+		}
+	}
 	for {
 		before := len(flow.flowing) + len(flow.fields)
 		flow.codes = diagnosticCodes{emitted: map[string][]codePlace{}, dynamic: map[string]bool{}}
-		flow.seen, flow.active = map[codePlace]bool{}, map[*ast.Object]bool{}
+		flow.seen, flow.active = map[codePlace]bool{}, map[codeVariable]bool{}
 		for _, owner := range sortedKeys(flow.packages) {
 			for _, source := range flow.packages[owner].sources {
 				flow.visit(source)
@@ -247,7 +459,7 @@ func (f *codeFlow) index(source *sourceFile) {
 	pkg := f.packages[source.owner]
 	if pkg == nil {
 		pkg = &codePackage{functions: map[string]*ast.FuncDecl{}, methods: map[string][]*ast.FuncDecl{},
-			values: map[string]ast.Expr{}, structs: map[string]*ast.StructType{}}
+			values: map[string][]codeValue{}, structs: map[string]*ast.StructType{}}
 		f.packages[source.owner] = pkg
 	}
 	pkg.sources = append(pkg.sources, source)
@@ -274,14 +486,96 @@ func (f *codeFlow) index(source *sourceFile) {
 			for _, spec := range general.Specs {
 				if value, ok := spec.(*ast.ValueSpec); ok {
 					for position, name := range value.Names {
-						if position < len(value.Values) {
-							pkg.values[name.Name] = value.Values[position]
+						if name.Name == "_" || name.Obj == nil {
+							continue
 						}
+						declared := codeValue{object: name.Obj, source: source, variable: general.Tok == token.VAR}
+						if len(value.Values) == len(value.Names) {
+							declared.value = value.Values[position]
+						}
+						pkg.values[name.Name] = append(pkg.values[name.Name], declared)
+						f.globals[name.Obj] = codeVariable{owner: source.owner, name: name.Name}
 					}
 				}
 			}
 		}
 	}
+}
+
+// indexWrites records each write the scope makes to a constant or variable: an
+// assignment, a declaration, a range clause or a taken address. A local
+// declaration that gives no value writes nothing, because its zero value is no
+// code; a package-level one is a write that gives no single value.
+func (f *codeFlow) indexWrites(scope codeScope) {
+	write := func(target, value ast.Expr) {
+		if variable := f.variableOf(scope.source, target); variable != (codeVariable{}) {
+			f.writes[variable] = append(f.writes[variable], codeWrite{scope: scope, target: target, value: value})
+		}
+	}
+	ast.Inspect(scope.body, func(node ast.Node) bool {
+		switch typed := node.(type) {
+		case *ast.AssignStmt:
+			for position, target := range typed.Lhs {
+				if singleValue(typed) {
+					write(target, typed.Rhs[position])
+				} else {
+					write(target, nil)
+				}
+			}
+		case *ast.ValueSpec:
+			for position, name := range typed.Names {
+				if len(typed.Values) == len(typed.Names) {
+					write(name, typed.Values[position])
+				} else if _, global := f.globals[name.Obj]; global || len(typed.Values) > 0 {
+					write(name, nil)
+				}
+			}
+		case *ast.RangeStmt:
+			for _, target := range []ast.Expr{typed.Key, typed.Value} {
+				if target != nil {
+					write(target, nil)
+				}
+			}
+		case *ast.UnaryExpr:
+			if typed.Op == token.AND {
+				write(typed.X, nil)
+			}
+		}
+		return true
+	})
+}
+
+// singleValue reports whether an assignment gives each target one value of its
+// own, which a tuple or compound assignment does not.
+func singleValue(assignment *ast.AssignStmt) bool {
+	return (assignment.Tok == token.ASSIGN || assignment.Tok == token.DEFINE) && len(assignment.Lhs) == len(assignment.Rhs)
+}
+
+// variableOf names the constant or variable an expression denotes: an
+// identifier, or a selector naming one another package of this module
+// declares.
+func (f *codeFlow) variableOf(source *sourceFile, expression ast.Expr) codeVariable {
+	switch typed := expression.(type) {
+	case *ast.Ident:
+		if typed.Obj != nil {
+			if global, found := f.globals[typed.Obj]; found {
+				return global
+			}
+			if typed.Obj.Kind == ast.Var || typed.Obj.Kind == ast.Con {
+				return codeVariable{object: typed.Obj}
+			}
+		} else if _, found := f.packages[source.owner].values[typed.Name]; found {
+			return codeVariable{owner: source.owner, name: typed.Name}
+		}
+	case *ast.SelectorExpr:
+		imported := importPath(source, typed.X)
+		if other := f.packages[imported]; imported != "" && other != nil {
+			if _, found := other.values[typed.Sel.Name]; found {
+				return codeVariable{owner: imported, name: typed.Sel.Name}
+			}
+		}
+	}
+	return codeVariable{}
 }
 
 func (f *codeFlow) indexParameters(function *ast.FuncType) {
@@ -295,7 +589,10 @@ func (f *codeFlow) indexParameters(function *ast.FuncType) {
 // visit finds every code store in one file's function bodies and package-level
 // variable initializers, function literals included: a code field set by a
 // composite literal or an assignment, and an argument bound to a flowing
-// parameter.
+// parameter. A code field written by a tuple or compound assignment, a range
+// clause or a taken address is unresolved, and so is a function with a flowing
+// parameter that the scope passes on other than by calling it or binding it to
+// a variable, because no call through that value is followed.
 func (f *codeFlow) visit(source *sourceFile) {
 	for _, scope := range scopesOf(source) {
 		f.visitScope(scope)
@@ -324,31 +621,122 @@ func scopesOf(source *sourceFile) []codeScope {
 }
 
 func (f *codeFlow) visitScope(scope codeScope) {
+	bound := map[ast.Node]bool{}
 	ast.Inspect(scope.body, func(node ast.Node) bool {
 		switch typed := node.(type) {
 		case *ast.CompositeLit:
 			f.visitLiteral(scope, typed)
-		case *ast.AssignStmt:
-			for position, target := range typed.Lhs {
-				selector, ok := target.(*ast.SelectorExpr)
-				if !ok || position >= len(typed.Rhs) {
-					continue
-				}
-				if prefix, found := f.codeField(scope.source.owner, selector.Sel.Name); found {
-					f.store(scope, typed.Rhs[position], prefix)
+			for _, element := range typed.Elts {
+				if keyed, ok := element.(*ast.KeyValueExpr); ok {
+					bound[keyed.Key] = true
 				}
 			}
+		case *ast.AssignStmt:
+			f.visitAssignment(scope, typed, bound)
+		case *ast.ValueSpec:
+			for position, name := range typed.Names {
+				bound[name] = true
+				if len(typed.Values) == len(typed.Names) {
+					bound[functionExpression(typed.Values[position])] = true
+				}
+			}
+		case *ast.Field:
+			for _, name := range typed.Names {
+				bound[name] = true
+			}
+		case *ast.RangeStmt:
+			for _, target := range []ast.Expr{typed.Key, typed.Value} {
+				if _, found := f.codeTarget(scope, target); found {
+					f.unresolved(scope, target)
+				}
+			}
+		case *ast.UnaryExpr:
+			if _, found := f.codeTarget(scope, typed.X); found && typed.Op == token.AND {
+				f.unresolved(scope, typed.X)
+			}
 		case *ast.CallExpr:
-			for _, callee := range f.callees(scope, typed.Fun) {
+			bound[functionExpression(typed.Fun)] = true
+			for _, callee := range f.functionsOf(scope, typed.Fun) {
 				for position, argument := range typed.Args {
 					if prefix, flows := f.flowingParameter(callee, position); flows {
 						f.store(scope, argument, prefix)
 					}
 				}
 			}
+		case *ast.SelectorExpr:
+			bound[typed.Sel] = true
+			f.escape(scope, typed, bound)
+		case *ast.Ident:
+			f.escape(scope, typed, bound)
+		case *ast.FuncLit:
+			f.escape(scope, typed, bound)
 		}
 		return true
 	})
+}
+
+// visitAssignment stores what an assignment writes to a code field and marks
+// each target, and each value bound to a variable, as no escaping function.
+func (f *codeFlow) visitAssignment(scope codeScope, assignment *ast.AssignStmt, bound map[ast.Node]bool) {
+	for position, target := range assignment.Lhs {
+		bound[target] = true
+		blank, _ := target.(*ast.Ident)
+		if singleValue(assignment) && (blank != nil && blank.Name == "_" || f.variableOf(scope.source, target) != (codeVariable{})) {
+			bound[functionExpression(assignment.Rhs[position])] = true
+		}
+		prefix, found := f.codeTarget(scope, target)
+		switch {
+		case !found:
+		case singleValue(assignment):
+			f.store(scope, assignment.Rhs[position], prefix)
+		default:
+			f.unresolved(scope, target)
+		}
+	}
+}
+
+// codeTarget returns the prefix of the code field an expression writes
+// through, and whether it names one.
+func (f *codeFlow) codeTarget(scope codeScope, target ast.Expr) (string, bool) {
+	selector, ok := target.(*ast.SelectorExpr)
+	if !ok {
+		return "", false
+	}
+	return f.codeField(scope.source.owner, selector.Sel.Name)
+}
+
+// escape reports a function with a flowing parameter that the expression
+// passes on as a value: anything but a call of it or a value bound to a
+// variable, whose calls functionsOf follows.
+func (f *codeFlow) escape(scope codeScope, expression ast.Expr, bound map[ast.Node]bool) {
+	if bound[expression] {
+		return
+	}
+	for _, function := range f.functionsOf(scope, expression) {
+		for index := range function.Params.NumFields() {
+			if _, flows := f.flowingParameter(function, index); flows {
+				f.unresolved(scope, expression)
+				return
+			}
+		}
+	}
+}
+
+// functionExpression returns the function a called or bound expression names,
+// without its parentheses and type arguments.
+func functionExpression(expression ast.Expr) ast.Expr {
+	for {
+		switch typed := expression.(type) {
+		case *ast.ParenExpr:
+			expression = typed.X
+		case *ast.IndexExpr:
+			expression = typed.X
+		case *ast.IndexListExpr:
+			expression = typed.X
+		default:
+			return expression
+		}
+	}
 }
 
 func (f *codeFlow) visitLiteral(scope codeScope, literal *ast.CompositeLit) {
@@ -410,11 +798,9 @@ func (f *codeFlow) store(scope codeScope, expression ast.Expr, prefix string) {
 	case *ast.Ident:
 		f.storeIdentifier(scope, typed, prefix)
 	case *ast.SelectorExpr:
-		if imported := importPath(scope.source, typed.X); imported != "" {
-			if pkg := f.packages[imported]; pkg != nil && pkg.values[typed.Sel.Name] != nil {
-				f.store(codeScope{source: pkg.sources[0]}, pkg.values[typed.Sel.Name], prefix)
-				return
-			}
+		if f.variableOf(scope.source, typed) != (codeVariable{}) {
+			f.storeVariable(scope, typed, prefix)
+			return
 		}
 		if known, found := f.codeField(scope.source.owner, typed.Sel.Name); found && known != prefix {
 			f.unresolved(scope, expression)
@@ -426,17 +812,10 @@ func (f *codeFlow) store(scope codeScope, expression ast.Expr, prefix string) {
 	}
 }
 
+// storeIdentifier stores what an identifier reads. A parameter holds every
+// argument its function receives and every value its function writes to it.
 func (f *codeFlow) storeIdentifier(scope codeScope, identifier *ast.Ident, prefix string) {
-	if identifier.Obj == nil {
-		if value := f.packages[scope.source.owner].values[identifier.Name]; value != nil {
-			f.store(scope, value, prefix)
-			return
-		}
-		f.unresolved(scope, identifier)
-		return
-	}
-	switch declaration := identifier.Obj.Decl.(type) {
-	case *ast.Field:
+	if declaration, ok := declarationOf(identifier).(*ast.Field); ok {
 		if parameter, found := f.parameters[declaration]; found {
 			for position, name := range declaration.Names {
 				if name.Obj == identifier.Obj {
@@ -444,123 +823,97 @@ func (f *codeFlow) storeIdentifier(scope codeScope, identifier *ast.Ident, prefi
 				}
 			}
 			f.flowing[parameter] = prefix
-			return
-		}
-	case *ast.ValueSpec, *ast.AssignStmt:
-		if f.active[identifier.Obj] {
-			break
-		}
-		f.active[identifier.Obj] = true
-		defer delete(f.active, identifier.Obj)
-		if scope.body != nil && f.storeAssignments(scope, identifier, prefix) {
-			return
-		}
-		if value := fileValue(scope.source, identifier.Obj); value != nil {
-			f.store(scope, value, prefix)
-			if identifier.Obj.Kind == ast.Var {
-				f.storePackageAssignments(scope.source, identifier, prefix)
-			}
+			f.storeWrites(codeVariable{object: identifier.Obj}, prefix)
 			return
 		}
 	}
-	f.unresolved(scope, identifier)
+	f.storeVariable(scope, identifier, prefix)
 }
 
-// storePackageAssignments stores every value the package assigns to a
-// package-level variable, each in the scope that assigns it. It reports the
-// variable unresolved where a write cannot be followed to one value: a tuple
-// or compound assignment, a range clause, or a taken address. Another file of
-// the package names the variable by an identifier its parser left unresolved.
-func (f *codeFlow) storePackageAssignments(declaring *sourceFile, identifier *ast.Ident, prefix string) {
-	for _, source := range f.packages[declaring.owner].sources {
-		names := func(expression ast.Expr) bool {
-			name, ok := expression.(*ast.Ident)
-			if !ok {
-				return false
-			}
-			if source == declaring {
-				return name.Obj == identifier.Obj
-			}
-			return name.Obj == nil && name.Name == identifier.Name
-		}
-		for _, scope := range scopesOf(source) {
-			ast.Inspect(scope.body, func(node ast.Node) bool {
-				switch typed := node.(type) {
-				case *ast.AssignStmt:
-					for position, target := range typed.Lhs {
-						if !names(target) {
-							continue
-						}
-						if typed.Tok == token.ASSIGN && len(typed.Lhs) == len(typed.Rhs) {
-							f.store(scope, typed.Rhs[position], prefix)
-						} else {
-							f.unresolved(scope, target)
-						}
-					}
-				case *ast.RangeStmt:
-					for _, target := range []ast.Expr{typed.Key, typed.Value} {
-						if typed.Tok == token.ASSIGN && names(target) {
-							f.unresolved(scope, target)
-						}
-					}
-				case *ast.UnaryExpr:
-					if typed.Op == token.AND && names(typed.X) {
-						f.unresolved(scope, typed)
-					}
-				}
-				return true
-			})
+// storeWrites stores each value written to a variable in the scope writing
+// it, and reports each write that gives no single value.
+func (f *codeFlow) storeWrites(variable codeVariable, prefix string) {
+	if f.active[variable] {
+		return
+	}
+	f.active[variable] = true
+	defer delete(f.active, variable)
+	for _, write := range f.writes[variable] {
+		if write.value == nil {
+			f.unresolved(write.scope, write.target)
+		} else {
+			f.store(write.scope, write.value, prefix)
 		}
 	}
 }
 
-// storeAssignments stores every value the scope's body gives the identifier and
-// reports whether it gives any.
-func (f *codeFlow) storeAssignments(scope codeScope, identifier *ast.Ident, prefix string) bool {
-	assigned := false
-	ast.Inspect(scope.body, func(node ast.Node) bool {
-		switch typed := node.(type) {
-		case *ast.AssignStmt:
-			for position, target := range typed.Lhs {
-				if name, ok := target.(*ast.Ident); ok && name.Obj == identifier.Obj && position < len(typed.Rhs) {
-					assigned = true
-					f.store(scope, typed.Rhs[position], prefix)
-				}
-			}
-		case *ast.ValueSpec:
-			for position, name := range typed.Names {
-				if name.Obj == identifier.Obj && position < len(typed.Values) {
-					assigned = true
-					f.store(scope, typed.Values[position], prefix)
-				}
+// storeVariable stores what the constant or variable an expression reads can
+// hold, each value in the scope that gives it: the value of each package-level
+// constant declaration the read can denote; the values the reading scope
+// writes to a variable; or, where it writes none, every value written to the
+// variable anywhere, a package-level one's declarations included. A write that
+// gives no single value is unresolved, and so is a read of a variable nothing
+// writes.
+func (f *codeFlow) storeVariable(scope codeScope, read ast.Expr, prefix string) {
+	variable := f.variableOf(scope.source, read)
+	if variable == (codeVariable{}) || f.active[variable] {
+		f.unresolved(scope, read)
+		return
+	}
+	f.active[variable] = true
+	defer delete(f.active, variable)
+	if variable.object == nil {
+		varying := false
+		for _, declared := range f.declarationsRead(read, variable) {
+			switch {
+			case declared.variable:
+				varying = true
+			case declared.value == nil:
+				f.unresolved(scope, read)
+			default:
+				f.store(codeScope{source: declared.source}, declared.value, prefix)
 			}
 		}
-		return true
-	})
-	return assigned
+		if !varying {
+			return
+		}
+	}
+	writes := f.writes[variable]
+	var local []codeWrite
+	for _, write := range writes {
+		if scope.body != nil && write.scope.body == scope.body {
+			local = append(local, write)
+		}
+	}
+	if len(local) > 0 {
+		writes = local
+	}
+	if len(writes) == 0 {
+		f.unresolved(scope, read)
+		return
+	}
+	for _, write := range writes {
+		if write.value == nil {
+			f.unresolved(write.scope, write.target)
+		} else {
+			f.store(write.scope, write.value, prefix)
+		}
+	}
 }
 
-// fileValue returns the value a package-level constant or variable declared in
-// the source file gives the object, or nil when the file declares none.
-func fileValue(source *sourceFile, object *ast.Object) ast.Expr {
-	for _, declaration := range source.syntax.Decls {
-		general, ok := declaration.(*ast.GenDecl)
-		if !ok {
-			continue
-		}
-		for _, spec := range general.Specs {
-			value, ok := spec.(*ast.ValueSpec)
-			if !ok {
-				continue
-			}
-			for position, name := range value.Names {
-				if name.Obj == object && position < len(value.Values) {
-					return value.Values[position]
-				}
+// declarationsRead returns the declarations of a package-level constant or
+// variable that a read can denote: the one in the read's own file, which the
+// parser resolves the read to, or else every build variant's.
+func (f *codeFlow) declarationsRead(read ast.Expr, variable codeVariable) []codeValue {
+	declarations := f.packages[variable.owner].values[variable.name]
+	if identifier, ok := read.(*ast.Ident); ok && identifier.Obj != nil {
+		for _, declared := range declarations {
+			if declared.object == identifier.Obj {
+				return []codeValue{declared}
 			}
 		}
 	}
-	return nil
+	return declarations
 }
 
 func (f *codeFlow) unresolved(scope codeScope, expression ast.Expr) {
@@ -577,61 +930,56 @@ func (f *codeFlow) unresolved(scope codeScope, expression ast.Expr) {
 	}
 }
 
-// callees resolves a called expression to the functions it may name: a
-// package function, an imported function, a method of the same name in the
-// calling package, or a function literal bound to a local or package variable.
-func (f *codeFlow) callees(scope codeScope, expression ast.Expr) []*ast.FuncType {
+// functionsOf resolves an expression to the functions it may denote: a
+// package or imported function, a method of that name in the calling or an
+// imported package, a function literal, or a variable holding one of these,
+// followed through every value written to it. A function a parameter receives
+// is not followed; escape reports each one with a flowing parameter where it
+// is passed on.
+func (f *codeFlow) functionsOf(scope codeScope, expression ast.Expr) []*ast.FuncType {
 	pkg := f.packages[scope.source.owner]
-	switch typed := expression.(type) {
+	switch typed := functionExpression(expression).(type) {
+	case *ast.FuncLit:
+		return []*ast.FuncType{typed.Type}
 	case *ast.Ident:
-		switch declaration := declarationOf(typed).(type) {
-		case *ast.AssignStmt:
-			for position, target := range declaration.Lhs {
-				name, ok := target.(*ast.Ident)
-				if ok && name.Obj == typed.Obj && position < len(declaration.Rhs) {
-					if literal, ok := declaration.Rhs[position].(*ast.FuncLit); ok {
-						return []*ast.FuncType{literal.Type}
-					}
-				}
+		if typed.Obj == nil || typed.Obj.Kind == ast.Fun {
+			if function := pkg.functions[typed.Name]; function != nil {
+				return []*ast.FuncType{function.Type}
 			}
-			return nil
-		case *ast.ValueSpec:
-			for position, name := range declaration.Names {
-				if name.Obj == typed.Obj && position < len(declaration.Values) {
-					if literal, ok := declaration.Values[position].(*ast.FuncLit); ok {
-						return []*ast.FuncType{literal.Type}
-					}
-				}
-			}
-			return nil
-		}
-		if function := pkg.functions[typed.Name]; function != nil {
-			return []*ast.FuncType{function.Type}
-		}
-		if literal, ok := pkg.values[typed.Name].(*ast.FuncLit); ok && typed.Obj == nil {
-			return []*ast.FuncType{literal.Type}
 		}
 	case *ast.SelectorExpr:
-		if imported := importPath(scope.source, typed.X); imported != "" {
-			if other := f.packages[imported]; other != nil && other.functions[typed.Sel.Name] != nil {
-				return []*ast.FuncType{other.functions[typed.Sel.Name].Type}
+		imported := importPath(scope.source, typed.X)
+		if imported == "" {
+			var found []*ast.FuncType
+			for _, method := range pkg.methods[typed.Sel.Name] {
+				found = append(found, method.Type)
 			}
-			return nil
-		}
-		var found []*ast.FuncType
-		for _, method := range pkg.methods[typed.Sel.Name] {
-			found = append(found, method.Type)
-		}
-		for _, imported := range scope.source.imports {
-			if other := f.packages[strings.TrimPrefix(imported.path, modulePath)]; other != nil {
-				for _, method := range other.methods[typed.Sel.Name] {
-					found = append(found, method.Type)
+			for _, imported := range scope.source.imports {
+				if other := f.packages[strings.TrimPrefix(imported.path, modulePath)]; other != nil {
+					for _, method := range other.methods[typed.Sel.Name] {
+						found = append(found, method.Type)
+					}
 				}
 			}
+			return found
 		}
-		return found
+		if other := f.packages[imported]; other != nil && other.functions[typed.Sel.Name] != nil {
+			return []*ast.FuncType{other.functions[typed.Sel.Name].Type}
+		}
 	}
-	return nil
+	variable := f.variableOf(scope.source, functionExpression(expression))
+	if variable == (codeVariable{}) || f.active[variable] {
+		return nil
+	}
+	f.active[variable] = true
+	defer delete(f.active, variable)
+	var found []*ast.FuncType
+	for _, write := range f.writes[variable] {
+		if write.value != nil {
+			found = append(found, f.functionsOf(write.scope, write.value)...)
+		}
+	}
+	return found
 }
 
 func (f *codeFlow) flowingParameter(function *ast.FuncType, position int) (string, bool) {

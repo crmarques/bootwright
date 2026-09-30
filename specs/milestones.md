@@ -25,9 +25,9 @@ every other command `bootwright --help` lists returns the
 | [M6](milestones/m6.md) | Provision and destroy OpenShift clusters over OpenShift Virtualization | M3 | not started | nothing until M3 |
 | [M7](milestones/m7.md) | Add-ons ACM, Argo CD and GitLab | M5 | not started | nothing until M5 |
 
-No slice is active.
+X21 is active.
 
-- **Next for agents:** X21 and X27.
+- **Next for agents:** deliver X21.
 - **Next for operator:** on a clean build that contains X20, run
   [lab-rhel](../examples/lab-rhel/README.md#run-it) for
   [B72](milestones/m4.md#b72) and [lab-sno](../examples/lab-sno/README.md) for

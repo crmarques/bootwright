@@ -89,7 +89,7 @@ func wireResolution(t *testing.T, f *fixture) (*fixture, *resolvingFixture) {
 		PythonExecutable: "python/bin/python3.14", SitePackages: "python/lib/python3.14/site-packages/",
 		Sources:          []DependencySource{source("python-3.14.7", "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.14.7%2B20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"), source("ansible-2.21.4", "https://files.pythonhosted.org/packages/ansible_core-2.21.4-py3-none-any.whl"), source("urllib3-2.7.0", "https://files.pythonhosted.org/packages/urllib3-2.7.0-py3-none-any.whl")},
 		Wheels:           []BootstrapWheel{{Name: "ansible-core", Version: "2.21.4", SourceID: "ansible-2.21.4"}, {Name: "urllib3", Version: "2.7.0", SourceID: "urllib3-2.7.0"}},
-		Metadata:         []DependencySource{source("python-metadata", "https://raw.githubusercontent.com/astral-sh/uv/main/crates/uv-python/download-metadata.json"), source("ansible-metadata", "https://pypi.org/pypi/ansible-core/json")},
+		Metadata:         []DependencySource{source("python-metadata", "https://raw.githubusercontent.com/astral-sh/uv/main/crates/uv-python/download-metadata.json"), source("ansible-metadata", "https://pypi.org/simple/ansible-core/")},
 		ProjectionSHA256: strings.Repeat("b", 64), FileCount: 10, ExpandedBytes: 100,
 		Execution:         ExecutionRequirement{PythonExecutable: "python/bin/python3.14", Files: []InstalledFile{}, Links: []InstalledLink{}, Preload: []string{}},
 		ExecutionPackages: []string{"glibc", "libgcc"},

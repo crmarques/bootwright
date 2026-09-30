@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"maps"
 	"path"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,6 +24,7 @@ import (
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore/areadouble"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
@@ -93,40 +94,8 @@ func (a *memoryArea) landed(target string) error {
 	return err
 }
 
-// admit refuses, before any injected failure or hook runs, what the contract
-// refuses: a cancelled context, a path outside the area, a path beneath a
-// record, and a record where a directory is named or the reverse.
 func (a *memoryArea) admit(ctx context.Context, target string, record bool) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if !(fs.ValidPath(target) && target != ".") && (record || target != "") {
-		return errors.New("path escapes the area")
-	}
-	for parent := path.Dir(target); target != "" && parent != "."; parent = path.Dir(parent) {
-		if _, isRecord := a.files[parent]; isRecord {
-			return errors.New("path lies beneath a record")
-		}
-	}
-	if _, isRecord := a.files[target]; !record && isRecord {
-		return errors.New("not a directory")
-	}
-	if record && a.isDirectory(target) {
-		return errors.New("is a directory")
-	}
-	return nil
-}
-
-func (a *memoryArea) isDirectory(target string) bool {
-	if a.directories[target] {
-		return true
-	}
-	for name := range a.files {
-		if strings.HasPrefix(name, target+"/") {
-			return true
-		}
-	}
-	return false
+	return areadouble.Admit(ctx, a.files, a.directories, target, record)
 }
 
 func (a *memoryArea) Read(ctx context.Context, target string, maximum int) ([]byte, bool, error) {
@@ -334,22 +303,57 @@ func (w *testWorkspace) view() *testView {
 	return &testView{workspace: w}
 }
 
-func (w *testWorkspace) ReadLifecycle(ctx context.Context, name string, callback func(View) error) error {
+// held is the view one callback holds. Its operation area writes only in a
+// transaction and its run area only in a bounded run, and both refuse every
+// call once the callback returns, as the store's areas do.
+func (w *testWorkspace) held(operations, runs bool) (*testView, func()) {
+	closed := &atomic.Bool{}
+	view := &testView{
+		workspace:  w,
+		operations: &heldArea{memoryArea: w.area, writable: operations, closed: closed},
+		runs:       &heldArea{memoryArea: w.runArea, writable: runs, closed: closed},
+	}
+	return view, func() { closed.Store(true) }
+}
+
+// admit refuses, as the store does before it reads anything, a context this
+// workspace does not hold and a missing callback.
+func (w *testWorkspace) admit(name string, called bool) error {
 	if name == "" {
 		return errors.New("explicit context required")
 	}
-	return callback(w.view())
+	if name != testContextName {
+		return errors.New("the selected context does not exist")
+	}
+	if !called {
+		return errors.New("lifecycle callback is missing")
+	}
+	return nil
+}
+
+func (w *testWorkspace) ReadLifecycle(ctx context.Context, name string, callback func(View) error) error {
+	if err := w.admit(name, callback != nil); err != nil {
+		return err
+	}
+	view, release := w.held(false, false)
+	defer release()
+	return callback(view)
 }
 
 func (w *testWorkspace) RunLifecycle(ctx context.Context, name string, callback func(RunView) error) error {
-	if name == "" {
-		return errors.New("explicit context required")
+	if err := w.admit(name, callback != nil); err != nil {
+		return err
 	}
 	w.runs++
-	return callback(w.view())
+	view, release := w.held(false, true)
+	defer release()
+	return callback(view)
 }
 
 func (w *testWorkspace) MutateLifecycle(ctx context.Context, name string, callback func(Transaction) error) error {
+	if err := w.admit(name, callback != nil); err != nil {
+		return err
+	}
 	// The real store takes the exclusive lock here, so this is the moment
 	// another invocation's committed work becomes visible to a decision that
 	// was taken under the shared one.
@@ -357,10 +361,87 @@ func (w *testWorkspace) MutateLifecycle(ctx context.Context, name string, callba
 		w.beforeMutation()
 	}
 	w.mutations++
-	return callback(w.view())
+	view, release := w.held(true, false)
+	defer release()
+	return callback(view)
 }
 
-type testView struct{ workspace *testWorkspace }
+// heldArea is one callback's hold on an area: it refuses every call once that
+// callback returned, and every write while it is read-only.
+type heldArea struct {
+	*memoryArea
+	writable bool
+	closed   *atomic.Bool
+}
+
+func (a *heldArea) usable(ctx context.Context, write bool) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if a.closed.Load() {
+		return errors.New("the lifecycle operation capability has closed")
+	}
+	if write && !a.writable {
+		return errors.New("read-only lifecycle access refuses mutation")
+	}
+	return nil
+}
+
+func (a *heldArea) Read(ctx context.Context, target string, maximum int) ([]byte, bool, error) {
+	if err := a.usable(ctx, false); err != nil {
+		return nil, false, err
+	}
+	return a.memoryArea.Read(ctx, target, maximum)
+}
+
+func (a *heldArea) Entries(ctx context.Context, target string) ([]operationstore.Entry, error) {
+	if err := a.usable(ctx, false); err != nil {
+		return nil, err
+	}
+	return a.memoryArea.Entries(ctx, target)
+}
+
+func (a *heldArea) EnsureDirectory(ctx context.Context, target string) error {
+	if err := a.usable(ctx, true); err != nil {
+		return err
+	}
+	return a.memoryArea.EnsureDirectory(ctx, target)
+}
+
+func (a *heldArea) WriteExclusive(ctx context.Context, target string, data []byte) error {
+	if err := a.usable(ctx, true); err != nil {
+		return err
+	}
+	return a.memoryArea.WriteExclusive(ctx, target, data)
+}
+
+func (a *heldArea) Replace(ctx context.Context, target string, data, expected []byte) error {
+	if err := a.usable(ctx, true); err != nil {
+		return err
+	}
+	return a.memoryArea.Replace(ctx, target, data, expected)
+}
+
+func (a *heldArea) Append(ctx context.Context, target string, data []byte) error {
+	if err := a.usable(ctx, true); err != nil {
+		return err
+	}
+	return a.memoryArea.Append(ctx, target, data)
+}
+
+func (a *heldArea) Sync(ctx context.Context, target string) error {
+	if err := a.usable(ctx, true); err != nil {
+		return err
+	}
+	return a.memoryArea.Sync(ctx, target)
+}
+
+// testView is a view of the workspace. One a callback holds carries the areas
+// it holds; one a test builds to inspect state reaches the areas directly.
+type testView struct {
+	workspace        *testWorkspace
+	operations, runs operationstore.Area
+}
 
 func (v *testView) Identity() ContextIdentity {
 	return ContextIdentity{Name: testContextName, Revision: v.workspace.revision, Mode: "ready"}
@@ -374,11 +455,26 @@ func (v *testView) Controller() prerequisites.StorageView {
 	view.State.Reservations = slices.Clone(v.workspace.reservations)
 	return view
 }
-func (v *testView) Evidence() []byte                { return slices.Clone(v.workspace.evidence) }
-func (v *testView) Operations() operationstore.Area { return v.workspace.area }
-func (v *testView) Runs() operationstore.Area       { return v.workspace.runArea }
+func (v *testView) Evidence() []byte { return slices.Clone(v.workspace.evidence) }
+
+func (v *testView) Operations() operationstore.Area {
+	if v.operations != nil {
+		return v.operations
+	}
+	return v.workspace.area
+}
+
+func (v *testView) Runs() operationstore.Area {
+	if v.runs != nil {
+		return v.runs
+	}
+	return v.workspace.runArea
+}
 
 func (v *testView) PublishEvidence(_ context.Context, data []byte) error {
+	if len(data) == 0 {
+		return errors.New("context mutation evidence exceeds its bounds")
+	}
 	if err := v.killed("publish evidence"); err != nil {
 		return err
 	}
@@ -393,8 +489,15 @@ func (v *testView) PublishEvidence(_ context.Context, data []byte) error {
 
 // Bind records the relationship the way the store does: a first apply
 // establishes it, a later one revalidates exactly it, and a different Machine
-// or host refuses instead of replacing it.
+// or host refuses instead of replacing it. It names a Machine, and binds only
+// the host the controller record identifies.
 func (v *testView) Bind(_ context.Context, machine string, host controller.InstalledHostIdentity) error {
+	if machine == "" {
+		return errors.New("a controller binding requires the selected Machine name")
+	}
+	if !v.workspace.controller.State.Host.Equal(host) {
+		return failure("controller.identity", "this host is not the host this controller state belongs to", "")
+	}
 	if err := v.killed("publish binding"); err != nil {
 		return err
 	}
@@ -418,6 +521,11 @@ func (v *testView) Bind(_ context.Context, machine string, host controller.Insta
 }
 
 func (v *testView) Reserve(_ context.Context, reservations []prerequisites.HostReservation) error {
+	for _, reservation := range reservations {
+		if reservation.Context != v.Identity().Name {
+			return errors.New("a lifecycle reservation must belong to its own context")
+		}
+	}
 	if err := v.killed("publish reservations"); err != nil {
 		return err
 	}

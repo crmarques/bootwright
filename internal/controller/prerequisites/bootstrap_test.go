@@ -78,6 +78,44 @@ func TestRecordedAnsibleFloorKeepsEarlierRecordsReadable(t *testing.T) {
 	}
 }
 
+// Setup records the Index API page latest was selected from; a latest record
+// an earlier build wrote from the project JSON stays readable on every path a
+// controller-record read takes, and an exact intent names only its release.
+func TestAnsibleMetadataNamesTheEndpointItsIntentReads(t *testing.T) {
+	_, fixture := dynamicFixture(t)
+	for _, test := range []struct {
+		intent, url string
+		pass        bool
+	}{
+		{"latest", "https://pypi.org/simple/ansible-core/", true},
+		{"latest", "https://pypi.org/pypi/ansible-core/json", true},
+		{"latest", "https://pypi.org/simple/ansible/", false},
+		{"latest", "https://pypi.org/simple/ansible-core", false},
+		{"latest", "https://pypi.org/pypi/ansible-core/2.21.4/json", false},
+		{"2.21.4", "https://pypi.org/pypi/ansible-core/2.21.4/json", true},
+		{"2.21.4", "https://pypi.org/simple/ansible-core/", false},
+		{"2.21.4", "https://pypi.org/pypi/ansible-core/json", false},
+	} {
+		value := fixture.bootstrap
+		value.Metadata = slices.Clone(value.Metadata)
+		value.AnsibleIntent, value.Metadata[1].URL = test.intent, test.url
+		bootstrap, err := CanonicalBootstrap(value)
+		if (err == nil) != test.pass {
+			t.Fatalf("%s intent naming %s: accepted %t, want %t: %+v", test.intent, test.url, err == nil, test.pass, diagnostics.Of(err))
+		}
+		if !test.pass || test.intent != "latest" {
+			continue
+		}
+		definition, err := NewResolvedDefinition(bootstrap, fixture.native)
+		if err == nil {
+			err = ValidateResolvedDefinition(definition)
+		}
+		if err != nil {
+			t.Fatalf("a retained definition naming %s is unreadable: %+v", test.url, diagnostics.Of(err))
+		}
+	}
+}
+
 func TestCanonicalBootstrapDoesNotShareCallerSlices(t *testing.T) {
 	_, fixture := dynamicFixture(t)
 	input := fixture.bootstrap

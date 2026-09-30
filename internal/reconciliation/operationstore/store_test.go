@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore/areadouble"
 	"maps"
 	"reflect"
 	"slices"
@@ -901,7 +902,7 @@ func TestAReclaimRemovesOnlyClaimsThatHoldNothing(t *testing.T) {
 		}
 	}
 	for _, kept := range []string{current.ID, interrupted, logged, blocked, "slot-0"} {
-		if !area.isDirectory(kept) {
+		if !areadouble.IsDirectory(area.files, area.directories, kept) {
 			t.Fatalf("the reclaim removed %s", kept)
 		}
 	}

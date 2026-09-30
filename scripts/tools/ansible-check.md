@@ -24,7 +24,8 @@ bootstrap entirely. Keep the environment outside tracked content. The gate check
 versions, supplies isolated inventory/configuration/cache paths, runs every
 shipped playbook through syntax checking, and runs Ansible Lint offline. It then
 copies the collection into a temporary area and runs all applicable Ansible
-sanity checks, collection unit tests, and the synthetic controller tool and
+sanity checks, the sanity import test again under the managed-host floor
+interpreter, collection unit tests, and the synthetic controller tool and
 supervisor integration targets.
 
 `./scripts/ansible-check --suite syntax|lint|sanity|units|integration` runs
@@ -44,3 +45,15 @@ including Ansible's pip bootstrap. Acquisition verifies every artifact digest;
 the check gate verifies them again and installs test requirements only into
 temporary virtual environments with an offline wheel source. Set
 `BOOTWRIGHT_ANSIBLE_TEST_ARTIFACTS` to use a previously acquired fixture directory.
+
+`ansible-check-floor-interpreter.json` pins the oldest Python a managed host
+may run, a CPython 3.9 build from python-build-standalone; the same acquisition
+fetches it into the fixture directory. On every sanity run the gate verifies
+the archive, extracts it into the temporary area and imports each module and
+module utility under it. That proves 3.9 grammar and everything that runs at
+import, such as a name imported from a library module 3.9 lacks; a later
+library call inside a function body runs only when that function does, which
+no gate does under 3.9. The gate refuses an import test that ansible-test
+reports as skipped, such as one whose virtual environment it could not create.
+A cache prepared before this lock existed has no archive: run
+`python3 scripts/tools/ansible_test_prepare.py` once.

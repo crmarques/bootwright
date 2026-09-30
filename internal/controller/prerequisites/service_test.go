@@ -103,6 +103,9 @@ func (m *memoryStorage) view() StorageView {
 	return value
 }
 func (m *memoryStorage) ReadController(ctx context.Context, name string, fn func(StorageView) error) error {
+	if fn == nil {
+		return errors.New("controller inspection callback is missing")
+	}
 	m.reads++
 	m.owner.events = append(m.owner.events, "read:"+name)
 	view := m.view()
@@ -114,6 +117,9 @@ func (m *memoryStorage) ReadController(ctx context.Context, name string, fn func
 	return fn(view)
 }
 func (m *memoryStorage) MutateController(ctx context.Context, scope SetupContext, create bool, fn func(StorageTransaction) error) error {
+	if fn == nil {
+		return errors.New("controller mutation callback is missing")
+	}
 	m.owner.events = append(m.owner.events, "mutate")
 	if m.owner.beforeMutation != nil {
 		m.owner.beforeMutation()
@@ -145,7 +151,13 @@ func (m *memoryStorage) Publish(ctx context.Context, state HostState) (Publicati
 	}
 	return Committed, nil
 }
-func (m *memoryStorage) Bundle(ctx context.Context, _ string) (BundleArea, error) {
+
+// Bundle opens only the approved catalog's bundle, and only under a durable
+// intent, as the store does.
+func (m *memoryStorage) Bundle(ctx context.Context, id string) (BundleArea, error) {
+	if id != m.state.Receipt.CatalogDigest || id == "" {
+		return nil, errors.New("bundle namespace is not the approved setup catalog")
+	}
 	if !slices.ContainsFunc(m.state.Receipt.Actions, func(a SetupAction) bool { return a.Phase == "intent" }) {
 		return nil, errors.New("missing durable intent")
 	}
@@ -165,10 +177,29 @@ func (m *memoryStorage) RetireBundles(_ context.Context, ids []string) error {
 	return nil
 }
 
+// copyState copies every mutable value a HostState reaches, as the store
+// copies what crosses its boundary.
 func copyState(s HostState) HostState {
 	s.Bindings = slices.Clone(s.Bindings)
+	s.Reservations = slices.Clone(s.Reservations)
+	for index := range s.Reservations {
+		s.Reservations[index].Keys = slices.Clone(s.Reservations[index].Keys)
+	}
 	s.RetainedSources = slices.Clone(s.RetainedSources)
+	s.RetainedDefinitions = slices.Clone(s.RetainedDefinitions)
+	for index := range s.RetainedDefinitions {
+		s.RetainedDefinitions[index] = CloneDefinition(s.RetainedDefinitions[index])
+	}
+	if s.Receipt.Definition != nil {
+		definition := CloneDefinition(*s.Receipt.Definition)
+		s.Receipt.Definition = &definition
+	}
 	s.Receipt.Actions = slices.Clone(s.Receipt.Actions)
+	for index := range s.Receipt.Actions {
+		s.Receipt.Actions[index].Request = slices.Clone(s.Receipt.Actions[index].Request)
+		s.Receipt.Actions[index].Evidence = slices.Clone(s.Receipt.Actions[index].Evidence)
+		s.Receipt.Actions[index].Preparation = slices.Clone(s.Receipt.Actions[index].Preparation)
+	}
 	s.Receipt.Sources = slices.Clone(s.Receipt.Sources)
 	s.Receipt.Egress.NoProxy = slices.Clone(s.Receipt.Egress.NoProxy)
 	return s

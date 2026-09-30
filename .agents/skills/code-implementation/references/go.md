@@ -92,10 +92,18 @@ Report failed, skipped, flaky, or unavailable gates under the shared workflow.
 
 For lifecycle capabilities, the shared port contract suite is
 `cmd/bootwright/capability_contract_test.go`: a new binding joins it with a
-row, which `TestEveryBindingJoinsTheCapabilityContractSuite` requires. For the
-operation area a Workspace supplies, it is `areacontract.Verify` in
-`internal/reconciliation/operationstore/areacontract`, which contextfs's area
-and every in-memory double run. A new
+row, which `TestEveryBindingJoinsTheCapabilityContractSuite` requires. For a
+storage port the Workspace adapter implements, it is the `Verify` beside that
+port, which contextfs and every in-memory double of the port run: the
+operation area's in `internal/reconciliation/operationstore/areacontract`, the
+secret store area's in `internal/secrets/secretstore/areacontract`, controller
+storage's in `internal/controller/prerequisites/storagecontract`, the lifecycle
+workspace's in `internal/reconciliation/lifecycle/workspacecontract` and the
+media store's in `internal/managedos/media/storecontract`. An in-memory
+operation area admits each call through `areadouble.Admit` in
+`internal/reconciliation/operationstore/areadouble`. A stub that embeds a port
+to answer one test's calls, or a fault injector wrapping an implementation, is
+not a double and runs no suite. A new
 contextfs checkpoint is a catalogued constant that the checkpoint harness
 reaches, and a new publication protocol or lifecycle journey joins its harness
 with the retry its spec names; lifecycle journeys are killed at every durable

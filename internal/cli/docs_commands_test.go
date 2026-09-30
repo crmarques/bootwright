@@ -1,8 +1,11 @@
 package cli
 
 import (
-	"io/fs"
+	"bytes"
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -11,30 +14,66 @@ import (
 	"testing"
 )
 
-// operatorDocuments are the human journeys whose command lines must stay
-// runnable against this build's catalog.
-func operatorDocuments(t *testing.T) []string {
-	t.Helper()
-	root := filepath.Join("..", "..")
-	documents := []string{filepath.Join(root, "README.md")}
-	for _, directory := range []string{"docs", "examples"} {
-		err := filepath.WalkDir(filepath.Join(root, directory), func(path string, entry fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if entry.IsDir() && entry.Name() == "wip" {
-				return filepath.SkipDir
-			}
-			if !entry.IsDir() && strings.HasSuffix(path, ".md") {
-				documents = append(documents, path)
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatalf("walk %s: %v", directory, err)
+// operatorDocuments lists, under root, the human journeys whose command lines
+// must stay runnable against this build's catalog: the Markdown Git tracks in
+// the README, docs and examples, so no untracked or ignored file of a checkout,
+// such as a draft under examples/wip/, decides a verdict that CI reaches
+// without it. The caller's GIT_ variables never redirect the listing.
+func operatorDocuments(root string) ([]string, error) {
+	command := exec.Command("git", "ls-files", "-z", "--", "README.md", "docs", "examples")
+	command.Dir = root
+	command.Env = slices.DeleteFunc(os.Environ(), func(variable string) bool { return strings.HasPrefix(variable, "GIT_") })
+	output, err := command.Output()
+	if err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			return nil, fmt.Errorf("git ls-files: %w: %s", err, bytes.TrimSpace(exit.Stderr))
+		}
+		return nil, fmt.Errorf("git ls-files: %w", err)
+	}
+	var documents []string
+	for name := range strings.SplitSeq(string(output), "\x00") {
+		if strings.HasSuffix(name, ".md") {
+			documents = append(documents, filepath.Join(root, filepath.FromSlash(name)))
 		}
 	}
-	return documents
+	return documents, nil
+}
+
+func TestDocsCommandLinesReadOnlyTrackedDocuments(t *testing.T) {
+	root := t.TempDir()
+	for name, content := range map[string]string{
+		".gitignore": "/examples/wip/\n", "README.md": "# committed\n", "docs/guide.md": "# guide\n",
+		"examples/lab/README.md": "# lab\n", "specs/other.md": "# elsewhere\n",
+		"docs/draft-notes.md": "# untracked\n", "examples/wip/draft.md": "# ignored\n",
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	git := func(arguments ...string) {
+		t.Helper()
+		command := exec.Command("git", arguments...)
+		command.Dir = root
+		command.Env = append(slices.DeleteFunc(os.Environ(), func(variable string) bool { return strings.HasPrefix(variable, "GIT_") }),
+			"GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1")
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(arguments, " "), err, output)
+		}
+	}
+	git("init", "-q", "-b", "main")
+	git("add", ".gitignore", "README.md", "docs/guide.md", "examples/lab/README.md", "specs/other.md")
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(t.TempDir(), "index"))
+	documents, err := operatorDocuments(root)
+	if err != nil {
+		t.Fatalf("list operator documents: %v", err)
+	}
+	if want := []string{filepath.Join(root, "README.md"), filepath.Join(root, "docs", "guide.md"), filepath.Join(root, "examples", "lab", "README.md")}; !slices.Equal(documents, want) {
+		t.Fatalf("listed %q, want %q", documents, want)
+	}
 }
 
 // documentedInvocations returns every fenced code line that runs bootwright,
@@ -93,8 +132,12 @@ func flagSpellings(flags []flagSpec) map[string]bool {
 func TestDocsCommandLinesMatchTheCatalog(t *testing.T) {
 	paths := catalogPaths()
 	global := flagSpellings(globalFlags())
+	documents, err := operatorDocuments(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("list operator documents: %v", err)
+	}
 	checked := 0
-	for _, document := range operatorDocuments(t) {
+	for _, document := range documents {
 		for location, arguments := range documentedInvocations(t, document) {
 			checked++
 			var words []string

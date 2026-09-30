@@ -6,6 +6,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -67,6 +68,13 @@ func packageRoles() map[string]packageRole {
 		"internal/trust":                         domainRole,
 		// A port's shared contract suite, imported only by tests.
 		"internal/reconciliation/operationstore/areacontract": applicationRole,
+		"internal/secrets/secretstore/areacontract":           applicationRole,
+		"internal/controller/prerequisites/storagecontract":   applicationRole,
+		"internal/reconciliation/lifecycle/workspacecontract": applicationRole,
+		"internal/managedos/media/storecontract":              applicationRole,
+		// What every in-memory operation area double refuses, imported only by
+		// tests.
+		"internal/reconciliation/operationstore/areadouble": applicationRole,
 	}
 	for _, capability := range []string{
 		"addons/catalog", "addons/preflight",
@@ -124,9 +132,16 @@ func applicationDependencies() map[string][]string {
 		// package's vocabulary and nothing else.
 		"internal/reconciliation/contextguard":   {"internal/workspace/contexts"},
 		"internal/reconciliation/operationstore": {},
-		// The operation area's contract suite exercises that store's Area port
-		// and consumes nothing else.
+		// Each port's contract suite exercises that port and consumes nothing
+		// else; the workspace's also reads the operation areas and the
+		// controller evidence its views carry.
 		"internal/reconciliation/operationstore/areacontract": {"internal/reconciliation/operationstore"},
+		"internal/secrets/secretstore/areacontract":           {"internal/secrets/secretstore"},
+		"internal/controller/prerequisites/storagecontract":   {"internal/controller/prerequisites"},
+		"internal/managedos/media/storecontract":              {"internal/managedos/media"},
+		"internal/reconciliation/lifecycle/workspacecontract": {
+			"internal/controller/prerequisites", "internal/reconciliation/lifecycle", "internal/reconciliation/operationstore",
+		},
 		// Each named service is one managed-service definition and consumes only
 		// the package whose capability runs it.
 		"internal/infrastructureservices/dnsserver": {"internal/infrastructureservices/managedservice"},
@@ -268,6 +283,51 @@ func TestPackageDependencyDirection(t *testing.T) {
 			if !consumed[consumer+" "+provider] {
 				t.Errorf("applicationDependencies lets %s consume %s, which it no longer imports; remove the edge", consumer, provider)
 			}
+		}
+	}
+}
+
+// A package no production package imports, other than the executable, is one
+// only tests import: a port's contract suite or a shared double. No
+// dependency rule shows where one lives, so the Port test support row of the
+// specs/architecture.md package table names each, and names nothing else.
+func TestDocsPackageTableNamesEveryTestOnlyPackage(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "specs", "architecture.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, table, found := strings.Cut(string(data), "\n| Kind | Path | Owns | Role |\n")
+	table, _, _ = strings.Cut(table, "\n\n")
+	var cells []string
+	for _, line := range strings.Split(table, "\n") {
+		if strings.HasPrefix(line, "| Port test support | ") {
+			cells = strings.Split(line, " | ")
+		}
+	}
+	if !found || len(cells) < 2 {
+		t.Fatal("the specs/architecture.md package table has no Port test support row")
+	}
+	named := map[string]bool{}
+	for index, part := range strings.Split(cells[1], "`") {
+		if index%2 == 1 {
+			named["internal/"+part] = true
+		}
+	}
+	owners, imported := map[string]bool{}, map[string]bool{}
+	for _, source := range productionSources(t) {
+		owners[source.owner] = true
+		for _, dependency := range source.imports {
+			imported[strings.TrimPrefix(dependency.path, modulePath)] = true
+		}
+	}
+	for _, owner := range sortedKeys(owners) {
+		if owner != "cmd/bootwright" && !imported[owner] && !named[owner] {
+			t.Errorf("only tests import %s, which the Port test support row of the specs/architecture.md package table does not name", owner)
+		}
+	}
+	for _, name := range sortedKeys(named) {
+		if !owners[name] || imported[name] {
+			t.Errorf("the Port test support row of the specs/architecture.md package table names %s, which is no package only tests import", name)
 		}
 	}
 }

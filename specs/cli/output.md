@@ -394,7 +394,13 @@ reported through the source coordinates and `$.metadata.name` field without
 repeating unbounded authored text in every diagnostic. This table is the
 registry: it lists every code production code emits, from a function body or a
 package-level variable initializer, and nothing else
-(`TestDiagnosticCodesMatchOutputSpec`).
+(`TestDiagnosticCodesMatchOutputSpec`). That check follows a code through
+constants, variables, parameters and calls, a call through a variable bound to
+a function included. A write it follows that gives no single value (a tuple or
+compound assignment, a range clause, a taken address, a package variable
+declared without a value) fails the check, and so does a function storing its
+argument as a code that is used as a value other than by calling it or binding
+it to a variable.
 
 | Code | Meaning |
 | --- | --- |

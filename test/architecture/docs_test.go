@@ -2,9 +2,12 @@ package architecture_test
 
 import (
 	"bufio"
+	"bytes"
+	"errors"
 	"fmt"
-	"io/fs"
 	"os"
+	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -15,9 +18,9 @@ import (
 )
 
 // docsByteBudgets bounds the files an agent reads at the start of every task or
-// every tracked edit. A budget more than a tenth above its file's size fails,
-// so each one follows its file down; never raise one to admit growth that
-// belongs in an on-demand page.
+// every tracked edit, each .claude/rules page among them. A budget more than a
+// tenth above its file's size fails, so each one follows its file down; never
+// raise one to admit growth that belongs in an on-demand page.
 func docsByteBudgets() map[string]int {
 	return map[string]int{
 		"AGENTS.md":           2516,
@@ -25,6 +28,9 @@ func docsByteBudgets() map[string]int {
 		"specs/index.md":      4656,
 		"specs/milestones.md": 8192,
 		".agents/skills/code-implementation/SKILL.md": 3072,
+		".claude/rules/ansible.md":                    491,
+		".claude/rules/go.md":                         564,
+		".claude/rules/guidance.md":                   484,
 	}
 }
 
@@ -46,42 +52,178 @@ type markdownFile struct {
 	lines []string
 }
 
-// guidanceFiles lists every tracked-looking Markdown file outside caches,
-// build output and version-control metadata.
-func guidanceFiles(t *testing.T) []markdownFile {
-	t.Helper()
-	root := filepath.Join("..", "..")
-	var files []markdownFile
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		name := entry.Name()
-		if entry.IsDir() {
-			switch name {
-			case ".git", ".cache", "bin", "output", "__pycache__", ".pytest_cache":
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(name, ".md") {
-			return nil
-		}
-		relative, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		files = append(files, markdownFile{path: filepath.ToSlash(relative), lines: strings.Split(string(data), "\n")})
-		return nil
-	})
+// trackedFiles lists, relative to root, the files Git tracks there, so no
+// untracked or ignored file of a checkout decides a docs verdict that CI
+// reaches without it. The caller's GIT_ variables never redirect the listing.
+func trackedFiles(root string) ([]string, error) {
+	command := exec.Command("git", "ls-files", "-z")
+	command.Dir = root
+	command.Env = slices.DeleteFunc(os.Environ(), func(variable string) bool { return strings.HasPrefix(variable, "GIT_") })
+	output, err := command.Output()
 	if err != nil {
-		t.Fatalf("walk guidance: %v", err)
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			return nil, fmt.Errorf("git ls-files: %w: %s", err, bytes.TrimSpace(exit.Stderr))
+		}
+		return nil, fmt.Errorf("git ls-files: %w", err)
+	}
+	var files []string
+	for name := range strings.SplitSeq(string(output), "\x00") {
+		if name != "" {
+			files = append(files, name)
+		}
+	}
+	return files, nil
+}
+
+// trackedPaths returns the tracked files together with every directory that
+// holds one, each spelled as path.Clean spells it: the names a checkout without
+// untracked or ignored files has.
+func trackedPaths(files []string) map[string]bool {
+	present := map[string]bool{}
+	for _, name := range files {
+		present[name] = true
+		for directory := path.Dir(name); !present[directory]; directory = path.Dir(directory) {
+			present[directory] = true
+		}
+	}
+	return present
+}
+
+// trackedMarkdown reads each Markdown file Git tracks under root. A tracked
+// file the working tree lacks fails until its removal is staged.
+func trackedMarkdown(root string) ([]markdownFile, error) {
+	names, err := trackedFiles(root)
+	if err != nil {
+		return nil, err
+	}
+	var files []markdownFile
+	for _, name := range names {
+		if !strings.HasSuffix(name, ".md") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, markdownFile{path: name, lines: strings.Split(string(data), "\n")})
+	}
+	return files, nil
+}
+
+// repositoryFiles lists the files the repository tracks.
+func repositoryFiles(t *testing.T) []string {
+	t.Helper()
+	files, err := trackedFiles(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("list tracked files: %v", err)
 	}
 	return files
+}
+
+// trackedGlob returns the tracked files the slash-separated pattern matches.
+func trackedGlob(t *testing.T, pattern string) []string {
+	t.Helper()
+	var matches []string
+	for _, name := range repositoryFiles(t) {
+		matched, err := path.Match(pattern, name)
+		if err != nil {
+			t.Fatalf("match %s: %v", pattern, err)
+		}
+		if matched {
+			matches = append(matches, name)
+		}
+	}
+	return matches
+}
+
+// guidanceFiles reads every Markdown file the repository tracks.
+func guidanceFiles(t *testing.T) []markdownFile {
+	t.Helper()
+	files, err := trackedMarkdown(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("read guidance: %v", err)
+	}
+	return files
+}
+
+func TestTrackedMarkdownSkipsUntrackedAndIgnoredFiles(t *testing.T) {
+	root := t.TempDir()
+	ratchetWrite(t, root, ".gitignore", "/wip/\n", 0o644)
+	ratchetWrite(t, root, "README.md", "# committed\n", 0o644)
+	ratchetWrite(t, root, "docs/guide.md", "# guide\n", 0o644)
+	ratchetGit(t, root, "init", "-q", "-b", "main")
+	ratchetGit(t, root, "add", ".")
+	ratchetGit(t, root, "commit", "-q", "-m", "base")
+	ratchetWrite(t, root, "README.md", "# edited\n", 0o644)
+	ratchetWrite(t, root, "staged.md", "# staged\n", 0o644)
+	ratchetGit(t, root, "add", "staged.md")
+	ratchetWrite(t, root, "notes.md", "# untracked\n", 0o644)
+	ratchetWrite(t, root, "wip/draft.md", "# ignored\n", 0o644)
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(t.TempDir(), "index"))
+
+	read := func() []string {
+		t.Helper()
+		files, err := trackedMarkdown(root)
+		if err != nil {
+			t.Fatalf("read tracked Markdown: %v", err)
+		}
+		var headings []string
+		for _, file := range files {
+			headings = append(headings, file.path+": "+file.lines[0])
+		}
+		return headings
+	}
+	if got, want := read(), []string{"README.md: # edited", "docs/guide.md: # guide", "staged.md: # staged"}; !slices.Equal(got, want) {
+		t.Fatalf("read %q, want %q", got, want)
+	}
+
+	if err := os.Remove(filepath.Join(root, "docs", "guide.md")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := trackedMarkdown(root); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a tracked file the working tree lacks read as %v, want it to fail", err)
+	}
+	ratchetGit(t, root, "rm", "-q", "docs/guide.md")
+	if got, want := read(), []string{"README.md: # edited", "staged.md: # staged"}; !slices.Equal(got, want) {
+		t.Fatalf("after staging the removal, read %q, want %q", got, want)
+	}
+}
+
+func TestDocsLinksAndCitedPathsNameOnlyTrackedFiles(t *testing.T) {
+	root := t.TempDir()
+	ratchetWrite(t, root, ".gitignore", "/examples/wip/\n", 0o644)
+	ratchetWrite(t, root, "README.md", "# Fixture\n\n"+
+		"See [the guide](docs/guide.md#guide), [the docs](docs/), [notes](docs/notes.md) and [a draft](examples/wip/draft.md).\n"+
+		"Cite `docs/guide.md:1`, `docs/`, `docs/notes.md` and `examples/wip/draft.md`.\n", 0o644)
+	ratchetWrite(t, root, "docs/guide.md", "# Guide\n", 0o644)
+	ratchetGit(t, root, "init", "-q", "-b", "main")
+	ratchetGit(t, root, "add", ".")
+	ratchetGit(t, root, "commit", "-q", "-m", "base")
+	ratchetWrite(t, root, "docs/notes.md", "# untracked\n", 0o644)
+	ratchetWrite(t, root, "examples/wip/draft.md", "# ignored\n", 0o644)
+
+	files, err := trackedMarkdown(root)
+	if err != nil {
+		t.Fatalf("read tracked Markdown: %v", err)
+	}
+	names, err := trackedFiles(root)
+	if err != nil {
+		t.Fatalf("list tracked files: %v", err)
+	}
+	present := trackedPaths(names)
+	if got, want := linkViolations(files, present), []string{
+		"README.md:3 links to missing docs/notes.md",
+		"README.md:3 links to missing examples/wip/draft.md",
+	}; !slices.Equal(got, want) {
+		t.Fatalf("link violations = %q, want %q", got, want)
+	}
+	if got, want := citedPathViolations(present, files, nil), []string{
+		"README.md:4 cites missing path docs/notes.md",
+		"README.md:4 cites missing path examples/wip/draft.md",
+	}; !slices.Equal(got, want) {
+		t.Fatalf("cited path violations = %q, want %q", got, want)
+	}
 }
 
 // proseLines yields the lines outside fenced code blocks, numbered from one.
@@ -137,20 +279,27 @@ func githubSlug(heading string) string {
 var markdownLink = regexp.MustCompile(`\]\(([^)\s]+)\)`)
 
 func TestDocsLinksAndAnchorsResolve(t *testing.T) {
-	files := guidanceFiles(t)
+	for _, violation := range linkViolations(guidanceFiles(t), trackedPaths(repositoryFiles(t))) {
+		t.Error(violation)
+	}
+}
+
+// linkViolations reports each relative link to a name present lacks and each
+// anchor its Markdown target lacks.
+func linkViolations(files []markdownFile, present map[string]bool) []string {
 	byPath := map[string]markdownFile{}
 	for _, file := range files {
 		byPath[file.path] = file
 	}
 	slugs := map[string]map[string]bool{}
-	anchorsOf := func(path string) map[string]bool {
-		if found, ok := slugs[path]; ok {
+	anchorsOf := func(name string) map[string]bool {
+		if found, ok := slugs[name]; ok {
 			return found
 		}
-		slugs[path] = headingSlugs(byPath[path])
-		return slugs[path]
+		slugs[name] = headingSlugs(byPath[name])
+		return slugs[name]
 	}
-	root := filepath.Join("..", "..")
+	var violations []string
 	for _, file := range files {
 		proseLines(file, func(number int, line string) {
 			for _, match := range markdownLink.FindAllStringSubmatch(inlineCode.ReplaceAllString(line, ""), -1) {
@@ -158,12 +307,12 @@ func TestDocsLinksAndAnchorsResolve(t *testing.T) {
 				if strings.Contains(target, "://") || strings.HasPrefix(target, "mailto:") {
 					continue
 				}
-				path, anchor, _ := strings.Cut(target, "#")
+				linked, anchor, _ := strings.Cut(target, "#")
 				resolved := file.path
-				if path != "" {
-					resolved = filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(file.path), path)))
-					if _, err := os.Stat(filepath.Join(root, resolved)); err != nil {
-						t.Errorf("%s:%d links to missing %s", file.path, number, target)
+				if linked != "" {
+					resolved = path.Join(path.Dir(file.path), linked)
+					if !present[resolved] {
+						violations = append(violations, fmt.Sprintf("%s:%d links to missing %s", file.path, number, target))
 						continue
 					}
 				}
@@ -171,11 +320,12 @@ func TestDocsLinksAndAnchorsResolve(t *testing.T) {
 					continue
 				}
 				if !anchorsOf(resolved)[anchor] {
-					t.Errorf("%s:%d links to missing anchor %s", file.path, number, target)
+					violations = append(violations, fmt.Sprintf("%s:%d links to missing anchor %s", file.path, number, target))
 				}
 			}
 		})
 	}
+	return violations
 }
 
 var (
@@ -184,20 +334,20 @@ var (
 )
 
 func TestDocsRepositoryPathsExist(t *testing.T) {
-	for _, violation := range citedPathViolations(filepath.Join("..", ".."), guidanceFiles(t), ignoredGuidancePaths) {
+	for _, violation := range citedPathViolations(trackedPaths(repositoryFiles(t)), guidanceFiles(t), ignoredGuidancePaths) {
 		t.Error(violation)
 	}
 }
 
 // citedPathViolations reports each backticked repository path that names
-// nothing under root, and each ignored path no file outside the ignored paths
-// cites. Whether an ignored path exists never decides, since a fresh clone has
-// none.
-func citedPathViolations(root string, files []markdownFile, ignored map[string]bool) []string {
+// nothing present holds, and each ignored path no file outside the ignored
+// paths cites. Whether an ignored path exists never decides, since a fresh
+// clone has none.
+func citedPathViolations(present map[string]bool, files []markdownFile, ignored map[string]bool) []string {
 	var violations []string
 	cited := map[string]bool{}
 	for _, file := range files {
-		inside := slices.ContainsFunc(sortedKeys(ignored), func(path string) bool { return strings.HasPrefix(file.path, path) })
+		inside := slices.ContainsFunc(sortedKeys(ignored), func(prefix string) bool { return strings.HasPrefix(file.path, prefix) })
 		proseLines(file, func(number int, line string) {
 			for _, match := range citedPath.FindAllStringSubmatch(line, -1) {
 				token := strings.TrimRight(match[1], ".,;")
@@ -208,16 +358,16 @@ func citedPathViolations(root string, files []markdownFile, ignored map[string]b
 					cited[token] = cited[token] || !inside
 					continue
 				}
-				path := token
-				if index := strings.Index(path, ":"); index >= 0 {
-					path = path[:index]
+				name := token
+				if index := strings.Index(name, ":"); index >= 0 {
+					name = name[:index]
 				}
 				// A Go reference such as internal/cli.Confirmation names a
 				// symbol of the package directory before the dot.
-				if symbol := goSymbolReference.FindStringIndex(path); symbol != nil {
-					path = path[:symbol[0]]
+				if symbol := goSymbolReference.FindStringIndex(name); symbol != nil {
+					name = name[:symbol[0]]
 				}
-				if _, err := os.Stat(filepath.Join(root, path)); err != nil {
+				if !present[path.Clean(name)] {
 					violations = append(violations, fmt.Sprintf("%s:%d cites missing path %s", file.path, number, token))
 				}
 			}
@@ -246,27 +396,17 @@ func TestDocsCitedTestsExist(t *testing.T) {
 	root := filepath.Join("..", "..")
 	declared := map[string]bool{}
 	declaration := regexp.MustCompile(`(?m)^func (Test[A-Za-z0-9_]+)\(`)
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+	for _, name := range repositoryFiles(t) {
+		if !strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
 		if err != nil {
-			return err
-		}
-		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == ".cache") {
-			return filepath.SkipDir
-		}
-		if entry.IsDir() || !strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
+			t.Fatalf("read tests: %v", err)
 		}
 		for _, match := range declaration.FindAllStringSubmatch(string(data), -1) {
 			declared[match[1]] = true
 		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk tests: %v", err)
 	}
 	for _, file := range guidanceFiles(t) {
 		proseLines(file, func(number int, line string) {
@@ -309,24 +449,25 @@ func frontmatter(t *testing.T, path string) (string, string) {
 
 func TestDocsSkillsAreDiscoverable(t *testing.T) {
 	root := filepath.Join("..", "..")
-	canonical, err := filepath.Glob(filepath.Join(root, ".agents", "skills", "*", "SKILL.md"))
-	if err != nil || len(canonical) == 0 {
-		t.Fatalf("find skills: %v", err)
+	canonical := trackedGlob(t, ".agents/skills/*/SKILL.md")
+	if len(canonical) == 0 {
+		t.Fatal("find skills: the repository tracks none")
 	}
+	wrappers := trackedGlob(t, ".claude/skills/*/SKILL.md")
 	for _, path := range canonical {
 		directory := filepath.Base(filepath.Dir(path))
-		name, description := frontmatter(t, path)
+		name, description := frontmatter(t, filepath.Join(root, path))
 		if name != directory || len(name) > 64 {
 			t.Errorf("%s: name %q must equal its directory and stay within 64 characters", path, name)
 		}
 		if description == "" || len(description) > 1536 {
 			t.Errorf("%s: description must be present and within 1,536 characters", path)
 		}
-		wrapper := filepath.Join(root, ".claude", "skills", directory, "SKILL.md")
-		if _, err := os.Stat(wrapper); err != nil {
+		wrapper := ".claude/skills/" + directory + "/SKILL.md"
+		if !slices.Contains(wrappers, wrapper) {
 			continue
 		}
-		wrapperName, wrapperDescription := frontmatter(t, wrapper)
+		wrapperName, wrapperDescription := frontmatter(t, filepath.Join(root, wrapper))
 		if wrapperName != name || wrapperDescription != description {
 			t.Errorf("%s: frontmatter differs from %s", wrapper, path)
 		}
@@ -335,43 +476,47 @@ func TestDocsSkillsAreDiscoverable(t *testing.T) {
 
 func TestDocsExamplesAreIndexed(t *testing.T) {
 	root := filepath.Join("..", "..")
+	tracked := repositoryFiles(t)
+	if !slices.Contains(tracked, "examples/README.md") {
+		t.Fatal("read examples index: the repository does not track examples/README.md")
+	}
 	index, err := os.ReadFile(filepath.Join(root, "examples", "README.md"))
 	if err != nil {
 		t.Fatalf("read examples index: %v", err)
 	}
-	entries, err := os.ReadDir(filepath.Join(root, "examples"))
-	if err != nil {
-		t.Fatalf("list examples: %v", err)
+	examples := map[string]bool{}
+	for _, name := range tracked {
+		if rest, ok := strings.CutPrefix(name, "examples/"); ok {
+			if example, _, nested := strings.Cut(rest, "/"); nested {
+				examples[example] = true
+			}
+		}
 	}
-	for _, entry := range entries {
-		if entry.IsDir() && !strings.Contains(string(index), entry.Name()+"/") {
-			t.Errorf("examples/README.md does not index examples/%s", entry.Name())
+	for _, example := range sortedKeys(examples) {
+		if !strings.Contains(string(index), example+"/") {
+			t.Errorf("examples/README.md does not index examples/%s", example)
 		}
 	}
 }
 
 func TestDocsStayWithinByteBudgets(t *testing.T) {
 	root := filepath.Join("..", "..")
-	rules, err := filepath.Glob(filepath.Join(root, ".claude", "rules", "*.md"))
-	if err != nil {
-		t.Fatalf("find rules: %v", err)
-	}
-	caps := map[string]int{}
-	for _, rule := range rules {
-		relative, _ := filepath.Rel(root, rule)
-		caps[filepath.ToSlash(relative)] = 1024
-	}
-	for _, violation := range byteBudgetViolations(root, docsByteBudgets(), caps) {
+	for _, violation := range byteBudgetViolations(root, repositoryFiles(t), docsByteBudgets(), trackedGlob(t, ".claude/rules/*.md")) {
 		t.Error(violation)
 	}
 }
 
-// byteBudgetViolations reports each file above its budget or cap, and each
-// budget, never a cap, more than a tenth above its file's size. The largest
-// budget a file of size bytes admits is size+size/9.
-func byteBudgetViolations(root string, budgets, caps map[string]int) []string {
+// byteBudgetViolations reports each budgeted file outside tracked, each file
+// above its budget, each budget more than a tenth above its file's size, and
+// each required file without a budget. The largest budget a file of size bytes
+// admits is size+size/9.
+func byteBudgetViolations(root string, tracked []string, budgets map[string]int, required []string) []string {
 	var violations []string
-	check := func(path string, limit int, ratcheted bool) {
+	check := func(path string, limit int) {
+		if !slices.Contains(tracked, path) {
+			violations = append(violations, fmt.Sprintf("budgeted file %s is not tracked", path))
+			return
+		}
 		info, err := os.Stat(filepath.Join(root, path))
 		if err != nil {
 			violations = append(violations, fmt.Sprintf("budgeted file %s: %v", path, err))
@@ -380,15 +525,17 @@ func byteBudgetViolations(root string, budgets, caps map[string]int) []string {
 		size := int(info.Size())
 		if size > limit {
 			violations = append(violations, fmt.Sprintf("%s is %d bytes, above its %d-byte budget; move detail to an on-demand page", path, size, limit))
-		} else if ratcheted && limit-size > limit/10 {
+		} else if limit-size > limit/10 {
 			violations = append(violations, fmt.Sprintf("%s is %d bytes, more than a tenth below its %d-byte budget; lower the budget to %d", path, size, limit, size+size/9))
 		}
 	}
 	for _, path := range sortedKeys(budgets) {
-		check(path, budgets[path], true)
+		check(path, budgets[path])
 	}
-	for _, path := range sortedKeys(caps) {
-		check(path, caps[path], false)
+	for _, path := range required {
+		if _, budgeted := budgets[path]; !budgeted {
+			violations = append(violations, fmt.Sprintf("%s has no byte budget; add one to docsByteBudgets", path))
+		}
 	}
 	return violations
 }

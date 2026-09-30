@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func TestPrivilegeClassificationHasNoInformationOrInvalidEffects(t *testing.T) {
@@ -37,21 +39,29 @@ func TestPrivilegeClassificationHasNoInformationOrInvalidEffects(t *testing.T) {
 	}
 }
 
-func TestPrivilegeFailurePreservesJSONEnvelope(t *testing.T) {
+func TestPrivilegeDiagnosticPreservesTheOutputContract(t *testing.T) {
+	refusal := diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: "sudo invocation failed", Remediation: "run sudo -v"}
 	classification := ClassifyInvocation([]string{"render", "effective", "--output", "json"})
 	if !classification.RequiresRoot || !classification.JSON {
 		t.Fatal(classification)
 	}
 	var out, errOut bytes.Buffer
-	if code := classification.Failure(&out, &errOut, "runtime.privilege", "sudo invocation failed", 1); code != 1 {
+	if code := classification.Diagnostic(&out, &errOut, refusal, 1); code != 1 {
 		t.Fatal(code)
 	}
 	var result commandEnvelope
 	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.Command != "render effective" || result.ExitCode != 1 || result.OK || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "runtime.privilege" || errOut.Len() != 0 {
+	if result.Command != "render effective" || result.ExitCode != 1 || result.OK || len(result.Diagnostics) != 1 || result.Diagnostics[0] != refusal || errOut.Len() != 0 {
 		t.Fatalf("envelope %+v stderr %q", result, errOut.String())
+	}
+	out.Reset()
+	if code := ClassifyInvocation([]string{"render", "effective"}).Diagnostic(&out, &errOut, refusal, 1); code != 1 {
+		t.Fatal(code)
+	}
+	if want := "[FAIL] runtime.privilege: sudo invocation failed; next: run sudo -v\n"; out.Len() != 0 || errOut.String() != want {
+		t.Fatalf("stdout %q stderr %q, want stderr %q", out.String(), errOut.String(), want)
 	}
 }
 

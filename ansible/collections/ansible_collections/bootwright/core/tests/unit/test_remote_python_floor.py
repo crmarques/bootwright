@@ -9,9 +9,11 @@ run only on the controller and are not checked.
 ast.parse with feature_version is best-effort. It rejects match statements,
 except* and type parameter lists, but it accepts parenthesized context
 managers, same-quote nested f-strings, a runtime X | None outside an
-annotation and calls to library functions added after 3.9. Only importing
-each file under a real 3.9 interpreter proves those; that interpreter-backed
-import check is a follow-up.
+annotation and calls to library functions added after 3.9. The sanity suite
+of scripts/ansible-check imports each file under the real 3.9 interpreter
+that scripts/tools/ansible-check-floor-interpreter.json pins, which proves the
+grammar and whatever runs at import; a later library call inside a function
+body runs only when that function does.
 """
 
 from __future__ import annotations

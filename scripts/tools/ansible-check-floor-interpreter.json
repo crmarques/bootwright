@@ -1,0 +1,8 @@
+{
+  "version": "3.9.25",
+  "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20251031/cpython-3.9.25%2B20251031-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+  "filename": "cpython-3.9.25+20251031-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+  "sha256": "fe04e8b27bd69ca2144fc542428f8b9b5287b6a2e45516a4acfe2c2bc3102773",
+  "bytes": 28338050,
+  "member": "python/bin/python3"
+}

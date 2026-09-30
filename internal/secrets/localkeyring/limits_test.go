@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -258,7 +257,7 @@ func TestPublishRejectsOversizedProjectedEnvelopeBeforeEffects(t *testing.T) {
 		t.Fatalf("test index must exceed only the projected envelope bound: size=%d error=%v", indexSize, err)
 	}
 
-	area := &limitArea{files: map[string][]byte{}}
+	area := initializedLimitArea(map[string][]byte{})
 	random := &sequenceReader{}
 	session := &session{
 		implementation: NewWithOptions(Options{Random: random}),
@@ -289,7 +288,7 @@ func TestSealReservationCeilingIncludesAbandonedReservations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	area := &limitArea{files: map[string][]byte{ledgerPath(keyID): initial}}
+	area := initializedLimitArea(map[string][]byte{ledgerPath(keyID): initial})
 	newSession := func() *session {
 		return &session{
 			context:  secretstore.Context{Name: contextName},
@@ -363,63 +362,6 @@ func (r *sequenceReader) Read(value []byte) (int, error) {
 	return len(value), nil
 }
 
-type limitArea struct {
-	files     map[string][]byte
-	mutations int
-}
-
-func (a *limitArea) Read(ctx context.Context, path string, maximum int) ([]byte, bool, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, false, err
-	}
-	data, exists := a.files[path]
-	if !exists {
-		return nil, false, nil
-	}
-	if len(data) > maximum {
-		return nil, false, errors.New("record exceeds read limit")
-	}
-	return bytes.Clone(data), true, nil
-}
-
-func (a *limitArea) ReadMutable(ctx context.Context, path string, maximum int) ([]byte, bool, error) {
-	return a.Read(ctx, path, maximum)
-}
-
-func (*limitArea) Entries(context.Context, string) ([]secretstore.Entry, error) { return nil, nil }
-
-func (a *limitArea) EnsureDirectory(context.Context, string) error {
-	a.mutations++
-	return nil
-}
-
-func (a *limitArea) WriteExclusive(_ context.Context, path string, data []byte) error {
-	a.mutations++
-	if _, exists := a.files[path]; exists {
-		return errors.New("entry already exists")
-	}
-	a.files[path] = bytes.Clone(data)
-	return nil
-}
-
-func (a *limitArea) PublishExclusive(ctx context.Context, path string, data []byte) error {
-	return a.WriteExclusive(ctx, path, data)
-}
-
-func (a *limitArea) Replace(_ context.Context, path string, replacement, expected []byte) (secretstore.Outcome, error) {
-	a.mutations++
-	if !bytes.Equal(a.files[path], expected) {
-		return secretstore.NotCommitted, nil
-	}
-	a.files[path] = bytes.Clone(replacement)
-	return secretstore.Committed, nil
-}
-
-func (a *limitArea) Sync(context.Context, string) error {
-	a.mutations++
-	return nil
-}
-
 func repeatedJSONArray(prefix, suffix, element string, count int) []byte {
 	var result strings.Builder
 	result.Grow(len(prefix) + len(suffix) + count*(len(element)+1))
@@ -451,12 +393,3 @@ func limitFailureCode(err error) string {
 	}
 	return diagnostics[0].Code
 }
-
-func (a *limitArea) Prune(context.Context, []byte, []string) error { a.mutations++; return nil }
-
-func (a *limitArea) PruneUnpublished(context.Context, []secretstore.RecordExpectation, []string) error {
-	a.mutations++
-	return nil
-}
-
-func (a *limitArea) SyncFile(context.Context, string) error { a.mutations++; return nil }

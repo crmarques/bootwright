@@ -1,9 +1,12 @@
 #!/bin/sh
-# Test what this branch changed: every Go package with a changed file since the
-# branch left main, every package that depends on one, and the architecture
-# fitness suite. A change to the module files, or no base to compare against,
-# tests everything. A changed directory the default build does not list, such
-# as a package behind a build tag, is named and left to its own gate.
+# Test what this branch changed since it left main: every Go package with a
+# changed Go file, or whose directory encloses a changed file that is not Go
+# source; every package that depends on one, directly or only through its
+# tests; every package whose tests name, as a quoted path, the first path
+# element of a changed file that is not Go source; and the architecture fitness
+# suite. A change to the module files, or no base to compare against, tests
+# everything. A selected directory the default build does not list, such as a
+# package behind a build tag, is named and left to its own gate.
 set -eu
 repository=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repository"
@@ -22,22 +25,74 @@ directories=$(printf '%s\n' "$changed" | grep '\.go$' | while IFS= read -r file;
     directory=$(dirname -- "$file")
     if test -d "$directory"; then printf '%s\n' "$directory"; fi
 done | sort -u)
-if test -z "$directories"; then
+# A test reads a repository file by a path that climbs out of its package, such
+# as ../../specs, so a changed file that is not Go source selects every package
+# whose tests name the file's first path element as a quoted path. The search
+# is taken on its own so that its failure stops the run; exit status 1, no name
+# found, is not a failure.
+others=$(printf '%s\n' "$changed" | grep -v -e '\.go$' -e '^$' | sort -u)
+roots=$(printf '%s\n' "$others" | cut -d / -f 1 | sort -u)
+set --
+while IFS= read -r root; do
+    if test -n "$root"; then
+        set -- "$@" -e "\"$root\"" -e "\"$root/" -e "../$root\"" -e "../$root/"
+    fi
+done <<EOF
+$roots
+EOF
+named=
+if test $# -gt 0; then
+    named=$(git grep -l --no-color --untracked -F "$@" -- '*_test.go' || test $? -eq 1)
+fi
+readers=$(printf '%s\n' "$named" | grep '\.go$' | while IFS= read -r file; do dirname -- "$file"; done | sort -u)
+if test -z "$directories$readers$others"; then
     exec ./scripts/go test ./test/architecture/...
 fi
 # The listing is taken on its own so that its failure stops the run: piped into
 # the selection, a failed listing left out every package it could not list.
-graph=$(./scripts/go list -f '{{.ImportPath}} {{join .Deps " "}}' ./...)
-listed=$(printf '%s\n' "$graph" | cut -d ' ' -f 1)
-printf '%s\n' "$directories" | while IFS= read -r directory; do
+graph=$(./scripts/go list -f '{{.ImportPath}}{{"\t"}}{{join .Deps " "}}{{"\t"}}{{join .TestImports " "}} {{join .XTestImports " "}}' ./...)
+listed=$(printf '%s\n' "$graph" | cut -f 1)
+printf '%s\n%s\n' "$directories" "$readers" | grep -v '^$' | sort -u | while IFS= read -r directory; do
     target=$module/$directory
     if test "$directory" = .; then target=$module; fi
     if ! printf '%s\n' "$listed" | grep -Fqx -- "$target"; then
         printf 'quick-test: %s is outside the default build; its own gate runs it\n' "$directory" >&2
     fi
 done
-targets=$(printf '%s\n' "$directories" | sed "s|^\.$|$module|; s|^\([^/].*\)$|$module/\1|" | sort -u)
-packages=$(printf '%s\n' "$graph" | awk -v targets="$targets" '
-    BEGIN { n = split(targets, list, "\n"); for (i = 1; i <= n; i++) wanted[list[i]] = 1 }
-    { for (i = 1; i <= NF; i++) if ($i in wanted) { print $1; next } }')
+# A file that is not Go source belongs to every listed package whose directory
+# encloses it, not only the nearest: a go:embed pattern, like a test's read of
+# its testdata, reaches into a subdirectory that holds another package. The
+# listing reaches awk through the environment, as a POSIX awk -v value holds no
+# newline.
+owners=$(printf '%s\n' "$others" | listed=$listed awk -v module="$module" '
+    BEGIN { n = split(ENVIRON["listed"], list, "\n"); for (i = 1; i <= n; i++) known[list[i]] = 1 }
+    /./ {
+        for (path = module "/" $0; length(path) > length(module); ) {
+            sub("/[^/]*$", "", path)
+            if (path in known) print path
+        }
+    }')
+targets=$({ printf '%s\n' "$directories" | sed "s|^\.$|$module|; s|^\([^/].*\)$|$module/\1|"; printf '%s\n' "$owners"; } | sort -u)
+readers=$(printf '%s\n' "$readers" | sed "s|^\.$|$module|; s|^\([^/].*\)$|$module/\1|" | sort -u)
+# A package is affected when it or one of its dependencies is a target; it is
+# tested when it is affected, when its tests import an affected package, or
+# when its tests read a changed file.
+packages=$(printf '%s\n' "$graph" | awk -F '\t' -v targets="$targets" -v readers="$readers" '
+    BEGIN {
+        n = split(targets, list, "\n"); for (i = 1; i <= n; i++) wanted[list[i]] = 1
+        n = split(readers, list, "\n"); for (i = 1; i <= n; i++) reads[list[i]] = 1
+    }
+    {
+        path[NR] = $1; tests[NR] = $3
+        n = split($1 " " $2, deps, " ")
+        for (i = 1; i <= n; i++) if (deps[i] in wanted) { affected[$1] = 1; break }
+    }
+    END {
+        for (line = 1; line <= NR; line++) {
+            selected = (path[line] in affected) || (path[line] in reads)
+            n = split(tests[line], imports, " ")
+            for (i = 1; i <= n && !selected; i++) selected = (imports[i] in affected)
+            if (selected) print path[line]
+        }
+    }')
 exec ./scripts/go test ./test/architecture/... $packages

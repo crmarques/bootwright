@@ -1185,3 +1185,42 @@ run.
 B67 and B73. The automation digest moves: finish or destroy in-flight
 operations with the build that registered them, then run `setup`. Refused
 record states have no recovery yet (B136).
+
+### X27 — tooling and suites from X19 to X25
+
+**Owner:** Architecture, with Controller, Workspace and CLI. Integrated on
+local `main` on 2026-09-30 as one commit, beside X26, on explicit request.
+**Items:** B117, B118, B124, B125, B126, B127, B128, B130, B134, B135.
+
+**Outcome:** every collection module imports under a pinned Python 3.9 floor
+interpreter in the sanity suite (B117); ansible-core's `latest` resolves from
+PyPI's Index API (B118); the diagnostic registry follows the other paths a
+code takes (B124); quick-test selects the packages whose tests read a changed
+file, and the package a moved file left (B125); the docs tests read only
+tracked Markdown, and a guard names every docs check that walks the working
+tree (B126); contract suites hold the secret store's area, controller storage
+and the lifecycle workspace (B127); the milestone checker refuses completed
+items left on a page, planned slices naming absent items, done milestones with
+open Requires, unknown Kinds and a stale Next column (B128); the plain
+collection test loop loads the collection (B130); shell completion's path
+bounds are tested (B134); and the composition root's leftovers are gone (B135).
+
+**Guard tests:** the ones each item's commit names, among them the Python 3.9
+import in `./scripts/ansible-check --suite sanity`, the diagnostic registry
+fixture rows, the quick-test selection tests, the tracked-walk guard and the
+milestone checker rules under `make docs-check`.
+
+**Review:** four findings; three in scope and fixed (a constant declared in
+two platform files, two docs tests still reading untracked Markdown, and the
+architecture spec's package table), one older registry gap recorded in B150.
+The walk guard's precision, which three check rounds narrowed, is recorded in
+B148, and the architecture spec now says the guard matches by name.
+
+**Gates:** `make check-offline tidy-check modules-check vulncheck docs-check
+race` and `./scripts/ansible-check --suite units`, `sanity`, `integration` and
+`lint` pass on the integrated slice and on the squashed commit over X26. No
+real-host run.
+
+**Constraints left behind:** new items B148 to B157. Each ansible-check cache
+needs `python3 scripts/tools/ansible_test_prepare.py` once, so it holds the
+CPython 3.9 floor interpreter the sanity suite now pins.

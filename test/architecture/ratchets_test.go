@@ -13,29 +13,29 @@ import (
 
 func TestByteBudgetsFailWithMoreThanATenthToSpare(t *testing.T) {
 	root := t.TempDir()
-	for name, size := range map[string]int{"exact.md": 90, "slack.md": 89, "over.md": 101, "rule.md": 10} {
+	for name, size := range map[string]int{"exact.md": 90, "slack.md": 89, "over.md": 101, "rule.md": 10, "untracked.md": 90} {
 		ratchetWrite(t, root, name, strings.Repeat("x", size), 0o644)
 	}
-	budgets := map[string]int{"exact.md": 100, "slack.md": 100, "over.md": 100}
-	got := byteBudgetViolations(root, budgets, map[string]int{"rule.md": 1024})
+	tracked := []string{"exact.md", "over.md", "rule.md", "slack.md"}
+	budgets := map[string]int{"exact.md": 100, "slack.md": 100, "over.md": 100, "untracked.md": 100}
+	got := byteBudgetViolations(root, tracked, budgets, []string{"exact.md", "rule.md"})
 	want := []string{
 		"over.md is 101 bytes, above its 100-byte budget; move detail to an on-demand page",
 		"slack.md is 89 bytes, more than a tenth below its 100-byte budget; lower the budget to 98",
+		"budgeted file untracked.md is not tracked",
+		"rule.md has no byte budget; add one to docsByteBudgets",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("violations = %q, want %q", got, want)
 	}
-	budgets = map[string]int{"exact.md": 100, "slack.md": 98}
-	if got := byteBudgetViolations(root, budgets, nil); len(got) != 0 {
+	budgets = map[string]int{"exact.md": 100, "slack.md": 98, "rule.md": 11}
+	if got := byteBudgetViolations(root, tracked, budgets, []string{"exact.md", "rule.md"}); len(got) != 0 {
 		t.Fatalf("the budgets each violation names still fail: %q", got)
 	}
 }
 
 func TestIgnoredGuidancePathsFailOnceNothingOutsideThemCitesThem(t *testing.T) {
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "examples", "present"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	present := trackedPaths([]string{"examples/present/README.md"})
 	files := []markdownFile{
 		{path: "README.md", lines: []string{"Keep drafts in `examples/cited/`.", "```", "`examples/fenced/`", "```"}},
 		{path: "examples/inside/README.md", lines: []string{"`examples/inside/` only names itself."}},
@@ -45,14 +45,14 @@ func TestIgnoredGuidancePathsFailOnceNothingOutsideThemCitesThem(t *testing.T) {
 	for _, path := range []string{"examples/fenced/", "examples/inside/", "examples/present/"} {
 		want = append(want, "ignoredGuidancePaths excuses "+path+", which no guidance outside it cites; remove it")
 	}
-	if got := citedPathViolations(root, files, ignored); !slices.Equal(got, want) {
+	if got := citedPathViolations(present, files, ignored); !slices.Equal(got, want) {
 		t.Fatalf("violations = %q, want %q", got, want)
 	}
 }
 
 // ratchetGoStub stands in for scripts/go. It answers the two listings
 // quick-test takes with the output their templates define
-// (https://github.com/golang/go/blob/go1.26.7/src/cmd/go/internal/list/list.go#L119),
+// (https://github.com/golang/go/blob/go1.26.7/src/cmd/go/internal/list/list.go#L119-L121),
 // omitting a directory whose files a build tag excludes, as ./... does
 // (https://github.com/golang/go/blob/go1.26.7/src/cmd/go/internal/modload/search.go#L142-L144),
 // and fails after printing when list-fails exists, as a listing with an
@@ -62,8 +62,10 @@ const ratchetGoStub = `#!/bin/sh
 case "$1" in
 list)
 	if test "$2" = -m; then echo example.test/fixture; exit 0; fi
-	test "$2 $3 $4" = '-f {{.ImportPath}} {{join .Deps " "}} ./...' || exit 2
-	printf '%s\n' example.test/fixture/a 'example.test/fixture/b example.test/fixture/a' example.test/fixture/c
+	test "$2 $3 $4" = '-f {{.ImportPath}}{{"\t"}}{{join .Deps " "}}{{"\t"}}{{join .TestImports " "}} {{join .XTestImports " "}} ./...' || exit 2
+	p=example.test/fixture
+	printf '%s\t%s\t%s %s\n' $p/a '' '' '' $p/b $p/a '' '' $p/c '' '' '' $p/c/nested '' '' '' $p/d '' $p/b '' \
+		$p/e '' '' "$p/c $p/e" $p/r '' 'os testing' '' $p/s '' 'os path/filepath testing' ''
 	test ! -e list-fails
 	;;
 test)
@@ -77,6 +79,35 @@ esac
 
 const ratchetMovedFile = "package a\n\nfunc init() { register() }\n\nfunc register() {}\n\nfunc first() {}\n\nfunc second() {}\n\nfunc third() {}\n"
 
+const ratchetSpecReader = `package r
+
+import (
+	"os"
+	"testing"
+)
+
+func TestSpec(t *testing.T) {
+	if _, err := os.ReadFile("../specs/r.md"); err != nil {
+		t.Fatal(err)
+	}
+}
+`
+
+const ratchetExampleReader = `package s
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestExamples(t *testing.T) {
+	if _, err := os.ReadDir(filepath.Join("..", "examples")); err != nil {
+		t.Fatal(err)
+	}
+}
+`
+
 func TestQuickTestSelectsChangedPackagesAndNamesWhatTheBuildOmits(t *testing.T) {
 	root := ratchetQuickTestFixture(t)
 	ratchetWrite(t, root, "a/a.go", "package a\n\nconst changed = true\n", 0o644)
@@ -86,7 +117,7 @@ func TestQuickTestSelectsChangedPackagesAndNamesWhatTheBuildOmits(t *testing.T) 
 	}
 
 	stdout, stderr, err := ratchetQuickTest(root)
-	if err != nil || stdout != "test ./test/architecture/... example.test/fixture/a example.test/fixture/b\n" ||
+	if err != nil || stdout != "test ./test/architecture/... example.test/fixture/a example.test/fixture/b example.test/fixture/d\n" ||
 		stderr != "quick-test: gated is outside the default build; its own gate runs it\n" {
 		t.Fatalf("quick-test: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
 	}
@@ -110,13 +141,72 @@ func TestQuickTestTestsThePackageAMovedFileLeft(t *testing.T) {
 	}
 
 	stdout, stderr, err := ratchetQuickTest(root)
-	if err != nil || stdout != "test ./test/architecture/... example.test/fixture/a example.test/fixture/b example.test/fixture/c\n" || stderr != "" {
+	if err != nil || stdout != "test ./test/architecture/... example.test/fixture/a example.test/fixture/b example.test/fixture/c example.test/fixture/d example.test/fixture/e\n" || stderr != "" {
 		t.Fatalf("quick-test: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
 	}
 }
 
+func TestQuickTestSelectsThePackagesWhoseTestsAloneImportAChange(t *testing.T) {
+	root := ratchetQuickTestFixture(t)
+	for _, step := range []struct{ change, want string }{
+		{"a", "example.test/fixture/a example.test/fixture/b example.test/fixture/d"},
+		{"c", "example.test/fixture/a example.test/fixture/b example.test/fixture/c example.test/fixture/d example.test/fixture/e"},
+	} {
+		ratchetWrite(t, root, step.change+"/"+step.change+".go", "package "+step.change+"\n\nconst changed = true\n", 0o644)
+		stdout, stderr, err := ratchetQuickTest(root)
+		if err != nil || stdout != "test ./test/architecture/... "+step.want+"\n" || stderr != "" {
+			t.Fatalf("quick-test after changing %s: %v\nstdout:\n%s\nstderr:\n%s", step.change, err, stdout, stderr)
+		}
+	}
+}
+
+func TestQuickTestSelectsThePackagesWhoseTestsReadAChangedFile(t *testing.T) {
+	root := ratchetQuickTestFixture(t)
+	tagged := "quick-test: tagged is outside the default build; its own gate runs it\n"
+	for _, step := range []struct{ change, want, notice string }{
+		{"docs/guide.md", "", ""},
+		{"specs/r.md", " example.test/fixture/r", tagged},
+		{"examples/demo/new.yaml", " example.test/fixture/r example.test/fixture/s", tagged},
+	} {
+		ratchetWrite(t, root, step.change, "changed\n", 0o644)
+		stdout, stderr, err := ratchetQuickTest(root)
+		if err != nil || stdout != "test ./test/architecture/..."+step.want+"\n" || stderr != step.notice {
+			t.Fatalf("quick-test after changing %s: %v\nstdout:\n%s\nstderr:\n%s", step.change, err, stdout, stderr)
+		}
+	}
+
+	// git grep refuses a negative thread count, which nothing else reads.
+	ratchetGit(t, root, "config", "grep.threads", "-1")
+	stdout, stderr, err := ratchetQuickTest(root)
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || strings.Contains(stdout, "test ") || !strings.Contains(stderr, "grep.threads") {
+		t.Fatalf("quick-test after a failed search: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+}
+
+// A go:embed directory pattern descends into every subdirectory, one holding
+// another package included, and stops only at a module boundary
+// (https://github.com/golang/go/blob/go1.26.7/src/cmd/go/internal/load/pkg.go#L2247-L2251),
+// so a file of c/nested may be c's as well.
+func TestQuickTestSelectsEveryPackageWhoseDirectoryHoldsAChangedFile(t *testing.T) {
+	root := ratchetQuickTestFixture(t)
+	for _, step := range []struct{ change, want string }{
+		{"a/testdata/x.golden", "example.test/fixture/a example.test/fixture/b example.test/fixture/d"},
+		{"c/nested/testdata/n.golden", "example.test/fixture/a example.test/fixture/b example.test/fixture/c example.test/fixture/c/nested example.test/fixture/d example.test/fixture/e"},
+	} {
+		ratchetWrite(t, root, step.change, "changed\n", 0o644)
+		stdout, stderr, err := ratchetQuickTest(root)
+		if err != nil || stdout != "test ./test/architecture/... "+step.want+"\n" || stderr != "" {
+			t.Fatalf("quick-test after changing %s: %v\nstdout:\n%s\nstderr:\n%s", step.change, err, stdout, stderr)
+		}
+	}
+}
+
 // ratchetQuickTestFixture commits, on main, a module whose packages the stub
-// lists, a package a build tag excludes and a file that a later change moves.
+// lists, a package a build tag excludes, a file that a later change moves,
+// packages whose tests alone import others, a package nested in another's
+// directory and tests, one behind a build tag, that read repository files
+// outside their package.
 func ratchetQuickTestFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
@@ -126,11 +216,19 @@ func ratchetQuickTestFixture(t *testing.T) string {
 	}
 	ratchetWrite(t, root, "scripts/quick-test", string(script), 0o755)
 	ratchetWrite(t, root, "scripts/go", ratchetGoStub, 0o755)
-	for _, name := range []string{"a", "b", "c", "gone"} {
+	for _, name := range []string{"a", "b", "c", "d", "e", "gone"} {
 		ratchetWrite(t, root, name+"/"+name+".go", "package "+name+"\n", 0o644)
 	}
 	ratchetWrite(t, root, "a/moved.go", ratchetMovedFile, 0o644)
 	ratchetWrite(t, root, "gated/gated.go", "//go:build gated\n\npackage gated\n", 0o644)
+	ratchetWrite(t, root, "b/b.go", "package b\n\nimport _ \"example.test/fixture/a\"\n", 0o644)
+	ratchetWrite(t, root, "d/d_test.go", "package d\n\nimport _ \"example.test/fixture/b\"\n", 0o644)
+	ratchetWrite(t, root, "e/e_test.go", "package e_test\n\nimport (\n\t_ \"example.test/fixture/c\"\n\t_ \"example.test/fixture/e\"\n)\n", 0o644)
+	ratchetWrite(t, root, "c/nested/nested.go", "package nested\n", 0o644)
+	ratchetWrite(t, root, "r/r_test.go", ratchetSpecReader, 0o644)
+	ratchetWrite(t, root, "tagged/tagged_test.go", strings.Replace(ratchetSpecReader, "package r", "//go:build gated\n\npackage tagged", 1), 0o644)
+	ratchetWrite(t, root, "s/s_test.go", ratchetExampleReader, 0o644)
+	ratchetWrite(t, root, "specs/r.md", "# R\n", 0o644)
 	ratchetGit(t, root, "init", "-q", "-b", "main")
 	ratchetGit(t, root, "add", ".")
 	ratchetGit(t, root, "commit", "-q", "-m", "base")
