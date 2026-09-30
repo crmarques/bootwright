@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -72,18 +73,6 @@ func ansibleFile(version, packageType, requiresPython string, yanked bool) map[s
 	return map[string]any{"filename": filename, "packagetype": packageType, "python_version": "py3", "requires_python": requiresPython, "yanked": yanked, "yanked_reason": nil, "url": "https://files.pythonhosted.org/packages/" + filename, "digests": map[string]string{"sha256": strings.Repeat("a", 64)}}
 }
 
-// ansibleMetadataFixture shapes PyPI's version-specific project JSON, the
-// metadata an exact intent reads.
-func ansibleMetadataFixture(t *testing.T, version string) []byte {
-	t.Helper()
-	record := map[string]any{"info": map[string]any{"name": "ansible-core", "version": version, "requires_python": ">=3.12"}, "urls": []map[string]any{ansibleFile(version, "bdist_wheel", ">=3.12", false)}}
-	data, err := json.Marshal(record)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return data
-}
-
 // indexEntry is one file of PyPI's Index API project page in its PEP 691
 // JSON form, keyed like the api-version 1.4 example at
 // https://docs.pypi.org/api/index-api/; the selector reads only its filename
@@ -127,7 +116,7 @@ func TestAnsibleLatestIsTheNewestQualifiedPatch(t *testing.T) {
 	}
 	files = append(files, indexRelease("2.21.11", true)...)
 	files = append(files, indexRelease("2.21.14", "incorrect build")...)
-	for _, api := range []string{"1.0", "1.4", "1.10"} {
+	for _, api := range []string{"1.0", "1.4"} {
 		if got, err := selectAnsibleRelease(ansibleIndexFixture(t, api, files...), "latest", "3.14.7"); err != nil || got != "2.21.10" {
 			t.Fatalf("api-version %s: latest is not the newest qualified patch with a live wheel: %s %+v", api, got, diagnostics.Of(err))
 		}
@@ -211,29 +200,33 @@ func TestAnsibleIndexIsNegotiatedAsPEP691JSON(t *testing.T) {
 	}
 }
 
-func TestLatestAnsibleIsSelectedFromTheIndexAPI(t *testing.T) {
-	resolver := NewBootstrapResolver()
-	requested := []string{}
-	resolver.metadata = func(_ context.Context, method, endpoint string, _ prerequisites.SetupEgress) (toolMetadata, error) {
-		requested = append(requested, method+" "+endpoint)
-		switch {
-		case method == http.MethodGet && endpoint == pythonMetadataURL:
-			return toolMetadata{data: pythonMetadataFixture(t, "3.14.7")}, nil
-		case method == http.MethodHead:
-			return toolMetadata{size: 1024}, nil
-		case method == http.MethodGet && endpoint == ansibleIndexURL:
-			return toolMetadata{data: ansibleIndexFixture(t, "1.4", indexRelease("2.21.4", false)...)}, nil
+func TestAnsibleIsSelectedFromTheIndexAPI(t *testing.T) {
+	for _, intent := range []string{"latest", "2.21.4"} {
+		resolver := NewBootstrapResolver()
+		requested := []string{}
+		resolver.metadata = func(_ context.Context, method, endpoint string, _ prerequisites.SetupEgress) (toolMetadata, error) {
+			requested = append(requested, method+" "+endpoint)
+			switch {
+			case method == http.MethodGet && endpoint == pythonMetadataURL:
+				return toolMetadata{data: pythonMetadataFixture(t, "3.14.7")}, nil
+			case method == http.MethodHead:
+				return toolMetadata{size: 1024}, nil
+			case method == http.MethodGet && endpoint == ansibleIndexURL:
+				return toolMetadata{data: ansibleIndexFixture(t, "1.4", indexRelease("2.21.4", false)...)}, nil
+			}
+			t.Fatalf("%s ansible-core consulted another publisher endpoint: %s %s", intent, method, endpoint)
+			return toolMetadata{}, nil
 		}
-		t.Fatalf("latest ansible-core consulted another publisher endpoint: %s %s", method, endpoint)
-		return toolMetadata{}, nil
-	}
-	selected := errors.New("selection finished")
-	resolver.fetch = func(context.Context, prerequisites.DependencySource, prerequisites.SetupEgress) ([]byte, error) {
-		return nil, selected
-	}
-	_, err := resolver.Resolve(t.Context(), prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, controller.DefaultDependencyVersions(), prerequisites.SetupEgress{})
-	if !errors.Is(err, selected) || !slices.Contains(requested, http.MethodGet+" "+ansibleIndexURL) {
-		t.Fatalf("latest was not selected from the Index API: %v %+v %v", requested, diagnostics.Of(err), err)
+		selected := errors.New("selection finished")
+		resolver.fetch = func(context.Context, prerequisites.DependencySource, prerequisites.SetupEgress) ([]byte, error) {
+			return nil, selected
+		}
+		versions := controller.DefaultDependencyVersions()
+		versions.Ansible = intent
+		_, err := resolver.Resolve(t.Context(), prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, versions, prerequisites.SetupEgress{})
+		if !errors.Is(err, selected) || !slices.Contains(requested, http.MethodGet+" "+ansibleIndexURL) {
+			t.Fatalf("%s was not selected from the Index API: %v %+v %v", intent, requested, diagnostics.Of(err), err)
+		}
 	}
 }
 
@@ -249,16 +242,56 @@ func TestAnsibleDoesNotDowngradeForIncompatiblePython(t *testing.T) {
 	if version, err := selectAnsibleRelease(project, "latest", "3.15.0"); err == nil {
 		t.Fatalf("an unqualified controller Python was accepted: %s", version)
 	}
-	_, err := selectAnsibleRelease(ansibleMetadataFixture(t, "2.20.1"), "2.20.1", "3.14.7")
-	if found := diagnostics.Of(err); len(found) != 1 || !strings.Contains(found[0].Message, "ansible-core "+prerequisites.QualifiedAnsibleMinor+" ") {
-		t.Fatalf("an exact release outside the qualified minor was accepted: %+v", found)
+}
+
+// An exact intent reads the same Index API page latest does and takes its
+// release only when that release is a candidate latest could select.
+func TestAnExactAnsibleIsOneOfTheIndexPagesCandidates(t *testing.T) {
+	files := append(indexRelease("2.21.4", false), indexRelease("2.21.8", false)...)
+	files = append(files, indexRelease("2.20.9", false)...)
+	files = append(files, indexRelease("2.21.5", true)...)
+	files = append(files, indexRelease("2.21.6", "incorrect build")...)
+	files = append(files, indexEntry("2.21.7", "sdist", false))
+	page := ansibleIndexFixture(t, "1.4", files...)
+	if version, err := selectAnsibleRelease(page, "2.21.4", "3.14.7"); err != nil || version != "2.21.4" {
+		t.Fatalf("an exact live release was not selected: %s %+v", version, diagnostics.Of(err))
 	}
-	exact := ansibleMetadataFixture(t, "2.21.4")
-	if version, err := selectAnsibleRelease(exact, "2.21.4", "3.14.7"); err != nil || version != "2.21.4" {
-		t.Fatalf("an exact qualified release was refused: %s %v", version, err)
+	for requested, reason := range map[string]string{
+		"2.21.5": "yanked", "2.21.6": "yanked with a reason", "2.21.7": "without a wheel", "2.21.3": "unlisted",
+	} {
+		version, err := selectAnsibleRelease(page, requested, "3.14.7")
+		if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "controller.setup" || !strings.Contains(found[0].Message, "no live wheel of ansible-core "+requested) {
+			t.Fatalf("an exact release %s was selected: %s %+v", reason, version, found)
+		}
 	}
-	if version, err := selectAnsibleRelease(exact, "2.21.3", "3.14.7"); err == nil {
-		t.Fatalf("an exact release was taken from another release's metadata: %s", version)
+	version, err := selectAnsibleRelease(page, "2.20.9", "3.14.7")
+	if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "controller.unsupported" || !strings.Contains(found[0].Message, "ansible-core "+prerequisites.QualifiedAnsibleMinor+" ") {
+		t.Fatalf("an exact release outside the qualified minor was selected: %s %+v", version, found)
+	}
+	projectJSON, err := json.Marshal(map[string]any{"info": map[string]any{"name": "ansible-core", "version": "2.21.4"}, "urls": []map[string]any{ansibleFile("2.21.4", "bdist_wheel", ">=3.12", false)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	version, err = selectAnsibleRelease(projectJSON, "2.21.4", "3.14.7")
+	if found := diagnostics.Of(err); len(found) != 1 || !strings.Contains(found[0].Message, "no valid publisher metadata") {
+		t.Fatalf("an exact release was read from the version-specific project JSON: %s %+v", version, found)
+	}
+}
+
+// PEP 629 asks a client to warn of an Index API minor newer than it knows;
+// setup refuses one instead, for latest and an exact intent alike.
+func TestAnIndexPageOfANewerMinorRefuses(t *testing.T) {
+	files := indexRelease("2.21.4", false)
+	for _, requested := range []string{"latest", "2.21.4"} {
+		if version, err := selectAnsibleRelease(ansibleIndexFixture(t, "1."+strconv.Itoa(indexAPIMinor), files...), requested, "3.14.7"); err != nil || version != "2.21.4" {
+			t.Fatalf("%s: the newest minor this build reads was refused: %s %+v", requested, version, diagnostics.Of(err))
+		}
+		for _, api := range []string{"1." + strconv.Itoa(indexAPIMinor+1), "1.10"} {
+			version, err := selectAnsibleRelease(ansibleIndexFixture(t, api, files...), requested, "3.14.7")
+			if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "controller.unsupported" || !strings.Contains(found[0].Message, "version "+api+", newer than the 1."+strconv.Itoa(indexAPIMinor)+" ") || found[0].Remediation == "" {
+				t.Fatalf("%s: an Index API page of version %s was read silently: %s %+v", requested, api, version, found)
+			}
+		}
 	}
 }
 

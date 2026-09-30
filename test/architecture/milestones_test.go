@@ -170,8 +170,13 @@ func (c *milestoneCheck) items(path, heading, header string) []milestoneItem {
 				c.report(path, row.line, "%s has Kind %q outside %s", id, row.cells[2], strings.Join(milestoneKinds, ", "))
 			}
 			if header == milestoneItemsHeader {
-				item.delivery, item.slice, _ = strings.Cut(row.cells[len(row.cells)-1], ",")
+				cell := row.cells[len(row.cells)-1]
+				var suffixed bool
+				item.delivery, item.slice, suffixed = strings.Cut(cell, ",")
 				item.delivery, item.slice = strings.TrimSpace(item.delivery), strings.TrimSpace(item.slice)
+				if suffixed && item.slice == "" {
+					c.report(path, row.line, "%s Delivery %q ends in an empty slice suffix", id, cell)
+				}
 				if !slices.Contains(milestoneItemDeliveries, item.delivery) {
 					c.report(path, row.line, "%s has unknown Delivery %q", id, item.delivery)
 				}
@@ -253,10 +258,13 @@ func milestoneLinksSliceRecord(page string) bool {
 	return false
 }
 
-func (c *milestoneCheck) milestone(entry milestoneStatusEntry, items []milestoneItem, page string) {
+func (c *milestoneCheck) milestone(entry milestoneStatusEntry, items []milestoneItem, planned int, page string) {
 	if entry.delivery == "done" {
 		if len(items) > 0 {
 			c.report(milestoneStatusPath, entry.line, "%s is done but its page holds %d item rows", entry.id, len(items))
+		}
+		if planned > 0 {
+			c.report(milestoneStatusPath, entry.line, "%s is done but its page holds %d planned slice rows", entry.id, planned)
 		}
 		return
 	}
@@ -270,16 +278,17 @@ func (c *milestoneCheck) milestone(entry milestoneStatusEntry, items []milestone
 	}
 }
 
-func (c *milestoneCheck) plannedSlices(path string, items []milestoneItem) {
+func (c *milestoneCheck) plannedSlices(path string, items []milestoneItem) int {
 	lines := strings.Split(c.sources[path], "\n")
 	start, end, found := c.section(path, lines, "## Planned slices")
 	onPage := map[string]bool{}
 	for _, item := range items {
 		onPage[item.id] = true
 	}
-	listed, rowLine := map[string][]string{}, map[string]int{}
+	listed, rowLine, rows := map[string][]string{}, map[string]int{}, 0
 	if found {
 		for _, row := range c.table(path, lines, start, end, milestoneSlicesHeader) {
+			rows++
 			id := row.cells[0]
 			if !milestoneSliceID.MatchString(id) {
 				c.report(path, row.line, "Slice cell %q is not X<n>", id)
@@ -293,24 +302,30 @@ func (c *milestoneCheck) plannedSlices(path string, items []milestoneItem) {
 			if !slices.Contains(milestoneKinds, row.cells[1]) {
 				c.report(path, row.line, "%s has Kind %q outside %s", id, row.cells[1], strings.Join(milestoneKinds, ", "))
 			}
-			listed[id] = milestoneNamedItem.FindAllString(row.cells[2], -1)
-			for _, named := range listed[id] {
+			for _, named := range milestoneNamedItem.FindAllString(row.cells[2], -1) {
 				if !onPage[named] {
 					c.report(path, row.line, "%s names %s, which is not an item row on its page", id, named)
 				}
 			}
+			inOrder, _, _ := strings.Cut(row.cells[2], ";")
+			listed[id] = milestoneNamedItem.FindAllString(inOrder, -1)
 		}
 	}
 	for _, item := range items {
-		if item.slice == "" {
-			continue
+		if item.slice != "" {
+			if names, ok := listed[item.slice]; !ok {
+				c.report(path, item.line, "%s Delivery names %q, which is no planned slice on its page", item.id, item.slice)
+			} else if !slices.Contains(names, item.id) {
+				c.report(path, item.line, "%s Delivery names %s, whose Planned slices row does not list %s", item.id, item.slice, item.id)
+			}
 		}
-		if names, ok := listed[item.slice]; !ok {
-			c.report(path, item.line, "%s Delivery names %q, which is no planned slice on its page", item.id, item.slice)
-		} else if !slices.Contains(names, item.id) {
-			c.report(path, item.line, "%s Delivery names %s, whose Planned slices row does not list %s", item.id, item.slice, item.id)
+		for _, id := range slices.Sorted(maps.Keys(listed)) {
+			if id != item.slice && slices.Contains(listed[id], item.id) {
+				c.report(path, item.line, "%s Delivery omits %s, whose Planned slices row lists %s", item.id, id, item.id)
+			}
 		}
 	}
+	return rows
 }
 
 func (c *milestoneCheck) references(entries map[string]milestoneStatusEntry) {
@@ -405,13 +420,13 @@ func milestoneFindings(sources map[string]string) []string {
 		}
 		items := c.items(path, "## Items", milestoneItemsHeader)
 		milestoneItems += len(items)
-		c.plannedSlices(path, items)
+		planned := c.plannedSlices(path, items)
 		entry, ok := entries[path]
 		if !ok {
 			c.report(path, 1, "page has no Status row")
 			continue
 		}
-		c.milestone(entry, items, sources[path])
+		c.milestone(entry, items, planned, sources[path])
 	}
 	for _, page := range slices.Sorted(maps.Keys(entries)) {
 		if _, ok := sources[page]; !ok {
@@ -599,6 +614,7 @@ func TestDocsMilestoneCheckFindsEachDisagreement(t *testing.T) {
 		m3 = "specs/milestones/m3.md"
 		m4 = "specs/milestones/m4.md"
 		m5 = "specs/milestones/m5.md"
+		m6 = "specs/milestones/m6.md"
 		m7 = "specs/milestones/m7.md"
 	)
 	row, status := milestoneFixtureRow, milestoneFixtureStatusRow
@@ -773,6 +789,25 @@ func TestDocsMilestoneCheckFindsEachDisagreement(t *testing.T) {
 		{"two Planned slices rows for one slice",
 			[]milestoneEdit{milestoneReplace(m1, slice("X2", "enabling", "B1, B2"), slice("X2", "enabling", "B1, B2")+"\n"+slice("X2", "enabling", "B1, B2"))},
 			m1 + ":10: X2 already has the Planned slices row at line 9"},
+		{"a done milestone that keeps a planned slice",
+			[]milestoneEdit{milestoneReplace(m6, "None yet.", milestoneSlicesHeader+"\n"+milestoneSeparator(5)+"\n"+slice("X4", "enabling", "none"))},
+			milestoneStatusPath + ":14: M6 is done but its page holds 1 planned slice rows"},
+		{"an item a planned slice lists whose Delivery omits it",
+			[]milestoneEdit{milestoneReplace(m1, row("B2", "not started, X2"), row("B2", "not started"))},
+			m1 + ":16: B2 Delivery omits X2, whose Planned slices row lists B2"},
+		{"an item two planned slices list",
+			[]milestoneEdit{milestoneReplace(m1, slice("X2", "enabling", "B1, B2"), slice("X2", "enabling", "B1, B2")+"\n"+slice("X4", "enabling", "B2"))},
+			m1 + ":17: B2 Delivery omits X4, whose Planned slices row lists B2"},
+		{"a Delivery ending in an empty slice suffix",
+			[]milestoneEdit{milestoneReplace(m1, row("B2", "not started, X2"), row("B2", "not started,"))},
+			m1 + `:16: B2 Delivery "not started," ends in an empty slice suffix`},
+		{"a note after a planned slice's items lists no item",
+			[]milestoneEdit{milestoneReplace(m1, slice("X2", "enabling", "B1, B2"), slice("X2", "enabling", "B1; B2 waits for B1")),
+				milestoneReplace(m1, row("B2", "not started, X2"), row("B2", "not started"))},
+			""},
+		{"a Delivery naming a planned slice whose note alone names it",
+			[]milestoneEdit{milestoneReplace(m1, slice("X2", "enabling", "B1, B2"), slice("X2", "enabling", "B1; B2 waits for B1"))},
+			m1 + ":16: B2 Delivery names X2, whose Planned slices row does not list B2"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

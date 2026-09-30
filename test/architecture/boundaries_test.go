@@ -334,29 +334,14 @@ func TestDocsPackageTableNamesEveryTestOnlyPackage(t *testing.T) {
 
 func TestAdmissionEffectBoundary(t *testing.T) {
 	grants := effectGrants()
-	owners, needed := map[string]bool{}, map[string]bool{}
-	for _, source := range productionSources(t) {
+	sources := productionSources(t)
+	owners := map[string]bool{}
+	for _, source := range sources {
 		owners[source.owner] = true
-		if source.owner == "cmd/bootwright" {
-			continue
-		}
-		held := append(slices.Clone(grants[everyPackage]), grants[source.owner]...)
-		violations := effectViolations(source, held)
-		for _, violation := range violations {
-			t.Error(violation)
-		}
-		for index, capability := range held {
-			revoked := slices.Delete(slices.Clone(held), index, index+1)
-			for _, violation := range effectViolations(source, revoked) {
-				if !slices.Contains(violations, violation) {
-					owner := source.owner
-					if index < len(grants[everyPackage]) {
-						owner = everyPackage
-					}
-					needed[owner+" "+capability] = true
-				}
-			}
-		}
+	}
+	violations, needed := effectBoundary(sources, grants)
+	for _, violation := range violations {
+		t.Error(violation)
 	}
 	if !owners[readOnlyInput] {
 		t.Errorf("the effect boundary restricts %s, which has no production source; remove the restriction", readOnlyInput)
@@ -375,6 +360,44 @@ func TestAdmissionEffectBoundary(t *testing.T) {
 				t.Errorf("the effect boundary grants %s %s, which it no longer needs; remove the grant", holder, capability)
 			}
 		}
+	}
+}
+
+// effectBoundary reports what every source uses beyond the capabilities its
+// package holds, the composition root's included, and each grant a source
+// needs, keyed by its holder and capability.
+func effectBoundary(sources []sourceFile, grants map[string][]string) ([]string, map[string]bool) {
+	var found []string
+	needed := map[string]bool{}
+	for _, source := range sources {
+		held := append(slices.Clone(grants[everyPackage]), grants[source.owner]...)
+		violations := effectViolations(source, held)
+		found = append(found, violations...)
+		for index, capability := range held {
+			revoked := slices.Delete(slices.Clone(held), index, index+1)
+			for _, violation := range effectViolations(source, revoked) {
+				if !slices.Contains(violations, violation) {
+					owner := source.owner
+					if index < len(grants[everyPackage]) {
+						owner = everyPackage
+					}
+					needed[owner+" "+capability] = true
+				}
+			}
+		}
+	}
+	return found, needed
+}
+
+// TestTheEffectBoundaryHoldsTheCompositionRoot proves the composition root is
+// held to its own grants like every package: privilege.Begin is the one signal
+// subscription, so a subscription of its own is refused.
+func TestTheEffectBoundaryHoldsTheCompositionRoot(t *testing.T) {
+	source := compositionSource(t, "cmd/bootwright", "package main\nimport \"os/signal\"\nvar _ = signal.Notify\n")
+	got, _ := effectBoundary([]sourceFile{source}, effectGrants())
+	want := []string{"cmd/bootwright/fixture.go imports unauthorized effect capability os/signal"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("violations:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
 
@@ -423,6 +446,11 @@ func effectGrants() map[string][]string {
 		// Media acquisition is the one adapter that opens an operator-named file
 		// or one authorized endpoint; it runs no process and holds no state.
 		"internal/managedos/medialocal": {"net.Dialer", "net/http", "os"},
+		// The composition root is the process boundary: it reads the process's
+		// arguments, environment and terminal and lists completion's paths. It
+		// only binds entropy and the media proxy selector, and holds no
+		// os/signal, since privilege.Begin is the one signal subscription.
+		"cmd/bootwright": {"crypto/rand.Read", "io", modulePath + "internal/cli", "net/http.Request", "os", "syscall", "unsafe"},
 	}
 }
 

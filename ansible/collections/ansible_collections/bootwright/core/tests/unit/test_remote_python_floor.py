@@ -1,19 +1,20 @@
 """Every module and module utility keeps to the managed-host Python floor.
 
 Modules and the module utilities they import run on the managed host, under
-its own interpreter, and ansible-core 2.21 supports targets from Python 3.9.
-They therefore parse under 3.9 grammar and defer annotation evaluation, so an
-annotation written with later syntax is never evaluated there. Action plugins
-run only on the controller and are not checked.
+its own interpreter, and the floor is the oldest target Python of the
+ansible-core these tests run under. They therefore parse under its grammar and
+defer annotation evaluation, so an annotation written with later syntax is
+never evaluated there. Action plugins run only on the controller and are not
+checked.
 
 ast.parse with feature_version is best-effort. It rejects match statements,
 except* and type parameter lists, but it accepts parenthesized context
 managers, same-quote nested f-strings, a runtime X | None outside an
-annotation and calls to library functions added after 3.9. The sanity suite
-of scripts/ansible-check imports each file under the real 3.9 interpreter
+annotation and calls to library functions added after the floor. The sanity
+suite of scripts/ansible-check imports each file under the real interpreter
 that scripts/tools/ansible-check-floor-interpreter.json pins, which proves the
-grammar and whatever runs at import; a later library call inside a function
-body runs only when that function does.
+grammar and whatever runs at import, and its units suite runs the modules and
+module_utils tests there, which proves the library calls those tests reach.
 """
 
 from __future__ import annotations
@@ -21,8 +22,15 @@ from __future__ import annotations
 import ast
 import pathlib
 
+from ansible_test._util.target.common.constants import (
+    CONTROLLER_PYTHON_VERSIONS,
+    REMOTE_ONLY_PYTHON_VERSIONS,
+)
+
 COLLECTION = pathlib.Path(__file__).resolve().parents[2]
 
+# internal/controller/bundlelocal's TestTheFloorLockPinsTheCollectionsRemotePythonFloor
+# holds the floor interpreter lock's minor to this value.
 REMOTE_PYTHON_FLOOR = (3, 9)
 
 
@@ -61,3 +69,9 @@ def test_modules_defer_annotation_evaluation():
         if not defers_annotations(ast.parse(path.read_text(), filename=str(path)))
     ]
     assert not eager, "missing from __future__ import annotations: %s" % eager
+
+
+def test_the_floor_is_the_oldest_target_python_of_ansible_core():
+    targets = REMOTE_ONLY_PYTHON_VERSIONS + CONTROLLER_PYTHON_VERSIONS
+    oldest = min(tuple(int(part) for part in version.split(".")) for version in targets)
+    assert REMOTE_PYTHON_FLOOR == oldest, "ansible-core supports targets from Python %s" % ".".join(map(str, oldest))

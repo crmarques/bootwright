@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -94,16 +95,22 @@ func (a streamOnlyArea) Read(ctx context.Context, name string, limit int) ([]byt
 }
 
 // A binary tool's source is its member, so it proves the source streams; an
-// archive's member compresses far below its size, so it proves the member does.
+// archive's member compresses far below its size, so it proves the member does,
+// and an oc's, that its release stamp is read as it streams.
 func TestReadOnlyToolInspectionStreamsTheSourceAndEachMember(t *testing.T) {
 	const size = 32 << 20
 	member := strings.Repeat("qualified binary", size/16)
-	for kind, source := range map[string][]byte{
-		"kubectl": []byte(member),
-		"helm":    pythonArchive(t, archiveMember{name: "linux-amd64/helm", data: member}),
+	oc := stampedOC("4.21.15", member)
+	for kind, fixture := range map[string]struct {
+		source []byte
+		member string
+	}{
+		"kubectl":           {[]byte(member), member},
+		"helm":              {pythonArchive(t, archiveMember{name: "linux-amd64/helm", data: member}), member},
+		"openshift-clients": {pythonArchive(t, archiveMember{name: "oc", data: oc}, archiveMember{name: "kubectl", typeflag: tar.TypeLink, link: "oc"}), oc},
 	} {
 		t.Run(kind, func(t *testing.T) {
-			tool := toolFixture(t, kind, source)
+			tool := toolFixture(t, kind, fixture.source)
 			area := streamOnlyArea{memoryArea: newMemoryArea(), t: t}
 			assets := newProjection()
 			if err := assets.automation(t.Context()); err != nil {
@@ -112,8 +119,10 @@ func TestReadOnlyToolInspectionStreamsTheSourceAndEachMember(t *testing.T) {
 			for name, file := range assets.files {
 				area.files[name] = file
 			}
-			area.files[sourcePath(tool.Source)] = projectedFile{data: source}
-			area.files[tool.Files[0].Path] = projectedFile{data: []byte(member), executable: true}
+			area.files[sourcePath(tool.Source)] = projectedFile{data: fixture.source}
+			for _, file := range tool.Files {
+				area.files[file.Path] = projectedFile{data: []byte(fixture.member), executable: true}
+			}
 			var before, after runtime.MemStats
 			runtime.GC()
 			runtime.ReadMemStats(&before)
@@ -153,24 +162,25 @@ func TestAChangedToolSourceIsReportedAsChangedBeforeItsArchive(t *testing.T) {
 }
 
 func TestToolProjectionFlattensOnlySelectedAliases(t *testing.T) {
-	archive := pythonArchive(t, archiveMember{name: "oc", data: "binary"}, archiveMember{name: "kubectl", typeflag: tar.TypeLink, link: "oc"})
+	oc := stampedOC("4.21.15", "binary")
+	archive := pythonArchive(t, archiveMember{name: "oc", data: oc}, archiveMember{name: "kubectl", typeflag: tar.TypeLink, link: "oc"})
 	tool := toolFixture(t, "openshift-clients", archive)
 	files, err := projectTool(t.Context(), tool, bytes.NewReader(archive))
 	if err != nil || len(files) != 2 {
 		t.Fatal(files, err)
 	}
 	for _, file := range files {
-		if file != (streamedFile{sha256: digestHex("binary"), size: 6, executable: true}) {
+		if file != (streamedFile{sha256: digestHex(oc), size: int64(len(oc)), executable: true}) {
 			t.Fatal(file)
 		}
 	}
 	for name, members := range map[string][]archiveMember{
-		"escape":     {{name: "oc", data: "binary"}, {name: "kubectl", typeflag: tar.TypeSymlink, link: "../oc"}},
-		"unselected": {{name: "oc", data: "binary"}, {name: "kubectl", typeflag: tar.TypeLink, link: "other"}, {name: "other", data: "binary"}},
+		"escape":     {{name: "oc", data: oc}, {name: "kubectl", typeflag: tar.TypeSymlink, link: "../oc"}},
+		"unselected": {{name: "oc", data: oc}, {name: "kubectl", typeflag: tar.TypeLink, link: "other"}, {name: "other", data: "binary"}},
 		"cycle":      {{name: "oc", typeflag: tar.TypeLink, link: "kubectl"}, {name: "kubectl", typeflag: tar.TypeLink, link: "oc"}},
-		"duplicate":  {{name: "oc", data: "binary"}, {name: "oc", data: "another"}, {name: "kubectl", data: "binary"}},
-		"missing":    {{name: "oc", data: "binary"}},
-		"absolute":   {{name: "/oc", data: "binary"}, {name: "kubectl", data: "binary"}},
+		"duplicate":  {{name: "oc", data: oc}, {name: "oc", data: "another"}, {name: "kubectl", data: "binary"}},
+		"missing":    {{name: "oc", data: oc}},
+		"absolute":   {{name: "/oc", data: oc}, {name: "kubectl", data: "binary"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			archive := pythonArchive(t, members...)
@@ -183,6 +193,170 @@ func TestToolProjectionFlattensOnlySelectedAliases(t *testing.T) {
 	tool.Source.SHA256 = strings.Repeat("0", 64)
 	if _, err := projectTool(t.Context(), tool, bytes.NewReader(archive)); err == nil {
 		t.Fatal("modified archive checksum accepted")
+	}
+}
+
+// stampedOC is an oc body naming release the way the release extraction in
+// https://github.com/openshift/oc/blob/master/pkg/cli/admin/release/extract_tools.go
+// stamps it (copyAndReplace writes the value and one NUL over the marker's
+// head), laid out as the collection's stamped fixture records an operator
+// observed openshift-client-linux-amd64-rhel9-4.21.11.tar.gz: one stamped
+// marker, no whole marker, a bare marker head followed by other bytes and oc's
+// own "!"-led copy of the marker.
+func stampedOC(release, body string) string {
+	marker := string(releaseMarker)
+	return body + marker[:28] + "other bytes" + "!" + marker[1:] + release + "\x00" + marker[len(release)+1:] + "tail"
+}
+
+func clientsFixture(t *testing.T, compatibility, release string, archive []byte) prerequisites.ToolDefinition {
+	t.Helper()
+	request := controller.ToolRequest{Kind: "openshift-clients", Version: release, Compatibility: compatibility}
+	source := fixtureSource(toolSourcePrefix(request)+release, archive)
+	source.URL, _, _ = sourceURL(request, release)
+	tool, err := toolDefinition(request, release, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tool
+}
+
+func TestTheReleaseMarkerIsTheOneTheAdapterScansFor(t *testing.T) {
+	if want := "\x00_RELEASE_VERSION_LOCATION_\x00" + strings.Repeat("X", 64) + "\x00"; string(releaseMarker) != want || len(releaseMarker) != 93 {
+		t.Fatalf("release marker %q, want the fixed 93-byte %q", releaseMarker, want)
+	}
+	module := string(ansible.Assets()["collections/ansible_collections/bootwright/core/plugins/module_utils/controller_files.py"])
+	if !strings.Contains(module, "\nRELEASE_MARKER = b\"\\x00_RELEASE_VERSION_LOCATION_\\x00\" + b\"X\" * 64 + b\"\\x00\"\n") {
+		t.Fatal("the adapter no longer scans for the release marker the projection reads")
+	}
+}
+
+func TestTheReleaseStampCountsEachSplitOccurrenceOnce(t *testing.T) {
+	const release = "4.21.15"
+	stamp := release + "\x00" + string(releaseMarker[len(release)+1:])
+	for _, pattern := range []struct {
+		data               string
+		stamped, unstamped int
+	}{{stamp, 1, 0}, {string(releaseMarker), 0, 1}} {
+		data := "head" + pattern.data + "tail"
+		splits := [][]string{}
+		for offset := 1; offset < len(data); offset++ {
+			splits = append(splits, []string{data[:offset], data[offset:]}, []string{data[:offset], "", data[offset : offset+1], data[offset+1:]})
+		}
+		single := []string{}
+		for index := range len(data) {
+			single = append(single, data[index:index+1])
+		}
+		for _, chunks := range append(splits, single) {
+			scanner, err := newReleaseStamp(release)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, chunk := range chunks {
+				if _, err := scanner.Write([]byte(chunk)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if scanner.stamped.count != pattern.stamped || scanner.unstamped.count != pattern.unstamped {
+				t.Fatalf("chunks %q counted %d stamped and %d unstamped", chunks, scanner.stamped.count, scanner.unstamped.count)
+			}
+		}
+	}
+	for content, proved := range map[string]bool{
+		stampedOC(release, "client executable"):                                   true,
+		"no release" + string(releaseMarker[28:]):                                 false,
+		stampedOC(release, "client executable") + string(releaseMarker):           false,
+		stampedOC("4.21.16", "client executable"):                                 false,
+		stampedOC(release, "client executable") + stampedOC(release, "and again"): false,
+		"client executable" + strings.Repeat("\x00", len(stampedOC(release, ""))): false,
+	} {
+		scanner, err := newReleaseStamp(release)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := scanner.Write([]byte(content)); err != nil || scanner.proved() != proved {
+			t.Fatalf("%q proved %v, want %v", content, scanner.proved(), proved)
+		}
+	}
+	if _, err := newReleaseStamp(strings.Repeat("4", 92)); err == nil {
+		t.Fatal("a release longer than the marker holds was accepted")
+	}
+	if _, err := newReleaseStamp(strings.Repeat("4", 91)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestToolProjectionRequiresOCToNameItsFrozenRelease(t *testing.T) {
+	const release = "4.21.15"
+	oc, kubectl := stampedOC(release, "client executable"), "separate kubectl executable"
+	for name, members := range map[string][]archiveMember{
+		"regular":           {{name: "oc", data: oc}, {name: "kubectl", data: kubectl}},
+		"hard link":         {{name: "oc", data: oc}, {name: "kubectl", typeflag: tar.TypeLink, link: "oc"}},
+		"symlink":           {{name: "kubectl", typeflag: tar.TypeSymlink, link: "oc"}, {name: "oc", data: oc}},
+		"oc links kubectl":  {{name: "kubectl", data: oc}, {name: "oc", typeflag: tar.TypeLink, link: "kubectl"}},
+		"okd compatibility": {{name: "oc", data: stampedOC("4.18.0-okd-scos.8", "client executable")}, {name: "kubectl", data: kubectl}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			archive := pythonArchive(t, members...)
+			tool := clientsFixture(t, "openshift", release, archive)
+			if name == "okd compatibility" {
+				tool = clientsFixture(t, "okd", "4.18.0-okd-scos.8", archive)
+			}
+			if files, err := projectTool(t.Context(), tool, bytes.NewReader(archive)); err != nil || len(files) != 2 {
+				t.Fatal(files, err)
+			}
+		})
+	}
+	for name, members := range map[string][]archiveMember{
+		"unstamped":       {{name: "oc", data: "client executable" + string(releaseMarker)}, {name: "kubectl", typeflag: tar.TypeLink, link: "oc"}},
+		"no marker":       {{name: "oc", data: "client executable"}, {name: "kubectl", typeflag: tar.TypeLink, link: "oc"}},
+		"another release": {{name: "oc", data: stampedOC("4.21.16", "client executable")}, {name: "kubectl", typeflag: tar.TypeLink, link: "oc"}},
+		"stamped twice":   {{name: "oc", data: oc + oc}, {name: "kubectl", typeflag: tar.TypeLink, link: "oc"}},
+		"only kubectl":    {{name: "oc", data: "client executable"}, {name: "kubectl", data: oc}},
+		"okd unstamped":   {{name: "oc", data: "client executable" + string(releaseMarker)}, {name: "kubectl", data: kubectl}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			archive := pythonArchive(t, members...)
+			tool := clientsFixture(t, "openshift", release, archive)
+			if name == "okd unstamped" {
+				tool = clientsFixture(t, "okd", "4.18.0-okd-scos.8", archive)
+			}
+			if _, err := projectTool(t.Context(), tool, bytes.NewReader(archive)); !failedWith(err, "does not name its frozen release") {
+				t.Fatal("an oc that does not name its frozen release was proved:", err)
+			}
+		})
+	}
+}
+
+// A build that published before the stamp was checked left members that match
+// their retained source byte for byte; inspection still refuses them.
+func TestReadOnlyInspectionRefusesARetainedOCThatNamesNoRelease(t *testing.T) {
+	const release = "4.21.15"
+	for oc, proved := range map[string]bool{
+		stampedOC(release, "client executable"):     true,
+		"client executable" + string(releaseMarker): false,
+		stampedOC("4.21.16", "client executable"):   false,
+	} {
+		archive := pythonArchive(t, archiveMember{name: "oc", data: oc}, archiveMember{name: "kubectl", typeflag: tar.TypeSymlink, link: "oc"})
+		tool := clientsFixture(t, "openshift", release, archive)
+		area := newMemoryArea()
+		assets := newProjection()
+		if err := assets.automation(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		for name, file := range assets.files {
+			area.files[name] = file
+		}
+		area.files[sourcePath(tool.Source)] = projectedFile{data: archive}
+		for _, file := range tool.Files {
+			area.files[file.Path] = projectedFile{data: []byte(oc), executable: true}
+		}
+		got, _, err := inspectFiles(t.Context(), area, catalogRecord{}, []prerequisites.ToolDefinition{tool})
+		if proved && (err != nil || !got.ToolsReady || !got.Recoverable) {
+			t.Fatal(got, err)
+		}
+		if !proved && (got.ToolsReady || !failedWith(err, "does not name its frozen release")) {
+			t.Fatalf("inspection proved an oc that names no frozen release: %+v %v", got, err)
+		}
 	}
 }
 

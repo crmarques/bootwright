@@ -78,9 +78,10 @@ func TestRecordedAnsibleFloorKeepsEarlierRecordsReadable(t *testing.T) {
 	}
 }
 
-// Setup records the Index API page latest was selected from; a latest record
-// an earlier build wrote from the project JSON stays readable on every path a
-// controller-record read takes, and an exact intent names only its release.
+// Setup records the Index API page it selected from, for latest and an exact
+// intent alike; a record an earlier build wrote from the project JSON stays
+// readable on every path a controller-record read takes, and that JSON names
+// an exact intent's own release.
 func TestAnsibleMetadataNamesTheEndpointItsIntentReads(t *testing.T) {
 	_, fixture := dynamicFixture(t)
 	for _, test := range []struct {
@@ -92,8 +93,10 @@ func TestAnsibleMetadataNamesTheEndpointItsIntentReads(t *testing.T) {
 		{"latest", "https://pypi.org/simple/ansible/", false},
 		{"latest", "https://pypi.org/simple/ansible-core", false},
 		{"latest", "https://pypi.org/pypi/ansible-core/2.21.4/json", false},
+		{"2.21.4", "https://pypi.org/simple/ansible-core/", true},
 		{"2.21.4", "https://pypi.org/pypi/ansible-core/2.21.4/json", true},
-		{"2.21.4", "https://pypi.org/simple/ansible-core/", false},
+		{"2.21.4", "https://pypi.org/pypi/ansible-core/2.21.3/json", false},
+		{"2.21.4", "https://pypi.org/simple/ansible/", false},
 		{"2.21.4", "https://pypi.org/pypi/ansible-core/json", false},
 	} {
 		value := fixture.bootstrap

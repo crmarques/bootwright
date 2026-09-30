@@ -4,9 +4,10 @@
 # source; every package that depends on one, directly or only through its
 # tests; every package whose tests name, as a quoted path, the first path
 # element of a changed file that is not Go source; and the architecture fitness
-# suite. A change to the module files, or no base to compare against, tests
-# everything. A selected directory the default build does not list, such as a
-# package behind a build tag, is named and left to its own gate.
+# suite. A change to the module files, a path Git always quotes, or no base to
+# compare against, tests everything. A selected directory the default build
+# does not list, such as a package behind a build tag, is named and left to its
+# own gate.
 set -eu
 repository=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repository"
@@ -16,7 +17,12 @@ if test -z "$base"; then
 fi
 # Without rename detection a moved file names both the directory it left and
 # the one it entered; with it, the name-only listing gives only the new path.
-changed=$({ git diff --name-only --no-renames "$base" --; git ls-files --others --exclude-standard; } | sort -u)
+# Every path listing here turns core.quotePath off: Git quotes a path holding a
+# byte outside ASCII unless it is off, and a quoted path names no directory.
+changed=$({
+    git -c core.quotePath=false diff --name-only --no-renames "$base" --
+    git -c core.quotePath=false ls-files --others --exclude-standard
+} | sort -u)
 if printf '%s\n' "$changed" | grep -Eq '^(go\.mod|go\.sum)$'; then
     exec ./scripts/go test ./...
 fi
@@ -42,7 +48,12 @@ $roots
 EOF
 named=
 if test $# -gt 0; then
-    named=$(git grep -l --no-color --untracked -F "$@" -- '*_test.go' || test $? -eq 1)
+    named=$(git -c core.quotePath=false grep -l --no-color --untracked -F "$@" -- '*_test.go' || test $? -eq 1)
+fi
+# Off, Git still quotes a path holding a double quote, a backslash or a control
+# character: a changed file or a reading test with such a path tests everything.
+if printf '%s\n%s\n' "$changed" "$named" | grep -q '^"'; then
+    exec ./scripts/go test ./...
 fi
 readers=$(printf '%s\n' "$named" | grep '\.go$' | while IFS= read -r file; do dirname -- "$file"; done | sort -u)
 if test -z "$directories$readers$others"; then

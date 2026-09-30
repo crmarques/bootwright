@@ -1,8 +1,9 @@
 """Acquire the reviewed Ansible sanity artifacts into a development cache.
 
 The artifacts include the managed-host floor interpreter, whose archive the
-sanity gate verifies and extracts on each run to import the collection's
-modules under the oldest Python a managed host may run.
+sanity and units gates verify and extract on each run to import the
+collection's modules and run their unit tests under the oldest Python a
+managed host may run.
 """
 
 import hashlib

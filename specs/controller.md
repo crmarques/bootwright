@@ -46,11 +46,15 @@ minor supports as a controller;
 [development](../docs/development.md#qualified-hosts-and-images) records both.
 `latest` ignores a newer minor of either: it is never selected and never
 refused. A yanked `ansible-core` release, or one without a pure-Python wheel,
-is not a candidate. `latest` reads its candidates from the JSON form of the
-publisher's [Index API](https://peps.python.org/pep-0691/) project page and
-refuses a page of any major API version but 1; the project JSON's deprecated
-`releases` listing is never read. The collection's `requires_ansible` names
-the same minor, and the embedded configuration makes a mismatch an error. No
+is not a candidate, and an exact `ansible-core` intent selects its release only
+when it is one. `latest` and an exact intent alike read the candidates from the
+JSON form of the publisher's [Index API](https://peps.python.org/pep-0691/)
+project page, never from the project JSON, and refuse a page of any major API
+version but 1 or of a minor newer than the one the build was checked against.
+A newer minor may add what the build does not read;
+[PEP 629](https://peps.python.org/pep-0629/) asks a client to warn of one, and
+setup refuses it instead. The collection's `requires_ansible` names the same
+minor, and the embedded configuration makes a mismatch an error. No
 Environment declares their versions, because setup reads none. The
 [Environment version policy](api/environment.md#dependency-versions) declares
 only the versions a controller stage installs. Resolve Python and Ansible
@@ -335,7 +339,12 @@ Task output is not an application API. Read-only Go verification reconstructs
 installed bootstrap and target file inventories from approved retained sources.
 It streams each target source once and each published target member it proves,
 holding only their digests, so neither is ever held whole in memory; a bundle
-area that cannot stream a file is refused rather than read whole.
+area that cannot stream a file is refused rather than read whole. When it
+projects an `openshift-clients` source, it also reads `oc`'s release stamp as
+the member streams, as the adapter does, and refuses a source whose `oc` does
+not hold exactly one marker stamped with the frozen version and no unstamped
+one. A client area's readiness stays presence only and reads no bytes, so the
+stamp of a client already in a sealed area is not read again.
 
 The automation content digest covers every embedded automation file except
 documentation, the collection's root `README` and `CHANGELOG`, which stay in

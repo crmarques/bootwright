@@ -14,11 +14,14 @@ type signalCause struct{ signal syscall.Signal }
 
 func (s signalCause) Error() string { return "invocation interrupted" }
 
-// Begin derives cancellation only for the already-classified privileged
-// operation. Its owner must finish, stopping subscriptions and joining the waiter.
-// A hangup is relayed like SIGTERM, since by default it would end this
-// supervisor without relaying anything to the elevated child; one ignored at
-// start, as nohup leaves it, stays ignored (os/signal).
+// Begin is the process's one signal subscription. The unprivileged supervisor
+// of a sudo invocation derives from it the cancellation it relays to the
+// elevated child, and each implemented operation the CLI runs in this process
+// derives its own. Its owner must finish, stopping subscriptions and joining
+// the waiter. A hangup cancels like SIGTERM, since by default it would end the
+// process without relaying anything to the elevated child or reaping an
+// operation's adapters; one ignored at start, as nohup leaves it, stays
+// ignored (os/signal).
 func Begin(parent context.Context) (context.Context, func()) {
 	ctx, cancel := context.WithCancelCause(parent)
 	signals := make(chan os.Signal, 1)

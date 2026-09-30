@@ -187,17 +187,59 @@ func TestQuickTestSelectsThePackagesWhoseTestsReadAChangedFile(t *testing.T) {
 // A go:embed directory pattern descends into every subdirectory, one holding
 // another package included, and stops only at a module boundary
 // (https://github.com/golang/go/blob/go1.26.7/src/cmd/go/internal/load/pkg.go#L2247-L2251),
-// so a file of c/nested may be c's as well.
+// so a file of c/completion, like internal/cli's completion scripts, is c's,
+// and a file of c/nested may be c's as well.
 func TestQuickTestSelectsEveryPackageWhoseDirectoryHoldsAChangedFile(t *testing.T) {
 	root := ratchetQuickTestFixture(t)
 	for _, step := range []struct{ change, want string }{
 		{"a/testdata/x.golden", "example.test/fixture/a example.test/fixture/b example.test/fixture/d"},
+		{"c/completion/bash.sh", "example.test/fixture/a example.test/fixture/b example.test/fixture/c example.test/fixture/d example.test/fixture/e"},
 		{"c/nested/testdata/n.golden", "example.test/fixture/a example.test/fixture/b example.test/fixture/c example.test/fixture/c/nested example.test/fixture/d example.test/fixture/e"},
 	} {
 		ratchetWrite(t, root, step.change, "changed\n", 0o644)
 		stdout, stderr, err := ratchetQuickTest(root)
 		if err != nil || stdout != "test ./test/architecture/... "+step.want+"\n" || stderr != "" {
 			t.Fatalf("quick-test after changing %s: %v\nstdout:\n%s\nstderr:\n%s", step.change, err, stdout, stderr)
+		}
+	}
+}
+
+// Git quotes a path holding a byte outside ASCII unless core.quotePath is off,
+// and one holding a double quote, a backslash or a control character even then
+// (https://github.com/git/git/blob/v2.55.0/Documentation/config/core.adoc).
+// The fixture's Git leaves core.quotePath at its default, on, and each path
+// reaches quick-test through a different listing: a committed change, an
+// untracked file and a test that names a changed file.
+func TestQuickTestSelectsThePackagesOfAPathGitQuotes(t *testing.T) {
+	root := ratchetQuickTestFixture(t)
+	ratchetWrite(t, root, "s/lê_test.go", "package s\n\nconst data = \"../ñ/\"\n", 0o644)
+	ratchetWrite(t, root, "s/q\"_test.go", "package s\n\nconst data = \"../ø/\"\n", 0o644)
+	ratchetGit(t, root, "add", ".")
+	ratchetGit(t, root, "commit", "-q", "-m", "readers")
+	ratchetGit(t, root, "switch", "-q", "-c", "quoted")
+	ratchetWrite(t, root, "c/ç.go", "package c\n", 0o644)
+	ratchetGit(t, root, "add", ".")
+	ratchetGit(t, root, "commit", "-q", "-m", "quoted")
+	stdout, stderr, err := ratchetQuickTest(root)
+	if err != nil || stdout != "test ./test/architecture/... example.test/fixture/c example.test/fixture/e\n" || stderr != "" {
+		t.Fatalf("quick-test after committing c/ç.go: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+
+	for _, step := range []struct{ change, want string }{
+		{"a/testdata/é.golden", "./test/architecture/... example.test/fixture/a example.test/fixture/b example.test/fixture/c example.test/fixture/d example.test/fixture/e"},
+		{"ñ/data.yaml", "./test/architecture/... example.test/fixture/a example.test/fixture/b example.test/fixture/c example.test/fixture/d example.test/fixture/e example.test/fixture/s"},
+		{"a/testdata/back\\slash.golden", "./..."},
+		{"ø/data.yaml", "./..."},
+	} {
+		ratchetWrite(t, root, step.change, "changed\n", 0o644)
+		stdout, stderr, err := ratchetQuickTest(root)
+		if err != nil || stdout != "test "+step.want+"\n" || stderr != "" {
+			t.Fatalf("quick-test after changing %s: %v\nstdout:\n%s\nstderr:\n%s", step.change, err, stdout, stderr)
+		}
+		if step.want == "./..." {
+			if err := os.Remove(filepath.Join(root, filepath.FromSlash(step.change))); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 }

@@ -27,7 +27,6 @@ func longFunctionsAwaitingSplit() []string {
 		"internal/containercluster/admission.go.Normalize",
 		"internal/containercluster/admission.go.validateLocal",
 		"internal/controller/ansiblelocal/runner_linux_amd64.go.runProcess",
-		"internal/controller/bundlelocal/bootstrap.go.Resolve",
 		"internal/controller/bundlelocal/bootstrap_linux_amd64.go.qualifyBootstrapELF",
 		"internal/controller/bundlelocal/execution_linux_amd64.go.WithPython",
 		"internal/controller/bundlelocal/manager.go.Prepare",

@@ -2,6 +2,7 @@ package bundlelocal
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -17,6 +18,56 @@ import (
 )
 
 const maxToolExpandedBytes int64 = 2 << 30
+
+// releaseMarker is where a released oc names its release: the version,
+// NUL-terminated, overwrites its head. An unstamped oc carries it whole. It is
+// the marker the collection's controller_files module scans for.
+var releaseMarker = []byte("\x00_RELEASE_VERSION_LOCATION_\x00" + strings.Repeat("X", 64) + "\x00")
+
+// patternCount counts a pattern in the blocks written to it, carrying between
+// blocks only the bytes an occurrence split across them needs.
+type patternCount struct {
+	pattern []byte
+	window  []byte
+	count   int
+}
+
+func (p *patternCount) update(block []byte) {
+	p.window = append(p.window, block...)
+	for from := 0; ; from++ {
+		found := bytes.Index(p.window[from:], p.pattern)
+		if found < 0 {
+			break
+		}
+		p.count++
+		from += found
+	}
+	keep := min(len(p.pattern)-1, len(p.window))
+	p.window = p.window[:copy(p.window, p.window[len(p.window)-keep:])]
+}
+
+// releaseStamp reads the release an oc member names as it streams, without
+// executing it: exactly one marker stamped with the frozen version, and no
+// unstamped one.
+type releaseStamp struct{ stamped, unstamped patternCount }
+
+func newReleaseStamp(version string) (*releaseStamp, error) {
+	if len(version) >= len(releaseMarker)-1 {
+		return nil, bundleFailure("frozen OpenShift client release is longer than its release marker holds")
+	}
+	stamp := append([]byte(version+"\x00"), releaseMarker[len(version)+1:]...)
+	return &releaseStamp{stamped: patternCount{pattern: stamp}, unstamped: patternCount{pattern: releaseMarker}}, nil
+}
+
+func (s *releaseStamp) Write(block []byte) (int, error) {
+	s.stamped.update(block)
+	s.unstamped.update(block)
+	return len(block), nil
+}
+
+func (s *releaseStamp) proved() bool {
+	return s != nil && s.stamped.count == 1 && s.unstamped.count == 0
+}
 
 type streamedFile struct {
 	sha256     string
@@ -90,6 +141,7 @@ func projectMembers(ctx context.Context, tool prerequisites.ToolDefinition, sour
 		selected[file.Member] = true
 	}
 	regular := map[string]streamedFile{}
+	stamps := map[string]*releaseStamp{}
 	links := map[string]string{}
 	seen := map[string]bool{}
 	var expanded int64
@@ -125,7 +177,14 @@ func projectMembers(ctx context.Context, tool prerequisites.ToolDefinition, sour
 			if !selected[name] {
 				continue
 			}
-			member, err := streamMember(ctx, reader, header)
+			var stamp *releaseStamp
+			if tool.Kind == "openshift-clients" {
+				if stamp, err = newReleaseStamp(tool.Version); err != nil {
+					return nil, err
+				}
+				stamps[name] = stamp
+			}
+			member, err := streamMember(ctx, reader, header, stamp)
 			if err != nil {
 				return nil, err
 			}
@@ -143,12 +202,18 @@ func projectMembers(ctx context.Context, tool prerequisites.ToolDefinition, sour
 			return nil, bundleFailure("target archive contains an unsupported member type")
 		}
 	}
-	return resolveMembers(tool, regular, links)
+	return resolveMembers(tool, regular, links, stamps)
 }
 
-func streamMember(ctx context.Context, reader io.Reader, header *tar.Header) (streamedFile, error) {
+// streamMember digests one selected member as it streams, and reads its
+// release stamp when stamp is given.
+func streamMember(ctx context.Context, reader io.Reader, header *tar.Header, stamp *releaseStamp) (streamedFile, error) {
 	member := &digestReader{reader: contextReader{ctx: ctx, reader: io.LimitReader(reader, header.Size+1)}, digest: sha256.New()}
-	if _, err := io.Copy(io.Discard, member); err != nil {
+	sink := io.Discard
+	if stamp != nil {
+		sink = stamp
+	}
+	if _, err := io.Copy(sink, member); err != nil {
 		if ctx.Err() != nil {
 			return streamedFile{}, ctx.Err()
 		}
@@ -160,8 +225,13 @@ func streamMember(ctx context.Context, reader io.Reader, header *tar.Header) (st
 	return streamedFile{sha256: hex.EncodeToString(member.digest.Sum(nil)), size: member.read, executable: true}, nil
 }
 
-func resolveMembers(tool prerequisites.ToolDefinition, regular map[string]streamedFile, links map[string]string) (map[string]streamedFile, error) {
+// resolveMembers maps each file to the regular member its links lead to. An
+// OpenShift client is proved only after every member resolves, and only when
+// the member oc resolves to names the frozen release, as the adapter requires
+// before it publishes either client.
+func resolveMembers(tool prerequisites.ToolDefinition, regular map[string]streamedFile, links map[string]string, stamps map[string]*releaseStamp) (map[string]streamedFile, error) {
 	result := map[string]streamedFile{}
+	released := tool.Kind != "openshift-clients"
 	for _, file := range tool.Files {
 		member := file.Member
 		for depth := 0; links[member] != ""; depth++ {
@@ -175,6 +245,12 @@ func resolveMembers(tool prerequisites.ToolDefinition, regular map[string]stream
 			return nil, bundleFailure("target archive omits a required executable member")
 		}
 		result[file.Path] = content
+		if !released && file.Member == "oc" {
+			released = stamps[member].proved()
+		}
+	}
+	if !released {
+		return nil, bundleFailure("selected oc executable does not name its frozen release")
 	}
 	return result, nil
 }

@@ -403,7 +403,9 @@ owns local account lookup and invocation-scoped sudo process supervision, and
 the elevation decisions: noninteractive mode, stream handoff, the elevated
 child's start announcement, and what each outcome reports. Its `Begin` is the
 one signal subscription, which the supervisor relays and every CLI operation's
-cancellation derives from. Only
+cancellation derives from. `TestAdmissionEffectBoundary` holds every production
+package to its effect grants, the composition root included, which holds no
+`os/signal` (`TestTheEffectBoundaryHoldsTheCompositionRoot`). Only
 validated, available commands needing stored context data acquire that
 privilege boundary; informational and explicit-input validation paths remain
 effect-free. [CLI invocation](cli.md#local-privilege-and-user-identity) owns
@@ -580,7 +582,7 @@ needed paths:
 | Collection `playbooks/<domain>/<operation>.yml` | One fixed application-port entrypoint; private fragments under its `tasks/`. |
 | Collection `roles/<domain>_<capability>[_<implementation>]/` | One local or remote capability adapter with only applicable standard role directories. |
 | Collection `plugins/` | Capability adapters or effect-free product translation/evidence normalization. |
-| Collection `tests/unit/` | Collection-owned tests following `ansible-test` discovery. Their `conftest.py` installs the collection loader `ansible-test` would when no runner has, so plain pytest runs the same tests. |
+| Collection `tests/unit/` | Collection-owned tests following `ansible-test` discovery. Their `conftest.py` installs the collection loader `ansible-test` would when no runner has, so plain pytest runs the same tests; the `units` suite of `scripts/ansible-check` runs them both ways. |
 
 The first consumer selects package-native or standard lock formats; Bootwright
 does not invent a dependency resolver or lock format. Locks cover
@@ -807,15 +809,23 @@ reviewers retain semantic judgments that source checks cannot prove.
   tracked or not, as a build reads them.
   `TestDocsNameEveryCheckThatWalksTheWorkingTree` keeps that list exact: it
   follows each docs check through the functions, methods and package variables
-  of its package directory, sources and tests alike, to any call named `Glob`,
-  `ReadDir`, `Readdir`, `Readdirnames`, `Walk` or `WalkDir`, so a listing
-  reached only through another package's function is beyond it. It matches
-  calls by name, so it also reports a call of one of those names that lists
-  nothing, such as `ast.Walk`, and misses a listing through a dot import, a
-  write through an index or field, or an assignment through another package's
-  qualifier ([B148](milestones/m1.md#b148)). Every other
-  docs check that lists files reads only the files Git tracks, never an
-  untracked or ignored one: the guidance checks of
+  of its package directory, sources and tests alike, to any reference, through
+  a file's imports or dot imports, to a standard library function that lists a
+  directory (`Glob`, `ReadDir` and `WalkDir` of `io/fs`, `ReadDir` of `os` and
+  `io/ioutil`, and `Glob`, `Walk` and `WalkDir` of `path/filepath`), or to a
+  method named `Glob`, `ReadDir`, `Readdir` or `Readdirnames`, whose receiver
+  a syntax walk cannot type. A listing reached only through another package's
+  function is beyond it, and another package's function of the same name,
+  such as `ast.Walk`, is no listing. A listing of a filesystem whose syntax
+  makes it an `fstest.MapFS` lists nothing: a literal, a conversion, or a
+  parameter or variable declared as one, a package variable in any file of
+  its package; any other filesystem, a field or a function's result among
+  them, is the working tree's. It follows a package variable through every
+  value an assignment statement gives it, directly or through an element,
+  field or pointer, and from the external tests through the tested package's
+  qualifier, and no order in which it reads the files decides its verdict.
+  Every other docs check that lists files reads only the files Git tracks,
+  never an untracked or ignored one: the guidance checks of
   `test/architecture/docs_test.go`, the milestone checker of
   `test/architecture/milestones_test.go` and the operator command lines of
   `internal/cli/docs_commands_test.go`. A link or cited path resolves only to
@@ -832,9 +842,12 @@ reviewers retain semantic judgments that source checks cannot prove.
   `testdata` reaches it; each package that imports one, directly, through a
   dependency or only from its tests; and each package whose tests name, as a
   quoted path, the first path element of a changed file that is not Go source,
-  as a test reading `specs/` or `examples/` does. A change to the module files
-  tests everything, and a selected package the default build omits is named
-  and left to its own gate.
+  as a test reading `specs/` or `examples/` does. Paths are matched as Git
+  stores them, non-ASCII characters included. A change to the module files, or
+  a changed file or reading test whose path Git quotes even with
+  `core.quotePath` off, because it holds a double quote, a backslash or a
+  control character, tests everything; a selected package the default build
+  omits is named and left to its own gate.
 
 Unit or fake-adapter success never qualifies a remote implementation. Every
 supported substrate/component/product/version combination needs its named

@@ -396,7 +396,11 @@ registry: it lists every code production code emits, from a function body or a
 package-level variable initializer, and nothing else
 (`TestDiagnosticCodesMatchOutputSpec`). That check follows a code through
 constants, variables, parameters and calls, a call through a variable bound to
-a function included. A write it follows that gives no single value (a tuple or
+a function included. A variable holds every value written to it anywhere, the
+reading scope's own writes included, and a parameter also every argument it
+receives. With no type information, a method call resolves by name to every
+method it can select: an unexported one of its own package, or an exported one
+of any package. A write it follows that gives no single value (a tuple or
 compound assignment, a range clause, a taken address, a package variable
 declared without a value) fails the check, and so does a function storing its
 argument as a code that is used as a value other than by calling it or binding

@@ -74,11 +74,7 @@ func (c *BootstrapCatalog) Resolve(ctx context.Context, platform prerequisites.P
 		return prerequisites.BootstrapDefinition{}, err
 	}
 	source.Bytes = asset.size
-	ansibleURL := ansibleIndexURL
-	if versions.Ansible != "latest" {
-		ansibleURL = "https://pypi.org/pypi/ansible-core/" + versions.Ansible + "/json"
-	}
-	ansibleMetadata, err := c.metadata(ctx, http.MethodGet, ansibleURL, egress)
+	ansibleMetadata, err := c.metadata(ctx, http.MethodGet, ansibleIndexURL, egress)
 	if err != nil {
 		return prerequisites.BootstrapDefinition{}, err
 	}
@@ -91,7 +87,7 @@ func (c *BootstrapCatalog) Resolve(ctx context.Context, platform prerequisites.P
 		Format: "bootwright.controller.bootstrap-v1", Platform: platform, PythonIntent: versions.Python, AnsibleIntent: versions.Ansible,
 		PythonVersion: pythonVersion, AnsibleVersion: ansibleVersion, PythonExecutable: "python/bin/python" + minor,
 		SitePackages: "python/lib/python" + minor + "/site-packages/", Sources: []prerequisites.DependencySource{source},
-		Metadata:  []prerequisites.DependencySource{bootstrapMetadataSource("python-metadata", pythonMetadataURL, pythonMetadata.data), bootstrapMetadataSource("ansible-metadata", ansibleURL, ansibleMetadata.data)},
+		Metadata:  []prerequisites.DependencySource{bootstrapMetadataSource("python-metadata", pythonMetadataURL, pythonMetadata.data), bootstrapMetadataSource("ansible-metadata", ansibleIndexURL, ansibleMetadata.data)},
 		Execution: cloneExecution(native.Execution), AutomationDigest: ansible.Digest(),
 	}
 	value.Execution.PythonExecutable = value.PythonExecutable
@@ -232,57 +228,59 @@ type ansibleIndexFile struct {
 
 var indexAPIVersion = regexp.MustCompile(`^1\.(0|[1-9][0-9]*)$`)
 
-// selectAnsibleRelease picks the highest stable patch of the qualified minor
-// that publishes a live pure wheel. Python compatibility is not judged here:
-// pip's exact-root resolve enforces Requires-Python, so an incompatible
-// release refuses rather than yielding to an older one.
+// indexAPIMinor is the newest Index API minor this selector was checked
+// against: ansible-core's page, read on 2026-09-29, and
+// https://docs.pypi.org/api/index-api/ serve 1.4. PEP 629 asks a client to
+// warn of a newer minor; setup refuses one instead.
+const indexAPIMinor = 4
+
+// selectAnsibleRelease picks, from the Index API project page, the highest
+// stable patch of the qualified minor that publishes a live pure wheel, or
+// the requested exact release when it is such a candidate. Python
+// compatibility is not judged here: pip's exact-root resolve enforces
+// Requires-Python, so an incompatible release refuses rather than yielding to
+// an older one.
 func selectAnsibleRelease(data []byte, requested, python string) (string, error) {
 	if !prerequisites.QualifiedControllerPython(python) {
 		return "", unqualifiedPython()
+	}
+	if requested != "latest" {
+		if err := prerequisites.ValidateQualifiedAnsibleVersion(requested); err != nil {
+			return "", err
+		}
 	}
 	invalid := bundleFailure("requested Ansible release has no valid publisher metadata")
 	if len(data) > 8<<20 {
 		return "", invalid
 	}
-	var version string
-	if requested == "latest" {
-		var page struct {
-			Meta struct {
-				APIVersion string `json:"api-version"`
-			} `json:"meta"`
-			Name  string             `json:"name"`
-			Files []ansibleIndexFile `json:"files"`
-		}
-		ok := json.Unmarshal(data, &page) == nil && indexAPIVersion.MatchString(page.Meta.APIVersion) && page.Name == "ansible-core"
-		if ok {
-			version, ok = latestQualifiedAnsible(page.Files)
-		}
-		if !ok {
-			return "", invalid
-		}
-		if version == "" {
-			return "", bundleFailure("Ansible publisher metadata lists no stable ansible-core " + prerequisites.QualifiedAnsibleMinor + " release with a live wheel")
-		}
-	} else {
-		var record struct {
-			Info struct {
-				Version string `json:"version"`
-			} `json:"info"`
-		}
-		if json.Unmarshal(data, &record) != nil || !stableBootstrapVersion.MatchString(record.Info.Version) || requested != record.Info.Version {
-			return "", invalid
-		}
-		version = record.Info.Version
+	var page struct {
+		Meta struct {
+			APIVersion string `json:"api-version"`
+		} `json:"meta"`
+		Name  string             `json:"name"`
+		Files []ansibleIndexFile `json:"files"`
 	}
-	if err := prerequisites.ValidateQualifiedAnsibleVersion(version); err != nil {
-		return "", err
+	if json.Unmarshal(data, &page) != nil || !indexAPIVersion.MatchString(page.Meta.APIVersion) || page.Name != "ansible-core" {
+		return "", invalid
+	}
+	if minor, err := strconv.Atoi(strings.TrimPrefix(page.Meta.APIVersion, "1.")); err != nil || minor > indexAPIMinor {
+		return "", diagnostics.NewFailureWithRemediation("controller.unsupported", "the publisher's Index API page is version "+page.Meta.APIVersion+", newer than the 1."+strconv.Itoa(indexAPIMinor)+" this build reads", "", "use a Bootwright build that reads this Index API version")
+	}
+	version, ok := qualifiedAnsible(page.Files, requested)
+	switch {
+	case !ok:
+		return "", invalid
+	case version == "" && requested == "latest":
+		return "", bundleFailure("Ansible publisher metadata lists no stable ansible-core " + prerequisites.QualifiedAnsibleMinor + " release with a live wheel")
+	case version == "":
+		return "", bundleFailure("Ansible publisher metadata lists no live wheel of ansible-core " + requested)
 	}
 	return version, nil
 }
 
-// latestQualifiedAnsible reports false when a file's yank is none of the
-// shapes PEP 691 allows: absent, a Boolean, or a non-empty reason.
-func latestQualifiedAnsible(files []ansibleIndexFile) (string, bool) {
+// qualifiedAnsible reports false when a file's yank is none of the shapes
+// PEP 691 allows: absent, a Boolean, or a non-empty reason.
+func qualifiedAnsible(files []ansibleIndexFile, requested string) (string, bool) {
 	selected, selectedPatch := "", -1
 	for _, file := range files {
 		var reason string
@@ -292,7 +290,7 @@ func latestQualifiedAnsible(files []ansibleIndexFile) (string, bool) {
 		}
 		version, wheel := strings.CutPrefix(file.Filename, "ansible_core-")
 		version, pure := strings.CutSuffix(version, "-py3-none-any.whl")
-		if yanked || !wheel || !pure || prerequisites.ValidateQualifiedAnsibleVersion(version) != nil {
+		if yanked || !wheel || !pure || prerequisites.ValidateQualifiedAnsibleVersion(version) != nil || requested != "latest" && version != requested {
 			continue
 		}
 		patch, err := strconv.Atoi(version[strings.LastIndex(version, ".")+1:])

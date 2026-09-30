@@ -1224,3 +1224,36 @@ real-host run.
 **Constraints left behind:** new items B148 to B157. Each ansible-check cache
 needs `python3 scripts/tools/ansible_test_prepare.py` once, so it holds the
 CPython 3.9 floor interpreter the sanity suite now pins.
+
+### X28 — test tooling and the collection floor
+
+**Owner:** Architecture, with Controller. Integrated on local `main` on
+2026-09-30 as one commit, beside X21, on explicit request. **Items:** B148,
+B150, B151, B154, B155, B157, B145, B149.
+
+**Outcome:** the working-tree walk guard matches listings by import path and
+knows in-memory filesystems, dot imports and writes through a qualifier (B148);
+the diagnostic registry holds a package variable's every write and resolves
+exported methods across packages (B150); quick-test selects the packages whose
+embedded or test-data files changed and reads quoted paths (B151); the
+milestone checker refuses a done page with a planned slice, a planned item whose
+Delivery omits the slice, and an empty slice suffix (B154); a gate runs the
+plain collection test loop (B155); the boundary test covers the composition
+root's signal rule (B157); Go's read-only tool projection checks `oc`'s release
+stamp (B145); and the collection's module unit tests also run on the Python 3.9
+floor interpreter, whose lock minor is held to the qualified ansible-core, and
+an exact ansible-core intent resolves through the Index API (B149).
+
+**Review:** one finding, rejected. Follow-ups were triaged under the rule of
+2026-09-30: three defects entered M1 (B158 to B160) and four tooling items
+were parked (B161 to B164).
+
+**Gates:** `make check-offline tidy-check modules-check vulncheck docs-check
+race` and `./scripts/ansible-check --suite units`, `sanity`, `integration` and
+`lint` pass on the integrated slice and on the squashed commit. No real-host
+run.
+
+**Constraints left behind:** B158 needs the owner's choice between refusing and
+warning on a newer Index API minor; until then a PyPI minor bump stops fresh
+setups. X28 pins five more Ansible test artifacts, so each ansible-check cache
+runs `python3 scripts/tools/ansible_test_prepare.py` again.

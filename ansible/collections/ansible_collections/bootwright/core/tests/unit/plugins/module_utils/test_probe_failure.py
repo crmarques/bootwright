@@ -31,9 +31,11 @@ def test_a_refused_port_is_told_apart_from_an_absent_address():
         assert "Connection refused" in refused
 
 
+# A probe's timeout is socket.timeout, which Python 3.10 made an alias of
+# TimeoutError; on the 3.9 floor it is its own class, named timeout.
 def test_a_refusal_carrying_no_number_still_names_its_kind():
     for probe_failure in PROBES:
-        assert probe_failure(socket.timeout()) == "TimeoutError"
+        assert probe_failure(socket.timeout()) == socket.timeout.__name__
         assert probe_failure(ValueError("status line")) == "ValueError: status line"
 
 

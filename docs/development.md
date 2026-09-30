@@ -58,8 +58,8 @@ says what that requires.
 | Command | Result |
 | --- | --- |
 | `make build` | Build `bin/bootwright`, stamped with the version, commit and source state of the checkout it was built from. |
-| `make quick` | Inner loop: formatting, vet, the architecture suite, and the packages this branch changed with their dependents. |
-| `make docs-check` | Check guidance links, anchors, cited paths and tests, documented command lines, skill frontmatter and byte budgets, and that each milestone's Status Delivery agrees with its page and every item has one row, one detail section and no delivered record (`TestDocsMilestonePagesAgreeWithTheirStatus`). |
+| `make quick` | Inner loop: formatting, vet, the architecture suite, and the packages a change on this branch reaches, whether to Go source, an embedded asset or test data, as [architecture verification](../specs/architecture.md#architecture-verification) selects them. |
+| `make docs-check` | Check guidance links, anchors, cited paths and tests, documented command lines, skill frontmatter and byte budgets over the files Git tracks, beside the working-tree walks [architecture verification](../specs/architecture.md#architecture-verification) names, and hold the pages to the [milestone rules](../specs/milestones.md) (`TestDocsMilestonePagesAgreeWithTheirStatus`): each milestone's Status Delivery agrees with its page and its Next names only open work; a done milestone keeps no item or planned slice and requires only done milestones; every item has one row of a known Kind, one detail section and no delivered record, and leaves its page when it completes; each planned slice has one row of a known Kind naming only its page's items; and an item's Delivery names a planned slice exactly when that slice's row lists the item, with no empty slice suffix. |
 | `make test` | Run all package tests. |
 | `make vet` | Run Go static analysis on linux/amd64 and on darwin/arm64, where each `*_unsupported.go` refusal stands in for its Linux adapter. |
 | `make fmt-check` | Check Go formatting. |
@@ -141,9 +141,10 @@ stable patch, on controller CPython 3.12, 3.13 or 3.14 at the latest patch of
 the newest. Managed hosts run Python 3.9 through 3.14, the target versions in
 ansible-core 2.21's
 [test matrix](https://github.com/ansible/ansible/blob/stable-2.21/test/lib/ansible_test/_util/target/common/constants.py),
-so the collection's modules and module utilities keep to 3.9 grammar, and the
+so the collection's modules and module utilities keep to 3.9 grammar, the
 sanity suite imports each of them under the CPython 3.9 that
-`scripts/tools/ansible-check-floor-interpreter.json` pins. The ansible-core
+`scripts/tools/ansible-check-floor-interpreter.json` pins, and the units suite
+runs their unit tests under it. The ansible-core
 minor is one constant, in `internal/controller/prerequisites/qualified.go`.
 `TestQualifiedAnsibleMinorAgreesEverywhere` holds every statement of it
 together: the collection's `requires_ansible`, both `ansible-core` pins, the

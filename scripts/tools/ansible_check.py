@@ -102,6 +102,32 @@ def require_imported(collection: Path, minor: str) -> None:
         raise SystemExit(f"The import test on Python {minor} did not run and pass")
 
 
+def require_unit_tested(collection: Path, minor: str) -> None:
+    """Refuse a floor unit run that ansible-test skipped instead of ran.
+
+    ansible-test reports a target Python whose tests it skips with a warning
+    and exits zero, so only the modules and module_utils reports prove that
+    their tests ran, and each must hold a passed test and no failed one.
+    """
+    for context in ("modules", "module_utils"):
+        report = collection / f"tests/output/junit/python{minor}-{context}-units.xml"
+        try:
+            cases = list(ElementTree.parse(report).getroot().iter("testcase"))
+        except (OSError, ElementTree.ParseError) as failure:
+            raise SystemExit(
+                f"The {context} unit tests on Python {minor} left no report"
+            ) from failure
+        outcomes = [{child.tag for child in case} for case in cases]
+        passed = [
+            tags for tags in outcomes if not tags & {"skipped", "failure", "error"}
+        ]
+        failed = [tags for tags in outcomes if tags & {"failure", "error"}]
+        if not passed or failed:
+            raise SystemExit(
+                f"The {context} unit tests on Python {minor} did not run and pass"
+            )
+
+
 def main() -> int:
     if sys.version_info[:3] != (3, 13, 15):
         raise SystemExit(
@@ -273,14 +299,67 @@ def main() -> int:
                 env=environment,
                 check=True,
             )
+        if "units" in selected:
+            # ansible-test installs the collection loader before it collects a
+            # test. This runs the same tests again the plain way, pytest alone
+            # with the collections directory on PYTHONPATH, where the
+            # collection's conftest.py installs that loader instead. -P and -s
+            # keep the working directory and the user site off the path, as
+            # -I does, while PYTHONPATH is still read.
+            collections = area / "collections"
+            subprocess.run(
+                [
+                    str(executable),
+                    "-P",
+                    "-s",
+                    "-m",
+                    "pytest",
+                    str(test_collection.relative_to(collections) / "tests/unit"),
+                ],
+                cwd=collections,
+                env=dict(environment, PYTHONPATH=str(collections)),
+                check=True,
+            )
+        if not selected & {"sanity", "units"}:
+            return 0
+        # ansible-test finds the target's real interpreter on PATH to build
+        # its environment.
+        minor, interpreter = floor_interpreter(root, fixtures, area)
+        floor_environment = dict(
+            environment,
+            PATH=os.pathsep.join(
+                [str(executable.parent), str(interpreter.parent), "/usr/bin", "/bin"]
+            ),
+        )
+        if "units" in selected:
+            # The units suite above runs every test on the controller's
+            # Python; this runs the modules and module_utils tests again in a
+            # virtual environment of the managed-host floor, where a library
+            # call the floor lacks fails once its function runs. The floor is
+            # no controller Python, so ansible-test runs no controller test.
+            subprocess.run(
+                ansible_test
+                + [
+                    "units",
+                    "--num-workers",
+                    "0",
+                    "--controller",
+                    "origin:python=3.13",
+                    "--target-python",
+                    f"venv/{minor}@{interpreter}",
+                    "--color",
+                    "no",
+                ],
+                cwd=test_collection,
+                env=floor_environment,
+                check=True,
+            )
+            require_unit_tested(test_collection, minor)
         if "sanity" in selected:
             # Sanity above imports every module on the controller's Python;
             # this imports them again under the managed-host floor, which
             # proves what the collection's grammar test cannot, such as a
             # name imported from a library module the floor lacks.
-            # ansible-test finds the target's real interpreter on PATH to
-            # build its environment.
-            minor, interpreter = floor_interpreter(root, fixtures, area)
             subprocess.run(
                 ansible_test
                 + [
@@ -296,17 +375,7 @@ def main() -> int:
                     "no",
                 ],
                 cwd=test_collection,
-                env=dict(
-                    environment,
-                    PATH=os.pathsep.join(
-                        [
-                            str(executable.parent),
-                            str(interpreter.parent),
-                            "/usr/bin",
-                            "/bin",
-                        ]
-                    ),
-                ),
+                env=floor_environment,
                 check=True,
             )
             require_imported(test_collection, minor)
