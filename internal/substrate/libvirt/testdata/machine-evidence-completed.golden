@@ -10,6 +10,7 @@
     }
   ],
   "domain": "bootwright-lab-rhel-01",
+  "listener": true,
   "owned": true,
   "postcondition": true,
   "power": "Off",

@@ -2,7 +2,9 @@ package architecture_test
 
 import (
 	"go/ast"
+	"go/token"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -146,8 +148,11 @@ func TestCLIImportsOnlyServicePackagesAndSharedValues(t *testing.T) {
 
 // TestCompositionRootBuildsNoDiagnostics keeps product policy and operator
 // guidance out of wiring. Invoking-account verification retains its typed
-// context failures, which name no command.
+// context failures, which name no command. No string literal there may be a
+// documented diagnostic code: the packages that decide a refusal build it, and
+// the composition root only presents what they report.
 func TestCompositionRootBuildsNoDiagnostics(t *testing.T) {
+	codes := documentedDiagnosticCodes(t)
 	for _, source := range productionSources(t) {
 		if source.owner != "cmd/bootwright" {
 			continue
@@ -162,6 +167,9 @@ func TestCompositionRootBuildsNoDiagnostics(t *testing.T) {
 			case *ast.BasicLit:
 				if strings.Contains(typed.Value, "context use") {
 					t.Errorf("%s carries operator guidance in the composition root", source.path)
+				}
+				if value, err := strconv.Unquote(typed.Value); typed.Kind == token.STRING && err == nil && codes[value] {
+					t.Errorf("%s names diagnostic code %s in the composition root", source.path, value)
 				}
 			}
 			return true

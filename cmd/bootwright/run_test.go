@@ -3,12 +3,14 @@ package main
 import (
 	"bytes"
 	"context"
+	"os"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/privilege"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -43,12 +45,11 @@ func TestOnlyContextFreeAcquisitionForwardsTheInvokingRoute(t *testing.T) {
 		{routeFromFile, nil},
 		{routeContextCheck, nil},
 	} {
-		var out, errOut bytes.Buffer
-		route, refused := ambientRoute(cli.ClassifyInvocation(test.args), &out, &errOut)
-		if refused != 0 || out.Len() != 0 || errOut.Len() != 0 {
-			t.Fatalf("%v: refused %d, stdout %q, stderr %q", test.args, refused, out.String(), errOut.String())
+		route, refusal := privilege.AmbientRoute(cli.ClassifyInvocation(test.args).AmbientRoute, os.LookupEnv)
+		if refusal != nil {
+			t.Fatalf("%v: refused %+v", test.args, *refusal)
 		}
-		if got := routeAssignments(route); !slices.Equal(got, test.want) {
+		if got := privilege.RouteAssignments(route); !slices.Equal(got, test.want) {
 			t.Errorf("%v: forwarded %q, want %q", test.args, got, test.want)
 		}
 	}
@@ -67,16 +68,12 @@ func TestAnUnqualifiedRouteRefusesOnlyContextFreeAcquisition(t *testing.T) {
 		{routeFromFile, false},
 		{routeContextCheck, false},
 	} {
-		var out, errOut bytes.Buffer
-		_, refused := ambientRoute(cli.ClassifyInvocation(test.args), &out, &errOut)
-		if (refused != 0) != test.refuses {
-			t.Errorf("%v: refused %d, want refusal %v", test.args, refused, test.refuses)
+		_, refusal := privilege.AmbientRoute(cli.ClassifyInvocation(test.args).AmbientRoute, os.LookupEnv)
+		if (refusal != nil) != test.refuses {
+			t.Errorf("%v: refusal %+v, want refusal %v", test.args, refusal, test.refuses)
 		}
-		if test.refuses && !strings.Contains(errOut.String(), "controller.unsupported") {
-			t.Errorf("%v: refusal reported %q", test.args, errOut.String())
-		}
-		if !test.refuses && (out.Len() != 0 || errOut.Len() != 0) {
-			t.Errorf("%v: stdout %q, stderr %q", test.args, out.String(), errOut.String())
+		if refusal != nil && refusal.Code != "controller.unsupported" {
+			t.Errorf("%v: refusal reported %+v", test.args, *refusal)
 		}
 	}
 }

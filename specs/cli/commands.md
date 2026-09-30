@@ -316,8 +316,9 @@ for `--from-file`. URL userinfo and an unverifiable digest are rejected.
 Redirects are disabled unless the media-import port explicitly permits them;
 every permitted hop is revalidated under [security](../security.md).
 
-`<filename.iso>` is one portable ASCII basename of 5 through 255 bytes with an
-exact lowercase `.iso` suffix. Its stem begins and ends with an ASCII
+`<filename.iso>` is one portable ASCII basename of 5 through 250 bytes with an
+exact lowercase `.iso` suffix, so its record name, the image name followed by
+`.json`, fits one 255-byte file name. Its stem begins and ends with an ASCII
 alphanumeric character and otherwise contains only ASCII alphanumerics, `.`,
 `_`, or `-`. A case-insensitive stem equal to `CON`, `PRN`, `AUX`, `NUL`,
 `COM1` through `COM9`, or `LPT1` through `LPT9` is invalid.

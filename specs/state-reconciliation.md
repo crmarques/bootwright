@@ -492,6 +492,17 @@ and refuses before registration when no block realizes it, so a capability
 never learns another capability's block-identity grammar and a frozen plan
 carries only resolved dependencies.
 
+An apply attempt receives what each block it depends on durably proved in this
+operation: that block's kind, object, implementation, verb and state, and the
+evidence its last attempt recorded when that attempt completed, handed over
+unread in frozen plan order. It is read before the attempt starts, so a record
+that cannot be read leaves the block as it was. A removal's attempts, every
+resolution and every quiescence probe receive none.
+
+Not yet met: a block a resolution completed hands over what its last attempt
+recorded, which is no evidence when that attempt never completed, rather than
+what the resolution observed; tracked as [B109](milestones/m1.md#b109).
+
 A definition may also name the authorization tokens its effects *consume*,
 frozen with the plan and covered by its digest; the
 [authorization rules](#confirmation-and-authorization) require exactly the
@@ -579,15 +590,32 @@ shape a capability reports unsupported. A frozen plan requires a resolved
 implementation for every block; a removal planned from a frozen plan is never
 refused this way.
 
-A fresh `plan` previews exactly the decision a fresh `apply` registers, and one
-path takes it: it compiles the frozen input, refuses what this executable
-cannot realize, plans, refuses `lifecycle.state` for a plan with no block, and
-refuses a selection that admits no startable block. Both verbs report a refusal
-of that decision with the same code, message and remedy, and a preview that
-succeeds shows the plan `apply` then registers. The preview stops at the
-decision: it binds no secret, claims neither the controller host nor a host
-reservation, takes no exclusive lock and registers nothing, so a refusal from
-those steps, like the authorization and confirmation gates, stays `apply`'s.
+Every `plan` previews exactly the decision the verb it previews takes, and one
+path takes both. That verb is a fresh `apply` over no operation or a completed
+destroy, the `destroy` of a completed apply, and an incomplete operation's own
+verb. A fresh apply's decision compiles the frozen input, refuses what this
+executable cannot realize, plans, refuses `lifecycle.state` for a plan with no
+block, and refuses a selection that admits no startable block; a continued
+apply's refuses a selection as the rules above do; and a removal's refuses, as
+[continuation and removal](#continuation-and-removal) requires, a completed
+apply holding a block that is not `done`, records that leave nothing to remove,
+and a frozen request this executable cannot read. A failed removal is previewed
+as the fresh removal `destroy` starts over what it has not yet proved gone.
+`plan` over an incomplete apply previews its continuation, never the removal a
+`destroy` would start over it, so the refusal of records that contradict what
+an incomplete apply started stays that `destroy`'s. A `destroy` accepts no
+stage selection, so its preview refuses `lifecycle.stage` for any. Where a
+[finalization](#lifecycle-unit) is due, the preview decides as the verb does
+once that finalization is done, without performing it, and where the verb then
+settles, the preview says the verb only completes that finalization. The
+preview and its verb report a refusal of that decision with the same code,
+message and remedy, and a preview that succeeds shows the plan the verb then
+presents. The preview stops at the decision: it finalizes nothing, binds no
+secret, claims neither the controller host nor a host reservation, takes no
+exclusive lock and registers nothing, so a refusal from those steps, like the
+authorization and confirmation gates, a continuation's re-proof of its input,
+automation and host, and a removal's resolution and quiescence proof, stays the
+verb's.
 
 A domain capability may define ordered presentation groups within its block for
 one operation performed across one or more Machines. The capability owns each

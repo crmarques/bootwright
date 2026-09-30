@@ -13,10 +13,20 @@ const maxEvidenceBytes = 64 << 10
 // Go validates it strictly, so an adapter cannot widen a postcondition or
 // report a network the operation did not freeze.
 type HostEvidence struct {
-	Absent        bool              `json:"absent"`
-	Hypervisor    bool              `json:"hypervisor"`
-	Networks      []NetworkEvidence `json:"networks"`
-	Pool          string            `json:"pool"`
+	Absent bool `json:"absent"`
+	// Directory is whether anything exists at the pool directory's path, read
+	// whether or not the URI answered. Evidence without it proves the
+	// directory neither present nor absent.
+	Directory  *bool             `json:"directory"`
+	Hypervisor bool              `json:"hypervisor"`
+	Networks   []NetworkEvidence `json:"networks"`
+	Pool       string            `json:"pool"`
+	// PoolAnswered is whether the storage driver answered for the pool: it
+	// returned the pool, or completed a listing that does not name it. The
+	// URI answering proves only that the hypervisor did, and a storage driver
+	// that is silent reports no pool either, so an empty Pool means absent
+	// only while PoolAnswered is true. Evidence without it decodes as silent.
+	PoolAnswered  bool              `json:"poolAnswered"`
 	Postcondition bool              `json:"postcondition"`
 	Request       string            `json:"request"`
 	Services      []ServiceEvidence `json:"services"`
@@ -33,11 +43,18 @@ type ServiceEvidence struct {
 }
 
 type NetworkEvidence struct {
-	Bridge  bool   `json:"bridge"`
-	Managed bool   `json:"managed"`
-	Name    string `json:"name"`
-	Owned   bool   `json:"owned"`
-	State   string `json:"state"`
+	// Answered is whether the network driver answered for a managed network:
+	// it returned the definition, or completed a listing that does not name
+	// it. A network driver that is silent reports no state and no ownership
+	// either, so a managed network without state is absent only while
+	// Answered is true. An external network is never read, so it is never
+	// answered for. Evidence without the field decodes as silent.
+	Answered bool   `json:"answered"`
+	Bridge   bool   `json:"bridge"`
+	Managed  bool   `json:"managed"`
+	Name     string `json:"name"`
+	Owned    bool   `json:"owned"`
+	State    string `json:"state"`
 }
 
 // MachineEvidence is the only result shape the machine adapter may return. It
@@ -50,14 +67,19 @@ type MachineEvidence struct {
 	// reports an empty Domain and State too, and neither then proves anything,
 	// so an empty Domain means absent only while Answered is true. Evidence
 	// without the field decodes as silent.
-	Answered      bool           `json:"answered"`
-	Controller    string         `json:"controller"`
-	Disks         []DiskEvidence `json:"disks"`
-	Domain        string         `json:"domain"`
-	Owned         bool           `json:"owned"`
-	Postcondition bool           `json:"postcondition"`
-	Power         string         `json:"power"`
-	Request       string         `json:"request"`
+	Answered   bool           `json:"answered"`
+	Controller string         `json:"controller"`
+	Disks      []DiskEvidence `json:"disks"`
+	Domain     string         `json:"domain"`
+	// Listener is whether anything listens on the controller's socket. Alone
+	// it is not proved to be this Machine's, so only absence reads it: a
+	// removal releases the socket only once nothing listens on it. Evidence
+	// without it proves the socket neither held nor free.
+	Listener      *bool  `json:"listener"`
+	Owned         bool   `json:"owned"`
+	Postcondition bool   `json:"postcondition"`
+	Power         string `json:"power"`
+	Request       string `json:"request"`
 	// State is what the hypervisor says the domain is doing, in libvirt's own
 	// words. Only `shut off` means removing it interrupts nothing.
 	State  string `json:"state"`
@@ -92,7 +114,7 @@ func ValidateHostPresence(data []byte, request HostRequest, digest string) error
 	if !evidence.URI {
 		return refusal("lifecycle.state", "the declared libvirt connection does not answer", "")
 	}
-	if evidence.Pool != "active" {
+	if !evidence.PoolAnswered || evidence.Pool != "active" {
 		return refusal("lifecycle.state", "the provider's virtual-media pool is not active", "")
 	}
 	return matchNetworks(evidence.Networks, request.Networks)
@@ -141,7 +163,7 @@ func matchNetworks(observed []NetworkEvidence, frozen []Network) error {
 		if !network.Managed {
 			continue
 		}
-		if entry.State != "active" {
+		if !entry.Answered || entry.State != "active" {
 			return refusal("lifecycle.state", "a managed libvirt network is not active", "")
 		}
 		if !entry.Owned {
@@ -152,9 +174,12 @@ func matchNetworks(observed []NetworkEvidence, frozen []Network) error {
 }
 
 // ValidateHostAbsence accepts evidence only when it positively proves that
-// every owned network and the pool are gone. Packages, foreign networks and
-// external bridges are never this block's to remove, so it reports nothing
-// about them.
+// every owned network, the pool and its directory are gone: the networks and
+// pool through a URI that answered and each through the driver that owns it,
+// because a connection or a driver that does not answer reports none of them
+// either, and the directory by its path. Packages, foreign networks and
+// external bridges are never this block's to remove, so nothing about them
+// refuses it.
 func ValidateHostAbsence(data []byte, digest string) error {
 	evidence, err := decodeHostEvidence(data, digest)
 	if err != nil {
@@ -163,11 +188,26 @@ func ValidateHostAbsence(data []byte, digest string) error {
 	if !evidence.Postcondition || !evidence.Absent {
 		return refusal("lifecycle.state", "the provider host adapter did not prove removal", "")
 	}
+	if !evidence.URI {
+		return refusal("lifecycle.state", "the provider host's hypervisor did not answer, so its removal is not proved", "")
+	}
+	if evidence.Directory == nil || *evidence.Directory {
+		return refusal("lifecycle.state", "the provider host removal evidence does not prove its pool directory gone", "")
+	}
+	if !evidence.PoolAnswered {
+		return refusal("lifecycle.state", "the provider host's storage driver did not answer for its pool, so its removal is not proved", "")
+	}
 	if evidence.Pool != "" {
 		return refusal("lifecycle.state", "the provider host removal evidence still reports its pool", "")
 	}
 	for _, network := range evidence.Networks {
-		if network.Managed {
+		if !network.Managed {
+			continue
+		}
+		if !network.Answered {
+			return refusal("lifecycle.state", "the provider host's network driver did not answer for a managed network, so its removal is not proved", "")
+		}
+		if network.State != "" || network.Owned {
 			return refusal("lifecycle.state", "the provider host removal evidence still reports a managed network", "")
 		}
 	}
@@ -175,12 +215,14 @@ func ValidateHostAbsence(data []byte, digest string) error {
 }
 
 // ValidateHostPartial accepts evidence only when it positively proves this
-// context's own provider host is part way realized: its pool or one of its
-// owned managed networks is present while the whole is not. A managed network
-// the hypervisor defines without this context's ownership is foreign, so it
-// proves nothing here and leaves the effect unknown. The hypervisor closure is
-// shared host software this block never removes, so its presence alone is not
-// a partial realization.
+// context's own provider host is part way realized: its pool, its pool
+// directory or one of its owned managed networks is present while the whole
+// is not. The directory is read by its path, so it counts whether or not the
+// URI answered, and its path is this context's own reservation. A managed
+// network the hypervisor defines without this context's ownership is foreign,
+// so it proves nothing here and leaves the effect unknown. The hypervisor
+// closure is shared host software this block never removes, so its presence
+// alone is not a partial realization.
 func ValidateHostPartial(data []byte, digest string) error {
 	evidence, err := decodeHostEvidence(data, digest)
 	if err != nil {
@@ -189,7 +231,7 @@ func ValidateHostPartial(data []byte, digest string) error {
 	if evidence.Postcondition || evidence.Absent {
 		return refusal("lifecycle.state", "the provider host evidence proves a settled state, not a partial one", "")
 	}
-	present := evidence.Pool != ""
+	present := evidence.Pool != "" || (evidence.Directory != nil && *evidence.Directory)
 	for _, network := range evidence.Networks {
 		if !network.Managed || (network.State == "" && !network.Owned) {
 			continue
@@ -258,8 +300,9 @@ func matchDisks(observed []DiskEvidence, frozen []Disk) error {
 }
 
 // ValidateMachineAbsence accepts evidence only when it positively proves the
-// domain, its disks and the controller are gone. An empty domain proves the
-// domain gone only when the hypervisor answered for it.
+// domain, its disks and the controller are gone and nothing listens on the
+// controller's socket, so the removal can release that reservation. An empty
+// domain proves the domain gone only when the hypervisor answered for it.
 func ValidateMachineAbsence(data []byte, digest string) error {
 	evidence, err := decodeMachineEvidence(data, digest)
 	if err != nil {
@@ -278,6 +321,9 @@ func ValidateMachineAbsence(data []byte, digest string) error {
 		if disk.Present {
 			return refusal("lifecycle.state", "the machine removal evidence still reports a disk", "")
 		}
+	}
+	if evidence.Listener == nil || *evidence.Listener {
+		return refusal("lifecycle.state", "the machine removal evidence does not prove its controller socket free", "")
 	}
 	return nil
 }

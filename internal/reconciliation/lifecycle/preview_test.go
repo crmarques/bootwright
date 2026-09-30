@@ -1,12 +1,16 @@
 package lifecycle
 
 import (
+	"bytes"
 	"context"
+	"path"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -89,6 +93,281 @@ func TestAFreshPlanAfterADestroyRefusesAsItsApplyDoes(t *testing.T) {
 	}
 	if !reflect.DeepEqual(diagnostics.Of(previewErr), diagnostics.Of(applyErr)) {
 		t.Fatalf("preview reported %+v, apply reported %+v", diagnostics.Of(previewErr), diagnostics.Of(applyErr))
+	}
+}
+
+// previewCase is one durable state, the service over it, and the verb its
+// preview decides as, run with the stages the row selects and the tokens its
+// plan consumes.
+type previewCase struct {
+	service   Service
+	workspace *testWorkspace
+	presenter *testPresenter
+	verb      reconciliation.Verb
+	stages    []string
+	tokens    []string
+}
+
+func (c previewCase) run(ctx context.Context) (*OperationResult, error) {
+	if c.verb == reconciliation.Destroy {
+		return c.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, Authorizations: c.tokens, SkipConfirmation: true})
+	}
+	return c.service.Apply(ctx, ApplyRequest{ContextName: testContextName, Authorizations: c.tokens, SkipConfirmation: true, Stages: c.stages})
+}
+
+// harnessCase passes the token only where the capability consumes it, since a
+// token the plan does not consume refuses.
+func harnessCase(h *harness, verb reconciliation.Verb, stages ...string) previewCase {
+	var tokens []string
+	if len(h.capability.consumes) != 0 {
+		tokens = dataLoss()
+	}
+	return previewCase{service: h.service, workspace: h.workspace, presenter: h.presenter, verb: verb, stages: stages, tokens: tokens}
+}
+
+func killedCase(run killedRun, verb reconciliation.Verb) previewCase {
+	service, _ := run.repairing()
+	return previewCase{service: service, workspace: run.snapshot.workspace, presenter: run.rig.harness.presenter, verb: verb, tokens: dataLoss()}
+}
+
+// previewRow is one state a preview decides over, and what its verb then does:
+// refuses with refusal (and message, where the row names it), settles after
+// only a finalization, or presents the plan of shown. A continuation names the
+// receipt's next action; a fresh plan names none. fails is the code a verb
+// that presented its plan then fails with.
+type previewRow struct {
+	name             string
+	prepare          func(t *testing.T) previewCase
+	refusal, message string
+	settles          bool
+	shown            reconciliation.Verb
+	next, fails      string
+}
+
+// Every preview is the decision of the verb it previews. It refuses where that
+// verb refuses, with the same diagnostics; it says so where that verb only
+// completes an interrupted finalization and settles; and otherwise it shows the
+// very plan that verb then presents. It writes, binds and locks nothing.
+func TestEveryPreviewDecidesAsItsVerbDoes(t *testing.T) {
+	ctx := context.Background()
+	for _, row := range previewRows(ctx) {
+		t.Run(row.name, func(t *testing.T) {
+			c := row.prepare(t)
+			current := currentIn(t, c.service)
+			records, evidence, mutations := c.workspace.area.clone(), slices.Clone(c.workspace.evidence), c.workspace.mutations
+			preview, previewErr := c.service.Plan(ctx, PlanRequest{ContextName: testContextName, Stages: c.stages})
+			if !sameFiles(c.workspace.area, records) || !bytes.Equal(c.workspace.evidence, evidence) || c.workspace.mutations != mutations {
+				t.Fatal("the preview wrote durable state or took the exclusive lock")
+			}
+			presented := len(c.presenter.presented)
+			result, verbErr := c.run(ctx)
+			switch {
+			case row.refusal != "":
+				reported := diagnostics.Of(previewErr)
+				if firstCode(previewErr) != row.refusal || (row.message != "" && reported[0].Message != row.message) ||
+					!reflect.DeepEqual(reported, diagnostics.Of(verbErr)) {
+					t.Fatalf("preview = %+v (%v), %s = %+v (%v)", reported, previewErr, c.verb, diagnostics.Of(verbErr), verbErr)
+				}
+			case row.settles:
+				want := Receipt{Operation: current, Verb: "plan", State: "preview", Next: "continue-" + string(c.verb)}
+				if previewErr != nil || verbErr != nil || !preview.Finalizes || !preview.Continuation || preview.Receipt != want ||
+					preview.Verb != string(c.verb) || !result.Settled || result.Recovered != RecoveredFinalization ||
+					result.Receipt.Operation != current || len(c.presenter.presented) != presented {
+					t.Fatalf("preview = %+v (%v), %s = %+v (%v)", preview, previewErr, c.verb, result, verbErr)
+				}
+			default:
+				agreeOnPresentation(t, row, c, current, preview, previewErr, verbErr, presented)
+			}
+		})
+	}
+}
+
+// agreeOnPresentation proves the verb presented exactly the plan its preview
+// showed, under the receipt the row names.
+func agreeOnPresentation(t *testing.T, row previewRow, c previewCase, current string, preview *PlanResult, previewErr, verbErr error, presented int) {
+	t.Helper()
+	if previewErr != nil || (verbErr != nil && firstCode(verbErr) != row.fails) || (verbErr == nil && row.fails != "") {
+		t.Fatalf("preview = %v, %s = %v", previewErr, c.verb, verbErr)
+	}
+	if preview.Finalizes || len(c.presenter.presented) != presented+1 {
+		t.Fatalf("preview = %+v, the %s presented %d plans", preview, c.verb, len(c.presenter.presented)-presented)
+	}
+	shown, previewed := c.presenter.presented[presented], *preview
+	shown.Context, shown.Receipt, previewed.Context, previewed.Receipt = ContextIdentity{}, Receipt{}, ContextIdentity{}, Receipt{}
+	if !reflect.DeepEqual(shown, previewed) {
+		t.Fatalf("the %s presented %+v, the preview showed %+v", c.verb, shown, previewed)
+	}
+	want := Receipt{Operation: "none", Verb: "plan", State: "preview", Next: string(row.shown)}
+	if row.next != "" {
+		want = Receipt{Operation: current, Verb: "plan", State: "preview", Next: row.next}
+	}
+	if preview.Receipt != want || preview.Verb != string(row.shown) || preview.Context.Name != testContextName {
+		t.Fatalf("preview receipt = %+v verb %s, want %+v verb %s", preview.Receipt, preview.Verb, want, row.shown)
+	}
+}
+
+func currentIn(t *testing.T, service Service) string {
+	t.Helper()
+	status, err := service.Status(context.Background(), StatusRequest{ContextName: testContextName})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Lifecycle == nil {
+		return ""
+	}
+	return status.Lifecycle.Operation
+}
+
+func previewRows(ctx context.Context) []previewRow {
+	applied := []reconciliation.Verb{reconciliation.Apply}
+	destroyed := func(t *testing.T, h *harness) {
+		t.Helper()
+		completeApply(t, h)
+		if _, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paused := func(t *testing.T, stages string) previewCase {
+		h := newPlannedHarness(t, nestedDefinitions())
+		if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true, Stages: []string{"infra-components"}}); err != nil {
+			t.Fatal(err)
+		}
+		return harnessCase(h, reconciliation.Apply, stages)
+	}
+	removalOutcome := func(t *testing.T, h *harness, outcome reconciliation.Outcome) {
+		t.Helper()
+		completeApply(t, h)
+		h.capability.outcomes = []Result{{Outcome: outcome}}
+		if _, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
+			t.Fatalf("a removal whose block reported %s reported success", outcome)
+		}
+	}
+	return []previewRow{
+		{name: "a destroy of a completed apply", shown: reconciliation.Destroy, prepare: func(t *testing.T) previewCase {
+			h := newHarness(t, "alpha", "bravo")
+			completeApply(t, h)
+			return harnessCase(h, reconciliation.Destroy)
+		}},
+		{name: "a destroy of a completed apply whose finalization is due", shown: reconciliation.Destroy, prepare: func(t *testing.T) previewCase {
+			h := newHarness(t, "alpha", "bravo")
+			completeApply(t, h)
+			h.workspace.evidence = evidenceBytes(t, reconciliation.Apply, reconciliation.OperationRunning)
+			return harnessCase(h, reconciliation.Destroy)
+		}},
+		{name: "a destroy of a completed apply with a lost block record", refusal: "lifecycle.state", prepare: func(t *testing.T) previewCase {
+			h := newHarness(t, "alpha", "bravo", "charlie")
+			current := completeApply(t, h)
+			h.workspace.area.mutex.Lock()
+			delete(h.workspace.area.files, path.Join(current, "blocks", "bravo", "state.json"))
+			h.workspace.area.mutex.Unlock()
+			return harnessCase(h, reconciliation.Destroy)
+		}},
+		{name: "a fresh apply after a completed destroy", shown: reconciliation.Apply, prepare: func(t *testing.T) previewCase {
+			h := newHarness(t, "alpha", "bravo")
+			destroyed(t, h)
+			return harnessCase(h, reconciliation.Apply)
+		}},
+		{name: "a fresh apply after a completed destroy whose finalization is due", shown: reconciliation.Apply, prepare: func(t *testing.T) previewCase {
+			h := newHarness(t, "alpha", "bravo")
+			destroyed(t, h)
+			h.workspace.evidence = evidenceBytes(t, reconciliation.Destroy, reconciliation.OperationRunning)
+			return harnessCase(h, reconciliation.Apply)
+		}},
+		{
+			name: "a continuation whose selection admits nothing", refusal: "lifecycle.stage", message: "the selected stages have nothing to start",
+			prepare: func(t *testing.T) previewCase { return paused(t, "clusters") },
+		},
+		{
+			name: "a continuation whose selection excludes the failed block", refusal: "lifecycle.stage",
+			message: "the block this operation must retry is outside the selected stages",
+			prepare: func(t *testing.T) previewCase {
+				h := newHarness(t, "alpha")
+				failApply(t, h, "alpha")
+				return harnessCase(h, reconciliation.Apply, "machines")
+			},
+		},
+		{
+			name: "a continuation whose selection admits work", shown: reconciliation.Apply, next: "continue-apply",
+			prepare: func(t *testing.T) previewCase { return paused(t, "substrates") },
+		},
+		{name: "a running apply whose blocks are all done", settles: true, prepare: func(t *testing.T) previewCase {
+			return killedCase(killedAt(ctx, t, nil, reconciliation.Apply, "replace <op>/operation.json#1"), reconciliation.Apply)
+		}},
+		{
+			name: "a running apply whose blocks are all done over a changed input", refusal: "lifecycle.state",
+			message: "the desired state changed after this apply completed",
+			prepare: func(t *testing.T) previewCase {
+				c := killedCase(killedAt(ctx, t, nil, reconciliation.Apply, "replace <op>/operation.json#1"), reconciliation.Apply)
+				c.workspace.inputs = desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{
+					desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte("kind: Environment\n# edited\n")),
+				}}
+				return c
+			},
+		},
+		{name: "a running destroy whose blocks are all done", settles: true, prepare: func(t *testing.T) previewCase {
+			return killedCase(killedAt(ctx, t, applied, reconciliation.Destroy, "replace <op>/operation.json#1"), reconciliation.Destroy)
+		}},
+		{name: "an unknown apply whose blocks are all done", settles: true, prepare: func(t *testing.T) previewCase {
+			return harnessCase(unknownApplyWithEveryBlockDone(t), reconciliation.Apply)
+		}},
+		{name: "an unknown destroy whose blocks are all done", settles: true, prepare: func(t *testing.T) previewCase {
+			return harnessCase(unknownDestroyWithEveryBlockDone(t), reconciliation.Destroy)
+		}},
+		{name: "a failed destroy", shown: reconciliation.Destroy, prepare: func(t *testing.T) previewCase {
+			h := newHarness(t, "alpha", "bravo")
+			removalOutcome(t, h, reconciliation.OutcomeFailed)
+			return harnessCase(h, reconciliation.Destroy)
+		}},
+		{
+			name: "a failed destroy whose blocks are all done", refusal: "lifecycle.state",
+			message: "the operation this removal supersedes records no block it still owns",
+			prepare: func(t *testing.T) previewCase {
+				h := newHarness(t, "alpha")
+				removalOutcome(t, h, reconciliation.OutcomeFailed)
+				rewriteState(t, h, path.Join(currentOperation(t, h), "blocks", "alpha", "state.json"), string(reconciliation.BlockDone))
+				return harnessCase(h, reconciliation.Destroy)
+			},
+		},
+		{
+			// The harness answers an unscripted observation as still unknown,
+			// so the repeated destroy presents its plan and then fails again.
+			name: "an unknown destroy that still holds an unresolved block", shown: reconciliation.Destroy, next: "resolve", fails: "lifecycle.unknown",
+			prepare: func(t *testing.T) previewCase {
+				h := newHarness(t, "alpha", "bravo")
+				removalOutcome(t, h, reconciliation.OutcomeUnknown)
+				return harnessCase(h, reconciliation.Destroy)
+			},
+		},
+	}
+}
+
+// A destroy accepts no stage selection, so a preview of one refuses any
+// selection, over a completed apply and over a failed destroy alike, and
+// writes nothing.
+func TestADestroyPreviewRefusesAStageSelection(t *testing.T) {
+	for name, prepare := range map[string]func(t *testing.T, h *harness){
+		"a completed apply": func(t *testing.T, h *harness) { completeApply(t, h) },
+		"a failed destroy": func(t *testing.T, h *harness) {
+			completeApply(t, h)
+			h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
+			if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
+				t.Fatal("a failed removal reported success")
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t, "alpha")
+			prepare(t, h)
+			records, evidence, mutations := h.workspace.area.clone(), slices.Clone(h.workspace.evidence), h.workspace.mutations
+			_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: testContextName, Stages: []string{"infra-components"}})
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Remediation != "repeat bootwright plan without --stage" {
+				t.Fatalf("preview = %+v (%v)", reported, err)
+			}
+			if !sameFiles(h.workspace.area, records) || !bytes.Equal(h.workspace.evidence, evidence) || h.workspace.mutations != mutations {
+				t.Fatal("the refused preview wrote durable state")
+			}
+		})
 	}
 }
 

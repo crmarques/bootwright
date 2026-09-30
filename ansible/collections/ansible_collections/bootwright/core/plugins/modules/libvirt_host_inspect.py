@@ -10,7 +10,12 @@ version_added: "0.1.0"
 description:
   - Reports the hypervisor closure, the virtualization daemon, whether the
     declared connection answers, the state and ownership of every declared
-    network, and the virtual-media pool.
+    network, the virtual-media pool, and whether the pool directory exists.
+  - Networks and the pool are read only through a connection that answers,
+    so without an answer their empty fields prove nothing. Each network and
+    the pool also report whether the driver that owns it answered for it,
+    because a driver that is silent reports them undefined too. The pool
+    directory is observed by its path either way.
   - Performs no change and is safe to repeat.
 options:
   request:
@@ -29,7 +34,12 @@ EXAMPLES = r"""
 
 RETURN = r"""
 observation:
-  description: The owned host resources and their observed state.
+  description:
+    - The owned host resources and their observed state.
+    - The uri key is whether the declared connection answered, each
+      network's answered key and the poolAnswered key whether the network
+      and storage drivers answered for them, and the directory key whether
+      anything exists at the pool directory's path.
   returned: always
   type: dict
 """

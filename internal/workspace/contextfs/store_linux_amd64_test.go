@@ -207,7 +207,10 @@ func TestEmptyRootViewRemainsReadOnly(t *testing.T) {
 	}
 }
 
-func TestEmptyRegistryToleratesVerifiedUnpublishedRegistryStage(t *testing.T) {
+// A registry replacement refused in process removes its stage; only a kill
+// leaves one, which a view ignores and the next reserve removes as it
+// publishes.
+func TestAViewToleratesARegistryStageAKillLeft(t *testing.T) {
 	store, _ := fixture(t)
 	checkpoints := 0
 	store.fail = func(point string) error {
@@ -227,22 +230,37 @@ func TestEmptyRegistryToleratesVerifiedUnpublishedRegistryStage(t *testing.T) {
 	}
 	expectState(t, reserve())
 	store.fail = nil
-	view, err := store.View(context.Background())
-	if err != nil || !reflect.DeepEqual(view, emptyRegistry()) {
-		t.Fatalf("unpublished registry stage changed the visible registry: %#v %v", view, err)
+	if checkpoints != 2 {
+		t.Fatalf("the reservation reached %d registry renames, want 2", checkpoints)
 	}
-	entries, err := os.ReadDir(store.options.Root)
+	pending := func() []string {
+		t.Helper()
+		entries, err := os.ReadDir(store.options.Root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for _, entry := range entries {
+			if pendingInitialRegistryName(entry.Name()) {
+				names = append(names, entry.Name())
+			}
+		}
+		return names
+	}
+	if left := pending(); len(left) != 0 {
+		t.Fatalf("the refused replacement left %v", left)
+	}
+	registry, err := os.ReadFile(filepath.Join(store.options.Root, "registry.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	pending := 0
-	for _, entry := range entries {
-		if pendingInitialRegistryName(entry.Name()) {
-			pending++
-		}
+	writePrivate(t, filepath.Join(store.options.Root, plantedStageName(1, ".json")), registry)
+	view, err := store.View(context.Background())
+	if err != nil || !reflect.DeepEqual(view, emptyRegistry()) {
+		t.Fatalf("a killed replacement's stage changed the visible registry: %#v %v", view, err)
 	}
-	if pending != 1 {
-		t.Fatalf("interruption retained %d pending registries, want 1", pending)
+	if left := pending(); len(left) != 1 {
+		t.Fatalf("the view changed the killed replacement's stage: %v", left)
 	}
 	if err := reserve(); err != nil {
 		t.Fatal(err)
@@ -250,6 +268,9 @@ func TestEmptyRegistryToleratesVerifiedUnpublishedRegistryStage(t *testing.T) {
 	view, err = store.View(context.Background())
 	if err != nil || len(view.Contexts) != 1 || view.Contexts[0].Mode != contexts.Initializing {
 		t.Fatalf("retry did not publish initialization intent: %#v %v", view, err)
+	}
+	if left := pending(); len(left) != 0 {
+		t.Fatalf("the reserve left %v", left)
 	}
 }
 

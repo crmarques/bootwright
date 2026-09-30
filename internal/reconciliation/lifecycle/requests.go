@@ -77,7 +77,10 @@ type PlanResult struct {
 	Startable    int
 	Deferred     int
 	Continuation bool
-	Receipt      Receipt
+	// Finalizes marks a preview whose verb only completes the operation's
+	// interrupted finalization and then settles, running no block.
+	Finalizes bool
+	Receipt   Receipt
 }
 
 type MachineOutcome struct {

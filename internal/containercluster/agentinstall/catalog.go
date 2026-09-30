@@ -22,7 +22,7 @@ const (
 
 const (
 	mediaRequestVersion   = "cluster-media-agent-v3"
-	installRequestVersion = "cluster-install-agent-v2"
+	installRequestVersion = "cluster-install-agent-v3"
 )
 
 // mediaMargin is what a media run's deadline allows beyond its build budget:

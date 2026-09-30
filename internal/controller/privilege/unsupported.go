@@ -21,3 +21,5 @@ func GuardParent(int) (func(), error) { return nil, errAccount }
 func Begin(ctx context.Context) (context.Context, func()) { return context.WithCancel(ctx) }
 
 func ExitCode(_ context.Context, fallback int) int { return fallback }
+
+func SupervisedChild() bool { return false }

@@ -449,7 +449,7 @@ package-level variable initializer, and nothing else
 | `controller.unknown` | A local controller prerequisite action has an unresolved effect outcome. |
 | `lifecycle.state` | Durable lifecycle state does not permit the requested transition or continuation. |
 | `lifecycle.unsupported` | This executable cannot realize a selected object: no capability claims its kind, or its capability reports the shape unsupported. |
-| `lifecycle.stage` | The stage selection admits no startable block, or excludes the block the operation must retry. |
+| `lifecycle.stage` | The stage selection admits no startable block, excludes the block the operation must retry, or is given to a `plan` that previews a `destroy`. |
 | `lifecycle.authorization` | The frozen plan requires an authorization that was not validly supplied, or a supplied one it does not require. |
 | `lifecycle.lease` | The context root lock or mutation lease cannot be safely acquired or recovered. |
 | `lifecycle.unknown` | A frozen block has an unresolved unknown effect outcome. |

@@ -2,8 +2,9 @@
 # The identity operation for a machine with a hypervisor channel: a bounded
 # guest file read out of band, so nothing about the network is trusted.
 #
-# Inputs are passed explicitly by the consuming playbook, never inherited from
-# a shared fact, and the answers are published under this role's own names.
+# The inputs are this entry point's argument spec, passed explicitly by the
+# consuming role and never inherited from a shared fact, and the answers are
+# published under this role's own names.
 # The caller owns the budget: a pre-boot read and an observation take the answer
 # that is already true, while an installation waits for one. The wait lives here
 # rather than in a looped include, because a dynamic include expands its loop up

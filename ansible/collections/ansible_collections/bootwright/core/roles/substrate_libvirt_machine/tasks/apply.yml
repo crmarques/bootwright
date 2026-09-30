@@ -240,16 +240,18 @@
     status: running
   no_log: true
 
+# A read the controller does not answer yet is not yet an answer, so it spends
+# one attempt rather than ending the poll.
 - name: Prove the controller answers for exactly this machine
-  bootwright.core.redfish_boot:
+  bootwright.core.redfish_system_read:
     endpoint: '{{ bootwright_substrate_machine_request.controller.endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerPassword) }}'
-    operation: read
+    media: false
   register: substrate_libvirt_machine_controller
   retries: 30
   delay: 2
-  until: substrate_libvirt_machine_controller.power | length > 0
+  until: (substrate_libvirt_machine_controller.power | default('')) | length > 0
   no_log: true
 
 - name: Report controller verification completion

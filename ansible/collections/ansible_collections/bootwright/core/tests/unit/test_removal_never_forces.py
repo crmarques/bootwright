@@ -68,3 +68,44 @@ def test_a_machine_removal_refuses_a_silent_hypervisor_before_it_stops_anything(
     assert refusal is not None, "the removal no longer refuses a hypervisor that did not answer"
     assert stop is not None, "the removal no longer stops the management controller"
     assert refusal < effect <= stop
+
+
+# A connection that does not answer reports no network and no pool, which the
+# host removal reads as nothing this context owns, so its refusal has to come
+# before the first task that takes anything away.
+def test_a_host_removal_refuses_a_silent_hypervisor_before_its_first_effect():
+    destroy = tasks("substrate_libvirt_host", "destroy.yml")
+
+    def first(predicate):
+        return next((index for index, task in enumerate(destroy) if predicate(task)), None)
+
+    refusal = first(lambda task: any(
+        str(condition).strip() == "substrate_libvirt_host_before.observation.uri"
+        for condition in (task.get("ansible.builtin.assert") or {}).get("that") or []
+    ))
+    effect = first(lambda task: "ansible.builtin.command" in task or "ansible.builtin.file" in task)
+    assert refusal is not None, "the host removal no longer refuses a hypervisor that did not answer"
+    assert effect is not None, "the host removal no longer takes anything away"
+    assert refusal < effect
+
+
+# The uri answering proves only that the hypervisor driver did. A network or the
+# pool its own driver did not answer for reads as nothing defined too, so each
+# refusal has to come before the first task that takes anything away.
+def test_a_host_removal_refuses_what_its_drivers_did_not_answer_for_before_its_first_effect():
+    destroy = tasks("substrate_libvirt_host", "destroy.yml")
+
+    def refusal(condition):
+        return next((
+            index for index, task in enumerate(destroy)
+            if any(str(that).strip() == condition for that in (task.get("ansible.builtin.assert") or {}).get("that") or [])
+        ), None)
+
+    effect = next(index for index, task in enumerate(destroy) if "ansible.builtin.command" in task or "ansible.builtin.file" in task)
+    network = refusal("item.answered")
+    pool = refusal("substrate_libvirt_host_before.observation.poolAnswered")
+    assert network is not None, "the host removal no longer refuses a network its driver did not answer for"
+    assert pool is not None, "the host removal no longer refuses a pool its driver did not answer for"
+    assert destroy[network].get("loop") == "{{ substrate_libvirt_host_before.observation.networks }}"
+    assert destroy[network].get("when") == "item.managed"
+    assert max(network, pool) < effect

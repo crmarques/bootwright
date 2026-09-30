@@ -2,6 +2,7 @@ package installation
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strings"
 
@@ -18,9 +19,19 @@ import (
 // Capability installs the operating system of a Bootwright-installed Machine.
 // It owns what completion, replay and absence mean for that installation and
 // nothing else: the Machine it installs onto is the substrate's.
-type Capability struct{ runner Runner }
+type Capability struct {
+	runner     Runner
+	identities Identities
+}
 
 func New(runner Runner) Capability { return Capability{runner: runner} }
+
+// WithIdentities returns a copy that reads a physical target's pin through
+// identities, which composition binds to the pin's own owner.
+func (c Capability) WithIdentities(identities Identities) Capability {
+	c.identities = identities
+	return c
+}
 
 const variablePrefix = "bootwright_os_install"
 
@@ -343,6 +354,11 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 			return lifecycle.RunResult{}, err
 		}
 		values["authorizedKey"] = key
+		pin, err := c.pinValues(execution, request)
+		if err != nil {
+			return lifecycle.RunResult{}, err
+		}
+		maps.Copy(values, pin)
 	}
 	// A machine proved by a delivered key is read over a connection pinned to
 	// exactly that key, so the public half reaches every operation, not only
@@ -373,6 +389,25 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
 		Deadline: request.Deadline(),
 	}))
+}
+
+// pinValues carries the identity a physical target's own Machine block proved
+// earlier in this operation, so the pre-boot proof refuses a machine that
+// answers as another system. A target its substrate created, and a Machine
+// with no pin, carry nothing.
+func (c Capability) pinValues(execution lifecycle.Execution, request Request) (map[string]string, error) {
+	if !request.Target.Physical {
+		return nil, nil
+	}
+	if c.identities == nil {
+		return nil, refusal("lifecycle.state",
+			"the reader of Machine/"+request.Identity.Object+"'s pinned identity is not configured", "")
+	}
+	pin, pinned, err := c.identities.PinnedIdentity(request.Identity.Object, execution.Proved)
+	if err != nil || !pinned {
+		return nil, err
+	}
+	return pin.PinValues(""), nil
 }
 
 // authorizedKey reads the public half of the bound fleet key. Only that half

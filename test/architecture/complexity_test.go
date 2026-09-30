@@ -56,7 +56,6 @@ func longFunctionsAwaitingSplit() []string {
 		"internal/workspace/contextfs/controller_records.go.validateControllerState",
 		"internal/workspace/contextfs/initialization_linux_amd64.go.Reserve",
 		"internal/workspace/contextfs/records.go.fitsJSON",
-		"internal/workspace/contextfs/repository_linux_amd64.go.writeRegistry",
 		"internal/workspace/selectionfs/files_linux_amd64.go.local",
 	}
 }

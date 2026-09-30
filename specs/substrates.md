@@ -30,10 +30,10 @@ declares, and frozen into the realized target every consumer reads: the
 Machine's substrate arm, its management controller, its identity channel, the
 interfaces the machine presents with the hardware addresses they report, and
 the block that realizes it. No consumer derives any of it again. Consumers
-dispatch on the frozen arm through fixed, allowlisted task files, and an arm a
-consumer has no task file for fails closed before anything is published,
-inserted or booted, so a substrate added later supplies those task files to
-every consumer that dispatches on it.
+dispatch on the frozen arm through the substrate's fixed port entry points, and
+an arm a consumer has no entry point for fails closed before anything is
+published, inserted or booted, so a substrate added later supplies those entry
+points to every consumer that dispatches on it.
 
 The libvirt provider host is the Machine `spec.libvirt.machineRef` names. It
 must be OS-ready and reachable through one of the
@@ -112,30 +112,32 @@ active. Replay reports `completed` with no change when live state matches. The
 differences it converges are an owned network whose definition differs, which
 is redefined under the identity it already holds, and a missing network or
 pool, which is defined again.
-The inverse destroys and undefines the networks and pool this context owns,
-removes the pool directory, proves each absent, and leaves packages, foreign
-networks and external bridges untouched. Observation is read-only against the
-frozen request: the pool or an owned managed network present without the whole
-is a positive partial realization the next attempt converges, while a managed
-network the hypervisor defines without this context's ownership is foreign and
-stays unknown. The hypervisor closure is shared host software this block never
-removes, so its presence alone is not a partial realization. A removal's
-resolution reads the same observation for what the removal proves: all of the
-owned networks and the pool present is positive no effect, and some of them is
-a positive partial realization, while the hypervisor closure proves nothing
-either way. It never reads the absence form as the removal's completion,
-because a connection that does not answer publishes that form too, and so does
-a pool undefined before its directory was deleted: the form reads as no
-effect, and the repeated removal proves its own absence against a connection
-that answers.
-
-Not yet met: the observation reads a silent connection or an empty pool as
-removed and then publishes the absence form, which carries neither whether the
-connection answered nor the pool directory. An owned network left without its
-pool therefore resolves unknown instead of partial, and a removal whose effect
-finished before it was interrupted is repeated once, because its resolution
-cannot prove that from the absence form; tracked as
-[B8](milestones/m1.md#b8).
+The inverse refuses before its first effect when the `uri` does not answer,
+or when the network driver did not answer for a managed network or the storage
+driver for the pool, then destroys and undefines the networks and pool this
+context owns, removes the pool directory, and proves each absent: the networks
+and pool through a `uri` that answers and the driver that owns each, and the
+directory by its path. It leaves packages, foreign networks and external
+bridges untouched. Observation is read-only against the frozen request and
+reports whether the `uri` answered and, for each managed network and the pool,
+whether the driver that owns it answered for it: returned it, or completed a
+listing that does not name it. The `uri` answering proves only that the
+hypervisor driver did, and virsh reports a lookup a silent driver failed
+exactly as one that found nothing. The pool, its directory
+or an owned managed network present without the whole is a positive partial
+realization the next attempt converges. A managed network the hypervisor
+defines without this context's ownership is foreign and stays unknown. A
+connection that does not answer reports no network and no pool either, so its
+silence proves neither absent: it is never positive no effect or positive
+absence. A network or pool whose driver did not answer for it is proved
+neither present nor absent in the same way. Evidence without the directory
+proves it neither present nor absent.
+The hypervisor closure is shared host software this block never removes, so its
+presence alone is not a partial realization. A removal's resolution reads the
+same observation for what the removal proves. None of the owned networks, the
+pool and its directory present, through a `uri` and drivers that answered, is
+its completion. All of them present is positive no effect, and some of them is a
+positive partial realization. The hypervisor closure proves nothing either way.
 
 ## Machine realization
 
@@ -161,7 +163,9 @@ booting it is the work of whichever consumer installs it. Its boot order is the
 root disk first and optical media second: an empty disk falls through to
 inserted installer media, and once an installer has written that disk the
 machine boots it again without anything having to change the domain between the
-two boots. A same-name domain without this
+two boots. That order holds for the domain as realized: after an eject, the
+emulated controller leaves the disk as the only bootable device until the
+machine block redefines the domain. A same-name domain without this
 context's metadata is foreign and refuses; an owned domain whose root disk size
 differs from the profile refuses rather than resizing.
 
@@ -193,24 +197,23 @@ bound credential and a reported power state. Replay reports `completed` with no
 change when live state matches; the differences it converges are a missing
 disk, domain definition or controller unit, each realized again, while an owned
 domain whose root disk size differs refuses rather than resizing.
-The inverse stops and removes the BMC unit,
-container and state, forces the domain off, undefines it, deletes the disks
-this context owns and proves each absent. Because the deleted disks may hold an
-installed operating system, the block consumes `data-loss` on destroy, so the
-operator acknowledges the loss before the plan registers. Observation is
-read-only; nothing present with no recorded before-state is positive no effect;
-the domain, its controller unit or one of its disks present without the whole
-is a positive partial realization the next attempt converges; and a same-name
+The inverse refuses a domain that is not shut off, as Quiescence states. It then
+stops and removes the BMC unit, container and state, undefines the domain,
+deletes the disks this context owns and proves each absent, and it proves
+nothing listens on the controller's socket before that reservation is released.
+A disk is present while anything exists at its path, whatever its image
+reports. Because the deleted disks may hold an installed operating system, the
+block consumes `data-loss` on destroy, so the operator acknowledges the loss
+before the plan registers. Observation is read-only, and nothing present with
+no recorded before-state is positive no effect. The domain, its controller unit
+or one of its disks present without the whole is a positive partial realization
+the next attempt converges. A listener on the controller socket with none of
+those present is not proved to be this Machine's and stays unknown. A same-name
 domain without this context's ownership is foreign and stays unknown. A
-removal's resolution reads the same observation for what the removal proves:
-none of the domain, its controller unit and its disks present is its
-completion, the whole machine is positive no effect, and any of them present
-is a positive partial realization.
-
-Not yet met: the observation reads an empty domain and controller unit as
-removed, so a machine with only its disks left resolves unknown instead of
-partial, in an apply's resolution and a removal's alike; tracked as
-[B8](milestones/m1.md#b8).
+removal's resolution reads the same observation for what the removal proves.
+None of the domain, its controller unit, its disks and a listener on its socket
+present is its completion. The whole machine is positive no effect, and any of
+the domain, unit or disks present is a positive partial realization.
 
 **Hypervisor answer.** The observation and its evidence report whether the
 hypervisor answered for the domain, because a hypervisor that does not answer
@@ -224,7 +227,8 @@ alone proves only that the connection opened
 Any other failure is no answer, and then an empty domain proves nothing: it is
 never positive no effect or positive absence, removal evidence requires the
 answer, and the inverse refuses before it stops the BMC unit. Evidence without
-the field reads as no answer.
+the field reads as no answer. Evidence without the listener proves the
+controller's socket neither held nor free.
 
 **Quiescence.** A Machine is quiescent only when the hypervisor reports its
 domain `shut off`, or answers that no domain is defined at all. Every other
@@ -264,9 +268,17 @@ or an address: those locate a machine, and only the complete MAC set together
 with the ComputerSystem identity distinguishes it from another server that
 answers at the same endpoint after a re-cabling or a re-addressing.
 
-Not yet met: the pre-boot proof an installation or a cluster boot repeats does
-not compare the identity this block pinned, so there only the MAC set tells a
-replacement server apart; tracked as [B6](milestones/m1.md#b6).
+An installation and a cluster boot each repeat that proof immediately before
+they insert media: the controller is read again, a declaration with no NIC
+refuses because an empty set proves nothing, every declared MAC must be
+reported by a complete inventory, and the machine must be off. The repeated
+proof also compares the controller's answer with the identity this block pinned
+earlier in the same operation, under the same rule a
+[day-2 power operation](#identity-and-power-operations) applies: a `UUID` that
+differs other than in letter case or surrounding space, or a `SerialNumber`
+that differs other than in surrounding space, refuses, naming the controller
+endpoint and the remedy but neither identity. A Machine with no pin is compared
+with nothing.
 
 **Claim.** The block claims `bmc:<host>:<port>/<system>` for the normalized
 endpoint, so two contexts cannot both drive one physical server. The claim
@@ -285,9 +297,10 @@ and the block realizes nothing that could drift. The differences it converges
 are none: hardware is not converged, and a machine whose MAC set no longer
 matches fails naming what it lacks rather than adopting the new hardware. The
 `UUID` and `SerialNumber` recorded by the apply attempt that proved the machine
-are its pin while that apply is the context's current operation: the day-2
-power operations below compare the controller's answer with them before any
-power request and refuse a machine that answers as a different system. A block
+are its pin while that apply is the context's current operation: the pre-boot
+proof above compares the controller's answer with them before any media is
+inserted, and the day-2 power operations below before any power request, and
+each refuses a machine that answers as a different system. A block
 a [resolution](state-reconciliation.md#resolution-outcomes) completed after an
 attempt whose outcome was not proved pins nothing, because the pin is read from
 the attempt and that attempt recorded no evidence. A destroy ends the pin once
@@ -319,13 +332,19 @@ performed by cancellation, because it performs none.
 ## Identity and power operations
 
 Substrate publishes the operations other domains use to act on a realized
-Machine, through fixed task files of its collection roles bound by the
-consuming playbook. Power operations go through the Machine's management
-controller over Redfish, never through the hypervisor directly, so a consumer
-takes the same path to a virtual and a physical server: read the power state,
-insert and eject virtual media, set a one-time boot device, power on, power
-off. A power request is not evidence; every operation polls the resource to
-its expected state within a bounded window and reports unknown when it does
+Machine. An installation composes them through the argument-spec entry points
+of each machine role, which the [adapter boundary](#adapter-boundary) names:
+consumer roles include them by exactly those names, and ansible-core validates
+their inputs before their first task. Power operations go through the
+Machine's management controller over Redfish, never through the hypervisor
+directly, so a consumer takes the same path to a virtual and a physical server:
+read the power state and the inserted media, insert and eject virtual media,
+set a one-time boot device, power on, power off. A power read reads the system
+alone and never looks for media; a media read discovers the device first. Both
+run through a module that cannot drive the machine. A poll treats a failed read
+as not yet at the state it waits for, so one failure spends one attempt rather
+than ending the poll. A power request is not evidence; every operation polls the resource
+to its expected state within a bounded window and reports unknown when it does
 not arrive. A boot selection is read back like any other effect. A read that
 cannot reach a resource the controller reports, or that receives a body which
 is not a Redfish resource, fails rather than answering empty, and the target
@@ -333,23 +352,28 @@ proof reports what it could not read as unobserved, which proves nothing; a
 controller that offers no virtual media reports none, and inserting into it
 refuses.
 
-Booting a machine from inserted media is one operation rather than a fixed
-sequence every consumer repeats, because how a boot is selected is the
-substrate's own answer. A physical controller consumes a one-time override and
-forgets it, so the operation sets one and the machine returns to its disk by
-itself. An emulated controller has no one-time override: selecting a device
-rewrites the domain's persistent boot order, which then survives the reboot an
-installer performs and boots the installer again, so the operation selects
-nothing and relies on the [boot order](#machine-realization) the domain already
-declares. The [cluster installation](container-clusters.md#installation)
-inserts media and asks the substrate to boot the machine this way. The
-[managed-OS installation](managed-os.md#installation) instead sets a one-time
-boot from the inserted media on either arm and, once the installer has powered
-the machine off, selects the installed disk before powering it on again.
-
-Not yet met: every consumer booting through this substrate-owned operation
-rather than selecting a boot device itself; tracked as
-[B5](milestones/m1.md#b5).
+Booting a machine from inserted media is one operation, `boot_media`, rather
+than a fixed sequence every consumer repeats, because how a boot is selected is
+the substrate's own answer. Its consumer says whether the installer ends by
+powering the machine off, rather than by rebooting into what it wrote. A
+physical controller consumes a one-time override and forgets it, so the
+bare-metal arm sets one from the media and powers the machine on, and the
+machine returns to its disk by itself; it never powers an operator-owned
+machine off. An emulated controller has no one-time override: selecting a
+device rewrites the domain's persistent boot order, which then survives every
+reboot. The libvirt arm therefore powers its own machine off first, which
+narrows the window in which it was started after the pre-boot proof, selects
+the media only for an installer that powers the machine off, and powers the
+machine on. For an installer that reboots it selects nothing and relies on the
+[boot order](#machine-realization) the domain declares. Booting the installed
+disk is the operation `boot_disk`, which a consumer runs only once the
+installer has proved it ran: on either arm it selects the disk, and it powers
+the machine on only when its consumer asks. The
+[managed-OS installation](managed-os.md#installation) boots the media for an
+installer that powers off and, once it has, ejects the media and boots the
+disk. The [cluster installation](container-clusters.md#installation) boots the
+media for an installer that reboots, and points each node at its disk when it
+releases the media.
 
 Day-2 power commands consume exactly these operations. `machine start`,
 `machine stop` and `machine restart` freeze one request naming the Machine's
@@ -424,14 +448,18 @@ and the [process](security.md#process-boundary) and
 speaks Redfish to exactly the endpoint the frozen request names. Both placement
 arms use the same roles, requests and evidence.
 
-Each substrate's machine role also publishes fixed task files that consumers
-compose by qualified name: one proves the exact target immediately before
-destructive media is inserted, one performs the identity read above, and one
-boots from inserted media. A consumer selects among them by the frozen arm, as
-[selection](#selection-and-refusal) states, and a substrate supplies them or
-its installation path is not promoted. Because they are named task files of a
-role rather than free variables, the binding is allowlisted and frozen:
-authored data can never select which of them runs.
+Each substrate's machine role also publishes four entry points that consumers
+compose by qualified role name and entry-point key, each validated by the
+role's argument specification before its first task: `pre_boot` proves the
+exact target immediately before destructive media is inserted, `boot_media`
+boots from inserted media, `boot_disk` boots the installed disk, and
+`identity_read` performs the identity read above. A consumer selects among them
+by the frozen arm, as [selection](#selection-and-refusal) states, and a
+substrate supplies them or its installation path is not promoted. Because they
+are named entry points of a role rather than free variables, the binding is
+allowlisted and frozen: authored data can never select which of them runs. An
+input is a value or the path of a material file, never secret bytes, because
+the validation is not hidden from output and echoes a value it refuses.
 
 A Redfish client speaks to one endpoint and follows no redirect, uses no
 ambient proxy or credential, bounds every request and response, and treats a

@@ -303,6 +303,12 @@ type Execution struct {
 	Bundle     prerequisites.BundleLocation
 	Area       prerequisites.BundleArea
 	Material   map[string]secrets.Material
+	// Proved is what each block this apply attempt's block depends on durably
+	// proved in this operation, read from that block's last observed attempt
+	// and handed over unread. A capability decodes it only through the owner
+	// of that evidence, which composition wires. A destroy, a resolution and a
+	// probe receive none.
+	Proved []BlockEvidence
 	// LocateTool answers where the controller stage installed one executable,
 	// so a block runs the exact file that stage published for the release its
 	// own graph selected.

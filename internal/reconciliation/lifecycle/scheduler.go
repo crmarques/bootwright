@@ -243,7 +243,7 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 		} else {
 			// An attempt that never started recorded nothing either, and the
 			// block keeps the state it had.
-			state, err = c.service.attempt(ctx, c.tx, c.store, c.approved, c.logging, c.operation, block, c.material, position+1, len(c.plan.Blocks))
+			state, err = c.service.attempt(ctx, c.tx, c.store, c.approved, c.logging, c.operation, c.plan, block, c.material, position+1, len(c.plan.Blocks))
 			if state == "" {
 				state, unstarted = prior, true
 			}

@@ -15,10 +15,12 @@
     phase: loaded
   no_log: true
 
-# The boot and identity task files bind the frozen substrate and identity
-# channel only after the tree, the image and any private key are published. A
-# target neither of them binds refuses here, before the first of those effects,
-# and each of those files keeps its own refusal as well.
+# The boot, await and identity task files bind the frozen substrate and
+# identity channel only after the tree, the image and any private key are
+# published, and await.yml only after the installer wait and the eject. A
+# target none of them binds refuses here, before the first of those effects.
+# Each of those files also ends its dispatch in a terminal fail, which this
+# refusal leaves unreachable from here.
 - name: Refuse a target this installation has no boot or identity binding for
   ansible.builtin.assert:
     that:

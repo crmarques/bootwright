@@ -52,6 +52,27 @@ func finalization(ctx context.Context, view View, store OperationStore, verb rec
 	return plannedFrom(decided, operation, states, attempts), nil
 }
 
+// afterFinalization is the decision a verb takes once the finalization its
+// first decision marked is done, taken without doing it. That finalization
+// rewrites only the operation record's state, to the one its block records
+// give; no decision after the mark reads the evidence, reservations or Secret
+// bindings it also completes.
+func (s Service) afterFinalization(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.StageSelection, marked transition) (transition, error) {
+	next, err := finalState(marked.plan, marked.states)
+	if err != nil {
+		return transition{}, err
+	}
+	operation := marked.operation
+	operation.State = next
+	return s.decideOver(ctx, view, s.store(view), verb, selection, operation, marked.plan, marked.states, marked.basis.attempts)
+}
+
+// finalState is the state a finalization records: the one the operation's
+// block records give.
+func finalState(frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (reconciliation.OperationState, error) {
+	return reconciliation.NextOperationState(orderedStates(frozen, states), false)
+}
+
 // finalized reports whether a completed operation's finalization is complete:
 // its evidence is its projection and a completed removal leaves this context
 // no reservation. A removal publishes pristine evidence only once its Secret
@@ -142,7 +163,7 @@ func (s Service) finalize(ctx context.Context, name string, decided transition) 
 		if err != nil {
 			return err
 		}
-		next, err := reconciliation.NextOperationState(orderedStates(frozen, states), false)
+		next, err := finalState(frozen, states)
 		if err != nil {
 			return err
 		}

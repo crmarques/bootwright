@@ -236,3 +236,10 @@ Requires cell as `owner decision: <question>`.
   proceed with recommendations; pending review): the controller CPython is
   the latest patch of the newest minor the qualified ansible-core supports as
   a controller, and `latest` ignores a newer minor (X22).
+- **D21** (2026-09-29, taken by the session under the owner's instruction to
+  proceed with recommendations; pending review): an elevated child announces
+  that it started, and the held `sudo:` lines decide the outcome only when that
+  announcement cannot be proved (X20).
+- **D22** (2026-09-29, taken likewise; pending review): an elevated command
+  that exits without a result reports `runtime.internal` with exit status 1;
+  `runtime.interrupted` still wins after an interrupt (X20).

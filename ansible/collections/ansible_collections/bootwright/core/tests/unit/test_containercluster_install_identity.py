@@ -233,9 +233,9 @@ def resolved(observation):
     """The state the state file resolves for a whole cluster reporting its installation completed.
 
     Each register is what the command module returns for one of the role's
-    reads, and the controller read is what redfish_boot returns
-    (plugins/modules/redfish_boot.py, RETURN) for a node running with its media
-    released.
+    reads, and the controller read is what a media read of redfish_system_read
+    returns (plugins/modules/redfish_system_read.py, RETURN) for a node running
+    with its media released.
     """
     task = state_task(lambda task: "ansible.builtin.set_fact" in task and "vars" in task)
     scope = dict(task["vars"])

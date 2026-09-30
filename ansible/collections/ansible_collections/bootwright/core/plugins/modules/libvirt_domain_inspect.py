@@ -9,7 +9,15 @@ short_description: Observe one Bootwright virtual machine and its controller
 version_added: "0.1.0"
 description:
   - Reports whether the domain is defined, whether it carries this context's
-    ownership, the size of every owned disk, and the controller unit and image.
+    ownership, every owned disk, and the controller unit and image.
+  - A disk is present while anything exists at its path, whatever its image
+    reports, and its size is read with the image shared, so a disk a live
+    domain holds reports its real size and an unreadable one reports zero.
+  - Reports whether anything listens on the controller's socket, read from the
+    kernel's socket tables in /proc/1/net, the network namespace the
+    controller's unit listens in. A missing IPv6 table means the host has no
+    IPv6 stack; any other table that cannot be read fails the observation
+    rather than reporting the socket free.
   - Reports whether the hypervisor answered for the domain. A domain is not
     defined only when virsh fails to look it up and a complete listing of
     every domain omits it; any other failure is no answer, and then an empty
@@ -36,6 +44,9 @@ observation:
     - The owned domain, disks and controller with their observed state.
     - The answered key is false when the hypervisor did not answer, and the
       domain and state keys are then empty without proving the domain absent.
+    - Each disk's present key is whether anything exists at its path.
+    - The listener key is whether anything listens on the controller's
+      address and port, in the kernel's socket tables in /proc/1/net.
   returned: always
   type: dict
 """

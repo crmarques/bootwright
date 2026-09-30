@@ -1,0 +1,28 @@
+---
+# Point one machine this substrate created at its installed disk, and power it
+# on when the consumer asks. A consumer includes this only once the installer
+# has proved it ran: the managed OS once the installer powered the machine
+# off, a cluster once it reports its installation completed. A disk selected
+# any earlier boots the disk the installer has not written yet.
+#
+# The inputs are this entry point's argument spec, passed explicitly by the
+# consuming role and never inherited from a shared fact.
+- name: Select the installed disk as the boot device
+  bootwright.core.redfish_boot:
+    endpoint: '{{ substrate_libvirt_machine_disk_endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_disk_user) }}'
+    password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_disk_password) }}'
+    verify: '{{ substrate_libvirt_machine_disk_verify }}'
+    operation: boot
+    target: Hdd
+  no_log: true
+
+- name: Power the installed system on and poll it to running
+  bootwright.core.redfish_boot:
+    endpoint: '{{ substrate_libvirt_machine_disk_endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_disk_user) }}'
+    password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_disk_password) }}'
+    verify: '{{ substrate_libvirt_machine_disk_verify }}'
+    operation: power-on
+  no_log: true
+  when: substrate_libvirt_machine_disk_power_on | bool

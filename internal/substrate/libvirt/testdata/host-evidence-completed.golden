@@ -1,0 +1,37 @@
+{
+  "absent": false,
+  "directory": true,
+  "hypervisor": true,
+  "networks": [
+    {
+      "answered": true,
+      "bridge": true,
+      "managed": true,
+      "name": "bootwright-lab-lab-guests",
+      "owned": true,
+      "state": "active"
+    }
+  ],
+  "pool": "active",
+  "poolAnswered": true,
+  "postcondition": true,
+  "request": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "services": [
+    {
+      "enabled": true,
+      "name": "virtqemud.service",
+      "state": "active"
+    },
+    {
+      "enabled": true,
+      "name": "virtnetworkd.service",
+      "state": "active"
+    },
+    {
+      "enabled": true,
+      "name": "virtstoraged.service",
+      "state": "active"
+    }
+  ],
+  "uri": true
+}

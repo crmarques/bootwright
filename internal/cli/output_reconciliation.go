@@ -107,6 +107,9 @@ func (p *LifecycleProgressPresenter) ReportLogLocation(ctx context.Context, loca
 
 func lifecycleHeadline(result lifecycle.PlanResult) string {
 	verb := strings.ToUpper(result.Verb[:1]) + result.Verb[1:]
+	if result.Finalizes {
+		return verb + " finalization"
+	}
 	if result.Continuation {
 		return verb + " continuation plan"
 	}
@@ -205,6 +208,10 @@ func startSummary(result lifecycle.PlanResult) string {
 func writeLifecyclePlan(out io.Writer, result *lifecycle.PlanResult) error {
 	var text display
 	text.headline("", lifecycleHeadline(*result))
+	if result.Finalizes {
+		text.section("")
+		text.lines([]string{"Nothing to run: every block is done, so bootwright " + result.Verb + " only completes this operation's interrupted finalization."})
+	}
 	writeLifecycleSteps(&text, *result)
 	if err := text.writeTo(out); err != nil {
 		return err

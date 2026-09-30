@@ -3,7 +3,6 @@ package power
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"maps"
 	"slices"
@@ -279,22 +278,10 @@ func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, dig
 	}
 }
 
-// pinValues carries a proved identity to the adapter encoded. The values are
-// what a management controller once reported, and a run's variables are
-// rendered as templates when they are read, so a raw value could be evaluated
-// there rather than compared. A field the proof recorded empty is not sent.
+// pinValues carries a proved identity to the adapter encoded, under the keys a
+// power run reads for its one machine.
 func pinValues(pin machine.HardwareIdentity) map[string]string {
-	if !pin.Present() {
-		return nil
-	}
-	values := map[string]string{}
-	if pin.UUID != "" {
-		values["pinnedUUIDBase64"] = base64.StdEncoding.EncodeToString([]byte(pin.UUID))
-	}
-	if pin.Serial != "" {
-		values["pinnedSerialBase64"] = base64.StdEncoding.EncodeToString([]byte(pin.Serial))
-	}
-	return values
+	return pin.PinValues("")
 }
 
 // ContentDigest binds a power request to the exact behavior this build

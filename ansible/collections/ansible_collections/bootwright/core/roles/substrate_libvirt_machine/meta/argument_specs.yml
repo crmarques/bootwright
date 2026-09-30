@@ -62,3 +62,85 @@ argument_specs:
   destroy:
     short_description: Remove one frozen virtual machine and prove its absence.
     options: *request
+
+  # The machine port other domains compose, each entry point included by
+  # exactly this key. ansible-core validates these inputs before the entry
+  # point's first task. That validation is not hidden from output and echoes a
+  # value it refuses, so a credential is passed as the path of its material
+  # file, never as its bytes, and no required input has a role default that
+  # could stand in for one a consumer forgot.
+  pre_boot:
+    short_description: Prove a machine this substrate created is off before media is inserted.
+    options:
+      substrate_libvirt_machine_target_endpoint:
+        type: str
+        required: true
+      substrate_libvirt_machine_target_verify:
+        type: bool
+        required: true
+      substrate_libvirt_machine_target_user:
+        type: str
+        required: true
+      substrate_libvirt_machine_target_password:
+        type: str
+        required: true
+
+  boot_media:
+    short_description: Boot a machine this substrate created from the media inserted in its controller.
+    options:
+      substrate_libvirt_machine_boot_endpoint:
+        type: str
+        required: true
+      substrate_libvirt_machine_boot_verify:
+        type: bool
+        required: true
+      substrate_libvirt_machine_boot_user:
+        type: str
+        required: true
+      substrate_libvirt_machine_boot_password:
+        type: str
+        required: true
+      # Whether the installer ends by powering the machine off, rather than by
+      # rebooting it into what it installed.
+      substrate_libvirt_machine_boot_installer_powers_off:
+        type: bool
+        required: true
+
+  boot_disk:
+    short_description: Point a machine this substrate created at its installed disk.
+    options:
+      substrate_libvirt_machine_disk_endpoint:
+        type: str
+        required: true
+      substrate_libvirt_machine_disk_verify:
+        type: bool
+        required: true
+      substrate_libvirt_machine_disk_user:
+        type: str
+        required: true
+      substrate_libvirt_machine_disk_password:
+        type: str
+        required: true
+      substrate_libvirt_machine_disk_power_on:
+        type: bool
+        required: true
+
+  identity_read:
+    short_description: Read the install marker and host key through the hypervisor's guest channel.
+    options:
+      substrate_libvirt_machine_identity_uri:
+        type: str
+        required: true
+      substrate_libvirt_machine_identity_domain:
+        type: str
+        required: true
+      substrate_libvirt_machine_identity_marker_path:
+        type: str
+        required: true
+      substrate_libvirt_machine_identity_host_key_path:
+        type: str
+        required: true
+      substrate_libvirt_machine_identity_retries:
+        type: int
+      substrate_libvirt_machine_identity_delay:
+        type: int

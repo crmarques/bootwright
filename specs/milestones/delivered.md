@@ -899,10 +899,10 @@ records earlier builds wrote now refuse where they used to proceed.
 empty ledger.
 
 **Constraints left behind:** a killed keyring initialization
-([B26](m1.md#b26), was S28), lost and lagging records ([B27](m1.md#b27), was
+(B26, was S28, delivered by [X20](delivered.md#x20--substrate-port-pre-boot-proof-and-observations)), lost and lagging records ([B27](m1.md#b27), was
 S29), claims and bindings ([B28](m1.md#b28), was S30), resolution gaps that
 need adapter changes ([B29](m1.md#b29), was S31) and the protocols the
-primitive leaves ([B35](m1.md#b35), was R3 (rest)), with clauses added to B8,
+primitive leaves (B35, was R3 (rest), delivered by X20), with clauses added to B8,
 B11, B16, B21 and B30. Gates: `make check` in CI, `make race` and the kill
 harness locally, `make docs-check`. No real-host run.
 
@@ -1061,3 +1061,71 @@ under `ansible/` changed, so the collection suites were not required.
 **Constraints left behind:** new items B124 to B128; the `GOOS=darwin
 GOARCH=arm64` vet failures in contextfs and the Ansible runner, which X20's B36
 settles.
+
+### X20 — substrate port, pre-boot proof and observations
+
+**Owner:** Substrate, with Container cluster, Managed OS, State
+reconciliation, Workspace, Secrets and Architecture. Integrated on local
+`main` on 2026-09-29 as one commit, on explicit request. **Items:** B6 (was S2b
+(pre-boot)), B5 (was A3 (port)), B7 (was Y1 (rest): substrate rules), B8 (was
+S6b (rest)), and in parallel lanes B26 (was S28), B35 (was R3 (rest)), B31 (was
+F4 (rest)), B30 (was F1 (rest)) and B36 (was R5).
+
+**Outcome:** a physical cluster node's hardware is frozen in the install
+request (now `cluster-install-agent-v3`), and every node passes its
+substrate's pre-boot proof before its media is inserted; the bare-metal proof
+compares the UUID and serial X19 pins, which an apply attempt receives from the
+evidence its dependencies proved, and physical nodes and installations still
+refuse (B6, D2, D6). Each machine role owns its port as validated entry points
+(pre-boot, boot media, boot disk, identity read), a read-only Redfish module
+reads power without discovering media, and read-only consumers left the
+mutating boot module (B5, D1). Every substrate dispatch ends in a refusal
+nothing catches, and an insert follows a pre-boot proof (B7). A libvirt
+observation says whether the hypervisor, and each driver daemon, answered;
+absence evidence carries observed values (the pool directory, a controller
+socket listener, disks by path); a silent host proves nothing and its removal
+refuses before any effect (B8). A keyring initialization a kill tore resumes
+(B26). The registry and secret area replace through the publication
+primitive, and the collector's gaps are closed (B35). Media acquisition keeps a
+pinned, verified stage for its repeat, prompts with no lock held, bounds names
+by their record and unlocks explicitly (B31). Every preview decides as its
+verb does (B30). The privilege boundary moved into a tested package: a sudo
+refusal is told from an elevated child that ran (D21, D22), and `make vet` also
+vets darwin/arm64 (B36).
+
+**Decided by the session, pending the owner's review:** the brief decisions
+A3P-3, A3P-4 (B6 before B5), A3P-5, A3P-7, S2B-2, S2B-3, S2B-5, S2B-6, S6R-2 (a
+silent libvirt host proves nothing, so a continuation waits until it answers),
+S6R-5, S6R-6, X20-B26-TORN, B30-FINALIZATION, B30-FAILED-DESTROY,
+B30-DESTROY-STAGE, B30-BOUNDARY, B31-RETAIN, B31-ADOPT, B31-DISPOSAL,
+B31-CONFIRM and B31-NAME, and D21 and D22.
+
+**Guard tests:** `TestAnApplyAttemptReceivesWhatItsDependenciesProved`,
+`TestTheInstallationsReadTheBareMetalPinOfTheirOwnMachine`,
+`TestAPhysicalNodeWhosePinCannotBeReadRefusesBeforeTheAdapter`,
+`TestElevationOutcomes`, `TestElevationOutcomesAfterAnInterrupt`,
+`TestStartFilterStripsOneAnnouncementAndPassesTheRestUnchanged`,
+`TestEveryPreviewDecidesAsItsVerbDoes`, and the collection's
+`test_substrate_port.py`, `test_containercluster_pre_boot.py`,
+`test_baremetal_pre_boot.py`, `test_substrate_observation.py` and
+`test_role_structure.py` rules; the checkpoint harness case
+`secret-initialization/killed/write-file#1` converges with its ledger entry
+removed.
+
+**Review:** three findings confirmed and fixed (a host network and pool read
+absent although their driver daemon never answered; a media retention lost to
+a concurrent prune; the supervisor exiting 128 plus the signal instead of the
+child's status), each checked independently. The check found that the last
+fix let a child sudo killed at its deadline after Ctrl-C end with 137; such a
+child now ends with the interrupt's 130, and three outcome rows guard it.
+
+**Gates:** `make check-offline tidy-check modules-check vulncheck docs-check
+race` and `./scripts/ansible-check --suite units`, `sanity`, `integration` and
+`lint` pass on the integrated slice, after its fixes and on the squashed commit
+over X25. No real-host run.
+
+**Constraints left behind:** new items B129 to B135 and clauses on B27, B32,
+B49, B108, B109, B112 and B127. The install request is version 3 and the
+automation digest moves: finish or destroy in-flight operations with the build
+that registered them, then run `setup`. The emulated labs repeat their rows on
+a build with X20.

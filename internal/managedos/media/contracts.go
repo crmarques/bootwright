@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/managedos"
@@ -13,6 +14,11 @@ type Payload interface {
 	Read([]byte) (int, error)
 	Close() error
 }
+
+// ErrBusy marks a store command that could not take the store's lock because
+// another command holds it. Nothing is wrong with the store: the same command
+// succeeds once that command finishes.
+var ErrBusy = errors.New("the media store is held by another command")
 
 // Store is the host-wide media area. Media is shared by every context, so a
 // callback holds the store's root coordination and no context lease. A Stage
@@ -34,6 +40,13 @@ type View interface {
 	Digest(context.Context, string) (string, error)
 	// Frozen names every image a context reserves, in any context.
 	Frozen(context.Context) ([]string, error)
+	// Entry reports the record published for one image, whether or not its
+	// bytes still match it, so a store that refuses to list a damaged image
+	// still confirms its replacement or deletion.
+	Entry(context.Context, string) (managedos.MediaEntry, bool, error)
+	// Retained names every image whose verified stage a pinned add kept
+	// because its publication met another command's lock.
+	Retained(context.Context) ([]string, error)
 }
 
 // Staged is one bounded image written into a stage, with the exact bytes the
@@ -51,19 +64,33 @@ type Stage interface {
 	// Fill copies the payload into the stage under the byte limit and reports
 	// what it wrote. It holds no root lock and publishes nothing.
 	Fill(context.Context, Payload, int64) (Staged, error)
-	// Close discards the stage unless it was published. It takes no context,
-	// so a cancelled acquisition still removes what it wrote.
+	// Retained reports the entry a retained stage was verified as, when this
+	// stage adopted one rather than claiming fresh staging.
+	Retained() (managedos.MediaEntry, bool)
+	// Verify re-reads an adopted stage in full, holding no root lock, and
+	// reports the bytes it holds now.
+	Verify(context.Context) (Staged, error)
+	// Retain keeps a filled, unpublished stage beside the record it would have
+	// published, so a repeated add publishes it without acquiring it again.
+	Retain(context.Context, []byte) error
+	// Close discards the stage unless it was published or retained, and an
+	// adopted stage only once Verify found other bytes in it. It takes no
+	// context, so a cancelled acquisition still removes what it wrote.
 	Close() error
 }
 
 type Transaction interface {
 	View
 	// Stage claims private staging for the named image. It refuses while
-	// another live stage holds that name.
-	Stage(context.Context, string) (Stage, error)
+	// another live stage holds that name. It adopts the name's retained stage
+	// when the digest pin equals the retained one, and otherwise removes that
+	// stage before claiming fresh staging.
+	Stage(ctx context.Context, name, sha256 string) (Stage, error)
 	// Publish atomically installs a filled stage as the named image with its
 	// record.
 	Publish(context.Context, string, Stage, []byte, bool) error
+	// Delete removes the named image and its record, and the stage retained
+	// for that name.
 	Delete(context.Context, string) error
 }
 

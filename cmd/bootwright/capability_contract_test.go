@@ -103,11 +103,6 @@ type contractRow struct {
 	// resolution is always the removal's completion, whatever the target
 	// would report.
 	removalObservesNothing string
-	// removalAbsenceUnproved says why a binding's removal resolution reads its
-	// own absence evidence as positive no effect rather than completion: its
-	// adapter publishes that form over a target it could not read, so only the
-	// repeated removal proves its absence.
-	removalAbsenceUnproved string
 	// readiness names the presence field carrying what the listeners answered,
 	// for a binding whose removal's resolution reads only what the removal
 	// takes back and never the apply's readiness or postcondition:
@@ -136,7 +131,7 @@ func contractRows() []contractRow {
 	return []contractRow{
 		{kind: clients.Kind, implementation: clients.Implementation, example: "lab-rhel"},
 		{kind: libvirt.MachineKind, implementation: libvirt.MachineImplementation, example: "lab-rhel", probes: true,
-			absence: map[string]any{"answered": true}, presence: contractMachinePresence},
+			absence: map[string]any{"answered": true, "listener": false}, presence: contractMachinePresence},
 		{kind: baremetal.Kind, implementation: baremetal.Implementation, example: "lab-baremetal", presence: contractBareMetalPresence,
 			retains: true, indivisible: true,
 			noEffectUnreported:     "specs/substrates.md proves no effect only from a claim never published, which the controller's reservations hold, not the adapter's evidence",
@@ -144,7 +139,7 @@ func contractRows() []contractRow {
 		{kind: installation.Kind, implementation: installation.Implementation, example: "lab-rhel", presence: contractInstallationPresence, retains: true,
 			noEffect: map[string]any{"power": "Off"}},
 		{kind: libvirt.HostKind, implementation: libvirt.HostImplementation, example: "lab-rhel", presence: contractHostPresence,
-			removalAbsenceUnproved: "specs/substrates.md, Provider host realization, publishes the absence form over a connection that does not answer and over a pool undefined before its directory was deleted"},
+			absence: map[string]any{"uri": true, "poolAnswered": true, "directory": false}},
 		{kind: agentinstall.Kind, implementation: agentinstall.MediaImplementation, example: "lab-sno", presence: contractMediaPresence},
 		{kind: agentinstall.Kind, implementation: agentinstall.InstallImplementation, example: "lab-sno", presence: contractClusterPresence,
 			removalKeepsPresence: true},
@@ -305,10 +300,8 @@ func (f *contractFindings) record(row contractRow, property, message string) {
 // realization still reporting all of it, as positive no effect, and its own
 // partial removal as partial. A binding whose removal keeps what its
 // presence reports reads presence and a partial realization as completion too,
-// one whose removal changes nothing observable runs no adapter and reads
-// everything as completion, and one whose adapter also publishes its absence
-// over a target it could not read reads that absence as positive no effect. A
-// failed or empty probe never reads as quiescent.
+// and one whose removal changes nothing observable runs no adapter and reads
+// everything as completion. A failed or empty probe never reads as quiescent.
 func TestEveryCapabilityHonoursTheCapabilityContract(t *testing.T) {
 	runner := &contractRunner{}
 	resolver := buildCapabilitiesWith(systemClock{}, exampleControllerPorts(t), runner)
@@ -634,24 +627,18 @@ func contractEvidence(t *testing.T, row contractRow, example contractExample, bl
 // nothing back; and a partial realization is partial, because the removal
 // left part of what it takes back. A binding whose removal keeps what its
 // presence reports, and one whose removal observes nothing, read presence and
-// a partial realization as completion instead, and one whose absence evidence
-// its adapter also publishes over a target it could not read reads that
-// absence as positive no effect, so the removal repeats and proves it. A
-// binding whose removal reads only what it takes back reads its presence with
-// readiness unproved, and the partial fixture, which still reports all of it,
-// as positive no effect, and its own partial removal as partial, so a silent
-// listener never leaves a removal unresolvable. The fixtures are the ones
-// contractEvidenceControls proves sound.
+// a partial realization as completion instead. A binding whose removal reads
+// only what it takes back reads its presence with readiness unproved, and the
+// partial fixture, which still reports all of it, as positive no effect, and
+// its own partial removal as partial, so a silent listener never leaves a
+// removal unresolvable. The fixtures are the ones contractEvidenceControls
+// proves sound.
 func contractRemovalObservations(t *testing.T, row contractRow, block reconciliation.Block, capability lifecycle.Capability, execution lifecycle.Execution, runner *contractRunner, findings *contractFindings) {
 	t.Helper()
 	kept := row.removalKeepsPresence || row.removalObservesNothing != ""
 	presenceWant, partialWant := reconciliation.EffectNoEffect, reconciliation.EffectPartial
 	if kept {
 		presenceWant, partialWant = reconciliation.EffectCompleted, reconciliation.EffectCompleted
-	}
-	absenceWant := reconciliation.EffectCompleted
-	if row.removalAbsenceUnproved != "" {
-		absenceWant = reconciliation.EffectNoEffect
 	}
 	type removalRule struct {
 		property string
@@ -660,7 +647,7 @@ func contractRemovalObservations(t *testing.T, row contractRow, block reconcilia
 	}
 	partial := contractPartial(t, row, execution, block.RequestDigest)
 	rules := []removalRule{
-		{"observe-removal-proves-absence", contractAbsence(t, row, block.RequestDigest), absenceWant},
+		{"observe-removal-proves-absence", contractAbsence(t, row, block.RequestDigest), reconciliation.EffectCompleted},
 		{"observe-removal-reads-presence", contractPresence(t, row, execution, block.RequestDigest), presenceWant},
 	}
 	if row.readiness == "" {
@@ -951,10 +938,12 @@ func contractHostPresence(t *testing.T, execution lifecycle.Execution) map[strin
 	}
 	networks := []map[string]any{}
 	for _, network := range request.Networks {
-		networks = append(networks, map[string]any{"name": network.Name, "managed": network.Managed, "bridge": true, "state": "active", "owned": network.Managed})
+		networks = append(networks, map[string]any{
+			"name": network.Name, "managed": network.Managed, "answered": network.Managed, "bridge": true, "state": "active", "owned": network.Managed,
+		})
 	}
 	return map[string]any{
-		"postcondition": true, "hypervisor": true, "services": services, "uri": true, "pool": "active", "networks": networks,
+		"postcondition": true, "hypervisor": true, "services": services, "uri": true, "pool": "active", "poolAnswered": true, "networks": networks,
 	}
 }
 

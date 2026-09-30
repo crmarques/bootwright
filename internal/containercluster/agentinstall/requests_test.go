@@ -54,6 +54,23 @@ func TestAForeignRequestVersionRefuses(t *testing.T) {
 	}
 }
 
+// An install request frozen by the build before physical nodes froze their
+// hardware is not read as this one, so its apply, and even its destroy, run
+// only on the build that registered it.
+func TestAnInstallRequestOfThePreviousVersionRefuses(t *testing.T) {
+	_, install, _ := onlyRequests(t, singleNodeCatalog())
+	install.Version = "cluster-install-agent-v2"
+	data, err := install.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeInstallRequest(data); err == nil {
+		t.Fatal("an install request of the previous version was read as this one")
+	} else if code := refusalCode(t, err); code != "lifecycle.state" {
+		t.Fatalf("refusal = %s", code)
+	}
+}
+
 // The media block claims the two host resources it writes into, so a second
 // context refuses rather than publishing over them.
 func TestMediaReservationsClaimTheImageTreeAndWorkArea(t *testing.T) {

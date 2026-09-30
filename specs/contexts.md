@@ -202,7 +202,7 @@ confirmed setup:
 | Path | Purpose and retention |
 | --- | --- |
 | `registry.json` | One atomic map of context names to their selected inputs and status, plus the Controller descriptor once setup publishes it. |
-| `media/` | Host-wide installer media under the [Managed OS media contract](managed-os.md#media-store): each image's exact bytes beside its canonical record, created by the first `media add`, shared read-only by every context and frozen through shared reservations rather than copied. An image is [acquired](#media-acquisition) into a private stage in this directory while no root lock is held, then published exclusively and atomically with its record; deletion is guarded by the reservation record. |
+| `media/` | Host-wide installer media under the [Managed OS media contract](managed-os.md#media-store): each image's exact bytes beside its canonical record, created by the first `media add`, shared read-only by every context and frozen through shared reservations rather than copied. An image is [acquired](#media-acquisition) into a private stage in this directory while no root lock is held, then published exclusively and atomically with its record; a pinned stage whose publication met another command's lock is kept beside its record for the command's repetition; deletion is guarded by the reservation record. |
 | `contexts/<name>/context.yaml` | Canonical immutable Context configuration; keeps the authored configuration contract separate from runtime metadata. |
 | `desired-state/revisions/<revision-id>/` | Immutable input snapshot, so publication and protected recovery can retain a complete selected revision. Collect unselected revisions only with disposal proof. |
 | `manifest.json` | Original input provenance, blob mapping, sizes and hashes needed to verify and replay the snapshot. |
@@ -253,30 +253,38 @@ Two advisory locks guard the store, and neither is ever waited for:
 - a context's **lease**, an exclusive lock on that context's directory, taken
   only while the exclusive root lock is held.
 
-A media stage's own lock marks a live [acquisition](#media-acquisition) and
-guards nothing else.
+A media stage's own lock marks a live [acquisition](#media-acquisition) or the
+add adopting a retained stage, and guards only that stage and the record
+retained beside it.
 
 | Root lock | Lease | Commands |
 | --- | --- | --- |
-| shared | none | Every read: `context list` and `current`, `plan`, `status`, `preflight controller`, `secret check`, `list` and `show`, `secret encryption status`, `media list`, SSH-trust and input reads, [bounded runs](cli/output.md#bounded-run-output), and the reads that precede `setup`, `apply` and `destroy`. |
-| exclusive | none | Every other command that may publish, such as `context use`, a `context update` that imports no input, `setup`, `media delete`, the admission and publication of `media add`, and the SSH trust that `machine trust` or a confirmed first use records. |
-| none | none | The [acquisition](#media-acquisition) of `media add` between those two holds: its copy or download and its digest verification. |
+| shared | none | Every read: `context list` and `current`, `plan`, `status`, `preflight controller`, `secret check`, `list` and `show`, `secret encryption status`, `media list`, the admission a `media add` or `media delete` without `--yes` reviews before its confirmation, SSH-trust and input reads, [bounded runs](cli/output.md#bounded-run-output), and the reads that precede `setup`, `apply` and `destroy`. |
+| exclusive | none | Every other command that may publish, such as `context use`, a `context update` that imports no input, `setup` (which scopes no context), `media delete`, the admission and publication of `media add`, and the SSH trust that `machine trust` or a confirmed first use records. |
+| none | none | The [acquisition](#media-acquisition) of `media add` between those two holds: its copy or download, or its re-read of a stage it adopts, its digest verification, and the record it retains beside a stage whose publication met another command's lock; and the confirmation prompt of `media add` and `media delete`. |
 | exclusive | held | `context init`; a `context update` that imports input; `context delete` of a ready context; `secret set`, `generate` and `delete`, `secret encryption init` and `rotate`, and the Secret binding `apply` and `destroy` take before they execute; and the execution of `apply` and `destroy`. |
 
 A read holds its lock until all stored input or secret-session files have been
 consumed, and a mutator holds its locks until it finishes, except that
-`media add` releases the root lock while it acquires. A command that
+`media add` releases the root lock while it acquires, and neither `media add`
+nor `media delete` holds one while it prompts. A command that
 cannot take the lock or lease refuses with `lifecycle.lease` and a retry
-remedy; no lock or lease is ever waited for or taken over. Revalidate target,
-identity and evidence under those locks. Read-only operations perform no
-repair, initialization or publication.
+remedy; no lock or lease is ever waited for or taken over. A lease is held
+only once its stage collection, layout verification and reservation check
+succeed; a lease that refuses is released at once. `setup`
+[selects no context](controller.md#selection-and-command-journeys), so it
+takes no lease and collects no stage in a context's `state/` subtree.
+Revalidate target, identity and evidence under those locks. Read-only
+operations perform no repair, initialization or publication.
 
 A lifecycle operation holds the exclusive root lock and the selected context's
 lease for its entire execution, because its host reservations, controller
 evidence and operation records must stay coherent while its effects run. Every
 other store command, a read included, therefore refuses while one runs; only
-the lock-free [acquisition](#media-acquisition) of a `media add` admitted
-earlier continues, and it refuses at its second hold.
+the lock-free [acquisition](#media-acquisition) of a `media add`, or a media
+confirmation, admitted earlier continues, and each refuses at its next
+exclusive hold, a pinned `media add` keeping its stage for the command's
+repetition.
 Narrowing that boundary to the lease alone is
 [B18](milestones/m1.md#b18). Within it, Workspace
 supplies the operation area, the mutation-evidence replacement primitive and
@@ -307,37 +315,43 @@ adopted by scanning. Small temporary files for atomic record replacement stay
 inside existing directories; they do not introduce a staging tree. A write
 that fails after creating its file removes exactly that file, unless its retry
 relies on what it leaves, as below. Every record publication except the
-registry's and the secret store's stages its bytes beside its target, proves
-right before one rename that the destination still holds what it replaces or
-renames without replacing anything, and removes its stage on any failure
-before that rename, even when the command was cancelled. Removal happens only
-while the containing directory still verifies; otherwise the file stays and
-the original failure is reported.
+initial registry's and the secret store's exclusive writes stages its bytes
+beside its target, proves right before one rename that the destination still
+holds what it replaces or renames without replacing anything, and removes its
+stage on any failure before that rename, even when the command was cancelled.
+Removal happens only while the containing directory still verifies; otherwise
+the file stays and the original failure is reported.
 
-Every writer of a stage in the controller directory or in a context's `state/`
-subtree holds the root lock for its whole command, so under the exclusive root
-lock no stage there has a live writer: only a killed process, or a failure
-whose directory no longer verified, leaves one. Every command that opens a
-registry transaction (`context init`, `use`, `update` and `delete`, `setup`,
-and the execution of `apply` and `destroy`) therefore first removes the
-controller directory's stages and, when it takes the lease of a context whose
-directory identity the registry records, the stages in that context's `state/`
-directory and in its operation, run and trust areas; every secret mutation
-first removes the stages in its context's `state/` directory; each does so
-before it verifies the layout. Only a private regular file named as that
-directory's publication stage, on its device and within its record bound, is
-removed; anything else is left to the verification that already refuses it.
+Every writer of a stage in the root, the controller directory or a context's
+`state/` subtree holds the root lock for its whole command, so under the
+exclusive root lock no stage there has a live writer: only a killed process,
+or a failure whose directory no longer verified, leaves one. Every command
+that opens a registry transaction (`context init`, `use`, `update` and
+`delete`, `setup`, and the execution of `apply` and `destroy`) therefore first
+removes the root's registry stages and the controller directory's stages and,
+when it takes the lease of a context whose directory identity the registry
+records, the stages in that context's `state/` directory and in its operation,
+run and trust areas; every secret mutation first removes the stages in its
+context's `state/` directory; each does so before it verifies the layout. Only
+a private regular file named as that directory's publication stage, on its
+device and within its record bound, is removed; anything else is left to the
+verification that already refuses it. An operation, run or trust area refuses
+a record or directory named as a stage, so collection never removes one.
 Reads never collect.
 
-The [secret store](secrets.md#local-keyring-v3) keeps what its writes leave
-for its own recovery, except that its replacement removes a stage whose write
-fails in-process, because the keyring attributes only a complete stage; what a
-killed write leaves follows [Local keyring v3](secrets.md#local-keyring-v3).
+The [secret store](secrets.md#local-keyring-v3)'s exclusive writes keep what
+they leave for its own recovery. Its replacement stages through the same
+publication and removes its stage on any failure before the rename, keeping
+its exact read expectation, its publication phase and its not-committed,
+committed or uncertain outcome; what a killed write leaves follows
+[Local keyring v3](secrets.md#local-keyring-v3).
 The context reservation write also keeps what it leaves: until the registry
 records the context directory's identity, the reservation alone lets an init
 retry attribute that directory and record the identity that deletion
-requires. Registry stages follow the root admission rule below, and media
-stages follow [Media acquisition](#media-acquisition).
+requires. The initial registry's stage is the recovery artifact the
+missing-registry rule below names; a replacement registry stage is removed on
+failure like any other, and after a kill by the next registry transaction.
+Media stages follow [Media acquisition](#media-acquisition).
 
 After durable registry publication, a pristine context may collect verified
 unselected revisions while holding the root lock and context lease. Pristine
@@ -362,20 +376,23 @@ filesystems are ext4, XFS, Btrfs, tmpfs and overlayfs; Linux must provide
 Bounds apply before allocation/traversal: registry 8 MiB; manifest 4 MiB and
 32 MiB aggregate referenced manifests; paths 4096 bytes; mutation records
 64 KiB, with at most 16 abandoned publication stages beside a context's state
-entries; media images 32 GiB each and 64 entries, with records of at most 4 KiB
-and at most 16 stages; and the operator-visible bounds below. Input and
+entries; media records 4 KiB; and the operator-visible bounds below. Input and
 Secrets limits additionally bound their trees.
 
 | Operator-visible bound | Value | Go constant |
 | --- | --- | --- |
 | Active or reserved context names | 4096 | `maxContexts` in `internal/workspace/contextfs/store.go` |
 | Revisions per context | 4096 | `maxRevisions` in `internal/workspace/contextfs/store.go` |
-| Retained [controller bundle namespaces](contexts/controller-record.md#bounds) | 16 | `maxControllerBundles` in `internal/workspace/contextfs/controller_bundles_linux_amd64.go` |
+| Retained [controller bundle namespaces](contexts/controller-record.md#bounds) | 16 | `maxControllerBundles` in `internal/workspace/contextfs/controller_records.go` |
 | Lifecycle operations one context retains | 4096 | `MaxOperations` in `internal/reconciliation/operationstore/records.go` |
 | One lifecycle adapter invocation whose request states no deadline | 2 hours | `invocationTimeout` in `internal/reconciliation/ansiblerunner/process_linux_amd64.go` |
 | The longest deadline a lifecycle adapter request may state | 6 hours | `MaxDeadline` in `internal/reconciliation/lifecycle/invocation.go` |
 | One controller Ansible run: setup, its recovery or the base of a controller-stage client installation | 10 minutes | `runTimeout` in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
 | The longest deadline a controller-stage client installation may run under | 2 hours | `clientStageCeiling` in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
+| Bytes in one installer media image | 32 GiB | `MaxMediaBytes` in `internal/managedos/media.go` |
+| Installer media images one host holds | 64 | `MaxMediaEntries` in `internal/managedos/media.go` |
+| Bytes in an installer media name | 250 | `MaxMediaName` in `internal/managedos/media.go` |
+| Installer media stages at once, live, retained or abandoned | 16 | `maxStagedMedia` in `internal/workspace/contextfs/media_linux_amd64.go` |
 
 `TestDocumentedBoundsMatchCode` compares each value with its code, and each
 deadline with the one its runner passes to `context.WithTimeout`: the lifecycle
@@ -401,8 +418,9 @@ The root admits only the store's own published objects: `registry.json`, the
 `contexts` container, the `controller` subtree once the registry declares it,
 the `media` container once a `media add` has created it,
 and verified private, bounded `pending-<32 lowercase hexadecimal digits>.json`
-files left by an interrupted registry replacement; those files are ignored,
-never adopted. Any other entry refuses with the same complete-store guidance,
+files left by an interrupted registry replacement; reads ignore them, nothing
+adopts them, and the next command that opens a registry transaction removes
+them. Any other entry refuses with the same complete-store guidance,
 whether or not the registry holds contexts. Bounds never authorize evidence
 deletion to make room.
 
@@ -425,18 +443,49 @@ measured, and that the record states their size and digest; a stage or record
 that fails that proof refuses before a replacement removes the image it
 supersedes. It then renames the stage to the image name without replacing
 anything, proves the renamed file is still that stage, and only then publishes
-the record. A
-command that cannot take the lock for the second hold refuses with
-`lifecycle.lease`, removes its stage and publishes nothing.
+the record.
+
+Without `--yes`, a `media add` and a `media delete` first take a shared hold
+that admits the request as the media store requires. A `media add` that
+replaces an image and a `media delete` then ask for confirmation with no root
+lock held, and the exclusive hold that claims the stage or deletes refuses,
+changing nothing, when the name's occupancy, its published size and digest, its
+freeze or, for a deletion, its retained stage changed meanwhile, whether or not
+a prompt ran. With `--yes` the command takes the exclusive hold alone.
+
+A command that cannot take the lock for the second hold refuses with
+`lifecycle.lease` and publishes nothing. When the request pinned the digest with
+`--sha256`, it first retains its stage: still holding the stage's lock and no
+root lock, it writes exclusively beside the stage the canonical media record it
+would have published, as
+`media/staging-<32 lowercase hexadecimal digits>.json`, and its refusal says
+that repeating the command publishes the image without acquiring it again. An
+unpinned stage is removed.
+
+A stage and the record beside it are a retained pair while no process holds
+the stage's lock, the record decodes as a canonical media record within its
+bound, the stage is the one named by the record's image, and the opened stage
+is a private regular file of exactly the size the record states. The next
+`media add` of that image whose `--sha256` equals the recorded digest adopts
+the pair: its first hold takes the stage's lock, the add re-reads the stage in
+full with no root lock held, and its second hold publishes it as a filled stage
+with the retained source and its own publication time, then removes the
+retained record. An adopted stage whose bytes no longer match the record is
+removed and the add refuses; any other failure leaves it retained. An add of
+that image with another digest or none removes the pair before it claims, and
+`media delete` of that image removes it; either refuses while another add holds
+the stage's lock, and a frozen image's pair stays until its freeze ends.
 
 A failed, refused or cancelled acquisition removes its own stage while it still
-holds the stage's lock. A stage whose lock no process holds, such as one a
-killed `media add` left, is abandoned: it is never listed or adopted, and the
-next `media add` or `media delete` removes it under the exclusive root lock
-before it claims anything, as it removes the record temporary files named
-`pending-<32 lowercase hexadecimal digits>` that only an exclusive holder
-writes. At most 16 stages exist at once, live or abandoned; a claim beyond them
-refuses until another `media add` finishes.
+holds the stage's lock. A stage whose lock no process holds and that is not
+retained, such as one a killed `media add` left, is abandoned: it is never
+listed or adopted, and the next `media add` or `media delete` removes it, after
+the record beside it if any, under the exclusive root lock before it claims
+anything, as it removes a retained record whose stage is gone and the record
+temporary files named `pending-<32 lowercase hexadecimal digits>` that only an
+exclusive holder writes. At most 16 stages exist at once, live, retained or
+abandoned; a claim beyond them refuses until another `media add` finishes or
+`media delete` removes a retained stage.
 
 ## Format and restore boundary
 

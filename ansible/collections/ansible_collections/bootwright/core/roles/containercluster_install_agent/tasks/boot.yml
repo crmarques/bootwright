@@ -1,21 +1,13 @@
 ---
 # Insert the image its own cluster published and boot the machine through the
-# substrate that realized it. How a boot is selected is that substrate's
-# answer, so this composes its fixed task file and carries no rule that is
-# true of only one of them. A substrate with neither task file refuses before
-# the media is inserted, rather than inserting it and booting nothing.
-- name: Refuse a substrate this installation has no boot binding for
-  ansible.builtin.assert:
-    that:
-      - containercluster_install_agent_node.substrate in ['libvirt', 'baremetal']
-    fail_msg: >-
-      node {{ containercluster_install_agent_node.name }} names substrate
-      {{ containercluster_install_agent_node.substrate }}, which this cluster
-      installation has no boot binding for, so no media was inserted into
-      Machine {{ containercluster_install_agent_node.machine }} and it was not
-      booted; plan the installation again with this release
-    quiet: true
-
+# substrate that realized it. How a machine is proved and booted is that
+# substrate's answer, so this composes its pre-boot and boot entry points and
+# carries no rule that is true of only one of them. The boot entry point is
+# told that this installer reboots into what it wrote rather than powering the
+# machine off, so a substrate whose selection outlives a reboot selects
+# nothing. Each dispatch ends in a terminal fail for a substrate it has no
+# entry point for, and the proof dispatch's fail comes before the media is
+# inserted, rather than inserting it and booting nothing.
 - name: Refuse to boot a node whose cluster published no image
   ansible.builtin.assert:
     that:
@@ -63,6 +55,50 @@
         {{ [(containercluster_install_agent_boot_deadline | int)
             - (((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int)), 1] | max }}
       block:
+        # Each node is proved through its own substrate immediately before
+        # anything is inserted into it: a machine the substrate created by its
+        # controller answering with the machine off, and a physical one by its
+        # declared NICs, the identity its Machine block pinned in this
+        # operation, and its power off. A node that fails its proof is given
+        # no media and is not booted.
+        - name: Prove a machine this substrate created before inserting anything
+          ansible.builtin.include_role:
+            name: bootwright.core.substrate_libvirt_machine
+            tasks_from: pre_boot
+          vars:
+            substrate_libvirt_machine_target_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+            substrate_libvirt_machine_target_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+            substrate_libvirt_machine_target_user: '{{ containercluster_install_agent_user }}'
+            substrate_libvirt_machine_target_password: '{{ containercluster_install_agent_password }}'
+          when: containercluster_install_agent_node.substrate == 'libvirt'
+
+        - name: Prove the exact physical node before anything it holds is erased
+          ansible.builtin.include_role:
+            name: bootwright.core.substrate_baremetal_machine
+            tasks_from: pre_boot
+          vars:
+            substrate_baremetal_machine_target_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+            substrate_baremetal_machine_target_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+            substrate_baremetal_machine_target_expected: "{{ containercluster_install_agent_node.hardware.interfaces | map(attribute='macAddress') | list }}"
+            substrate_baremetal_machine_target_user: '{{ containercluster_install_agent_user }}'
+            substrate_baremetal_machine_target_password: '{{ containercluster_install_agent_password }}'
+            substrate_baremetal_machine_target_pinned_uuid_base64: >-
+              {{ bootwright_cluster_install_material['pinnedUUIDBase64Node' ~ containercluster_install_agent_index] | default('') }}
+            substrate_baremetal_machine_target_pinned_serial_base64: >-
+              {{ bootwright_cluster_install_material['pinnedSerialBase64Node' ~ containercluster_install_agent_index] | default('') }}
+          when: containercluster_install_agent_node.substrate == 'baremetal'
+
+        - name: Refuse a substrate this installation has no pre-boot binding for
+          ansible.builtin.fail:
+            msg: >-
+              node {{ containercluster_install_agent_node.name }} names substrate
+              {{ containercluster_install_agent_node.substrate }}, which this cluster
+              installation has no pre_boot binding for, so Machine
+              {{ containercluster_install_agent_node.machine }} was not proved, no
+              media was inserted into it and it was not booted; plan the
+              installation again with this release
+          when: containercluster_install_agent_node.substrate not in ['libvirt', 'baremetal']
+
         - name: Insert the published image as virtual media
           bootwright.core.redfish_boot:
             endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
@@ -76,18 +112,19 @@
         - name: Boot a machine this substrate created
           ansible.builtin.include_role:
             name: bootwright.core.substrate_libvirt_machine
-            tasks_from: boot_media.yml
+            tasks_from: boot_media
           vars:
             substrate_libvirt_machine_boot_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
             substrate_libvirt_machine_boot_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
             substrate_libvirt_machine_boot_user: '{{ containercluster_install_agent_user }}'
             substrate_libvirt_machine_boot_password: '{{ containercluster_install_agent_password }}'
+            substrate_libvirt_machine_boot_installer_powers_off: false
           when: containercluster_install_agent_node.substrate == 'libvirt'
 
         - name: Boot an operator-owned machine through its own controller
           ansible.builtin.include_role:
             name: bootwright.core.substrate_baremetal_machine
-            tasks_from: boot_media.yml
+            tasks_from: boot_media
           vars:
             substrate_baremetal_machine_boot_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
             substrate_baremetal_machine_boot_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
@@ -95,9 +132,21 @@
             substrate_baremetal_machine_boot_password: '{{ containercluster_install_agent_password }}'
           when: containercluster_install_agent_node.substrate == 'baremetal'
 
+        - name: Refuse a substrate this installation has no media-boot binding for
+          ansible.builtin.fail:
+            msg: >-
+              node {{ containercluster_install_agent_node.name }} names substrate
+              {{ containercluster_install_agent_node.substrate }}, which this cluster
+              installation has no boot_media binding for, so Machine
+              {{ containercluster_install_agent_node.machine }} was not booted from
+              the inserted image; plan the installation again with this release
+          when: containercluster_install_agent_node.substrate not in ['libvirt', 'baremetal']
+
       # A step the timeout stopped fails with ansible-core's own message, so the
       # budget is named here; any other failure stays a failure, and its own
-      # step above, not this one, says what refused.
+      # step above, not this one, says what refused. The rescue therefore ends
+      # in a fail with no condition, which is what keeps each refusal above
+      # terminal.
       rescue:
         - name: Report the boot the boot phase's budget stopped
           ansible.builtin.fail:

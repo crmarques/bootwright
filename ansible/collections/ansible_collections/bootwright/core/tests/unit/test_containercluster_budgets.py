@@ -504,7 +504,7 @@ def test_every_boot_step_runs_under_what_the_boot_phase_has_left():
              if "bootwright.core.redfish_boot" in task or "ansible.builtin.include_role" in task]
     effects = [task for task in walk(skip()["block"])
                if "bootwright.core.redfish_boot" in task or "ansible.builtin.include_role" in task]
-    assert steps == effects and len(steps) == 3
+    assert steps == effects and len(steps) == 5
     assert bounded() in skip()["block"]
     # ansible-core reads a timeout of 0 as none at all (_alarm_timeout.py:
     # `if not timeout: return`), so a step reached at or past the deadline

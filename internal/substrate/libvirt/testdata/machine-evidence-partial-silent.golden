@@ -10,6 +10,7 @@
     }
   ],
   "domain": "",
+  "listener": true,
   "owned": false,
   "postcondition": false,
   "power": "On",

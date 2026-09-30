@@ -63,12 +63,28 @@ type VirtualMedia struct {
 type Node struct {
 	Address    string     `json:"address"`
 	Controller Controller `json:"controller"`
-	Machine    string     `json:"machine"`
-	Name       string     `json:"name"`
+	// Hardware is what a physical node proves about itself before its boot
+	// erases what it holds. A node its substrate created carries none.
+	Hardware *Hardware `json:"hardware,omitempty"`
+	Machine  string    `json:"machine"`
+	Name     string    `json:"name"`
 	// Physical is operator-owned hardware: the installation erases what it
 	// already held, so the block consumes that authorization on apply.
 	Physical  bool   `json:"physical"`
 	Substrate string `json:"substrate"`
+}
+
+// Hardware is the complete set of NICs a physical node must report, in the
+// order its Machine declares them.
+type Hardware struct {
+	Interfaces []Interface `json:"interfaces"`
+}
+
+// Interface is one NIC a physical node must report for it to be the machine
+// this installation boots.
+type Interface struct {
+	MACAddress string `json:"macAddress"`
+	Name       string `json:"name"`
 }
 
 // Endpoint is one name the controller must resolve before any node is booted,

@@ -33,16 +33,22 @@ transfer publishes nothing.
 
 Acquisition holds no store lock, so a long download blocks no other command;
 [Workspace](contexts.md#media-acquisition) owns how. Every refusal and the
-confirmation precede it, and publication proves them again against the store
-as it then stands: the add refuses, publishing nothing, when meanwhile the
-image it would replace was deleted or frozen, the name it would take was
-occupied, or the store filled. While one add acquires a name, a second add of
-that name refuses before it acquires anything.
+confirmation precede it. The confirmation prompts with no store lock held, and
+the claim that follows refuses, acquiring nothing, when the entry it confirmed
+changed meanwhile. Publication proves the admission again against the store as
+it then stands: the add refuses, publishing nothing, when meanwhile the image
+it would replace was deleted or frozen, the name it would take was occupied, or
+the store filled. While one add acquires a name, a second add of that name
+refuses before it acquires anything. An add whose publication met another
+command's lock keeps the stage it verified against its `--sha256`, so repeating
+it publishes that image without acquiring it again.
 
 `media list` reads only records and file metadata. `--checksums` reads every
 image in full, reports each computed digest, and marks an entry whose bytes no
 longer match its record as failed. `media delete --name <filename.iso>` removes
-the image and its record after ordinary confirmation, and refuses while frozen.
+the image and its record, and a stage an interrupted add retained for that
+name, after ordinary confirmation, which holds no store lock, and refuses while
+frozen.
 
 An entry is frozen while any context holds the shared reservation
 `media:<filename.iso>`, which a lifecycle operation claims at registration for
@@ -68,8 +74,8 @@ One installation contract covers every substrate. The
 [realized target](substrates.md#selection-and-refusal) supplies the substrate
 arm, the management controller to boot through, the identity channel to prove
 completion with, and whether the machine is physical. The installation
-dispatches on the frozen arm and channel through the substrate's fixed task
-files and fails closed on one it has no task file for, as the
+dispatches on the frozen arm and channel through the substrate's port entry
+points and fails closed on one it has no entry point for, as the
 [adapter boundary](#adapter-boundary) states.
 
 **Supported shape.** The profile's `anaconda` arm, with `packageSource` absent
@@ -150,18 +156,20 @@ proves intent and only an observation taken before the effect proves the
 target. It fails closed, and no authorization relaxes it: `data-loss`
 acknowledges that an installation destroys data and never selects what to
 destroy. A machine found running refuses on either substrate, because the proof
-never powers a machine off to satisfy itself. A machine its substrate created is
-then powered off through its controller, which narrows the window in which it
-was started after the proof; an operator-owned physical machine is never
-powered off by an installation. The block then inserts the published image
-URL as the controller's virtual media, sets a one-time boot from it, powers
-the Machine on, and polls the power state to on, all through the
-[identity and power operations](substrates.md#identity-and-power-operations);
-it selects each boot device itself rather than through the substrate's
-boot-from-media operation.
+never powers a machine off to satisfy itself. The block then inserts the
+published image URL as the controller's virtual media and boots the Machine
+from it through the substrate's
+[boot entry point](substrates.md#identity-and-power-operations), telling it that
+this installer powers the machine off when it is done. The power-off of a
+machine its substrate created, which narrows the window in which it was started
+after the proof, the media selection and the power-on, polled to on, happen
+inside that entry point; an operator-owned physical machine is never powered
+off by an installation.
 Anaconda installs unattended and powers the machine off when it is done, which
 is what lets the block eject the media and boot the installed system from disk
-deliberately rather than racing a reboot.
+deliberately rather than racing a reboot: once the installer has powered the
+machine off, the block ejects the media and boots the installed disk through
+the substrate's disk-boot entry point.
 
 **Budgets.** Each of the three waits an apply performs while the machine
 installs and starts is a budget its request freezes, as a number of retries and
@@ -169,11 +177,12 @@ the seconds between them, never a value the adapter chooses: the installer
 powering the machine off (180 retries 20 seconds apart), the installed machine
 answering through its identity channel (120 retries 30 seconds apart) and its
 fleet account accepting the reported key (30 retries 10 seconds apart), 7,500
-seconds of pauses in all. Every run of the block is bounded by a
-[deadline](architecture.md#the-adapter-result-protocol) derived from the
-budgets it froze: their pauses back to back plus one hour for the media work,
-the boot and each read's own time, which is 3 hours 5 minutes for these budgets
-and within the runner's ceiling. A run that reaches its deadline is killed, and
+seconds of pauses in all. A read the controller does not answer spends one
+retry of the installer wait rather than ending it. Every run of the block is
+bounded by a [deadline](architecture.md#the-adapter-result-protocol) derived
+from the budgets it froze: their pauses back to back plus one hour for the
+media work, the boot and each read's own time, which is 3 hours 5 minutes for
+these budgets and within the runner's ceiling. A run that reaches its deadline is killed, and
 the attempt becomes unknown and is resolved from the marker, as after a
 cancellation. The controller's own power and media polls, which the adapter
 bounds with fixed counts, and the single retry, one second later, of an
@@ -309,11 +318,13 @@ fixed entrypoint per operation on the artifact server's placement Machine,
 under [the adapter result protocol](architecture.md#the-adapter-result-protocol)
 and the [process](security.md#process-boundary) and
 [Secret-material](security.md#sensitive-material) rules, composing the
-substrate's power and identity task files by fixed qualified name. The frozen
-target's substrate and identity channel select those task files. A substrate or
-channel that selects none refuses as soon as the entrypoint has loaded, before
-the tree, the image or any private material is published and before the machine
-is read, given media or booted, and each task file refuses it again itself. The
+substrate's pre-boot, boot, disk-boot and identity entry points by fixed
+qualified name. The frozen target's substrate and identity channel select those
+entry points. A substrate or channel that selects none refuses as soon as the
+entrypoint has loaded, before the tree, the image or any private material is
+published and before the machine is read, given media or booted, and each
+dispatching task file refuses it again with a terminal fail after its
+dispatch. The
 adapter renders the frozen Kickstart, invokes `mkksiso` and the archive tooling
 with exact argument vectors, and returns bounded structured evidence. The fleet
 key's public half reaches it as a value; no private key, password or other

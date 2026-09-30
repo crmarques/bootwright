@@ -36,12 +36,18 @@ func recordingContext(ctx context.Context) context.Context { return context.With
 // that cannot start returns no state and the block keeps the one it had: a
 // pending block stays pending and a failed one it would have retried stays
 // failed, exactly as their records still say.
-func (s Service) attempt(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, position, total int) (reconciliation.BlockState, error) {
+func (s Service) attempt(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, position, total int) (reconciliation.BlockState, error) {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
 		return "", failure("lifecycle.state",
 			"this executable does not offer the implementation this block froze",
 			"install the executable that registered this operation")
+	}
+	// What the attempt relies on is read before it starts, so a record that
+	// cannot be read leaves the block exactly as it was.
+	proved, err := provedDependencies(ctx, store, operation, plan, block)
+	if err != nil {
+		return "", err
 	}
 	number, err := store.StartAttempt(ctx, operation.ID, block.ID)
 	if err != nil {
@@ -61,7 +67,7 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	}
 	defer boundary.close(ctx, log)
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: "running", Position: position, Total: total})
-	result, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, block, material, log, number, 0, position, total, func(inner context.Context, execution Execution) (Result, error) {
+	result, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, block, material, proved, log, number, 0, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		if operation.Verb == reconciliation.Destroy {
 			return capability.Destroy(inner, execution)
 		}
@@ -125,7 +131,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	defer boundary.close(ctx, log)
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Detail: "resolving the unknown outcome from live evidence", Status: "running", Position: position, Total: total})
 	var observation Observation
-	_, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, block, material, log, attemptNumber, number, position, total, func(inner context.Context, execution Execution) (Result, error) {
+	_, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, block, material, nil, log, attemptNumber, number, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		observe := capability.Observe
 		if operation.Verb == reconciliation.Destroy {
 			observe = capability.ObserveRemoval
@@ -177,7 +183,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 // invoke runs the capability inside the private Python execution boundary,
 // exactly as controller setup does. The approved bundle is the operation's
 // own, opened once before its first effect.
-func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, log *operationstore.Log, attempt, resolution, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
+func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, proved []BlockEvidence, log *operationstore.Log, attempt, resolution, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
 	view := tx.Controller()
 	result := Result{Outcome: reconciliation.OutcomeUnknown}
 	// Completion is counted in proved groups, not in elapsed time: the adapter
@@ -226,7 +232,7 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 		}
 		execution := Execution{
 			Operation: operation.ID, Attempt: attempt, Resolution: resolution, Block: block, Launch: launch, Bundle: approved.location, Area: approved.area,
-			Material: material,
+			Material: material, Proved: proved,
 			LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
 				return prerequisites.LocateInstalledTool(inner, view, tool)
 			},

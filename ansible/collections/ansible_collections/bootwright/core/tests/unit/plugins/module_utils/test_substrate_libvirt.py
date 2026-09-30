@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import ipaddress
+import sys
+
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import (
+    MAX_OUTPUT,
     domain_metadata,
     domain_state,
     invoke,
+    listening,
     network_state,
     observe_host,
     observe_machine,
     packages_present,
+    pool_state,
     unit_enabled,
     unit_state,
 )
@@ -105,7 +111,7 @@ def test_a_network_without_this_contexts_metadata_is_foreign():
         "net-info bootwright-lab-guests": (0, "Active:         yes\n", ""),
     })
     assert network_state(owned, "qemu:///system", "bootwright-lab-guests") == {
-        "state": "active", "owned": True, "bridge": "virbr-lab",
+        "answered": True, "state": "active", "owned": True, "bridge": "virbr-lab",
         "uuid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00",
     }
     foreign = runner_for({
@@ -119,11 +125,76 @@ def test_an_absent_or_malformed_network_reports_no_state():
     assert network_state(runner_for({}), "qemu:///system", "gone")["state"] == ""
     malformed = runner_for({"net-dumpxml gone": (0, "not xml", "")})
     assert network_state(malformed, "qemu:///system", "gone") == {
-        "state": "", "owned": False, "bridge": "", "uuid": "",
+        "answered": False, "state": "", "owned": False, "bridge": "", "uuid": "",
     }
 
 
-def test_an_observed_network_carries_the_identity_libvirt_assigned_it():
+# The network and storage drivers are daemons of their own, reached through the
+# hypervisor's connection only when a network or pool call is made, and virsh
+# reports a lookup it failed the same way whatever the cause
+# (tools/virsh-network.c, tools/virsh-pool.c). A network or pool is therefore
+# absent only when its driver completes a listing that does not name it.
+NETWORK_DRIVER_SILENT = (1, "", "error: failed to get network 'bootwright-lab-guests'\n"
+                         "error: Failed to connect socket to '/var/run/libvirt/virtnetworkd-sock': No such file or directory\n")
+NETWORK_UNDEFINED = (1, "", "error: failed to get network 'bootwright-lab-guests'\n"
+                     "error: Network not found: no network with matching name 'bootwright-lab-guests'\n")
+POOL_UNDEFINED = (1, "", "error: failed to get pool 'p'\nerror: Storage pool not found: no storage pool with matching name 'p'\n")
+
+
+def test_a_network_or_pool_is_absent_only_when_its_driver_answered_for_it():
+    undefined = runner_for({"net-dumpxml bootwright-lab-guests": NETWORK_UNDEFINED, "net-list --all --name": (0, "default\n\n", "")})
+    assert network_state(undefined, "qemu:///system", "bootwright-lab-guests") == {
+        "answered": True, "state": "", "owned": False, "bridge": "", "uuid": "",
+    }
+    for name, answers in {
+        "driver silent": {"net-dumpxml bootwright-lab-guests": NETWORK_DRIVER_SILENT,
+                          "net-list --all --name": (1, "", "error: Failed to list networks\n")},
+        "listed after all": {"net-dumpxml bootwright-lab-guests": NETWORK_UNDEFINED,
+                             "net-list --all --name": (0, "bootwright-lab-guests\n\n", "")},
+        "listing truncated": {"net-dumpxml bootwright-lab-guests": NETWORK_UNDEFINED, "net-list --all --name": (0, "x" * MAX_OUTPUT, "")},
+    }.items():
+        state = network_state(runner_for(answers), "qemu:///system", "bootwright-lab-guests")
+        assert state == {"answered": False, "state": "", "owned": False, "bridge": "", "uuid": ""}, name
+    assert pool_state(runner_for({"pool-info p": POOL_UNDEFINED, "pool-list --all --name": (0, "default\n\n", "")}), "qemu:///system", "p") == {
+        "answered": True, "state": "",
+    }
+    for name, answers in {
+        "driver silent": {"pool-info p": POOL_UNDEFINED, "pool-list --all --name": (1, "", "error: Failed to list pools\n")},
+        "listed after all": {"pool-info p": POOL_UNDEFINED, "pool-list --all --name": (0, "p\n\n", "")},
+    }.items():
+        assert pool_state(runner_for(answers), "qemu:///system", "p") == {"answered": False, "state": ""}, name
+    running = runner_for({"pool-info p": (0, "Name:           p\nState:          running\n", "")})
+    assert pool_state(running, "qemu:///system", "p") == {"answered": True, "state": "active"}
+
+
+# The uri answering proves only that the hypervisor did: with the network driver
+# silent, the observation reports the network unanswered rather than absent.
+def test_a_host_whose_network_driver_is_silent_reports_the_network_unanswered(tmp_path):
+    runner = runner_for({
+        "version": (0, "", ""),
+        "net-dumpxml bootwright-lab-guests": NETWORK_DRIVER_SILENT,
+        "net-list --all --name": (1, "", "error: Failed to list networks\n"),
+        "pool-info bootwright-lab-p-vmedia": POOL_UNDEFINED,
+        "pool-list --all --name": (0, "\n", ""),
+    })
+    request = {
+        "networks": [
+            {"name": "bootwright-lab-guests", "bridge": "virbr-lab", "managed": True},
+            {"name": "external", "bridge": "br0", "managed": False},
+        ],
+        "packages": [],
+        "poolName": "bootwright-lab-p-vmedia",
+        "poolPath": str(tmp_path / "pool"),
+        "services": [],
+        "uri": "qemu:///system",
+    }
+    observation = observe_host(runner, request)
+    assert observation["uri"] is True
+    assert [entry["answered"] for entry in observation["networks"]] == [False, False]
+    assert (observation["pool"], observation["poolAnswered"]) == ("", True)
+
+
+def test_an_observed_network_carries_the_identity_libvirt_assigned_it(tmp_path):
     """libvirt refuses to redefine a name under a new UUID, so apply reads it."""
     runner = runner_for({
         "version": (0, "", ""),
@@ -135,6 +206,7 @@ def test_an_observed_network_carries_the_identity_libvirt_assigned_it():
         "networks": [{"name": "bootwright-lab-guests", "bridge": "virbr-lab", "managed": True}],
         "packages": ["qemu-kvm"],
         "poolName": "bootwright-lab-p-vmedia",
+        "poolPath": str(tmp_path / "pool"),
         "services": ["virtnetworkd.service"],
         "uri": "qemu:///system",
     }
@@ -158,17 +230,19 @@ def test_a_domain_reports_its_identity_and_ownership():
     }
 
 
-def test_a_host_whose_connection_is_silent_reports_nothing_it_cannot_read():
+def test_a_host_whose_connection_is_silent_reports_nothing_it_cannot_read(tmp_path):
     request = {
         "networks": [{"name": "bootwright-lab-guests", "bridge": "virbr-lab", "managed": True}],
         "packages": ["qemu-kvm"],
         "poolName": "bootwright-lab-p-vmedia",
+        "poolPath": str(tmp_path / "pool"),
         "services": ["virtnetworkd.service"],
         "uri": "qemu:///system",
     }
     observation = observe_host(runner_for({}), request)
     assert observation["uri"] is False
-    assert observation["pool"] == ""
+    assert (observation["pool"], observation["poolAnswered"]) == ("", False)
+    assert observation["networks"][0]["answered"] is False
     assert observation["networks"][0]["state"] == ""
     assert observation["networks"][0]["owned"] is False
     assert observation["networks"][0]["uuid"] == ""
@@ -176,7 +250,7 @@ def test_a_host_whose_connection_is_silent_reports_nothing_it_cannot_read():
 
 # Every driver the provider depends on is observed the same way, because a
 # daemon that is running but not enabled is the state this block converges.
-def test_each_declared_driver_daemon_reports_its_state_and_enablement():
+def test_each_declared_driver_daemon_reports_its_state_and_enablement(tmp_path):
     runner = runner_for({
         "is-enabled virtnetworkd.service": (0, "disabled\n", ""),
         "virtnetworkd.service": loaded("active"),
@@ -187,6 +261,7 @@ def test_each_declared_driver_daemon_reports_its_state_and_enablement():
         "networks": [],
         "packages": ["qemu-kvm"],
         "poolName": "bootwright-lab-p-vmedia",
+        "poolPath": str(tmp_path / "pool"),
         "services": ["virtnetworkd.service"],
         "uri": "qemu:///system",
     }
@@ -236,10 +311,10 @@ def test_a_domain_the_hypervisor_does_not_define_is_told_apart_from_no_answer():
         assert metadata == {"answered": False, "present": False, "owned": False, "uuid": ""}, name
 
 
-def machine_request():
+def machine_request(disks=None):
     return {
-        "controller": {"unit": "bootwright-lab-bmc-rhel-01"},
-        "disks": [],
+        "controller": {"address": "192.0.2.1", "port": 8000, "unit": "bootwright-lab-bmc-rhel-01"},
+        "disks": disks or [],
         "domain": "bootwright-lab-rhel-01",
         "uri": "qemu:///system",
     }
@@ -249,14 +324,174 @@ def machine_request():
 # no domain; only `answered` says which, and only the first proves absence.
 def test_a_machine_observation_reports_whether_the_hypervisor_answered():
     undefined = runner_for({"dumpxml bootwright-lab-rhel-01": LOOKUP_REFUSED, "list --all --name": OTHER_DOMAINS})
-    observation = observe_machine(undefined, machine_request())
+    observation = observe_machine(undefined, machine_request(), reader())
     assert (observation["answered"], observation["domain"], observation["state"]) == (True, "", "")
     silent = runner_for({"dumpxml bootwright-lab-rhel-01": CONNECTION_REFUSED})
-    observation = observe_machine(silent, machine_request())
+    observation = observe_machine(silent, machine_request(), reader())
     assert (observation["answered"], observation["domain"], observation["state"]) == (False, "", "")
     defined = runner_for({
         "dumpxml bootwright-lab-rhel-01": (0, OWNED_DOMAIN, ""),
         "domstate bootwright-lab-rhel-01": (0, "running\n", ""),
     })
-    observation = observe_machine(defined, machine_request())
+    observation = observe_machine(defined, machine_request(), reader())
     assert (observation["answered"], observation["domain"], observation["state"]) == (True, "bootwright-lab-rhel-01", "running")
+
+
+# The kernel's layout of /proc/net/tcp and tcp6: a header, then one line per
+# socket with every listening socket first, each local address printed as its
+# 32-bit words in host byte order and its port in hexadecimal
+# (Documentation/networking/proc_net_tcp.rst in the Linux tree).
+TCP_HEADER = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+TCP6_HEADER = (
+    "  sl  local_address                         remote_address                        "
+    "st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+)
+LISTEN, ESTABLISHED = "0A", "01"
+ENTRY = "%4d: %s %s:0000 %s 00000000:00000000 00:00000000 00000000     0        0 %d 1 0000000000000000 100 0 0 10 0\n"
+
+
+def table_word(address):
+    packed = ipaddress.ip_address(address).packed
+    return "".join("%08X" % int.from_bytes(packed[at:at + 4], sys.byteorder) for at in range(0, len(packed), 4))
+
+
+def table_entry(index, address, port, state=LISTEN):
+    remote = "0.0.0.0" if ipaddress.ip_address(address).version == 4 else "::"
+    local = "%s:%04X" % (table_word(address), port)
+    return ENTRY % (index, local, table_word(remote), state, 20000 + index)
+
+
+def reader(tcp=(), tcp6=(), asked=None):
+    """PID 1's socket tables holding these (address, port[, state]) entries.
+
+    A table given as None is missing, and every path asked for is recorded.
+    """
+    tables = {"/proc/1/net/tcp": (TCP_HEADER, tcp), "/proc/1/net/tcp6": (TCP6_HEADER, tcp6)}
+
+    def read(path):
+        if asked is not None:
+            asked.append(path)
+        header, entries = tables.get(path, (None, None))
+        if entries is None:
+            raise FileNotFoundError(path)
+        return [header] + [table_entry(index, *entry) for index, entry in enumerate(entries)]
+
+    return read
+
+
+# The controller binds its address with host networking, so its port is taken by
+# a listener on that address or its family's wildcard and, for an IPv4 address,
+# on its IPv4-mapped form or the IPv6 wildcard, which accepts IPv4 too.
+def test_a_listener_holds_the_port_by_its_address_or_its_family_wildcard():
+    for tcp, tcp6 in (
+        ([("192.0.2.1", 8000)], []),
+        ([("0.0.0.0", 8000)], []),
+        ([], [("::ffff:192.0.2.1", 8000)]),
+        ([], [("::", 8000)]),
+    ):
+        assert listening("192.0.2.1", 8000, reader(tcp, tcp6)), (tcp, tcp6)
+    for tcp6 in ([("2001:db8::1", 8000)], [("::", 8000)]):
+        assert listening("2001:db8::1", 8000, reader([], tcp6)), tcp6
+    others = reader([("192.0.2.2", 8000)], [("::ffff:192.0.2.2", 8000), ("2001:db8::1", 8000)])
+    assert not listening("192.0.2.1", 8000, others)
+    assert not listening("2001:db8::1", 8000, reader([("0.0.0.0", 8000)], [("2001:db8::2", 8000)]))
+
+
+# /proc/1/net/tcp on a little-endian Fedora 43 host printed systemd-resolved's
+# stub listener, 127.0.0.53:53, with the local address 3500007F:0035.
+@pytest.mark.skipif(sys.byteorder != "little", reason="the address was recorded on a little-endian host")
+def test_a_recorded_local_address_is_read_as_the_kernel_printed_it():
+    recorded = ENTRY % (0, "3500007F:0035", "00000000", LISTEN, 20000)
+    tables = {"/proc/1/net/tcp": [TCP_HEADER, recorded], "/proc/1/net/tcp6": [TCP6_HEADER]}
+    assert listening("127.0.0.53", 53, tables.get)
+    assert not listening("127.0.0.53", 5353, tables.get)
+
+
+def test_an_established_connection_or_another_port_is_not_a_listener():
+    read = reader(
+        [("192.0.2.1", 8001), ("192.0.2.1", 8000, ESTABLISHED)],
+        [("::", 9000), ("::ffff:192.0.2.1", 8000, ESTABLISHED)],
+    )
+    assert not listening("192.0.2.1", 8000, read)
+
+
+def long_table(header, entries, state):
+    """A table whose entries, all in one state, run past the observation bound."""
+    yield header
+    for index in range(entries):
+        yield table_entry(index, "192.0.2.9", 30000 + index % 1000, state)
+
+
+def test_a_socket_table_that_cannot_be_read_fails_the_observation():
+    past = MAX_OUTPUT // len(table_entry(0, "192.0.2.9", 30000)) + 2
+
+    def refused(path):
+        raise PermissionError(path)
+
+    for read, failure in (
+        (reader(tcp=None), OSError),
+        (refused, OSError),
+        (lambda path: [TCP_HEADER, "garbage\n"], ValueError),
+        (lambda path: [], ValueError),
+        (lambda path: long_table(TCP_HEADER, past, LISTEN), ValueError),
+    ):
+        with pytest.raises(failure):
+            listening("192.0.2.1", 8000, read)
+    # A host without an IPv6 stack has no tcp6 table at all.
+    assert not listening("192.0.2.1", 8000, reader(tcp=[("192.0.2.1", 8001)], tcp6=None))
+    # Only the listeners are read, so a busy table stays within the bound.
+    busy = {"/proc/1/net/tcp": long_table(TCP_HEADER, past, ESTABLISHED), "/proc/1/net/tcp6": [TCP6_HEADER]}
+    assert not listening("192.0.2.1", 8000, busy.get)
+
+
+# The controller's quadlet unit runs with host networking, so its socket is in
+# PID 1's network namespace, whichever namespace the observation runs in.
+def test_the_listener_is_read_where_the_controller_unit_listens():
+    asked = []
+    assert not listening("192.0.2.1", 8000, reader(asked=asked))
+    assert asked == ["/proc/1/net/tcp", "/proc/1/net/tcp6"]
+    asked = []
+    observation = observe_machine(runner_for({}), machine_request(), reader([("192.0.2.1", 8000)], asked=asked))
+    assert observation["listener"] is True
+    assert asked == ["/proc/1/net/tcp"]
+
+
+# A leftover disk the apply would skip recreating must never read absent, so
+# presence is whatever exists at the path; its image decides only the size.
+def test_a_disk_that_exists_is_present_whatever_its_image_reports(tmp_path):
+    (tmp_path / "file").write_bytes(b"not an image")
+    (tmp_path / "directory").mkdir()
+    (tmp_path / "dangling").symlink_to(tmp_path / "nowhere")
+    for name, present in (("file", True), ("directory", True), ("dangling", True), ("missing", False)):
+        request = machine_request([{"name": "root", "path": str(tmp_path / name), "sizeGiB": 60}])
+        observation = observe_machine(runner_for({}), request, reader())
+        assert observation["disks"] == [{"name": "root", "present": present, "sizeGiB": 0}], name
+
+
+# A running or paused QEMU holds a lock on its images, and `qemu-img info`
+# exits 1 with 'Failed to get shared "write" lock' on one unless it shares the
+# image (-U, --force-share), as observed against an image `qemu-system-x86_64 -S`
+# held open.
+def test_a_disk_a_running_domain_holds_reads_its_size(tmp_path):
+    disk = tmp_path / "root.qcow2"
+    disk.write_bytes(b"")
+    runner = runner_for({"info --force-share --output json " + str(disk): (0, '{"virtual-size": 64424509440}', "")})
+    observation = observe_machine(runner, machine_request([{"name": "root", "path": str(disk), "sizeGiB": 60}]), reader())
+    assert observation["disks"] == [{"name": "root", "present": True, "sizeGiB": 60}]
+
+
+def pool_request(path):
+    return {"networks": [], "packages": [], "poolName": "p", "poolPath": str(path), "services": [], "uri": "qemu:///system"}
+
+
+# A removal deletes the pool directory after it undefines the pool, so the
+# directory is read by its path whether or not the connection answered.
+def test_the_pool_directory_is_observed_by_its_path(tmp_path):
+    answers = runner_for({"version": (0, "", "")})
+    (tmp_path / "directory").mkdir()
+    (tmp_path / "file").write_bytes(b"")
+    (tmp_path / "dangling").symlink_to(tmp_path / "nowhere")
+    for name, present in (("directory", True), ("file", True), ("dangling", True), ("missing", False)):
+        assert observe_host(answers, pool_request(tmp_path / name))["directory"] is present, name
+    observation = observe_host(runner_for({}), pool_request(tmp_path / "directory"))
+    assert (observation["uri"], observation["directory"]) == (False, True)

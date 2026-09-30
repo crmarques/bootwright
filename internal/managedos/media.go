@@ -20,6 +20,9 @@ const (
 	MaxMediaEntries    = 64
 	MaxMediaBytes      = 32 << 30
 	MaxMediaRecord     = 4 << 10
+	// MaxMediaName keeps an image's record name, the image name followed by
+	// .json, within one 255-byte file name.
+	MaxMediaName = 250
 )
 
 // MediaEntry is one image of the host-wide installer media store: its name, the
@@ -36,7 +39,7 @@ type MediaEntry struct {
 // ValidMediaName admits one portable ASCII basename ending in a lowercase
 // `.iso`, so a media name is safe as a single path segment on every host.
 func ValidMediaName(name string) bool {
-	if len(name) < 5 || len(name) > 255 || !strings.HasSuffix(name, ".iso") {
+	if len(name) < 5 || len(name) > MaxMediaName || !strings.HasSuffix(name, ".iso") {
 		return false
 	}
 	stem := name[:len(name)-4]
@@ -146,6 +149,22 @@ func DecodeMediaRecord(data []byte, name string) (MediaEntry, error) {
 		return MediaEntry{}, mediaError("media record is not canonical")
 	}
 	return record.MediaEntry, nil
+}
+
+// DecodeStagedMediaRecord accepts the record retained beside a stage, whose
+// hashed name cannot give back the image it names: it reads the name the record
+// states and accepts exactly what DecodeMediaRecord accepts for that name.
+func DecodeStagedMediaRecord(data []byte) (MediaEntry, error) {
+	if len(data) > MaxMediaRecord {
+		return MediaEntry{}, mediaError("media record exceeds its bounds or encoding")
+	}
+	var stated struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(data, &stated); err != nil {
+		return MediaEntry{}, mediaError("media record is malformed")
+	}
+	return DecodeMediaRecord(data, stated.Name)
 }
 
 // MediaReservationKey is the shared host claim a context holds while an

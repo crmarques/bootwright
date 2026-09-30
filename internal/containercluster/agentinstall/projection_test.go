@@ -10,6 +10,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 func onlyRequests(t *testing.T, catalog api.Catalog) (MediaRequest, InstallRequest, Requirements) {
@@ -140,6 +141,50 @@ func TestPhysicalNodesAreFrozenAsOperatorOwnedHardware(t *testing.T) {
 	}
 }
 
+// A physical node's boot is proved against exactly the NICs its Machine
+// declares, in declared order, while a node its substrate created is proved by
+// its own controller and freezes none, although its target carries the
+// addresses its realization derived. Each fixture server declares one NIC,
+// which cannot show an order, so the targets are built here.
+func TestPhysicalNodesFreezeTheirDeclaredInterfacesInOrder(t *testing.T) {
+	frozen := frozenNodes([]nodeProjection{
+		{
+			machine: server("metal-01", "198.51.100.41/24", "aa:bb:cc:dd:ee:01"), name: "master-0",
+			target: substrate.Target{Physical: true, Substrate: "baremetal", Interfaces: []substrate.Interface{
+				{Name: "enp2s0", MACAddress: "aa:bb:cc:dd:ee:02"}, {Name: "enp1s0", MACAddress: "aa:bb:cc:dd:ee:01"},
+			}},
+		},
+		{
+			machine: guest("sno-01", "198.51.100.21/24"), name: "master-1",
+			target: substrate.Target{Substrate: "libvirt", Interfaces: []substrate.Interface{
+				{Name: "enp1s0", MACAddress: "52:54:00:06:3e:11"},
+			}},
+		},
+	})
+	want := &Hardware{Interfaces: []Interface{
+		{MACAddress: "aa:bb:cc:dd:ee:02", Name: "enp2s0"}, {MACAddress: "aa:bb:cc:dd:ee:01", Name: "enp1s0"},
+	}}
+	if len(frozen) != 2 || !reflect.DeepEqual(frozen[0].Hardware, want) {
+		t.Fatalf("physical node froze %+v, want %+v", frozen[0].Hardware, want)
+	}
+	if frozen[1].Hardware != nil {
+		t.Fatalf("virtual node froze %+v", frozen[1].Hardware)
+	}
+}
+
+// No install request this build freezes for a virtual cluster names hardware,
+// so its bytes carry no hardware key at all.
+func TestAVirtualNodeFreezesNoHardware(t *testing.T) {
+	_, install, _ := onlyRequests(t, singleNodeCatalog())
+	canonical, err := install.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(canonical, []byte(`"hardware"`)) {
+		t.Fatalf("a virtual cluster's install request froze hardware: %s", canonical)
+	}
+}
+
 // The rendezvous host is the first master in node-name order, because that is
 // the host the installer expects to run the bootstrap control plane.
 func TestTheRendezvousHostIsTheFirstMasterInNodeOrder(t *testing.T) {
@@ -250,11 +295,10 @@ func TestUnsupportedNamesEveryClusterThisContractCannotInstall(t *testing.T) {
 }
 
 // A cluster with a physical node refuses, because booting that node erases
-// what it holds and nothing proves the node is the declared machine, powered
-// off, before it is booted. A node Bootwright also installs an operating
-// system on refuses too, because two installations would write its one disk.
-// Either refusal names the bound Machine, because that is what an operator
-// changes.
+// what it holds and that boot is not yet qualified on emulated hardware. A
+// node Bootwright also installs an operating system on refuses too, because
+// two installations would write its one disk. Either refusal names the bound
+// Machine, because that is what an operator changes.
 func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.T) {
 	installed := guest("sno-01", "198.51.100.21/24")
 	installed = installed.WithSpec(installed.Spec().WithPath(api.StringValue("rhel-9-8"), "os", "installProfileRef"))
@@ -266,7 +310,7 @@ func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.
 	}{
 		"physical nodes": {
 			physicalCatalog(), "ContainerCluster/metal",
-			"physical cluster nodes are not supported until the installer proves each node before booting it",
+			"physical cluster nodes are not supported until an emulated rehearsal qualifies them",
 			"Machine/metal-01 is physical; declare ContainerCluster/metal on virtual nodes",
 		},
 		"installed node": {

@@ -24,12 +24,12 @@
   no_log: true
 
 - name: Read the state the management controller reports
-  bootwright.core.redfish_boot:
+  bootwright.core.redfish_system_read:
     endpoint: '{{ bootwright_machine_power_request.controller.endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerPassword) }}'
     verify: '{{ bootwright_machine_power_request.controller.tlsVerify }}'
-    operation: read
+    media: false
   register: machine_power_redfish_before
   no_log: true
 
@@ -94,12 +94,12 @@
   when: bootwright_machine_power_request.verb in ['start', 'restart']
 
 - name: Read the state the operation settled at
-  bootwright.core.redfish_boot:
+  bootwright.core.redfish_system_read:
     endpoint: '{{ bootwright_machine_power_request.controller.endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerPassword) }}'
     verify: '{{ bootwright_machine_power_request.controller.tlsVerify }}'
-    operation: read
+    media: false
   register: machine_power_redfish_after
   no_log: true
 

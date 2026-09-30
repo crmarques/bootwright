@@ -4,18 +4,21 @@
 # lifecycle and it is reported under its own group, because an operator reading
 # a progress row cannot otherwise tell a machine that is installing from one
 # that is wedged. Its budget is the request's own, which the run's deadline
-# covers.
+# covers. A read the controller does not answer is a machine not yet seen off,
+# so it spends one attempt of that budget rather than ending the wait. The
+# installed disk is then booted through the substrate's disk-boot entry point,
+# selected by the frozen request's own substrate.
 - name: Wait for the installer to power the machine off when it is done
-  bootwright.core.redfish_boot:
+  bootwright.core.redfish_system_read:
     endpoint: '{{ managedos_install_anaconda_endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
     verify: '{{ managedos_install_anaconda_verify }}'
-    operation: read
+    media: false
   register: managedos_install_anaconda_installer
   retries: '{{ bootwright_os_install_request.budgets.installer.attempts | int }}'
   delay: '{{ bootwright_os_install_request.budgets.installer.delaySeconds | int }}'
-  until: managedos_install_anaconda_installer.power == 'Off'
+  until: (managedos_install_anaconda_installer.power | default('')) == 'Off'
   no_log: true
 
 - name: Eject the installer image now that the installation is written
@@ -27,21 +30,39 @@
     operation: eject
   no_log: true
 
-- name: Select the installed disk as the boot device
-  bootwright.core.redfish_boot:
-    endpoint: '{{ managedos_install_anaconda_endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
-    password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
-    verify: '{{ managedos_install_anaconda_verify }}'
-    operation: boot
-    target: Hdd
-  no_log: true
+- name: Boot the installed disk of a machine this substrate created
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_libvirt_machine
+    tasks_from: boot_disk
+  vars:
+    substrate_libvirt_machine_disk_endpoint: '{{ managedos_install_anaconda_endpoint }}'
+    substrate_libvirt_machine_disk_verify: '{{ managedos_install_anaconda_verify }}'
+    substrate_libvirt_machine_disk_user: '{{ bootwright_os_install_material.controllerUser }}'
+    substrate_libvirt_machine_disk_password: '{{ bootwright_os_install_material.controllerPassword }}'
+    substrate_libvirt_machine_disk_power_on: true
+  when: bootwright_os_install_request.target.substrate == 'libvirt'
 
-- name: Power the installed system on and poll it to running
-  bootwright.core.redfish_boot:
-    endpoint: '{{ managedos_install_anaconda_endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
-    password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
-    verify: '{{ managedos_install_anaconda_verify }}'
-    operation: power-on
-  no_log: true
+- name: Boot the installed disk of an operator-owned machine
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_baremetal_machine
+    tasks_from: boot_disk
+  vars:
+    substrate_baremetal_machine_disk_endpoint: '{{ managedos_install_anaconda_endpoint }}'
+    substrate_baremetal_machine_disk_verify: '{{ managedos_install_anaconda_verify }}'
+    substrate_baremetal_machine_disk_user: '{{ bootwright_os_install_material.controllerUser }}'
+    substrate_baremetal_machine_disk_password: '{{ bootwright_os_install_material.controllerPassword }}'
+    substrate_baremetal_machine_disk_power_on: true
+  when: bootwright_os_install_request.target.substrate == 'baremetal'
+
+# A substrate with no disk-boot entry point reaches this refusal only after the
+# installer wait and the eject above. That is acceptable only because apply.yml
+# refuses such a substrate before its first effect, which leaves this
+# unreachable from there.
+- name: Refuse a substrate this installation has no disk-boot binding for
+  ansible.builtin.fail:
+    msg: >-
+      Machine {{ bootwright_os_install_request.identity.object }} names substrate
+      {{ bootwright_os_install_request.target.substrate }}, which this
+      installation has no boot_disk binding for, so its installed disk was not
+      booted; plan the installation again with this release
+  when: bootwright_os_install_request.target.substrate not in ['libvirt', 'baremetal']

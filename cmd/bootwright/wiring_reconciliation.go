@@ -148,7 +148,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		capability: baremetal.NewMachine(runner),
 	}, {
 		kind: installation.Kind, implementation: installation.Implementation,
-		capability: installation.New(runner),
+		capability: installation.New(runner).WithIdentities(provedIdentities{}),
 	}, {
 		kind: libvirt.HostKind, implementation: libvirt.HostImplementation,
 		capability: libvirt.NewHost(runner),
@@ -157,7 +157,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		capability: agentinstall.NewMedia(runner),
 	}, {
 		kind: agentinstall.Kind, implementation: agentinstall.InstallImplementation,
-		capability: agentinstall.NewInstall(runner),
+		capability: agentinstall.NewInstall(runner).WithIdentities(provedIdentities{}),
 	}}
 	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(), ntpserver.Definition()} {
 		resolver = append(resolver, boundCapability{

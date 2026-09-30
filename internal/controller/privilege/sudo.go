@@ -61,6 +61,9 @@ func NewSupervisor(options SudoOptions) *Supervisor { return &Supervisor{options
 
 // Run keeps all sudo children attached to the original nonroot parent. Refresh
 // failures never invalidate or terminate an operation that is already elevated.
+// It returns sudo's own status, which is the child's once the child ran: sudo
+// relays an interrupt to the child, which reports it and chooses its status,
+// so the interrupting signal never replaces that status.
 func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 	options := s.options
 	if options.Executor == nil || options.Delay == nil || options.Executable == "" || options.Sudo == "" {
@@ -126,7 +129,7 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 	code, err := options.Executor.Run(ctx, Command{Executable: options.Sudo, Arguments: childArgs, Environment: environment, Input: options.Input, Output: options.Output, Error: options.Error})
 	stopRefresh()
 	<-finished
-	return ExitCode(ctx, code), err
+	return code, err
 }
 
 // A plain -ll report is not an effective-policy API. Only an explicit matching

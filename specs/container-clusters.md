@@ -14,8 +14,8 @@ One installation contract covers every substrate, as
 [realized target](substrates.md#selection-and-refusal) supplies its substrate
 arm, the management controller to boot through, the NICs the node reports, and
 whether the machine is physical. The installation dispatches on the frozen arm
-through the substrate's fixed task files and fails closed on an arm it has none
-for, before any media is inserted.
+through the substrate's port entry points and fails closed on an arm it has
+none for, before any media is inserted.
 
 ## Selection and refusal
 
@@ -40,8 +40,10 @@ Machine the selected artifact server is placed on, because its emulated
 controller fetches the private [boot image](#boot-media) without verifying the
 server, a node that selects an install profile,
 because managed OS and the cluster installer would both write its disk, a
-node whose realized target is physical, because nothing proves each such node
-is the declared machine, powered off, before its boot erases it, a node whose
+node whose realized target is physical, because physical cluster installation
+is not yet qualified ([B67](milestones/m3.md#b67) lifts that refusal after
+in-tree tests and an emulated rehearsal, with real-hardware acceptance before
+support is claimed), a node whose
 `deviceName` the agent installer cannot name, which is anything but
 `/dev/<name>` or `/dev/disk/by-path/<name>`, and a node
 whose `minSizeGigabytes` exceeds 9007199254740991, the largest integer the
@@ -195,8 +197,8 @@ A node whose realized target is
 `data-loss` on **apply**: the agent installer writes the release image to that
 node's disk, and that is the moment its existing content is lost. A cluster of
 virtual nodes consumes nothing here, because their disks are created by their
-realization and removed by its inverse. A physical node that no pre-boot proof
-covers refuses before registration, as [selection](#selection-and-refusal)
+realization and removed by its inverse. A physical node refuses before
+registration, as [selection](#selection-and-refusal)
 states; an operation that froze one refuses its apply at execution, naming the
 node and directing the operator to destroy the operation and plan again, while
 its destroy and observation still run.
@@ -217,18 +219,19 @@ to its frozen address and any other fails the block naming each such name, its
 answers and the address it must answer with, and nothing is booted.
 
 **Boot.** Each node is booted in node-name order, through
-[its own substrate's boot operation](substrates.md#identity-and-power-operations):
-the target is proved exactly as an OS installation proves it, the published
-image is inserted as virtual media, the substrate applies whatever boot
-selection its controller needs, and the machine is powered on and polled to
-running. The media stays inserted: a live agent image is still being read after
-the node answers on the network, and removing it early corrupts the running
-installer.
-
-Not yet met: the per-node pre-boot target proof, so every physical node refuses
-and a virtual node boots without it; tracked as
-[B6](milestones/m1.md#b6), and lifting the physical refusal as
-[B67](milestones/m3.md#b67).
+[its own substrate's boot operation](substrates.md#identity-and-power-operations).
+Before anything is inserted, each node the boot does not skip is proved through
+its substrate's pre-boot proof, exactly as an OS installation proves its
+target: a machine the substrate created by its controller answering with the
+machine off, and a physical node against the declared NICs its install request
+froze and the identity its Machine's
+[bare-metal block pinned](substrates.md#physical-machine-realization) earlier in
+the same operation. A node that fails the proof fails the block, and nothing is
+inserted into it or booted. Then the published image is inserted as virtual
+media, the substrate applies whatever boot selection its controller needs, and
+the machine is powered on and polled to running. The media stays inserted: a
+live agent image is still being read after the node answers on the network, and
+removing it early corrupts the running installer.
 
 **Waiting.** The block waits for bootstrap completion and then for installation
 completion, through the same installer that built the image. Each wait is a
@@ -302,7 +305,8 @@ into this context's confidential custody, and revealing it through
 
 **Releasing the media.** Once the installation has completed, and only then,
 each node's virtual media is ejected and its controller is pointed at the
-installed disk, in node-name order.
+installed disk through the substrate's disk-boot entry point, which powers
+nothing on, in node-name order.
 
 **Completion.** Completion requires the cluster answering with this build's
 identity, reporting the release it was installed for and its installation
@@ -349,8 +353,10 @@ including another attempt's under the same reserved path, is foreign.
 **Replay.** A cluster already answering with this operation's identity, at the
 declared release, reporting its installation completed and holding every
 declared node, reports `completed` with the same evidence, boots nothing and
-waits for nothing. The only difference it converges is media it did not finish
-releasing. The same cluster answering while it does not report its installation
+waits for nothing. The only differences it converges are media it did not
+finish releasing and each node's controller pointed at its installed disk:
+release runs on every apply, so a settled apply selects each node's disk again.
+The same cluster answering while it does not report its installation
 completed, as an attempt interrupted during the installation wait leaves it, is
 not installed: the next attempt waits for bootstrap and installation completion
 again before it releases any media. An attempt interrupted during boot or the
@@ -359,7 +365,9 @@ cluster's own image. The next attempt boots only the nodes that are not both
 running and presenting that image: it inserts no media into such a node, which
 would swap the image its installer is still reading, and sets no boot override
 on it, which its installer's own reboot would obey, and then waits for
-bootstrap and installation completion. A foreign answer is not
+bootstrap and installation completion. A node running without this cluster's
+own image is not skipped, and refuses at its pre-boot proof: nothing is
+inserted into a running machine. A foreign answer is not
 converged: there is no reinstall path, and installing again requires this
 cluster's nodes to be destroyed and applied again.
 
@@ -405,8 +413,8 @@ artifact server is placed on, under
 [the adapter result protocol](architecture.md#the-adapter-result-protocol) and
 the [process](security.md#process-boundary) and
 [Secret-material](security.md#sensitive-material) rules, composing each
-substrate's boot task file by fixed qualified name. Go locates
-the exact installer executable; the adapter substitutes bound material into the
-installer inputs and invokes the installer with exact argument vectors. No pull
-secret, private key or captured credential enters an argument, an environment
-variable, the evidence or a log.
+substrate's pre-boot, boot and disk-boot entry points by fixed qualified name.
+Go locates the exact installer executable; the adapter substitutes bound
+material into the installer inputs and invokes the installer with exact
+argument vectors. No pull secret, private key or captured credential enters an
+argument, an environment variable, the evidence or a log.

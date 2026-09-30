@@ -7,12 +7,12 @@
 # is that the machine is not running: an installer booting beside a running
 # guest would write to disks that guest is using.
 - name: Read the machine this installation is about to overwrite
-  bootwright.core.redfish_boot:
+  bootwright.core.redfish_system_read:
     endpoint: '{{ substrate_libvirt_machine_target_endpoint }}'
     user: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_target_user) }}'
     password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_target_password) }}'
     verify: '{{ substrate_libvirt_machine_target_verify }}'
-    operation: read
+    media: false
   register: substrate_libvirt_machine_target
   no_log: true
 

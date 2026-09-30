@@ -20,6 +20,7 @@ test:
 
 vet:
 	$(GO) vet ./...
+	GOOS=darwin GOARCH=arm64 $(GO) vet ./...
 
 fmt-check:
 	@set -eu; \

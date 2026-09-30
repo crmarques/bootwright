@@ -481,3 +481,47 @@ func TestSecretInitializationRetrySynchronizesRecoveredKey(t *testing.T) {
 		}
 	}
 }
+
+func TestAContextInitRetryResumesOverATornKeyringStage(t *testing.T) {
+	store, _ := fixture(t)
+	ctx := context.Background()
+	renames := 0
+	store.fail = func(point string) error {
+		if point != string(checkpointBeforeSecretRename) {
+			return nil
+		}
+		renames++
+		if renames == 2 {
+			return errors.New("refused before the signed initialization record is published")
+		}
+		return nil
+	}
+	err := checkpointInitialize(ctx, store)
+	store.fail = nil
+	if err == nil || renames != 2 {
+		t.Fatalf("the refusal before the signed record did not fire: renames=%d err=%v", renames, err)
+	}
+	root := filepath.Join(store.options.Root, "contexts", checkpointContext, "secrets")
+	if err := os.WriteFile(filepath.Join(root, "pending-"+strings.Repeat("e", 32)), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkpointInitialize(ctx, store); err != nil {
+		t.Fatal("context init did not resume over the torn keyring stage:", err)
+	}
+	if err := checkpointSelected(ctx, store, "version: original\n", 1); err != nil {
+		t.Fatal(err)
+	}
+	if key, err := checkpointSecretKey(ctx, store); err != nil || key == "" {
+		t.Fatalf("the resumed keyring has no active key: %q %v", key, err)
+	}
+	var stages []string
+	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err == nil && strings.HasPrefix(entry.Name(), "pending-") {
+			stages = append(stages, path)
+		}
+		return err
+	})
+	if err != nil || len(stages) != 0 {
+		t.Fatalf("stages remain after the resumed init: %v %v", stages, err)
+	}
+}

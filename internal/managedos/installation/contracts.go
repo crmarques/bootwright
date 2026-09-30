@@ -3,6 +3,7 @@ package installation
 import (
 	"context"
 
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -11,4 +12,12 @@ import (
 // returns bounded structured evidence the capability validates strictly.
 type Runner interface {
 	Run(context.Context, lifecycle.RunRequest) (lifecycle.RunResult, error)
+}
+
+// Identities reads the identity a physical Machine's own block proved earlier
+// in this operation, from the evidence the attempt was handed. That evidence
+// is another capability's, so its owner decodes it and this capability asks
+// only for the answer. A Machine with no pin reports false, never an error.
+type Identities interface {
+	PinnedIdentity(name string, proved []lifecycle.BlockEvidence) (machineref.HardwareIdentity, bool, error)
 }

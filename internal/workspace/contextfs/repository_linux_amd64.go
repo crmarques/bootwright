@@ -146,10 +146,7 @@ func uncertainInitialRegistryRecovery() error {
 	)
 }
 
-func uncertainRegistryPublication(initial bool) error {
-	if initial {
-		return uncertainInitialRegistryRecovery()
-	}
+func uncertainRegistryPublication() error {
 	return contexts.StateErrorWithRemediation(
 		"registry publication may have completed, but its disk state is unconfirmed",
 		"inspect the target context, then retry the same command",
@@ -579,7 +576,7 @@ func (s *Store) Transact(ctx context.Context, create bool, inputs []string, call
 		if !create {
 			return state("context store does not exist")
 		}
-		if err := s.writeRegistry(ctx, root, registry, nil); err != nil {
+		if err := s.publishInitialRegistry(ctx, root, registry); err != nil {
 			return safeError(err)
 		}
 	}
@@ -587,6 +584,9 @@ func (s *Store) Transact(ctx context.Context, create bool, inputs []string, call
 		return safeError(err)
 	}
 	if err := s.collectControllerStages(ctx, root, registry); err != nil {
+		return safeError(err)
+	}
+	if err := s.collectRegistryStages(ctx, root); err != nil {
 		return safeError(err)
 	}
 	expected, err := registryExpectation(ctx, root, registry)
@@ -689,7 +689,7 @@ func (t *transaction) save(ctx context.Context, registry contexts.Registry) erro
 	if err := validateRegistry(registry); err != nil {
 		return err
 	}
-	if err := t.store.writeRegistry(ctx, t.root, registry, t.expected); err != nil {
+	if err := t.store.replaceRegistry(ctx, t.root, registry, t.expected); err != nil {
 		return err
 	}
 	t.registry = cloneRegistry(registry)
@@ -758,25 +758,33 @@ func (t *transaction) leaseContext(ctx context.Context, name string) (*directory
 		dir.file.Close()
 		return nil, err
 	}
+	if err := t.admitLease(ctx, dir, name); err != nil {
+		syscall.Flock(int(dir.file.Fd()), syscall.LOCK_UN)
+		dir.file.Close()
+		return nil, err
+	}
 	t.leases[name] = dir
+	return dir, nil
+}
+
+// admitLease collects a locked context directory's stages and verifies its
+// layout and reservation; only a directory that passes all three is held.
+func (t *transaction) admitLease(ctx context.Context, dir *directory, name string) error {
 	// A directory the registry does not yet attribute may not be this
 	// context's own, so nothing in it is collected.
 	record, err := t.record(name)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if record.DirectoryInode != 0 {
 		if err := t.store.collectContextStages(ctx, dir, true); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	if err := verifyContextLayout(ctx, dir); err != nil {
-		return nil, err
+		return err
 	}
-	if err := verifyReservation(ctx, dir, name); err != nil {
-		return nil, err
-	}
-	return dir, nil
+	return verifyReservation(ctx, dir, name)
 }
 
 type expectedRegistry struct {
@@ -814,7 +822,11 @@ func registryExpectation(ctx context.Context, root *directory, registry contexts
 	return &expectedRegistry{data: data, identity: after}, nil
 }
 
-func (s *Store) writeRegistry(ctx context.Context, root *directory, registry contexts.Registry, expected *expectedRegistry) error {
+// publishInitialRegistry publishes the first registry into a root that holds
+// nothing else. Its complete stage is the recovery artifact init resumes from,
+// so every failure after the write keeps it; only a failed write removes what
+// it created.
+func (s *Store) publishInitialRegistry(ctx context.Context, root *directory, registry contexts.Registry) error {
 	data, err := encodeRecord(registry, maxRegistry)
 	if err != nil {
 		return err
@@ -850,80 +862,89 @@ func (s *Store) writeRegistry(ctx context.Context, root *directory, registry con
 	if err := root.verify(); err != nil {
 		return err
 	}
-	if expected != nil {
-		current, _, err := readRegistry(ctx, root)
-		if err != nil {
-			return err
-		}
-		actual, err := registryExpectation(ctx, root, current)
-		if err != nil {
-			return err
-		}
-		if !sameFile(expected.identity, actual.identity) || !bytes.Equal(expected.data, actual.data) {
-			return state("registry was replaced or modified during the transaction")
-		}
-	} else {
-		file, err := openRelative(root, "registry.json", pathHandle, 0)
-		if file != nil {
-			file.Close()
-		}
-		if !errors.Is(err, syscall.ENOENT) {
-			return initialRegistryRecoveryError("initial registry destination unexpectedly exists")
-		}
+	file, err := openRelative(root, "registry.json", pathHandle, 0)
+	if file != nil {
+		file.Close()
+	}
+	if !errors.Is(err, syscall.ENOENT) {
+		return initialRegistryRecoveryError("initial registry destination unexpectedly exists")
 	}
 	currentPending, err := verifyPending(ctx, root, name, data)
 	if err != nil {
 		return err
 	}
 	if !sameFile(pendingIdentity, currentPending) {
-		if expected == nil {
-			return initialRegistryRecoveryError("pending initial registry changed before publication")
-		}
-		return state("pending registry was replaced before publication")
+		return initialRegistryRecoveryError("pending initial registry changed before publication")
 	}
-	if expected == nil {
-		entry, sole, err := soleRootEntry(root)
-		if err != nil {
-			return initialRegistryRecoveryError("state root cannot be verified before initial registry publication")
-		}
-		if !sole || entry != name {
-			return initialRegistryRecoveryError("state root changed before initial registry publication")
-		}
+	entry, sole, err := soleRootEntry(root)
+	if err != nil {
+		return initialRegistryRecoveryError("state root cannot be verified before initial registry publication")
 	}
-	if expected == nil {
-		if err := renameNoReplaceAt(root, name, "registry.json"); err != nil {
-			return initialRegistryRecoveryError("initial registry could not be atomically published")
-		}
-	} else if err := syscall.Renameat(int(root.file.Fd()), name, int(root.file.Fd()), "registry.json"); err != nil {
-		return state("registry could not be atomically published")
+	if !sole || entry != name {
+		return initialRegistryRecoveryError("state root changed before initial registry publication")
+	}
+	if err := renameNoReplaceAt(root, name, "registry.json"); err != nil {
+		return initialRegistryRecoveryError("initial registry could not be atomically published")
 	}
 	publishedIdentity, err := verifyPending(ctx, root, "registry.json", data)
 	if err != nil || !sameIdentity(currentPending, publishedIdentity) {
-		return uncertainRegistryPublication(expected == nil)
+		return uncertainInitialRegistryRecovery()
 	}
 	if err := s.checkpoint(ctx, checkpointAfterRegistryRename); err != nil {
-		return uncertainRegistryPublication(expected == nil)
+		return uncertainInitialRegistryRecovery()
 	}
-	if expected == nil {
-		entry, sole, err := soleRootEntry(root)
-		if err != nil || !sole || entry != "registry.json" {
-			return uncertainInitialRegistryRecovery()
-		}
+	entry, sole, err = soleRootEntry(root)
+	if err != nil || !sole || entry != "registry.json" {
+		return uncertainInitialRegistryRecovery()
 	}
 	if err := s.syncDirectory(ctx, root); err != nil {
-		return uncertainRegistryPublication(expected == nil)
+		return uncertainInitialRegistryRecovery()
 	}
-	if expected == nil {
-		entry, sole, err := soleRootEntry(root)
-		if err != nil || !sole || entry != "registry.json" {
-			return uncertainInitialRegistryRecovery()
-		}
+	entry, sole, err = soleRootEntry(root)
+	if err != nil || !sole || entry != "registry.json" {
+		return uncertainInitialRegistryRecovery()
 	}
 	finalIdentity, err := verifyPending(ctx, root, "registry.json", data)
 	if err != nil || !sameFile(publishedIdentity, finalIdentity) {
-		return uncertainRegistryPublication(expected == nil)
+		return uncertainInitialRegistryRecovery()
 	}
 	return nil
+}
+
+// replaceRegistry publishes a transaction's registry over the one it read,
+// proving right before the rename that the root still holds exactly those
+// bytes at that identity. A failure before the rename removes the stage; any
+// failure after it leaves the publication uncertain.
+func (s *Store) replaceRegistry(ctx context.Context, root *directory, registry contexts.Registry, expected *expectedRegistry) error {
+	data, err := encodeRecord(registry, maxRegistry)
+	if err != nil {
+		return err
+	}
+	outcome, err := s.publishStage(ctx, root, "registry.json", data, stagedPublication{
+		subject: "registry", suffix: ".json", replace: true, immutable: true, bound: maxRegistry,
+		renameFailure: "registry could not be atomically published",
+		prove: func(ctx context.Context) error {
+			if err := root.verify(); err != nil {
+				return err
+			}
+			current, _, err := readRegistry(ctx, root)
+			if err != nil {
+				return err
+			}
+			actual, err := registryExpectation(ctx, root, current)
+			if err != nil {
+				return err
+			}
+			if expected == nil || !sameFile(expected.identity, actual.identity) || !bytes.Equal(expected.data, actual.data) {
+				return state("registry was replaced or modified during the transaction")
+			}
+			return nil
+		},
+	}, checkpointBeforeRegistryRename, checkpointAfterRegistryRename)
+	if outcome == publicationUnknown {
+		return uncertainRegistryPublication()
+	}
+	return err
 }
 
 func verifyPending(ctx context.Context, root *directory, name string, data []byte) (syscall.Stat_t, error) {

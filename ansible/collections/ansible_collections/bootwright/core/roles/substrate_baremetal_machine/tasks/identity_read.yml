@@ -4,8 +4,9 @@
 # presenting any other key is not this installation, and one that does not
 # answer has not answered yet; neither is ever read as absence.
 #
-# Inputs are passed explicitly by the consuming playbook, never inherited from
-# a shared fact, and the answers are published under this role's own names.
+# The inputs are this entry point's argument spec, passed explicitly by the
+# consuming role and never inherited from a shared fact, and the answers are
+# published under this role's own names.
 - name: Pin the delivered host key for this one connection
   ansible.builtin.copy:
     content: >-

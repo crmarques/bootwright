@@ -110,61 +110,79 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 	return result, nil
 }
 
-// preview derives the next legal operation or the exact continuation point of
-// an incomplete one. It allocates no identity and writes nothing.
+// preview takes the decision of the verb it previews, through the path that
+// verb takes, so it refuses exactly where that verb refuses and otherwise shows
+// the plan the verb then presents. Where a finalization is due it decides as
+// the verb does once that finalization is done, without performing it. It
+// stops at the decision: it allocates no identity and writes nothing.
 func (s Service) preview(ctx context.Context, view View, selection reconciliation.StageSelection) (*PlanResult, error) {
+	verb, err := s.previewed(ctx, view)
+	if err != nil {
+		return nil, err
+	}
+	// A destroy accepts no stage selection, so its decision takes none, as
+	// Destroy passes none.
+	decideSelection := selection
+	if verb == reconciliation.Destroy {
+		decideSelection = nil
+	}
+	decided, err := s.decide(ctx, view, verb, decideSelection)
+	if err != nil {
+		return nil, err
+	}
+	finalizes := decided.finalize
+	if finalizes {
+		if decided, err = s.afterFinalization(ctx, view, verb, decideSelection, decided); err != nil {
+			return nil, err
+		}
+	}
+	if verb == reconciliation.Destroy && len(selection) != 0 {
+		return nil, failure("lifecycle.stage",
+			"the next operation is a destroy, which accepts no stage selection",
+			"repeat bootwright plan without --stage")
+	}
+	var result PlanResult
+	switch {
+	case decided.noop:
+		// Only a finalization leads here, because no verb a preview decides as
+		// settles over a record whose finalization is not due.
+		result = planPreview(decided.plan, decided.states, nil)
+		result.Verb, result.Continuation, result.Finalizes = string(verb), true, true
+		result.Receipt = Receipt{Operation: decided.operation.ID, Verb: "plan", State: "preview", Next: continuationAction(decided.operation, decided.states)}
+	case decided.fresh:
+		result = presentation(decided)
+		result.Receipt = Receipt{Operation: "none", Verb: "plan", State: "preview", Next: string(decided.verb)}
+	default:
+		result = presentation(decided)
+		result.Receipt = Receipt{Operation: decided.operation.ID, Verb: "plan", State: "preview", Next: continuationAction(decided.operation, decided.states)}
+	}
+	result.Context = view.Identity()
+	return &result, nil
+}
+
+// previewed is the verb a preview decides as: a fresh apply over no operation
+// or a completed destroy, the destroy of a completed apply, and an incomplete
+// operation's own verb.
+func (s Service) previewed(ctx context.Context, view View) (reconciliation.Verb, error) {
 	store := s.store(view)
 	index, err := store.Index(ctx)
 	if err != nil {
-		return nil, err
-	}
-	// A fresh preview is the fresh apply's own decision, so it refuses exactly
-	// what that apply would refuse before it registers anything.
-	fresh := func() (*PlanResult, error) {
-		decided, err := s.freshApply(ctx, view, selection)
-		if err != nil {
-			return nil, err
-		}
-		result := planPreview(decided.plan, nil, selection)
-		result.Context, result.Verb = view.Identity(), string(decided.verb)
-		result.Receipt = Receipt{Operation: "none", Verb: "plan", State: "preview", Next: string(decided.verb)}
-		return &result, nil
+		return "", err
 	}
 	if index.Current == "" {
-		return fresh()
+		return reconciliation.Apply, nil
 	}
 	operation, err := store.ReadOperation(ctx, index.Current)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	frozen, err := store.ReadPlan(ctx, operation.ID)
-	if err != nil {
-		return nil, err
+	switch {
+	case operation.State != reconciliation.OperationDone:
+		return operation.Verb, nil
+	case operation.Verb == reconciliation.Apply:
+		return reconciliation.Destroy, nil
 	}
-	states, err := store.BlockStates(ctx, operation.ID, frozen)
-	if err != nil {
-		return nil, err
-	}
-	// A removal is planned from the plan its apply froze, so the preview shows
-	// the removal destroy would perform rather than what this executable would
-	// derive from the same input today.
-	if operation.Verb == reconciliation.Apply && operation.State == reconciliation.OperationDone {
-		removal, err := s.removalOf(ctx, reconciliation.OwnedSubset(frozen, states), operation.Executable)
-		if err != nil {
-			return nil, err
-		}
-		result := planPreview(removal, nil, selection)
-		result.Context, result.Verb = view.Identity(), string(reconciliation.Destroy)
-		result.Receipt = Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "destroy"}
-		return &result, nil
-	}
-	if operation.Verb == reconciliation.Destroy && operation.State == reconciliation.OperationDone {
-		return fresh()
-	}
-	result := planPreview(frozen, states, selection)
-	result.Context, result.Verb, result.Continuation = view.Identity(), string(operation.Verb), true
-	result.Receipt = Receipt{Operation: operation.ID, Verb: "plan", State: "preview", Next: continuationAction(operation, states)}
-	return &result, nil
+	return reconciliation.Apply, nil
 }
 
 func continuationAction(operation operationstore.Operation, states map[string]reconciliation.BlockState) string {

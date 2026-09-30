@@ -12,3 +12,7 @@ type Executor interface {
 type Delay interface {
 	Wait(context.Context, time.Duration) error
 }
+
+type AccountResolver interface {
+	Resolve(context.Context) (Account, error)
+}

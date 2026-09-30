@@ -16,6 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -317,6 +318,146 @@ func TestAPublicationProvesItsStageAndItsTarget(t *testing.T) {
 			}
 			if _, err := os.Lstat(target); interference.outcome == publicationNotCommitted && !errors.Is(err, os.ErrNotExist) {
 				t.Fatalf("an unproved stage was published (%v)", err)
+			}
+		})
+	}
+}
+
+// substituteSameBytes replaces the file at path with a new inode holding the
+// same bytes, which only an identity proof tells apart.
+func substituteSameBytes(store *Store, path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	replacement := filepath.Join(filepath.Dir(store.options.Root), "replacement")
+	if err := os.WriteFile(replacement, data, 0600); err != nil {
+		return err
+	}
+	return os.Rename(replacement, path)
+}
+
+// A registry replacement that fails before its rename, whether refused,
+// cancelled or refused by its own destination proof, removes its stage, and
+// one that fails after the rename is uncertain and has no stage left.
+func TestARefusedRegistryReplacementLeavesNoStage(t *testing.T) {
+	refuse := func(*Store, context.CancelFunc) error { return errors.New("refused at the registry rename") }
+	for _, interruption := range []struct {
+		name    string
+		point   checkpoint
+		message string
+		act     func(store *Store, cancel context.CancelFunc) error
+	}{
+		{name: "refused", point: checkpointBeforeRegistryRename, act: refuse},
+		{name: "cancelled", point: checkpointBeforeRegistryRename, act: func(_ *Store, cancel context.CancelFunc) error {
+			cancel()
+			return context.Canceled
+		}},
+		{name: "replaced-destination", point: checkpointBeforeRegistryRename, message: "registry was replaced or modified during the transaction", act: func(store *Store, _ context.CancelFunc) error {
+			return substituteSameBytes(store, filepath.Join(store.options.Root, "registry.json"))
+		}},
+		{name: "refused-after-rename", point: checkpointAfterRegistryRename, message: "registry publication may have completed, but its disk state is unconfirmed", act: refuse},
+	} {
+		t.Run(interruption.name, func(t *testing.T) {
+			store, _ := lifecycleFixture(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			fired := false
+			store.fail = func(point string) error {
+				if point != string(interruption.point) || fired {
+					return nil
+				}
+				fired = true
+				return interruption.act(store, cancel)
+			}
+			err := checkpointCommit(ctx, store, checkpointContext)
+			store.fail = nil
+			if !fired {
+				t.Fatalf("the commit never reached %s", interruption.point)
+			}
+			if err == nil {
+				t.Fatal("the interrupted registry replacement succeeded")
+			}
+			if reported := diagnostics.Of(err); interruption.message != "" && (len(reported) != 1 || reported[0].Message != interruption.message) {
+				t.Fatalf("the interruption was not reported as %q: %v %#v", interruption.message, err, reported)
+			}
+			entries, err := os.ReadDir(store.options.Root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, entry := range entries {
+				if stageName(entry.Name(), true) {
+					t.Errorf("the interrupted registry replacement left %s", entry.Name())
+				}
+			}
+		})
+	}
+}
+
+// A secret replacement that fails before its rename removes its stage and is
+// not committed; one that fails after the rename is uncertain and finishes the
+// callback's mutation authority.
+func TestARefusedSecretReplacementLeavesNoStage(t *testing.T) {
+	refuse := func(*Store, context.CancelFunc) error { return errors.New("refused at the secret rename") }
+	for _, interruption := range []struct {
+		name    string
+		point   checkpoint
+		outcome secretstore.Outcome
+		message string
+		act     func(store *Store, cancel context.CancelFunc) error
+	}{
+		{name: "refused", point: checkpointBeforeSecretRename, outcome: secretstore.NotCommitted, act: refuse},
+		{name: "cancelled", point: checkpointBeforeSecretRename, outcome: secretstore.NotCommitted, act: func(_ *Store, cancel context.CancelFunc) error {
+			cancel()
+			return context.Canceled
+		}},
+		{name: "replaced-destination", point: checkpointBeforeSecretRename, outcome: secretstore.NotCommitted, message: "secret state was replaced or modified before publication", act: func(store *Store, _ context.CancelFunc) error {
+			return substituteSameBytes(store, filepath.Join(store.options.Root, "contexts", checkpointContext, "secrets", secretstore.RecordPath))
+		}},
+		{name: "refused-after-rename", point: checkpointAfterSecretRename, outcome: secretstore.Uncertain, message: "secret state publication has uncertain durability; inspect it before retrying", act: refuse},
+	} {
+		t.Run(interruption.name, func(t *testing.T) {
+			store, token := secretPublicationFixture(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			fired := false
+			store.fail = func(point string) error {
+				if point != string(interruption.point) || fired {
+					return nil
+				}
+				fired = true
+				return interruption.act(store, cancel)
+			}
+			var outcome secretstore.Outcome
+			var replaced, later error
+			_ = store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
+				expected, exists, err := area.ReadMutable(ctx, secretstore.RecordPath, maxSecretBytes)
+				if err != nil || !exists {
+					return errors.New("the fixture has no secret record")
+				}
+				outcome, replaced = area.Replace(ctx, secretstore.RecordPath, []byte("{}\n"), expected)
+				if outcome == secretstore.Uncertain {
+					later = area.WriteExclusive(context.Background(), "later", []byte("{}\n"))
+				}
+				return nil
+			})
+			store.fail = nil
+			if !fired {
+				t.Fatalf("the replacement never reached %s", interruption.point)
+			}
+			if outcome != interruption.outcome || replaced == nil {
+				t.Fatalf("the interrupted replacement reported %s (%v)", outcome, replaced)
+			}
+			if reported := diagnostics.Of(replaced); interruption.message != "" && (len(reported) != 1 || reported[0].Message != interruption.message) {
+				t.Fatalf("the interruption was not reported as %q: %v %#v", interruption.message, replaced, reported)
+			}
+			if outcome == secretstore.Uncertain {
+				if reported := diagnostics.Of(later); len(reported) != 1 || reported[0].Message != "secret storage callback has already finished" {
+					t.Fatalf("an uncertain replacement left the callback writable: %v %#v", later, reported)
+				}
+			}
+			if stages := stagesBeneath(t, filepath.Join(store.options.Root, "contexts", checkpointContext, "secrets")); len(stages) != 0 {
+				t.Fatalf("the interrupted replacement left %v", stages)
 			}
 		})
 	}

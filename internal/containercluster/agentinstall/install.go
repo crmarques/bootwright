@@ -2,6 +2,7 @@ package agentinstall
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,9 +17,19 @@ import (
 // published and watches that cluster install. It owns what completion, replay
 // and absence mean for the installation and nothing else: the image belongs to
 // the media block, and each node's hardware to its own Machine block.
-type InstallCapability struct{ runner Runner }
+type InstallCapability struct {
+	runner     Runner
+	identities Identities
+}
 
 func NewInstall(runner Runner) InstallCapability { return InstallCapability{runner: runner} }
+
+// WithIdentities returns a copy that reads each physical node's pin through
+// identities, which composition binds to the pin's own owner.
+func (c InstallCapability) WithIdentities(identities Identities) InstallCapability {
+	c.identities = identities
+	return c
+}
 
 const installVariablePrefix = "bootwright_cluster_install"
 
@@ -308,6 +319,13 @@ func (c InstallCapability) run(ctx context.Context, execution lifecycle.Executio
 		}
 		values[strings.ReplaceAll(executable, "-", "")] = path
 	}
+	if operation == "apply" {
+		pins, err := c.pinValues(execution, request)
+		if err != nil {
+			return lifecycle.RunResult{}, err
+		}
+		maps.Copy(values, pins)
+	}
 	materials := lifecycle.Materials(request.Placement)
 	for index, node := range request.Nodes {
 		materials = append(materials,
@@ -327,6 +345,30 @@ func (c InstallCapability) run(ctx context.Context, execution lifecycle.Executio
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
 		Deadline: request.Deadline(),
 	}))
+}
+
+// pinValues carries the identity each physical node's own Machine block proved
+// earlier in this operation, under that node's position, so its pre-boot proof
+// refuses a machine that answers as another system. A node its substrate
+// created, and a Machine with no pin, carry nothing.
+func (c InstallCapability) pinValues(execution lifecycle.Execution, request InstallRequest) (map[string]string, error) {
+	values := map[string]string{}
+	for index, node := range request.Nodes {
+		if !node.Physical {
+			continue
+		}
+		if c.identities == nil {
+			return nil, refusal("lifecycle.state", "the reader of Machine/"+node.Machine+"'s pinned identity is not configured", "")
+		}
+		pin, pinned, err := c.identities.PinnedIdentity(node.Machine, execution.Proved)
+		if err != nil {
+			return nil, err
+		}
+		if pinned {
+			maps.Copy(values, pin.PinValues(nodeVariable(index)))
+		}
+	}
+	return values, nil
 }
 
 // nodeVariable names one node's material by its position in the frozen node

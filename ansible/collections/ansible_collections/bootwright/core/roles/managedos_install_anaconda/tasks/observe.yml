@@ -41,12 +41,12 @@
   when: managedos_install_anaconda_host_key | default('') | trim | length > 0
 
 - name: Read the power state and media its controller reports
-  bootwright.core.redfish_boot:
+  bootwright.core.redfish_system_read:
     endpoint: '{{ managedos_install_anaconda_endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
     verify: '{{ managedos_install_anaconda_verify }}'
-    operation: read
+    media: true
   register: managedos_install_anaconda_controller
   failed_when: false
   no_log: true

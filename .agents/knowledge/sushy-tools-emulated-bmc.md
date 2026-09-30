@@ -91,8 +91,23 @@ refused by SELinux, so the unit sets `SecurityLabelDisable=true`.
 - **Boot override is per device.** `set_boot_device` removes every
   `<os><boot>` element and sets `<boot order>` on the selected disk, keeping
   disk entries bootable. Ejecting media restores the boot device to `Hdd` by
-  itself; the installation role selects `Hdd` explicitly anyway before it powers
-  the installed system on.
+  itself, so after an eject only the disk is bootable until the domain is
+  defined again. The substrate's disk-boot entry point selects `Hdd` explicitly
+  anyway, and its libvirt boot entry point selects the media, `Cd`, for an
+  installer that powers the machine off
+  ([substrates](../../specs/substrates.md#identity-and-power-operations)).
+- **Selections live in the persistent definition.** Read from the image's
+  source on 2026-09-29, in the layer of the pinned image (its `pbr.json`
+  records git `3b57e7a`) that local container storage holds:
+  `get_boot_device` reads the inactive domain XML (`libvirtdriver.py` 344) and
+  `set_boot_device` defines it again (`get_xml_desc` defaults to the inactive
+  XML at 222, `defineXML` at 410), so a selection made while the domain runs
+  is reported at once. An insert gives the new `cdrom` disk no `<boot>` element
+  (1494-1519) and re-applies the selection only when the device reported as
+  the boot device is already the inserted one (1571, 1587-1588); an eject
+  selects `Hdd` (1589-1591). So an insert after an eject leaves the media
+  unbootable until `Cd` is selected or the domain is defined again with its
+  declared order. Not observed on a running host.
 - **Power** maps `On` to `domain.create()`, `ForceOff` to `domain.destroy()`,
   `GracefulShutdown` to `domain.shutdown()`; `PowerState` is `On` when the
   domain is active and `Off` otherwise. An installer that ends with `poweroff`

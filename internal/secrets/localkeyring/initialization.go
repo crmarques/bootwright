@@ -2,6 +2,7 @@ package localkeyring
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"reflect"
 	"slices"
@@ -356,6 +357,9 @@ func freshInitializationPending(ctx context.Context, area secretstore.Area, sele
 		if err != nil || !exists {
 			return initializationRecord{}, false, areaFailure(ctx, "store.corrupt", "pending secret initialization record is unsafe", err)
 		}
+		if interruptedStage(data) {
+			continue
+		}
 		var candidate initializationRecord
 		if decodeCanonical(data, selectorMaximum, 512, &candidate) != nil || !validInitialization(candidate, selected, selection) || candidate.MAC != "" || len(candidate.Attempts) != 1 {
 			return initializationRecord{}, false, secretstore.Failure("store.corrupt", "pending secret initialization record is not attributable")
@@ -389,6 +393,9 @@ func verifyInitializationArtifacts(ctx context.Context, area secretstore.Area, s
 			return secretstore.Failure("store.corrupt", "secret initialization layout contains an unsupported artifact")
 		}
 		data, exists, err := area.Read(ctx, entry.Name, selectorMaximum)
+		if err == nil && exists && interruptedStage(data) {
+			continue
+		}
 		if err != nil || !exists || !validRootInitializationPending(ctx, area, data, selected, marker) {
 			return secretstore.Failure("store.corrupt", "pending secret initialization publication is not attributable")
 		}
@@ -435,6 +442,12 @@ func verifyInitializationArtifacts(ctx context.Context, area secretstore.Area, s
 			}
 			if table.allowed[entry.Name] {
 				continue
+			}
+			if table.name == "keys" && validPending(entry.Name) {
+				data, exists, err := area.Read(ctx, "keys/"+entry.Name, ledgerMaximum)
+				if err == nil && exists && interruptedStage(data) {
+					continue
+				}
 			}
 			if table.name != "keys" || !validPending(entry.Name) || !validInitializationLedgerPending(ctx, area, entry.Name, selected, marker) {
 				return secretstore.Failure("store.corrupt", "secret initialization contains non-attributable artifacts")
@@ -492,6 +505,8 @@ func validRootInitializationPending(ctx context.Context, area secretstore.Area, 
 	}
 	return false
 }
+
+func interruptedStage(data []byte) bool { return !json.Valid(data) }
 
 func initializationAttemptsPrefix(prefix, complete []initializationAttempt) bool {
 	return len(prefix) <= len(complete) && slices.Equal(prefix, complete[:len(prefix)])

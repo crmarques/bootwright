@@ -255,6 +255,13 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 	if marked, err := finalization(ctx, view, store, verb, operation, frozen, states, attempts); err != nil || marked.finalize {
 		return marked, err
 	}
+	return s.decideOver(ctx, view, store, verb, selection, operation, frozen, states, attempts)
+}
+
+// decideOver is the decision over a current operation whose finalization is
+// not due. A preview also takes it over the record a due finalization would
+// leave, so it decides as the verb does once that finalization is done.
+func (s Service) decideOver(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, selection reconciliation.StageSelection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (transition, error) {
 	if verb == reconciliation.Destroy && supersedable(operation) {
 		return s.supersede(ctx, view, store, operation, frozen, states, attempts)
 	}
@@ -686,16 +693,23 @@ func (s Service) present(ctx context.Context, name string, decided transition) e
 	if s.options.Presenter == nil {
 		return failure("lifecycle.state", "lifecycle plan presentation is not configured", "")
 	}
-	result := planPreview(decided.plan, decided.states, decided.selection)
+	result := presentation(decided)
 	result.Context = ContextIdentity{Name: name}
-	result.Verb = string(decided.verb)
-	result.Continuation = !decided.fresh
 	result.Receipt = Receipt{Operation: "none", Verb: string(decided.verb), State: "preview", Next: string(decided.verb)}
 	if !decided.fresh {
 		result.Receipt.Operation = decided.operation.ID
 		result.Receipt.Next = "continue-" + string(decided.verb)
 	}
 	return s.options.Presenter.PresentLifecyclePlan(ctx, result)
+}
+
+// presentation is the plan a transition shows: what apply and destroy present
+// before they confirm, and what plan previews of the same transition.
+func presentation(decided transition) PlanResult {
+	result := planPreview(decided.plan, decided.states, decided.selection)
+	result.Verb = string(decided.verb)
+	result.Continuation = !decided.fresh
+	return result
 }
 
 // execute binds the Secrets the plan consumes, then performs the operation

@@ -45,7 +45,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [cluster-install-agent-v2]
+            choices: [cluster-install-agent-v3]
           workRoot:
             type: str
             required: true

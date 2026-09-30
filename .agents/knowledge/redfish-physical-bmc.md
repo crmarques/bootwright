@@ -210,7 +210,8 @@ confirms `Inserted` with a matching image. The status of a request is never the
 evidence; the state of the resource is.
 
 Bootwright's [client](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/redfish_control.py),
-which [redfish_boot](../../ansible/collections/ansible_collections/bootwright/core/plugins/modules/redfish_boot.py)
+which [redfish_boot](../../ansible/collections/ansible_collections/bootwright/core/plugins/modules/redfish_boot.py),
+[redfish_system_read](../../ansible/collections/ansible_collections/bootwright/core/plugins/modules/redfish_system_read.py)
 and [redfish_system_inspect](../../ansible/collections/ansible_collections/bootwright/core/plugins/modules/redfish_system_inspect.py)
 drive, keeps this with one exception: 401 and 403 end any write at once,
 because no retry or read-back changes a missing privilege. An attach nothing

@@ -126,3 +126,20 @@ func (i machineIdentities) ProvedIdentity(ctx context.Context, contextName, name
 	}
 	return baremetal.PinnedIdentity(name, published)
 }
+
+// provedIdentities reads the identity a physical Machine's own block proved
+// earlier in the operation an installation runs in, from the evidence the
+// engine handed that installation's attempt. An attempt receives every
+// dependency's evidence, another Machine's among them, so only the entries of
+// this exact Machine are the bare-metal capability's to decode.
+type provedIdentities struct{}
+
+func (provedIdentities) PinnedIdentity(name string, proved []lifecycle.BlockEvidence) (machine.HardwareIdentity, bool, error) {
+	var own []lifecycle.BlockEvidence
+	for _, block := range proved {
+		if block.Kind == baremetal.Kind && block.Object == name {
+			own = append(own, block)
+		}
+	}
+	return baremetal.PinnedIdentity(name, own)
+}

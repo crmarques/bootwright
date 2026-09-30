@@ -61,7 +61,7 @@ says what that requires.
 | `make quick` | Inner loop: formatting, vet, the architecture suite, and the packages this branch changed with their dependents. |
 | `make docs-check` | Check guidance links, anchors, cited paths and tests, documented command lines, skill frontmatter and byte budgets, and that each milestone's Status Delivery agrees with its page and every item has one row, one detail section and no delivered record (`TestDocsMilestonePagesAgreeWithTheirStatus`). |
 | `make test` | Run all package tests. |
-| `make vet` | Run Go static analysis. |
+| `make vet` | Run Go static analysis on linux/amd64 and on darwin/arm64, where each `*_unsupported.go` refusal stands in for its Linux adapter. |
 | `make fmt-check` | Check Go formatting. |
 | `make modules-check` | Verify both module locks. |
 | `make tidy-check` | Check that both module files are tidy. |

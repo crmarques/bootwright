@@ -393,7 +393,9 @@ The composition root binds `workspace/contextfs` to the fixed privileged store
 and `workspace/selectionfs` to a lazily verified invoking account. The latter
 accesses the user file with that account's credentials, including a bounded
 credential-dropped subprocess when the caller is root. `controller/privilege`
-owns local account lookup and invocation-scoped sudo process supervision. Only
+owns local account lookup and invocation-scoped sudo process supervision, and
+the elevation decisions: noninteractive mode, stream handoff, the elevated
+child's start announcement, and what each outcome reports. Only
 validated, available commands needing stored context data acquire that
 privilege boundary; informational and explicit-input validation paths remain
 effect-free. [CLI invocation](cli.md#local-privilege-and-user-identity) owns
@@ -494,6 +496,14 @@ specifics never widen the contract the others receive. The controller stage's
 publication boundary is such a value. Which blocks receive it follows the stage
 the plan froze, which is declared domain vocabulary; no application policy reads
 an implementation identity to decide.
+
+The one widening is an apply attempt's `Proved`: what each block it depends on
+proved earlier in this operation, as the engine's block evidence, handed over
+unread. A proof one capability relies on is another capability's to have made,
+as the identity a physical Machine's block pins is what an installation's
+pre-boot proof compares, so the consumer decodes that evidence only through the
+evidence's owner, which composition wires to it. The engine never interprets
+it, and the consumer never learns its shape.
 
 ### Native projection and publication
 
@@ -610,12 +620,10 @@ select executable code. Do not use implicit role dependencies or shared mutable
 facts to communicate across capability boundaries.
 
 A consumer of a realized Machine dispatches on the substrate arm or identity
-channel Go froze into its request, through that substrate role's fixed task
-files, and each dispatch ends in a terminal fail for a value it has no task file
-for. The substrate owns its composition as role entry points (decision D1),
-not yet implemented ([B5](milestones/m1.md#b5)).
-
-Not yet met: the Managed OS and cluster-install dispatches refuse an unknown value with a leading assert, not a terminal fail, and no structural test checks either; tracked as [B7](milestones/m1.md#b7).
+channel Go froze into its request, through that substrate role's entry points,
+and each dispatch ends in a terminal fail for a value it has no entry point
+for. The substrate owns the machine port as role entry points validated by
+their argument specs (decision D1), and consumers compose only those.
 
 ### Ansible collection plugins and results
 
@@ -766,6 +774,8 @@ reviewers retain semantic judgments that source checks cannot prove.
   failure propagation; import direction alone does not prove substitutability.
 - Verify that builds and runtime adapters use their declared versions and
   locks, with no ambient or silently substituted dependencies.
+- Build and vet the module on one platform besides linux/amd64, where each
+  off-platform refusal satisfies the ports its Linux adapter is bound to.
 - Verify implementation registry entries against actual adapter content,
   contract IDs, playbooks/roles, and immutable identities. Review support claims.
 - Test pure decisions, ordering, diagnostics, cancellation, and deterministic

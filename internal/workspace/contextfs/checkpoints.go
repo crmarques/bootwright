@@ -42,6 +42,8 @@ const (
 	checkpointBeforeMediaRecord              checkpoint = "before-media-record"
 	checkpointBeforeMediaRecordRemoval       checkpoint = "before-media-record-removal"
 	checkpointBeforeMediaRename              checkpoint = "before-media-rename"
+	checkpointBeforeMediaRetainedRemoval     checkpoint = "before-media-retained-removal"
+	checkpointBeforeMediaRetention           checkpoint = "before-media-retention"
 	checkpointBeforeMediaStaging             checkpoint = "before-media-staging"
 	checkpointBeforeMediaStagingPrune        checkpoint = "before-media-staging-prune"
 	checkpointBeforeMediaStagingSync         checkpoint = "before-media-staging-sync"
@@ -106,6 +108,8 @@ func checkpoints() []checkpoint {
 		checkpointBeforeMediaRecord,
 		checkpointBeforeMediaRecordRemoval,
 		checkpointBeforeMediaRename,
+		checkpointBeforeMediaRetainedRemoval,
+		checkpointBeforeMediaRetention,
 		checkpointBeforeMediaStaging,
 		checkpointBeforeMediaStagingPrune,
 		checkpointBeforeMediaStagingSync,

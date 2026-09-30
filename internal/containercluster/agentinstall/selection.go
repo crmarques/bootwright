@@ -99,10 +99,10 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 		if err != nil {
 			return "a declared node is on a substrate this executable does not realize", ""
 		}
-		// Booting a physical node erases what it holds, and nothing proves the
-		// node is the declared machine, powered off, before it is booted.
+		// Booting a physical node erases what it holds, and that boot is
+		// proved only by tests until an emulated rehearsal qualifies it.
 		if target.Physical {
-			return "physical cluster nodes are not supported until the installer proves each node before booting it",
+			return "physical cluster nodes are not supported until an emulated rehearsal qualifies them",
 				bound.Identity() + " is physical; declare " + cluster.Identity() + " on virtual nodes"
 		}
 		if _, reason, remediation := installerRootDeviceHints(bound, target.RootDeviceHints); reason != "" {
@@ -402,7 +402,8 @@ func nodeProjections(catalog api.Catalog, cluster api.Object, contextName, contr
 }
 
 // frozenNodes is what the install block freezes about each node: the machine
-// to boot, the controller to boot it through, and the address it answers at.
+// to boot, the controller to boot it through, the address it answers at, and
+// for a physical node the NICs its pre-boot proof requires.
 func frozenNodes(nodes []nodeProjection) []Node {
 	frozen := make([]Node, 0, len(nodes))
 	for _, node := range nodes {
@@ -418,11 +419,26 @@ func frozenNodes(nodes []nodeProjection) []Node {
 					Trust:               node.target.Controller.VirtualMedia.Trust,
 				},
 			},
-			Machine: node.machine.Name(), Name: node.name,
+			Hardware: frozenHardware(node.target),
+			Machine:  node.machine.Name(), Name: node.name,
 			Physical: node.target.Physical, Substrate: node.target.Substrate,
 		})
 	}
 	return frozen
+}
+
+// frozenHardware is the hardware a physical node is proved against: the NICs
+// its Machine declares, in declared order. A node its substrate created is
+// proved by its own controller answering, so it freezes none.
+func frozenHardware(target substrate.Target) *Hardware {
+	if !target.Physical {
+		return nil
+	}
+	hardware := Hardware{Interfaces: make([]Interface, 0, len(target.Interfaces))}
+	for _, declared := range target.Interfaces {
+		hardware.Interfaces = append(hardware.Interfaces, Interface{MACAddress: declared.MACAddress, Name: declared.Name})
+	}
+	return &hardware
 }
 
 // installAddress is the address a node answers at once it is installed, which

@@ -45,13 +45,19 @@ options:
     type: str
     required: false
   removed:
-    description: Whether the completion proves removal rather than presence.
+    description:
+      - Whether the completion proves removal rather than presence. A removal
+        publishes the absence form, and fails unless it proves everything
+        gone. It is never combined with observed.
     type: bool
     required: false
   observed:
     description:
       - Whether this publication is a read-only observation, which may report
         evidence that proves no postcondition rather than failing.
+      - The observation publishes the absence form exactly when everything it
+        observed is gone, and the presence form otherwise, so a caller never
+        chooses the form.
     type: bool
     required: false
 author:

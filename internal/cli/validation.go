@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -233,7 +234,7 @@ func validateSecretInput(flags *pflag.FlagSet) string {
 }
 
 func mediaName(value string) bool {
-	if len(value) < 5 || len(value) > 255 || !strings.HasSuffix(value, ".iso") {
+	if len(value) < 5 || len(value) > media.MaxMediaName || !strings.HasSuffix(value, ".iso") {
 		return false
 	}
 	stem := strings.TrimSuffix(value, ".iso")

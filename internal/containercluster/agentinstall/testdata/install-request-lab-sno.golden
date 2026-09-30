@@ -59,6 +59,6 @@
     "kind": "openshift-install",
     "version": "4.21.15"
   },
-  "version": "cluster-install-agent-v2",
+  "version": "cluster-install-agent-v3",
   "workRoot": "/var/lib/bootwright-clusters/lab/sno"
 }

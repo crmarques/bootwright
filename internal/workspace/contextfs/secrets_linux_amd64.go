@@ -848,64 +848,35 @@ func (a *secretArea) Replace(ctx context.Context, path string, data, expected []
 		return secretstore.NotCommitted, secretCorruption(ctx, "secret storage parent directory is unsafe", err)
 	}
 	defer close()
-	var pending string
-	written := false
-	for range 16 {
-		candidate, err := a.store.candidate("pending-")
-		if err != nil {
-			return secretstore.NotCommitted, err
-		}
-		pending = candidate
-		// The keyring attributes only a complete stage, so a write that fails
-		// in process removes what it created; nothing removes a complete one.
-		_, err = a.store.writeExclusiveIdentity(ctx, parent, pending, data, false)
-		if errors.Is(err, syscall.EEXIST) {
-			continue
-		}
-		if err != nil {
-			return secretstore.NotCommitted, err
-		}
-		written = true
-		break
-	}
-	if !written {
-		return secretstore.NotCommitted, state("secret storage replacement exhausted its collision limit")
-	}
-	pendingIdentity, err := verifySecretPending(ctx, parent, pending, data)
-	if err != nil {
+	// The keyring attributes and collects only a bare stage, so the stage has
+	// no suffix, and a failure before the rename removes it.
+	outcome, err := a.store.publishStage(ctx, parent, name, data, stagedPublication{
+		subject: "secret state", replace: true, immutable: true, bound: len(data),
+		renameFailure: "secret state could not be atomically published",
+		prove: func(ctx context.Context) error {
+			if err := a.verifyExpectedContext(ctx); err != nil {
+				return err
+			}
+			if err := verifySecretExpectation(ctx, parent, name, expectation); err != nil {
+				return err
+			}
+			if path == secretstore.RecordPath {
+				return a.verifyReadDependencies(ctx, path)
+			}
+			return nil
+		},
+	}, checkpointBeforeSecretRename, checkpointAfterSecretRename)
+	switch outcome {
+	case publicationNotCommitted:
 		return secretstore.NotCommitted, err
-	}
-	if err := a.store.checkpoint(ctx, checkpointBeforeSecretRename); err != nil {
-		return secretstore.NotCommitted, err
-	}
-	if err := a.verifyExpectedContext(ctx); err != nil {
-		return secretstore.NotCommitted, err
-	}
-	if err := verifySecretExpectation(ctx, parent, name, expectation); err != nil {
-		return secretstore.NotCommitted, err
-	}
-	if path == secretstore.RecordPath {
-		if err := a.verifyReadDependencies(ctx, path); err != nil {
-			return secretstore.NotCommitted, err
+	case publicationUnknown:
+		a.forgetExpectation(path)
+		if path == secretstore.RecordPath {
+			a.phase = secretUncertain
 		}
-	}
-	currentPending, err := verifySecretPending(ctx, parent, pending, data)
-	if err != nil || !sameFile(pendingIdentity, currentPending) {
-		return secretstore.NotCommitted, state("pending secret state changed before publication")
-	}
-	if err := syscall.Renameat(int(parent.file.Fd()), pending, int(parent.file.Fd()), name); err != nil {
-		return secretstore.NotCommitted, state("secret state could not be atomically published")
+		return secretstore.Uncertain, state("secret state publication has uncertain durability; inspect it before retrying")
 	}
 	a.forgetExpectation(path)
-	if path == secretstore.RecordPath {
-		a.phase = secretUncertain
-	}
-	if err := a.store.checkpoint(ctx, checkpointAfterSecretRename); err != nil {
-		return secretstore.Uncertain, state("secret state publication has uncertain durability; inspect it before retrying")
-	}
-	if err := a.store.syncDirectory(ctx, parent); err != nil {
-		return secretstore.Uncertain, state("secret state publication has uncertain durability; inspect it before retrying")
-	}
 	if err := a.rememberPublishedFile(ctx, parent, name, path, data); err != nil {
 		a.phase = secretUncertain
 		return secretstore.Committed, err
@@ -962,15 +933,6 @@ func (a *secretArea) verifyReadDependencies(ctx context.Context, target string) 
 		}
 	}
 	return nil
-}
-
-func verifySecretPending(ctx context.Context, parent *directory, name string, data []byte) (syscall.Stat_t, error) {
-	actual, identity, err := readBoundedIdentity(ctx, parent, name, len(data), true)
-	defer clear(actual)
-	if err != nil || !bytes.Equal(data, actual) {
-		return syscall.Stat_t{}, state("pending secret state changed before publication")
-	}
-	return identity, nil
 }
 
 func (a *secretArea) verifyExpectedContext(ctx context.Context) error {

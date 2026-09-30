@@ -54,6 +54,8 @@ func TestHostPresenceRequiresEveryProof(t *testing.T) {
 		"daemon renamed":    func(e *HostEvidence) { e.Services[0].Name = "libvirtd.service" },
 		"uri silent":        func(e *HostEvidence) { e.URI = false },
 		"pool inactive":     func(e *HostEvidence) { e.Pool = "" },
+		"pool unanswered":   func(e *HostEvidence) { e.PoolAnswered = false },
+		"network silent":    func(e *HostEvidence) { e.Networks[0].Answered = false },
 		"no postcondition":  func(e *HostEvidence) { e.Postcondition = false },
 		"network inactive":  func(e *HostEvidence) { e.Networks[0].State = "inactive" },
 		"network unowned":   func(e *HostEvidence) { e.Networks[0].Owned = false },
@@ -73,24 +75,65 @@ func TestHostPresenceRequiresEveryProof(t *testing.T) {
 	}
 }
 
+func observed(value bool) *bool { return &value }
+
 // Removal is accepted only when it positively proves the owned objects are
-// gone, never merely that they were not observed.
+// gone, never merely that they were not observed: the networks and pool
+// through a URI that answered and the driver that owns each, and the pool
+// directory by its path.
 func TestHostAbsenceRequiresPositiveRemoval(t *testing.T) {
-	gone := HostEvidence{Absent: true, Postcondition: true, Request: "digest"}
-	if err := ValidateHostAbsence(encode(t, gone), "digest"); err != nil {
-		t.Fatalf("removal evidence was refused: %v", err)
+	forgotten := []NetworkEvidence{{Answered: true, Managed: true, Name: "n"}}
+	for name, gone := range map[string]HostEvidence{
+		"nothing left":   {Absent: true, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true},
+		"network forgot": {Absent: true, Directory: observed(false), Networks: forgotten, PoolAnswered: true, Postcondition: true, Request: "digest", URI: true},
+	} {
+		if err := ValidateHostAbsence(encode(t, gone), "digest"); err != nil {
+			t.Fatalf("%s: removal evidence was refused: %v", name, err)
+		}
+	}
+	answered := func(damage func(*HostEvidence)) HostEvidence {
+		evidence := HostEvidence{Absent: true, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true}
+		damage(&evidence)
+		return evidence
 	}
 	for name, evidence := range map[string]HostEvidence{
-		"not absent":       {Postcondition: true, Request: "digest"},
-		"no postcondition": {Absent: true, Request: "digest"},
-		"pool remains":     {Absent: true, Postcondition: true, Pool: "active", Request: "digest"},
-		"network remains":  {Absent: true, Postcondition: true, Request: "digest", Networks: []NetworkEvidence{{Managed: true, Name: "n"}}},
+		"not absent":           answered(func(e *HostEvidence) { e.Absent = false }),
+		"no postcondition":     answered(func(e *HostEvidence) { e.Postcondition = false }),
+		"uri silent":           answered(func(e *HostEvidence) { e.URI = false }),
+		"directory remains":    answered(func(e *HostEvidence) { e.Directory = observed(true) }),
+		"directory unreported": answered(func(e *HostEvidence) { e.Directory = nil }),
+		"pool remains":         answered(func(e *HostEvidence) { e.Pool = "active" }),
+		"pool unanswered":      answered(func(e *HostEvidence) { e.PoolAnswered = false }),
+		"network still defined": answered(func(e *HostEvidence) {
+			e.Networks = []NetworkEvidence{{Answered: true, Managed: true, Name: "n", State: "inactive"}}
+		}),
+		"network still owned": answered(func(e *HostEvidence) {
+			e.Networks = []NetworkEvidence{{Answered: true, Managed: true, Name: "n", Owned: true}}
+		}),
+		"network unanswered": answered(func(e *HostEvidence) { e.Networks = []NetworkEvidence{{Managed: true, Name: "n"}} }),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := ValidateHostAbsence(encode(t, evidence), "digest"); err == nil {
 				t.Fatal("incomplete removal evidence was accepted")
 			}
 		})
+	}
+}
+
+// The absence form published before the host observation reported whether its
+// URI answered and its pool directory carried neither, which is exactly what a
+// connection that did not answer published too. Neither it nor the same form
+// with an answering URI but no directory proves the removal.
+func TestHostEvidenceWithoutAnAnswerOrItsDirectoryProvesNoRemoval(t *testing.T) {
+	for name, recorded := range map[string]string{
+		"the earlier absence form": `{"absent":true,"hypervisor":false,"networks":[],"pool":"","postcondition":true,` +
+			`"request":"digest","services":[],"uri":false}`,
+		"answered without directory": `{"absent":true,"hypervisor":false,"networks":[],"pool":"","postcondition":true,` +
+			`"request":"digest","services":[],"uri":true}`,
+	} {
+		if err := ValidateHostAbsence([]byte(recorded), "digest"); err == nil {
+			t.Fatalf("%s: removal evidence that proves no answer or no directory was accepted", name)
+		}
 	}
 }
 
@@ -129,18 +172,22 @@ func TestMachinePresenceRequiresEveryProof(t *testing.T) {
 }
 
 // A hypervisor that did not answer reports no domain either, so only evidence
-// that says it answered proves the domain gone.
+// that says it answered proves the domain gone, and the controller's socket is
+// released only once nothing listens on it.
 func TestMachineAbsenceRequiresPositiveRemoval(t *testing.T) {
-	gone := MachineEvidence{Absent: true, Answered: true, Postcondition: true, Request: "digest"}
+	gone := MachineEvidence{Absent: true, Answered: true, Listener: observed(false), Postcondition: true, Request: "digest"}
 	if err := ValidateMachineAbsence(encode(t, gone), "digest"); err != nil {
 		t.Fatalf("removal evidence was refused: %v", err)
 	}
+	free := observed(false)
 	for name, evidence := range map[string]MachineEvidence{
-		"domain remains":    {Absent: true, Answered: true, Postcondition: true, Domain: "bootwright-lab-rhel-01", Request: "digest"},
-		"unit remains":      {Absent: true, Answered: true, Postcondition: true, Unit: "active", Request: "digest"},
-		"power reported":    {Absent: true, Answered: true, Postcondition: true, Power: "Off", Request: "digest"},
-		"disk remains":      {Absent: true, Answered: true, Postcondition: true, Request: "digest", Disks: []DiskEvidence{{Name: "root", Present: true}}},
-		"hypervisor silent": {Absent: true, Postcondition: true, Request: "digest"},
+		"domain remains":      {Absent: true, Answered: true, Listener: free, Postcondition: true, Domain: "bootwright-lab-rhel-01", Request: "digest"},
+		"unit remains":        {Absent: true, Answered: true, Listener: free, Postcondition: true, Unit: "active", Request: "digest"},
+		"power reported":      {Absent: true, Answered: true, Listener: free, Postcondition: true, Power: "Off", Request: "digest"},
+		"disk remains":        {Absent: true, Answered: true, Listener: free, Postcondition: true, Request: "digest", Disks: []DiskEvidence{{Name: "root", Present: true}}},
+		"hypervisor silent":   {Absent: true, Listener: free, Postcondition: true, Request: "digest"},
+		"socket held":         {Absent: true, Answered: true, Listener: observed(true), Postcondition: true, Request: "digest"},
+		"socket not reported": {Absent: true, Answered: true, Postcondition: true, Request: "digest"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := ValidateMachineAbsence(encode(t, evidence), "digest"); err == nil {
@@ -156,9 +203,11 @@ func TestMachineAbsenceRequiresPositiveRemoval(t *testing.T) {
 // removes.
 func TestHostPartialRequiresSomethingThisContextOwns(t *testing.T) {
 	for name, evidence := range map[string]HostEvidence{
-		"pool alone":       {Request: "digest", Pool: "active"},
-		"owned network":    {Request: "digest", Networks: []NetworkEvidence{{Managed: true, Name: "n", Owned: true, State: "inactive"}}},
-		"network and pool": {Request: "digest", Pool: "inactive", Networks: []NetworkEvidence{{Managed: true, Name: "n", Owned: true, State: "active"}}},
+		"pool alone":                  {Request: "digest", Pool: "active"},
+		"owned network":               {Request: "digest", Networks: []NetworkEvidence{{Managed: true, Name: "n", Owned: true, State: "inactive"}}},
+		"network and pool":            {Request: "digest", Pool: "inactive", Networks: []NetworkEvidence{{Managed: true, Name: "n", Owned: true, State: "active"}}},
+		"directory alone":             {Request: "digest", URI: true, Directory: observed(true)},
+		"silent uri with a directory": {Request: "digest", Directory: observed(true)},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := ValidateHostPartial(encode(t, evidence), "digest"); err != nil {
@@ -168,6 +217,7 @@ func TestHostPartialRequiresSomethingThisContextOwns(t *testing.T) {
 	}
 	for name, evidence := range map[string]HostEvidence{
 		"nothing owned":    {Request: "digest"},
+		"directory gone":   {Request: "digest", URI: true, Directory: observed(false)},
 		"hypervisor alone": {Request: "digest", Hypervisor: true},
 		"foreign network":  {Request: "digest", Networks: []NetworkEvidence{{Managed: true, Name: "n", State: "active"}}},
 		"external bridge":  {Request: "digest", Networks: []NetworkEvidence{{Name: "n", Bridge: true}}},

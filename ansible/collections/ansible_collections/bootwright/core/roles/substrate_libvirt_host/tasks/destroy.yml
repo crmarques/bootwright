@@ -25,6 +25,51 @@
     request: '{{ bootwright_substrate_host_request }}'
   register: substrate_libvirt_host_before
 
+# A connection that does not answer reports no network and no pool either, which
+# the guard and the owned-network list below read as nothing this context owns.
+# Nothing then proves which of them remain, so the removal refuses before its
+# first effect and names the connection.
+- name: Refuse to remove a provider host its hypervisor did not answer for
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_host_before.observation.uri
+    fail_msg: >-
+      the hypervisor at {{ bootwright_substrate_host_request.uri }} did not
+      answer, so nothing proves which of its networks and pool remain; restore
+      that connection and repeat the removal
+    quiet: true
+
+# The uri answering proves only that the hypervisor driver did. Each network
+# and the pool are read through the driver that owns it, a daemon of its own
+# that may be silent meanwhile, and a lookup it never answered reads exactly as
+# one that found nothing. The removal refuses before its first effect and names
+# the driver rather than reading that silence as nothing left to remove.
+- name: Refuse to remove a network its driver did not answer for
+  ansible.builtin.assert:
+    that:
+      - item.answered
+    fail_msg: >-
+      the libvirt network driver (virtnetworkd) behind
+      {{ bootwright_substrate_host_request.uri }} did not answer for network
+      {{ item.name }}, so nothing proves whether it remains; restore that
+      driver and repeat the removal
+    quiet: true
+  loop: '{{ substrate_libvirt_host_before.observation.networks }}'
+  loop_control:
+    label: '{{ item.name }}'
+  when: item.managed
+
+- name: Refuse to remove a pool its driver did not answer for
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_host_before.observation.poolAnswered
+    fail_msg: >-
+      the libvirt storage driver (virtstoraged) behind
+      {{ bootwright_substrate_host_request.uri }} did not answer for pool
+      {{ bootwright_substrate_host_request.poolName }}, so nothing proves
+      whether it remains; restore that driver and repeat the removal
+    quiet: true
+
 - name: Refuse to remove a same-named network this context does not own
   ansible.builtin.assert:
     that:

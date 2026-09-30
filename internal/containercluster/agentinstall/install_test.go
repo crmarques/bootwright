@@ -151,8 +151,8 @@ func TestInstallPlanWaitsForItsMediaAndItsNodes(t *testing.T) {
 // Installing a cluster of virtual nodes acknowledges no loss, because each
 // node's disks are created by its realization and removed by its inverse.
 // Installing onto operator-owned hardware would be the moment its content is
-// lost, and nothing proves each node before it is booted, so a cluster of
-// physical nodes plans nothing for either verb.
+// lost, and that installation is not yet qualified, so a cluster of physical
+// nodes plans nothing for either verb.
 func TestAVirtualInstallationConsumesNothingAndAPhysicalOneRefuses(t *testing.T) {
 	virtual := installPlan(t, singleNodeCatalog(), reconciliation.Apply)
 	if len(virtual.Definitions[0].Consumes) != 0 {

@@ -2,13 +2,20 @@ package media
 
 import (
 	"context"
+	"errors"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/managedos"
 )
+
+// MaxMediaName is the longest media name a request may carry, published with
+// the service so a driving adapter checks it without depending on the domain
+// rule it comes from.
+const MaxMediaName = managedos.MaxMediaName
 
 // Service manages the host-wide installer media store. It selects no context:
 // one store serves every context on the host, and a context-scoped artifact
@@ -36,39 +43,20 @@ func (s Service) available(ctx context.Context) error {
 
 // Add acquires one image, proves its bytes and publishes it with its record.
 // Confirmation and every refusal precede acquisition, so a declined
-// replacement never downloads anything. Acquisition holds no root lock: an
-// image may take hours to arrive, and every other store command on the host
-// would refuse while it did. Admission is therefore proved twice, once to claim
-// a stage and again, against the store as it now stands, to publish it.
+// replacement never downloads anything, and the prompt holds no root lock.
+// Acquisition holds none either: an image may take hours to arrive, and every
+// other store command on the host would refuse while it did. Admission is
+// therefore proved again, against the store as it then stands, to claim a stage
+// and to publish it.
 func (s Service) Add(ctx context.Context, request AddMediaRequest) (*MutationResult, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
-	if !managedos.ValidMediaName(request.Name) {
-		return nil, failure("the media name is not a portable ISO basename",
-			"name the image with ASCII letters, digits, dot, underscore or dash and a lowercase .iso suffix")
-	}
-	source, err := selectSource(request)
+	source, expected, err := addition(request)
 	if err != nil {
 		return nil, err
 	}
-	expected, ok := managedos.NormalizeMediaDigest(request.SHA256)
-	if !ok {
-		return nil, failure("the supplied digest is not a SHA-256 content pin", "supply 64 hexadecimal digits, optionally prefixed by sha256:")
-	}
-	if source.URL != "" && expected == "" {
-		return nil, failure("a downloaded image requires its expected digest", "repeat the command with --sha256 <digest>")
-	}
-	var stage Stage
-	replacing := false
-	err = s.store.MutateMedia(ctx, func(tx Transaction) error {
-		var err error
-		if replacing, err = s.admit(ctx, tx, request); err != nil {
-			return err
-		}
-		stage, err = tx.Stage(ctx, request.Name)
-		return err
-	})
+	stage, replacing, err := s.claim(ctx, request, expected)
 	if stage != nil {
 		// Close's own failure is ignored: the outcome to report is the
 		// publication or the refusal that preceded it, and a stage Close could
@@ -78,7 +66,7 @@ func (s Service) Add(ctx context.Context, request AddMediaRequest) (*MutationRes
 	if err != nil {
 		return nil, err
 	}
-	entry, err := s.acquire(ctx, stage, request.Name, source, expected)
+	entry, err := s.obtain(ctx, stage, request.Name, source, expected)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +81,7 @@ func (s Service) Add(ctx context.Context, request AddMediaRequest) (*MutationRes
 		return tx.Publish(ctx, entry.Name, stage, record, replacing)
 	})
 	if err != nil {
-		return nil, err
+		return nil, unpublished(ctx, err, stage, record, request.Name, expected)
 	}
 	outcome := "stored"
 	if replacing {
@@ -102,25 +90,111 @@ func (s Service) Add(ctx context.Context, request AddMediaRequest) (*MutationRes
 	return &MutationResult{Name: entry.Name, Size: entry.Size, SHA256: entry.SHA256, Outcome: outcome}, nil
 }
 
-// admit proves the store can take the image and confirms a replacement. It
-// reports whether the name is occupied, which is what was confirmed.
-func (s Service) admit(ctx context.Context, tx Transaction, request AddMediaRequest) (bool, error) {
-	replacing, err := admissible(ctx, tx, request.Name)
-	if err != nil || !replacing || request.SkipConfirmation {
-		return replacing, err
+// addition refuses what an add names before any store is read, and returns its
+// one source and its normalized digest pin.
+func addition(request AddMediaRequest) (Source, string, error) {
+	if !managedos.ValidMediaName(request.Name) {
+		return Source{}, "", failure("the media name is not a portable ISO basename",
+			"name the image with ASCII letters, digits, dot, underscore or dash and a lowercase .iso suffix, in at most "+
+				strconv.Itoa(MaxMediaName)+" bytes")
 	}
-	if s.confirmer == nil {
-		return false, failure("replacing a stored image requires confirmation", "review the image and repeat with --yes")
+	source, err := selectSource(request)
+	if err != nil {
+		return Source{}, "", err
 	}
-	return true, s.confirmer.Confirm(ctx, "media replace", request.Name)
+	expected, ok := managedos.NormalizeMediaDigest(request.SHA256)
+	if !ok {
+		return Source{}, "", failure("the supplied digest is not a SHA-256 content pin", "supply 64 hexadecimal digits, optionally prefixed by sha256:")
+	}
+	if source.URL != "" && expected == "" {
+		return Source{}, "", failure("a downloaded image requires its expected digest", "repeat the command with --sha256 <digest>")
+	}
+	return source, expected, nil
+}
+
+// observed is what a media confirmation confirms about one name: whether it is
+// occupied, the record published for it and, for a deletion, whether a stage is
+// retained for it.
+type observed struct {
+	occupied bool
+	listed   bool
+	retained bool
+	entry    managedos.MediaEntry
+}
+
+func observe(ctx context.Context, view View, name string, occupied bool) (observed, error) {
+	entry, listed, err := view.Entry(ctx, name)
+	return observed{occupied: occupied, listed: listed, entry: entry}, err
+}
+
+// claim admits the add and claims its stage. Without --yes a shared hold
+// admits it first and a replacement is confirmed with no root lock held; the
+// exclusive hold that claims the stage then refuses, claiming nothing, when
+// what that hold observed changed meanwhile, whether or not a prompt ran, since
+// a name occupied since would otherwise be replaced unconfirmed.
+func (s Service) claim(ctx context.Context, request AddMediaRequest, expected string) (Stage, bool, error) {
+	var confirmed *observed
+	if !request.SkipConfirmation {
+		seen, err := s.confirmReplacement(ctx, request.Name)
+		if err != nil {
+			return nil, false, err
+		}
+		confirmed = &seen
+	}
+	var stage Stage
+	replacing := false
+	err := s.store.MutateMedia(ctx, func(tx Transaction) error {
+		occupied, err := admissible(ctx, tx, request.Name)
+		if err != nil {
+			return err
+		}
+		if confirmed != nil {
+			current, err := observe(ctx, tx, request.Name, occupied)
+			if err != nil {
+				return err
+			}
+			if current != *confirmed {
+				while := "while this add was being admitted"
+				if confirmed.occupied {
+					while = "while its replacement was being confirmed"
+				}
+				return changedFailure(request.Name, while)
+			}
+		}
+		replacing = occupied
+		stage, err = tx.Stage(ctx, request.Name, expected)
+		return err
+	})
+	return stage, replacing, err
+}
+
+// confirmReplacement admits an add under a shared hold and, when it would
+// replace an image, confirms that with no root lock held.
+func (s Service) confirmReplacement(ctx context.Context, name string) (observed, error) {
+	var seen observed
+	err := s.store.ReadMedia(ctx, func(view View) error {
+		occupied, err := admissible(ctx, view, name)
+		if err != nil {
+			return err
+		}
+		if occupied && s.confirmer == nil {
+			return failure("replacing a stored image requires confirmation", "review the image and repeat with --yes")
+		}
+		seen, err = observe(ctx, view, name, occupied)
+		return err
+	})
+	if err != nil || !seen.occupied {
+		return seen, err
+	}
+	return seen, s.confirmer.Confirm(ctx, "media replace", name)
 }
 
 // revalidate re-proves admission under the lock that publishes. Only this
 // invocation's stage can publish the name, so the name's occupancy changes only
 // when another command deletes it, and a lifecycle operation may have frozen it
 // meanwhile; any change refuses rather than publishing what was not confirmed.
-func revalidate(ctx context.Context, tx Transaction, name string, replacing bool) error {
-	occupied, err := admissible(ctx, tx, name)
+func revalidate(ctx context.Context, view View, name string, replacing bool) error {
+	occupied, err := admissible(ctx, view, name)
 	if err != nil {
 		return err
 	}
@@ -131,8 +205,8 @@ func revalidate(ctx context.Context, tx Transaction, name string, replacing bool
 	return nil
 }
 
-func admissible(ctx context.Context, tx Transaction, name string) (bool, error) {
-	occupied, err := tx.Names(ctx)
+func admissible(ctx context.Context, view View, name string) (bool, error) {
+	occupied, err := view.Names(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -144,7 +218,7 @@ func admissible(ctx context.Context, tx Transaction, name string) (bool, error) 
 	if !replacing {
 		return false, nil
 	}
-	frozen, err := tx.Frozen(ctx)
+	frozen, err := view.Frozen(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -152,6 +226,39 @@ func admissible(ctx context.Context, tx Transaction, name string) (bool, error) 
 		return false, frozenFailure(name)
 	}
 	return true, nil
+}
+
+// obtain fills a claimed stage from its source, or proves that an adopted stage
+// still holds the bytes it was retained with. Either runs outside every store
+// transaction, so it holds no root lock.
+func (s Service) obtain(ctx context.Context, stage Stage, name string, source Source, expected string) (managedos.MediaEntry, error) {
+	retained, adopted := stage.Retained()
+	if !adopted {
+		return s.acquire(ctx, stage, name, source, expected)
+	}
+	staged, err := stage.Verify(ctx)
+	if err != nil {
+		return managedos.MediaEntry{}, err
+	}
+	if staged.Size != retained.Size || staged.SHA256 != retained.SHA256 || staged.SHA256 != expected {
+		return managedos.MediaEntry{}, failure("the image retained for "+name+" no longer holds the bytes it verified",
+			"repeat the command to acquire it again")
+	}
+	return managedos.MediaEntry{Name: name, Size: staged.Size, SHA256: staged.SHA256, Source: retained.Source, Added: s.now()}, nil
+}
+
+// unpublished reports a publication that did not happen. A pinned add whose
+// publication met another command's lock first retains its verified stage, so
+// repeating the command publishes it without acquiring it again; a stage it
+// cannot retain is removed like any other, and the lock's refusal stands.
+func unpublished(ctx context.Context, err error, stage Stage, record []byte, name, expected string) error {
+	if !errors.Is(err, ErrBusy) || expected == "" || stage.Retain(ctx, record) != nil {
+		return err
+	}
+	return diagnostics.NewFailureWithRemediation("lifecycle.lease",
+		"another Bootwright command holds the media store, so image "+name+" was verified but not published", "",
+		"repeat this command once that command finishes: it publishes the verified image without acquiring it again; "+
+			"or discard it with bootwright media delete --name "+name)
 }
 
 // acquire fills the stage from the source and proves the bytes against the
@@ -176,8 +283,12 @@ func (s Service) acquire(ctx context.Context, stage Stage, name string, source S
 		Size:   staged.Size,
 		SHA256: staged.SHA256,
 		Source: acquisition.Origin,
-		Added:  s.clock.Now().UTC().Truncate(1e9).Format("2006-01-02T15:04:05Z07:00"),
+		Added:  s.now(),
 	}, nil
+}
+
+func (s Service) now() string {
+	return s.clock.Now().UTC().Truncate(1e9).Format("2006-01-02T15:04:05Z07:00")
 }
 
 // List reports the store's inventory. Without checksums it reads records and
@@ -225,49 +336,85 @@ func (s Service) List(ctx context.Context, request ListMediaRequest) (*ListResul
 	return result, nil
 }
 
-// Delete removes one image and its record. An image any context reserves is
-// refused, because a frozen operation still needs exactly those bytes.
+// Delete removes one image and its record, and a stage retained for it. An
+// image any context reserves is refused, because a frozen operation still needs
+// exactly those bytes. Without --yes a shared hold admits the deletion, the
+// prompt holds no root lock, and the exclusive hold that deletes refuses when
+// what was confirmed changed meanwhile.
 func (s Service) Delete(ctx context.Context, request DeleteMediaRequest) (*MutationResult, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
 	if !managedos.ValidMediaName(request.Name) {
-		return nil, failure("the media name is not a portable ISO basename", "name an image this store holds")
+		return nil, failure("the media name is not a portable ISO basename",
+			"name an image this store holds, in at most "+strconv.Itoa(MaxMediaName)+" bytes")
 	}
-	var result *MutationResult
+	var confirmed *observed
+	if !request.SkipConfirmation {
+		seen, err := s.confirmDeletion(ctx, request.Name)
+		if err != nil {
+			return nil, err
+		}
+		confirmed = &seen
+	}
 	err := s.store.MutateMedia(ctx, func(tx Transaction) error {
-		occupied, err := tx.Names(ctx)
+		current, err := deletable(ctx, tx, request.Name)
 		if err != nil {
 			return err
 		}
-		if !slices.Contains(occupied, request.Name) {
-			return failure("the media store holds no image with that name", "list the store with bootwright media list")
+		if confirmed != nil && current != *confirmed {
+			return changedFailure(request.Name, "while its deletion was being confirmed")
 		}
-		frozen, err := tx.Frozen(ctx)
-		if err != nil {
-			return err
-		}
-		if slices.Contains(frozen, request.Name) {
-			return frozenFailure(request.Name)
-		}
-		if !request.SkipConfirmation {
-			if s.confirmer == nil {
-				return failure("deleting a stored image requires confirmation", "review the image and repeat with --yes")
-			}
-			if err := s.confirmer.Confirm(ctx, "media delete", request.Name); err != nil {
-				return err
-			}
-		}
-		if err := tx.Delete(ctx, request.Name); err != nil {
-			return err
-		}
-		result = &MutationResult{Name: request.Name, Outcome: "deleted"}
-		return nil
+		return tx.Delete(ctx, request.Name)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
+	return &MutationResult{Name: request.Name, Outcome: "deleted"}, nil
+}
+
+func (s Service) confirmDeletion(ctx context.Context, name string) (observed, error) {
+	var seen observed
+	err := s.store.ReadMedia(ctx, func(view View) error {
+		var err error
+		if seen, err = deletable(ctx, view, name); err != nil {
+			return err
+		}
+		if s.confirmer == nil {
+			return failure("deleting a stored image requires confirmation", "review the image and repeat with --yes")
+		}
+		return nil
+	})
+	if err != nil {
+		return seen, err
+	}
+	return seen, s.confirmer.Confirm(ctx, "media delete", name)
+}
+
+// deletable proves the store holds an image or a retained stage by that name
+// that no context reserves, and reports what a confirmation confirms.
+func deletable(ctx context.Context, view View, name string) (observed, error) {
+	occupied, err := view.Names(ctx)
+	if err != nil {
+		return observed{}, err
+	}
+	retained, err := view.Retained(ctx)
+	if err != nil {
+		return observed{}, err
+	}
+	if !slices.Contains(occupied, name) && !slices.Contains(retained, name) {
+		return observed{}, failure("the media store holds no image with that name", "list the store with bootwright media list")
+	}
+	frozen, err := view.Frozen(ctx)
+	if err != nil {
+		return observed{}, err
+	}
+	if slices.Contains(frozen, name) {
+		return observed{}, frozenFailure(name)
+	}
+	seen, err := observe(ctx, view, name, slices.Contains(occupied, name))
+	seen.retained = slices.Contains(retained, name)
+	return seen, err
 }
 
 func selectSource(request AddMediaRequest) (Source, error) {
@@ -276,6 +423,11 @@ func selectSource(request AddMediaRequest) (Source, error) {
 		return Source{}, failure("exactly one media source is required", "supply --from-file or --from-url")
 	}
 	return Source{Path: file, URL: url}, nil
+}
+
+func changedFailure(name, while string) error {
+	return failure("image "+name+" changed in the media store "+while,
+		"review the store with bootwright media list, then repeat the command")
 }
 
 func frozenFailure(name string) error {

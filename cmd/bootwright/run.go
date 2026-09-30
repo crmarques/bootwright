@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"os"
@@ -13,7 +12,6 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/privilege"
 	"github.com/crmarques/bootwright/internal/desiredstate/encoding"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -26,77 +24,52 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	classification := cli.ClassifyInvocation(args)
-	route, refused := ambientRoute(classification, stdout, stderr)
-	if refused != 0 {
-		return refused
+	if classification.RequiresRoot {
+		_, errorTerminal := terminalFile(stderr)
+		privilege.AnnounceStart(stderr, errorTerminal)
+	}
+	route, refusal := privilege.AmbientRoute(classification.AmbientRoute, os.LookupEnv)
+	if refusal != nil {
+		return classification.Diagnostic(stdout, stderr, *refusal, 1)
 	}
 	if classification.RequiresRoot {
-		account, err := (privilege.Resolver{}).Resolve(ctx)
-		if err != nil {
-			return classification.Failure(stdout, stderr, "runtime.privilege", "invoking account cannot be verified", 1)
+		release, refusal := privilege.Admit(ctx, privilege.Resolver{}, privilege.GuardParent)
+		if refusal != nil {
+			return classification.Diagnostic(stdout, stderr, *refusal, 1)
 		}
-		if account.SudoParentPID != 0 {
-			release, err := privilege.GuardParent(account.SudoParentPID)
-			if err != nil {
-				return classification.Failure(stdout, stderr, "runtime.privilege", "sudo parent lifetime cannot be guarded", 1)
-			}
-			defer release()
-		}
+		defer release()
 	}
 	if classification.RequiresRoot && os.Geteuid() != 0 {
-		operation, finish := privilege.Begin(ctx)
-		defer finish()
-		executable, err := privilege.ReexecutionPath()
-		if err != nil {
-			return classification.Failure(stdout, stderr, "runtime.privilege", "invocation executable cannot be verified", 1)
-		}
-		sudo, err := privilege.QualifiedSudo()
-		if err != nil {
-			return classification.Failure(stdout, stderr, "runtime.privilege", "sudo is unavailable; run Bootwright as root", 1)
-		}
-		terminal, terminalErr := stdinTerminal()
-		noninteractive := classification.JSON || terminalErr != nil || !terminal
-		output := &invocationOutput{writer: stdout}
-		// Without a terminal sudo cannot prompt, so its refusal text carries no
-		// operator action and is not a product result.
-		errOut := &invocationError{writer: stderr, withhold: noninteractive}
-		var childOutput, childError io.Writer = output, errOut
-		if !noninteractive {
-			// Sudo relays the terminal only while the child inherits it on stdin
-			// and stdout; behind a pipe it parks the child in the background of a
-			// new pseudo-terminal until the child claims it through job control.
-			if file, ok := terminalFile(stdout); ok {
-				childOutput = file
-			}
-			if file, ok := terminalFile(stderr); ok {
-				childError = file
-			}
-		}
-		terminalType := invokingTerminalType(noninteractive)
-		supervisor := privilege.NewSupervisor(privilege.SudoOptions{Executable: executable, Sudo: sudo, Executor: privilege.ProcessExecutor{}, Delay: privilege.Timer{}, NonInteractive: noninteractive, Terminal: terminalType, Assignments: routeAssignments(route), Input: os.Stdin, Output: childOutput, Error: childError})
-		code, err := supervisor.Run(operation, args)
-		errOut.Close()
-		if err != nil {
-			if output.bytes != 0 {
-				if code != 0 {
-					return code
-				}
-				return 1
-			}
-			if code := privilege.ExitCode(operation, 0); code != 0 {
-				return classification.Failure(stdout, stderr, "runtime.interrupted", "operation interrupted", code)
-			}
-			return classification.Failure(stdout, stderr, "runtime.privilege", "sudo invocation failed", 1)
-		}
-		if code != 0 && output.bytes == 0 && (classification.JSON || errOut.withheld) {
-			return classification.Failure(stdout, stderr, "runtime.privilege", "sudo authorization could not be obtained; authenticate to sudo or run Bootwright as root", code)
-		}
-		return code
+		return runElevated(ctx, classification, args, stdout, stderr, route)
 	}
 	process, hooks := interactiveProcess(classification, stdout, stderr, route)
 	services, release := wireServices(process)
 	defer release()
 	return runServices(ctx, args, stdout, stderr, services, hooks)
+}
+
+// runElevated acquires the process facts the privilege boundary decides from
+// and presents what it reports.
+func runElevated(ctx context.Context, classification cli.InvocationClass, args []string, stdout, stderr io.Writer, route controller.Route) int {
+	operation, finish := privilege.Begin(ctx)
+	defer finish()
+	terminal, err := stdinTerminal()
+	invocation := privilege.Invocation{
+		JSON: classification.JSON, Arguments: args, Route: route, Terminal: os.Getenv("TERM"),
+		Input: os.Stdin, Output: stdout, Error: stderr, InputTerminal: err == nil && terminal,
+	}
+	if file, ok := terminalFile(stdout); ok {
+		invocation.OutputTerminal = file
+	}
+	if file, ok := terminalFile(stderr); ok {
+		invocation.ErrorTerminal = file
+	}
+	elevator := privilege.Elevator{Executable: privilege.ReexecutionPath, Sudo: privilege.QualifiedSudo, Executor: privilege.ProcessExecutor{}, Delay: privilege.Timer{}}
+	outcome := elevator.Run(operation, invocation)
+	if outcome.Diagnostic != nil {
+		return classification.Diagnostic(stdout, stderr, *outcome.Diagnostic, outcome.ExitCode)
+	}
+	return outcome.ExitCode
 }
 
 // interactiveProcess builds what an interactive invocation reports through. A
@@ -135,63 +108,6 @@ func interactiveProcess(classification cli.InvocationClass, stdout, stderr io.Wr
 type invocationHooks struct {
 	begin  func(context.Context) (context.Context, func())
 	finish func()
-}
-
-type invocationOutput struct {
-	writer io.Writer
-	bytes  int
-}
-
-func (w *invocationOutput) Write(data []byte) (int, error) {
-	n, err := w.writer.Write(data)
-	w.bytes += n
-	return n, err
-}
-
-// invocationError forwards the elevated child's diagnostics unchanged and
-// withholds sudo's own refusal lines, which the caller replaces with the
-// product diagnostic for the privilege boundary.
-type invocationError struct {
-	writer   io.Writer
-	withhold bool
-	withheld bool
-	pending  []byte
-}
-
-const invocationErrorLine = 4096
-
-func (w *invocationError) Write(data []byte) (int, error) {
-	if !w.withhold {
-		return w.writer.Write(data)
-	}
-	for _, b := range data {
-		w.pending = append(w.pending, b)
-		if b != '\n' && len(w.pending) < invocationErrorLine {
-			continue
-		}
-		if err := w.emit(); err != nil {
-			return 0, err
-		}
-	}
-	return len(data), nil
-}
-
-func (w *invocationError) Close() error {
-	if !w.withhold || len(w.pending) == 0 {
-		return nil
-	}
-	return w.emit()
-}
-
-func (w *invocationError) emit() error {
-	line := w.pending
-	w.pending = nil
-	if bytes.HasPrefix(line, []byte("sudo: ")) {
-		w.withheld = true
-		return nil
-	}
-	_, err := w.writer.Write(line)
-	return err
 }
 
 // buildInformation prefers the linker-injected release values. A build that
@@ -258,44 +174,4 @@ func runServices(ctx context.Context, args []string, stdout, stderr io.Writer, s
 		EncodeEffectiveYAML: encoding.YAML,
 		EncodeEffectiveJSON: encoding.JSON,
 	}).Run(ctx, args)
-}
-
-// routeAssignments names the variables the elevated child must see. Nothing is
-// forwarded for direct access, so an ordinary setup crosses sudo unchanged.
-func routeAssignments(route controller.Route) []string {
-	if !route.Configured() || route.Direct() {
-		return nil
-	}
-	assignments := []string{"HTTPS_PROXY=" + route.HTTPSProxy()}
-	if bypass := route.NoProxy(); len(bypass) != 0 {
-		assignments = append(assignments, "NO_PROXY="+strings.Join(bypass, ","))
-	}
-	return assignments
-}
-
-// ambientRoute qualifies the operator's proxy variables before sudo can prompt,
-// so an unusable value costs nothing but a diagnostic. A nonzero result is the
-// exit status of a refusal that has already been reported.
-func ambientRoute(classification cli.InvocationClass, stdout, stderr io.Writer) (controller.Route, int) {
-	if !classification.AmbientRoute {
-		return controller.Route{}, 0
-	}
-	route, err := controller.RouteFromEnvironment(os.LookupEnv)
-	if err == nil {
-		return route, 0
-	}
-	if reported := diagnostics.Of(err); len(reported) == 1 {
-		return controller.Route{}, classification.Diagnostic(stdout, stderr, reported[0], 1)
-	}
-	return controller.Route{}, classification.Failure(stdout, stderr, "controller.unsupported", "the acquisition route is not qualified", 1)
-}
-
-// invokingTerminalType forwards the caller's terminal identity, because the
-// elevated child runs the operator's SSH sessions and a session without one is
-// a remote shell that cannot draw itself.
-func invokingTerminalType(noninteractive bool) string {
-	if noninteractive {
-		return ""
-	}
-	return os.Getenv("TERM")
 }

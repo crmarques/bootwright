@@ -79,7 +79,7 @@
   failed_when: false
 
 - name: Read each node through its own management controller
-  bootwright.core.redfish_boot:
+  bootwright.core.redfish_system_read:
     endpoint: '{{ item.controller.endpoint }}'
     user: >-
       {{ lookup("ansible.builtin.file",
@@ -88,7 +88,7 @@
       {{ lookup("ansible.builtin.file",
          bootwright_cluster_install_material['controllerPasswordNode' ~ loop_index]) }}
     verify: '{{ item.controller.tlsVerify }}'
-    operation: read
+    media: true
   loop: '{{ bootwright_cluster_install_request.nodes }}'
   loop_control:
     label: '{{ item.machine }}'

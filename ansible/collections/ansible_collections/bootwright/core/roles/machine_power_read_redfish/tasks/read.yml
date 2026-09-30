@@ -25,12 +25,12 @@
   no_log: true
 
 - name: Read the state each management controller reports
-  bootwright.core.redfish_boot:
+  bootwright.core.redfish_system_read:
     endpoint: '{{ item.controller.endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_read_material[item.userVariable]) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_read_material[item.passwordVariable]) }}'
     verify: '{{ item.controller.tlsVerify }}'
-    operation: read
+    media: false
   loop: '{{ bootwright_machine_power_read_request.targets }}'
   loop_control:
     label: '{{ item.object }}'

@@ -88,12 +88,12 @@ func TestResolvedValuesAndDefaults(t *testing.T) {
 }
 
 func TestMediaNameAndURLBoundaries(t *testing.T) {
-	for _, value := range []string{"a.iso", "Image_1.2-test.iso", strings.Repeat("a", 251) + ".iso"} {
+	for _, value := range []string{"a.iso", "Image_1.2-test.iso", strings.Repeat("a", 246) + ".iso"} {
 		if !mediaName(value) {
 			t.Errorf("valid basename rejected: %q", value)
 		}
 	}
-	for _, value := range []string{".iso", "a.ISO", "../image.iso", "a/b.iso", "a\\b.iso", "a_.iso", "_a.iso", "CON.iso", "prn.iso", "AUX.iso", "nul.iso", "com9.iso", "LPT1.iso", "á.iso", strings.Repeat("a", 252) + ".iso"} {
+	for _, value := range []string{".iso", "a.ISO", "../image.iso", "a/b.iso", "a\\b.iso", "a_.iso", "_a.iso", "CON.iso", "prn.iso", "AUX.iso", "nul.iso", "com9.iso", "LPT1.iso", "á.iso", strings.Repeat("a", 247) + ".iso"} {
 		if mediaName(value) {
 			t.Errorf("unsafe basename accepted: %q", value)
 		}

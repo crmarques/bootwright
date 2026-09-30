@@ -5,10 +5,11 @@
 # A physical controller consumes a one-time override and forgets it, so this
 # arm sets one: the machine boots the inserted image once and returns to its
 # own disk by itself, without anything having to change the selection between
-# the two boots.
+# the two boots. An operator-owned machine is never powered off here: the
+# pre-boot proof refused it unless it was already off.
 #
-# Inputs are passed explicitly by the consuming role, never inherited from a
-# shared fact.
+# The inputs are this entry point's argument spec, passed explicitly by the
+# consuming role and never inherited from a shared fact.
 - name: Select a one-time boot from the inserted media
   bootwright.core.redfish_boot:
     endpoint: '{{ substrate_baremetal_machine_boot_endpoint }}'

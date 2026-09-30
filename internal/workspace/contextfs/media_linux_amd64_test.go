@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -54,7 +55,7 @@ func claimStage(t *testing.T, store *Store, name string) media.Stage {
 	var stage media.Stage
 	err := store.MutateMedia(context.Background(), func(tx media.Transaction) error {
 		var err error
-		stage, err = tx.Stage(context.Background(), name)
+		stage, err = tx.Stage(context.Background(), name, "")
 		return err
 	})
 	if err != nil {
@@ -344,12 +345,17 @@ func (*mediaSource) Close() error { return nil }
 
 type mediaAcquirer struct {
 	source func() media.Payload
+	origin string
 	opens  atomic.Int32
 }
 
 func (a *mediaAcquirer) Open(context.Context, media.Source) (media.Acquisition, error) {
 	a.opens.Add(1)
-	return media.Acquisition{Payload: a.source(), Origin: "file:///images/source.iso"}, nil
+	origin := a.origin
+	if origin == "" {
+		origin = "file:///images/source.iso"
+	}
+	return media.Acquisition{Payload: a.source(), Origin: origin}, nil
 }
 
 type mediaClock struct{}
@@ -405,15 +411,15 @@ func TestMediaAddHoldsNoRootLockWhileItAcquires(t *testing.T) {
 	}
 }
 
-// A command that takes the root lock during the download and still holds it
-// when the image has arrived makes the publication refuse; the add then
-// removes its stage and publishes nothing.
-func TestMediaAddThatCannotRetakeTheRootLockPublishesNothing(t *testing.T) {
+// addMeetingALock adds data as name while a command takes the root lock during
+// the download and still holds it when the image has arrived, so the add's
+// publication meets that lock.
+func addMeetingALock(t *testing.T, store *Store, name, data, pin string) error {
+	t.Helper()
 	ctx := context.Background()
-	store := mediaFixture(t)
 	locked, unlock, held := make(chan struct{}), make(chan struct{}), make(chan error, 1)
 	acquirer := &mediaAcquirer{source: func() media.Payload {
-		return &mediaSource{data: bytes.NewReader([]byte("installer bytes")), first: func() {
+		return &mediaSource{data: bytes.NewReader([]byte(data)), first: func() {
 			go func() {
 				held <- store.MutateMedia(ctx, func(media.Transaction) error {
 					close(locked)
@@ -424,11 +430,19 @@ func TestMediaAddThatCannotRetakeTheRootLockPublishesNothing(t *testing.T) {
 			<-locked
 		}}
 	}}
-	_, err := mediaService(store, acquirer).Add(ctx, media.AddMediaRequest{Name: "demo.iso", SourceFile: "/images/demo.iso"})
+	_, err := mediaService(store, acquirer).Add(ctx, media.AddMediaRequest{Name: name, SourceFile: "/images/" + name, SHA256: pin, SkipConfirmation: true})
 	close(unlock)
 	if err := <-held; err != nil {
 		t.Fatalf("the command holding the root lock failed: %#v", diagnostics.Of(err))
 	}
+	return err
+}
+
+// An unpinned add whose publication meets another command's lock refuses with
+// that lock's lifecycle.lease, removes its stage and publishes nothing.
+func TestMediaAddThatCannotRetakeTheRootLockPublishesNothing(t *testing.T) {
+	store := mediaFixture(t)
+	err := addMeetingALock(t, store, "demo.iso", "installer bytes", "")
 	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.lease" {
 		t.Fatalf("publication under a held root lock = %#v", reported)
 	}
@@ -650,9 +664,10 @@ func TestMediaPublicationRefusesARecordThatDoesNotDescribeItsStage(t *testing.T)
 	}
 }
 
-// The bounds admit a full store with every stage in flight: 64 images beside
-// their records, with 16 replacements of them being acquired, still list, and
-// only a seventeenth stage is refused.
+// The bounds admit a full store with every stage retained beside its record:
+// 64 images beside their records, with 16 retained replacements of them, still
+// list, and only a seventeenth stage is refused, naming how to discard a
+// retained one. An image's own retained stage never counts against its claim.
 func TestMediaStagingRefusesBeyondItsBound(t *testing.T) {
 	ctx := context.Background()
 	store := mediaFixture(t)
@@ -660,21 +675,505 @@ func TestMediaStagingRefusesBeyondItsBound(t *testing.T) {
 		addMedia(t, store, fmt.Sprintf("image-%02d.iso", index), "installer bytes", false)
 	}
 	for index := range maxStagedMedia {
-		claimStage(t, store, fmt.Sprintf("image-%02d.iso", index))
+		retainStage(t, store, fmt.Sprintf("image-%02d.iso", index), "replacement bytes")
+	}
+	if entries := mediaDirectory(t, store); len(entries) != 2*managedos.MaxMediaEntries+2*maxStagedMedia {
+		t.Fatalf("media directory holds %d entries", len(entries))
 	}
 	listing, err := mediaService(store, &mediaAcquirer{}).List(ctx, media.ListMediaRequest{})
 	if err != nil {
-		t.Fatalf("a full store with every stage in flight cannot be listed: %#v", diagnostics.Of(err))
+		t.Fatalf("a full store with every stage retained cannot be listed: %#v", diagnostics.Of(err))
 	}
 	if len(listing.Media) != managedos.MaxMediaEntries {
-		t.Fatalf("a full store with every stage in flight listed %d images", len(listing.Media))
+		t.Fatalf("a full store with every stage retained listed %d images", len(listing.Media))
 	}
-	err = store.MutateMedia(ctx, func(tx media.Transaction) error {
-		stage, err := tx.Stage(ctx, "overflow.iso")
-		if err == nil {
-			stage.Close()
-		}
-		return err
-	})
+	claim := func(name string) error {
+		return store.MutateMedia(ctx, func(tx media.Transaction) error {
+			stage, err := tx.Stage(ctx, name, "")
+			if err == nil {
+				stage.Close()
+			}
+			return err
+		})
+	}
+	err = claim("overflow.iso")
 	expectMediaRefusal(t, err, "maximum number of images")
+	if remedy := diagnostics.Of(err)[0].Remediation; !strings.Contains(remedy, "bootwright media delete") {
+		t.Fatalf("the bound's remedy names no way to discard a retained stage: %q", remedy)
+	}
+	if err := claim("image-00.iso"); err != nil {
+		t.Fatalf("an image's own retained stage counted against its claim: %#v", diagnostics.Of(err))
+	}
+}
+
+// retainStage leaves data retained for name, as a pinned add whose
+// publication met another command's lock does.
+func retainStage(t *testing.T, store *Store, name, data string) managedos.MediaEntry {
+	t.Helper()
+	stage := fillStage(t, store, name, data)
+	entry := managedos.MediaEntry{Name: name, Size: int64(len(data)), SHA256: mediaDigest(data), Source: "https://example.test/" + name, Added: "2026-09-25T09:00:00Z"}
+	record, err := managedos.EncodeMediaRecord(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.Retain(context.Background(), record); err != nil {
+		t.Fatalf("retaining %s failed: %#v", name, diagnostics.Of(err))
+	}
+	if err := stage.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return entry
+}
+
+func sortedNames(names ...string) []string {
+	slices.Sort(names)
+	return names
+}
+
+// retainedFiles names the stage retained for name and its record.
+func retainedFiles(name string) []string {
+	return []string{mediaStageName(name), mediaStageName(name) + ".json"}
+}
+
+// holdRootLock takes the root lock through a descriptor of its own, as another
+// Bootwright command holds it, and returns its release.
+func holdRootLock(t *testing.T, store *Store) func() {
+	t.Helper()
+	holder, err := os.Open(store.options.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Flock(int(holder.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		holder.Close()
+		t.Fatalf("the root lock could not be taken: %v", err)
+	}
+	return func() { unlockAndClose(holder) }
+}
+
+// lockedPublication is the media store with another command holding the root
+// lock during one of its media mutations, counted from one.
+type lockedPublication struct {
+	*Store
+	t         *testing.T
+	at, count int
+}
+
+func (s *lockedPublication) MutateMedia(ctx context.Context, callback func(media.Transaction) error) error {
+	s.count++
+	if s.count == s.at {
+		release := holdRootLock(s.t, s.Store)
+		defer release()
+	}
+	return s.Store.MutateMedia(ctx, callback)
+}
+
+func pinnedAdd(name, data string) media.AddMediaRequest {
+	return media.AddMediaRequest{Name: name, SourceFile: "/images/" + name, SHA256: mediaDigest(data), SkipConfirmation: true}
+}
+
+// A released stage is unlocked explicitly: its lock belongs to the open file
+// description, which a descriptor another process shares keeps open, so a close
+// alone would leave the abandoned stage held and every prune would keep it.
+func TestAReleasedStageIsUnlockedEvenWhileAnotherDescriptorSharesIt(t *testing.T) {
+	store := mediaFixture(t)
+	stage := fillStage(t, store, "demo.iso", "partial").(*mediaStage)
+	shared, _, errno := syscall.Syscall(syscall.SYS_FCNTL, stage.file.Fd(), syscall.F_DUPFD_CLOEXEC, 0)
+	if errno != 0 {
+		t.Fatal(errno)
+	}
+	t.Cleanup(func() { syscall.Close(int(shared)) })
+	stage.release()
+	stage.closed = true
+	if err := store.MutateMedia(context.Background(), func(media.Transaction) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if entries := mediaDirectory(t, store); len(entries) != 0 {
+		t.Fatalf("a released stage survived the next mutation: %v", entries)
+	}
+}
+
+// A media name whose record name would pass one 255-byte file name is refused
+// before anything is acquired or created.
+func TestAnOverLongMediaNameIsRefusedBeforeItIsAcquired(t *testing.T) {
+	store := mediaFixture(t)
+	acquirer := &mediaAcquirer{source: func() media.Payload { return mediaPayload("installer bytes") }}
+	_, err := mediaService(store, acquirer).Add(context.Background(), pinnedAdd(strings.Repeat("a", 247)+".iso", "installer bytes"))
+	expectMediaRefusal(t, err, "not a portable ISO basename")
+	if acquirer.opens.Load() != 0 {
+		t.Fatal("an over-long name was acquired")
+	}
+	if _, err := os.Lstat(filepath.Join(store.options.Root, "media")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("an over-long name created the media directory: %v", err)
+	}
+}
+
+// mediaPrompt runs other store commands while the operator is asked.
+type mediaPrompt struct {
+	store  *Store
+	during []error
+}
+
+func (p *mediaPrompt) Confirm(ctx context.Context, _, _ string) error {
+	p.during = append(p.during, p.store.MutateMedia(ctx, func(media.Transaction) error { return nil }))
+	_, err := p.store.View(ctx)
+	p.during = append(p.during, err)
+	return nil
+}
+
+// A media confirmation holds no root lock, so another command's exclusive and
+// shared holds both succeed while it waits, and the confirmed replacement and
+// deletion then complete.
+func TestMediaConfirmationsHoldNoRootLock(t *testing.T) {
+	ctx := context.Background()
+	store := mediaFixture(t)
+	addMedia(t, store, "demo.iso", "first", false)
+	prompt := &mediaPrompt{store: store}
+	acquirer := &mediaAcquirer{source: func() media.Payload { return mediaPayload("second image") }}
+	service := media.New(store, acquirer, prompt, mediaClock{})
+	replaced, err := service.Add(ctx, media.AddMediaRequest{Name: "demo.iso", SourceFile: "/images/demo.iso"})
+	if err != nil || replaced.Outcome != "replaced" {
+		t.Fatalf("confirmed replacement = %+v (%#v)", replaced, diagnostics.Of(err))
+	}
+	deleted, err := service.Delete(ctx, media.DeleteMediaRequest{Name: "demo.iso"})
+	if err != nil || deleted.Outcome != "deleted" {
+		t.Fatalf("confirmed deletion = %+v (%#v)", deleted, diagnostics.Of(err))
+	}
+	if len(prompt.during) != 4 || slices.ContainsFunc(prompt.during, func(err error) bool { return err != nil }) {
+		t.Fatalf("store commands during the prompts = %v", prompt.during)
+	}
+	if entries := mediaDirectory(t, store); len(entries) != 0 {
+		t.Fatalf("media directory = %v", entries)
+	}
+}
+
+// An image whose bytes no longer match its record makes media list refuse and
+// names replacement or deletion as the remedy, so a confirmation reviews that
+// image without listing the store: both still complete.
+func TestADamagedImageStaysReplaceableAndDeletableWithConfirmation(t *testing.T) {
+	ctx := context.Background()
+	for _, verb := range []string{"add", "delete"} {
+		t.Run(verb, func(t *testing.T) {
+			store := mediaFixture(t)
+			addMedia(t, store, "demo.iso", "first", false)
+			file, err := os.OpenFile(filepath.Join(store.options.Root, "media", "demo.iso"), os.O_WRONLY|os.O_APPEND, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := file.WriteString("!"); err != nil {
+				t.Fatal(err)
+			}
+			if err := file.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := mediaService(store, &mediaAcquirer{}).List(ctx, media.ListMediaRequest{}); err == nil {
+				t.Fatal("a damaged image was listed")
+			}
+			acquirer := &mediaAcquirer{source: func() media.Payload { return mediaPayload("second image") }}
+			service := media.New(store, acquirer, &mediaPrompt{store: store}, mediaClock{})
+			if verb == "add" {
+				_, err = service.Add(ctx, media.AddMediaRequest{Name: "demo.iso", SourceFile: "/images/demo.iso"})
+			} else {
+				_, err = service.Delete(ctx, media.DeleteMediaRequest{Name: "demo.iso"})
+			}
+			if err != nil {
+				t.Fatalf("a confirmed %s of a damaged image: %#v", verb, diagnostics.Of(err))
+			}
+		})
+	}
+}
+
+// A pinned add whose publication meets another command's lock keeps the stage
+// it verified beside the record it would have published, and says that
+// repeating the command publishes it. Other media commands keep the pair and
+// never list it.
+func TestAPinnedAddThatCannotRetakeTheRootLockRetainsItsStage(t *testing.T) {
+	ctx := context.Background()
+	store := mediaFixture(t)
+	err := addMeetingALock(t, store, "demo.iso", "installer bytes", mediaDigest("installer bytes"))
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.lease" ||
+		!strings.Contains(reported[0].Remediation, "without acquiring it again") {
+		t.Fatalf("publication under a held root lock = %#v", reported)
+	}
+	if entries := mediaDirectory(t, store); !slices.Equal(entries, retainedFiles("demo.iso")) {
+		t.Fatalf("media directory = %v", entries)
+	}
+	want, err := managedos.EncodeMediaRecord(managedos.MediaEntry{
+		Name: "demo.iso", Size: 15, SHA256: mediaDigest("installer bytes"), Source: "file:///images/source.iso", Added: "2026-09-26T09:00:00Z",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, err := os.ReadFile(filepath.Join(store.options.Root, "media", mediaStageName("demo.iso")+".json"))
+	if err != nil || !bytes.Equal(record, want) {
+		t.Fatalf("retained record = %q (%v), want %q", record, err, want)
+	}
+	other := &mediaAcquirer{source: func() media.Payload { return mediaPayload("other image") }}
+	if _, err := mediaService(store, other).Add(ctx, pinnedAdd("other.iso", "other image")); err != nil {
+		t.Fatalf("an add of another image: %#v", diagnostics.Of(err))
+	}
+	expectMedia(t, store, map[string]string{"other.iso": mediaDigest("other image")})
+	if entries := mediaDirectory(t, store); !slices.Equal(entries, sortedNames(append(retainedFiles("demo.iso"), "other.iso", "other.iso.json")...)) {
+		t.Fatalf("media directory = %v", entries)
+	}
+}
+
+// A pinned add can retain its stage while the media mutation whose lock it met
+// is pruning: that prune listed the directory before the record existed, and
+// reaches the stage only once the add has released it. It still keeps the pair,
+// so the repeated add publishes the image without acquiring it again, as the
+// refusal promised.
+func TestARetentionThatFinishesDuringAPruneKeepsItsPair(t *testing.T) {
+	ctx := context.Background()
+	store := mediaFixture(t)
+	started, proceed, added := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	acquirer := &mediaAcquirer{source: func() media.Payload {
+		return &mediaSource{data: bytes.NewReader([]byte("installer bytes")), first: func() {
+			close(started)
+			<-proceed
+		}}
+	}}
+	go func() {
+		_, err := mediaService(store, acquirer).Add(ctx, pinnedAdd("demo.iso", "installer bytes"))
+		added <- err
+	}()
+	<-started
+	var retention error
+	var listed []string
+	paused := false
+	pruning := New(store.options)
+	pruning.fail = func(point string) error {
+		if point == string(checkpointBeforeMediaStagingPrune) && !paused {
+			paused = true
+			close(proceed)
+			retention = <-added
+			listed = mediaDirectory(t, store)
+		}
+		return nil
+	}
+	if err := pruning.MutateMedia(ctx, func(media.Transaction) error { return nil }); err != nil || !paused {
+		t.Fatalf("the pruning mutation (paused %v) failed: %#v", paused, diagnostics.Of(err))
+	}
+	if reported := diagnostics.Of(retention); len(reported) != 1 || reported[0].Code != "lifecycle.lease" ||
+		!strings.Contains(reported[0].Remediation, "without acquiring it again") {
+		t.Fatalf("the add meeting the pruning lock = %#v", reported)
+	}
+	if !slices.Equal(listed, retainedFiles("demo.iso")) {
+		t.Fatalf("while the prune was under way the media directory = %v", listed)
+	}
+	if entries := mediaDirectory(t, store); !slices.Equal(entries, retainedFiles("demo.iso")) {
+		t.Fatalf("after the prune the media directory = %v, want the retained pair", entries)
+	}
+	repeated := &mediaAcquirer{source: func() media.Payload { return mediaPayload("installer bytes") }}
+	if result, err := mediaService(store, repeated).Add(ctx, pinnedAdd("demo.iso", "installer bytes")); err != nil || result.Outcome != "stored" {
+		t.Fatalf("repeated add = %+v (%#v)", result, diagnostics.Of(err))
+	}
+	if opens := repeated.opens.Load(); opens != 0 {
+		t.Fatalf("the repeated add acquired its image %d times", opens)
+	}
+}
+
+// The repeated add adopts the retained stage, re-reads it and publishes it
+// with the source it was retained with; its own source is never opened.
+func TestARepeatedAddPublishesARetainedStageWithoutAcquiring(t *testing.T) {
+	ctx := context.Background()
+	store := mediaFixture(t)
+	retained := retainStage(t, store, "demo.iso", "installer bytes")
+	acquirer := &mediaAcquirer{source: func() media.Payload { return mediaPayload("installer bytes") }, origin: "file:///images/elsewhere.iso"}
+	result, err := mediaService(store, acquirer).Add(ctx, pinnedAdd("demo.iso", "installer bytes"))
+	if err != nil || result.Outcome != "stored" || result.SHA256 != retained.SHA256 {
+		t.Fatalf("repeated add = %+v (%#v)", result, diagnostics.Of(err))
+	}
+	if acquirer.opens.Load() != 0 {
+		t.Fatal("the repeated add acquired its image again")
+	}
+	if entries := mediaDirectory(t, store); !slices.Equal(entries, []string{"demo.iso", "demo.iso.json"}) {
+		t.Fatalf("media directory = %v", entries)
+	}
+	data, err := os.ReadFile(filepath.Join(store.options.Root, "media", "demo.iso.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, err := managedos.DecodeMediaRecord(data, "demo.iso")
+	if err != nil || entry.Source != retained.Source || entry.Added != "2026-09-26T09:00:00Z" {
+		t.Fatalf("published record = %+v (%v)", entry, err)
+	}
+}
+
+// A repeated add whose own publication meets another command's lock keeps the
+// stage it adopted, so a later repetition still publishes it.
+func TestARepeatedAddWhosePublicationMeetsALockAgainKeepsTheRetainedStage(t *testing.T) {
+	ctx := context.Background()
+	store := mediaFixture(t)
+	retainStage(t, store, "demo.iso", "installer bytes")
+	record, err := os.ReadFile(filepath.Join(store.options.Root, "media", mediaStageName("demo.iso")+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	acquirer := &mediaAcquirer{source: func() media.Payload { return mediaPayload("installer bytes") }}
+	locked := &lockedPublication{Store: store, t: t, at: 2}
+	_, err = media.New(locked, acquirer, nil, mediaClock{}).Add(ctx, pinnedAdd("demo.iso", "installer bytes"))
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.lease" || !strings.Contains(reported[0].Remediation, "without acquiring it again") {
+		t.Fatalf("a repeated publication under a held root lock = %#v", reported)
+	}
+	if entries := mediaDirectory(t, store); !slices.Equal(entries, retainedFiles("demo.iso")) {
+		t.Fatalf("media directory = %v", entries)
+	}
+	kept, err := os.ReadFile(filepath.Join(store.options.Root, "media", mediaStageName("demo.iso")+".json"))
+	if err != nil || !bytes.Equal(kept, record) {
+		t.Fatalf("the retained record changed: %q (%v)", kept, err)
+	}
+	if _, err := mediaService(store, acquirer).Add(ctx, pinnedAdd("demo.iso", "installer bytes")); err != nil || acquirer.opens.Load() != 0 {
+		t.Fatalf("the later repetition = %#v, acquisitions %d", diagnostics.Of(err), acquirer.opens.Load())
+	}
+	expectMedia(t, store, map[string]string{"demo.iso": mediaDigest("installer bytes")})
+}
+
+// An add of the image with another pin or none removes its retained stage
+// before it claims, and acquires and publishes afresh.
+func TestAnAddWithAnotherPinOrNoneDiscardsTheRetainedStage(t *testing.T) {
+	for name, pin := range map[string]string{"another pin": mediaDigest("new image"), "no pin": ""} {
+		t.Run(name, func(t *testing.T) {
+			store := mediaFixture(t)
+			retainStage(t, store, "demo.iso", "installer bytes")
+			acquirer := &mediaAcquirer{source: func() media.Payload { return mediaPayload("new image") }}
+			request := pinnedAdd("demo.iso", "new image")
+			request.SHA256 = pin
+			if _, err := mediaService(store, acquirer).Add(context.Background(), request); err != nil {
+				t.Fatalf("add: %#v", diagnostics.Of(err))
+			}
+			if acquirer.opens.Load() != 1 {
+				t.Fatalf("the add acquired %d times", acquirer.opens.Load())
+			}
+			expectMedia(t, store, map[string]string{"demo.iso": mediaDigest("new image")})
+			if entries := mediaDirectory(t, store); !slices.Equal(entries, []string{"demo.iso", "demo.iso.json"}) {
+				t.Fatalf("media directory = %v", entries)
+			}
+		})
+	}
+}
+
+// A retained stage rewritten in place, same size, since it was retained is
+// re-read before publication: the add refuses, publishes nothing and removes
+// the pair.
+func TestARetainedStageWhoseBytesChangedIsNeverPublished(t *testing.T) {
+	store := mediaFixture(t)
+	retainStage(t, store, "demo.iso", "installer bytes")
+	file, err := os.OpenFile(filepath.Join(store.options.Root, "media", mediaStageName("demo.iso")), os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.WriteAt([]byte("INSTALLER BYTES"), 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	acquirer := &mediaAcquirer{source: func() media.Payload { return mediaPayload("installer bytes") }}
+	_, err = mediaService(store, acquirer).Add(context.Background(), pinnedAdd("demo.iso", "installer bytes"))
+	expectMediaRefusal(t, err, "no longer holds the bytes it verified")
+	expectMedia(t, store, map[string]string{})
+	if entries := mediaDirectory(t, store); len(entries) != 0 || acquirer.opens.Load() != 0 {
+		t.Fatalf("media directory = %v, acquisitions %d", entries, acquirer.opens.Load())
+	}
+}
+
+// media delete removes a retained stage with its record, refuses by name while
+// an add holds that stage, and keeps it while the image is frozen.
+func TestMediaDeleteDiscardsARetainedStage(t *testing.T) {
+	ctx := context.Background()
+	remove := func(store *Store) (*media.MutationResult, error) {
+		return mediaService(store, &mediaAcquirer{}).Delete(ctx, media.DeleteMediaRequest{Name: "demo.iso", SkipConfirmation: true})
+	}
+	t.Run("retained only", func(t *testing.T) {
+		store := mediaFixture(t)
+		retainStage(t, store, "demo.iso", "installer bytes")
+		result, err := remove(store)
+		if err != nil || result.Outcome != "deleted" {
+			t.Fatalf("delete = %+v (%#v)", result, diagnostics.Of(err))
+		}
+		if entries := mediaDirectory(t, store); len(entries) != 0 {
+			t.Fatalf("media directory = %v", entries)
+		}
+	})
+	t.Run("held by an adopting add", func(t *testing.T) {
+		store := mediaFixture(t)
+		retainStage(t, store, "demo.iso", "installer bytes")
+		var adopter media.Stage
+		if err := store.MutateMedia(ctx, func(tx media.Transaction) error {
+			var err error
+			adopter, err = tx.Stage(ctx, "demo.iso", mediaDigest("installer bytes"))
+			return err
+		}); err != nil {
+			t.Fatalf("adoption: %#v", diagnostics.Of(err))
+		}
+		_, err := remove(store)
+		expectMediaRefusal(t, err, "already acquiring image demo.iso")
+		if err := adopter.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if entries := mediaDirectory(t, store); !slices.Equal(entries, retainedFiles("demo.iso")) {
+			t.Fatalf("media directory = %v", entries)
+		}
+	})
+	t.Run("frozen", func(t *testing.T) {
+		store := mediaFixture(t)
+		addMedia(t, store, "demo.iso", "first", false)
+		retainStage(t, store, "demo.iso", "installer bytes")
+		scope := prerequisites.SetupContext{}
+		publishControllerState(t, store, scope, completeControllerState(syntheticControllerState(t, scope)))
+		if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+			return tx.Reserve(ctx, []prerequisites.HostReservation{{
+				Context: "example", Kind: "media", Service: "media",
+				Keys: []string{managedos.MediaReservationKey("demo.iso")}, Shared: true,
+			}})
+		}); err != nil {
+			t.Fatalf("reservation: %#v", diagnostics.Of(err))
+		}
+		_, err := remove(store)
+		expectMediaRefusal(t, err, "reserved by a context operation")
+		want := sortedNames(append(retainedFiles("demo.iso"), "demo.iso", "demo.iso.json")...)
+		if entries := mediaDirectory(t, store); !slices.Equal(entries, want) {
+			t.Fatalf("media directory = %v", entries)
+		}
+	})
+}
+
+// A retained record whose stage is gone is removed by the next media mutation.
+func TestAPrunedRetainedRecordWithoutItsStageIsRemoved(t *testing.T) {
+	store := mediaFixture(t)
+	retainStage(t, store, "demo.iso", "installer bytes")
+	if err := os.Remove(filepath.Join(store.options.Root, "media", mediaStageName("demo.iso"))); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MutateMedia(context.Background(), func(media.Transaction) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if entries := mediaDirectory(t, store); len(entries) != 0 {
+		t.Fatalf("media directory = %v", entries)
+	}
+}
+
+// A record torn by a killed retention does not make a retained pair, so the
+// next media mutation removes the record and its abandoned stage.
+func TestATornRetainedRecordLeavesItsStageAbandoned(t *testing.T) {
+	store := mediaFixture(t)
+	retainStage(t, store, "demo.iso", "installer bytes")
+	record := filepath.Join(store.options.Root, "media", mediaStageName("demo.iso")+".json")
+	info, err := os.Stat(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(record, info.Size()/2); err != nil {
+		t.Fatal(err)
+	}
+	listing, err := mediaService(store, &mediaAcquirer{}).List(context.Background(), media.ListMediaRequest{})
+	if err != nil || len(listing.Media) != 0 {
+		t.Fatalf("listing = %+v (%v)", listing, err)
+	}
+	if err := store.MutateMedia(context.Background(), func(media.Transaction) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if entries := mediaDirectory(t, store); len(entries) != 0 {
+		t.Fatalf("media directory = %v", entries)
+	}
 }

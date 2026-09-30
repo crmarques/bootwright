@@ -18,11 +18,11 @@
   register: substrate_libvirt_machine_observed
 
 - name: Read the power state its controller reports, when it answers
-  bootwright.core.redfish_boot:
+  bootwright.core.redfish_system_read:
     endpoint: '{{ bootwright_substrate_machine_request.controller.endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerPassword) }}'
-    operation: read
+    media: false
   register: substrate_libvirt_machine_controller
   failed_when: false
   no_log: true
@@ -36,7 +36,4 @@
     observation: '{{ substrate_libvirt_machine_observed.observation }}'
     power: '{{ substrate_libvirt_machine_controller.power | default("") }}'
     system: '{{ substrate_libvirt_machine_observed.observation.uuid }}'
-    removed: >-
-      {{ substrate_libvirt_machine_observed.observation.domain | length == 0
-         and substrate_libvirt_machine_observed.observation.unit | length == 0 }}
   no_log: true

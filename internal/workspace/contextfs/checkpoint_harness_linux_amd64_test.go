@@ -30,6 +30,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -161,7 +162,7 @@ func checkpointTrace(t *testing.T, scenario checkpointScenario) []string {
 	if err := scenario.settled(t, ctx, store); err != nil {
 		t.Fatalf("the uninterrupted %s did not settle: %v", scenario.name, err)
 	}
-	if err := checkpointUsable(t, ctx, scenario, store); err != nil {
+	if err := checkpointUsable(t, ctx, scenario, store, ""); err != nil {
 		t.Fatalf("the uninterrupted %s left the store unusable: %v", scenario.name, err)
 	}
 	checkpointTraceCache.Lock()
@@ -233,7 +234,7 @@ func TestAnInterruptedPublicationLeavesAUsableStoreAndItsRetryConverges(t *testi
 									t.Errorf("%s is ledgered as a refusal %s permits, but %v", key, entry, err)
 								}
 							case ledgered:
-								failure := checkpointConverges(t, ctx, scenario, store)
+								failure := checkpointConverges(t, ctx, scenario, store, mode)
 								switch {
 								case failure == nil:
 									t.Errorf("%s now converges; remove this entry (%s)", key, entry)
@@ -241,7 +242,7 @@ func TestAnInterruptedPublicationLeavesAUsableStoreAndItsRetryConverges(t *testi
 									t.Logf("%s fails as ledgered (%s): %v", key, entry, failure)
 								}
 							default:
-								if failure := checkpointConverges(t, ctx, scenario, store); failure != nil {
+								if failure := checkpointConverges(t, ctx, scenario, store, mode); failure != nil {
 									t.Errorf("%s: %v", key, failure)
 								}
 							}
@@ -360,10 +361,10 @@ func (f *checkpointFailure) Error() string {
 }
 
 // checkpointConverges asserts that the interrupted store is usable, that the
-// named retry succeeds, and that the store then settles.
-func checkpointConverges(t *testing.T, ctx context.Context, scenario checkpointScenario, store *Store) *checkpointFailure {
+// named retry succeeds, and that the store then settles and holds no stage.
+func checkpointConverges(t *testing.T, ctx context.Context, scenario checkpointScenario, store *Store, mode checkpointMode) *checkpointFailure {
 	t.Helper()
-	if err := checkpointUsable(t, ctx, scenario, store); err != nil {
+	if err := checkpointUsable(t, ctx, scenario, store, mode); err != nil {
 		return &checkpointFailure{checkpointUsablePhase, err}
 	}
 	if err := scenario.retry(t, ctx, store); err != nil {
@@ -371,6 +372,13 @@ func checkpointConverges(t *testing.T, ctx context.Context, scenario checkpointS
 	}
 	if err := scenario.settled(t, ctx, store); err != nil {
 		return &checkpointFailure{checkpointSettledPhase, err}
+	}
+	stale, err := checkpointStaleEntries(store.options.Root, mode, true)
+	if err != nil {
+		return &checkpointFailure{checkpointSettledPhase, err}
+	}
+	if len(stale) != 0 {
+		return &checkpointFailure{checkpointSettledPhase, fmt.Errorf("stale stages remain: %v", stale)}
 	}
 	return nil
 }
@@ -441,8 +449,9 @@ func checkpointReads(t *testing.T, ctx context.Context, scenario checkpointScena
 }
 
 // checkpointUsable requires the store to read, to accept one mutation, and to
-// hold no stage beyond what the specification lets a component keep.
-func checkpointUsable(t *testing.T, ctx context.Context, scenario checkpointScenario, store *Store) error {
+// hold no stage beyond what the specification lets a component keep until the
+// retry.
+func checkpointUsable(t *testing.T, ctx context.Context, scenario checkpointScenario, store *Store, mode checkpointMode) error {
 	t.Helper()
 	if err := checkpointReads(t, ctx, scenario, store); err != nil {
 		return err
@@ -450,7 +459,7 @@ func checkpointUsable(t *testing.T, ctx context.Context, scenario checkpointScen
 	if err := scenario.mutate(t, ctx, store); err != nil {
 		return fmt.Errorf("mutation: %v %#v", err, diagnostics.Of(err))
 	}
-	stale, err := checkpointStaleEntries(store.options.Root)
+	stale, err := checkpointStaleEntries(store.options.Root, mode, false)
 	if err != nil {
 		return err
 	}
@@ -461,14 +470,20 @@ func checkpointUsable(t *testing.T, ctx context.Context, scenario checkpointScen
 }
 
 // checkpointStaleEntries lists every pending or staging entry beneath the root
-// that no component may keep. specs/contexts.md lets the root keep verified
-// pending registry files, which are ignored and never adopted, and lets the
-// secret store keep what its writes leave for its own recovery, so nothing
-// beneath a context's secrets/ counts here; what a killed keyring write leaves
-// is the keyring's to resolve (B26).
-func checkpointStaleEntries(root string) ([]string, error) {
+// that no component may keep. Once the retry has settled, nothing may remain.
+// Before it, specs/contexts.md lets four things wait for that retry: init's
+// recovery artifact, the root's only entry holding exactly the canonical empty
+// registry; what the secret store's exclusive writes keep under
+// secrets/identities/; after a kill, any stage beneath a context's secrets/,
+// which Local keyring v3 resolves; and a media stage a pinned add retained
+// beside its record, which the repeated add publishes.
+func checkpointStaleEntries(root string, mode checkpointMode, retried bool) ([]string, error) {
+	recovery, err := checkpointInitialRegistryRecovery(root)
+	if err != nil {
+		return nil, err
+	}
 	var stale []string
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) && path == root {
 				return fs.SkipAll
@@ -484,15 +499,42 @@ func checkpointStaleEntries(root string) ([]string, error) {
 			return err
 		}
 		parts := strings.Split(relative, string(filepath.Separator))
+		secrets := len(parts) > 3 && parts[0] == "contexts" && parts[2] == "secrets"
 		switch {
-		case len(parts) == 1 && pendingInitialRegistryName(name):
-		case len(parts) > 3 && parts[0] == "contexts" && parts[2] == "secrets":
+		case retried:
+			stale = append(stale, relative)
+		case len(parts) == 1 && relative == recovery:
+		case secrets && len(parts) == 5 && parts[3] == "identities":
+		case secrets && mode == checkpointKilled:
+		case len(parts) == 2 && parts[0] == mediaContainer && checkpointRetainedMediaPair(root, parts[1]):
 		default:
 			stale = append(stale, relative)
 		}
 		return nil
 	})
 	return stale, err
+}
+
+// checkpointInitialRegistryRecovery names init's recovery artifact when the
+// root holds one: its only entry, a pending registry file whose bytes are
+// exactly the canonical empty registry, as inspectInitialRegistry accepts.
+func checkpointInitialRegistryRecovery(root string) (string, error) {
+	entries, err := os.ReadDir(root)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil || len(entries) != 1 || !pendingInitialRegistryName(entries[0].Name()) || !entries[0].Type().IsRegular() {
+		return "", err
+	}
+	want, err := encodeRecord(emptyRegistry(), maxRegistry)
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(filepath.Join(root, entries[0].Name()))
+	if err != nil || !bytes.Equal(data, want) {
+		return "", err
+	}
+	return entries[0].Name(), nil
 }
 
 // TestEveryCataloguedCheckpointIsExercisedByTheHarness requires the harness to
@@ -802,6 +844,7 @@ func checkpointScenarios() []checkpointScenario {
 		checkpointMediaAddScenario(),
 		checkpointMediaReplaceScenario(),
 		checkpointMediaDeleteScenario(),
+		checkpointMediaRetainScenario(),
 		checkpointSecretPublicationScenario(),
 		checkpointSecretRotationScenario(),
 		checkpointSecretCleanupScenario(),
@@ -932,6 +975,14 @@ func checkpointTraceShapes() map[string]map[checkpoint]int {
 			checkpointBeforeMediaRecordRemoval: 1, checkpointSyncDirectory: 2,
 			checkpointBeforeMediaImageRemoval: 1,
 		},
+		"media-retain": {
+			checkpointBeforeMediaStaging: 1, checkpointBeforeMediaStagingSync: 1,
+			checkpointBeforeMediaRetention: 1, checkpointCreateFile: 2, checkpointWriteFile: 2,
+			checkpointSyncFile: 2, checkpointSyncDirectory: 5, checkpointBeforeMediaStagingPrune: 2,
+			checkpointBeforeMediaRename: 1, checkpointBeforeMediaRecord: 1,
+			checkpointBeforeSecretImmutableRename: 1, checkpointAfterSecretImmutableRename: 1,
+			checkpointBeforeMediaRetainedRemoval: 1,
+		},
 		"secret-publication": {
 			checkpointCreateFile: 4, checkpointWriteFile: 4, checkpointSyncFile: 4,
 			checkpointSyncDirectory: 9, checkpointBeforeSecretImmutableRename: 1,
@@ -950,7 +1001,7 @@ func checkpointTraceShapes() map[string]map[checkpoint]int {
 			checkpointBeforeSecretUnlink: 1, checkpointAfterSecretUnlink: 1,
 		},
 		"stage-collection": {
-			checkpointBeforeStageCollection: 3, checkpointSyncDirectory: 3,
+			checkpointBeforeStageCollection: 4, checkpointSyncDirectory: 4,
 		},
 		"secret-initialization": {
 			checkpointBeforeSecretFileSync: 1, checkpointSyncContextFile: 2, checkpointSyncDirectory: 8,
@@ -1976,18 +2027,12 @@ func checkpointMediaAddScenario() checkpointScenario {
 	return checkpointMediaPublication("media-add", "installer bytes", func(t *testing.T) *Store {
 		store := mediaFixture(t)
 		// A killed add of another image abandoned its stage: the kernel
-		// released its lock and nothing removed it. The lock belongs to the
-		// open file description, which a child that a parallel killed case
-		// forks shares until it execs, so closing the file alone can leave
-		// the stage held into this case's first prune; unlock it explicitly.
+		// released its lock and nothing removed it.
 		stage := claimStage(t, store, "other.iso")
 		if _, err := stage.Fill(context.Background(), mediaPayload("partial"), 1<<20); err != nil {
 			t.Fatal(err)
 		}
 		dead := stage.(*mediaStage)
-		if err := syscall.Flock(int(dead.file.Fd()), syscall.LOCK_UN); err != nil {
-			t.Fatal(err)
-		}
 		dead.release()
 		dead.closed = true
 		return store
@@ -2026,6 +2071,84 @@ func checkpointMediaDeleteScenario() checkpointScenario {
 			return checkpointMediaHolds(ctx, store, map[string]string{})
 		},
 	})
+}
+
+// unopenedAcquirer is the source of an add that must publish a retained stage:
+// opening it fails the add.
+type unopenedAcquirer struct{}
+
+func (unopenedAcquirer) Open(context.Context, media.Source) (media.Acquisition, error) {
+	return media.Acquisition{}, errors.New("the retained image was acquired again")
+}
+
+// checkpointMediaRetainScenario adds demo.iso pinned while another command
+// takes the root lock during its download, so its publication refuses and it
+// retains its stage, then repeats the add, which publishes that stage without
+// acquiring it. The holder takes the lock through a descriptor of its own and
+// never calls the store, so the trace stays deterministic, and it lets go on
+// every path, a refused or cancelled case's early return included.
+// specs/contexts.md, Media acquisition: an interrupted add leaves a retained
+// pair, which the repeated pinned add publishes, or an abandoned stage, which
+// the next mutation removes before that add acquires afresh, so the retry is
+// the pinned add repeated.
+func checkpointMediaRetainScenario() checkpointScenario {
+	const data = "installer bytes"
+	scenario := checkpointMediaPublication("media-retain", data, func(t *testing.T) *Store {
+		store := mediaFixture(t)
+		if err := store.MutateMedia(context.Background(), func(media.Transaction) error { return nil }); err != nil {
+			t.Fatal(err)
+		}
+		return store
+	})
+	scenario.operate = func(_ *testing.T, ctx context.Context, store *Store) error {
+		var holder *os.File
+		var held error
+		release := func() {
+			if holder != nil {
+				unlockAndClose(holder)
+				holder = nil
+			}
+		}
+		defer release()
+		first := &mediaAcquirer{source: func() media.Payload {
+			return &mediaSource{data: bytes.NewReader([]byte(data)), first: func() {
+				if holder, held = os.Open(store.options.Root); held == nil {
+					held = syscall.Flock(int(holder.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+				}
+			}}
+		}}
+		request := media.AddMediaRequest{Name: "demo.iso", SourceFile: "/images/demo.iso", SHA256: mediaDigest(data), SkipConfirmation: true}
+		_, err := mediaService(store, first).Add(ctx, request)
+		if held != nil {
+			return held
+		}
+		if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.lease" {
+			return fmt.Errorf("the add whose publication met a held root lock = %v %#v", err, reported)
+		}
+		release()
+		_, err = media.New(store, unopenedAcquirer{}, nil, mediaClock{}).Add(ctx, request)
+		return err
+	}
+	return scenario
+}
+
+// checkpointRetainedMediaPair reports whether a media entry belongs to a pair a
+// pinned add retained: a stage and, beside it, a record that decodes for the
+// image whose stage it is.
+func checkpointRetainedMediaPair(root, name string) bool {
+	stage := strings.TrimSuffix(name, ".json")
+	if !stagedMediaName(stage) {
+		return false
+	}
+	if _, err := os.Lstat(filepath.Join(root, mediaContainer, stage)); err != nil {
+		return false
+	}
+	data, err := os.ReadFile(filepath.Join(root, mediaContainer, stage+".json"))
+	if err != nil {
+		return false
+	}
+	entry, err := managedos.DecodeStagedMediaRecord(data)
+	return err == nil && mediaStageName(entry.Name) == stage
 }
 
 func checkpointSecretAccess(store *Store) *secretstore.Access {
@@ -2308,11 +2431,12 @@ func checkpointSecretInitializationScenario() checkpointScenario {
 }
 
 // checkpointStageCollectionScenario collects what killed publications left: a
-// controller receipt stage, a mutation evidence stage and an operation record
-// stage. specs/contexts.md, Storage, locking and publication: the next command
-// that opens a registry transaction removes the controller directory's stages,
-// and the next that takes the context's lease removes those in its state
-// directory and operation areas, so the retry is that command again.
+// root registry stage, a controller receipt stage, a mutation evidence stage
+// and an operation record stage. specs/contexts.md, Storage, locking and
+// publication: the next command that opens a registry transaction removes the
+// root's registry stages and the controller directory's stages, and the next
+// that takes the context's lease removes those in its state directory and
+// operation areas, so the retry is that command again.
 func checkpointStageCollectionScenario() checkpointScenario {
 	collect := func(_ *testing.T, ctx context.Context, store *Store) error {
 		return checkpointMutateLifecycle(ctx, store, func(lifecycle.Transaction) error { return nil })
@@ -2341,6 +2465,7 @@ func checkpointStageCollectionScenario() checkpointScenario {
 			}
 			root := store.options.Root
 			runtime := filepath.Join(root, "contexts", checkpointContext, "state")
+			plant(t, root, "pending-"+strings.Repeat("4", 32)+".json", "registry.json", nil)
 			plant(t, filepath.Join(root, "controller"), "pending-"+strings.Repeat("1", 32)+".json", "state.json", nil)
 			plant(t, runtime, "pending-"+strings.Repeat("2", 32)+".json", "mutation.json", nil)
 			plant(t, filepath.Join(runtime, "operations", "op-1"), "pending-"+strings.Repeat("3", 32), "", []byte("{}\n"))
@@ -2349,7 +2474,7 @@ func checkpointStageCollectionScenario() checkpointScenario {
 		operate: collect,
 		retry:   collect,
 		settled: func(_ *testing.T, _ context.Context, store *Store) error {
-			stale, err := checkpointStaleEntries(store.options.Root)
+			stale, err := checkpointStaleEntries(store.options.Root, "", true)
 			if err != nil || len(stale) != 0 {
 				return fmt.Errorf("stages remain: %v (%v)", stale, err)
 			}
@@ -2367,10 +2492,6 @@ func checkpointStageCollectionScenario() checkpointScenario {
 // must refuse with a diagnosed context.state failure while the store reads,
 // and one prefixed restore: marks a refusal whose store no read admits.
 //
-//   - B26: a kill inside a keyring initialization's staged write leaves an
-//     incomplete secrets/pending-* that the keyring refuses as not
-//     attributable, so neither init nor secret encryption init completes; an
-//     in-process interruption no longer leaves one.
 //   - restore:specs/contexts.md#storage-locking-and-publication: a kill while
 //     the first registry is written leaves the root's only entry a pending
 //     file whose bytes are not the canonical empty registry, which init may
@@ -2412,6 +2533,5 @@ func checkpointLedger() map[string]string {
 		"init/killed/write-file#1":                                 "restore:specs/contexts.md#storage-locking-and-publication",
 		"init/refused/write-file#3":                                "specs/contexts.md#storage-locking-and-publication",
 		"init/cancelled/write-file#3":                              "specs/contexts.md#storage-locking-and-publication",
-		"secret-initialization/killed/write-file#1":                "B26",
 	}
 }

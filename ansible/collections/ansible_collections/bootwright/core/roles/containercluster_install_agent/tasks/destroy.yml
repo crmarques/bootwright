@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_cluster_install_request.version == 'cluster-install-agent-v2'
+      - bootwright_cluster_install_request.version == 'cluster-install-agent-v3'
       - bootwright_cluster_install_digest is match('[0-9a-f]{64}')
     quiet: true
   no_log: true
@@ -37,9 +37,15 @@
   changed_when: false
 
 # The installed cluster leaves with its nodes' own disks. What this block
-# opened is the media each node presents, so that is what it takes back.
+# opened is the media each node presents, so that is all it takes back: a
+# removal selects no boot device and composes no substrate entry point.
 - name: Eject the media every node still presents
-  ansible.builtin.include_tasks: release.yml
+  bootwright.core.redfish_boot:
+    endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", containercluster_install_agent_user) }}'
+    password: '{{ lookup("ansible.builtin.file", containercluster_install_agent_password) }}'
+    verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+    operation: eject
   loop: '{{ bootwright_cluster_install_request.nodes }}'
   loop_control:
     loop_var: containercluster_install_agent_node
@@ -50,6 +56,7 @@
       {{ bootwright_cluster_install_material['controllerUserNode' ~ containercluster_install_agent_index] }}
     containercluster_install_agent_password: >-
       {{ bootwright_cluster_install_material['controllerPasswordNode' ~ containercluster_install_agent_index] }}
+  no_log: true
 
 - name: Report media release completion
   bootwright.core.containercluster_install_protocol:

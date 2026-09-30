@@ -7,6 +7,8 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/managedos/media"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -31,7 +33,7 @@ func (*Store) View(ctx context.Context) (contexts.Registry, error) {
 	return contexts.Registry{}, unsupported(ctx)
 }
 
-func (*Store) ReadInputs(ctx context.Context, _, _ string) (desiredstate.Sources, error) {
+func (*Store) ReadInputs(ctx context.Context, _ string) (desiredstate.Sources, error) {
 	return desiredstate.Sources{}, unsupported(ctx)
 }
 
@@ -48,5 +50,33 @@ func (*Store) ReadSecrets(ctx context.Context, _ secretstore.Context, _ func(sec
 }
 
 func (*Store) MutateSecrets(ctx context.Context, _ secretstore.Context, _ func(secretstore.Area) error) error {
+	return unsupported(ctx)
+}
+
+func (*Store) ReadHostKeys(ctx context.Context, _ string) ([]byte, error) {
+	return nil, unsupported(ctx)
+}
+
+func (*Store) ReplaceHostKeys(ctx context.Context, _ string, _, _ []byte) error {
+	return unsupported(ctx)
+}
+
+func (*Store) ReadMedia(ctx context.Context, _ func(media.View) error) error {
+	return unsupported(ctx)
+}
+
+func (*Store) MutateMedia(ctx context.Context, _ func(media.Transaction) error) error {
+	return unsupported(ctx)
+}
+
+func (*Store) ReadLifecycle(ctx context.Context, _ string, _ func(lifecycle.View) error) error {
+	return unsupported(ctx)
+}
+
+func (*Store) RunLifecycle(ctx context.Context, _ string, _ func(lifecycle.RunView) error) error {
+	return unsupported(ctx)
+}
+
+func (*Store) MutateLifecycle(ctx context.Context, _ string, _ func(lifecycle.Transaction) error) error {
 	return unsupported(ctx)
 }

@@ -24,7 +24,4 @@
     outcome: unchanged
     digest: '{{ bootwright_substrate_host_digest }}'
     observation: '{{ substrate_libvirt_host_observed.observation }}'
-    removed: >-
-      {{ not substrate_libvirt_host_observed.observation.uri
-         or substrate_libvirt_host_observed.observation.pool | length == 0 }}
   no_log: true

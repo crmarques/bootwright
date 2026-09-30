@@ -16,11 +16,10 @@ import (
 )
 
 const (
-	maxControllerBundles = 16
-	maxBundleEntries     = 32768
-	maxBundleBytes       = 8 << 30
-	maxBundleFileBytes   = 1 << 30
-	maxBundleDepth       = 32
+	maxBundleEntries   = 32768
+	maxBundleBytes     = 8 << 30
+	maxBundleFileBytes = 1 << 30
+	maxBundleDepth     = 32
 )
 
 func verifyControllerBundleReservations(ctx context.Context, owner *directory, reservations []controllerBundleReservation) error {

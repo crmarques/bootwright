@@ -12,12 +12,15 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
+	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
 // A planted stage is exactly what a killed publication leaves: a private file
@@ -195,6 +198,73 @@ func TestTheNextExclusiveCommandCollectsControllerStages(t *testing.T) {
 	}
 }
 
+// A killed registry replacement leaves its stage, complete or torn, beside
+// registry.json. Reads and secret mutations keep it; the next command that
+// opens a registry transaction removes it.
+func TestTheNextRegistryTransactionCollectsRootRegistryStages(t *testing.T) {
+	ctx := context.Background()
+	plant := func(t *testing.T, store *Store) []string {
+		t.Helper()
+		registry, err := os.ReadFile(filepath.Join(store.options.Root, "registry.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		paths := []string{
+			filepath.Join(store.options.Root, plantedStageName(1, ".json")),
+			filepath.Join(store.options.Root, plantedStageName(2, ".json")),
+		}
+		plantStage(t, paths[0], registry)
+		plantStage(t, paths[1], registry[:len(registry)/2])
+		return paths
+	}
+	remaining := func(paths []string) []string {
+		var kept []string
+		for _, path := range paths {
+			if _, err := os.Lstat(path); err == nil {
+				kept = append(kept, path)
+			}
+		}
+		return kept
+	}
+	store, record := lifecycleFixture(t)
+	paths := plant(t, store)
+	for _, keeper := range []struct {
+		name string
+		run  func() error
+	}{
+		{"view", func() error { _, err := store.View(ctx); return err }},
+		{"lifecycle read", func() error {
+			return store.ReadLifecycle(ctx, checkpointContext, func(lifecycle.View) error { return nil })
+		}},
+		{"secret mutation", func() error {
+			return store.MutateSecrets(ctx, secretToken(record), func(secretstore.Area) error { return nil })
+		}},
+	} {
+		if err := keeper.run(); err != nil {
+			t.Fatalf("the %s refused the root's registry stages: %#v", keeper.name, diagnostics.Of(err))
+		}
+		if kept := remaining(paths); len(kept) != len(paths) {
+			t.Fatalf("the %s removed a root registry stage: %v remain", keeper.name, kept)
+		}
+	}
+	if err := checkpointCommit(ctx, store, checkpointContext); err != nil {
+		t.Fatalf("the commit refused the root's registry stages: %#v", diagnostics.Of(err))
+	}
+	if kept := remaining(paths); len(kept) != 0 {
+		t.Fatalf("the commit left %v", kept)
+	}
+	t.Run("lease", func(t *testing.T) {
+		store, _ := lifecycleFixture(t)
+		paths := plant(t, store)
+		if err := collectingLease(ctx, store); err != nil {
+			t.Fatalf("the lease refused the root's registry stages: %#v", diagnostics.Of(err))
+		}
+		if kept := remaining(paths); len(kept) != 0 {
+			t.Fatalf("the lease left %v", kept)
+		}
+	})
+}
+
 // A read holds only the shared root lock, which a live writer of a stage may
 // hold beside it, so no read removes anything.
 func TestReadsNeverCollectAStage(t *testing.T) {
@@ -210,7 +280,12 @@ func TestReadsNeverCollectAStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registry, err := os.ReadFile(filepath.Join(store.options.Root, "registry.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	planted := map[string][]byte{
+		filepath.Join(store.options.Root, plantedStageName(4, ".json")):                       registry,
 		filepath.Join(store.options.Root, "controller", plantedStageName(1, ".json")):         receipt,
 		filepath.Join(contextStatePath(store), "operations", "op-1", plantedStageName(2, "")): []byte("{}\n"),
 		filepath.Join(contextStatePath(store), plantedStageName(3, ".json")):                  []byte("{}\n"),
@@ -414,15 +489,22 @@ func TestTheCollectorLeavesWhatItCannotProve(t *testing.T) {
 			}
 		})
 	}
-	t.Run("root secrets and media stages", func(t *testing.T) {
-		store := mediaFixture(t)
-		addMedia(t, store, "demo.iso", "image bytes", false)
-		registry, err := os.ReadFile(filepath.Join(store.options.Root, "registry.json"))
-		if err != nil {
+	t.Run("shared root stage", func(t *testing.T) {
+		store := checkpointSealedFixture(t)
+		path := filepath.Join(store.options.Root, plantedStageName(1, ".json"))
+		plantStage(t, path, []byte("{}\n"))
+		if err := os.Chmod(path, 0644); err != nil {
 			t.Fatal(err)
 		}
+		expectUnsupportedRootState(t, checkpointCommit(ctx, store, ""))
+		if _, err := os.Lstat(path); err != nil {
+			t.Fatalf("the refused commit removed the root stage (%v)", err)
+		}
+	})
+	t.Run("secrets and media stages", func(t *testing.T) {
+		store := mediaFixture(t)
+		addMedia(t, store, "demo.iso", "image bytes", false)
 		kept := map[string][]byte{
-			filepath.Join(store.options.Root, plantedStageName(1, ".json")):                                      registry,
 			filepath.Join(store.options.Root, "contexts", checkpointContext, "secrets", plantedStageName(2, "")): []byte("{\"ver"),
 			filepath.Join(store.options.Root, "media", plantedStageName(3, "")):                                  []byte("{}\n"),
 		}
@@ -475,4 +557,95 @@ func TestACancelledCollectionStopsItsWalk(t *testing.T) {
 	if err := store.collectContextStages(ctx, dir, true); !errors.Is(err, context.Canceled) {
 		t.Fatalf("a cancelled collection walked on: %v", err)
 	}
+}
+
+// The next lease removes every entry named as a stage in the operation, run
+// and trust areas, so no area creates a record or directory named as one.
+func TestAnAreaRefusesARecordNamedAsAStage(t *testing.T) {
+	ctx := context.Background()
+	store, _ := lifecycleFixture(t)
+	if err := checkpointMutateLifecycle(ctx, store, func(tx lifecycle.Transaction) error {
+		return tx.Operations().EnsureDirectory(ctx, "op-1")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	const unsafe = "lifecycle operation path component is unsafe"
+	operation := filepath.Join(contextStatePath(store), "operations", "op-1")
+	for _, stage := range []string{plantedStageName(7, ""), plantedStageName(7, ".json")} {
+		target := "op-1/" + stage
+		for _, write := range []struct {
+			name string
+			run  func(operationstore.Area) error
+		}{
+			{"exclusive write", func(area operationstore.Area) error { return area.WriteExclusive(ctx, target, []byte("{}\n")) }},
+			{"replacement", func(area operationstore.Area) error { return area.Replace(ctx, target, []byte("{}\n"), nil) }},
+			{"append", func(area operationstore.Area) error { return area.Append(ctx, target, []byte("{}\n")) }},
+			{"directory", func(area operationstore.Area) error { return area.EnsureDirectory(ctx, target) }},
+		} {
+			expectRefusal(t, checkpointMutateLifecycle(ctx, store, func(tx lifecycle.Transaction) error {
+				return write.run(tx.Operations())
+			}), unsafe)
+			if entries, err := os.ReadDir(operation); err != nil || len(entries) != 0 {
+				t.Fatalf("the refused %s of %s created %v (%v)", write.name, stage, entries, err)
+			}
+		}
+	}
+	run := plantedStageName(8, "")
+	expectRefusal(t, store.RunLifecycle(ctx, checkpointContext, func(view lifecycle.RunView) error {
+		return view.Runs().EnsureDirectory(ctx, run)
+	}), unsafe)
+	if _, err := os.Lstat(filepath.Join(contextStatePath(store), "runs", run)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the refused run directory was created (%v)", err)
+	}
+}
+
+// A lease whose collection, layout or reservation check refuses is released at
+// once and never held, so nothing later in the transaction treats the context
+// as leased.
+func TestARefusedLeaseIsReleasedAndNeverHeld(t *testing.T) {
+	ctx := context.Background()
+	store, sources := fixture(t)
+	record := publish(t, store, "example", sources)
+	directory := filepath.Join(store.options.Root, "contexts", record.Name)
+	writePrivate(t, filepath.Join(directory, "future-operation.json"), []byte("{}\n"))
+	err := store.Transact(ctx, false, nil, func(tx contexts.Transaction) error {
+		for range 2 {
+			_, err := tx.MutationState(ctx, record.Name)
+			expectRefusal(t, err, "context layout cannot be verified")
+		}
+		_, err := tx.Publish(ctx, record.Name, record.EnvironmentDirectory, sources)
+		expectRefusal(t, err, "input publication requires the context mutation lease")
+		file, err := os.Open(directory)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+			t.Fatalf("the refused lease is still held: %v", err)
+		}
+		return syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+	})
+	if err != nil {
+		t.Fatalf("the transaction failed: %#v", diagnostics.Of(err))
+	}
+}
+
+// setup scopes no context, so it takes no lease; only a controller mutation
+// scoped to a context leases that context.
+func TestOnlyAScopedControllerMutationTakesTheContextLease(t *testing.T) {
+	ctx := context.Background()
+	store, record := lifecycleFixture(t)
+	file, err := os.Open(filepath.Join(store.options.Root, "contexts", record.Name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MutateController(ctx, prerequisites.SetupContext{}, false, func(prerequisites.StorageTransaction) error { return nil }); err != nil {
+		t.Fatalf("a controller mutation that scopes no context took the lease: %#v", diagnostics.Of(err))
+	}
+	scope := prerequisites.SetupContext{Name: record.Name, Revision: record.Revision, Machine: "controller"}
+	expectBusy(t, store.MutateController(ctx, scope, false, func(prerequisites.StorageTransaction) error { return nil }))
 }

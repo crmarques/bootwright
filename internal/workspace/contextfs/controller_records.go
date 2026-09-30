@@ -438,3 +438,7 @@ func validateControllerReservations(values []prerequisites.HostReservation) erro
 	}
 	return nil
 }
+
+// maxControllerBundles bounds the bundle namespaces and retained definitions a
+// controller record holds.
+const maxControllerBundles = 16

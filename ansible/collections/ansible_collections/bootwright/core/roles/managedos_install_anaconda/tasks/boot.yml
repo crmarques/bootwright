@@ -4,24 +4,18 @@
 # takes. A request is not evidence: every step polls its own outcome.
 # The proof runs here rather than at planning time, because a plan proves
 # intent and only an observation taken before the effect proves the target.
-# Both bindings are fixed role task files selected by the frozen request's own
-# substrate, so authored data can never choose which one runs, and a substrate
-# with neither binding refuses before anything is inserted or booted.
-- name: Refuse a substrate this installation has no boot binding for
-  ansible.builtin.assert:
-    that:
-      - bootwright_os_install_request.target.substrate in ['libvirt', 'baremetal']
-    fail_msg: >-
-      Machine {{ bootwright_os_install_request.identity.object }} names substrate
-      {{ bootwright_os_install_request.target.substrate }}, which this
-      installation has no boot binding for, so nothing was inserted or booted;
-      plan the installation again with this release
-    quiet: true
-
+# How a machine is proved and booted is its substrate's answer, so this
+# composes the substrate's pre-boot and boot entry points, each selected by the
+# frozen request's own substrate so authored data can never choose which one
+# runs. Each dispatch ends in a terminal fail for a substrate it has no entry
+# point for, and the proof dispatch's fail comes before anything is inserted or
+# booted. The boot entry point is told that this installer powers the machine
+# off when it is done, so a substrate may select the media rather than rely on
+# its machine's boot order.
 - name: Prove the exact target through the substrate that realized it
   ansible.builtin.include_role:
     name: bootwright.core.substrate_libvirt_machine
-    tasks_from: pre_boot.yml
+    tasks_from: pre_boot
   vars:
     substrate_libvirt_machine_target_endpoint: '{{ managedos_install_anaconda_endpoint }}'
     substrate_libvirt_machine_target_verify: '{{ managedos_install_anaconda_verify }}'
@@ -32,28 +26,26 @@
 - name: Prove the exact physical target before anything it holds is erased
   ansible.builtin.include_role:
     name: bootwright.core.substrate_baremetal_machine
-    tasks_from: pre_boot.yml
+    tasks_from: pre_boot
   vars:
     substrate_baremetal_machine_target_endpoint: '{{ managedos_install_anaconda_endpoint }}'
     substrate_baremetal_machine_target_verify: '{{ managedos_install_anaconda_verify }}'
     substrate_baremetal_machine_target_expected: '{{ managedos_install_anaconda_expected }}'
     substrate_baremetal_machine_target_user: '{{ bootwright_os_install_material.controllerUser }}'
     substrate_baremetal_machine_target_password: '{{ bootwright_os_install_material.controllerPassword }}'
+    substrate_baremetal_machine_target_pinned_uuid_base64: '{{ bootwright_os_install_material.pinnedUUIDBase64 | default("") }}'
+    substrate_baremetal_machine_target_pinned_serial_base64: '{{ bootwright_os_install_material.pinnedSerialBase64 | default("") }}'
   when: bootwright_os_install_request.target.substrate == 'baremetal'
 
-# Either proof refuses a running machine. A machine the libvirt substrate
-# created is Bootwright's own, so it is also powered off through its controller,
-# which narrows the window in which it was started after that proof. An
-# operator-owned physical machine is never powered off by an installation.
-- name: Power off the emulated machine Bootwright created before inserting anything
-  bootwright.core.redfish_boot:
-    endpoint: '{{ managedos_install_anaconda_endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
-    password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
-    verify: '{{ managedos_install_anaconda_verify }}'
-    operation: power-off
-  no_log: true
-  when: bootwright_os_install_request.target.substrate == 'libvirt'
+- name: Refuse a substrate this installation has no pre-boot binding for
+  ansible.builtin.fail:
+    msg: >-
+      Machine {{ bootwright_os_install_request.identity.object }} names substrate
+      {{ bootwright_os_install_request.target.substrate }}, which this
+      installation has no pre_boot binding for, so it was not proved and
+      nothing was inserted or booted; plan the installation again with this
+      release
+  when: bootwright_os_install_request.target.substrate not in ['libvirt', 'baremetal']
 
 - name: Insert the published installer image as virtual media
   bootwright.core.redfish_boot:
@@ -65,20 +57,34 @@
     image: '{{ bootwright_os_install_request.image.url }}'
   no_log: true
 
-- name: Set a one-time boot from that media
-  bootwright.core.redfish_boot:
-    endpoint: '{{ managedos_install_anaconda_endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
-    password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
-    verify: '{{ managedos_install_anaconda_verify }}'
-    operation: boot
-  no_log: true
+- name: Boot a machine this substrate created from that media
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_libvirt_machine
+    tasks_from: boot_media
+  vars:
+    substrate_libvirt_machine_boot_endpoint: '{{ managedos_install_anaconda_endpoint }}'
+    substrate_libvirt_machine_boot_verify: '{{ managedos_install_anaconda_verify }}'
+    substrate_libvirt_machine_boot_user: '{{ bootwright_os_install_material.controllerUser }}'
+    substrate_libvirt_machine_boot_password: '{{ bootwright_os_install_material.controllerPassword }}'
+    substrate_libvirt_machine_boot_installer_powers_off: true
+  when: bootwright_os_install_request.target.substrate == 'libvirt'
 
-- name: Power the machine on and poll it to running
-  bootwright.core.redfish_boot:
-    endpoint: '{{ managedos_install_anaconda_endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
-    password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
-    verify: '{{ managedos_install_anaconda_verify }}'
-    operation: power-on
-  no_log: true
+- name: Boot an operator-owned machine from that media through its own controller
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_baremetal_machine
+    tasks_from: boot_media
+  vars:
+    substrate_baremetal_machine_boot_endpoint: '{{ managedos_install_anaconda_endpoint }}'
+    substrate_baremetal_machine_boot_verify: '{{ managedos_install_anaconda_verify }}'
+    substrate_baremetal_machine_boot_user: '{{ bootwright_os_install_material.controllerUser }}'
+    substrate_baremetal_machine_boot_password: '{{ bootwright_os_install_material.controllerPassword }}'
+  when: bootwright_os_install_request.target.substrate == 'baremetal'
+
+- name: Refuse a substrate this installation has no media-boot binding for
+  ansible.builtin.fail:
+    msg: >-
+      Machine {{ bootwright_os_install_request.identity.object }} names substrate
+      {{ bootwright_os_install_request.target.substrate }}, which this
+      installation has no boot_media binding for, so it was not booted from the
+      inserted image; plan the installation again with this release
+  when: bootwright_os_install_request.target.substrate not in ['libvirt', 'baremetal']

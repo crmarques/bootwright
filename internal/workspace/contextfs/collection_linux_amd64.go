@@ -42,12 +42,7 @@ func (s *Store) collectStages(ctx context.Context, dir *directory, maximum int, 
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		entry, err := openRelative(dir, name, pathHandle, 0)
-		if err != nil {
-			continue
-		}
-		stat, err := statHandle(entry)
-		entry.Close()
+		stat, err := listedEntry(dir, name)
 		if err != nil {
 			continue
 		}
@@ -66,21 +61,76 @@ func (s *Store) collectStages(ctx context.Context, dir *directory, maximum int, 
 			}
 			continue
 		}
-		if !stageName(name, bare) || stat.Dev != dir.identity.Dev || !private(stat, syscall.S_IFREG, dir.identity.Uid, dir.identity.Gid) || stat.Size > bound {
-			continue
-		}
-		if err := s.checkpoint(ctx, checkpointBeforeStageCollection); err != nil {
+		collected, err := s.collectStage(ctx, dir, name, stat, bound, bare)
+		if err != nil {
 			return err
 		}
-		if err := unlinkVerified(dir, name, stat, false); err != nil {
-			return state("abandoned publication stage could not be removed: " + filepath.Join(dir.path, name))
-		}
-		removed = true
+		removed = removed || collected
 	}
 	if !removed {
 		return nil
 	}
 	return s.syncDirectory(ctx, dir)
+}
+
+// listedEntry reads the identity of one listed entry without following it.
+func listedEntry(dir *directory, name string) (syscall.Stat_t, error) {
+	entry, err := openRelative(dir, name, pathHandle, 0)
+	if err != nil {
+		return syscall.Stat_t{}, err
+	}
+	defer entry.Close()
+	return statHandle(entry)
+}
+
+// collectStage removes one listed entry only when it is proved a publication
+// stage of dir: a private regular file named as one, on dir's device and
+// within bound. It reports whether it removed the entry.
+func (s *Store) collectStage(ctx context.Context, dir *directory, name string, stat syscall.Stat_t, bound int64, bare bool) (bool, error) {
+	if !stageName(name, bare) || stat.Dev != dir.identity.Dev || !private(stat, syscall.S_IFREG, dir.identity.Uid, dir.identity.Gid) || stat.Size > bound {
+		return false, nil
+	}
+	if err := s.checkpoint(ctx, checkpointBeforeStageCollection); err != nil {
+		return false, err
+	}
+	if err := unlinkVerified(dir, name, stat, false); err != nil {
+		return false, state("abandoned publication stage could not be removed: " + filepath.Join(dir.path, name))
+	}
+	return true, nil
+}
+
+// collectRegistryStages removes the stages a killed registry replacement left
+// in the root. It runs only in a registry transaction, under the exclusive
+// root lock and after the root's entries were admitted, so no stage it finds
+// has a live writer; init's recovery artifact never meets it, because that
+// stage exists only while registry.json does not.
+func (s *Store) collectRegistryStages(ctx context.Context, root *directory) error {
+	names, err := rootEntryNames(root, maxContexts+1)
+	if err != nil {
+		return nil
+	}
+	removed := false
+	for _, name := range names {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if !stageName(name, false) {
+			continue
+		}
+		stat, err := listedEntry(root, name)
+		if err != nil {
+			continue
+		}
+		collected, err := s.collectStage(ctx, root, name, stat, maxRegistry, false)
+		if err != nil {
+			return err
+		}
+		removed = removed || collected
+	}
+	if !removed {
+		return nil
+	}
+	return s.syncDirectory(ctx, root)
 }
 
 // collectContextStages removes the stages in a leased context's state

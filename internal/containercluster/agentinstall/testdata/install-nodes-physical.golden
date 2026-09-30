@@ -12,6 +12,14 @@
           "trust": "disable-verification"
         }
       },
+      "hardware": {
+        "interfaces": [
+          {
+            "macAddress": "aa:bb:cc:dd:ee:01",
+            "name": "enp1s0"
+          }
+        ]
+      },
       "machine": "metal-01",
       "name": "master-0",
       "physical": true,
@@ -29,6 +37,14 @@
           "trust": "disable-verification"
         }
       },
+      "hardware": {
+        "interfaces": [
+          {
+            "macAddress": "aa:bb:cc:dd:ee:02",
+            "name": "enp1s0"
+          }
+        ]
+      },
       "machine": "metal-02",
       "name": "master-1",
       "physical": true,
@@ -45,6 +61,14 @@
           "restoreVerification": true,
           "trust": "disable-verification"
         }
+      },
+      "hardware": {
+        "interfaces": [
+          {
+            "macAddress": "aa:bb:cc:dd:ee:03",
+            "name": "enp1s0"
+          }
+        ]
       },
       "machine": "metal-03",
       "name": "master-2",

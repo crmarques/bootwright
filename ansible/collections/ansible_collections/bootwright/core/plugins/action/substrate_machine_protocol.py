@@ -46,18 +46,35 @@ def disk_evidence(entry):
     return {"name": str(entry["name"]), "present": bool(entry["present"]), "sizeGiB": int(entry["sizeGiB"])}
 
 
-def presence(observation, power, system, request_digest):
+def listener(observation):
+    """Whether anything listens on the controller's socket, as observed.
+
+    Evidence without it proves the socket neither held nor free, so an
+    observation that does not report it is never published.
+    """
+    value = observation.get("listener")
+    if not isinstance(value, bool):
+        raise ValueError("listener")
+    return value
+
+
+def disks_of(observation):
     disks = observation.get("disks") or []
     if len(disks) > MAX_DISKS:
         raise ValueError("disk count")
+    return [disk_evidence(entry) for entry in disks]
+
+
+def presence(observation, power, system, request_digest):
     if power not in POWER_STATES:
         raise ValueError("power state")
     evidence = {
         "absent": False,
         "answered": bool(observation.get("answered")),
         "controller": str(observation.get("controller", "")),
-        "disks": [disk_evidence(entry) for entry in disks],
+        "disks": disks_of(observation),
         "domain": str(observation.get("domain", "")),
+        "listener": listener(observation),
         "owned": bool(observation.get("owned")),
         "postcondition": False,
         "power": str(power),
@@ -82,7 +99,7 @@ def remaining(observation):
     that `no_log` would otherwise censor along with the evidence.
     """
     names = []
-    for name in ("domain", "unit", "controller"):
+    for name in ("domain", "unit", "controller", "listener"):
         if observation.get(name):
             names.append(name)
     if any(entry.get("present") for entry in observation.get("disks") or []):
@@ -107,32 +124,43 @@ def unproved(evidence):
     return names
 
 
-def absence(observation, request_digest):
-    """Removal evidence, proved only when the hypervisor answered for the domain.
+def gone(evidence):
+    """Whether the evidence proves every part of the machine gone.
 
     A silent hypervisor reports no domain too, so its absence is never proved
-    by an empty field alone.
+    by an empty field alone, and a socket something still listens on is not
+    free to release.
     """
-    disks = [disk_evidence(entry) for entry in observation.get("disks") or []]
-    answered = bool(observation.get("answered"))
-    gone = (
-        answered and not observation.get("domain") and not observation.get("unit")
-        and not observation.get("controller") and not any(entry["present"] for entry in disks)
+    return (
+        evidence["answered"] is True
+        and not any(evidence[name] for name in ("domain", "unit", "controller", "state", "power", "system"))
+        and not any(entry["present"] for entry in evidence["disks"])
+        and evidence["listener"] is False
     )
-    return {
+
+
+def absence(observation, power, system, request_digest):
+    """Removal evidence carrying what was observed, proved only by gone()."""
+    power, system = str(power or ""), str(system or "")
+    if power not in POWER_STATES:
+        raise ValueError("power state")
+    evidence = {
         "absent": True,
-        "answered": answered,
-        "controller": "",
-        "disks": [],
-        "domain": "",
-        "owned": False,
-        "postcondition": bool(gone),
-        "power": "",
+        "answered": bool(observation.get("answered")),
+        "controller": str(observation.get("controller", "")),
+        "disks": disks_of(observation),
+        "domain": str(observation.get("domain", "")),
+        "listener": listener(observation),
+        "owned": bool(observation.get("owned")),
+        "postcondition": False,
+        "power": power,
         "request": digest(request_digest),
-        "state": "",
-        "system": "",
-        "unit": "",
+        "state": state(observation.get("state")),
+        "system": system,
+        "unit": str(observation.get("unit", "")),
     }
+    evidence["postcondition"] = gone(evidence)
+    return evidence
 
 
 def publishes(evidence, observed):
@@ -143,6 +171,32 @@ def publishes(evidence, observed):
     evidence. A mutation has to reach its postcondition or fail.
     """
     return bool(evidence["postcondition"]) or bool(observed)
+
+
+def completion(arguments):
+    """The evidence one completion publishes, and what it names when unmet.
+
+    A removal publishes the absence form. An observation publishes it exactly
+    when everything is gone and the presence form otherwise, so what is still
+    there reaches the engine; asking an observation for a removal's form is a
+    malformed call.
+    """
+    request_digest = arguments.get("digest")
+    observation = arguments.get("observation") or {}
+    power, system = arguments.get("power"), arguments.get("system")
+    if arguments.get("removed"):
+        if arguments.get("observed"):
+            raise ValueError("an observation proves no removal")
+        evidence = absence(observation, power, system, request_digest)
+        if not evidence["answered"]:
+            return evidence, ["domain"], "the hypervisor did not answer for"
+        return evidence, remaining(observation), "still present"
+    if arguments.get("observed"):
+        evidence = absence(observation, power, system, request_digest)
+        if evidence["postcondition"]:
+            return evidence, [], "still present"
+    evidence = presence(observation, power, system, request_digest)
+    return evidence, unproved(evidence), "not proved"
 
 
 class ActionModule(ActionBase):
@@ -168,16 +222,7 @@ class ActionModule(ActionBase):
             outcome = arguments.get("outcome")
             if outcome not in OUTCOMES:
                 raise ValueError("outcome")
-            request_digest = arguments.get("digest")
-            observation = arguments.get("observation") or {}
-            if arguments.get("removed"):
-                evidence = absence(observation, request_digest)
-                unmet, verb = remaining(observation), "still present"
-                if not evidence["answered"]:
-                    unmet, verb = ["domain"], "the hypervisor did not answer for"
-            else:
-                evidence = presence(observation, arguments.get("power"), arguments.get("system"), request_digest)
-                unmet, verb = unproved(evidence), "not proved"
+            evidence, unmet, verb = completion(arguments)
             if not publishes(evidence, arguments.get("observed")):
                 return {
                     "failed": True,

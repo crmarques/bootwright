@@ -2,6 +2,7 @@ package libvirt
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 // update rewrites each golden this package compares instead of comparing it:
@@ -99,35 +101,49 @@ func lineDiff(want, got string) string {
 // The protocol plugin publishes evidence through a channel that encodes with
 // sorted keys and no spaces (plugins/module_utils/controller_channel.py), which
 // Freeze proves is also how Go encodes it. Each golden is what
-// substrate_machine_protocol.py publishes for one state of the lab machine,
-// and the validator of that state accepts exactly those bytes.
+// substrate_machine_protocol.py publishes for one state of the lab machine:
+// the validator of that state accepts exactly those bytes, every other
+// validator refuses them, and the removal gate reads them as the quiescence
+// they prove.
 func TestMachineEvidenceMatchesItsGoldens(t *testing.T) {
 	request := machineRequest(t)
 	disks := make([]DiskEvidence, 0, len(request.Disks))
+	gone := make([]DiskEvidence, 0, len(request.Disks))
 	for _, disk := range request.Disks {
 		disks = append(disks, DiskEvidence{Name: disk.Name, Present: true, SizeGiB: disk.SizeGiB})
+		gone = append(gone, DiskEvidence{Name: disk.Name})
+	}
+	validators := map[string]func([]byte) error{
+		"presence": func(data []byte) error { return ValidateMachinePresence(data, request, evidenceDigest) },
+		"absence":  func(data []byte) error { return ValidateMachineAbsence(data, evidenceDigest) },
+		"partial":  func(data []byte) error { return ValidateMachinePartial(data, evidenceDigest) },
 	}
 	// Each case names the substrate_machine_protocol.py call it mirrors.
 	for name, test := range map[string]struct {
-		evidence MachineEvidence
-		validate func([]byte) error
+		evidence   MachineEvidence
+		accepts    string
+		quiescence string
 	}{
 		// presence() after an apply: the domain defined, owned and shut off,
 		// every disk at its frozen size, and the controller running the pinned
-		// image and answering for this machine's system.
+		// image, listening, and answering for this machine's system.
 		"completed": {
 			MachineEvidence{
 				Answered: true, Controller: request.Controller.Image, Disks: disks, Domain: request.Domain,
-				Owned: true, Postcondition: true, Power: "Off", Request: evidenceDigest, State: domainOff,
-				System: request.UUID, Unit: "active",
+				Listener: observed(true), Owned: true, Postcondition: true, Power: "Off", Request: evidenceDigest,
+				State: domainOff, System: request.UUID, Unit: "active",
 			},
-			func(data []byte) error { return ValidateMachinePresence(data, request, evidenceDigest) },
+			"presence", lifecycle.Quiescent,
 		},
-		// absence() once the hypervisor answers that it defines no such domain
-		// and the controller and disks are gone; it lists no disks at all.
+		// absence() once the hypervisor answers that it defines no such domain,
+		// the controller is gone, nothing exists at the root disk's path and
+		// nothing listens on the controller's socket.
 		"removed": {
-			MachineEvidence{Absent: true, Answered: true, Disks: []DiskEvidence{}, Postcondition: true, Request: evidenceDigest},
-			func(data []byte) error { return ValidateMachineAbsence(data, evidenceDigest) },
+			MachineEvidence{
+				Absent: true, Answered: true, Disks: gone, Listener: observed(false), Postcondition: true,
+				Request: evidenceDigest,
+			},
+			"absence", lifecycle.Quiescent,
 		},
 		// An observed presence() whose hypervisor did not answer while the
 		// controller still runs: the empty domain proves nothing, the unit is
@@ -135,9 +151,24 @@ func TestMachineEvidenceMatchesItsGoldens(t *testing.T) {
 		// answer the removal gate reads.
 		"partial-silent": {
 			MachineEvidence{
-				Controller: request.Controller.Image, Disks: disks, Power: "On", Request: evidenceDigest, Unit: "active",
+				Controller: request.Controller.Image, Disks: disks, Listener: observed(true), Power: "On",
+				Request: evidenceDigest, Unit: "active",
 			},
-			func(data []byte) error { return ValidateMachinePartial(data, evidenceDigest) },
+			"partial", lifecycle.Live,
+		},
+		// An observed presence() over a machine a removal left with only its
+		// root disk: the hypervisor answered that no domain is defined, so the
+		// disk is this context's own work part way removed.
+		"partial-disks": {
+			MachineEvidence{Answered: true, Disks: disks, Listener: observed(false), Request: evidenceDigest},
+			"partial", lifecycle.Quiescent,
+		},
+		// An observed presence() with nothing of the machine left but a
+		// listener on the controller's socket, which is not proved to be this
+		// Machine's, so no validator reads it.
+		"held-socket": {
+			MachineEvidence{Answered: true, Disks: gone, Listener: observed(true), Request: evidenceDigest},
+			"", lifecycle.Quiescent,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -146,8 +177,117 @@ func TestMachineEvidenceMatchesItsGoldens(t *testing.T) {
 				t.Fatalf("encoding: %v", diagnostics.Of(err))
 			}
 			matchesGolden(t, "machine-evidence-"+name, canonical)
-			if err := test.validate(canonical); err != nil {
-				t.Fatalf("the %s evidence was refused: %v", name, diagnostics.Of(err))
+			for validator, validate := range validators {
+				if err := validate(canonical); (err == nil) != (validator == test.accepts) {
+					t.Errorf("the %s validator read the %s evidence as %v", validator, name, diagnostics.Of(err))
+				}
+			}
+			if state := quiescenceOf(t, request, canonical); state != test.quiescence {
+				t.Errorf("the %s evidence reads as %s to the removal gate, want %s", name, state, test.quiescence)
+			}
+		})
+	}
+}
+
+// quiescenceOf is what the removal gate reads from one published observation
+// of the lab machine.
+func quiescenceOf(t *testing.T, request MachineRequest, evidence []byte) string {
+	t.Helper()
+	canonical, err := request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := lifecycle.Probe{Block: reconciliation.Block{
+		BlockDefinition: reconciliation.BlockDefinition{ID: "machine-rhel-01", Request: canonical},
+		RequestDigest:   evidenceDigest,
+	}}
+	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: evidence}}
+	quiescence, err := NewMachine(runner).Quiescent(context.Background(), probe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return quiescence.State
+}
+
+// Each golden is what substrate_host_protocol.py publishes for one state of
+// the lab provider host, whose one network is managed, and only the validator
+// of that state accepts those bytes.
+func TestHostEvidenceMatchesItsGoldens(t *testing.T) {
+	request := hostRequest(t)
+	var completed HostEvidence
+	if err := json.Unmarshal(hostEvidence(request, evidenceDigest), &completed); err != nil {
+		t.Fatal(err)
+	}
+	if len(completed.Networks) != 1 || !completed.Networks[0].Managed {
+		t.Fatalf("the lab provider host no longer has exactly one managed network: %+v", completed.Networks)
+	}
+	forgotten := []NetworkEvidence{{Answered: true, Managed: true, Name: completed.Networks[0].Name}}
+	unread := []NetworkEvidence{{Managed: true, Name: completed.Networks[0].Name}}
+	validators := map[string]func([]byte) error{
+		"presence": func(data []byte) error { return ValidateHostPresence(data, request, evidenceDigest) },
+		"absence":  func(data []byte) error { return ValidateHostAbsence(data, evidenceDigest) },
+		"partial":  func(data []byte) error { return ValidateHostPartial(data, evidenceDigest) },
+	}
+	// Each case names the substrate_host_protocol.py call it mirrors.
+	for name, test := range map[string]struct {
+		evidence HostEvidence
+		accepts  string
+	}{
+		// presence() after an apply: everything the request froze, and the
+		// pool directory present.
+		"completed": {completed, "presence"},
+		// absence() once the URI answered, the storage and network drivers
+		// answered that the pool and the managed network are gone, and
+		// nothing exists at the pool directory's path; the hypervisor closure
+		// and its daemons stay, as the removal leaves them.
+		"removed": {
+			HostEvidence{
+				Absent: true, Directory: observed(false), Hypervisor: true, Networks: forgotten, PoolAnswered: true,
+				Postcondition: true, Request: evidenceDigest, Services: completed.Services, URI: true,
+			},
+			"absence",
+		},
+		// An observed presence() over a host a removal left with only its pool
+		// directory: the URI and both drivers answered for the pool and the
+		// network.
+		"partial-directory": {
+			HostEvidence{
+				Directory: observed(true), Hypervisor: true, Networks: forgotten, PoolAnswered: true,
+				Request: evidenceDigest, Services: completed.Services, URI: true,
+			},
+			"partial",
+		},
+		// An observed presence() whose URI answered while the network driver
+		// did not: observe_host reads the managed network as unanswered, so
+		// its missing state proves nothing, and no validator accepts it.
+		"network-silent": {
+			HostEvidence{
+				Directory: observed(false), Hypervisor: true, Networks: unread, PoolAnswered: true,
+				Request: evidenceDigest, Services: completed.Services, URI: true,
+			},
+			"",
+		},
+		// An observed presence() whose URI did not answer: observe_host reads
+		// no network state and no pool without an answer, so neither proves
+		// anything, and nothing exists at the pool directory's path.
+		"silent": {
+			HostEvidence{
+				Directory: observed(false), Hypervisor: true, Networks: unread, Request: evidenceDigest,
+				Services: completed.Services,
+			},
+			"",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			canonical, err := reconciliation.Freeze(test.evidence, "provider host evidence")
+			if err != nil {
+				t.Fatalf("encoding: %v", diagnostics.Of(err))
+			}
+			matchesGolden(t, "host-evidence-"+name, canonical)
+			for validator, validate := range validators {
+				if err := validate(canonical); (err == nil) != (validator == test.accepts) {
+					t.Errorf("the %s validator read the %s evidence as %v", validator, name, diagnostics.Of(err))
+				}
 			}
 		})
 	}

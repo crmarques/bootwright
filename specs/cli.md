@@ -242,6 +242,33 @@ answers to the child. A confirmation read whose terminal belongs to another
 foreground process group requests the terminal through job control instead of
 waiting for input that cannot arrive.
 
+Sudo and the elevated child share one standard error, and sudo exits 1 for its
+own refusals, so a noninteractive supervisor learns that the child started only
+from the child. When the child runs as root, its standard error is not a
+terminal, and the process above its one or two sudo processes runs the same
+executable, the child first writes one fixed start line, which the supervisor
+removes. Every later byte passes unchanged. In a human noninteractive
+invocation, lines beginning with `sudo:` and a space that arrive before the
+start line are held, at most 16 of at most 4096 bytes each, and reach standard
+error once the child starts; any other line releases the held lines in order
+and ends the holding. JSON mode discards those lines, and an interactive
+invocation passes them at once. When sudo cannot be run or waited for and no
+result was written, the supervisor reports `runtime.interrupted` after an
+interrupt and `runtime.privilege` otherwise. An interactive invocation whose
+sudo ran ends with the child's status and no report of the supervisor's own,
+since sudo's refusals and the child's own diagnostics, an interrupt's included,
+already reached standard error. A JSON child that exits nonzero without writing
+its document reports `runtime.interrupted` after an interrupt,
+`runtime.internal` naming its status once it started, and `runtime.privilege`
+otherwise. In a human noninteractive invocation, when the child never started
+and nothing but held lines reached standard error, the supervisor reports
+`runtime.interrupted` after an interrupt, and `runtime.privilege` only when sudo
+exited 1 having held a line. A report the supervisor writes replaces the held
+lines and exits `130` after an interrupt and `1` otherwise, as
+[streams and exit status](cli/output.md#streams-and-exit-status) requires;
+every other ending forwards the held lines and exits with the child's status,
+never `0` when sudo could not be waited for.
+
 The supervisor owns bounded `sudo -n -v` refresh subprocesses during that child.
 Keep the same parent and terminal identity. An unambiguous positive effective
 timeout refreshes at half its duration, including fractional minutes. Zero and
@@ -345,15 +372,21 @@ They accept no positional operand, partial selector, range, mode,
 reconciliation, adoption, reclaim, force, or resource-specific subcommand.
 
 `plan` is a pure text preview of the next legal full operation or frozen
-continuation point. With no operation it previews the fresh operation the
-current state would start, listing every block in frozen order with the
-description and impacts of the verb it previews. That preview is the fresh
-`apply`'s own [decision](state-reconciliation.md#stages-and-the-pause-boundary),
-so wherever that decision refuses, it refuses with the same diagnostics and no
-receipt. With an incomplete operation
-it previews that exact continuation point instead, showing which blocks are
-already done and which block resumes, and never a re-planned alternative. With
-a completed apply it previews the destroy that the recorded ownership evidence
+continuation point. Each preview is the
+[decision](state-reconciliation.md#stages-and-the-pause-boundary) of the verb
+it previews, so wherever that decision refuses, it refuses with the same
+diagnostics and no receipt. With no operation, or a completed destroy, it
+previews the fresh operation the current state would start, listing every block
+in frozen order with the description and impacts of the verb it previews. With
+an incomplete operation it previews that exact continuation point instead,
+showing which blocks are already done and which block resumes, and never a
+re-planned alternative, except that a failed destroy previews the fresh removal
+`destroy` starts over what it has not yet proved gone. When every block of a
+`running` or `unknown` operation is done, its own verb completes the
+operation's [finalization](state-reconciliation.md#lifecycle-unit) and then
+settles, and the preview says so in one line above those blocks; an `apply`
+whose input changed refuses there instead, and so does its preview. With a
+completed apply it previews the destroy that the recorded ownership evidence
 defines. It reads context state, allocates no identity, writes nothing and
 creates no log.
 
@@ -394,9 +427,9 @@ or safety gate.
 what a selection gates, pauses and refuses is owned by the
 [stage contract](state-reconciliation.md#stages-and-the-pause-boundary).
 `plan --stage` previews which blocks the selection would start and which it
-would defer. Previewing a fresh operation, it fails `lifecycle.stage` exactly
-where the fresh `apply` it previews would; previewing a continuation, it never
-fails `lifecycle.stage`.
+would defer. Previewing a fresh or continued `apply`, it fails
+`lifecycle.stage` exactly where that `apply` would; previewing a `destroy`,
+which accepts no selection, it fails `lifecycle.stage` for any selection.
 
 ### Lifecycle receipt
 

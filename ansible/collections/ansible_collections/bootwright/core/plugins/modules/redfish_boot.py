@@ -1,5 +1,5 @@
 #!/usr/bin/python
-"""Read or drive one machine's power and virtual media through its controller.
+"""Drive one machine's power, boot device and virtual media through its controller.
 
 Every power operation goes through the management controller, never through the
 hypervisor, so a consumer takes the same path to a virtual and a physical
@@ -28,13 +28,13 @@ from __future__ import annotations
 
 DOCUMENTATION = r"""
 module: redfish_boot
-short_description: Read or drive one machine through its management controller
+short_description: Drive one machine through its management controller
 version_added: "0.1.0"
 description:
-  - Reads the power state and inserted media, inserts or ejects virtual media,
-    sets a one-time boot device, asks the operating system to shut down, and
-    powers a machine on or off.
-  - The read operation performs no change and is safe to repeat.
+  - Inserts or ejects virtual media, sets a one-time boot device, asks the
+    operating system to shut down, and powers a machine on or off.
+  - Every operation may change the machine. A read goes through
+    redfish_system_read, which cannot.
 options:
   endpoint:
     description: The exact ComputerSystem resource this machine is managed through.
@@ -49,10 +49,10 @@ options:
     type: str
     required: true
   operation:
-    description: What to read or drive.
+    description: What to drive.
     type: str
     required: true
-    choices: [read, insert, eject, boot, power-on, power-off, shutdown]
+    choices: [insert, eject, boot, power-on, power-off, shutdown]
   image:
     description: The media URL to insert.
     type: str
@@ -75,12 +75,12 @@ author:
 """
 
 EXAMPLES = r"""
-- name: Read the machine's power state
+- name: Eject the installer media
   bootwright.core.redfish_boot:
     endpoint: '{{ endpoint }}'
     user: '{{ user }}'
     password: '{{ password }}'
-    operation: read
+    operation: eject
 """
 
 RETURN = r"""
@@ -90,8 +90,8 @@ power:
   type: str
 media:
   description:
-    - The image the virtual-media device last reported for read, insert and
-      eject, or the empty string when it presents none or none is offered.
+    - The image the virtual-media device last reported for insert and eject,
+      or the empty string when it presents none or none is offered.
     - Always empty for boot and power operations, which never look for media.
   returned: always
   type: str
@@ -103,6 +103,8 @@ from ansible_collections.bootwright.core.plugins.module_utils import redfish_con
 MAX_ATTEMPTS = 600
 # Each power operation's reset type and the state it must reach.
 RESETS = {"power-on": ("On", "On"), "power-off": ("ForceOff", "Off"), "shutdown": ("GracefulShutdown", "Off")}
+# Every operation, each of which may change the machine.
+DRIVES = ("insert", "eject", "boot") + tuple(RESETS)
 
 
 def main():
@@ -111,10 +113,7 @@ def main():
             "endpoint": {"type": "str", "required": True},
             "user": {"type": "str", "required": True},
             "password": {"type": "str", "required": True, "no_log": True},
-            "operation": {
-                "type": "str", "required": True,
-                "choices": ["read", "insert", "eject", "boot", "power-on", "power-off", "shutdown"],
-            },
+            "operation": {"type": "str", "required": True, "choices": list(DRIVES)},
             "image": {"type": "str", "required": False},
             "target": {"type": "str", "default": "Cd", "choices": ["Cd", "Hdd"]},
             "attempts": {"type": "int", "default": 60},
@@ -138,10 +137,13 @@ def drive(client, operation, attempts, image="", target="Cd"):
     """Perform exactly the one operation asked for, prove it, and report it.
 
     Returns whether it changed anything, the power state the invocation's last
-    system read reported, and the image the device last reported. Only read,
-    insert and eject look for media; boot and power operations never do, so
-    they report no image.
+    system read reported, and the image the device last reported. Only insert
+    and eject look for media; boot and power operations never do, so they
+    report no image. Anything else is refused before a request is made: this
+    module drives, and a read goes through redfish_system_read.
     """
+    if operation not in DRIVES:
+        raise redfish_control.ControllerError("%s is not an operation this module drives" % operation)
     if operation == "insert" and not image:
         raise redfish_control.ControllerError("insert needs an image")
     if operation == "boot":
@@ -154,13 +156,7 @@ def drive(client, operation, attempts, image="", target="Cd"):
         kind, expected = RESETS[operation]
         return client.power(kind, expected, attempts), client.last_power, ""
     power = client.power_state()
-    changed = False
-    if operation == "insert":
-        changed = client.insert(image)
-    elif operation == "eject":
-        changed = client.eject()
-    else:
-        client.inserted()
+    changed = client.insert(image) if operation == "insert" else client.eject()
     return changed, power, client.last_image
 
 

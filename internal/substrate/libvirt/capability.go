@@ -283,9 +283,12 @@ func (c HostCapability) mutate(ctx context.Context, execution lifecycle.Executio
 }
 
 // Observe is read-only against the frozen request. Live state matching it in
-// full is positive completion, nothing present is positive no effect, this
-// context's own networks or pool part way realized is positive partial, and a
-// foreign or contradictory observation stays unknown.
+// full is positive completion, nothing present through a URI and drivers that
+// answered is positive no effect, this context's own networks, pool or pool
+// directory part way realized is positive partial, and a foreign or
+// contradictory observation stays unknown. A connection or a network or
+// storage driver that does not answer reports no network and no pool, so it
+// proves nothing: silence with nothing else of this context's is unknown.
 func (c HostCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	return c.observe(ctx, execution, func(evidence []byte, request HostRequest, digest string) reconciliation.EffectState {
 		switch {
@@ -300,18 +303,19 @@ func (c HostCapability) Observe(ctx context.Context, execution lifecycle.Executi
 	})
 }
 
-// ObserveRemoval reads the same observation for what a removal proves: all of
-// this context's networks and pool present is positive no effect, and some of
-// them is a positive partial removal the next attempt converges. It never
-// reads the absence form as the removal's completion, because a connection
-// that does not answer publishes that form too, as does a pool undefined
-// before its directory was deleted; the form reads as no effect, so the
-// removal repeats and proves its own absence. The hypervisor closure it never
-// removes proves nothing either way.
+// ObserveRemoval reads the same observation for what a removal proves: none of
+// the owned networks, the pool and its directory present, through a URI and
+// drivers that answered, is its completion; all of them present is positive no
+// effect; and some of them is a positive partial removal the next attempt
+// converges. A connection or driver that does not answer proves none of them
+// absent, so it stays unknown. The hypervisor closure it never removes proves
+// nothing either way.
 func (c HostCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	return c.observe(ctx, execution, func(evidence []byte, request HostRequest, digest string) reconciliation.EffectState {
 		switch {
-		case ValidateHostAbsence(evidence, digest) == nil, ValidateHostPresence(evidence, request, digest) == nil:
+		case ValidateHostAbsence(evidence, digest) == nil:
+			return reconciliation.EffectCompleted
+		case ValidateHostPresence(evidence, request, digest) == nil:
 			return reconciliation.EffectNoEffect
 		case ValidateHostPartial(evidence, digest) == nil:
 			return reconciliation.EffectPartial
@@ -425,9 +429,10 @@ func (c MachineCapability) Observe(ctx context.Context, execution lifecycle.Exec
 }
 
 // ObserveRemoval reads the same observation for what a removal proves: none of
-// the domain, its controller unit and its disks present is its completion, the
-// whole machine is positive no effect, and part of it is a positive partial
-// removal the next attempt converges.
+// the domain, its controller unit, its disks and a listener on its socket
+// present is its completion, the whole machine is positive no effect, and part
+// of it is a positive partial removal the next attempt converges. A listener
+// alone is not proved to be this Machine's, so it stays unknown.
 func (c MachineCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	return c.observe(ctx, execution, func(evidence []byte, request MachineRequest, digest string) reconciliation.EffectState {
 		switch {

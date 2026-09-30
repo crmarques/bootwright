@@ -2,8 +2,15 @@
   "absent": true,
   "answered": true,
   "controller": "",
-  "disks": [],
+  "disks": [
+    {
+      "name": "root",
+      "present": false,
+      "sizeGiB": 0
+    }
+  ],
   "domain": "",
+  "listener": false,
   "owned": false,
   "postcondition": true,
   "power": "",

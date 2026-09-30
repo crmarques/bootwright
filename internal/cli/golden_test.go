@@ -428,8 +428,9 @@ func cliGoldens() []cliGolden {
 			}
 		}},
 
-		// Lifecycle: a staged preview, a completed apply, a settled destroy,
-		// a settled apply that first completed an interrupted finalization, a
+		// Lifecycle: a staged preview, a preview whose apply only completes an
+		// interrupted finalization, a completed apply, a settled destroy, a
+		// settled apply that first completed an interrupted finalization, a
 		// settled destroy that first released what an interrupted registration
 		// left, an apply that ran and failed, and a refusal that registered
 		// nothing.
@@ -444,6 +445,17 @@ func cliGoldens() []cliGolden {
 				},
 				Stages: []string{"infra-components", "substrates"}, Waves: 4, Widest: 1, Startable: 2, Deferred: 2,
 				Receipt: lifecycle.Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "apply"},
+			}
+		}},
+		{golden: "cli-plan-finalization", args: "plan", record: func(r *dispatchRecord) {
+			r.result.lifecyclePlan = &lifecycle.PlanResult{
+				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply",
+				Steps: []lifecycle.PlanStep{
+					{ID: "artifact-server-lab-artifacts", Description: "serve artifacts for lab-artifacts on controller", Stage: "infra-components", Impacts: []string{"create-container-unit"}, State: "done", Wave: 1},
+					{ID: "substrate-host-lab-libvirt", Description: "realize the libvirt host of lab-libvirt on controller", Stage: "substrates", Impacts: []string{"create-libvirt-pool lab-libvirt"}, State: "done", After: []int{1}, Wave: 2},
+				},
+				Waves: 2, Widest: 1, Continuation: true, Finalizes: true,
+				Receipt: lifecycle.Receipt{Operation: operationID, Verb: "plan", State: "preview", Next: "continue-apply"},
 			}
 		}},
 		{golden: "cli-apply", args: "apply --yes", record: func(r *dispatchRecord) { r.result.lifecycleOperation = operation("done") }},

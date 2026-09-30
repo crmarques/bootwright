@@ -132,7 +132,9 @@ func operationPath(target string, minimum int) ([]string, error) {
 		return nil, state("lifecycle operation path exceeds its depth bounds")
 	}
 	for _, part := range parts {
-		if !safeOperationName(part) {
+		// A record named as a stage would be removed by the next lease's
+		// collection, so no area creates one.
+		if !safeOperationName(part) || stageName(part, true) {
 			return nil, state("lifecycle operation path component is unsafe")
 		}
 	}

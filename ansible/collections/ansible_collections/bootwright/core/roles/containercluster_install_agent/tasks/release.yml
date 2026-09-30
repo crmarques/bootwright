@@ -1,7 +1,10 @@
 ---
 # The media stays inserted while the installation runs, because a live agent
 # image is still read after a node answers on the network. It is released only
-# once the installation has completed.
+# once the installation has completed, and the node's controller is then
+# pointed at its installed disk through the substrate that realized it, which
+# powers nothing on: the node is running the cluster. That dispatch ends in a
+# terminal fail for a substrate with neither entry point.
 - name: Eject the media this node installed from
   bootwright.core.redfish_boot:
     endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
@@ -11,13 +14,39 @@
     operation: eject
   no_log: true
 
-- name: Select the installed disk as the boot device
-  bootwright.core.redfish_boot:
-    endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", containercluster_install_agent_user) }}'
-    password: '{{ lookup("ansible.builtin.file", containercluster_install_agent_password) }}'
-    verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
-    operation: boot
-    target: Hdd
-  no_log: true
-  when: containercluster_install_agent_node.physical | bool
+- name: Point a machine this substrate created at its installed disk
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_libvirt_machine
+    tasks_from: boot_disk
+  vars:
+    substrate_libvirt_machine_disk_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+    substrate_libvirt_machine_disk_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+    substrate_libvirt_machine_disk_user: '{{ containercluster_install_agent_user }}'
+    substrate_libvirt_machine_disk_password: '{{ containercluster_install_agent_password }}'
+    substrate_libvirt_machine_disk_power_on: false
+  when: containercluster_install_agent_node.substrate == 'libvirt'
+
+- name: Point an operator-owned machine at its installed disk
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_baremetal_machine
+    tasks_from: boot_disk
+  vars:
+    substrate_baremetal_machine_disk_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+    substrate_baremetal_machine_disk_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+    substrate_baremetal_machine_disk_user: '{{ containercluster_install_agent_user }}'
+    substrate_baremetal_machine_disk_password: '{{ containercluster_install_agent_password }}'
+    substrate_baremetal_machine_disk_power_on: false
+  when: containercluster_install_agent_node.substrate == 'baremetal'
+
+# A substrate with no disk-boot entry point reaches this refusal only after the
+# eject above. That is acceptable only because apply.yml refuses such a node
+# before any node is touched, which leaves this unreachable from there.
+- name: Refuse a substrate this installation has no disk-boot binding for
+  ansible.builtin.fail:
+    msg: >-
+      node {{ containercluster_install_agent_node.name }} names substrate
+      {{ containercluster_install_agent_node.substrate }}, which this cluster
+      installation has no boot_disk binding for, so Machine
+      {{ containercluster_install_agent_node.machine }} was not pointed at its
+      installed disk; plan the installation again with this release
+  when: containercluster_install_agent_node.substrate not in ['libvirt', 'baremetal']

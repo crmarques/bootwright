@@ -131,8 +131,8 @@ func machineEvidence(request MachineRequest, digest string) json.RawMessage {
 		disks = append(disks, DiskEvidence{Name: disk.Name, Present: true, SizeGiB: disk.SizeGiB})
 	}
 	data, _ := json.Marshal(MachineEvidence{
-		Answered: true, Controller: request.Controller.Image, Disks: disks, Domain: request.Domain, Owned: true,
-		Postcondition: true, Power: "Off", Request: digest, System: request.UUID, Unit: "active",
+		Answered: true, Controller: request.Controller.Image, Disks: disks, Domain: request.Domain, Listener: observed(true),
+		Owned: true, Postcondition: true, Power: "Off", Request: digest, System: request.UUID, Unit: "active",
 	})
 	return data
 }
@@ -142,7 +142,7 @@ func hostEvidence(request HostRequest, digest string) json.RawMessage {
 	for _, network := range request.Networks {
 		entry := NetworkEvidence{Bridge: true, Managed: network.Managed, Name: network.Name}
 		if network.Managed {
-			entry.Owned, entry.State = true, "active"
+			entry.Answered, entry.Owned, entry.State = true, true, "active"
 		}
 		networks = append(networks, entry)
 	}
@@ -151,8 +151,8 @@ func hostEvidence(request HostRequest, digest string) json.RawMessage {
 		services = append(services, ServiceEvidence{Enabled: true, Name: service, State: "active"})
 	}
 	data, _ := json.Marshal(HostEvidence{
-		Hypervisor: true, Networks: networks, Pool: "active", Postcondition: true,
-		Request: digest, Services: services, URI: true,
+		Directory: observed(true), Hypervisor: true, Networks: networks, Pool: "active", PoolAnswered: true,
+		Postcondition: true, Request: digest, Services: services, URI: true,
 	})
 	return data
 }
@@ -193,7 +193,7 @@ func TestObservationMapsEvidenceToTheEffectItProves(t *testing.T) {
 		BlockDefinition: reconciliation.BlockDefinition{ID: "machine-rhel-01", Request: canonical},
 		RequestDigest:   "digest",
 	}}
-	absent, _ := json.Marshal(MachineEvidence{Absent: true, Answered: true, Postcondition: true, Request: "digest"})
+	absent, _ := json.Marshal(MachineEvidence{Absent: true, Answered: true, Listener: observed(false), Postcondition: true, Request: "digest"})
 	partial, _ := json.Marshal(MachineEvidence{Domain: requests[0].Domain, Owned: true, Postcondition: true, Request: "digest"})
 	for name, test := range map[string]struct {
 		runner *fakeRunner
@@ -211,13 +211,35 @@ func TestObservationMapsEvidenceToTheEffectItProves(t *testing.T) {
 			}
 		})
 	}
+	hosts, _ := HostRequests(labCatalog(), "controller", testContext)
+	hostCanonical, _ := hosts[0].Canonical()
+	host := lifecycle.Execution{Block: reconciliation.Block{
+		BlockDefinition: reconciliation.BlockDefinition{ID: "substrate-host-lab-libvirt", Request: hostCanonical},
+		RequestDigest:   "digest",
+	}}
+	for name, test := range map[string]struct {
+		evidence HostEvidence
+		want     reconciliation.EffectState
+	}{
+		"host absent":         {HostEvidence{Absent: true, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true}, reconciliation.EffectNoEffect},
+		"host directory only": {HostEvidence{Directory: observed(true), Hypervisor: true, PoolAnswered: true, Request: "digest", URI: true}, reconciliation.EffectPartial},
+		"host silent":         {HostEvidence{Directory: observed(false), Hypervisor: true, Request: "digest"}, reconciliation.EffectUnknown},
+	} {
+		t.Run(name, func(t *testing.T) {
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, test.evidence)}}
+			observation, err := NewHost(runner).Observe(context.Background(), host)
+			if err != nil || observation.Effect != test.want {
+				t.Fatalf("observation = %+v (%v), want %s", observation, err, test.want)
+			}
+		})
+	}
 }
 
 // A removal's resolution reads the same observation for what the removal
 // proves, so a host or machine still realized is a removal that had no effect
-// rather than one that completed. The host's absence form is no effect too,
-// because a connection that does not answer publishes it as well, so the
-// removal repeats and proves its absence instead of trusting it.
+// rather than one that completed, and its absence, proved through a
+// hypervisor that answered, is the removal's completion. A hypervisor that did
+// not answer proves neither, so it stays unknown.
 func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 	hosts, _ := HostRequests(labCatalog(), "controller", testContext)
 	machines, _ := MachineRequests(labCatalog(), "controller", testContext)
@@ -240,9 +262,9 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 		execution lifecycle.Execution
 		observe   func(Runner) func(context.Context, lifecycle.Execution) (lifecycle.Observation, error)
 		absent    json.RawMessage
-		absentIs  reconciliation.EffectState
 		present   json.RawMessage
 		partial   json.RawMessage
+		silent    json.RawMessage
 		foreign   json.RawMessage
 	}{
 		{
@@ -250,31 +272,32 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 			observe: func(runner Runner) func(context.Context, lifecycle.Execution) (lifecycle.Observation, error) {
 				return NewHost(runner).ObserveRemoval
 			},
-			absent:   encode(HostEvidence{Absent: true, Postcondition: true, Request: "digest"}),
-			absentIs: reconciliation.EffectNoEffect,
-			present:  hostEvidence(hosts[0], "digest"),
-			partial:  encode(HostEvidence{Pool: "active", Request: "digest"}),
-			foreign:  encode(HostEvidence{Absent: true, Postcondition: true, Request: "other"}),
+			absent:  encode(HostEvidence{Absent: true, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true}),
+			present: hostEvidence(hosts[0], "digest"),
+			partial: encode(HostEvidence{Pool: "active", PoolAnswered: true, Request: "digest", URI: true}),
+			silent:  encode(HostEvidence{Directory: observed(false), Hypervisor: true, Request: "digest"}),
+			foreign: encode(HostEvidence{Absent: true, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "other", URI: true}),
 		},
 		{
 			name: "machine", execution: block("machine-rhel-01", machineCanonical),
 			observe: func(runner Runner) func(context.Context, lifecycle.Execution) (lifecycle.Observation, error) {
 				return NewMachine(runner).ObserveRemoval
 			},
-			absent:   encode(MachineEvidence{Absent: true, Answered: true, Postcondition: true, Request: "digest"}),
-			absentIs: reconciliation.EffectCompleted,
-			present:  machineEvidence(machines[0], "digest"),
-			partial:  encode(MachineEvidence{Domain: machines[0].Domain, Owned: true, Request: "digest"}),
-			foreign:  encode(MachineEvidence{Absent: true, Answered: true, Postcondition: true, Request: "other"}),
+			absent:  encode(MachineEvidence{Absent: true, Answered: true, Listener: observed(false), Postcondition: true, Request: "digest"}),
+			present: machineEvidence(machines[0], "digest"),
+			partial: encode(MachineEvidence{Domain: machines[0].Domain, Owned: true, Request: "digest"}),
+			silent:  encode(MachineEvidence{Listener: observed(false), Power: "Off", Request: "digest"}),
+			foreign: encode(MachineEvidence{Absent: true, Answered: true, Listener: observed(false), Postcondition: true, Request: "other"}),
 		},
 	} {
 		for name, test := range map[string]struct {
 			runner *fakeRunner
 			want   reconciliation.EffectState
 		}{
-			"absent":          {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: target.absent}}, target.absentIs},
+			"absent":          {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: target.absent}}, reconciliation.EffectCompleted},
 			"present":         {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: target.present}}, reconciliation.EffectNoEffect},
 			"partial":         {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: target.partial}}, reconciliation.EffectPartial},
+			"silent":          {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: target.silent}}, reconciliation.EffectUnknown},
 			"another request": {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: target.foreign}}, reconciliation.EffectUnknown},
 			"failed":          {&fakeRunner{err: errors.New("unreachable")}, reconciliation.EffectUnknown},
 		} {
@@ -288,6 +311,64 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// silentDrivers is the absence form an adapter publishes over a host whose
+// hypervisor answered while the driver that owns a managed network or the pool
+// did not: each reports no state and no ownership, exactly as one that driver
+// removed would, and only its answer tells the two apart.
+func silentDrivers(request HostRequest, network, pool bool) HostEvidence {
+	networks := make([]NetworkEvidence, 0, len(request.Networks))
+	for _, entry := range request.Networks {
+		networks = append(networks, NetworkEvidence{Answered: entry.Managed && !network, Bridge: true, Managed: entry.Managed, Name: entry.Name})
+	}
+	services := make([]ServiceEvidence, 0, len(request.Services))
+	for _, service := range request.Services {
+		services = append(services, ServiceEvidence{Enabled: true, Name: service, State: "inactive"})
+	}
+	return HostEvidence{
+		Absent: true, Directory: observed(false), Hypervisor: true, Networks: networks, PoolAnswered: !pool,
+		Postcondition: true, Request: "digest", Services: services, URI: true,
+	}
+}
+
+// The URI answering proves only that the hypervisor driver did. A managed
+// network and the pool each live in a driver of their own, and one that is
+// silent reports them as one that removed them does, so neither a removal nor
+// either resolution reads that silence as the network or pool gone.
+func TestAHostItsDriversDidNotAnswerForProvesNoRemoval(t *testing.T) {
+	hosts, _ := HostRequests(labCatalog(), "controller", testContext)
+	canonical, _ := hosts[0].Canonical()
+	execution := lifecycle.Execution{Block: reconciliation.Block{
+		BlockDefinition: reconciliation.BlockDefinition{ID: "substrate-host-lab-libvirt", Request: canonical},
+		RequestDigest:   "digest",
+	}}
+	if err := ValidateHostAbsence(encode(t, silentDrivers(hosts[0], false, false)), "digest"); err != nil {
+		t.Fatalf("the absence both drivers answered for was refused: %v", err)
+	}
+	for name, evidence := range map[string]HostEvidence{
+		"network driver silent": silentDrivers(hosts[0], true, false),
+		"storage driver silent": silentDrivers(hosts[0], false, true),
+	} {
+		t.Run(name, func(t *testing.T) {
+			data := encode(t, evidence)
+			if err := ValidateHostAbsence(data, "digest"); err == nil {
+				t.Fatal("removal evidence a driver never answered for was accepted")
+			}
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: data}}
+			if result, err := NewHost(runner).Destroy(context.Background(), execution); err == nil {
+				t.Fatalf("a removal a driver never answered for resolved %s", result.Outcome)
+			}
+			for verb, observe := range map[string]func(context.Context, lifecycle.Execution) (lifecycle.Observation, error){
+				"apply": NewHost(runner).Observe, "destroy": NewHost(runner).ObserveRemoval,
+			} {
+				observation, err := observe(context.Background(), execution)
+				if err != nil || observation.Effect != reconciliation.EffectUnknown {
+					t.Fatalf("the %s resolution read %s (%v), want unknown", verb, observation.Effect, err)
+				}
+			}
+		})
 	}
 }
 

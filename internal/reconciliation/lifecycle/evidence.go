@@ -3,8 +3,10 @@ package lifecycle
 import (
 	"context"
 	"encoding/json"
+	"slices"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
 // BlockEvidence is what one block of the current operation durably proved
@@ -66,6 +68,28 @@ func (s Service) Evidence(ctx context.Context, contextName, kind, object string)
 		return nil, err
 	}
 	return found, nil
+}
+
+// provedDependencies reads what every block one block depends on durably
+// proved in this operation, in frozen plan order. Only an apply attempt
+// receives it: a removal's dependencies are the blocks it removes before, and
+// they prove absence rather than anything its effect relies on.
+func provedDependencies(ctx context.Context, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block) ([]BlockEvidence, error) {
+	if operation.Verb != reconciliation.Apply {
+		return nil, nil
+	}
+	var proved []BlockEvidence
+	for _, dependency := range plan.Blocks {
+		if !slices.Contains(block.Dependencies, dependency.ID) {
+			continue
+		}
+		evidence, err := blockEvidence(ctx, store, operation.ID, dependency, operation.Verb)
+		if err != nil {
+			return nil, err
+		}
+		proved = append(proved, evidence)
+	}
+	return proved, nil
 }
 
 // blockEvidence reads the last attempt a block durably completed. A block that

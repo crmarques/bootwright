@@ -155,9 +155,9 @@ keyring and never exposes prior material.
 
 The `secrets/` subtree is initialized during context creation, independently
 of the enclosing registry format. Empty or absent means uninitialized.
-Nonempty state without `store.json` resumes only from attributable
-initialization evidence, through `secret encryption init`; inspection never
-repairs it.
+Nonempty state without `store.json` resumes, through `secret encryption init`,
+only when everything in it is attributable initialization evidence or an
+interrupted temporary described below; inspection never repairs it.
 
 The normal layout has one atomically replaced `store.json`, immutable
 `parts/<blob-id>.enc`, immutable 32-byte `keys/<key-id>.key`, independently
@@ -220,7 +220,12 @@ Identity reservations use crash-atomic no-replace publication and retain
 `formatVersion`, `context`, and `id`. They preserve issued version/binding IDs
 after logical removal. Initialization uses an attributable,
 authenticated intent recording its context, backend, attempted key/generation
-identities and MAC; never adopt arbitrary partial state by filename.
+identities and MAC; never adopt arbitrary partial state by filename. A
+publication stage (`pending-` and 32 lowercase hexadecimal digits) in the
+subtree's root or in `keys/` whose bytes are not one complete JSON value is a
+temporary a killed write left: initialization recovery skips it, and cleanup
+after the next durable publication removes it. A stage that holds a complete
+JSON value is attributed as initialization evidence or refused.
 
 Sync new immutable material first, then revalidate the expected metadata inode,
 bytes and context under the lease. Atomic `store.json` replacement is the
@@ -253,9 +258,10 @@ Secret IDs use 128 random bits with 16 exclusive collision attempts. Limit
 failure never authorizes removal of referenced material or identity evidence.
 
 There is no conversion from an earlier keyring format. A `secrets/` subtree
-that is nonempty and holds neither a `store.json` this build can authenticate
-nor attributable initialization evidence refuses with `secret.store.corrupt`
-before any session is acquired, and the remedy is a new context.
+that is nonempty, holds no `store.json` this build can authenticate, and holds
+anything besides attributable initialization evidence and interrupted
+temporaries refuses with `secret.store.corrupt` before any session is acquired,
+and the remedy is a new context.
 
 Threat exclusions remain root, the same OS identity, process memory and theft
 of the full store with its keys. Keys share the local filesystem custody

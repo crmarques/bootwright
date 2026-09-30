@@ -20,7 +20,7 @@ HEX = set("0123456789abcdef")
 # The observation carries each network's UUID so a definition can be offered
 # back to libvirt under the identity it already holds. Evidence stays narrower:
 # Go validates exactly the facts below, and rejects any field it does not know.
-OBSERVED_NETWORK = {"bridge", "managed", "name", "owned", "state", "uuid"}
+OBSERVED_NETWORK = {"answered", "bridge", "managed", "name", "owned", "state", "uuid"}
 OBSERVED_SERVICE = {"enabled", "name", "state"}
 
 
@@ -34,6 +34,7 @@ def network_evidence(entry):
     if set(entry) != OBSERVED_NETWORK:
         raise ValueError("network evidence")
     return {
+        "answered": bool(entry["answered"]),
         "bridge": bool(entry["bridge"]),
         "managed": bool(entry["managed"]),
         "name": str(entry["name"]),
@@ -59,25 +60,48 @@ def services_of(observation):
     return [service_evidence(entry) for entry in services]
 
 
-def presence(observation, request_digest):
+def networks_of(observation):
     networks = observation.get("networks") or []
     if len(networks) > MAX_NETWORKS:
         raise ValueError("network count")
+    return [network_evidence(entry) for entry in networks]
+
+
+def directory(observation):
+    """Whether the pool directory exists, observed by its path.
+
+    Evidence without it proves the directory neither present nor absent, so
+    an observation that does not report it is never published.
+    """
+    value = observation.get("directory")
+    if not isinstance(value, bool):
+        raise ValueError("directory")
+    return value
+
+
+def realized(entry):
+    """Whether a managed network is answered for, owned and active."""
+    return entry["answered"] and entry["owned"] and entry["state"] == "active"
+
+
+def presence(observation, request_digest):
     evidence = {
         "absent": False,
+        "directory": directory(observation),
         "hypervisor": bool(observation.get("hypervisor")),
-        "networks": [network_evidence(entry) for entry in networks],
+        "networks": networks_of(observation),
         "pool": str(observation.get("pool", "")),
+        "poolAnswered": bool(observation.get("poolAnswered")),
         "postcondition": False,
         "request": digest(request_digest),
         "services": services_of(observation),
         "uri": bool(observation.get("uri")),
     }
-    complete = evidence["hypervisor"] and evidence["uri"] and evidence["pool"] == "active"
+    complete = evidence["hypervisor"] and evidence["uri"] and evidence["poolAnswered"] and evidence["pool"] == "active"
     for entry in evidence["services"]:
         complete = complete and entry["state"] == "active" and entry["enabled"]
     for entry in evidence["networks"]:
-        complete = complete and entry["bridge"] and (not entry["managed"] or (entry["owned"] and entry["state"] == "active"))
+        complete = complete and entry["bridge"] and (not entry["managed"] or realized(entry))
     evidence["postcondition"] = complete
     return evidence
 
@@ -98,6 +122,8 @@ def remaining(observation):
     networks = [network_evidence(entry) for entry in observation.get("networks") or []]
     if any(still_defined(entry) for entry in networks):
         names.append("networks")
+    if observation.get("directory"):
+        names.append("directory")
     return names
 
 
@@ -112,28 +138,62 @@ def unproved(evidence):
         if entry["state"] != "active" or not entry["enabled"]:
             names.append("services")
             break
-    if evidence["pool"] != "active":
+    if not evidence["poolAnswered"] or evidence["pool"] != "active":
         names.append("pool")
     for entry in evidence["networks"]:
-        if not entry["bridge"] or (entry["managed"] and not (entry["owned"] and entry["state"] == "active")):
+        if not entry["bridge"] or (entry["managed"] and not realized(entry)):
             names.append("networks")
             break
     return names
 
 
+def unanswered(evidence):
+    """What the driver that owns it did not answer for, named for a refusal.
+
+    The uri answering proves only that the hypervisor did. A managed network
+    and the pool each live in a driver of their own, and one that is silent
+    reports them undefined exactly as one that removed them does.
+    """
+    names = []
+    if any(entry["managed"] and not entry["answered"] for entry in evidence["networks"]):
+        names.append("networks")
+    if not evidence["poolAnswered"]:
+        names.append("pool")
+    return names
+
+
+def gone(evidence):
+    """Whether the evidence proves every owned network, the pool and its directory gone.
+
+    A connection that does not answer reports no network and no pool either,
+    and neither does a driver that did not answer for one, so only a network
+    and a pool their own driver answered for are proved absent.
+    """
+    return (
+        evidence["uri"] is True
+        and not unanswered(evidence)
+        and evidence["pool"] == ""
+        and not any(still_defined(entry) for entry in evidence["networks"])
+        and evidence["directory"] is False
+    )
+
+
 def absence(observation, request_digest):
-    networks = [network_evidence(entry) for entry in observation.get("networks") or []]
-    gone = not observation.get("pool") and not any(still_defined(entry) for entry in networks)
-    return {
+    """Removal evidence carrying what was observed, proved only by gone()."""
+    evidence = {
         "absent": True,
-        "hypervisor": False,
-        "networks": [entry for entry in networks if not entry["managed"]],
-        "pool": "",
-        "postcondition": bool(gone),
+        "directory": directory(observation),
+        "hypervisor": bool(observation.get("hypervisor")),
+        "networks": networks_of(observation),
+        "pool": str(observation.get("pool", "")),
+        "poolAnswered": bool(observation.get("poolAnswered")),
+        "postcondition": False,
         "request": digest(request_digest),
-        "services": [],
-        "uri": False,
+        "services": services_of(observation),
+        "uri": bool(observation.get("uri")),
     }
+    evidence["postcondition"] = gone(evidence)
+    return evidence
 
 
 def publishes(evidence, observed):
@@ -144,6 +204,33 @@ def publishes(evidence, observed):
     evidence. A mutation has to reach its postcondition or fail.
     """
     return bool(evidence["postcondition"]) or bool(observed)
+
+
+def completion(arguments):
+    """The evidence one completion publishes, and what it names when unmet.
+
+    A removal publishes the absence form. An observation publishes it exactly
+    when everything is gone and the presence form otherwise, so what is still
+    there reaches the engine; asking an observation for a removal's form is a
+    malformed call.
+    """
+    request_digest = arguments.get("digest")
+    observation = arguments.get("observation") or {}
+    if arguments.get("removed"):
+        if arguments.get("observed"):
+            raise ValueError("an observation proves no removal")
+        evidence = absence(observation, request_digest)
+        if not evidence["uri"]:
+            return evidence, ["networks", "pool"], "the hypervisor did not answer for"
+        if unanswered(evidence):
+            return evidence, unanswered(evidence), "the libvirt driver that owns it did not answer for"
+        return evidence, remaining(observation), "still present"
+    if arguments.get("observed"):
+        evidence = absence(observation, request_digest)
+        if evidence["postcondition"]:
+            return evidence, [], "still present"
+    evidence = presence(observation, request_digest)
+    return evidence, unproved(evidence), "not proved"
 
 
 class ActionModule(ActionBase):
@@ -169,14 +256,7 @@ class ActionModule(ActionBase):
             outcome = arguments.get("outcome")
             if outcome not in OUTCOMES:
                 raise ValueError("outcome")
-            request_digest = arguments.get("digest")
-            observation = arguments.get("observation") or {}
-            if arguments.get("removed"):
-                evidence = absence(observation, request_digest)
-                unmet, verb = remaining(observation), "still present"
-            else:
-                evidence = presence(observation, request_digest)
-                unmet, verb = unproved(evidence), "not proved"
+            evidence, unmet, verb = completion(arguments)
             if not publishes(evidence, arguments.get("observed")):
                 return {
                     "failed": True,

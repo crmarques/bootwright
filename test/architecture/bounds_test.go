@@ -19,10 +19,11 @@ import (
 // it. The phrase is the spec text around the value, with %s where the value
 // appears, and it must occur exactly once. The constant names a package-level
 // constant of source. A duration is a deadline, and applied says where it
-// takes effect; a count names nothing there.
+// takes effect; a count or a size in bytes names nothing there.
 type documentedBound struct {
 	spec, phrase, source, constant string
 	applied                        *application
+	size                           bool
 }
 
 // application names the function that passes a deadline to
@@ -40,24 +41,32 @@ func documentedBounds() []documentedBound {
 	const (
 		contexts         = "specs/contexts.md"
 		store            = "internal/workspace/contextfs/store.go"
-		bundles          = "internal/workspace/contextfs/controller_bundles_linux_amd64.go"
+		bundles          = "internal/workspace/contextfs/controller_records.go"
 		operations       = "internal/reconciliation/operationstore/records.go"
 		lifecycleRun     = "internal/reconciliation/ansiblerunner/process_linux_amd64.go"
 		lifecycleRequest = "internal/reconciliation/lifecycle/invocation.go"
 		setupRun         = "internal/controller/ansiblelocal/runner_linux_amd64.go"
+		mediaRecords     = "internal/managedos/media.go"
+		mediaStore       = "internal/workspace/contextfs/media_linux_amd64.go"
 	)
 	return []documentedBound{
-		{contexts, "| Active or reserved context names | %s |", store, "maxContexts", nil},
-		{contexts, "The %s-name bound applies", store, "maxContexts", nil},
-		{contexts, "| Revisions per context | %s |", store, "maxRevisions", nil},
-		{contexts, "| Retained [controller bundle namespaces](contexts/controller-record.md#bounds) | %s |", bundles, "maxControllerBundles", nil},
-		{"specs/contexts/controller-record.md", "There are at most %s retained bundle", bundles, "maxControllerBundles", nil},
-		{contexts, "| Lifecycle operations one context retains | %s |", operations, "MaxOperations", nil},
-		{contexts, "| One lifecycle adapter invocation whose request states no deadline | %s |", lifecycleRun, "invocationTimeout", &application{runner: "execute"}},
-		{contexts, "| The longest deadline a lifecycle adapter request may state | %s |", lifecycleRequest, "MaxDeadline", &application{runner: "execute", source: lifecycleRun, ceiling: true}},
-		{contexts, "| One controller Ansible run: setup, its recovery or the base of a controller-stage client installation | %s |", setupRun, "runTimeout", &application{runner: "runProcess"}},
-		{contexts, "| The longest deadline a controller-stage client installation may run under | %s |", setupRun, "clientStageCeiling", &application{runner: "runProcess", ceiling: true}},
-		{"specs/container-clusters.md", "whose `minSizeGigabytes` exceeds %s", "internal/containercluster/agentinstall/selection.go", "maxInstallerRootDeviceGigabytes", nil},
+		{contexts, "| Active or reserved context names | %s |", store, "maxContexts", nil, false},
+		{contexts, "The %s-name bound applies", store, "maxContexts", nil, false},
+		{contexts, "| Revisions per context | %s |", store, "maxRevisions", nil, false},
+		{contexts, "| Retained [controller bundle namespaces](contexts/controller-record.md#bounds) | %s |", bundles, "maxControllerBundles", nil, false},
+		{"specs/contexts/controller-record.md", "There are at most %s retained bundle", bundles, "maxControllerBundles", nil, false},
+		{contexts, "| Lifecycle operations one context retains | %s |", operations, "MaxOperations", nil, false},
+		{contexts, "| One lifecycle adapter invocation whose request states no deadline | %s |", lifecycleRun, "invocationTimeout", &application{runner: "execute"}, false},
+		{contexts, "| The longest deadline a lifecycle adapter request may state | %s |", lifecycleRequest, "MaxDeadline", &application{runner: "execute", source: lifecycleRun, ceiling: true}, false},
+		{contexts, "| One controller Ansible run: setup, its recovery or the base of a controller-stage client installation | %s |", setupRun, "runTimeout", &application{runner: "runProcess"}, false},
+		{contexts, "| The longest deadline a controller-stage client installation may run under | %s |", setupRun, "clientStageCeiling", &application{runner: "runProcess", ceiling: true}, false},
+		{"specs/container-clusters.md", "whose `minSizeGigabytes` exceeds %s", "internal/containercluster/agentinstall/selection.go", "maxInstallerRootDeviceGigabytes", nil, false},
+		{contexts, "| Bytes in one installer media image | %s |", mediaRecords, "MaxMediaBytes", nil, true},
+		{contexts, "| Installer media images one host holds | %s |", mediaRecords, "MaxMediaEntries", nil, false},
+		{contexts, "| Bytes in an installer media name | %s |", mediaRecords, "MaxMediaName", nil, false},
+		{contexts, "| Installer media stages at once, live, retained or abandoned | %s |", mediaStore, "maxStagedMedia", nil, false},
+		{contexts, "At most %s stages exist at once", mediaStore, "maxStagedMedia", nil, false},
+		{"specs/cli/commands.md", "basename of 5 through %s bytes", mediaRecords, "MaxMediaName", nil, false},
 	}
 }
 
@@ -74,7 +83,10 @@ func TestDocumentedBoundsMatchCode(t *testing.T) {
 				t.Fatal(err)
 			}
 			value, duration := boundValue(t, boundExpression(t, syntax, bound.source, bound.constant))
-			phrase := fmt.Sprintf(bound.phrase, renderBound(t, value, duration))
+			if duration && bound.size {
+				t.Fatalf("%s: a duration is not a size in bytes", bound.constant)
+			}
+			phrase := fmt.Sprintf(bound.phrase, renderBound(t, value, duration, bound.size))
 			if count := strings.Count(string(spec), phrase); count != 1 {
 				t.Errorf("%s states %q %d times, want once: %s in %s changed, or the spec did", bound.spec, phrase, count, bound.constant, bound.source)
 			}
@@ -325,12 +337,24 @@ func boundValue(t *testing.T, expression ast.Expr) (constant.Value, bool) {
 }
 
 // renderBound writes a value the way the specs state it: a count in decimal,
-// and a duration in the largest whole unit.
-func renderBound(t *testing.T, value constant.Value, duration bool) string {
+// a size in its largest whole binary unit, and a duration in the largest whole
+// unit.
+func renderBound(t *testing.T, value constant.Value, duration, size bool) string {
 	t.Helper()
 	number, exact := constant.Int64Val(value)
 	if !exact {
 		t.Fatalf("bound %s is not an integer", value)
+	}
+	if size {
+		for _, unit := range []struct {
+			shift uint
+			name  string
+		}{{30, "GiB"}, {20, "MiB"}, {10, "KiB"}} {
+			if count := number >> unit.shift; count > 0 && number%(1<<unit.shift) == 0 {
+				return fmt.Sprint(count) + " " + unit.name
+			}
+		}
+		return fmt.Sprint(number) + " bytes"
 	}
 	if !duration {
 		return fmt.Sprint(number)

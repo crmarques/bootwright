@@ -242,9 +242,9 @@ def test_the_settled_decision_and_the_completion_evidence_agree():
 # the frozen base, the 64 hexadecimal digits `openssl rand -hex 32` minted for
 # the attempt, and the image name (containercluster_media_agent/tasks/build.yml;
 # containercluster_install_inspect.published). Each controller result is what
-# redfish_boot's read returns, `media` the image the controller presents or the
-# empty string and `power` its power state (plugins/modules/redfish_boot.py,
-# RETURN), beside the loop item it read.
+# a media read of redfish_system_read returns, `media` the image the controller
+# presents or the empty string and `power` its power state
+# (plugins/modules/redfish_system_read.py, RETURN), beside the loop item it read.
 TOKEN = "3f" * 32
 BASE = "https://192.0.2.1:8443/private/clusters/sno/"
 PUBLISHED = BASE + TOKEN + "/agent.iso"
@@ -365,8 +365,9 @@ def test_every_boot_effect_sits_under_the_skip():
     inside = [task for task in beneath(skip["block"])
               if "bootwright.core.redfish_boot" in task or "ansible.builtin.include_role" in task]
     assert [task.get("bootwright.core.redfish_boot", {}).get("operation") for task in inside] == [
-        "insert", None, None]
+        None, None, "insert", None, None]
     assert [(task.get("ansible.builtin.include_role") or {}).get("name") for task in inside] == [
+        "bootwright.core.substrate_libvirt_machine", "bootwright.core.substrate_baremetal_machine",
         None, "bootwright.core.substrate_libvirt_machine", "bootwright.core.substrate_baremetal_machine"]
 
 

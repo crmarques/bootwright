@@ -24,6 +24,7 @@ import pytest
 from ansible_collections.bootwright.core.plugins.module_utils import redfish_control
 from ansible_collections.bootwright.core.plugins.modules import redfish_boot
 from ansible_collections.bootwright.core.plugins.modules import redfish_system_inspect
+from ansible_collections.bootwright.core.plugins.modules import redfish_system_read
 
 ControllerError = redfish_control.ControllerError
 IMAGE = "https://server.test:8443/os/m/install.iso"
@@ -129,6 +130,11 @@ def connect(monkeypatch, firmware, verify=True):
 def run(monkeypatch, firmware, operation, attempts=3, image="", target="Cd"):
     """One module invocation: a fresh client, as main() builds one."""
     return redfish_boot.drive(connect(monkeypatch, firmware), operation, attempts, image, target)
+
+
+def read(monkeypatch, firmware, media=True):
+    """One read-module invocation: a fresh client, as its main() builds one."""
+    return redfish_system_read.read(connect(monkeypatch, firmware), media)
 
 
 def emulator():
@@ -325,11 +331,8 @@ def test_every_operation_goes_through_the_client(monkeypatch, shape):
     firmware, expected = SHAPES[shape](), EXPECTED[shape]
     power = firmware.power
 
-    assert run(monkeypatch, firmware, "read") == (False, power, "")
+    assert read(monkeypatch, firmware) == (power, "")
     assert not writes(firmware) and gets(firmware).count(firmware.system) == 1
-    if shape == "emulator":
-        assert gets(firmware) == [firmware.system, firmware.system + "/VirtualMedia",
-                                  "/redfish/v1/Managers/" + UUID, firmware.system + "/VirtualMedia/Cd"]
 
     mark = len(firmware.calls)
     assert run(monkeypatch, firmware, "insert", image=IMAGE) == (True, power, IMAGE)
@@ -339,7 +342,7 @@ def test_every_operation_goes_through_the_client(monkeypatch, shape):
         assert "/redfish/v1/TaskService/Tasks/9" in gets(firmware, mark)
     mark = len(firmware.calls)
     assert run(monkeypatch, firmware, "insert", image=IMAGE) == (False, power, IMAGE)
-    assert run(monkeypatch, firmware, "read") == (False, power, IMAGE)
+    assert read(monkeypatch, firmware) == (power, IMAGE)
     assert not writes(firmware, mark)
 
     for target in ("Cd", "Hdd"):
@@ -392,9 +395,111 @@ def test_no_operation_builds_a_controller_path_itself():
     for helper in ("request", "power_state", "media_inserted", "insert_media", "eject_media",
                    "boot_once", "reset", "await_power"):
         assert not hasattr(redfish_control, helper), helper
-    tree = ast.parse(pathlib.Path(redfish_boot.__file__).read_text(encoding="utf-8"))
-    literals = [node.value for node in ast.walk(tree) if isinstance(node, ast.Constant) and isinstance(node.value, str)]
-    assert not [text for text in literals if "/VirtualMedia" in text or "/Actions/" in text]
+    for module in (redfish_boot, redfish_system_read):
+        tree = ast.parse(pathlib.Path(module.__file__).read_text(encoding="utf-8"))
+        literals = [node.value for node in ast.walk(tree)
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str)]
+        assert not [text for text in literals if "/VirtualMedia" in text or "/Actions/" in text], module.__name__
+
+
+# A power read is what a poll repeats while it waits, so it reads the system
+# once and nothing else: a media view that cannot be read, and a manager that
+# does not answer, cannot fail it or cost it a request.
+@pytest.mark.parametrize("broken", [False, True], ids=["answering", "media views 500"])
+@pytest.mark.parametrize("shape", sorted(SHAPES))
+def test_a_power_read_makes_one_request_and_never_looks_for_media(monkeypatch, shape, broken):
+    firmware = SHAPES[shape]()
+    if broken:
+        for path in [firmware.system + "/VirtualMedia"] + list(firmware.resources):
+            if "/VirtualMedia" in path or "/Managers/" in path:
+                firmware.resources[path] = (500, None, {})
+    assert read(monkeypatch, firmware, media=False) == (firmware.power, "")
+    assert [call[:2] for call in firmware.calls] == [("GET", firmware.origin + firmware.system)]
+
+
+# A media read discovers the device before it reports what it presents, and
+# changes nothing; on the pinned emulator that is four reads.
+@pytest.mark.parametrize("shape", sorted(SHAPES))
+def test_a_media_read_reports_what_the_device_presents(monkeypatch, shape):
+    firmware = SHAPES[shape]()
+    assert read(monkeypatch, firmware) == (firmware.power, "")
+    firmware.image = IMAGE
+    mark = len(firmware.calls)
+    assert read(monkeypatch, firmware) == (firmware.power, IMAGE)
+    assert not writes(firmware) and gets(firmware, mark).count(firmware.system) == 1
+    if shape == "emulator":
+        assert gets(firmware, mark) == [firmware.system, firmware.system + "/VirtualMedia",
+                                        "/redfish/v1/Managers/" + UUID, firmware.system + "/VirtualMedia/Cd"]
+
+
+class Built(Exception):
+    """What a module's main() asked AnsibleModule for, raised before anything runs."""
+
+
+def built(**arguments):
+    raise Built(arguments)
+
+
+class Module:
+    """The part of AnsibleModule a read module's main() uses, recording how it ended."""
+
+    def __init__(self, params):
+        self.params, self.arguments, self.ended = params, None, None
+
+    def build(self, **arguments):
+        self.arguments = arguments
+        return self
+
+    def exit_json(self, **result):
+        self.ended = ("exit", result)
+
+    def fail_json(self, **result):
+        self.ended = ("fail", result)
+
+
+# The boot module only drives. A read offered there would be one a consumer
+# could reach through a module that is allowed to change the machine.
+def test_the_boot_module_offers_no_read(monkeypatch):
+    monkeypatch.setattr(redfish_boot, "AnsibleModule", built)
+    with pytest.raises(Built) as spec:
+        redfish_boot.main()
+    assert "read" not in spec.value.args[0]["argument_spec"]["operation"]["choices"]
+    documented = re.search(r"operation:.*?choices: \[([^\]]*)\]", redfish_boot.DOCUMENTATION, re.S).group(1)
+    assert "read" not in [choice.strip() for choice in documented.split(",")]
+    firmware = emulator()
+    with pytest.raises(ControllerError, match="read is not an operation this module drives"):
+        run(monkeypatch, firmware, "read")
+    assert not firmware.calls
+
+
+# The read module changes nothing and says so, reports what the controller
+# said, and fails closed: a controller that does not answer is never an empty
+# answer.
+def test_the_read_module_reports_what_it_read_and_fails_closed(monkeypatch):
+    monkeypatch.setattr(redfish_system_read, "AnsibleModule", built)
+    with pytest.raises(Built) as spec:
+        redfish_system_read.main()
+    assert spec.value.args[0]["supports_check_mode"] is True
+    assert spec.value.args[0]["argument_spec"]["password"]["no_log"] is True
+    assert spec.value.args[0]["argument_spec"]["media"] == {"type": "bool", "default": False}
+
+    for answer, ended in (({}, "exit"), ((500, None, {}), "fail")):
+        firmware = emulator()
+        firmware.image = IMAGE
+        if answer:
+            firmware.resources[firmware.system] = answer
+        module = Module({"endpoint": firmware.endpoint, "user": "operator", "password": PASSWORD,
+                         "verify": True, "media": True})
+        monkeypatch.setattr(redfish_system_read, "AnsibleModule", module.build)
+        monkeypatch.setattr(redfish_control, "_opener", firmware.opener)
+        redfish_system_read.main()
+        assert module.ended[0] == ended
+        if ended == "exit":
+            assert module.ended[1] == {"changed": False, "power": "Off", "media": IMAGE}
+        else:
+            assert module.ended[1]["msg"].startswith("the management controller could not be read: ")
+            assert firmware.system in module.ended[1]["msg"] and PASSWORD not in module.ended[1]["msg"]
+        assert not writes(firmware)
 
 
 UNREADABLE = {
@@ -420,7 +525,7 @@ def test_an_unreadable_controller_is_a_failure_not_an_empty_answer(monkeypatch, 
     path = where(firmware)
     firmware.resources[path] = answer
     with pytest.raises(ControllerError) as failure:
-        run(monkeypatch, firmware, "read")
+        read(monkeypatch, firmware)
     line = str(failure.value)
     assert path in line and "HTTP %d" % status in line and "\n" not in line
 
@@ -434,7 +539,7 @@ def test_a_controller_that_says_it_has_no_media_offers_none(monkeypatch, status)
     firmware.resources[manager] = {"@odata.id": manager}
     firmware.resources[firmware.system + "/VirtualMedia"] = (status, None, {})
     firmware.resources[manager + "/VirtualMedia"] = (status, None, {})
-    assert run(monkeypatch, firmware, "read") == (False, "Off", "")
+    assert read(monkeypatch, firmware) == ("Off", "")
     with pytest.raises(ControllerError, match="the controller exposes no virtual-media device"):
         run(monkeypatch, firmware, "insert", image=IMAGE)
     assert not writes(firmware)
@@ -452,7 +557,7 @@ def test_a_device_that_is_not_optical_is_never_used(monkeypatch):
         "Image": "https://server.test:8443/os/stick.img",
         "Actions": {"#VirtualMedia.InsertMedia": {"target": stick + "/Actions/VirtualMedia.InsertMedia"},
                     "#VirtualMedia.EjectMedia": {"target": stick + "/Actions/VirtualMedia.EjectMedia"}}}
-    assert run(monkeypatch, firmware, "read") == (False, "Off", "")
+    assert read(monkeypatch, firmware) == ("Off", "")
     assert stick in gets(firmware)
     with pytest.raises(ControllerError, match="the controller exposes no virtual-media device"):
         run(monkeypatch, firmware, "insert", image=IMAGE)
@@ -472,7 +577,7 @@ def test_a_body_that_is_not_a_resource_is_unreadable(monkeypatch, body):
     firmware = emulator()
     firmware.resources[firmware.system] = (200, body, {})
     with pytest.raises(ControllerError) as failure:
-        run(monkeypatch, firmware, "read")
+        read(monkeypatch, firmware)
     line = str(failure.value)
     assert firmware.system in line and "HTTP 200" in line and "\n" not in line
 
@@ -969,21 +1074,21 @@ def test_a_failure_line_never_carries_the_credential_or_a_body(monkeypatch):
     failing.resources[failing.system] = (500, {"error": {"message": marker, "@Message.ExtendedInfo": [
         {"MessageId": "Base.1.8.InternalError", "Message": marker}]}}, {})
     with pytest.raises(ControllerError) as failure:
-        run(monkeypatch, failing, "read")
+        read(monkeypatch, failing)
     lines.append(str(failure.value))
 
     smuggling = emulator()
     smuggling.resources[smuggling.system + "/VirtualMedia"] = {"Members": [
         {"@odata.id": "http://intruder:s3cret@bmc.test:8000" + smuggling.system + "/VirtualMedia/Cd"}]}
     with pytest.raises(ControllerError) as failure:
-        run(monkeypatch, smuggling, "read")
+        read(monkeypatch, smuggling)
     lines.append(str(failure.value))
 
     endless = emulator()
     endless.resources[endless.system + "/VirtualMedia"] = {"Members": [{"@odata.id": "/" + "x" * 400}]}
     endless.resources["/" + "x" * 400] = (500, None, {})
     with pytest.raises(ControllerError) as failure:
-        run(monkeypatch, endless, "read")
+        read(monkeypatch, endless)
     lines.append(str(failure.value))
 
     assert "Base.1.8.InternalError" in lines[0] and "bmc.test:8000" in lines[1]
