@@ -112,7 +112,7 @@ func controllerSnapshot(ctx context.Context, root *directory, registry contexts.
 	if err != nil {
 		return prerequisites.StorageView{}, controllerStored{}, err
 	}
-	view := prerequisites.StorageView{Exists: true, Initialized: registry.Controller.Mode == "ready", State: cloneControllerState(stored.value)}
+	view := prerequisites.StorageView{Exists: true, Initialized: registry.Controller.Mode == "ready", State: cloneControllerState(stored.value), Areas: heldAreas(stored.bundles)}
 	if name == "" {
 		return view, stored, nil
 	}
@@ -285,6 +285,7 @@ func (t *controllerTransaction) Snapshot() prerequisites.StorageView {
 	}
 	view := t.view
 	view.State = cloneControllerState(t.stored.value)
+	view.Areas = heldAreas(t.stored.bundles)
 	view.Sources.Files = slices.Clone(view.Sources.Files)
 	view.Sources.Markers = slices.Clone(view.Sources.Markers)
 	view.Sources.Roots = slices.Clone(view.Sources.Roots)
@@ -420,6 +421,13 @@ func (t *controllerTransaction) Publish(ctx context.Context, requested prerequis
 	}
 	if err := validateControllerTransition(t.stored.value, next, t.view.Context); err != nil {
 		return prerequisites.NotCommitted, err
+	}
+	// A new receipt names the bundle it will publish. One this store could not
+	// reserve would stay pending with no way to complete, and no later setup
+	// could replace it, so it is refused while the record is still unchanged.
+	if next.Receipt.ID != t.stored.value.Receipt.ID && len(t.stored.bundles) >= maxControllerBundles &&
+		!slices.ContainsFunc(t.stored.bundles, func(item controllerBundleReservation) bool { return item.ID == next.Receipt.CatalogDigest }) {
+		return prerequisites.NotCommitted, state("retained controller bundle limit exceeded")
 	}
 	// First publication also admits only this context's new binding.
 	for _, binding := range next.Bindings {

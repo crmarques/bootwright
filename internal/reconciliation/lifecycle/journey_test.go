@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -120,30 +121,7 @@ func (a *memoryArea) Entries(ctx context.Context, target string) ([]operationsto
 	if err := a.admit(ctx, target, false); err != nil {
 		return nil, err
 	}
-	prefix := target
-	if prefix != "" {
-		prefix += "/"
-	}
-	seen := map[string]operationstore.Entry{}
-	for name, data := range a.files {
-		rest, ok := strings.CutPrefix(name, prefix)
-		if !ok || rest == "" {
-			continue
-		}
-		if head, _, nested := strings.Cut(rest, "/"); nested {
-			seen[head] = operationstore.Entry{Name: head, Directory: true}
-		} else {
-			seen[rest] = operationstore.Entry{Name: rest, Size: int64(len(data))}
-		}
-	}
-	for name := range a.directories {
-		if rest, ok := strings.CutPrefix(name, prefix); ok && rest != "" && !strings.Contains(rest, "/") {
-			seen[rest] = operationstore.Entry{Name: rest, Directory: true}
-		}
-	}
-	entries := slices.Collect(maps.Values(seen))
-	slices.SortFunc(entries, func(x, y operationstore.Entry) int { return strings.Compare(x.Name, y.Name) })
-	return entries, nil
+	return areadouble.Entries[operationstore.Entry](a.files, a.directories, target), nil
 }
 
 func (a *memoryArea) EnsureDirectory(ctx context.Context, target string) error {
@@ -300,6 +278,9 @@ type testWorkspace struct {
 	// transacting is true while a MutateLifecycle callback runs, the only time
 	// a secret area may be lent.
 	transacting bool
+	// clientFiles is what the client areas hold, by area and path; areas
+	// names each client area opened, true once it is sealed.
+	clientFiles map[string][]byte
 }
 
 func (w *testWorkspace) view() *testView {
@@ -315,6 +296,7 @@ func (w *testWorkspace) held(operations, runs bool) (*testView, func()) {
 		workspace:  w,
 		operations: &heldArea{memoryArea: w.area, writable: operations, closed: closed},
 		runs:       &heldArea{memoryArea: w.runArea, writable: runs, closed: closed},
+		closed:     closed,
 	}
 	return view, func() { closed.Store(true) }
 }
@@ -446,6 +428,7 @@ func (a *heldArea) Sync(ctx context.Context, target string) error {
 type testView struct {
 	workspace        *testWorkspace
 	operations, runs operationstore.Area
+	closed           *atomic.Bool
 }
 
 func (v *testView) Identity() ContextIdentity {
@@ -555,16 +538,92 @@ func (v *testView) killed(point string) error {
 }
 
 // ClientArea models the shared host area the controller stage publishes into:
-// the reservation is recorded before the area exists, and a sealed closure
-// reopens read-only.
+// only a closure's digest names one and never the approved setup bundle, the
+// reservation is recorded before the area exists, and a sealed closure reopens
+// read-only.
 func (v *testView) ClientArea(_ context.Context, id string) (prerequisites.BundleArea, error) {
+	if decoded, err := hex.DecodeString(id); err != nil || len(decoded) != 32 {
+		return nil, errors.New("controller client area identity is invalid")
+	}
+	if id == v.workspace.controller.State.Receipt.CatalogDigest {
+		return nil, errors.New("the approved setup bundle is not a client publication area")
+	}
 	if v.workspace.areas == nil {
 		v.workspace.areas = map[string]bool{}
 	}
+	if v.workspace.clientFiles == nil {
+		v.workspace.clientFiles = map[string][]byte{}
+	}
 	if _, exists := v.workspace.areas[id]; !exists {
 		v.workspace.areas[id] = false
+		v.workspace.controller.Areas = append(slices.Clone(v.workspace.controller.Areas), prerequisites.HeldArea{ID: id})
 	}
-	return nil, nil
+	return &clientArea{workspace: v.workspace, id: id, closed: v.closed}, nil
+}
+
+// clientArea is one client closure a view opened. It refuses a write once the
+// closure is sealed, and every call once the view's callback returned, as the
+// store's area does; a file, once written, is never replaced.
+type clientArea struct {
+	workspace *testWorkspace
+	id        string
+	closed    *atomic.Bool
+}
+
+func (a *clientArea) usable(ctx context.Context, write bool) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if a.closed != nil && a.closed.Load() || write && a.workspace.areas[a.id] {
+		return errors.New("controller bundle capability is closed or read-only")
+	}
+	return nil
+}
+
+func (a *clientArea) Read(ctx context.Context, name string, maximum int) ([]byte, error) {
+	if err := a.usable(ctx, false); err != nil {
+		return nil, err
+	}
+	data, exists := a.workspace.clientFiles[a.id+"/"+name]
+	if !exists || len(data) > maximum {
+		return nil, errors.New("controller bundle read failed or exceeded its bound")
+	}
+	return slices.Clone(data), nil
+}
+
+func (a *clientArea) Write(ctx context.Context, name string, data []byte, _ bool) error {
+	if err := a.usable(ctx, true); err != nil {
+		return err
+	}
+	if _, exists := a.workspace.clientFiles[a.id+"/"+name]; exists {
+		return errors.New("controller bundle file exists")
+	}
+	a.workspace.clientFiles[a.id+"/"+name] = slices.Clone(data)
+	return nil
+}
+
+func (a *clientArea) EnsureDirectory(ctx context.Context, _ string) error { return a.usable(ctx, true) }
+func (a *clientArea) Verify(ctx context.Context) error                    { return a.usable(ctx, false) }
+
+func (a *clientArea) Entries(ctx context.Context) ([]prerequisites.BundleEntry, error) {
+	if err := a.usable(ctx, false); err != nil {
+		return nil, err
+	}
+	entries := []prerequisites.BundleEntry{}
+	for _, name := range slices.Sorted(maps.Keys(a.workspace.clientFiles)) {
+		if rest, ok := strings.CutPrefix(name, a.id+"/"); ok {
+			entries = append(entries, prerequisites.BundleEntry{Path: rest, Size: int64(len(a.workspace.clientFiles[name]))})
+		}
+	}
+	return entries, nil
+}
+
+func (a *clientArea) Location(ctx context.Context) (prerequisites.BundleLocation, error) {
+	if err := a.usable(ctx, false); err != nil {
+		return prerequisites.BundleLocation{}, err
+	}
+	sealed := a.workspace.areas[a.id]
+	return prerequisites.BundleLocation{Writable: !sealed, Sealed: sealed}, nil
 }
 
 func (v *testView) SealClientArea(_ context.Context, id string) error {
@@ -582,6 +641,9 @@ func (v *testView) SealClientArea(_ context.Context, id string) error {
 // store does; the binder these tests use keeps its produced entries itself, so
 // the area it is handed is nil.
 func (v *testView) Secrets(ctx context.Context, callback func(secretstore.Context, secretstore.Area) error) error {
+	if callback == nil {
+		return errors.New("lifecycle secret callback is missing")
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -591,11 +653,40 @@ func (v *testView) Secrets(ctx context.Context, callback func(secretstore.Contex
 	return callback(secretstore.Context{Name: testContextName, Mode: "ready", Revision: v.workspace.revision}, nil)
 }
 
+// RetainDependencies records what it was asked to retain and keeps it in the
+// controller record as the store does: a source or a resolution is never
+// replaced under its identity, and a resolution is kept only complete and
+// beside its exact sources.
 func (v *testView) RetainDependencies(_ context.Context, definition *prerequisites.Definition, sources []prerequisites.DependencySource) error {
-	v.workspace.retained = append(v.workspace.retained, sources...)
+	state := v.workspace.controller.State
+	retained, definitions := slices.Clone(state.RetainedSources), slices.Clone(state.RetainedDefinitions)
+	for _, source := range sources {
+		index := slices.IndexFunc(retained, func(item prerequisites.DependencySource) bool { return item.ID == source.ID })
+		if index >= 0 && retained[index] != source {
+			return errors.New("a retained controller dependency source cannot be replaced")
+		}
+		if index < 0 {
+			retained = append(retained, source)
+		}
+	}
 	if definition != nil {
+		index := slices.IndexFunc(definitions, func(item prerequisites.Definition) bool { return item.ResolutionDigest == definition.ResolutionDigest })
+		if index >= 0 && !prerequisites.SameDefinition(definitions[index], *definition) {
+			return errors.New("a controller stage would replace immutable resolution evidence")
+		}
+		if index < 0 {
+			if err := prerequisites.ValidateResolvedDefinition(*definition); err != nil {
+				return err
+			}
+			if slices.ContainsFunc(definition.Sources, func(source prerequisites.DependencySource) bool { return !slices.Contains(retained, source) }) {
+				return errors.New("retained controller resolution lacks its exact sources")
+			}
+			definitions = append(definitions, prerequisites.CloneDefinition(*definition))
+		}
 		v.workspace.resolutions++
 	}
+	v.workspace.retained = append(v.workspace.retained, sources...)
+	v.workspace.controller.State.RetainedSources, v.workspace.controller.State.RetainedDefinitions = retained, definitions
 	return nil
 }
 

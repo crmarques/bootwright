@@ -7,6 +7,7 @@ package areacontract
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -36,6 +37,7 @@ func Verify(t *testing.T, within Within) {
 		{"records and directories never share a path", recordsAndDirectoriesNeverShareAPath},
 		{"every path stays inside the area", everyPathStaysInsideTheArea},
 		{"a cancelled context changes nothing", cancelledContextChangesNothing},
+		{"a location is one host path or none", aLocationIsOneHostPathOrNone},
 	} {
 		t.Run(clause.name, func(t *testing.T) {
 			provided := false
@@ -237,6 +239,19 @@ func cancelledContextChangesNothing(t *testing.T, area operationstore.Area) {
 		}
 	}
 	lists(t, area, "")
+}
+
+// aLocationIsOneHostPathOrNone holds Location to presentation: an absolute,
+// clean host path or the empty string, the same whatever the area holds.
+func aLocationIsOneHostPathOrNone(t *testing.T, area operationstore.Area) {
+	location := area.Location()
+	if location != "" && (!filepath.IsAbs(location) || filepath.Clean(location) != location) {
+		t.Fatalf("location %q is neither an absolute clean host path nor empty", location)
+	}
+	succeeds(t, area.WriteExclusive(context.Background(), "p/f.json", []byte("nested\n")), "a nested record")
+	if moved := area.Location(); moved != location {
+		t.Fatalf("location moved from %q to %q", location, moved)
+	}
 }
 
 type outcome struct {

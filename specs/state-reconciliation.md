@@ -22,9 +22,11 @@ Supported operation modes are:
   whether that apply completed or stopped at a boundary, at a failure, or at an
   interruption.
 
-There is no reconciliation, partial planning, adoption, reclaim, or force path.
-A completed apply must be destroyed before an apply of *changed* desired state
-can start, and an edited input refuses by naming that removal.
+There is no reconciliation, partial planning, adoption, reclaim of ownership,
+or force path. The one reclaim this contract performs is the
+[housekeeping](#context-mutation-evidence) of operation directories that hold
+nothing. A completed apply must be destroyed before an apply of *changed*
+desired state can start, and an edited input refuses by naming that removal.
 
 A verb whose work durable state already proves performs none of it and
 succeeds: an `apply` repeated over the unchanged input its completed apply
@@ -186,7 +188,10 @@ collection is housekeeping no transition may be refused for.
 
 A claim that holds nothing, only the empty `blocks/` and `logs/` a claim
 creates, is what a fresh apply that never registered leaves, as does a
-registration stopped before its plan landed. A transaction that gives back
+registration stopped before its plan landed. Reclaiming such a claim removes
+its directory and nothing else: it changes no evidence, reservation, Secret
+binding or ownership, so it is not the reclaim of ownership the
+[lifecycle unit](#lifecycle-unit) rules out. A transaction that gives back
 pristine evidence, which is a restoration, a destroy's release of what an
 interrupted registration left and a completed removal's pristine publication,
 then reclaims each such directory other than the one its index names, once the

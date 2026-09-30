@@ -10,6 +10,7 @@ import (
 func TestMemoryStorageHonoursTheStorageContract(t *testing.T) {
 	storagecontract.Verify(t, func(t *testing.T) storagecontract.Subject {
 		scope := prerequisites.SetupContext{Name: "lab", Revision: "rev-0123456789abcdef0123456789abcdef", Machine: "controller"}
-		return storagecontract.Subject{Storage: prerequisites.NewMemoryStorage(t, scope), Scope: scope}
+		storage, unsettle := prerequisites.NewMemoryStorage(t, scope)
+		return storagecontract.Subject{Storage: storage, Scope: scope, Unsettle: unsettle}
 	})
 }

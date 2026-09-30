@@ -9,7 +9,8 @@ type SetupRequest struct {
 	DryRun           bool
 	SkipConfirmation bool
 	// PurgeOldBundles retires the execution bundles this host no longer needs,
-	// after the setup it runs beside has completed and only then.
+	// after the setup it runs beside has completed, or before that setup
+	// publishes a new bundle into a host already at its bound.
 	PurgeOldBundles bool
 }
 
@@ -58,7 +59,8 @@ type Report struct {
 	Progress          []ActionProgress
 	// RetiredBundles names the superseded execution bundles this invocation
 	// removed, in canonical order. It is empty unless retirement was asked for
-	// and the setup it runs beside completed.
+	// and either the setup it runs beside completed or that setup made room at
+	// the host's bound.
 	RetiredBundles []string
 }
 

@@ -3,7 +3,6 @@ package operationstore
 import (
 	"context"
 	"errors"
-	"maps"
 	"path"
 	"slices"
 	"strings"
@@ -77,32 +76,7 @@ func (a *memoryArea) Entries(ctx context.Context, target string) ([]Entry, error
 	if err := a.check("entries", target); err != nil {
 		return nil, err
 	}
-	seen := map[string]Entry{}
-	prefix := target
-	if prefix != "" {
-		prefix += "/"
-	}
-	for name, data := range a.files {
-		rest, ok := strings.CutPrefix(name, prefix)
-		if !ok || rest == "" {
-			continue
-		}
-		if head, _, nested := strings.Cut(rest, "/"); nested {
-			seen[head] = Entry{Name: head, Directory: true}
-		} else {
-			seen[rest] = Entry{Name: rest, Size: int64(len(data))}
-		}
-	}
-	for name := range a.directories {
-		rest, ok := strings.CutPrefix(name, prefix)
-		if !ok || rest == "" || strings.Contains(rest, "/") {
-			continue
-		}
-		seen[rest] = Entry{Name: rest, Directory: true}
-	}
-	entries := slices.Collect(maps.Values(seen))
-	slices.SortFunc(entries, func(x, y Entry) int { return strings.Compare(x.Name, y.Name) })
-	return entries, nil
+	return areadouble.Entries[Entry](a.files, a.directories, target), nil
 }
 
 func (a *memoryArea) EnsureDirectory(ctx context.Context, target string) error {

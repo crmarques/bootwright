@@ -27,6 +27,23 @@ type StorageView struct {
 	Sources     desiredstate.Sources
 	State       HostState
 	OpenBundle  func(context.Context, string) (BundleArea, error)
+	// Areas is every bundle area this host holds, execution bundles and client
+	// areas alike, in canonical order. Each counts against MaxRetainedBundles
+	// until a retirement removes it.
+	Areas []HeldArea
+}
+
+// MaxRetainedBundles bounds both the bundle areas a host holds and the
+// resolutions it retains. Retiring a superseded execution bundle is what
+// returns either.
+const MaxRetainedBundles = 16
+
+// HeldArea is one bundle area a host holds. Retiring marks one whose removal is
+// already intended: it is never read again, and naming it to a retirement
+// completes that removal.
+type HeldArea struct {
+	ID       string
+	Retiring bool
 }
 
 type BundleEntry struct {

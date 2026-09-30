@@ -134,13 +134,15 @@ func applicationDependencies() map[string][]string {
 		"internal/reconciliation/operationstore": {},
 		// Each port's contract suite exercises that port and consumes nothing
 		// else; the workspace's also reads the operation areas and the
-		// controller evidence its views carry.
+		// controller evidence its views carry and the secret context a
+		// transaction lends.
 		"internal/reconciliation/operationstore/areacontract": {"internal/reconciliation/operationstore"},
 		"internal/secrets/secretstore/areacontract":           {"internal/secrets/secretstore"},
 		"internal/controller/prerequisites/storagecontract":   {"internal/controller/prerequisites"},
 		"internal/managedos/media/storecontract":              {"internal/managedos/media"},
 		"internal/reconciliation/lifecycle/workspacecontract": {
 			"internal/controller/prerequisites", "internal/reconciliation/lifecycle", "internal/reconciliation/operationstore",
+			"internal/secrets/secretstore",
 		},
 		// Each named service is one managed-service definition and consumes only
 		// the package whose capability runs it.

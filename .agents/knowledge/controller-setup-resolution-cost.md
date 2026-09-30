@@ -100,8 +100,8 @@ why each removed step was expensive, which is the reason those rules matter.
   `attributableDocumentation`, `publishDocumentation`),
   `internal/controller/prerequisites/resolution.go` (`carryForward`, `rebind`).
   Retiring the replaced area is `setup --purge-old-bundles` (X7); a foundation
-  shared across automation-only revisions is
-  [B44](../../specs/milestones/m1.md#b44).
+  shared across automation-only revisions is parked as
+  [B165](../../specs/milestones/backlog.md#b165).
 - Staging acquires every repository member the solver may open, and narrowing
   that set by what a solver is configured to load does not work. Staging only
   `primary` and `filelists` for DNF5, on the reasoning that

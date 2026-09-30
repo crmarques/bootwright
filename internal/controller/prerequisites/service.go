@@ -107,9 +107,10 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*Report, erro
 func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, error) {
 	report, err := s.setup(ctx, request)
 	// Retirement reads what the completed setup left behind, so it runs only
-	// after one completed: a refusal, a failure and a preview all retire
-	// nothing, because what may be retired is decided by what the bundle this
-	// setup sealed now holds.
+	// after one completed: a refusal, a failure and a preview retire nothing
+	// here, because what may be retired is decided by what the bundle this
+	// setup sealed now holds. The one earlier retirement is a host at its bound,
+	// which gives up its superseded bundles before it can publish a new one.
 	if err != nil || report == nil || !request.PurgeOldBundles {
 		return report, err
 	}
@@ -147,7 +148,8 @@ func (s Service) retireSuperseded(ctx context.Context, report *Report) error {
 		if err := tx.RetireBundles(ctx, superseded); err != nil {
 			return err
 		}
-		report.RetiredBundles = superseded
+		report.RetiredBundles = append(report.RetiredBundles, superseded...)
+		slices.Sort(report.RetiredBundles)
 		return nil
 	})
 }
@@ -207,6 +209,13 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 	if !current.dependenciesReady() && s.runtime == nil {
 		return &current.report, failure("controller.unsupported", "native runtime installation is not configured", "prepare the qualified runtime before repeating setup")
 	}
+	retiring, err := current.room(current.view, request.PurgeOldBundles)
+	if err != nil {
+		return &current.report, err
+	}
+	if len(retiring) != 0 {
+		current.report.Actions = append(current.report.Actions, retirementAction(len(retiring)))
+	}
 	if s.options.Presenter == nil {
 		return &current.report, failure("controller.setup", "setup plan presentation is not configured", "")
 	}
@@ -233,7 +242,12 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 		return &current.report, failure("controller.identity", "installed host changed after confirmation", "restore the original host before repeating setup")
 	}
 	approved := current
+	var retired []string
 	err = s.storage.MutateController(ctx, current.view.Context, true, func(tx StorageTransaction) error {
+		var err error
+		if retired, err = s.makeRoom(ctx, tx, approved, request.PurgeOldBundles); err != nil {
+			return err
+		}
 		frozen := inspectionResolution{Sources: approved.definition.Sources, Retained: approved.retainedDigest}
 		if approved.definition.Bootstrap != nil {
 			frozen.Definition = &approved.definition
@@ -250,6 +264,7 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 		current.report.ProgressPresented = approved.report.ProgressPresented
 		return s.prepare(ctx, tx, &current)
 	})
+	current.report.RetiredBundles = retired
 	if err != nil {
 		// Only an attempt that reached its durable intent can be incomplete. A
 		// refusal raised before that changed nothing and must not imply that

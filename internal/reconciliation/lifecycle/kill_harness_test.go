@@ -61,6 +61,15 @@ const (
 	// with nothing left to do: no block transition (Block transitions) and no
 	// continuation (Continuation and removal) asks for a second invocation.
 	killBoundSettled = 1
+	// killBoundReclaim is one destroy. It removes an apply that started beside
+	// an earlier apply's claim, wherever that apply was killed, exactly as
+	// killBoundSupersede's destroy does. Its registration, or its release of
+	// what an interrupted registration left, and its pristine publication each
+	// reclaim every claim that holds nothing (Context mutation evidence), and a
+	// reclaim removes a claim's children before the claim, so a claim whose
+	// reclaim was killed part way still holds nothing and goes with the
+	// destroy's.
+	killBoundReclaim = 1
 )
 
 // killLedger names every kill point whose store fails the harness today, by
@@ -238,6 +247,13 @@ func newKillRig(t *testing.T) *killRig {
 	return &killRig{harness: h, host: host}
 }
 
+// adopt makes what a kill left the rig's own, so a journey can start from an
+// invocation killed at one of its writes.
+func (r *killRig) adopt(snapshot *killSnapshot) {
+	r.harness.service = r.over(snapshot)
+	r.harness.workspace, r.harness.binder, r.host = snapshot.workspace, snapshot.binder, snapshot.host
+}
+
 // killSnapshot is everything durable at one kill point: the workspace, the
 // Secret bindings the invocation had reached and the host.
 type killSnapshot struct {
@@ -336,11 +352,12 @@ func killCloneBinder(b *testBinder) *testBinder {
 var killError = errors.New("killed at a durable write")
 
 // killPoints names every durable write of one invocation in order and, when
-// armed at one of them, snapshots the rig just before it lands and fails it
-// and every write after it.
+// armed at one of them, by its ordinal or its key, snapshots the rig just
+// before it lands and fails it and every write after it.
 type killPoints struct {
 	mutex    sync.Mutex
 	at       int
+	key      string
 	keys     []string
 	counts   map[string]int
 	fired    bool
@@ -354,8 +371,9 @@ func (k *killPoints) next(point string) (fire, dead bool) {
 		return false, true
 	}
 	k.counts[point]++
-	k.keys = append(k.keys, point+"#"+strconv.Itoa(k.counts[point]))
-	if len(k.keys) == k.at {
+	key := point + "#" + strconv.Itoa(k.counts[point])
+	k.keys = append(k.keys, key)
+	if len(k.keys) == k.at || key == k.key {
 		k.fired = true
 		return true, false
 	}
@@ -399,14 +417,18 @@ func (r *killRig) arm(points *killPoints) {
 	r.harness.binder.kill = w.kill
 }
 
-// killElide replaces the operation identity a target starts with, so a point's
-// key names the same write in every run.
+// killElide replaces the operation identity a target starts with, or is, as a
+// reclaim's last removal is, so a point's key names the same write in every
+// run.
 func killElide(target string) string {
 	head, rest, nested := strings.Cut(target, "/")
-	if nested && reconciliation.ValidOperationID(head) {
+	switch {
+	case !reconciliation.ValidOperationID(head):
+		return target
+	case nested:
 		return "<op>/" + rest
 	}
-	return target
+	return "<op>"
 }
 
 func killInvoke(ctx context.Context, service Service, verb reconciliation.Verb) error {
@@ -432,14 +454,20 @@ func killPristine(t *testing.T) []byte {
 // killState is what a journey leaves that an operator can observe: whether the
 // context rests applied, removed or holds an incomplete operation, its
 // evidence, its reservations and controller binding, how many Secret bindings
-// the custody store still holds for it, the produced material it keeps, and
-// what the host holds. A converged apply keeps its producer's entry and a
-// converged removal keeps none.
+// the custody store still holds for it, the produced material it keeps, how
+// many operation directories hold no record, and what the host holds. A
+// converged apply keeps its producer's entry and a converged removal keeps
+// none.
 type killState struct {
 	rest, evidence, reservations, bindings, realized, produced string
 	// secretBindings is a count rather than the identities, because every run
 	// issues its own.
 	secretBindings int
+	// idleClaims counts the directories a claim that never registered, or a
+	// reclaim killed part way, leaves: every registration and pristine
+	// publication reclaims them (Context mutation evidence), so a retry that
+	// makes one leaves none.
+	idleClaims int
 }
 
 func killStateOf(w *testWorkspace, binder *testBinder, host *killHost) killState {
@@ -451,7 +479,24 @@ func killStateOf(w *testWorkspace, binder *testBinder, host *killHost) killState
 		realized:       fmt.Sprintf("%v", host.realizedBlocks()),
 		produced:       fmt.Sprintf("%v", binder.producedEntries()),
 		secretBindings: killUnreleased(binder),
+		idleClaims:     killIdleClaims(w),
 	}
+}
+
+// killIdleClaims counts the operation directories that hold no record, and is
+// -1 when the area does not list, which no converged journey leaves.
+func killIdleClaims(w *testWorkspace) int {
+	entries, err := w.area.Entries(context.Background(), "")
+	if err != nil {
+		return -1
+	}
+	idle := 0
+	for _, entry := range entries {
+		if entry.Directory && !w.area.written(entry.Name) {
+			idle++
+		}
+	}
+	return idle
 }
 
 // killUnreleased counts the Secret bindings the binder issued and has not
@@ -636,6 +681,20 @@ type killJourney struct {
 	// completed keeps only the points at which the apply is already recorded
 	// completed, so its retry is the settled verb.
 	completed bool
+	// reaches names writes the uninterrupted invocation must make, so the
+	// harness keeps killing inside them.
+	reaches []string
+}
+
+// killClaimed is the first write of a fresh apply after the transaction that
+// claimed its operation directory and raised its running evidence, so an
+// apply killed there leaves a claim that holds nothing.
+const killClaimed = "publish secret binding#1"
+
+// killReclaim is every write of a reclaim of one claim, children before the
+// claim (specs/state-reconciliation.md, Context mutation evidence).
+func killReclaim() []string {
+	return []string{"remove <op>/blocks#1", "remove <op>/logs#1", "remove <op>#1"}
 }
 
 func killJourneys() []killJourney {
@@ -652,12 +711,23 @@ func killJourneys() []killJourney {
 			t.Fatal("the apply a continuation starts from did not fail b")
 		}
 	}
+	claimed := func(ctx context.Context, t *testing.T, rig *killRig) {
+		t.Helper()
+		points := &killPoints{counts: map[string]int{}, key: killClaimed}
+		rig.arm(points)
+		_ = killInvoke(ctx, rig.harness.service, reconciliation.Apply)
+		if points.snapshot == nil {
+			t.Fatalf("the apply a reclaim starts from was not killed at %s: %v", killClaimed, points.keys)
+		}
+		rig.adopt(points.snapshot)
+	}
 	return []killJourney{
 		{name: "a", bound: killBoundFreshApply, run: reconciliation.Apply, retry: reconciliation.Apply},
 		{name: "b", bound: killBoundDestroy, start: applied, run: reconciliation.Destroy, retry: reconciliation.Destroy},
 		{name: "c", bound: killBoundContinuation, start: failedOnce, run: reconciliation.Apply, retry: reconciliation.Apply},
 		{name: "d", bound: killBoundSupersede, run: reconciliation.Apply, retry: reconciliation.Destroy, finish: reconciliation.Destroy},
 		{name: "e", bound: killBoundSettled, run: reconciliation.Apply, retry: reconciliation.Apply, completed: true},
+		{name: "f", bound: killBoundReclaim, start: claimed, run: reconciliation.Apply, retry: reconciliation.Destroy, finish: reconciliation.Destroy, reaches: killReclaim()},
 	}
 }
 
@@ -751,6 +821,11 @@ func killJourneyOutcomes(ctx context.Context, t *testing.T, journey killJourney,
 	if len(names.keys) == 0 {
 		t.Fatal("the journey performed no durable write")
 	}
+	for _, point := range journey.reaches {
+		if !slices.Contains(names.keys, point) {
+			t.Fatalf("the journey never reaches %s: %v", point, names.keys)
+		}
+	}
 	var outcomes []killOutcome
 	for index, key := range names.keys {
 		killed := journey.begin(ctx, t)
@@ -796,14 +871,16 @@ func killEvaluate(ctx context.Context, journey killJourney, rig *killRig, snapsh
 		return nil
 	}
 	outcome.needed = journey.bound + 1
-	state := killStateOf(snapshot.workspace, snapshot.binder, snapshot.host)
+	state, settled := killStateOf(snapshot.workspace, snapshot.binder, snapshot.host), false
+	transactions := snapshot.workspace.mutations
 	for retry := 0; retry <= journey.bound; retry++ {
 		if retry != 0 {
 			_ = killInvoke(ctx, service, journey.retry)
 			outcome.failures = append(outcome.failures, killInvariants(snapshot, pristine)...)
 			state = killStateOf(snapshot.workspace, snapshot.binder, snapshot.host)
+			settled = snapshot.workspace.mutations == transactions
 		}
-		if state == end {
+		if killConverged(state, end, settled) {
 			outcome.needed = retry
 			break
 		}
@@ -816,6 +893,20 @@ func killEvaluate(ctx context.Context, journey killJourney, rig *killRig, snapsh
 	watch.Unlock()
 	outcome.failures = killDistinct(outcome.failures)
 	return outcome
+}
+
+// killConverged reports whether a state the kill or its retries left is the
+// journey's end. A verb that settles opens no transaction
+// (specs/state-reconciliation.md, Lifecycle unit), so a claim that holds
+// nothing outlasts retries that all settled, until a registration or pristine
+// publication reclaims it (Context mutation evidence). Idle claims are
+// therefore compared except in a state that retries left, every one of which
+// settled.
+func killConverged(state, end killState, settled bool) bool {
+	if settled {
+		state.idleClaims = end.idleClaims
+	}
+	return state == end
 }
 
 // killDistinct keeps the first report of each failure, because a rule broken

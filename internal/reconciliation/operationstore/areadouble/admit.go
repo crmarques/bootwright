@@ -1,15 +1,17 @@
 // Package areadouble is what every in-memory operationstore.Area double
-// refuses before it answers, decided over that double's own records and
-// directories, so the doubles areacontract.Verify holds share one copy. It
-// imports no first-party package, so operationstore's own tests can use it,
-// and no production package imports it.
+// refuses before it answers and what it lists, decided over that double's own
+// records and directories, so the doubles areacontract.Verify holds share one
+// copy. It imports no first-party package, so operationstore's own tests can
+// use it, and no production package imports it.
 package areadouble
 
 import (
 	"context"
 	"errors"
 	"io/fs"
+	"maps"
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -37,6 +39,47 @@ func Admit(ctx context.Context, files map[string][]byte, directories map[string]
 		return errors.New("is a directory")
 	}
 	return nil
+}
+
+// Entries is what a double lists for a target Admit accepted: each name the
+// directory holds directly once, in name order, a record with its size and a
+// directory with none, and nothing for an absent directory. E is the port's
+// entry type, which this package cannot import.
+func Entries[E ~struct {
+	Name      string
+	Directory bool
+	Size      int64
+}](files map[string][]byte, directories map[string]bool, target string) []E {
+	prefix := target
+	if prefix != "" {
+		prefix += "/"
+	}
+	sizes := map[string]int64{}
+	for name, data := range files {
+		rest, ok := strings.CutPrefix(name, prefix)
+		if !ok || rest == "" {
+			continue
+		}
+		if head, _, nested := strings.Cut(rest, "/"); nested {
+			sizes[head] = -1
+		} else {
+			sizes[rest] = int64(len(data))
+		}
+	}
+	for name := range directories {
+		if rest, ok := strings.CutPrefix(name, prefix); ok && rest != "" && !strings.Contains(rest, "/") {
+			sizes[rest] = -1
+		}
+	}
+	entries := make([]E, 0, len(sizes))
+	for _, name := range slices.Sorted(maps.Keys(sizes)) {
+		if sizes[name] < 0 {
+			entries = append(entries, E{Name: name, Directory: true})
+		} else {
+			entries = append(entries, E{Name: name, Size: sizes[name]})
+		}
+	}
+	return entries
 }
 
 // IsDirectory reports whether target is a directory of the double: one it was

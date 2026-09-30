@@ -1,6 +1,7 @@
 package prerequisites
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -29,6 +30,7 @@ type fixture struct {
 	presentationError error
 	beforeMutation    func()
 	resolution        *resolvingFixture
+	plan              Report
 }
 
 func newFixture(t *testing.T, platform ...Platform) *fixture {
@@ -59,8 +61,9 @@ func (f *fixture) PresentControllerScope(_ context.Context, phase string, _ Repo
 	return nil
 }
 
-func (f *fixture) PresentControllerPlan(ctx context.Context, _ Report) error {
+func (f *fixture) PresentControllerPlan(ctx context.Context, report Report) error {
 	f.events = append(f.events, "present")
+	f.plan = report
 	return f.presentationError
 }
 
@@ -80,10 +83,18 @@ type memoryStorage struct {
 	mutationError   error
 	retired         []string
 	retireErr       error
+	// areas is every bundle area this double holds. Bundle refuses a new one
+	// once MaxRetainedBundles are held, as the store does, and interrupted
+	// makes the next retirement stop once its intent is recorded.
+	areas       []HeldArea
+	interrupted bool
+	// uncertain is set by a publication whose outcome is unknown and ends
+	// every later publication of the same mutation, as the store's does.
+	uncertain bool
 }
 
 func (m *memoryStorage) view() StorageView {
-	value := StorageView{Exists: m.exists, Initialized: m.state.Host.Valid(), Context: m.scope, State: copyState(m.state)}
+	value := StorageView{Exists: m.exists, Initialized: m.state.Host.Valid(), Context: m.scope, State: copyState(m.state), Areas: slices.Clone(m.areas)}
 	// The store admits only a resolved bundle identity, so this double refuses
 	// anything else exactly as the durable adapter does.
 	value.OpenBundle = func(_ context.Context, id string) (BundleArea, error) {
@@ -91,9 +102,13 @@ func (m *memoryStorage) view() StorageView {
 		if decoded, err := hex.DecodeString(id); err != nil || len(decoded) != 32 {
 			return nil, errors.New("controller bundle identity is invalid")
 		}
-		// hidden is an area this host no longer has, however it was reserved.
-		if id == m.hidden {
+		// hidden is an area this host no longer has, however it was reserved,
+		// and a retired one is gone; one being retired is never read.
+		if id == m.hidden || slices.Contains(m.retired, id) {
 			return nil, nil
+		}
+		if slices.ContainsFunc(m.areas, func(held HeldArea) bool { return held.ID == id && held.Retiring }) {
+			return nil, errors.New("this controller bundle is being retired")
 		}
 		if m.bundleExists {
 			return dummyArea{}, nil
@@ -129,8 +144,8 @@ func (m *memoryStorage) MutateController(ctx context.Context, scope SetupContext
 		return m.mutationError
 	}
 	previous := m.held
-	m.held = scope
-	defer func() { m.held = previous }()
+	m.held, m.uncertain = scope, false
+	defer func() { m.held, m.uncertain = previous, false }()
 	return fn(m)
 }
 
@@ -140,40 +155,144 @@ func (m *memoryStorage) Snapshot() StorageView {
 	return value
 }
 func (m *memoryStorage) Publish(ctx context.Context, state HostState) (Publication, error) {
+	if m.uncertain {
+		return NotCommitted, errors.New("controller storage capability is no longer available")
+	}
+	if err := m.transition(state); err != nil {
+		return NotCommitted, err
+	}
+	retained, err := m.retain(state)
+	if err != nil {
+		return NotCommitted, err
+	}
 	m.writes++
 	if m.writes == m.failPublication {
+		m.uncertain = true
 		return Unknown, errors.New("private sync error")
 	}
 	m.state = copyState(state)
 	m.state.RetainedSources = slices.Clone(state.Receipt.Sources)
+	m.state.RetainedDefinitions = retained
 	if state.Receipt.Status == "complete" {
 		m.owner.bundle.sealed = true
 	}
 	return Committed, nil
 }
 
+// retain is what the store keeps of the retained resolutions when it publishes
+// next: the ones it already holds, whatever the caller passed, and the one the
+// receipt carries. Like the store it refuses a resolution beyond the bound,
+// and a new receipt naming a bundle it could not reserve once the areas are at
+// the bound.
+func (m *memoryStorage) retain(next HostState) ([]Definition, error) {
+	retained := slices.Clone(m.state.RetainedDefinitions)
+	if definition := next.Receipt.Definition; definition != nil &&
+		!slices.ContainsFunc(retained, func(item Definition) bool { return item.ResolutionDigest == definition.ResolutionDigest }) {
+		if len(retained) >= MaxRetainedBundles {
+			return nil, errors.New("retained controller resolution limit exceeded")
+		}
+		retained = append(retained, CloneDefinition(*definition))
+	}
+	if next.Receipt.ID != m.state.Receipt.ID && len(m.areas) >= MaxRetainedBundles &&
+		!slices.ContainsFunc(m.areas, func(held HeldArea) bool { return held.ID == next.Receipt.CatalogDigest }) {
+		return nil, errors.New("retained controller bundle limit exceeded")
+	}
+	return retained, nil
+}
+
+// transition refuses what the store's receipt rules refuse: a receipt of
+// another scope or host, a new receipt over a pending one, and, for the same
+// receipt, another plan, a completed receipt made pending, an intent or an
+// unresolved effect presumed not to have happened, and a verified postcondition
+// replaced.
+func (m *memoryStorage) transition(next HostState) error {
+	before := m.state
+	if next.Receipt.Context != m.held {
+		return errors.New("setup receipt differs from its held context scope")
+	}
+	switch {
+	case !before.Host.Valid():
+		return nil
+	case !before.Host.Equal(next.Host):
+		return errors.New("stored controller host evidence does not match the executing host")
+	case before.Receipt.ID != next.Receipt.ID && before.Receipt.Incomplete():
+		return errors.New("pending setup must be resolved before replacing its receipt")
+	case before.Receipt.ID != next.Receipt.ID:
+		return nil
+	case before.Receipt.PlanDigest != next.Receipt.PlanDigest || len(before.Receipt.Actions) != len(next.Receipt.Actions):
+		return errors.New("exact setup retry requires the original host, input, catalog and plan")
+	case before.Receipt.Status == "complete" && next.Receipt.Status != "complete":
+		return errors.New("completed setup cannot become pending again")
+	}
+	for index, previous := range before.Receipt.Actions {
+		now := next.Receipt.Actions[index]
+		if previous.Phase == "intent" && now.Phase == "planned" || previous.Phase == "observed" && previous.Outcome == "unknown" && now.Phase != "observed" {
+			return errors.New("setup retry cannot presume an unresolved effect did not occur")
+		}
+		if previous.Phase == "observed" && (previous.Outcome == "changed" || previous.Outcome == "unchanged") &&
+			(now.Phase != previous.Phase || now.Outcome != previous.Outcome || !bytes.Equal(now.Evidence, previous.Evidence)) {
+			return errors.New("setup cannot discard a verified action postcondition")
+		}
+	}
+	return nil
+}
+
 // Bundle opens only the approved catalog's bundle, and only under a durable
 // intent, as the store does.
 func (m *memoryStorage) Bundle(ctx context.Context, id string) (BundleArea, error) {
+	if m.uncertain {
+		return nil, errors.New("controller storage capability is no longer available")
+	}
 	if id != m.state.Receipt.CatalogDigest || id == "" {
 		return nil, errors.New("bundle namespace is not the approved setup catalog")
 	}
 	if !slices.ContainsFunc(m.state.Receipt.Actions, func(a SetupAction) bool { return a.Phase == "intent" }) {
 		return nil, errors.New("missing durable intent")
 	}
+	if !slices.ContainsFunc(m.areas, func(held HeldArea) bool { return held.ID == id }) {
+		if len(m.areas) >= MaxRetainedBundles {
+			return nil, errors.New("retained controller bundle limit exceeded")
+		}
+		m.areas = append(m.areas, HeldArea{ID: id})
+		slices.SortFunc(m.areas, func(a, b HeldArea) int { return strings.Compare(a.ID, b.ID) })
+	}
 	m.bundleExists = true
 	return dummyArea{}, nil
 }
 
 // RetireBundles records what a retirement asked for and drops the retained
-// resolutions it names, exactly as the store does.
+// resolutions it names, exactly as the store does, and refuses what the store
+// refuses: any retirement without a receipt or while it is pending, an
+// identity that is no digest and the bundle the receipt names.
 func (m *memoryStorage) RetireBundles(_ context.Context, ids []string) error {
 	if m.retireErr != nil {
 		return m.retireErr
 	}
-	m.retired = append(m.retired, ids...)
+	if m.uncertain {
+		return errors.New("controller storage capability is no longer available")
+	}
+	if m.state.Receipt.ID == "" || m.state.Receipt.Incomplete() {
+		return errors.New("controller retirement requires a settled setup receipt")
+	}
+	for _, id := range ids {
+		if decoded, err := hex.DecodeString(id); err != nil || len(decoded) != 32 {
+			return errors.New("retired controller bundle identity is invalid")
+		}
+	}
+	if slices.Contains(ids, m.state.Receipt.CatalogDigest) {
+		return errors.New("the execution bundle this receipt names may not be retired")
+	}
 	m.state.RetainedDefinitions = slices.DeleteFunc(slices.Clone(m.state.RetainedDefinitions),
 		func(definition Definition) bool { return slices.Contains(ids, definition.CatalogDigest) })
+	if m.interrupted {
+		m.interrupted = false
+		for index := range m.areas {
+			m.areas[index].Retiring = m.areas[index].Retiring || slices.Contains(ids, m.areas[index].ID)
+		}
+		return errors.New("synthetic process death after the retirement intent")
+	}
+	m.retired = append(m.retired, ids...)
+	m.areas = slices.DeleteFunc(m.areas, func(held HeldArea) bool { return slices.Contains(ids, held.ID) })
 	return nil
 }
 

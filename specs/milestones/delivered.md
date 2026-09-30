@@ -1299,3 +1299,40 @@ in-tree ([B73](m4.md#b73)); the media probe names the controller's file because
 media blocks run only on the controller; and every cluster read still uses the
 installer's kubeconfig ([B170](m1.md#b170)). New items B168 to B170 entered M1,
 B171 was parked, and B67 records the refusal its physical nodes lift.
+
+### X30 — setup at the bundle bound, storage suites and reclaim
+
+**Owner:** Controller setup and Workspace, with State reconciliation.
+Integrated on local `main` on 2026-09-30 as one commit, beside X29.
+**Items:** B44, B153, B139. **Decisions:** D40.
+
+**Outcome:** setup no longer strands a host at the 16-area bundle bound
+(B44, D40). When a setup must publish a new execution bundle at the bound,
+`setup --purge-old-bundles` first retires every superseded execution bundle and
+every area an interrupted retirement left retiring, keeping the receipt's
+bundle, the carry-forward source and the new bundle, then publishes and
+completes; a failed or canceled receipt counts as settled, and a new receipt
+whose bundle cannot be reserved is refused before it is published. Without the
+flag the refusal names that command; when only client areas and the current
+bundle hold the slots, the refusal says so. Every method of the operation area,
+controller storage and lifecycle workspace ports has a storage-suite clause, the
+memory doubles enforce the store's transition rules, and the two operation-area
+doubles share one entry listing (B153). The kill harness kills a claim reclaim
+part way, and the state-reconciliation spec tells a reclaim of ownership, a
+non-goal, from removing an empty claim directory (B139).
+
+**Review:** one blocking finding, confirmed and fixed: a failed setup receipt
+at the bound still stranded the host. The first check found thin coverage and
+narrow spec wording, both fixed; the second check found no gap.
+
+**Gates:** `make check-offline tidy-check modules-check vulncheck docs-check
+race` passes on the integrated slice and on the squashed commit, and
+`./scripts/ansible-check --suite units`, `sanity`, `integration` and `lint`
+pass on the squashed commit. No real-host run.
+
+**Constraints left behind:** a host a build before X30 left with a pending
+receipt at the bound stays stuck until [B175](m1.md#b175) decides its recovery;
+repeating an interrupted retirement ([B172](m1.md#b172)), a failed receipt
+after a moved automation digest ([B176](m1.md#b176)) and resolutions of a kept
+bundle ([B177](m1.md#b177)) can still stop setup. New items B172 to B178
+entered M1, and B179 to B181 were parked.

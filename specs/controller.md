@@ -185,11 +185,13 @@ own accord.
 
 **Retiring superseded bundles.** `setup --purge-old-bundles` retires the
 execution bundles this host no longer needs, after the setup it runs beside has
-completed and only then: a setup that refuses, fails or previews retires
-nothing, because what may be retired is decided by what the new bundle now
-holds. A bundle is retired only when it is positively identified as a
-superseded execution bundle, which is one a retained resolution names and that
-the completed receipt does not. Everything else is left untouched, including
+completed: a setup that refuses, fails or previews retires nothing then,
+because what may be retired is decided by what the new bundle now holds. The
+one earlier retirement is a setup at the bound, below. A bundle is retired
+only when it is positively identified as a superseded execution bundle, which
+is one a retained resolution names and that the receipt does not. That receipt
+is a settled one, whose setup completed, failed or was canceled; a pending
+receipt admits no retirement. Everything else is left untouched, including
 every [client area](#the-controller-stage), which is shared host state no
 context uninstalls, and any area this record does not account for.
 
@@ -199,13 +201,40 @@ publishes, whether that source was acquired or recovered from the bundle a
 [carried-forward resolution](#supported-host-and-dependency-selection) read, so
 the next carry-forward reads the bundle this setup just sealed. A lifecycle
 operation always runs the bundle the current receipt names, so no frozen
-operation reaches a retired one.
+operation reaches a retired one. At the bound, retirement also runs beside a
+receipt whose setup failed or was canceled, and that is safe too: that setup is
+over, nothing resumes it, and the bundle it names is kept.
 
 The resolution a retired bundle carries is retired with it, because a retained
 resolution whose sources are gone can be carried forward from nothing. That is
-what returns capacity: the retained resolutions and bundle areas a host may
-hold are bounded, and without retirement the bound is reached and every later
-setup refuses.
+what returns capacity: a host holds at most 16 bundle areas, execution bundles
+and client areas alike, and at most 16 retained resolutions
+([bounds](contexts/controller-record.md#bounds)).
+
+**A setup at the bound.** A setup never gets stuck at that bound. When it must
+publish a new execution bundle and the host already holds 16 areas or 16
+retained resolutions, it decides before it presents its plan, and decides
+again under the mutation that publishes:
+
+- With `--purge-old-bundles` it first retires every superseded execution
+  bundle, and every area an interrupted retirement left marked as retiring,
+  except the bundle the receipt names and the one its
+  [carried-forward resolution](#supported-host-and-dependency-selection) reads.
+  The plan names that retirement. It then publishes and completes, and the
+  retirement after completion follows as usual. Retirement is never undone,
+  so a setup that fails after it still leaves that room.
+- Without the flag it refuses with `controller.conflict` before any effect, and
+  names `bootwright setup --purge-old-bundles`.
+- When retiring would free no room, because only client areas and the current
+  execution bundle hold the bound, it refuses with `controller.conflict` and
+  says so, with or without the flag.
+
+The receipt may be one whose setup completed, or one whose setup failed or was
+canceled: the next setup replaces either with a new receipt, so both are
+treated alike at the bound. Only a pending receipt admits no retirement, because
+setup resumes it exactly rather than publishing a new one. The store refuses a
+new receipt that names a bundle it cannot reserve, so no receipt is left
+pending that no setup could complete.
 
 Retirement records its intent before it removes anything, so an interruption
 leaves an area marked as retiring rather than an area the record still presents

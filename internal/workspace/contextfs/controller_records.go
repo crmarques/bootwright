@@ -442,5 +442,16 @@ func validateControllerReservations(values []prerequisites.HostReservation) erro
 }
 
 // maxControllerBundles bounds the bundle namespaces and retained definitions a
-// controller record holds.
+// controller record holds. Setup plans room against the same bound,
+// prerequisites.MaxRetainedBundles.
 const maxControllerBundles = 16
+
+// heldAreas is what a view tells setup about the areas this record holds, so it
+// can decide whether publishing a new bundle needs room first.
+func heldAreas(bundles []controllerBundleReservation) []prerequisites.HeldArea {
+	held := make([]prerequisites.HeldArea, 0, len(bundles))
+	for _, bundle := range bundles {
+		held = append(held, prerequisites.HeldArea{ID: bundle.ID, Retiring: bundle.Mode == "retiring"})
+	}
+	return held
+}

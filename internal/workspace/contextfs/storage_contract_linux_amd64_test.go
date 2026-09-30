@@ -12,6 +12,9 @@ import (
 func TestControllerStorageHonoursTheStorageContract(t *testing.T) {
 	storagecontract.Verify(t, func(t *testing.T) storagecontract.Subject {
 		store, record := lifecycleFixture(t)
-		return storagecontract.Subject{Storage: store, Scope: prerequisites.SetupContext{Name: record.Name, Revision: record.Revision, Machine: "controller"}}
+		return storagecontract.Subject{
+			Storage: store, Scope: prerequisites.SetupContext{Name: record.Name, Revision: record.Revision, Machine: "controller"},
+			Unsettle: func() { (&interrupt{point: string(checkpointAfterControllerRename)}).install(store) },
+		}
 	})
 }

@@ -56,11 +56,13 @@ func retired(retiring []controllerBundleReservation, id string) bool {
 // plannedRetirement decides what this store will remove. Which areas are
 // superseded execution bundles is the caller's judgement, read from the
 // resolutions it retains; what the store refuses on its own is the bundle its
-// completed receipt names and every client closure, because neither is ever
-// superseded by a setup. An area it does not hold is already gone.
+// receipt names and every client closure, because neither is ever superseded
+// by a setup. A receipt whose setup completed, failed or was canceled admits a
+// retirement; a pending one does not, because its setup resumes it exactly. An
+// area it does not hold is already gone.
 func (t *controllerTransaction) plannedRetirement(ids []string) ([]controllerBundleReservation, []controllerBundleReservation, error) {
-	if t.stored.value.Receipt.Status != "complete" {
-		return nil, nil, state("controller retirement requires a completed setup receipt")
+	if receipt := t.stored.value.Receipt; receipt.ID == "" || receipt.Incomplete() {
+		return nil, nil, state("controller retirement requires a settled setup receipt")
 	}
 	current := t.stored.value.Receipt.CatalogDigest
 	next := slices.Clone(t.stored.bundles)

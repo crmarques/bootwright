@@ -124,7 +124,11 @@ at most 512 KiB, with at most 16 retained definitions subject to the aggregate
 state bound. Controller records allow nesting depth 16 and 32 fields per object;
 other durable records keep their own bounds. There are at most 16 retained bundle
 namespaces, named by the 64-character content digest of what they hold. Their
-reservations record their mode and physical directory identity. A bundle is bounded to 8 GiB total, 1 GiB per file, 32768 entries and
+reservations record their mode and physical directory identity. A new receipt
+naming a namespace the record does not hold is refused while all 16 are held,
+so none is left pending on a bundle that can never be reserved;
+[setup](../controller.md#supported-host-and-dependency-selection) makes room
+first. A bundle is bounded to 8 GiB total, 1 GiB per file, 32768 entries and
 depth 32. Symlinks, hard links, nested
 mounts, unsafe modes, unexpected entries and replacement refuse. Completion
 verifies and syncs the complete tree before sealing; sealed contents cannot be

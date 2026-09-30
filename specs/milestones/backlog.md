@@ -40,6 +40,9 @@ Alias cell.
 | [B166](#b166) | split from B45 on 2026-09-30 (D41) | safety | State reconciliation | Scoped removal | A state-contract candidate (D41) |
 | [B167](#b167) | split from B34 on 2026-09-30 (D28) | safety | Substrate and Controller | Frozen remote package transactions | The SSH-host install contract was narrowed instead (D28) |
 | [B171](#b171) | new, 2026-09-30 (X21) | enabling | State reconciliation and Secrets | Custody checks each held by its own test | Parked under the 2026-09-30 triage rule: test depth |
+| [B179](#b179) | new, 2026-09-30 (X30) | enabling | CLI and Controller setup | A refused setup names the remedy its refusal gives | Parked under the 2026-09-30 triage rule: wording |
+| [B180](#b180) | new, 2026-09-30 (X30) | enabling | Workspace, Controller setup and State reconciliation | Storage fixtures that can fail | Parked under the 2026-09-30 triage rule: test depth |
+| [B181](#b181) | new, 2026-09-30 (X30) | safety | Secrets and State reconciliation | A bounded run's rebind names its consumer | Bounded at three bindings since X26; closing it changes the keyring format |
 
 ### B94
 
@@ -206,6 +209,18 @@ An SSH-host provider's hypervisor install frozen as one exact transaction under 
 ### B171
 
 Three of X21's custody mutations are caught only by defence in depth: removing the lent area's close, dropping the closed-transaction check, and withdrawing before the removal's record reads done. **Exit evidence:** one test that fails for each mutation alone.
+
+### B179
+
+After a refused setup, the result's Next line always says `bootwright setup`, while the bound refusal's diagnostic names `bootwright setup --purge-old-bundles` (found in X30). **Exit evidence:** a result golden whose Next line follows the refusal's remediation.
+
+### B180
+
+The contextfs retirement fixture sets retained definitions that `Publish` ignores, so its kept-resolution assertion always passes; the controller storage memory double keeps no receipt's resolution append-only and refuses no replaced one, so the storage suite cannot require that retirement drops a retired bundle's resolution; and the kill harness's workspace clone does not copy the journey double's client files (found in X30). **Exit evidence:** fixtures and doubles that fail when the rule breaks.
+
+### B181
+
+A bounded run's rebind is limited to three bindings rather than closed, which a binding that names its consumer would close; that is a keyring format change (left by B139 in X30). **Exit evidence:** a binding format that names its consumer, and a rebind test that refuses any other.
 
 ## Retired
 
