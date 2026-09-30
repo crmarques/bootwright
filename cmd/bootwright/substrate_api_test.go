@@ -5,13 +5,15 @@ import (
 	"strings"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 // A libvirt provider names the one address its emulated BMCs listen on, because
 // no default names an address every hosted Machine's controller endpoint can
 // reach. Its absence is reported once, by the schema, and no rule adds a second
-// diagnostic for the same field.
+// diagnostic for the same field. An IPv6 address compiles in the one spelling
+// netip prints.
 func TestALibvirtProviderMustNameItsEmulatedBMCAddress(t *testing.T) {
 	const field = "$.spec.libvirt.bmcEmulationDefaults.bindAddress"
 	host := strings.Replace(serviceHost, "[container-runtime]", "[container-runtime, libvirt]", 1)
@@ -28,4 +30,8 @@ func TestALibvirtProviderMustNameItsEmulatedBMCAddress(t *testing.T) {
 		}
 	}
 	compileAcceptance(t, controllerInputs(serviceEnvironment, host, credential, provider("      bindAddress: 192.0.2.10\n")))
+	state, _ := compileAcceptance(t, controllerInputs(serviceEnvironment, host, credential, provider("      bindAddress: '2001:DB8:0::10'\n")))
+	if address := requireObject(t, state.Effective(), api.InfraProvider, "lab").Spec().Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text(); address != "2001:db8::10" {
+		t.Fatalf("an IPv6 listener compiled to %q", address)
+	}
 }

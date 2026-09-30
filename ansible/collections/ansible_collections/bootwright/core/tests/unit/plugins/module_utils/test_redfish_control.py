@@ -122,6 +122,23 @@ def test_a_reference_to_the_endpoint_itself_is_followed(monkeypatch, built, endp
     assert recorder.requests[0].get_header("Authorization").startswith("Basic ")
 
 
+# An emulated controller on an IPv6 listener is named by its bracketed
+# endpoint. The client reads the system at exactly that endpoint and resolves a
+# path onto its authority, while the unbracketed spelling names no authority and
+# is refused before any request exists.
+def test_a_bracketed_ipv6_emulated_endpoint_is_read_and_an_unbracketed_one_refused(monkeypatch, built):
+    system = "/redfish/v1/Systems/96edd92b-3d01-83fc-be8e-df45151205c6"
+    endpoint = "http://[fd00::1]:8000" + system
+    recorder = Recorder()
+    emulated = client(monkeypatch, recorder, endpoint)
+    assert emulated.home == ("http", "fd00::1", 8000)
+    assert emulated.fetch()[0] == 200 and emulated.fetch("/redfish/v1/Managers/1")[0] == 200
+    assert built == [endpoint, "http://[fd00::1]:8000/redfish/v1/Managers/1"]
+    with pytest.raises(redfish_control.ControllerError):
+        client(monkeypatch, recorder, "http://fd00::1:8000" + system).fetch()
+    assert len(built) == 2 and len(recorder.requests) == 2
+
+
 # A transport that breaks mid-answer is no answer, reported as status 0 rather
 # than escaping as a traceback past the module's failure handling.
 @pytest.mark.parametrize("failure", [

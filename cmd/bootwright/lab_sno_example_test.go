@@ -149,21 +149,11 @@ func TestLabSNOExampleDerivesItsInstallerInputs(t *testing.T) {
 	}
 }
 
-// Every root-device hint the example's node declares is admitted with its type
-// and reaches the agent configuration unchanged: strings a YAML 1.1 reader
-// would take for numbers, a size of zero and a disk that is not rotational.
-func TestLabSNOExampleCarriesEveryRootDeviceHintToItsAgentConfig(t *testing.T) {
-	const (
-		selected = "deviceName: /dev/vda\n"
-		hints    = "deviceName: \"/dev/vda\"\n" +
-			"        hctl: \"1:0:0:0\"\n" +
-			"        model: \"1e3\"\n" +
-			"        vendor: \"0o17\"\n" +
-			"        serialNumber: \"0987654321\"\n" +
-			"        wwn: \"0x5000c500a1b2c3d4\"\n" +
-			"        minSizeGigabytes: 0\n" +
-			"        rotational: false\n"
-	)
+// snoExampleWithHints is the example with its node's root device selected by
+// the given hints in place of its device name.
+func snoExampleWithHints(t *testing.T, hints string) desiredstate.Sources {
+	t.Helper()
+	const selected = "deviceName: /dev/vda\n"
 	sources := snoExampleSources(t)
 	replaced := 0
 	for index, file := range sources.Files {
@@ -174,6 +164,19 @@ func TestLabSNOExampleCarriesEveryRootDeviceHintToItsAgentConfig(t *testing.T) {
 	if replaced != 1 {
 		t.Fatalf("the example selects %d root devices, want 1", replaced)
 	}
+	return sources
+}
+
+// Every root-device hint a virtual node is admitted with is admitted on the
+// example's node with its type and reaches the agent configuration unchanged:
+// strings a YAML 1.1 reader would take for numbers, a size of zero and a disk
+// that is not rotational.
+func TestLabSNOExampleCarriesEveryRootDeviceHintToItsAgentConfig(t *testing.T) {
+	sources := snoExampleWithHints(t, "deviceName: \"/dev/vda\"\n"+
+		"        model: \"1e3\"\n"+
+		"        vendor: \"0o17\"\n"+
+		"        minSizeGigabytes: 0\n"+
+		"        rotational: false\n")
 	state, _ := compileAcceptance(t, sources)
 	if unsupported := agentinstall.Unsupported(state.Effective()); len(unsupported) != 0 {
 		t.Fatalf("the example declares a cluster this contract cannot install: %v", unsupported)
@@ -188,11 +191,32 @@ func TestLabSNOExampleCarriesEveryRootDeviceHintToItsAgentConfig(t *testing.T) {
 	}
 	host, _ := hosts[0].(map[string]any)
 	want := map[string]any{
-		"deviceName": "/dev/vda", "hctl": "1:0:0:0", "model": "1e3", "vendor": "0o17", "serialNumber": "0987654321",
-		"wwn": "0x5000c500a1b2c3d4", "minSizeGigabytes": int64(0), "rotational": false,
+		"deviceName": "/dev/vda", "model": "1e3", "vendor": "0o17", "minSizeGigabytes": int64(0), "rotational": false,
 	}
 	if !reflect.DeepEqual(host["rootDeviceHints"], want) {
 		t.Fatalf("hints = %#v, want %#v", host["rootDeviceHints"], want)
+	}
+}
+
+// The example's node installs to a disk its libvirt provider creates, which
+// carries no WWN, SCSI address or serial number, so admission refuses each of
+// those hints at its own path, naming the Machine, before anything is planned.
+func TestLabSNOExampleRefusesAHintItsCreatedDiskCannotMatch(t *testing.T) {
+	for hint, value := range map[string]string{"hctl": "1:0:0:0", "serialNumber": "0987654321", "wwn": "0x5000c500a1b2c3d4"} {
+		t.Run(hint, func(t *testing.T) {
+			sources := snoExampleWithHints(t, "deviceName: /dev/vda\n        "+hint+": \""+value+"\"\n")
+			state, _, err := wireCompiler().Compile(context.Background(), sources)
+			if state != nil || err == nil {
+				t.Fatalf("a %s hint on a created disk was admitted", hint)
+			}
+			for _, diagnostic := range diagnostics.Of(err) {
+				if diagnostic.Code == "api.invariant" && diagnostic.Field == "$.spec.os.install.rootDeviceHints."+hint &&
+					diagnostic.Object != nil && diagnostic.Object.Kind == string(api.Machine) && diagnostic.Object.Name == "sno-01" {
+					return
+				}
+			}
+			t.Fatalf("no %s refusal naming Machine/sno-01: %#v", hint, diagnostics.Of(err))
+		})
 	}
 }
 

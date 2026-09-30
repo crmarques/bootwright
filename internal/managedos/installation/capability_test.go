@@ -338,6 +338,7 @@ func TestObservationMapsEvidenceToTheEffectItProves(t *testing.T) {
 	other, _ := MarkerFor(request, "another")
 	fresh, _ := json.Marshal(Evidence{Power: "Off", Request: "digest"})
 	foreign, _ := json.Marshal(Evidence{Marker: string(other), Power: "On", Request: "digest"})
+	absenceForm, _ := json.Marshal(Evidence{Absent: true, Postcondition: true, Request: "digest"})
 	for name, test := range map[string]struct {
 		runner *fakeRunner
 		want   reconciliation.EffectState
@@ -345,7 +346,11 @@ func TestObservationMapsEvidenceToTheEffectItProves(t *testing.T) {
 		"complete":       {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: completeEvidence(request, "digest", string(marker))}}, reconciliation.EffectCompleted},
 		"nothing yet":    {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: fresh}}, reconciliation.EffectNoEffect},
 		"another marker": {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: foreign}}, reconciliation.EffectUnknown},
-		"failed":         {&fakeRunner{err: errors.New("unreachable")}, reconciliation.EffectUnknown},
+		// The absence form reports no power, so it can never prove that an
+		// apply stopped before it published anything had no effect; the
+		// observation publishes the presence form, which carries the power.
+		"absence form, no power": {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: absenceForm}}, reconciliation.EffectUnknown},
+		"failed":                 {&fakeRunner{err: errors.New("unreachable")}, reconciliation.EffectUnknown},
 	} {
 		t.Run(name, func(t *testing.T) {
 			observation, err := New(test.runner).Observe(context.Background(), call)
@@ -385,6 +390,9 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 		"content on a running guest":     {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Image: true, Power: "On", Request: "digest"})}}, reconciliation.EffectPartial},
 		"tree and private left":          {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Marker: string(marker), Power: "On", Private: true, Tree: true, Request: "digest"})}}, reconciliation.EffectPartial},
 		"private left":                   {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Marker: string(marker), Power: "On", Private: true, Request: "digest"})}}, reconciliation.EffectPartial},
+		"content read alone, none left":  {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Request: "digest"})}}, reconciliation.EffectCompleted},
+		"content read alone, image left": {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Image: true, Request: "digest"})}}, reconciliation.EffectPartial},
+		"tree left without its marker":   {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Request: "digest", TreeContent: true})}}, reconciliation.EffectPartial},
 		"another request":                {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Absent: true, Postcondition: true, Request: "another"})}}, reconciliation.EffectUnknown},
 		"failed":                         {&fakeRunner{err: errors.New("unreachable")}, reconciliation.EffectUnknown},
 	} {
@@ -395,6 +403,37 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 			}
 			if len(test.runner.requests) != 1 || test.runner.requests[0].Operation != "observe" {
 				t.Fatalf("adapter invocation = %+v", test.runner.requests)
+			}
+			if test.runner.requests[0].MaterialValues["observes"] != "removal" {
+				t.Fatalf("the removal observation was not scoped to the published content: %v", test.runner.requests[0].MaterialValues)
+			}
+		})
+	}
+}
+
+// A removal's resolution reads the published content alone, while the apply's
+// resolution reads the machine as well, so only the removal scopes the
+// observation it asks the adapter for.
+func TestOnlyARemovalScopesTheObservationToThePublishedContent(t *testing.T) {
+	call, _ := execution(t, "digest")
+	for name, test := range map[string]struct {
+		observe func(Capability, context.Context, lifecycle.Execution) (lifecycle.Observation, error)
+		want    string
+	}{
+		"apply":   {Capability.Observe, ""},
+		"removal": {Capability.ObserveRemoval, "removal"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(`{"request":"digest"}`)}}
+			if _, err := test.observe(New(runner), context.Background(), call); err != nil {
+				t.Fatal(err)
+			}
+			if len(runner.requests) != 1 {
+				t.Fatalf("adapter invocations = %d", len(runner.requests))
+			}
+			scope, scoped := runner.requests[0].MaterialValues["observes"]
+			if scope != test.want || scoped != (test.want != "") {
+				t.Fatalf("observation scope = %q (%v), want %q", scope, scoped, test.want)
 			}
 		})
 	}

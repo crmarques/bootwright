@@ -93,6 +93,9 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 		}
 	}
 	slices.Sort(binding.secrets)
+	if err := refuseOwnSocketConflicts(binding.reservations); err != nil {
+		return reconciliation.Plan{}, capabilityBinding{}, err
+	}
 	definitions = dependOnController(definitions)
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, definitions)
 	if err != nil {
@@ -104,6 +107,21 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 		}
 	}
 	return plan, binding, nil
+}
+
+// refuseOwnSocketConflicts compares the sockets this context's own blocks claim
+// on the controller as another context's are compared, so two of them that
+// could never both listen refuse before the plan exists rather than when the
+// second one starts.
+func refuseOwnSocketConflicts(reservations []prerequisites.HostReservation) error {
+	conflict, found := prerequisites.ConflictingSockets(reservations)
+	if !found {
+		return nil
+	}
+	return failure("api.invariant",
+		"this context's "+conflict.First.Kind+" "+conflict.First.Service+" at "+conflict.FirstSocket+" and "+
+			conflict.Second.Kind+" "+conflict.Second.Service+" at "+conflict.SecondSocket+" cannot both listen on the controller",
+		"give one of them another bind address or port")
 }
 
 // refuseUnsupported names every selected object whose realization this

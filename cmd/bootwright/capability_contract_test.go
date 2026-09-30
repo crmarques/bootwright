@@ -984,6 +984,7 @@ func contractHostPresence(t *testing.T, execution lifecycle.Execution) map[strin
 	for _, network := range request.Networks {
 		networks = append(networks, map[string]any{
 			"name": network.Name, "managed": network.Managed, "answered": network.Managed, "bridge": true, "state": "active", "owned": network.Managed,
+			"definition": network.Managed,
 		})
 	}
 	return map[string]any{

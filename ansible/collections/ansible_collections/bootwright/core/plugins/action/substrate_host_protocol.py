@@ -20,7 +20,7 @@ HEX = set("0123456789abcdef")
 # The observation carries each network's UUID so a definition can be offered
 # back to libvirt under the identity it already holds. Evidence stays narrower:
 # Go validates exactly the facts below, and rejects any field it does not know.
-OBSERVED_NETWORK = {"answered", "bridge", "managed", "name", "owned", "state", "uuid"}
+OBSERVED_NETWORK = {"answered", "bridge", "definition", "managed", "name", "owned", "state", "uuid"}
 OBSERVED_SERVICE = {"enabled", "name", "state"}
 
 
@@ -36,6 +36,7 @@ def network_evidence(entry):
     return {
         "answered": bool(entry["answered"]),
         "bridge": bool(entry["bridge"]),
+        "definition": bool(entry["definition"]),
         "managed": bool(entry["managed"]),
         "name": str(entry["name"]),
         "owned": bool(entry["owned"]),
@@ -80,8 +81,8 @@ def directory(observation):
 
 
 def realized(entry):
-    """Whether a managed network is answered for, owned and active."""
-    return entry["answered"] and entry["owned"] and entry["state"] == "active"
+    """Whether a managed network is answered for, owned, active and carries its frozen definition."""
+    return entry["answered"] and entry["owned"] and entry["state"] == "active" and entry["definition"]
 
 
 def presence(observation, request_digest):

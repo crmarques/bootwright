@@ -245,7 +245,7 @@ func cliGoldens() []cliGolden {
 	operation := func(state string) *lifecycle.OperationResult {
 		result := &lifecycle.OperationResult{
 			Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply", Blocks: blocks(state),
-			Logs: []string{operationID + "/logs/operation.jsonl"}, LogLocation: logs,
+			Logs: []string{"contexts/lab/state/operations/" + operationID + "/logs/operation.jsonl"}, LogLocation: logs,
 			Receipt: lifecycle.Receipt{Operation: operationID, Verb: "apply", State: state, Next: "continue-apply"},
 		}
 		if state == "done" {
@@ -270,11 +270,13 @@ func cliGoldens() []cliGolden {
 				{Kind: "ArtifactServer", Name: "lab-artifacts", Machine: "controller", Status: "done"},
 				{Kind: "DNSServer", Name: "lab-dns", Machine: "controller", Status: "unsupported"},
 			},
-			Secrets:   lifecycle.SecretSummary{Declared: 3, Bound: 3},
-			NextSteps: []string{"bootwright apply", "bootwright destroy"},
+			Secrets: lifecycle.SecretSummary{Declared: 3, Bound: 3},
+			// The lost record refuses both the continuation and the removal,
+			// so nothing is offered.
+			NextSteps: []string{},
 			Lifecycle: &lifecycle.LifecycleSummary{
 				Operation: operationID, Verb: "apply", State: "failed", Next: "continue-apply", Blocks: attempted,
-				Logs: []string{operationID + "/logs/operation.jsonl"}, Executable: "1.4.0 (9f2c1ab)",
+				Logs: []string{"contexts/lab/state/operations/" + operationID + "/logs/operation.jsonl"}, Executable: "1.4.0 (9f2c1ab)",
 			},
 			// The pending block reads so because its record was lost beside
 			// the attempt that started it.
@@ -379,17 +381,19 @@ func cliGoldens() []cliGolden {
 	powered := func(verb, now, previous string, changed bool) *power.Result {
 		return &power.Result{
 			Context: "lab", Machine: "rhel-01", Verb: verb, Power: now, Previous: previous, Changed: changed,
-			LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/" + runID, Logs: []string{runID + "/run.output"},
+			LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/" + runID, Logs: []string{"contexts/lab/state/runs/" + runID + "/run.output"},
 		}
 	}
 	// A run whose adapter refuses proves no power state: the service returns
 	// only where its output was retained, beside the runner's own refusal
-	// (internal/reconciliation/ansiblerunner/process_linux_amd64.go).
+	// (internal/reconciliation/ansiblerunner/process_linux_amd64.go), which
+	// points at the file the run's request names
+	// (internal/reconciliation/lifecycle/runtime.go).
 	refusedRun := func(r *dispatchRecord) {
 		r.result.power = &power.Result{
-			LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/" + runID, Logs: []string{runID + "/run.output"},
+			LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/" + runID, Logs: []string{"contexts/lab/state/runs/" + runID + "/run.output"},
 		}
-		r.err = diagnostics.NewFailureWithRemediation("lifecycle.state", "the adapter operation did not complete", "", "read the adapter output retained beside this attempt's log")
+		r.err = diagnostics.NewFailureWithRemediation("lifecycle.state", "the adapter operation did not complete", "", "read the adapter output retained in this run's run.output")
 	}
 	trusted := func() *enrollment.Report {
 		return &enrollment.Report{Context: "lab", Pending: 2, Recorded: 2, Hosts: []enrollment.HostReport{
@@ -503,9 +507,9 @@ func cliGoldens() []cliGolden {
 			args: "apply --yes --authorize data-loss --stage machines", code: 1, record: func(r *dispatchRecord) { r.err = unauthorized },
 			stderr: "[FAIL] lifecycle.authorization: this plan has data-loss consequences that are not authorized: os-install-rhel-01; next: review the plan's impacts and repeat the command with --authorize data-loss\n",
 		},
-		// Status: an apply that failed, whose every section is populated, and
-		// an idle context, whose empty row sections are omitted from text and
-		// whose lifecycle is null.
+		// Status: an apply that failed beside records that contradict it,
+		// which offers no next step, and an idle context, whose empty row
+		// sections are omitted from text and whose lifecycle is null.
 		{golden: "cli-status", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = status() }},
 		{golden: "cli-status-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = status() }},
 		{golden: "cli-status-idle", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = idle() }},
@@ -639,7 +643,7 @@ func cliGoldens() []cliGolden {
 		// envelope names the retained file.
 		{
 			args: "machine stop --name rhel-01 --yes", code: 1, record: refusedRun,
-			stderr: "[FAIL] lifecycle.state: the adapter operation did not complete; next: read the adapter output retained beside this attempt's log\n",
+			stderr: "[FAIL] lifecycle.state: the adapter operation did not complete; next: read the adapter output retained in this run's run.output\n",
 		},
 		{golden: "cli-machine-stop-refused-json", args: "machine stop --name rhel-01 --yes --output json", code: 1, record: refusedRun},
 		{golden: "cli-machine-trust", args: "machine trust --replace db-01 --yes", record: func(r *dispatchRecord) { r.result.trust = trusted() }},

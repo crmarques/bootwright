@@ -2,7 +2,8 @@
 
 The media request freezes the cluster's install configuration (installConfig in
 internal/containercluster/agentinstall/projection.go), and the attempt
-substitutes the pull secret and the cluster key into it. The installer reads
+substitutes the pull secret, the cluster key and the additional trust bundles
+the cluster selects into it. The installer reads
 install-config.yaml with sigs.k8s.io/yaml, whose YAML 1.1 resolver reads a plain
 1e3, 0o17 or 08 as a number and a plain y or n as a boolean and hands the
 installer different text, while to_nice_yaml leaves exactly those scalars plain
@@ -63,16 +64,25 @@ def walk(tasks):
             yield from walk([child for child in task.get(section) or [] if isinstance(child, dict)])
 
 
-def render(config, pull_secret):
+def render(config, pull_secret, trust_bundles=()):
+    """The task's content over a request selecting one trust bundle per path.
+
+    The runner hands the adapter each bound trust bundle's path as
+    trustBundle<index>, the index of its reference in the request
+    (MediaCapability.run in internal/containercluster/agentinstall).
+    """
     loaded = LOADER.load_from_file(str(MEDIA / "tasks" / "build.yml"), trusted_as_template=True)
     written = [task for task in walk([task for task in loaded if isinstance(task, dict)])
                if task.get("name") == "Write the install configuration with its bound material"]
     assert len(written) == 1, "build.yml has %d tasks writing the install configuration" % len(written)
-    templar = Templar(loader=LOADER, variables={
-        "bootwright_cluster_media_request": {"installConfig": config},
-        "bootwright_cluster_media_material": {"pullSecret": str(pull_secret), "sshKey": SSH_KEY},
-    })
-    return templar.template(written[0]["ansible.builtin.copy"]["content"])
+    request = {"installConfig": config}
+    material = {"pullSecret": str(pull_secret), "sshKey": SSH_KEY}
+    if trust_bundles:
+        request["trustBundleRefs"] = ["ca-%d" % index for index in range(len(trust_bundles))]
+        material.update(("trustBundle%d" % index, str(path)) for index, path in enumerate(trust_bundles))
+    variables = dict(written[0].get("vars") or {})
+    variables.update(bootwright_cluster_media_request=request, bootwright_cluster_media_material=material)
+    return Templar(loader=LOADER, variables=variables).template(written[0]["ansible.builtin.copy"]["content"])
 
 
 def plain_strings(node):
@@ -91,3 +101,34 @@ def test_the_install_configuration_is_written_with_every_value_typed(tmp_path, n
     rendered = render(install_config(name), pull_secret)
     assert plain_strings(yaml.compose(rendered)) == [], rendered
     assert json.loads(rendered) == dict(install_config(name), pullSecret=PULL_SECRET, sshKey=SSH_KEY)
+
+
+def certificate(index):
+    """A PEM block standing for one CA bundle; rendering never parses it."""
+    return "-----BEGIN CERTIFICATE-----\nQ0EtYnVuZGxl%02d\n-----END CERTIFICATE-----" % index
+
+
+def test_the_selected_trust_bundles_reach_the_installer_as_one_bundle_in_order(tmp_path):
+    """Eleven bundles, so ordering them by variable name, which puts
+    trustBundle10 before trustBundle2, differs from the order the cluster
+    selects them in. Each file carries blank lines around its certificate,
+    and the installer's CABundle refuses a bundle with a blank line after its
+    last one."""
+    pull_secret = tmp_path / "pull-secret"
+    pull_secret.write_text(PULL_SECRET + "\n")
+    bundles = []
+    for index in range(11):
+        bundle = tmp_path / ("trust-%d" % index)
+        bundle.write_text("\n" + certificate(index) + "\n\n")
+        bundles.append(bundle)
+    config = dict(install_config("ocp"), additionalTrustBundle="")
+    rendered = render(config, pull_secret, bundles)
+    assert plain_strings(yaml.compose(rendered)) == [], rendered
+    joined = "\n".join(certificate(index) for index in range(11))
+    assert json.loads(rendered) == dict(config, pullSecret=PULL_SECRET, sshKey=SSH_KEY, additionalTrustBundle=joined)
+
+
+def test_a_cluster_selecting_no_trust_bundle_writes_none(tmp_path):
+    pull_secret = tmp_path / "pull-secret"
+    pull_secret.write_text(PULL_SECRET + "\n")
+    assert "additionalTrustBundle" not in json.loads(render(install_config("ocp"), pull_secret))

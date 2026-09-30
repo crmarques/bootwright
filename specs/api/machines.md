@@ -73,7 +73,7 @@ certificate that is not a CA cannot be anchored by one and keeps
 | `spec.libvirt.bmcEmulationDefaults.enabled` | boolean | no | `true` | Current contract accepts only the enabled form. |
 | `spec.libvirt.bmcEmulationDefaults.protocol` | string | no | `redfish` | `redfish`. |
 | `spec.libvirt.bmcEmulationDefaults.emulator` | string | no | `sushy-tools` | `sushy-tools`. |
-| `spec.libvirt.bmcEmulationDefaults.bindAddress` | string | yes | — | Listener address; an IPv4 address that is not unspecified, multicast or `255.255.255.255`, so that every hosted Machine's controller endpoint names it; loopback is admitted, and an IPv6 listener is refused while the endpoint does not bracket it. |
+| `spec.libvirt.bmcEmulationDefaults.bindAddress` | string | yes | — | Listener address; one unicast IP address, so that every hosted Machine's controller endpoint names it: not unspecified, multicast or `255.255.255.255`, and not an IPv6 link-local, zoned or IPv4-mapped address. Loopback is admitted, and an IPv6 address normalizes to the spelling Go's `netip` prints. |
 | `spec.libvirt.bmcEmulationDefaults.port` | integer | no | `8000` | `1..65535`; the first port of the contiguous range the provider's emulated BMCs listen on. |
 | `spec.libvirt.bmcEmulationDefaults.auth.credentialsRef` | string | yes | — | `usernamePassword` `Secret`; required while emulation is enabled. |
 | `spec.libvirt.bmcEmulationDefaults.disableCertificateVerification` | boolean | no | `false` | Explicit TLS verification opt-out. |
@@ -239,7 +239,13 @@ whitespace, control characters, quotes, other shell metacharacters and `.` or
 `..` segments are refused, because the path reaches installer directives and
 shell words verbatim. `minSizeGigabytes` is non-negative. For a bare-metal
 install, `deviceName` or `wwn` is mandatory; predicate-only hints are not an
-adequate destructive target selector. Which hints an installation carries,
+adequate destructive target selector. On a Machine whose provider is `libvirt`,
+each of `wwn`, `hctl` and `serialNumber` refuses with `api.invariant` at its own
+path, because the disks that substrate creates carry no WWN, SCSI address or
+serial number ([substrates](../substrates.md#machine-realization)), so such a
+hint could match none of them; `deviceName`, `minSizeGigabytes`, `model`,
+`vendor` and `rotational` stay admitted there, and a bare-metal Machine keeps
+every hint. Which hints an installation carries,
 and which it refuses, is the rule of the consumer that installs the Machine:
 [managed OS](../managed-os.md#installation) or the
 [cluster installer](../container-clusters.md#selection-and-refusal).

@@ -43,6 +43,16 @@ Alias cell.
 | [B179](#b179) | new, 2026-09-30 (X30) | enabling | CLI and Controller setup | A refused setup names the remedy its refusal gives | Parked under the 2026-09-30 triage rule: wording |
 | [B180](#b180) | new, 2026-09-30 (X30) | enabling | Workspace, Controller setup and State reconciliation | Storage fixtures that can fail | Parked under the 2026-09-30 triage rule: test depth |
 | [B181](#b181) | new, 2026-09-30 (X30) | safety | Secrets and State reconciliation | A bounded run's rebind names its consumer | Bounded at three bindings since X26; closing it changes the keyring format |
+| [B193](#b193) | new, 2026-09-30 (X29) | enabling | Container cluster | A removal observation resolves only the tools it runs | Parked under the 2026-09-30 triage rule: efficiency |
+| [B194](#b194) | new, 2026-09-30 (X29) | enabling | State reconciliation | A local placement asks for no SSH material | Parked under the 2026-09-30 triage rule: tidiness |
+| [B195](#b195) | new, 2026-09-30 (X29) | enabling | Container cluster | Additional trust for the cluster-wide trusted CA | Needs an owner decision; no milestone asks for it |
+| [B196](#b196) | new, 2026-09-30 (X29) | enabling | Architecture | Two lessons for the knowledge pages | Parked under the 2026-09-30 triage rule: knowledge |
+| [B197](#b197) | new, 2026-09-30 (X29) | enabling | Architecture, with each test's owner | Tests X29 left narrower than they read | Parked under the 2026-09-30 triage rule: test depth |
+| [B198](#b198) | new, 2026-09-30 (X29) | enabling | Infrastructure services | IPv6 listener impacts print bracketed | Parked under the 2026-09-30 triage rule: display |
+| [B199](#b199) | new, 2026-09-30 (X29) | enabling | CLI | Completion over word breaks and truncated sets | Needs an owner decision on what the operator sees |
+| [B200](#b200) | new, 2026-09-30 (X29) | enabling | Substrate | Autostart replays report what they change | Parked under the 2026-09-30 triage rule: replay fidelity |
+| [B201](#b201) | new, 2026-09-30 (X29) | enabling | State reconciliation and Workspace | Remediations that match the next command | Parked under the 2026-09-30 triage rule: wording |
+| [B202](#b202) | new, 2026-09-30 (X29) | enabling | Controller setup | Resolution warnings in the plan and on failure | Needs an owner decision on the plan |
 
 ### B94
 
@@ -221,6 +231,46 @@ The contextfs retirement fixture sets retained definitions that `Publish` ignore
 ### B181
 
 A bounded run's rebind is limited to three bindings rather than closed, which a binding that names its consumer would close; that is a keyring format change (left by B139 in X30). **Exit evidence:** a binding format that names its consumer, and a rebind test that refuses any other.
+
+### B193
+
+The agent-install removal observation still resolves the openshift-install and oc paths although it runs no oc read; the destroy that follows needs them (found in X29). **Exit evidence:** an observation that resolves only what it runs.
+
+### B194
+
+The lifecycle's material list adds the SSH identity and host-key files whenever a placement names their Secrets, whatever its connection, so a local placement carrying SSH references still asks for SSH material; since X29 the agent-install decoders refuse such a placement, other decoders do not (found in X29). **Exit evidence:** a material-list test over a local placement.
+
+### B195
+
+Since X29 additional trust bundles reach `install-config`, but `additionalTrustBundlePolicy` stays at the installer default `Proxyonly`, and Bootwright refuses an installation proxy, so the bundles never feed the cluster-wide trusted CA. Whether they should (`Always`) is undecided (found in X29). **Exit evidence:** the decision, with a projection golden.
+
+### B196
+
+ansible-core 2.21.4 keeps a Jinja string-literal escape such as `'\n'` as a backslash and an `n`, so a role that joins with it writes a literal backslash-n; and `renameat2` moves the renamed inode's change time on ext4, XFS, Btrfs and tmpfs, so a status proof across a rename must leave the change time out (both confirmed by probes in X29). **Exit evidence:** a knowledge page for each.
+
+### B197
+
+Two tests still put wwn hints on libvirt guests that admission now refuses; the media store contract suite has no missing-callback clause and its double would panic; the second-implementation secret store fake assigns no sequence; and two runner consume sites keep no test pinning their remediation (found in X29). **Exit evidence:** each test narrowed or added.
+
+### B198
+
+The managed service and artifact server plan impacts print an IPv6 listener unbracketed, as `open-listener fd00::1:3128`, where the emulated BMC's impact prints `[fd00::1]:8000` since X29. **Exit evidence:** impact goldens over IPv6.
+
+### B199
+
+Bash's default word breaks also contain `:`, so a path with `:` breaks completion of the rest of the word as `@` and `=` did, and PowerShell's `,` may belong in the withheld set (not verified on a real shell); and when the candidate cap or the read bound truncates a listing, the shell still inserts the longest common prefix of the partial set (found in X29). **Exit evidence:** the chosen sets and truncation behavior, with completion tests.
+
+### B200
+
+The libvirt host apply runs network and pool autostart on every replay reporting no change, and the observation never reads autostart, so an autostart switched off is re-enabled silently (found in X29). **Exit evidence:** a replay test that reports the change and an observation that reads autostart.
+
+### B201
+
+A failed destroy's remediation still says to repeat the operation to continue it, where the next destroy replaces it; status lists a failed destroy's lost block record as a contradiction beside an offered destroy that no record refuses; and a repeated media add whose adopted stage was rewritten promises a publication its next repeat refuses (found in X29). **Exit evidence:** remediation and status goldens for each.
+
+### B202
+
+Since X29 a newer Index API minor warns in setup's result, but the plan shown before confirmation does not show it, and a failure after a warning-bearing selection drops the warning from its report (found in X29). **Exit evidence:** plan and failure goldens that carry the warning.
 
 ## Retired
 

@@ -110,8 +110,9 @@ func TestLibvirtBMCPortRangesDoNotOverlapOnOneHost(t *testing.T) {
 }
 
 // An emulated BMC listens where every hosted Machine's controller endpoint can
-// name it: one IPv4 unicast address. An absent address is the schema's to
-// refuse, so this rule says nothing about it.
+// name it: one unicast address, IPv6 included, in the spelling normalization
+// gives it. An absent address is the schema's to refuse, so this rule says
+// nothing about it.
 func TestAnEmulatedBMCListensOnOneNameableUnicastAddress(t *testing.T) {
 	const field = "$.spec.libvirt.bmcEmulationDefaults.bindAddress"
 	host := obj(api.Machine, "host", m("capabilities", api.StringList("libvirt")))
@@ -120,18 +121,26 @@ func TestAnEmulatedBMCListensOnOneNameableUnicastAddress(t *testing.T) {
 	}
 	for address, nameable := range map[string]bool{
 		"0.0.0.0": false, "::": false, "::0": false, "0:0:0:0:0:0:0:0": false, "::ffff:0.0.0.0": false,
-		"::ffff:192.0.2.1": false, "2001:db8::1": false, "::1": false, "fe80::1": false, "ff02::1": false,
-		"224.0.0.1": false, "255.255.255.255": false,
+		"::ffff:192.0.2.1": false, "fe80::1": false, "fe80::1%eth0": false, "fd00::1%eth0": false,
+		"ff02::1": false, "224.0.0.1": false, "255.255.255.255": false,
 		"192.0.2.1": true, "127.0.0.1": true, "169.254.1.1": true,
+		"2001:db8::1": true, "fd00::1": true, "::1": true, "2001:DB8:0::1": true,
 	} {
 		t.Run(address, func(t *testing.T) {
-			o := provider(m("port", api.IntegerValue("8000"), "bindAddress", address, "auth", m("credentialsRef", "bmc")))
+			o, _ := Normalize(provider(m("port", api.IntegerValue("8000"), "bindAddress", address, "auth", m("credentialsRef", "bmc"))), api.Catalog{})
 			issues := Validate(o, api.NewCatalog([]api.Object{o, host}))
 			refused := len(issues) == 1 && issues[0].Field == field && issues[0].Code == "api.invariant"
 			if nameable && len(issues) != 0 || !nameable && !refused {
 				t.Fatalf("nameable = %v, issues = %v", nameable, issues)
 			}
 		})
+	}
+	normalized, _ := Normalize(provider(m("port", api.IntegerValue("8000"), "bindAddress", "2001:DB8:0::1", "auth", m("credentialsRef", "bmc"))), api.Catalog{})
+	if address := normalized.Spec().Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text(); address != "2001:db8::1" {
+		t.Fatalf("normalized address = %q", address)
+	}
+	if NameableListener("2001:DB8:0::1") {
+		t.Fatal("a second spelling that bypassed normalization was admitted")
 	}
 	absent := provider(m("port", api.IntegerValue("8000"), "auth", m("credentialsRef", "bmc")))
 	if issues := Validate(absent, api.NewCatalog([]api.Object{absent, host})); len(issues) != 0 {

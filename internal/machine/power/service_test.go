@@ -43,10 +43,15 @@ func (b *boundary) WithRuntime(ctx context.Context, request lifecycle.RuntimeReq
 	b.requested = slices.Clone(request.Secrets)
 	return call(ctx, lifecycle.Runtime{
 		Material: map[string]secrets.Material{}, Output: &retained{},
-		LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/run-" + strings.Repeat("a", 32),
-		Logs:        []string{"run-" + strings.Repeat("a", 32) + "/run.output"},
+		LogLocation:       "/var/lib/bootwright/contexts/lab/state/runs/run-" + strings.Repeat("a", 32),
+		Logs:              []string{"contexts/lab/state/runs/run-" + strings.Repeat("a", 32) + "/run.output"},
+		OutputRemediation: lentRemediation,
 	})
 }
+
+// lentRemediation stands in for what the lender says a run's output failure
+// asks an operator to read.
+const lentRemediation = "read the adapter output retained in this run's run.output"
 
 // retained stands in for the file a bounded run keeps its adapter output in.
 type retained struct{ written []byte }
@@ -166,7 +171,7 @@ func TestAPowerRunRetainsItsAdapterOutputAndNamesWhereFirst(t *testing.T) {
 	if runner.seen.Output == nil {
 		t.Fatal("the adapter was run with nothing to retain its output in")
 	}
-	if result.LogLocation != location || !slices.Equal(result.Logs, []string{"run-" + strings.Repeat("a", 32) + "/run.output"}) {
+	if result.LogLocation != location || !slices.Equal(result.Logs, []string{"contexts/lab/state/runs/run-" + strings.Repeat("a", 32) + "/run.output"}) {
 		t.Fatalf("result logs = %q %+v", result.LogLocation, result.Logs)
 	}
 	refusing := &adapter{err: errors.New("the adapter operation did not complete")}
@@ -180,12 +185,37 @@ func TestAPowerRunRetainsItsAdapterOutputAndNamesWhereFirst(t *testing.T) {
 	}
 }
 
+// A power run names where its output is, so an adapter failure that output
+// explains points there. A reading names none, so its request carries no
+// remediation pointing at output an operator is never told about.
+func TestOnlyARunThatNamesItsOutputPointsAFailureAtIt(t *testing.T) {
+	runner := &adapter{power: "off"}
+	if _, err := service(&boundary{}, runner, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if runner.seen.OutputRemediation != lentRemediation {
+		t.Fatalf("the power run's request says %q, not what its lender named", runner.seen.OutputRemediation)
+	}
+	surveyor := &surveyor{reports: map[string]string{"guest": machine.PowerOn}}
+	if _, err := service(&boundary{}, surveyor, nil).Read(context.Background(), "lab", selected()); err != nil {
+		t.Fatal(err)
+	}
+	if len(surveyor.runs) == 0 {
+		t.Fatal("the reading crossed no adapter")
+	}
+	for _, run := range surveyor.runs {
+		if run.OutputRemediation != "" {
+			t.Fatalf("a reading points its failures at %q, which it never names", run.OutputRemediation)
+		}
+	}
+}
+
 // A run that fails once its runtime is lent proves no power state, but a JSON
 // invocation reports no progress, so the refusal itself must carry where that
 // output is. A refusal before the runtime is lent names no file.
 func TestARefusedRunReturnsOnlyWhereItsOutputIs(t *testing.T) {
 	location := "/var/lib/bootwright/contexts/lab/state/runs/run-" + strings.Repeat("a", 32)
-	logs := []string{"run-" + strings.Repeat("a", 32) + "/run.output"}
+	logs := []string{"contexts/lab/state/runs/run-" + strings.Repeat("a", 32) + "/run.output"}
 	for _, test := range []struct {
 		name   string
 		runner *adapter

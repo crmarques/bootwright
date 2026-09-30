@@ -74,6 +74,34 @@ func TestControllerNegativeReportPreservesStreamsAndSafeDiagnostics(t *testing.T
 	}
 }
 
+// A setup's warnings go to standard error, before any failure it reports, and
+// never change its exit status; a report whose warning is not one is refused.
+func TestControllerSetupReportsItsWarningsOnStandardError(t *testing.T) {
+	warning := diagnostics.Diagnostic{Severity: "warning", Code: "controller.unsupported", Message: "the publisher's Index API page is version 1.5, newer than the 1.4 this build reads", Remediation: "use a Bootwright build that reads this Index API version"}
+	want := "[WARN] controller.unsupported: the publisher's Index API page is version 1.5, newer than the 1.4 this build reads; next: use a Bootwright build that reads this Index API version\n"
+	run := func(report *prerequisites.Report, err error) (int, string, string) {
+		var out, errOut bytes.Buffer
+		record := &dispatchRecord{result: commandResult{controller: report}, err: err}
+		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"setup"})
+		return code, out.String(), errOut.String()
+	}
+	completed := controllerReport("changed", false)
+	completed.Warnings = []diagnostics.Diagnostic{warning}
+	if code, out, errOut := run(completed, nil); code != 0 || errOut != want || !strings.Contains(out, "Outcome  changed") || strings.Contains(out, "Index API") {
+		t.Fatal(code, out, errOut)
+	}
+	declined := controllerReport("planned", false)
+	declined.Warnings = []diagnostics.Diagnostic{warning}
+	if code, out, errOut := run(declined, diagnostics.NewFailure("controller.setup", "setup was declined", "")); code != 1 || errOut != want+"[FAIL] controller.setup: setup was declined\n" || !strings.Contains(out, "Outcome  planned") {
+		t.Fatal(code, out, errOut)
+	}
+	misfiled := controllerReport("changed", false)
+	misfiled.Warnings = []diagnostics.Diagnostic{{Severity: "error", Code: "controller.setup", Message: "not a warning"}}
+	if code, out, errOut := run(misfiled, nil); code != 1 || out != "" || strings.Contains(errOut, "not a warning") || !strings.Contains(errOut, "runtime.internal") {
+		t.Fatal(code, out, errOut)
+	}
+}
+
 func TestControllerPlanFailureStopsOutputWithoutFallback(t *testing.T) {
 	var errOut bytes.Buffer
 	presenter := NewControllerPresenter(rejectingWriter{}, nil)

@@ -680,17 +680,21 @@ phases:
 | `continue` | controller | adapter → runner | `phase` | before each tool installation | one per frozen tool, in order, after `prepared`; at most 128 | Acknowledgement EOF fails the adapter before that tool. |
 | `group` | lifecycle | adapter → runner | `phase`, `group`, `status` | none | after `loaded` | Progress only; a settled status advances completion only for a group the frozen block declares. |
 | `completed` | both | adapter → runner | `phase`, `outcome`, non-empty `evidence` | none | last, once | Absent when the channel closes, the run has no result. |
+| `refused` | controller | adapter → runner | `phase`, `reason`: `release-stamp` | none | last, once, in place of `completed`, while an `openshift-clients` tool is being installed | The run fails with the [release-stamp refusal](controller.md#selection-and-command-journeys) instead of the generic adapter failure, even when the adapter's failed exit is read first. |
 
 `outcome` is `changed` or `unchanged`, and the controller runner refuses
 `unchanged` after an authorized `native`. `status` is `running`, `ok`, `failed`
 or `skipped`, and every status but `running` settles its group. Go alone derives
-`failed`, `unknown` and `canceled`; they never cross the channel.
+`failed`, `unknown` and `canceled`; they never cross the channel. `reason`
+names the one adapter refusal Go remedies by name; the outcome is still Go's.
 
 Both runners refuse a malformed or oversized record, an unknown, repeated or
 out-of-order phase, a record after `completed`, and more records than their
 bound: 64 for the lifecycle runner, 132 for the controller runner (`loaded`,
-`prepared`, `native`, `completed` and a `continue` per tool). A refusal, or a
-channel that cannot be read, ends the protocol at once: the runner closes the
+`prepared`, `native`, `completed` or `refused`, and a `continue` per tool). The
+controller runner also refuses a `refused` record with another reason or for
+another tool kind. A refusal, or a channel that cannot be read, ends the
+protocol at once: the runner closes the
 acknowledgement channel, so an adapter waiting for one fails instead of waiting
 out the deadline, and the lifecycle runner kills the adapter's process group.
 The controller runner kills nothing on a refusal: the adapter fails at its next

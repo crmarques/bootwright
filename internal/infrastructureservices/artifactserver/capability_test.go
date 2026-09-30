@@ -87,8 +87,9 @@ func TestDestroyPlanUsesRemovalGroups(t *testing.T) {
 	}
 }
 
-// A server bound to a managed bridge's host address waits for the provider
-// block that creates the bridge, as every managed service does.
+// A server bound to a managed bridge's host address, or bound to a wildcard
+// with an endpoint at that address, waits for the provider block that creates
+// the bridge, as every managed service does.
 func TestAServerBoundToAManagedBridgeRequiresItsProvider(t *testing.T) {
 	provider := api.NewObject(api.InfraProvider, "lab-libvirt", api.Value{}, api.MapValue(
 		field("libvirt", api.MapValue(text("machineRef", "controller"), text("uri", "qemu:///system"))),
@@ -96,17 +97,33 @@ func TestAServerBoundToAManagedBridgeRequiresItsProvider(t *testing.T) {
 			text("bridge", "virbr-lab"), text("management", "managed"), text("address", "198.51.100.1/24"),
 		))))),
 	))
+	addresses := controller().Spec().Get("network", "addresses").Items()
+	host := api.NewObject(api.Machine, "controller", api.Value{}, controller().Spec().With("network", api.MapValue(field("addresses", api.ListValue(append(addresses,
+		api.MapValue(text("name", "guests"), text("address", "198.51.100.1/24")),
+	)...)))))
+	endpoints := func(https string) api.FieldValue {
+		return field("endpoints", api.ListValue(
+			api.MapValue(text("name", "ip-https"), text("listenerRef", "https"), text("addressRef", https)),
+			api.MapValue(text("name", "ip-http"), text("listenerRef", "http"), text("addressRef", "ip")),
+		))
+	}
+	requires := []reconciliation.ObjectRef{{Kind: "InfraProvider", Object: "lab-libvirt"}}
 	capability := New(&fakeRunner{}, fixedClock{})
-	for bind, want := range map[string][]reconciliation.ObjectRef{
-		"198.51.100.1": {{Kind: "InfraProvider", Object: "lab-libvirt"}},
-		"192.0.2.1":    nil,
+	for name, test := range map[string]struct {
+		server api.Object
+		want   []reconciliation.ObjectRef
+	}{
+		"the bridge host address":                 {artifactServer(text("bindAddress", "198.51.100.1")), requires},
+		"another address":                         {artifactServer(text("bindAddress", "192.0.2.1")), nil},
+		"a wildcard whose endpoint is the bridge": {artifactServer(text("bindAddress", "0.0.0.0"), endpoints("guests")), requires},
+		"a wildcard with no endpoint on it":       {artifactServer(text("bindAddress", "0.0.0.0"), endpoints("ip")), nil},
 	} {
-		plan, err := capability.Plan(context.Background(), planInput(t, reconciliation.Apply, controller(), provider, artifactServer(text("bindAddress", bind))))
+		plan, err := capability.Plan(context.Background(), planInput(t, reconciliation.Apply, host, provider, test.server))
 		if err != nil || len(plan.Definitions) != 1 {
-			t.Fatalf("plan = %+v (%v)", plan, err)
+			t.Fatalf("%s: plan = %+v (%v)", name, plan, err)
 		}
-		if !slices.Equal(plan.Definitions[0].Requires, want) {
-			t.Fatalf("a server bound to %s requires %+v, want %+v", bind, plan.Definitions[0].Requires, want)
+		if !slices.Equal(plan.Definitions[0].Requires, test.want) {
+			t.Fatalf("%s requires %+v, want %+v", name, plan.Definitions[0].Requires, test.want)
 		}
 	}
 }
@@ -208,6 +225,11 @@ func TestAdapterFailureIsUnknownNotFailed(t *testing.T) {
 	}
 }
 
+// A fresh destroy over an incomplete apply resolves the apply's block through
+// this same observation, so a server the apply left all present whose listener
+// never answered, or answers with another certificate, is this context's own
+// server not yet ready: partial, which that destroy then removes, rather than
+// unknown, which refuses it.
 func TestObserveMapsLiveEvidenceToItsEffectState(t *testing.T) {
 	material, fingerprint := issue(t, validOptions())
 	call := execution(t, material)
@@ -215,16 +237,40 @@ func TestObserveMapsLiveEvidenceToItsEffectState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	present := func(change func(*Evidence)) json.RawMessage {
+		var evidence Evidence
+		if err := json.Unmarshal(presenceEvidence(request, call.Block.RequestDigest, fingerprint), &evidence); err != nil {
+			t.Fatal(err)
+		}
+		change(&evidence)
+		data, err := json.Marshal(evidence)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	silent := func(e *Evidence) { e.Listeners = []ListenerEvidence{} }
+	foreignLeaf := func(e *Evidence) {
+		for index := range e.Listeners {
+			if e.Listeners[index].Protocol == "https" {
+				e.Listeners[index].Fingerprint = testFingerprint
+			}
+		}
+	}
 	for name, tc := range map[string]struct {
 		result lifecycle.RunResult
 		err    error
 		want   reconciliation.EffectState
 	}{
-		"complete":       {lifecycle.RunResult{Outcome: "unchanged", Evidence: presenceEvidence(request, call.Block.RequestDigest, fingerprint)}, nil, reconciliation.EffectCompleted},
-		"absent":         {lifecycle.RunResult{Outcome: "unchanged", Evidence: absenceEvidence(call.Block.RequestDigest)}, nil, reconciliation.EffectNoEffect},
-		"partial":        {lifecycle.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(`{"absent":false,"container":"","contentRoot":true,"listeners":[],"postcondition":false,"request":"` + call.Block.RequestDigest + `","unit":"active"}`)}, nil, reconciliation.EffectPartial},
-		"nothing owned":  {lifecycle.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(`{"absent":false,"container":"","contentRoot":false,"listeners":[],"postcondition":false,"request":"` + call.Block.RequestDigest + `","unit":""}`)}, nil, reconciliation.EffectUnknown},
-		"adapter failed": {lifecycle.RunResult{}, errors.New("unreachable"), reconciliation.EffectUnknown},
+		"complete":                   {lifecycle.RunResult{Outcome: "unchanged", Evidence: presenceEvidence(request, call.Block.RequestDigest, fingerprint)}, nil, reconciliation.EffectCompleted},
+		"absent":                     {lifecycle.RunResult{Outcome: "unchanged", Evidence: absenceEvidence(call.Block.RequestDigest)}, nil, reconciliation.EffectNoEffect},
+		"partial":                    {lifecycle.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(`{"absent":false,"container":"","contentRoot":true,"listeners":[],"postcondition":false,"request":"` + call.Block.RequestDigest + `","unit":"active"}`)}, nil, reconciliation.EffectPartial},
+		"present and silent":         {lifecycle.RunResult{Outcome: "unchanged", Evidence: present(silent)}, nil, reconciliation.EffectPartial},
+		"present, another leaf":      {lifecycle.RunResult{Outcome: "unchanged", Evidence: present(foreignLeaf)}, nil, reconciliation.EffectPartial},
+		"silent, another request":    {lifecycle.RunResult{Outcome: "unchanged", Evidence: present(func(e *Evidence) { silent(e); e.Request = testDigest })}, nil, reconciliation.EffectUnknown},
+		"a postcondition unreported": {lifecycle.RunResult{Outcome: "unchanged", Evidence: present(func(e *Evidence) { silent(e); e.Unit = "inactive" })}, nil, reconciliation.EffectUnknown},
+		"nothing owned":              {lifecycle.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(`{"absent":false,"container":"","contentRoot":false,"listeners":[],"postcondition":false,"request":"` + call.Block.RequestDigest + `","unit":""}`)}, nil, reconciliation.EffectUnknown},
+		"adapter failed":             {lifecycle.RunResult{}, errors.New("unreachable"), reconciliation.EffectUnknown},
 	} {
 		t.Run(name, func(t *testing.T) {
 			runner := &fakeRunner{result: tc.result, err: tc.err}

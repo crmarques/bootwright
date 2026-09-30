@@ -221,28 +221,41 @@ func libvirtProvider(host, management, address string) api.Object {
 }
 
 // A socket bound to a managed bridge's host address cannot open before the
-// provider's host block creates that bridge, so the service waits for it and
+// provider's host block creates that bridge, and a wildcard's endpoint at that
+// address cannot answer readiness before then, so the service waits for it and
 // its removal runs first.
 func TestAServiceBoundToAManagedBridgeRequiresItsProvider(t *testing.T) {
-	bound := func(address string) api.Object {
-		spec := service(api.Proxy, "lab-proxy").Spec().With("bindAddress", api.StringValue(address))
+	bound := func(address, endpoint string) api.Object {
+		if endpoint == "" {
+			endpoint = "ip"
+		}
+		spec := service(api.Proxy, "lab-proxy").Spec().With("bindAddress", api.StringValue(address)).
+			With("endpoints", api.ListValue(api.MapValue(text("name", "ip"), text("addressRef", endpoint))))
 		return api.NewObject(api.Proxy, "lab-proxy", api.Value{}, spec)
 	}
+	addresses := controller().Spec().Get("network", "addresses").Items()
+	host := api.NewObject(api.Machine, "controller", api.Value{}, controller().Spec().With("network", api.MapValue(field("addresses", api.ListValue(append(addresses,
+		api.MapValue(text("name", "guests"), text("address", "198.51.100.1/24")),
+		api.MapValue(text("name", "guests-v6"), text("address", "fd00:5::1/64")),
+	)...)))))
 	for name, test := range map[string]struct {
-		provider api.Object
-		bind     string
-		requires bool
+		provider       api.Object
+		bind, endpoint string
+		requires       bool
 	}{
-		"the bridge host address":   {libvirtProvider("controller", "managed", "198.51.100.1/24"), "198.51.100.1", true},
-		"another address":           {libvirtProvider("controller", "managed", "198.51.100.1/24"), "192.0.2.1", false},
-		"a wildcard":                {libvirtProvider("controller", "managed", "198.51.100.1/24"), "0.0.0.0", false},
-		"an external bridge":        {libvirtProvider("controller", "external", ""), "198.51.100.1", false},
-		"a bridge on another host":  {libvirtProvider("services", "managed", "198.51.100.1/24"), "198.51.100.1", false},
-		"an IPv6 bridge address":    {libvirtProvider("controller", "managed", "fd00:5::1/64"), "fd00:5::1", true},
-		"an IPv6 network's address": {libvirtProvider("controller", "managed", "fd00:5::1/64"), "fd00:5::", false},
+		"the bridge host address":                   {libvirtProvider("controller", "managed", "198.51.100.1/24"), "198.51.100.1", "", true},
+		"another address":                           {libvirtProvider("controller", "managed", "198.51.100.1/24"), "192.0.2.1", "", false},
+		"a wildcard":                                {libvirtProvider("controller", "managed", "198.51.100.1/24"), "0.0.0.0", "", false},
+		"a wildcard whose endpoint is the bridge":   {libvirtProvider("controller", "managed", "198.51.100.1/24"), "0.0.0.0", "guests", true},
+		"an IPv6 wildcard whose endpoint is it":     {libvirtProvider("controller", "managed", "fd00:5::1/64"), "::", "guests-v6", true},
+		"a wildcard whose endpoint is not a bridge": {libvirtProvider("controller", "managed", "fd00:5::1/64"), "0.0.0.0", "guests", false},
+		"an external bridge":                        {libvirtProvider("controller", "external", ""), "198.51.100.1", "", false},
+		"a bridge on another host":                  {libvirtProvider("services", "managed", "198.51.100.1/24"), "198.51.100.1", "", false},
+		"an IPv6 bridge address":                    {libvirtProvider("controller", "managed", "fd00:5::1/64"), "fd00:5::1", "", true},
+		"an IPv6 network's address":                 {libvirtProvider("controller", "managed", "fd00:5::1/64"), "fd00:5::", "", false},
 	} {
 		t.Run(name, func(t *testing.T) {
-			catalog := catalogOf(controller(), test.provider, bound(test.bind))
+			catalog := catalogOf(host, test.provider, bound(test.bind, test.endpoint))
 			plan, err := NewCapability(testDefinition(), nil).Plan(context.Background(), lifecycle.PlanInput{
 				Verb: reconciliation.Apply, Controller: "controller",
 				Context: lifecycle.ContextIdentity{Name: testContext},
@@ -369,29 +382,99 @@ func TestAbsenceRequiresEveryOwnedResourceGone(t *testing.T) {
 // A service part way realized is converged by repeating the operation, so the
 // resolution fails its block instead of leaving the context behind an unproved
 // effect. Everything the evidence reports carries this context in its name and
-// is claimed by its reservation, so presence alone proves the work is ours.
+// is claimed by its reservation, so presence alone proves the work is ours,
+// and a service all present whose listener stays silent is ours and not yet
+// ready rather than something no observation can prove.
 func TestPartialRequiresSomethingThisContextOwns(t *testing.T) {
+	requests, err := NewCapability(testDefinition(), nil).Requests(catalogOf(controller(), service(api.Proxy, "lab-proxy")), "controller", testContext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := requests[0]
 	digest := strings.Repeat("d", 64)
+	complete := Evidence{
+		Answers:   []Answer{{Address: "192.0.2.1", Answer: "HTTP/1.1 400 Bad Request", Port: request.Port}},
+		Container: request.Image, ContentRoot: true, Postcondition: true, Request: digest, Unit: "active",
+	}
+	silent := complete
+	silent.Answers = []Answer{}
+	otherImage := complete
+	otherImage.Container = "docker.io/library/squid:6"
 	for name, evidence := range map[string]Evidence{
-		"unit without its root": {Answers: []Answer{}, Request: digest, Unit: "active"},
-		"root without its unit": {Answers: []Answer{}, ContentRoot: true, Request: digest},
-		"container left behind": {Answers: []Answer{}, Container: "image", Request: digest},
+		"unit without its root":          {Answers: []Answer{}, Request: digest, Unit: "active"},
+		"root without its unit":          {Answers: []Answer{}, ContentRoot: true, Request: digest},
+		"container left behind":          {Answers: []Answer{}, Container: "image", Request: digest},
+		"present with a silent listener": silent,
+		"present, another image":         otherImage,
+		"unit and root, no container":    {Answers: []Answer{}, ContentRoot: true, Postcondition: true, Request: digest, Unit: "active"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if err := ValidatePartial(encode(t, evidence), digest); err != nil {
+			if err := ValidatePartial(encode(t, evidence), request, digest); err != nil {
 				t.Fatalf("partial evidence was refused: %v", err)
 			}
 		})
 	}
 	for name, evidence := range map[string]Evidence{
-		"nothing present":  {Answers: []Answer{}, Request: digest},
-		"already complete": {Answers: []Answer{}, ContentRoot: true, Postcondition: true, Request: digest, Unit: "active"},
-		"already absent":   {Absent: true, Answers: []Answer{}, Request: digest},
-		"another request":  {Answers: []Answer{}, Request: strings.Repeat("e", 64), Unit: "active"},
+		"nothing present":            {Answers: []Answer{}, Request: digest},
+		"already complete":           complete,
+		"already absent":             {Absent: true, Answers: []Answer{}, Request: digest},
+		"another request":            {Answers: []Answer{}, Request: strings.Repeat("e", 64), Unit: "active"},
+		"a postcondition unreported": {Answers: []Answer{}, Container: request.Image, ContentRoot: true, Postcondition: true, Request: digest, Unit: "inactive"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if err := ValidatePartial(encode(t, evidence), digest); err == nil {
+			if err := ValidatePartial(encode(t, evidence), request, digest); err == nil {
 				t.Fatal("evidence that proves no partial realization was accepted")
+			}
+		})
+	}
+}
+
+// A fresh destroy over an incomplete apply resolves the apply's block through
+// the apply's own observation. A service the apply left all present whose
+// listener never answered is this context's own and not yet ready, so it
+// resolves partial and the destroy goes on to remove it, where it used to stay
+// unknown and refuse that destroy.
+func TestAnApplyObservationReadsAPresentServiceWithASilentListenerAsPartial(t *testing.T) {
+	catalog := catalogOf(controller(), service(api.Proxy, "lab-proxy"))
+	plan, err := NewCapability(testDefinition(), nil).Plan(context.Background(), lifecycle.PlanInput{
+		Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: testContext},
+		State: compilation.NewState(catalog, catalog, nil), Controller: "controller",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	frozen, err := reconciliation.NewPlan(reconciliation.Apply, plan.Definitions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := lifecycle.Execution{Operation: "op-1", Attempt: 1, Block: frozen.Blocks[0]}
+	request, err := DecodeRequest(call.Block.Request, testDefinition().Version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := call.Block.RequestDigest
+	present := Evidence{
+		Answers:   []Answer{{Address: "192.0.2.1", Answer: "HTTP/1.1 400 Bad Request", Port: request.Port}},
+		Container: request.Image, ContentRoot: true, Postcondition: true, Request: digest, Unit: "active",
+	}
+	silent := present
+	silent.Answers = []Answer{}
+	foreignSilent := silent
+	foreignSilent.Request = strings.Repeat("e", 64)
+	for name, tc := range map[string]struct {
+		evidence []byte
+		want     reconciliation.EffectState
+	}{
+		"present":                 {encode(t, present), reconciliation.EffectCompleted},
+		"present and silent":      {encode(t, silent), reconciliation.EffectPartial},
+		"nothing present":         {encode(t, Evidence{Absent: true, Answers: []Answer{}, Postcondition: true, Request: digest}), reconciliation.EffectNoEffect},
+		"silent, another request": {encode(t, foreignSilent), reconciliation.EffectUnknown},
+	} {
+		t.Run(name, func(t *testing.T) {
+			runner := &scriptedRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: tc.evidence}}
+			observation, err := NewCapability(testDefinition(), runner).Observe(context.Background(), call)
+			if err != nil || observation.Effect != tc.want {
+				t.Fatalf("observation = %+v (%v), want %s", observation, err, tc.want)
 			}
 		})
 	}

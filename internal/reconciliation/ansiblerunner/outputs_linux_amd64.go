@@ -63,25 +63,25 @@ func prepareOutputs(job string, request lifecycle.RunRequest) (map[string]any, e
 // file of the owner with one link, the entry listed, of mode 0600 and of one
 // byte up to the part bound, read exactly. An output the run did not leave
 // produces nothing; anything else clears what was read and fails the run.
-func (r Runner) readOutputs(job string, outputs []lifecycle.OutputFile) ([]lifecycle.Produced, error) {
+func (r Runner) readOutputs(job string, outputs []lifecycle.OutputFile, remediation string) ([]lifecycle.Produced, error) {
 	dirs, err := r.openRunDirectories()
 	if err != nil {
-		return nil, unsafeOutput()
+		return nil, unsafeOutput(remediation)
 	}
 	defer dirs.close()
 	root, _, ok := dirs.directory(dirs.jobs, filepath.Base(job))
 	if !ok {
-		return nil, unsafeOutput()
+		return nil, unsafeOutput(remediation)
 	}
 	defer root.Close()
 	directory, _, ok := dirs.directory(root, outputsDirectory)
 	if !ok {
-		return nil, unsafeOutput()
+		return nil, unsafeOutput(remediation)
 	}
 	defer directory.Close()
 	produced := []lifecycle.Produced{}
 	for _, output := range outputs {
-		value, present, err := dirs.output(directory, output.Name)
+		value, present, err := dirs.output(directory, output.Name, remediation)
 		if err != nil {
 			lifecycle.ClearProduced(produced)
 			return nil, err
@@ -95,33 +95,33 @@ func (r Runner) readOutputs(job string, outputs []lifecycle.OutputFile) ([]lifec
 	return produced, nil
 }
 
-func (d runDirectories) output(directory *os.Root, name string) ([]byte, bool, error) {
+func (d runDirectories) output(directory *os.Root, name, remediation string) ([]byte, bool, error) {
 	if _, err := directory.Lstat(name); errors.Is(err, fs.ErrNotExist) {
 		return nil, false, nil
 	}
 	file, info, ok := d.file(directory, name)
 	if !ok {
-		return nil, false, unsafeOutput()
+		return nil, false, unsafeOutput(remediation)
 	}
 	defer file.Close()
 	if info.Mode().Perm() != 0600 || info.Size() < 1 || info.Size() > secrets.MaxPartBytes {
-		return nil, false, unsafeOutput()
+		return nil, false, unsafeOutput(remediation)
 	}
 	value := make([]byte, info.Size())
 	if _, err := io.ReadFull(file, value); err != nil {
 		clear(value)
-		return nil, false, unsafeOutput()
+		return nil, false, unsafeOutput(remediation)
 	}
 	var extra [1]byte
 	read, err := file.Read(extra[:])
 	clear(extra[:])
 	if read != 0 || !errors.Is(err, io.EOF) {
 		clear(value)
-		return nil, false, unsafeOutput()
+		return nil, false, unsafeOutput(remediation)
 	}
 	return value, true, nil
 }
 
-func unsafeOutput() error {
-	return failure("lifecycle.state", "an adapter output is not a private regular file of the expected size", outputRemediation)
+func unsafeOutput(remediation string) error {
+	return failure("lifecycle.state", "an adapter output is not a private regular file of the expected size", remediation)
 }

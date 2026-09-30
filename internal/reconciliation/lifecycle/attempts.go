@@ -340,7 +340,7 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 	if err == nil {
 		result.Logs = logs
 	}
-	result.Receipt = Receipt{Operation: operation.ID, Verb: string(operation.Verb), State: string(next), Next: nextAction(operation.Verb, next)}
+	result.Receipt = Receipt{Operation: operation.ID, Verb: string(operation.Verb), State: string(next), Next: nextAction(current, plan, states)}
 	if next == reconciliation.OperationDone || next == reconciliation.OperationPaused {
 		return result, nil
 	}
@@ -364,18 +364,25 @@ func terminalFailure(verb reconciliation.Verb, state reconciliation.OperationSta
 		"repeat the operation to continue it")
 }
 
-// nextAction names what an operation's own state calls for, which is nothing
+// nextAction names what an operation's own records call for, which is nothing
 // once it completed. A finished apply admits a later destroy, but naming it
 // here would read as an instruction to tear down what just succeeded; the
-// verbs a context admits are what `plan` is for.
-func nextAction(verb reconciliation.Verb, state reconciliation.OperationState) string {
-	switch state {
-	case reconciliation.OperationDone:
+// verbs a context admits are what `plan` is for. A failed removal holding a
+// block not done, an unknown one among them, is replaced by a fresh removal
+// rather than continued or resolved, as the destroy decides; one whose blocks
+// are all done is finalized, which completes that same removal. In any other
+// incomplete operation a block that reads unknown is resolved before anything
+// else starts, whatever state the operation records.
+func nextAction(operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) string {
+	switch {
+	case operation.State == reconciliation.OperationDone:
 		return "none"
-	case reconciliation.OperationUnknown:
+	case operation.Verb == reconciliation.Destroy && operation.State == reconciliation.OperationFailed && pendingRemains(frozen, states):
+		return string(reconciliation.Destroy)
+	case slices.ContainsFunc(frozen.Blocks, func(block reconciliation.Block) bool { return states[block.ID] == reconciliation.BlockUnknown }):
 		return "resolve"
 	}
-	return "continue-" + string(verb)
+	return "continue-" + string(operation.Verb)
 }
 
 // nextCommand is the command an operator actually runs for a next action. The

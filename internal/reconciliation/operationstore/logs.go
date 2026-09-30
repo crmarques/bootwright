@@ -274,13 +274,19 @@ func (l *Log) Close(ctx context.Context) error {
 }
 
 // LogPaths lists created logs once, operation log first, then blocks in frozen
-// plan order and their attempts and resolutions in numeric order.
+// plan order and their attempts and resolutions in numeric order. Each is named
+// relative to the state root, as a structured result lists it, so an area that
+// cannot place itself there names none rather than a path that reads as one.
 func (s *Store) LogPaths(ctx context.Context, id string, plan reconciliation.Plan) ([]string, error) {
+	reference := s.area.Reference()
+	if reference == "" {
+		return nil, nil
+	}
 	var paths []string
 	if _, found, err := s.area.Read(ctx, OperationLogPath(id), 0); err != nil {
 		return nil, err
 	} else if found {
-		paths = append(paths, OperationLogPath(id))
+		paths = append(paths, path.Join(reference, OperationLogPath(id)))
 	}
 	for _, block := range plan.Blocks {
 		directory := path.Join(id, "logs", "blocks", block.ID)
@@ -303,9 +309,9 @@ func (s *Store) LogPaths(ctx context.Context, id string, plan reconciliation.Pla
 		}
 		slices.Sort(names)
 		for _, name := range names {
-			paths = append(paths, path.Join(directory, name))
+			paths = append(paths, path.Join(reference, directory, name))
 			if retained, found := outputs[strings.TrimSuffix(name, ".jsonl")+".output"]; found && retained {
-				paths = append(paths, path.Join(directory, strings.TrimSuffix(name, ".jsonl")+".output"))
+				paths = append(paths, path.Join(reference, directory, strings.TrimSuffix(name, ".jsonl")+".output"))
 			}
 		}
 	}

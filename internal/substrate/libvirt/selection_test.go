@@ -6,7 +6,10 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -220,6 +223,35 @@ func TestMachineReservationsClaimItsDomainUnitSocketAndDisks(t *testing.T) {
 	}
 }
 
+// An IPv6 emulated BMC is reached at its bracketed endpoint and printed so in
+// the plan, while its listener claims the one unbracketed socket key a managed
+// service on the same address and port claims, so the two conflict.
+func TestAnIPv6ControllerIsBracketedAndClaimsTheSharedSocketKey(t *testing.T) {
+	defaults := provider().Spec().Get("libvirt", "bmcEmulationDefaults").With("bindAddress", api.StringValue("fd00::1"))
+	listener := provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulationDefaults", defaults)))
+	requests, err := MachineRequests(catalogOf(controller(), listener, networkConfig(), guest("rhel-01")), "controller", testContext)
+	if err != nil || len(requests) != 1 {
+		t.Fatalf("requests = %d (%v)", len(requests), err)
+	}
+	emulated := requests[0].Controller
+	if emulated.Address != "fd00::1" || emulated.Endpoint != "http://[fd00::1]:8000/redfish/v1/Systems/"+requests[0].UUID {
+		t.Fatalf("controller = %+v", emulated)
+	}
+	if impacts := machineImpacts(reconciliation.Apply, requests[0]); !slices.Contains(impacts, "open-listener [fd00::1]:8000") {
+		t.Fatalf("impacts = %v", impacts)
+	}
+	service := managedservice.SocketKeys("fd00::1", 8000, nil)
+	if !slices.Equal(service, []string{"socket:fd00::1:8000"}) || !slices.Contains(requests[0].ReservationKeys(), service[0]) {
+		t.Fatalf("machine keys = %v, managed service keys = %v", requests[0].ReservationKeys(), service)
+	}
+	held := []prerequisites.HostReservation{{Context: "other", Kind: "proxy", Service: "proxy",
+		Keys: managedservice.ReservationKeys("bootwright-other-proxy", "/var/lib/bootwright-services/other/proxy", service)}}
+	wanted := []prerequisites.HostReservation{{Context: testContext, Kind: "substrate-machine", Service: "rhel-01", Keys: requests[0].ReservationKeys()}}
+	if owner, conflict := prerequisites.ConflictingContext(held, wanted); !conflict || owner != "other" {
+		t.Fatalf("conflict = %v with %q", conflict, owner)
+	}
+}
+
 // A data disk becomes its own image at its own target, so a replay compares the
 // same devices rather than a set that shifted.
 func TestDataDisksBecomeTheirOwnImagesInTargetOrder(t *testing.T) {
@@ -294,13 +326,13 @@ func TestUnsupportedNamesEveryObjectThisContractCannotRealize(t *testing.T) {
 // A controller that binds a wildcard gives its guests no endpoint a consumer
 // can name, so the provider refuses rather than realizing an unreachable BMC.
 // Selection agrees with admission over every address, for state that bypassed
-// it, and an absent address refuses here too.
+// it, and an absent address or a second spelling refuses here too.
 func TestAWildcardControllerAddressRefuses(t *testing.T) {
 	for address, nameable := range map[string]bool{
 		"": false, "0.0.0.0": false, "::": false, "::0": false, "0:0:0:0:0:0:0:0": false,
-		"::ffff:0.0.0.0": false, "::ffff:192.0.2.1": false, "2001:db8::1": false, "::1": false,
-		"fe80::1": false, "ff02::1": false, "224.0.0.1": false, "255.255.255.255": false,
-		"192.0.2.1": true, "127.0.0.1": true, "169.254.1.1": true,
+		"::ffff:0.0.0.0": false, "::ffff:192.0.2.1": false, "fe80::1": false, "fe80::1%eth0": false,
+		"fd00::1%eth0": false, "ff02::1": false, "224.0.0.1": false, "255.255.255.255": false, "2001:DB8::1": false,
+		"192.0.2.1": true, "127.0.0.1": true, "169.254.1.1": true, "2001:db8::1": true, "::1": true,
 	} {
 		defaults := provider().Spec().Get("libvirt", "bmcEmulationDefaults").With("bindAddress", api.StringValue(address))
 		listener := provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulationDefaults", defaults)))

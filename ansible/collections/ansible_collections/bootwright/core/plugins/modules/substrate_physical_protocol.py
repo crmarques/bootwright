@@ -36,6 +36,12 @@ options:
     description: What the management controller reported about the machine.
     type: dict
     required: false
+  endpoint:
+    description:
+      - The management controller endpoint a refusal of the reported identity names.
+      - Every completion that is not a release requires it, and one without it publishes nothing.
+    type: str
+    required: false
   expected:
     description: The hardware addresses the declaration requires this machine to report.
     type: list

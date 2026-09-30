@@ -163,19 +163,23 @@
     mode: '0700'
   changed_when: false
 
-- name: Publish each managed network definition
+- name: Publish each managed network definition the host does not carry
   ansible.builtin.template:
     src: network.xml.j2
     dest: '{{ substrate_libvirt_host_definitions }}/{{ item.name }}.xml'
     owner: root
     group: root
     mode: '0600'
-  loop: '{{ substrate_libvirt_host_managed }}'
+  loop: '{{ substrate_libvirt_host_redefined }}'
   loop_control:
     label: '{{ item.name }}'
   changed_when: false
 
-- name: Define each managed network from its frozen definition
+# A network already defined but active keeps running the definition it started
+# with: defining it again changes only the one it next starts from, and it is
+# never stopped here, because stopping it disconnects every guest on it. Its
+# completion stays unproved until it runs the frozen definition.
+- name: Define each managed network the host does not carry as frozen
   ansible.builtin.command:
     argv:
       - /usr/bin/virsh
@@ -183,10 +187,10 @@
       - '{{ bootwright_substrate_host_request.uri }}'
       - net-define
       - '{{ substrate_libvirt_host_definitions }}/{{ item.name }}.xml'
-  loop: '{{ substrate_libvirt_host_managed }}'
+  loop: '{{ substrate_libvirt_host_redefined }}'
   loop_control:
     label: '{{ item.name }}'
-  changed_when: false
+  changed_when: true
 
 - name: Autostart each managed network
   ansible.builtin.command:
@@ -306,7 +310,8 @@
              or substrate_libvirt_host_daemon is changed
              or substrate_libvirt_host_pool_directory is changed
              or substrate_libvirt_host_running.observation.pool != 'active'
-             or substrate_libvirt_host_incomplete_networks | length > 0)
+             or substrate_libvirt_host_incomplete_networks | length > 0
+             or substrate_libvirt_host_redefined | length > 0)
          else 'unchanged' }}
     digest: '{{ bootwright_substrate_host_digest }}'
     observation: '{{ substrate_libvirt_host_after.observation }}'

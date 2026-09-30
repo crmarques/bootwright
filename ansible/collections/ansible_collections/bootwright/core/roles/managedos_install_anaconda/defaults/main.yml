@@ -25,6 +25,10 @@ managedos_install_anaconda_required_media: >-
 managedos_install_anaconda_installed: >-
   {{ managedos_install_anaconda_answered | default(false)
      and managedos_install_anaconda_marker | default('') == bootwright_os_install_material.marker }}
+# An observation the capability makes for a removal's resolution, which reads
+# only the content the removal takes back.
+managedos_install_anaconda_observes_removal: >-
+  {{ bootwright_os_install_material.observes | default('') == 'removal' }}
 # A hosted tree is extracted and published only when the profile uses one and
 # this installation has not published it yet.
 managedos_install_anaconda_publish_tree: >-

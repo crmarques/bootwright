@@ -26,6 +26,7 @@ type memoryArea struct {
 	appends     int
 	syncs       []string
 	location    string
+	reference   string
 	// landed, when set, runs once a write or replacement has landed and
 	// before the call returns, still holding the area, so a test can fail the
 	// next write exactly where a kill between the two would fall.
@@ -197,3 +198,5 @@ func (a *memoryArea) Sync(ctx context.Context, target string) error {
 }
 
 func (a *memoryArea) Location() string { return a.location }
+
+func (a *memoryArea) Reference() string { return a.reference }

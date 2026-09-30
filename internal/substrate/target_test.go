@@ -81,6 +81,42 @@ func TestAVirtualMachineIsReachedThroughItsEmulatedController(t *testing.T) {
 	}
 }
 
+// An emulated controller on an IPv6 listener is named with the address
+// bracketed, so its endpoint reads under the one grammar an authored controller
+// address meets and claims the same bracketed authority. An IPv4 listener's
+// endpoint is unchanged.
+func TestAnIPv6EmulatedControllerEndpointBracketsItsAddress(t *testing.T) {
+	uuid := DomainUUID("lab", "guest")
+	objects := targetCatalog().Objects()
+	for index, object := range objects {
+		if object.Kind() == api.InfraProvider && object.Name() == "lab" {
+			objects[index] = object.WithSpec(object.Spec().WithPath(api.StringValue("fd00::1"), "libvirt", "bmcEmulationDefaults", "bindAddress"))
+		}
+	}
+	catalog := api.NewCatalog(objects)
+	guest, _ := catalog.Find(api.Machine, "guest")
+	target, err := TargetFor(catalog, guest, "lab", "controller")
+	if err != nil {
+		t.Fatalf("deriving guest: %v", diagnostics.Of(err))
+	}
+	want := "http://[fd00::1]:8000/redfish/v1/Systems/" + uuid
+	if target.Controller.Endpoint != want || ControllerEndpoint("fd00::1", 8000, uuid) != want {
+		t.Fatalf("endpoint = %q, want %q", target.Controller.Endpoint, want)
+	}
+	if endpoint, ok := NormalizeControllerEndpoint(want); !ok || endpoint != want {
+		t.Fatalf("the controller address grammar read %q as %q, ok = %v", want, endpoint, ok)
+	}
+	if key := ControllerReservationKey(want); key != "bmc:[fd00::1]:8000/"+uuid {
+		t.Fatalf("claim key = %q", key)
+	}
+	if socket := ControllerSocket("fd00::1", 8000); socket != "[fd00::1]:8000" {
+		t.Fatalf("socket = %q", socket)
+	}
+	if endpoint := ControllerEndpoint("192.0.2.1", 8000, uuid); endpoint != "http://192.0.2.1:8000/redfish/v1/Systems/"+uuid {
+		t.Fatalf("IPv4 endpoint = %q", endpoint)
+	}
+}
+
 // A physical Machine is reached at the controller it authors, from the
 // controller Machine, and carries both the hardware it must prove and the key
 // its installation will deliver.

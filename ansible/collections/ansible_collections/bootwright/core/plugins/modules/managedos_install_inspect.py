@@ -11,6 +11,9 @@ description:
   - Reports whether the per-machine installer image, the private subtree and,
     when the profile uses one, the hosted package tree are published beneath
     the served root.
+  - Reports the package tree twice, complete by its C(.treeinfo) marker and
+    present by anything at its path, because a removal deleting the tree may
+    take the marker first and leave the rest.
   - Performs no change and is safe to repeat.
 options:
   request:
@@ -43,22 +46,29 @@ from ansible.module_utils.basic import AnsibleModule
 TREE_MARKER = ".treeinfo"
 
 
-def main():
-    module = AnsibleModule(
-        argument_spec={"request": {"type": "dict", "required": True}},
-        supports_check_mode=True,
-    )
-    request = module.params["request"]
+def observe(request):
+    """Whether each piece of content this installation publishes is present."""
     tree = request.get("tree")
     private = request.get("private")
-    observation = {
+    return {
         "image": os.path.isfile(request["image"]["path"]),
         # Material that only needed to exist for one boot must not outlive it,
         # so a subtree still present is unfinished work rather than a state.
         "private": bool(private) and os.path.isdir(private["path"]),
         "tree": bool(tree) and os.path.isfile(os.path.join(tree["path"], TREE_MARKER)),
+        # A removal deletes the tree in whatever order the directory lists, so
+        # one stopped part way can leave it without its marker: content still
+        # to take back, though no complete tree.
+        "treeContent": bool(tree) and os.path.lexists(tree["path"]),
     }
-    module.exit_json(changed=False, observation=observation)
+
+
+def main():
+    module = AnsibleModule(
+        argument_spec={"request": {"type": "dict", "required": True}},
+        supports_check_mode=True,
+    )
+    module.exit_json(changed=False, observation=observe(module.params["request"]))
 
 
 if __name__ == "__main__":

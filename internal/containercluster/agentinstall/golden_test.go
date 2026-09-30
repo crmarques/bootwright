@@ -238,6 +238,17 @@ func TestInstallEvidenceMatchesItsGoldens(t *testing.T) {
 			},
 			func(data []byte) error { return ValidateInstallPartial(data, testDigest) },
 		},
+		// A removal's observation reads each node's media and none of the
+		// cluster, so nothing answers and every declared node reads missing,
+		// while the node still presents an image this cluster did not publish:
+		// a removal part way through, which ejecting again converges (D27).
+		"release-partial-foreign": {
+			InstallEvidence{
+				Identity: anchorIdentity, Media: []string{"sno-01"}, Missing: []string{"master-0"},
+				OwnMedia: []string{}, Powered: []string{"sno-01"}, Request: testDigest,
+			},
+			func(data []byte) error { return ValidateInstallReleasePartial(data, install, testDigest) },
+		},
 		// The image was built, so its anchor is known, but nothing answers and
 		// no node runs: every declared node is missing.
 		"no-effect": {

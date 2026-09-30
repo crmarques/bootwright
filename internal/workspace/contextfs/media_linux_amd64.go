@@ -48,6 +48,9 @@ func (a *mediaArea) available(ctx context.Context, write bool) error {
 // ReadMedia takes a coherent read of the store under the shared root lock. It
 // creates, repairs and publishes nothing.
 func (s *Store) ReadMedia(ctx context.Context, callback func(media.View) error) error {
+	if callback == nil {
+		return state("media read callback is missing")
+	}
 	return s.withMedia(ctx, false, func(area *mediaArea) error { return callback(area) })
 }
 
@@ -55,13 +58,13 @@ func (s *Store) ReadMedia(ctx context.Context, callback func(media.View) error) 
 // cannot be published while another invocation reads the reservations that
 // freeze it. A stage the callback claims is the one thing that outlives it.
 func (s *Store) MutateMedia(ctx context.Context, callback func(media.Transaction) error) error {
+	if callback == nil {
+		return state("media mutation callback is missing")
+	}
 	return s.withMedia(ctx, true, func(area *mediaArea) error { return callback(area) })
 }
 
 func (s *Store) withMedia(ctx context.Context, write bool, callback func(*mediaArea) error) error {
-	if callback == nil {
-		return state("media callback is missing")
-	}
 	root, err := s.openRoot(ctx, false, nil)
 	if errors.Is(err, syscall.ENOENT) {
 		return mediaUnprepared()
@@ -704,7 +707,9 @@ func (a *mediaArea) openStage(ctx context.Context, image string) (*mediaStage, e
 // lock on the file from the claim until Close, which is how pruneStaging tells
 // it from an abandoned one. It belongs to one invocation and is used
 // sequentially. An adopted stage carries the entry and record identity it was
-// retained with, and mismatch once Verify found other bytes.
+// retained with, and mismatch once Verify found other bytes. measured is the
+// stage's status when Fill or Verify measured its bytes, which publication
+// proves unchanged.
 type mediaStage struct {
 	store     *Store
 	root      *directory
@@ -715,6 +720,7 @@ type mediaStage struct {
 	created   syscall.Stat_t
 	filling   bool
 	staged    *media.Staged
+	measured  syscall.Stat_t
 	adopted   *managedos.MediaEntry
 	record    syscall.Stat_t
 	mismatch  bool
@@ -751,7 +757,7 @@ func (s *mediaStage) Fill(ctx context.Context, source media.Payload, limit int64
 	if err != nil || !sameIdentity(s.created, after) || after.Size != size {
 		return media.Staged{}, state("media staging file changed while it was written")
 	}
-	s.staged = &media.Staged{Size: size, SHA256: digest}
+	s.staged, s.measured = &media.Staged{Size: size, SHA256: digest}, after
 	return *s.staged, nil
 }
 
@@ -764,9 +770,9 @@ func (s *mediaStage) Retained() (managedos.MediaEntry, bool) {
 }
 
 // Verify re-reads an adopted stage in full with no root lock held, as Digest
-// reads an image, and records what it measured: publication proves exactly
-// that, and Close removes a stage whose bytes no longer match what was
-// retained.
+// reads an image, and records what it measured and the stage's status then:
+// publication proves the stage unchanged since, and Close removes a stage
+// whose bytes no longer match what was retained.
 func (s *mediaStage) Verify(ctx context.Context) (media.Staged, error) {
 	if err := ctx.Err(); err != nil {
 		return media.Staged{}, err
@@ -786,7 +792,7 @@ func (s *mediaStage) Verify(ctx context.Context) (media.Staged, error) {
 	if err != nil || !sameFile(before, after) || size != after.Size {
 		return media.Staged{}, state("media file changed while it was being read")
 	}
-	s.staged = &media.Staged{Size: size, SHA256: digest}
+	s.staged, s.measured = &media.Staged{Size: size, SHA256: digest}, after
 	s.mismatch = size != s.adopted.Size || digest != s.adopted.SHA256
 	return *s.staged, nil
 }
@@ -811,7 +817,7 @@ func (s *mediaStage) Retain(ctx context.Context, record []byte) error {
 	if entry.Name != s.image || entry.Size != s.staged.Size || entry.SHA256 != s.staged.SHA256 {
 		return state("media retention does not describe this stage")
 	}
-	if err := s.at(s.dir, s.name); err != nil {
+	if err := s.at(s.dir, s.name, false); err != nil {
 		return err
 	}
 	if err := s.store.checkpoint(ctx, checkpointBeforeMediaRetention); err != nil {
@@ -866,8 +872,10 @@ func (s *mediaStage) release() {
 	s.root.file.Close()
 }
 
-// at proves that the named entry is exactly this stage's filled file.
-func (s *mediaStage) at(dir *directory, name string) error {
+// at proves that the named entry is this stage's file and that its status is
+// still the one taken when its bytes were measured. A rename sets the change
+// time, so once renamed the change time alone is not compared.
+func (s *mediaStage) at(dir *directory, name string, renamed bool) error {
 	held, err := statHandle(s.file)
 	if err != nil {
 		return err
@@ -878,8 +886,12 @@ func (s *mediaStage) at(dir *directory, name string) error {
 	}
 	named, err := statHandle(current)
 	current.Close()
-	if err != nil || !sameFile(held, named) || !privateMediaFile(named, dir) || named.Size != s.staged.Size {
-		return state("media stage was substituted before publication")
+	measured := s.measured
+	if renamed {
+		measured.Ctim = held.Ctim
+	}
+	if err != nil || !sameFile(held, named) || !sameFile(measured, held) || !privateMediaFile(named, dir) {
+		return state("media stage was substituted or changed before publication")
 	}
 	return nil
 }
@@ -904,7 +916,7 @@ func (a *mediaArea) Publish(ctx context.Context, name string, published media.St
 		!sameIdentity(stage.dir.identity, a.dir.identity) || entry.Size != stage.staged.Size || entry.SHA256 != stage.staged.SHA256 {
 		return state("media publication does not describe a filled stage of this store")
 	}
-	if err := stage.at(a.dir, stage.name); err != nil {
+	if err := stage.at(a.dir, stage.name, false); err != nil {
 		return err
 	}
 	if replace {
@@ -919,7 +931,7 @@ func (a *mediaArea) Publish(ctx context.Context, name string, published media.St
 		return safeError(err)
 	}
 	stage.published = true
-	if err := stage.at(a.dir, name); err != nil {
+	if err := stage.at(a.dir, name, true); err != nil {
 		return state("published media bytes are not the staged image")
 	}
 	if err := a.store.syncDirectory(ctx, a.dir); err != nil {

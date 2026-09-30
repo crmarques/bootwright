@@ -159,6 +159,24 @@
   when: substrate_libvirt_machine_before.observation.controller | length == 0
   changed_when: substrate_libvirt_machine_before.observation.controller | length == 0
 
+- name: Observe the controller's authentication file
+  ansible.builtin.stat:
+    path: '{{ substrate_libvirt_machine_state }}/htpasswd'
+    get_checksum: false
+  register: substrate_libvirt_machine_credentials_file
+
+- name: Read the password hash the controller already verifies
+  ansible.builtin.slurp:
+    src: '{{ substrate_libvirt_machine_state }}/htpasswd'
+  register: substrate_libvirt_machine_credentials_published
+  when: substrate_libvirt_machine_credentials_file.stat.isreg | default(false)
+  no_log: true
+
+# bcrypt salts every hash afresh, so hashing the same password again never
+# reproduces the published file: a replay would rewrite it and restart the
+# controller. The published hash is kept while checkpw still verifies the bound
+# password with it, and a new one is derived otherwise. The standard input is
+# the published file in base64 on its first line, then the password.
 - name: Derive the controller's password hash with the emulator's own bcrypt
   ansible.builtin.command:
     argv:
@@ -171,8 +189,20 @@
       - python3
       - '{{ bootwright_substrate_machine_request.controller.image }}'
       - -c
-      - 'import bcrypt, sys; print(bcrypt.hashpw(sys.stdin.buffer.read().strip(), bcrypt.gensalt()).decode())'
-    stdin: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerPassword) }}'
+      - |-
+        import base64, bcrypt, sys
+        head, _separator, rest = sys.stdin.buffer.read().partition(b"\n")
+        password = rest.strip()
+        try:
+            line = base64.b64decode(head.strip(), validate=True).split(b"\n", 1)[0]
+            kept = line.partition(b":")[2].strip()
+            verified = bool(kept) and bcrypt.checkpw(password, kept)
+        except ValueError:
+            verified = False
+        print((kept if verified else bcrypt.hashpw(password, bcrypt.gensalt())).decode())
+    stdin: |-
+      {{ substrate_libvirt_machine_credentials_published.content | default('') }}
+      {{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerPassword) }}
   register: substrate_libvirt_machine_hash
   changed_when: false
   no_log: true
@@ -205,6 +235,41 @@
       - daemon-reload
   changed_when: false
 
+# A running controller keeps what it started with: its unit takes effect at a
+# start, and its configuration and password file are each mounted on their own,
+# so publishing one replaces the host's file while the controller keeps reading
+# the one it mounted. An attempt stopped between publishing and restarting leaves
+# the controller on the earlier files while the next attempt finds the published
+# ones unchanged, so a running controller restarts whenever a file it runs from
+# is newer than its start.
+- name: Observe the files the controller runs from
+  ansible.builtin.stat:
+    path: '{{ item }}'
+    get_checksum: false
+  loop:
+    - '{{ substrate_libvirt_machine_state }}/conf.py'
+    - '{{ substrate_libvirt_machine_state }}/htpasswd'
+    - '{{ substrate_libvirt_machine_unit_path }}'
+  register: substrate_libvirt_machine_runs_from
+  when: substrate_libvirt_machine_before.observation.unit == 'active'
+
+# A start that cannot be read proves nothing, so the controller then restarts.
+# The format is podman's own template, handed to it as a literal.
+- name: Observe when the running controller started
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - inspect
+      - --type
+      - container
+      - --format
+      - "{{ '{{.State.StartedAt.UnixNano}}' }}"
+      - '{{ bootwright_substrate_machine_request.controller.unit }}'
+  register: substrate_libvirt_machine_started
+  when: substrate_libvirt_machine_before.observation.unit == 'active'
+  changed_when: false
+  failed_when: false
+
 - name: Start the machine's management controller
   ansible.builtin.command:
     argv:
@@ -214,16 +279,19 @@
   when: substrate_libvirt_machine_before.observation.unit != 'active'
   changed_when: substrate_libvirt_machine_before.observation.unit != 'active'
 
-- name: Restart the controller after a configuration change
+- name: Restart the controller when a file it runs from changed since it started
   ansible.builtin.command:
     argv:
       - /usr/bin/systemctl
       - restart
       - '{{ substrate_libvirt_machine_service }}'
+  register: substrate_libvirt_machine_restart
   when:
     - substrate_libvirt_machine_before.observation.unit == 'active'
     - substrate_libvirt_machine_configuration is changed or substrate_libvirt_machine_unit is changed
       or substrate_libvirt_machine_credentials is changed
+      or (substrate_libvirt_machine_started.stdout | default('') | trim | int)
+      < (substrate_libvirt_machine_runs_from.results | map(attribute='stat.mtime') | max) * 1000000000
   changed_when: true
 
 - name: Report controller start completion
@@ -276,6 +344,7 @@
              or substrate_libvirt_machine_configuration is changed
              or substrate_libvirt_machine_credentials is changed
              or substrate_libvirt_machine_unit is changed
+             or substrate_libvirt_machine_restart is changed
              or substrate_libvirt_machine_pull is changed
              or substrate_libvirt_machine_missing_disks | length > 0
              or substrate_libvirt_machine_before.observation.domain | length == 0

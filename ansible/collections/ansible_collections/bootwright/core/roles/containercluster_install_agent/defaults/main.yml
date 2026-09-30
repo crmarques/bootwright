@@ -5,6 +5,11 @@ containercluster_install_agent_work: '{{ bootwright_cluster_install_request.work
 containercluster_install_agent_kubeconfig: '{{ containercluster_install_agent_work }}/auth/kubeconfig'
 containercluster_install_agent_installer: '{{ bootwright_cluster_install_material.openshiftinstall }}'
 containercluster_install_agent_client: '{{ bootwright_cluster_install_material.oc }}'
+# An observation the capability makes for a removal's resolution, which reads
+# only the media each node presents: the cluster the removal leaves running is
+# not read.
+containercluster_install_agent_observes_removal: >-
+  {{ bootwright_cluster_install_material.observes | default('') == 'removal' }}
 # A cluster already answering with the identity this operation's own installer
 # recorded, at the declared release and holding every declared node, is
 # installed. The decision is taken once, before anything is booted, and kept in

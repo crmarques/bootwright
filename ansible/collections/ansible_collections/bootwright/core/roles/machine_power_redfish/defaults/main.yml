@@ -13,10 +13,3 @@ machine_power_redfish_attempts: 150
 machine_power_redfish_ca_data: >-
   {{ lookup('ansible.builtin.file', bootwright_machine_power_material.controllerCA)
      if bootwright_machine_power_material.controllerCA | default('') | length > 0 else '' }}
-
-# The identity refusal prints what a management controller reported, and a
-# controller promises neither printable text nor a length. Each identity it
-# names loses these characters, the C0 and C1 controls and DEL, and is then cut
-# to the 128 characters the evidence path bounds an identity to, so the run's
-# retained output carries no terminal escape and no unbounded value.
-machine_power_redfish_control_characters: '[\x00-\x1f\x7f-\x9f]'

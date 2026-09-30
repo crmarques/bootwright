@@ -26,10 +26,6 @@ Secrets
   Declared  3
   Bound     3
 
-Next steps
-  bootwright apply
-  bootwright destroy
-
 Lifecycle
   Operation  op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
   Verb       apply

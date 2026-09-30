@@ -126,6 +126,24 @@ this one, and then delete it with `bootwright context delete --name <context>
 --purge` and create it again. An apply or destroy that binds no Secret meets
 the refusal only when it reaches the keyring, which can be after its effects.
 
+A build before X20 accepted an installer media name of 251 to 255 bytes, whose
+record name, the image name followed by `.json`, is longer than a file name
+may be. Its `media add` moved the image into place and then could not write
+the record. Every media command of a later build refuses such a name, so
+`media list` never shows the image and `media delete` cannot remove it. List
+any such image in the host's media directory:
+
+```sh
+sudo find /var/lib/bootwright/media -maxdepth 1 -type f -name '*.iso' -regextype posix-extended -regex '.*/[^/]{251,255}' -printf '%f\n'
+```
+
+Then remove each one it lists by hand, holding the store's lock, which
+refuses while another Bootwright command holds the store:
+
+```sh
+sudo flock --nonblock /var/lib/bootwright rm -- /var/lib/bootwright/media/<name>
+```
+
 ## Record a run
 
 The ledger owns the [row format](acceptance.md#row-format) and who may accept a

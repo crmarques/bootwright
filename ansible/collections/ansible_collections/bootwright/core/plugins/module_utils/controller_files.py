@@ -53,6 +53,12 @@ class Refused(ValueError):
     """A bounded operation lacks the required authority or integrity proof."""
 
 
+class Unreleased(Refused):
+    """The release-stamp check found an oc that does not name its frozen
+    release. It is the one refusal Go remedies by name, because the same
+    release and mirror reuse the retained source and refuse again."""
+
+
 def canonical(value):
     return json.dumps(
         value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
@@ -422,7 +428,7 @@ class ReleaseStamp:
 
     def verify(self):
         if self.stamped.count != 1 or self.unstamped.count:
-            raise Refused("openshift client release")
+            raise Unreleased("openshift client release")
 
 
 def acquire(bundle, source, egress, seconds):

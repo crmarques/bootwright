@@ -59,6 +59,7 @@ func TestHostPresenceRequiresEveryProof(t *testing.T) {
 		"no postcondition":  func(e *HostEvidence) { e.Postcondition = false },
 		"network inactive":  func(e *HostEvidence) { e.Networks[0].State = "inactive" },
 		"network unowned":   func(e *HostEvidence) { e.Networks[0].Owned = false },
+		"network drifted":   func(e *HostEvidence) { e.Networks[0].Definition = false },
 		"bridge missing":    func(e *HostEvidence) { e.Networks[0].Bridge = false },
 		"network dropped":   func(e *HostEvidence) { e.Networks = nil },
 		"another request":   func(e *HostEvidence) { e.Request = "other" },

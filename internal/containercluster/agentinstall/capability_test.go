@@ -286,6 +286,41 @@ func TestTheProbeVerifiesTheListenerAgainstTheBoundServingCertificate(t *testing
 	}
 }
 
+// Each additional trust bundle the cluster selects reaches the adapter as the
+// certificate part of its Secret, bound as trustBundle<index> in the order the
+// cluster selects them, which is the name and order the role's install
+// configuration joins them in
+// (tests/unit/test_containercluster_install_config.py).
+func TestEachTrustBundleReachesTheAdapterInTheOrderTheClusterSelects(t *testing.T) {
+	execution, _ := mediaExecution(t, testDigest)
+	request, _, _ := onlyRequests(t, externalCatalog())
+	canonical, err := request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution.Block.ID, execution.Block.Request = MediaBlockID("ocp"), canonical
+	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: mediaEvidence(t, testDigest, nil)}}
+	if _, err := NewMedia(runner).Apply(context.Background(), execution); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	var bound []lifecycle.MaterialFile
+	for _, file := range runner.requests[0].Materials {
+		if strings.HasPrefix(file.Variable, "trustBundle") {
+			bound = append(bound, file)
+		}
+	}
+	want := []lifecycle.MaterialFile{
+		{Name: "trust-0", Part: secrets.CertificatePart, Secret: "lab-root-ca", Variable: "trustBundle0"},
+		{Name: "trust-1", Part: secrets.CertificatePart, Secret: "corp-proxy-ca", Variable: "trustBundle1"},
+	}
+	if !slices.Equal(bound, want) {
+		t.Fatalf("the trust bundles reach the adapter as %+v", bound)
+	}
+	if request.InstallConfig["additionalTrustBundle"] != "" {
+		t.Fatalf("the install configuration names the trust bundles as %#v", request.InstallConfig["additionalTrustBundle"])
+	}
+}
+
 // An installer the controller stage never published refuses before anything is
 // built, and names the command that publishes it.
 func TestAnAbsentInstallerRefusesBeforeBuilding(t *testing.T) {

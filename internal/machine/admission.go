@@ -236,6 +236,12 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		if variant == substrate.ArmBaremetal && provided.Present() && !provided.Bool() {
 			issues = appendIssues(issues, validateBaremetal(o)...)
 		}
+		for _, hint := range substrate.UnmatchableRootDeviceHints(provider) {
+			if s.Has("os", "install", "rootDeviceHints", hint) {
+				issues = appendIssues(issues, invariant("$.spec.os.install.rootDeviceHints."+hint,
+					"the disks this substrate creates carry no WWN, SCSI address or serial number, so this hint can match none of them"))
+			}
+		}
 	}
 	issues = appendIssues(issues, validateHardware(o, c, variant)...)
 	configured := network.Has("configRef") || network.Has("inline")

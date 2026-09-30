@@ -462,24 +462,48 @@ trustworthy lifecycle result and emits no receipt. A `paused` apply is a
 successful result: it exits zero and its next action is `continue-apply`. The
 receipt and `status --output json` derive from the same trustworthy state.
 
-`next` names what the operation's own state calls for, so a `done` operation of
-either verb reports `none`. A settled verb reports `done` and `none` too, over
-the completed operation it proved, or over `none` when the context owns no
-operation at all. A completed apply admits a later destroy, but
-naming it as the next action instructs an operator to undo what just succeeded;
-the verbs a context admits are what `plan` reports. `apply` and `destroy` appear
-only as the previewed verb of a pure plan. Where `status` offers a next step it
-offers a command this executable runs: a continuation and a resolution are both
-offered as the operation's own verb repeated — `continue-apply` and `resolve`
-as `bootwright apply` — and `none` is offered as no step at all. No next step
-names a verb this executable does not expose.
+`next` names what the operation's own records call for, by one rule the
+receipt, `plan` and `status` share: `none` once the operation is `done`;
+`destroy` for a `failed` destroy holding a block that is not `done`, an
+`unknown` one included, because `destroy` replaces it with a fresh removal of
+what it has not removed rather than continuing or resolving it; `resolve` while
+a block of any other operation reads `unknown`, whatever state the operation
+records, because that block is resolved before anything else starts; and
+otherwise the continuation of the operation's own verb,
+which is also how that verb completes a
+[finalization](state-reconciliation.md#lifecycle-unit). A settled verb reports
+`done` and `none` too, over the completed operation it proved, or over `none`
+when the context owns no operation at all. A completed apply admits a later
+destroy, but naming it as the next action instructs an operator to undo what
+just succeeded; the verbs a context admits are what `plan` reports. `apply`
+appears only as the previewed verb of a pure plan, and `destroy` only as that
+or as what a failed destroy calls for. Where `status` offers a next step it
+offers a command this executable runs: a continuation, a resolution and a
+replacement are all offered as the operation's own verb repeated —
+`continue-apply` and `resolve` as `bootwright apply` — and `none` is offered as
+no step at all. No next step names a verb this executable does not expose.
 
-`status` offers `bootwright destroy` beside the continuation of an apply that
-has not completed, whichever state it stopped in, because that apply owns every
-block it started and taking them back is as legitimate a way forward as
-continuing. A completed apply is the one exception, for the reason above. This
-is a next step only; the receipt's `next` still names what the operation's own
-state calls for.
+`status` offers a next step only where that verb's decision would pass over the
+records `status` read, so it never offers a command those records refuse:
+
+- beside no operation, `bootwright plan` and `bootwright apply`, unless it
+  names records or evidence no index accounts for, which both verbs refuse, and
+  then nothing;
+- over an apply that has not completed, its continuation, unless a lost block
+  record refuses it or the apply is `failed` with every block `done`, and
+  `bootwright destroy`, unless `status` names a contradiction of the apply's
+  records, each of which refuses that removal
+  ([continuation and removal](state-reconciliation.md#continuation-and-removal));
+- over a destroy that has not completed, the `destroy` that continues,
+  resolves, finalizes or replaces it, unless a lost block record refuses a
+  continuation; a replacement reads no such record;
+- over a completed operation, nothing.
+
+An apply that has not completed owns every block it started, whichever state
+it stopped in, so taking them back is as legitimate a way forward as
+continuing. A completed apply is the exception, for the reason above. These are
+next steps only; the receipt's `next` still names what the operation's own
+records call for.
 
 ## Resource inspection and explicit access
 
@@ -549,8 +573,8 @@ without an answer.
 
 A reading names no retained output. It is an inspection, not an operation: it
 either succeeds into a listing or refuses with its own diagnostic, so there is
-nothing for an operator to resume or read afterwards and no log location is
-reported for it.
+nothing for an operator to resume or read afterwards, no log location is
+reported for it and no refusal of it points at retained output.
 
 ### Administrator access export
 
@@ -676,8 +700,10 @@ A physical Machine whose [pin](substrates.md#physical-machine-realization) the
 context's current apply recorded is held to it: a controller reporting another
 identity refuses `lifecycle.state` with exit `1` before any power request, and
 the run's retained output names the Machine and both identities. Each identity
-is what a controller reported, so it is printed with its control characters
-removed and then cut to 128 characters, the bound its evidence holds it to. A
+is what a controller reported, so it is printed with every character removed
+that its [evidence](substrates.md#physical-machine-realization) refuses as not
+printable, a format character such as a bidi override included, and then cut
+to 128 characters, the bound that evidence holds it to. A
 current-operation record or pin of that Machine that cannot be read refuses
 `lifecycle.state` before any confirmation or run.
 

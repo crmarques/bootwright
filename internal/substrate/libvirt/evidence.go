@@ -49,12 +49,18 @@ type NetworkEvidence struct {
 	// either, so a managed network without state is absent only while
 	// Answered is true. An external network is never read, so it is never
 	// answered for. Evidence without the field decodes as silent.
-	Answered bool   `json:"answered"`
-	Bridge   bool   `json:"bridge"`
-	Managed  bool   `json:"managed"`
-	Name     string `json:"name"`
-	Owned    bool   `json:"owned"`
-	State    string `json:"state"`
+	Answered bool `json:"answered"`
+	Bridge   bool `json:"bridge"`
+	// Definition is whether a managed network runs, and keeps for its next
+	// start, everything its frozen entry sets. Defining an active network
+	// changes only the definition it next starts from, so a redefinition is
+	// proved only once both carry it. Evidence without the field decodes as a
+	// definition not proved.
+	Definition bool   `json:"definition"`
+	Managed    bool   `json:"managed"`
+	Name       string `json:"name"`
+	Owned      bool   `json:"owned"`
+	State      string `json:"state"`
 }
 
 // MachineEvidence is the only result shape the machine adapter may return. It
@@ -95,8 +101,8 @@ type DiskEvidence struct {
 
 // ValidateHostPresence accepts evidence only when it proves the exact frozen
 // request is realized: the closure present, the daemon active, the declared URI
-// answering, every managed network owned and active, every external bridge
-// present, and the pool active.
+// answering, every managed network owned, active and carrying its frozen
+// definition, every external bridge present, and the pool active.
 func ValidateHostPresence(data []byte, request HostRequest, digest string) error {
 	evidence, err := decodeHostEvidence(data, digest)
 	if err != nil {
@@ -168,6 +174,9 @@ func matchNetworks(observed []NetworkEvidence, frozen []Network) error {
 		}
 		if !entry.Owned {
 			return refusal("lifecycle.state", "a managed libvirt network does not carry this context's ownership", "")
+		}
+		if !entry.Definition {
+			return refusal("lifecycle.state", "a managed libvirt network does not carry its frozen definition", "")
 		}
 	}
 	return nil

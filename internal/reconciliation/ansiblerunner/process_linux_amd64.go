@@ -67,6 +67,9 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if err := checkOutputs(request); err != nil {
 		return lifecycle.RunResult{}, err
 	}
+	if err := checkMaterials(request); err != nil {
+		return lifecycle.RunResult{}, err
+	}
 	if err := verifyAutomation(ctx, request); err != nil {
 		return lifecycle.RunResult{}, err
 	}
@@ -128,7 +131,7 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	}
 	// What a completed run left is read before the deferred release removes
 	// the job, and with it every output.
-	produced, err := r.readOutputs(job, request.Outputs)
+	produced, err := r.readOutputs(job, request.Outputs, request.OutputRemediation)
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
@@ -331,21 +334,21 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, waited <-chan er
 			killGroup()
 			output.Close()
 			if operationErr == nil {
-				operationErr = failure("lifecycle.unknown", "adapter descendants retained the result channel after completion", outputRemediation)
+				operationErr = failure("lifecycle.unknown", "adapter descendants retained the result channel after completion", request.OutputRemediation)
 			}
 		case waitErr := <-waited:
 			waited = nil
 			killGroup()
 			arm()
 			if waitErr != nil && operationErr == nil {
-				operationErr = failure("lifecycle.state", "the adapter operation did not complete", outputRemediation)
+				operationErr = failure("lifecycle.state", "the adapter operation did not complete", request.OutputRemediation)
 			}
 		case message, open := <-messages:
 			if !open {
 				messages = nil
 				if err := <-readResult; err != nil {
 					if operationErr == nil {
-						operationErr = failure("lifecycle.unknown", "the adapter structured result was incomplete", outputRemediation)
+						operationErr = failure("lifecycle.unknown", "the adapter structured result was incomplete", request.OutputRemediation)
 					}
 					stop()
 				}
@@ -376,7 +379,7 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, waited <-chan er
 				valid = false
 			}
 			if !valid && operationErr == nil {
-				operationErr = failure("lifecycle.unknown", "the adapter capability protocol was invalid", outputRemediation)
+				operationErr = failure("lifecycle.unknown", "the adapter capability protocol was invalid", request.OutputRemediation)
 			}
 			if operationErr != nil || canceled {
 				stop()
@@ -384,7 +387,7 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, waited <-chan er
 			}
 			if message.Phase == "loaded" {
 				if _, err := input.Write([]byte("proceed\n")); err != nil {
-					operationErr = failure("lifecycle.unknown", "adapter authorization delivery was uncertain", outputRemediation)
+					operationErr = failure("lifecycle.unknown", "adapter authorization delivery was uncertain", request.OutputRemediation)
 				}
 			}
 		}
@@ -394,7 +397,7 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, waited <-chan er
 	}
 	if operationErr != nil || !completed {
 		if operationErr == nil {
-			operationErr = failure("lifecycle.unknown", "the adapter operation has no complete result", outputRemediation)
+			operationErr = failure("lifecycle.unknown", "the adapter operation has no complete result", request.OutputRemediation)
 		}
 		return lifecycle.RunResult{}, operationErr
 	}

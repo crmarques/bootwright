@@ -901,7 +901,7 @@ empty ledger.
 **Constraints left behind:** a killed keyring initialization
 (B26, was S28, delivered by [X20](delivered.md#x20--substrate-port-pre-boot-proof-and-observations)), lost and lagging records (B27, was
 S29, delivered by [X26](#x26--follow-ups-from-x19-to-x25)), claims and bindings (B28, was S30, delivered by X26), resolution gaps that
-need adapter changes ([B29](m1.md#b29), was S31) and the protocols the
+need adapter changes (B29, was S31, delivered by [X29](#x29--defects-and-decided-items)) and the protocols the
 primitive leaves (B35, was R3 (rest), delivered by X20), with clauses added to B8,
 B11, B16, B21 and B30. Gates: `make check` in CI, `make race` and the kill
 harness locally, `make docs-check`. No real-host run.
@@ -1163,7 +1163,8 @@ reservations order and refuse as the spec says (B33).
 `TestEvidenceReportsWhatAResolutionProved`,
 `TestResolutionOutcomeRecordsWhatTheCapabilityProved`,
 `TestTheMarginAllowsEveryControllerCallAnApplyMakes`,
-`TestAnSSHPlacedInstallationListsEachMaterialOnce`,
+`TestAFrozenPlacementOffTheControllerRefusesEveryVerb` (X29 replaced the
+SSH-placed material test X26 added),
 `TestNoDecoderTakesMoreAsTheEndOfItsDocument`,
 `TestOperationResultTextEscapesOnce`,
 `TestAFailedPowerRunNamesItsOutputInEveryFailureEnvelope`,
@@ -1336,3 +1337,61 @@ repeating an interrupted retirement ([B172](m1.md#b172)), a failed receipt
 after a moved automation digest ([B176](m1.md#b176)) and resolutions of a kept
 bundle ([B177](m1.md#b177)) can still stop setup. New items B172 to B178
 entered M1, and B179 to B181 were parked.
+
+### X29 — defects and decided items
+
+**Owner:** State reconciliation, Container cluster, Substrate, Managed OS,
+Infrastructure services, Desired state, Workspace, Controller and CLI.
+Integrated on local `main` on 2026-09-30 as one commit, beside X30.
+**Items:** B29, B140, B141, B142, B111, B143, B116, B147, B34, B146, B156, B137,
+B144, B152, B131, B158, B160, B159, B169. **Decisions:** D27, D28, D31 to D35,
+D44 to D47.
+
+**Outcome:** removal observations run only what a removal needs; a package tree
+a killed removal left reads partial, a stopped apply that published nothing
+reads no effect, a foreign image on one of the cluster's Machines reads partial
+(D27), and a managed service or artifact server with a silent listener reads
+partial (B29). The libvirt host and machine replay change nothing and the
+SSH-host install contract says its packages resolve at apply time (B34, D28).
+The cluster boot budget is 300 seconds per node with a 900-second floor, a
+cluster past the six-hour ceiling refuses, and a test holds the node margin to
+the install role's calls (B140, D32). The runner refuses a material listed
+twice and the agent-install decoders refuse a placement off the controller
+(B141, D33). Additional trust bundles reach `install-config`, moving the media
+request to `cluster-media-agent-v5` (B142). A libvirt Machine refuses wwn, hctl
+and serial root-device hints (B111, D44); a proved UUID or serial refuses
+anything unprintable (B143, D34); an emulated BMC admits a canonical IPv6
+address with a bracketed endpoint (B116, D45); bridge-bound listeners are
+ordered after their bridge and a context's own socket conflicts refuse on the
+controller (B147). A YAML key is refused for the construct it carries (B146,
+D35); completion bounds its reads and withholds `@` and `=` (B156); `status`
+offers only the verbs its records allow (B137, D31); JSON logs and run
+remediations name where output is (B144); a missing media callback refuses
+(B152) and media publication proves the stage unchanged since it was measured
+(B131, D46); a newer Index API minor warns and setup continues (B158, D47); an
+unstamped `oc` names the release-stamp check (B160); a probe timeout reads alike
+on every Python (B159); and `secret list` reports each version's sequence
+(B169).
+
+**Review:** lane reviews fixed their findings before integration; the slice
+review found one finding, rejected as the behavior D31 decided. The
+integration replaced two citations of the test B141 removed.
+
+**Gates:** `make check-offline tidy-check modules-check vulncheck docs-check
+race` and `./scripts/ansible-check --suite units`, `sanity`, `integration` and
+`lint` pass on the integrated slice and on the squashed commit; on the squashed
+commit `sanity` first failed in validate-modules with status 3 and no
+diagnostic, then passed on an unchanged rerun ([B192](m1.md#b192)). No
+real-host run.
+
+**Constraints left behind:** a context holding a cluster media block frozen as
+`cluster-media-agent-v4` refuses under this build, and a libvirt Machine
+declaring a refused hint no longer plans; the automation digest moves. The
+300-second budget is shorter than a libvirt node's worst-case boot under the
+controller bounds, which fails as a spent budget an apply can resume. B160's
+item text named the wrong remedy: the refusal printed the runner's exit remedy.
+The media proof reads status, not bytes, so a same-size write within one coarse
+clock tick is not caught (D46). A removal-scoped observation reports fields it
+did not read as empty. New items B182 to B192 entered M1 (B188 needs an owner
+decision), B193 to B202 were parked, and B17, B19, B39, B61 and B73 gained
+clauses.

@@ -111,7 +111,7 @@ def test_a_network_without_this_contexts_metadata_is_foreign():
         "net-info bootwright-lab-guests": (0, "Active:         yes\n", ""),
     })
     assert network_state(owned, "qemu:///system", "bootwright-lab-guests") == {
-        "answered": True, "state": "active", "owned": True, "bridge": "virbr-lab",
+        "answered": True, "definition": False, "state": "active", "owned": True, "bridge": "virbr-lab",
         "uuid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00",
     }
     foreign = runner_for({
@@ -125,7 +125,7 @@ def test_an_absent_or_malformed_network_reports_no_state():
     assert network_state(runner_for({}), "qemu:///system", "gone")["state"] == ""
     malformed = runner_for({"net-dumpxml gone": (0, "not xml", "")})
     assert network_state(malformed, "qemu:///system", "gone") == {
-        "answered": False, "state": "", "owned": False, "bridge": "", "uuid": "",
+        "answered": False, "definition": False, "state": "", "owned": False, "bridge": "", "uuid": "",
     }
 
 
@@ -144,7 +144,7 @@ POOL_UNDEFINED = (1, "", "error: failed to get pool 'p'\nerror: Storage pool not
 def test_a_network_or_pool_is_absent_only_when_its_driver_answered_for_it():
     undefined = runner_for({"net-dumpxml bootwright-lab-guests": NETWORK_UNDEFINED, "net-list --all --name": (0, "default\n\n", "")})
     assert network_state(undefined, "qemu:///system", "bootwright-lab-guests") == {
-        "answered": True, "state": "", "owned": False, "bridge": "", "uuid": "",
+        "answered": True, "definition": False, "state": "", "owned": False, "bridge": "", "uuid": "",
     }
     for name, answers in {
         "driver silent": {"net-dumpxml bootwright-lab-guests": NETWORK_DRIVER_SILENT,
@@ -154,7 +154,7 @@ def test_a_network_or_pool_is_absent_only_when_its_driver_answered_for_it():
         "listing truncated": {"net-dumpxml bootwright-lab-guests": NETWORK_UNDEFINED, "net-list --all --name": (0, "x" * MAX_OUTPUT, "")},
     }.items():
         state = network_state(runner_for(answers), "qemu:///system", "bootwright-lab-guests")
-        assert state == {"answered": False, "state": "", "owned": False, "bridge": "", "uuid": ""}, name
+        assert state == {"answered": False, "definition": False, "state": "", "owned": False, "bridge": "", "uuid": ""}, name
     assert pool_state(runner_for({"pool-info p": POOL_UNDEFINED, "pool-list --all --name": (0, "default\n\n", "")}), "qemu:///system", "p") == {
         "answered": True, "state": "",
     }
@@ -218,6 +218,111 @@ def test_an_observed_network_carries_the_identity_libvirt_assigned_it(tmp_path):
         "net-info bootwright-lab-guests": (0, "Active:         yes\n", ""),
     })
     assert network_state(without, "qemu:///system", "bootwright-lab-guests")["uuid"] == ""
+
+
+# A managed network as libvirt reports it once the network template defined it:
+# every value the template wrote, formatted as defined, with the UUID and the
+# bridge MAC address libvirt adds of its own (virNetworkDefParseXML and
+# virNetworkDefFormatBuf in src/conf/network_conf.c, virNetworkSetBridgeMacAddr
+# from networkValidate in src/network/bridge_driver.c,
+# https://gitlab.com/libvirt/libvirt).
+FROZEN_NETWORK = {"name": "bootwright-lab-guests", "bridge": "virbr-lab", "address": "198.51.100.1/24", "forward": "nat", "managed": True}
+CARRIED_NETWORK = """<network>
+  <name>bootwright-lab-guests</name>
+  <uuid>4c0a4300-aa43-458c-86d7-ac2256d1fc00</uuid>
+  <metadata>
+    <bw:owner xmlns:bw="https://bootwright.io/substrate/v1">
+      <bw:context>lab</bw:context>
+      <bw:attachment>bootwright-lab-guests</bw:attachment>
+    </bw:owner>
+  </metadata>
+  <forward mode='nat'/>
+  <bridge name='virbr-lab' zone='trusted' stp='on' delay='0'/>
+  <mac address='52:54:00:1c:2d:3e'/>
+  <dns enable='no'/>
+  <ip address='198.51.100.1' prefix='24'/>
+</network>"""
+# The same network running another host address, as it does after the request
+# moved the address while the network stayed active.
+READDRESSED_NETWORK = CARRIED_NETWORK.replace("198.51.100.1", "198.51.100.254")
+
+
+def definition_of(live, kept=None):
+    """The definition a network reports while it runs `live` and keeps `kept` for its next start."""
+    answers = {
+        "net-dumpxml bootwright-lab-guests": (0, live, ""),
+        "net-info bootwright-lab-guests": (0, "Active:         yes\n", ""),
+    }
+    if kept is not None:
+        answers["net-dumpxml --inactive bootwright-lab-guests"] = kept
+    return network_state(runner_for(answers), "qemu:///system", "bootwright-lab-guests", FROZEN_NETWORK, "lab")["definition"]
+
+
+# Defining an active network changes only the definition it next starts from,
+# so a network carries its frozen entry only while it runs it and keeps it.
+def test_a_network_carries_its_frozen_definition_only_while_it_runs_and_keeps_it():
+    assert definition_of(CARRIED_NETWORK, (0, CARRIED_NETWORK, "")) is True
+    for name, (live, kept) in {
+        "running another address": (READDRESSED_NETWORK, (0, CARRIED_NETWORK, "")),
+        "keeping another address": (CARRIED_NETWORK, (0, READDRESSED_NETWORK, "")),
+        "keeping nothing it answered": (CARRIED_NETWORK, (1, "", "error: failed to get network 'bootwright-lab-guests'\n")),
+        "keeping a definition that is not XML": (CARRIED_NETWORK, (0, "not xml", "")),
+        "not asked what it keeps": (CARRIED_NETWORK, None),
+    }.items():
+        assert definition_of(live, kept) is False, name
+
+
+def test_a_network_that_drifted_in_any_frozen_value_does_not_carry_its_definition():
+    kept = (0, CARRIED_NETWORK, "")
+    for name, (old, new) in {
+        "bridge": ("name='virbr-lab'", "name='virbr-other'"),
+        "firewall zone": ("zone='trusted'", "zone='libvirt'"),
+        "spanning tree": ("stp='on'", "stp='off'"),
+        "forward mode": ("<forward mode='nat'/>", "<forward mode='route'/>"),
+        "forwarding dropped": ("<forward mode='nat'/>", ""),
+        "resolver": ("<dns enable='no'/>", "<dns/>"),
+        "prefix": ("prefix='24'", "prefix='16'"),
+        "second address": ("<ip address='198.51.100.1' prefix='24'/>",
+                           "<ip address='198.51.100.1' prefix='24'/><ip address='203.0.113.1' prefix='24'/>"),
+        "DHCP enabled": ("<ip address='198.51.100.1' prefix='24'/>",
+                         "<ip address='198.51.100.1' prefix='24'><dhcp>"
+                         "<range start='198.51.100.2' end='198.51.100.254'/></dhcp></ip>"),
+        "owning context": ("<bw:context>lab</bw:context>", "<bw:context>other</bw:context>"),
+        "owning attachment": ("<bw:attachment>bootwright-lab-guests</bw:attachment>", ""),
+    }.items():
+        drifted = CARRIED_NETWORK.replace(old, new)
+        assert drifted != CARRIED_NETWORK, name
+        assert definition_of(drifted, kept) is False, name
+    isolated = CARRIED_NETWORK.replace("<forward mode='nat'/>", "")
+    answers = {
+        "net-dumpxml bootwright-lab-guests": (0, isolated, ""),
+        "net-dumpxml --inactive bootwright-lab-guests": (0, isolated, ""),
+        "net-info bootwright-lab-guests": (0, "Active:         no\n", ""),
+    }
+    frozen = dict(FROZEN_NETWORK, forward="none")
+    assert network_state(runner_for(answers), "qemu:///system", "bootwright-lab-guests", frozen, "lab")["definition"] is True
+
+
+def test_an_observed_managed_network_reports_whether_it_carries_its_frozen_entry(tmp_path):
+    request = {
+        "identity": {"context": "lab"},
+        "networks": [FROZEN_NETWORK, {"name": "external", "bridge": "br0", "managed": False}],
+        "packages": [],
+        "poolName": "bootwright-lab-p-vmedia",
+        "poolPath": str(tmp_path / "pool"),
+        "services": [],
+        "uri": "qemu:///system",
+    }
+    answers = {
+        "version": (0, "", ""),
+        "net-dumpxml bootwright-lab-guests": (0, CARRIED_NETWORK, ""),
+        "net-dumpxml --inactive bootwright-lab-guests": (0, CARRIED_NETWORK, ""),
+        "net-info bootwright-lab-guests": (0, "Active:         yes\n", ""),
+    }
+    observation = observe_host(runner_for(answers), request)
+    assert [entry["definition"] for entry in observation["networks"]] == [True, False]
+    other = observe_host(runner_for(answers), dict(request, identity={"context": "other"}))
+    assert other["networks"][0]["definition"] is False
 
 
 def test_a_domain_reports_its_identity_and_ownership():

@@ -243,6 +243,8 @@ func (a *memoryArea) Sync(ctx context.Context, target string) error {
 
 func (a *memoryArea) Location() string { return "/var/lib/bootwright/contexts/lab/state/operations" }
 
+func (a *memoryArea) Reference() string { return "contexts/lab/state/operations" }
+
 // testWorkspace is one context's durable state: its evidence, reservations and
 // operation records, with the same read and mutate boundaries the store has.
 type testWorkspace struct {
@@ -294,8 +296,8 @@ func (w *testWorkspace) held(operations, runs bool) (*testView, func()) {
 	closed := &atomic.Bool{}
 	view := &testView{
 		workspace:  w,
-		operations: &heldArea{memoryArea: w.area, writable: operations, closed: closed},
-		runs:       &heldArea{memoryArea: w.runArea, writable: runs, closed: closed},
+		operations: &heldArea{memoryArea: w.area, writable: operations, closed: closed, reference: "contexts/lab/state/operations"},
+		runs:       &heldArea{memoryArea: w.runArea, writable: runs, closed: closed, reference: "contexts/lab/state/runs"},
 		closed:     closed,
 	}
 	return view, func() { closed.Store(true) }
@@ -359,7 +361,11 @@ type heldArea struct {
 	*memoryArea
 	writable bool
 	closed   *atomic.Bool
+	// reference tells the two areas apart, which the shared double cannot.
+	reference string
 }
+
+func (a *heldArea) Reference() string { return a.reference }
 
 func (a *heldArea) usable(ctx context.Context, write bool) error {
 	if err := ctx.Err(); err != nil {
@@ -2609,6 +2615,30 @@ func TestStatusReportsDurableStateWithoutProbing(t *testing.T) {
 	}
 	if len(after.Lifecycle.Blocks) != 1 || after.Lifecycle.Blocks[0].State != "done" {
 		t.Fatalf("status blocks = %+v", after.Lifecycle.Blocks)
+	}
+}
+
+// A structured result names each log relative to the state root, so the
+// operation area's own place under it leads every path, in the apply's result
+// and in status alike.
+func TestAnOperationNamesItsLogsRelativeToTheStateRoot(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	operations := "contexts/" + testContextName + "/state/operations/" + result.Receipt.Operation + "/logs/"
+	if len(result.Logs) < 2 || result.Logs[0] != operations+"operation.jsonl" {
+		t.Fatalf("the apply named its logs %v", result.Logs)
+	}
+	for _, named := range result.Logs {
+		if !strings.HasPrefix(named, operations) {
+			t.Fatalf("the apply named %q outside its operation's logs under the state root", named)
+		}
+	}
+	status, err := h.service.Status(context.Background(), StatusRequest{ContextName: "lab"})
+	if err != nil || status.Lifecycle == nil || !slices.Equal(status.Lifecycle.Logs, result.Logs) {
+		t.Fatalf("status named %+v, not the apply's %v (%v)", status.Lifecycle, result.Logs, err)
 	}
 }
 

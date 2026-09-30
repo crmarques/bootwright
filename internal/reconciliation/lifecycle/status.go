@@ -186,7 +186,11 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 		if result.Contradictions, err = unindexed(ctx, view, store); err != nil {
 			return nil, err
 		}
-		result.NextSteps = append(result.NextSteps, "bootwright plan", "bootwright apply")
+		// Both verbs refuse what no index accounts for, and a plan previews
+		// the apply that refuses it.
+		if len(result.Contradictions) == 0 {
+			result.NextSteps = append(result.NextSteps, "bootwright plan", "bootwright apply")
+		}
 		return result, nil
 	}
 	operation, err := store.ReadOperation(ctx, index.Current)
@@ -216,7 +220,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	}
 	summary := &LifecycleSummary{
 		Operation: operation.ID, Verb: string(operation.Verb), State: string(operation.State),
-		Next: nextAction(operation.Verb, operation.State), Blocks: blocks, Logs: logs,
+		Next: nextAction(operation, plan, states), Blocks: blocks, Logs: logs,
 		Executable: executableIdentity(operation.Executable),
 	}
 	if summary.Logs == nil {
@@ -226,16 +230,37 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	result.LogLocation = store.LogDirectory(operation.ID)
 	result.Secrets.Bound = len(operation.Bindings)
 	result.Shared = applyBlockStatus(result.Shared, plan, states)
-	if command := nextCommand(operation.Verb, summary.Next); command != "" {
-		result.NextSteps = append(result.NextSteps, command)
-	}
-	// An apply owns every block it started, so removal is a next action beside
-	// continuing it however it stopped. A completed apply admits one too, but
-	// naming it there reads as an instruction to undo what just succeeded.
-	if operation.Verb == reconciliation.Apply && operation.State != reconciliation.OperationDone {
-		result.NextSteps = append(result.NextSteps, "bootwright destroy")
+	if result.NextSteps, err = offered(ctx, store, operation, plan, states, summary.Next, result.Contradictions); err != nil {
+		return nil, err
 	}
 	return result, nil
+}
+
+// offered is each command whose decision would pass over the records status
+// read, so status never offers a verb those records refuse. The operation's
+// own verb comes first: it resolves, continues or finalizes the operation
+// unless a record refuses its continuation, and it replaces a failed removal,
+// which reads no such record. An apply owns every block it started, so its
+// removal follows however it stopped, unless its records contradict what it
+// started: each contradiction status names for it refuses that removal. A
+// completed apply admits a removal too, but naming it there reads as an
+// instruction to undo what just succeeded.
+func offered(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, next string, contradicted []string) ([]string, error) {
+	steps := []string{}
+	if operation.State == reconciliation.OperationDone {
+		return steps, nil
+	}
+	refused, err := uncontinuable(ctx, store, operation, frozen, states)
+	if err != nil {
+		return nil, err
+	}
+	if len(refused) == 0 || next == string(reconciliation.Destroy) {
+		steps = append(steps, nextCommand(operation.Verb, next))
+	}
+	if operation.Verb == reconciliation.Apply && len(contradicted) == 0 {
+		steps = append(steps, "bootwright destroy")
+	}
+	return steps, nil
 }
 
 // setupChecks reports what the stored controller evidence already proves, in

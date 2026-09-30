@@ -213,16 +213,25 @@ public flags and shorthands, and closed enum values defined by this contract.
 
 A flag declared as directory-valued or file-valued additionally offers
 filesystem candidates, which the executable alone enumerates. It reads only the
-single directory named by the completed prefix, never recursively. A
+single directory named by the completed prefix, never recursively, taking its
+entries in the directory's own order. It reads at most 4096 of those entries
+and stops once it holds 256 candidates, so a larger directory may offer only
+some of its matching entries. A prefix longer than 4096 bytes, or one carrying
+a NUL, carriage return or line feed, reads nothing and offers no candidate. A
 directory-valued flag offers directories; a file-valued flag offers files and
 directories, so a path can be completed one segment at a time. A directory
 candidate carries a trailing separator and the request reports that the shell
-must append nothing of its own. Candidates are bounded in count and in entry
-length; a dot entry is offered only once the prefix names one; and any entry
-carrying a control character, whitespace, or a character significant to a shell
-word is withheld rather than escaped, because such a candidate could not be
-inserted unchanged. An unreadable directory yields no candidates and no
-diagnostic. Completion offers no dynamic candidate
+must append nothing of its own. A dot entry is offered only once the prefix
+names one, and an entry whose name is longer than 255 bytes, or which carries a
+control character, whitespace, or a character significant to a shell word, is
+withheld rather than escaped, because such a candidate could not be inserted
+unchanged. Those characters include `@` and `=`: Bash completion splits a word
+at either,
+[Zsh expands](https://zsh.sourceforge.io/Doc/Release/Expansion.html#g_t_0060_003d_0027-expansion)
+a word that starts with `=`, and
+[PowerShell splats](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_splatting)
+one that starts with `@`. An unreadable directory, or a read of it that fails,
+yields no candidates and no diagnostic. Completion offers no dynamic candidate
 for context, object, catalog, target, or other name or free-form value. The
 private protocol entries remain hidden and are never themselves candidates. A
 generated integration presents descriptions only when the shell provides a

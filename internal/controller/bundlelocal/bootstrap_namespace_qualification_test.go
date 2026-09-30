@@ -122,7 +122,7 @@ func TestQualifiedRootInvocationResolver(t *testing.T) {
 	if err := command.Wait(); err != nil {
 		t.Fatal(err)
 	}
-	resolved, err := NewBootstrapResolver().Resolve(ctx, platform, controller.DefaultDependencyVersions(), prerequisites.SetupEgress{})
+	resolved, _, err := NewBootstrapResolver().Resolve(ctx, platform, controller.DefaultDependencyVersions(), prerequisites.SetupEgress{})
 	if err != nil {
 		t.Fatalf("%v: %+v", err, diagnostics.Of(err))
 	}

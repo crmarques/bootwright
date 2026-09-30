@@ -43,44 +43,44 @@ func NewBootstrapResolver() *BootstrapCatalog {
 	return &BootstrapCatalog{metadata: fetchBootstrapMetadata, fetch: fetchSource, resolve: resolveBootstrapWheels}
 }
 
-func (c *BootstrapCatalog) Resolve(ctx context.Context, platform prerequisites.Platform, versions controller.DependencyVersions, egress prerequisites.SetupEgress) (prerequisites.BootstrapDefinition, error) {
+func (c *BootstrapCatalog) Resolve(ctx context.Context, platform prerequisites.Platform, versions controller.DependencyVersions, egress prerequisites.SetupEgress) (prerequisites.BootstrapDefinition, []diagnostics.Diagnostic, error) {
 	if c == nil || c.metadata == nil || c.fetch == nil || c.resolve == nil {
-		return prerequisites.BootstrapDefinition{}, bundleFailure("bootstrap resolver adapters are unavailable")
+		return prerequisites.BootstrapDefinition{}, nil, bundleFailure("bootstrap resolver adapters are unavailable")
 	}
 	if err := qualifiedIntent(versions); err != nil {
-		return prerequisites.BootstrapDefinition{}, err
+		return prerequisites.BootstrapDefinition{}, nil, err
 	}
 	if _, err := explicitProxy(egress); err != nil {
-		return prerequisites.BootstrapDefinition{}, err
+		return prerequisites.BootstrapDefinition{}, nil, err
 	}
 	record, _, err := compiledCatalog()
 	if err != nil {
-		return prerequisites.BootstrapDefinition{}, err
+		return prerequisites.BootstrapDefinition{}, nil, err
 	}
 	native, ok := selectNative(record, platform)
 	if !ok || platform.Architecture != "amd64" {
-		return prerequisites.BootstrapDefinition{}, unsupportedPlatform()
+		return prerequisites.BootstrapDefinition{}, nil, unsupportedPlatform()
 	}
 	pythonMetadata, err := c.metadata(ctx, http.MethodGet, pythonMetadataURL, egress)
 	if err != nil {
-		return prerequisites.BootstrapDefinition{}, err
+		return prerequisites.BootstrapDefinition{}, nil, err
 	}
 	pythonVersion, source, err := selectPythonArtifact(pythonMetadata.data, versions.Python)
 	if err != nil {
-		return prerequisites.BootstrapDefinition{}, err
+		return prerequisites.BootstrapDefinition{}, nil, err
 	}
 	asset, err := c.metadata(ctx, http.MethodHead, source.URL, egress)
 	if err != nil {
-		return prerequisites.BootstrapDefinition{}, err
+		return prerequisites.BootstrapDefinition{}, nil, err
 	}
 	source.Bytes = asset.size
 	ansibleMetadata, err := c.metadata(ctx, http.MethodGet, ansibleIndexURL, egress)
 	if err != nil {
-		return prerequisites.BootstrapDefinition{}, err
+		return prerequisites.BootstrapDefinition{}, nil, err
 	}
-	ansibleVersion, err := selectAnsibleRelease(ansibleMetadata.data, versions.Ansible, pythonVersion)
+	ansibleVersion, warnings, err := selectAnsibleRelease(ansibleMetadata.data, versions.Ansible, pythonVersion)
 	if err != nil {
-		return prerequisites.BootstrapDefinition{}, err
+		return prerequisites.BootstrapDefinition{}, warnings, err
 	}
 	minor := pythonVersion[:strings.LastIndex(pythonVersion, ".")]
 	value := prerequisites.BootstrapDefinition{
@@ -94,53 +94,66 @@ func (c *BootstrapCatalog) Resolve(ctx context.Context, platform prerequisites.P
 	value.ExecutionPackages = executionPackageOwners()
 	archive, err := c.fetch(ctx, source, egress)
 	if err != nil {
-		return prerequisites.BootstrapDefinition{}, err
+		return prerequisites.BootstrapDefinition{}, warnings, err
 	}
 	projected := newProjection()
 	projected.site = value.SitePackages
 	if err := projected.archive(ctx, archive); err != nil {
-		return prerequisites.BootstrapDefinition{}, err
+		return prerequisites.BootstrapDefinition{}, warnings, err
 	}
 	if _, ok := projected.files[value.PythonExecutable]; !ok {
-		return prerequisites.BootstrapDefinition{}, bundleFailure("selected Python archive lacks its declared executable")
+		return prerequisites.BootstrapDefinition{}, warnings, bundleFailure("selected Python archive lacks its declared executable")
 	}
 	report, err := c.resolve(ctx, projected, value, egress)
 	if err != nil {
-		return prerequisites.BootstrapDefinition{}, err
+		return prerequisites.BootstrapDefinition{}, warnings, err
 	}
 	wheels, sources, err := parsePipReport(report, value)
 	if err != nil {
-		return prerequisites.BootstrapDefinition{}, err
+		return prerequisites.BootstrapDefinition{}, warnings, err
 	}
 	value.Wheels = wheels
+	if err := c.acquireWheels(ctx, projected, &value, sources, egress); err != nil {
+		return prerequisites.BootstrapDefinition{}, warnings, err
+	}
+	if err := projected.automation(ctx); err != nil {
+		return prerequisites.BootstrapDefinition{}, warnings, err
+	}
+	if err := qualifyResolvedProjection(projected, value.Execution); err != nil {
+		return prerequisites.BootstrapDefinition{}, warnings, err
+	}
+	value.ProjectionSHA256, value.FileCount, value.ExpandedBytes = projected.identity(), len(projected.files), projected.bytes
+	definition, err := prerequisites.CanonicalBootstrap(value)
+	if err != nil {
+		return prerequisites.BootstrapDefinition{}, warnings, err
+	}
+	return definition, warnings, nil
+}
+
+// acquireWheels fetches the wheels the resolver selected into the projection,
+// appending each source within the closure's acquisition bound.
+func (c *BootstrapCatalog) acquireWheels(ctx context.Context, projected *projection, value *prerequisites.BootstrapDefinition, sources []prerequisites.DependencySource, egress prerequisites.SetupEgress) error {
 	sourceBytes := value.Sources[0].Bytes
 	for _, source := range sources {
 		metadata, err := c.metadata(ctx, http.MethodHead, source.URL, egress)
 		if err != nil {
-			return prerequisites.BootstrapDefinition{}, err
+			return err
 		}
 		source.Bytes = metadata.size
 		if source.Bytes <= 0 || sourceBytes > 256<<20-source.Bytes {
-			return prerequisites.BootstrapDefinition{}, bundleFailure("resolved bootstrap source closure exceeds its acquisition bound")
+			return bundleFailure("resolved bootstrap source closure exceeds its acquisition bound")
 		}
 		sourceBytes += source.Bytes
 		data, err := c.fetch(ctx, source, egress)
 		if err != nil {
-			return prerequisites.BootstrapDefinition{}, err
+			return err
 		}
 		if err := projected.wheel(ctx, data); err != nil {
-			return prerequisites.BootstrapDefinition{}, err
+			return err
 		}
 		value.Sources = append(value.Sources, source)
 	}
-	if err := projected.automation(ctx); err != nil {
-		return prerequisites.BootstrapDefinition{}, err
-	}
-	if err := qualifyResolvedProjection(projected, value.Execution); err != nil {
-		return prerequisites.BootstrapDefinition{}, err
-	}
-	value.ProjectionSHA256, value.FileCount, value.ExpandedBytes = projected.identity(), len(projected.files), projected.bytes
-	return prerequisites.CanonicalBootstrap(value)
+	return nil
 }
 
 // qualifiedIntent refuses, before any publisher is contacted, an exact
@@ -226,32 +239,35 @@ type ansibleIndexFile struct {
 	Yanked   json.RawMessage `json:"yanked"`
 }
 
-var indexAPIVersion = regexp.MustCompile(`^1\.(0|[1-9][0-9]*)$`)
+var indexAPIVersion = regexp.MustCompile(`^([1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
 
 // indexAPIMinor is the newest Index API minor this selector was checked
 // against: ansible-core's page, read on 2026-09-29, and
-// https://docs.pypi.org/api/index-api/ serve 1.4. PEP 629 asks a client to
-// warn of a newer minor; setup refuses one instead.
+// https://docs.pypi.org/api/index-api/ serve 1.4. PEP 629 has a client refuse
+// a newer major and warn of a newer minor, which only adds what this selector
+// does not read.
 const indexAPIMinor = 4
 
 // selectAnsibleRelease picks, from the Index API project page, the highest
 // stable patch of the qualified minor that publishes a live pure wheel, or
-// the requested exact release when it is such a candidate. Python
+// the requested exact release when it is such a candidate. A page of a newer
+// Index API minor returns its warning whether or not a release is then
+// selected, so a refusal of its releases still reports it. Python
 // compatibility is not judged here: pip's exact-root resolve enforces
 // Requires-Python, so an incompatible release refuses rather than yielding to
 // an older one.
-func selectAnsibleRelease(data []byte, requested, python string) (string, error) {
+func selectAnsibleRelease(data []byte, requested, python string) (string, []diagnostics.Diagnostic, error) {
 	if !prerequisites.QualifiedControllerPython(python) {
-		return "", unqualifiedPython()
+		return "", nil, unqualifiedPython()
 	}
 	if requested != "latest" {
 		if err := prerequisites.ValidateQualifiedAnsibleVersion(requested); err != nil {
-			return "", err
+			return "", nil, err
 		}
 	}
 	invalid := bundleFailure("requested Ansible release has no valid publisher metadata")
 	if len(data) > 8<<20 {
-		return "", invalid
+		return "", nil, invalid
 	}
 	var page struct {
 		Meta struct {
@@ -260,22 +276,43 @@ func selectAnsibleRelease(data []byte, requested, python string) (string, error)
 		Name  string             `json:"name"`
 		Files []ansibleIndexFile `json:"files"`
 	}
-	if json.Unmarshal(data, &page) != nil || !indexAPIVersion.MatchString(page.Meta.APIVersion) || page.Name != "ansible-core" {
-		return "", invalid
+	if json.Unmarshal(data, &page) != nil || page.Name != "ansible-core" {
+		return "", nil, invalid
 	}
-	if minor, err := strconv.Atoi(strings.TrimPrefix(page.Meta.APIVersion, "1.")); err != nil || minor > indexAPIMinor {
-		return "", diagnostics.NewFailureWithRemediation("controller.unsupported", "the publisher's Index API page is version "+page.Meta.APIVersion+", newer than the 1."+strconv.Itoa(indexAPIMinor)+" this build reads", "", "use a Bootwright build that reads this Index API version")
+	warnings, err := readableIndexAPI(page.Meta.APIVersion, invalid)
+	if err != nil {
+		return "", nil, err
 	}
 	version, ok := qualifiedAnsible(page.Files, requested)
 	switch {
 	case !ok:
-		return "", invalid
+		return "", warnings, invalid
 	case version == "" && requested == "latest":
-		return "", bundleFailure("Ansible publisher metadata lists no stable ansible-core " + prerequisites.QualifiedAnsibleMinor + " release with a live wheel")
+		return "", warnings, bundleFailure("Ansible publisher metadata lists no stable ansible-core " + prerequisites.QualifiedAnsibleMinor + " release with a live wheel")
 	case version == "":
-		return "", bundleFailure("Ansible publisher metadata lists no live wheel of ansible-core " + requested)
+		return "", warnings, bundleFailure("Ansible publisher metadata lists no live wheel of ansible-core " + requested)
 	}
-	return version, nil
+	return version, warnings, nil
+}
+
+func readableIndexAPI(version string, invalid error) ([]diagnostics.Diagnostic, error) {
+	parts := indexAPIVersion.FindStringSubmatch(version)
+	if parts == nil {
+		return nil, invalid
+	}
+	major, majorErr := strconv.Atoi(parts[1])
+	minor, minorErr := strconv.Atoi(parts[2])
+	remedy := "use a Bootwright build that reads this Index API version"
+	switch {
+	case majorErr != nil || minorErr != nil:
+		return nil, invalid
+	case major != 1:
+		return nil, diagnostics.NewFailureWithRemediation("controller.unsupported", "the publisher's Index API page is version "+version+", a major version this build does not read", "", remedy)
+	case minor > indexAPIMinor:
+		known := "1." + strconv.Itoa(indexAPIMinor)
+		return []diagnostics.Diagnostic{{Severity: "warning", Code: "controller.unsupported", Message: "the publisher's Index API page is version " + version + ", newer than the " + known + " this build reads; setup read only what " + known + " defines", Remediation: remedy}}, nil
+	}
+	return nil, nil
 }
 
 // qualifiedAnsible reports false when a file's yank is none of the shapes

@@ -230,23 +230,32 @@ func withHints(machine api.Object, hints ...api.FieldValue) api.Object {
 	return machine.WithSpec(machine.Spec().WithPath(api.MapValue(hints...), "os", "install", "rootDeviceHints"))
 }
 
-// everyHint is every root-device hint admission accepts, each string one a
-// YAML 1.1 reader would take for a number, with a size of zero and a disk
-// that is not rotational, so the frozen input must keep each type and value.
-func everyHint() []api.FieldValue {
+// virtualHints is every root-device hint admission accepts on a Machine its
+// libvirt provider creates, each string one a YAML 1.1 reader would take for a
+// number, with a size of zero and a disk that is not rotational, so the frozen
+// input must keep each type and value.
+func virtualHints() []api.FieldValue {
 	return []api.FieldValue{
-		text("deviceName", "/dev/disk/by-path/pci-0000:00:04.0"), text("hctl", "1:0:0:0"), text("model", "1e3"),
-		text("vendor", "0o17"), text("serialNumber", "0987654321"), text("wwn", "0x5000c500a1b2c3d4"),
+		text("deviceName", "/dev/disk/by-path/pci-0000:00:04.0"), text("model", "1e3"), text("vendor", "0o17"),
 		number("minSizeGigabytes", "0"), field("rotational", api.BoolValue(false)),
 	}
 }
 
-// hintsCatalog is the compact topology whose first node declares every hint,
-// whose second selects its disk by wwn alone and whose third names its device.
+// everyHint is every root-device hint admission accepts on a bare-metal
+// Machine: the virtual hints, and the WWN, SCSI address and serial number a
+// created disk carries none of.
+func everyHint() []api.FieldValue {
+	return append(virtualHints(),
+		text("hctl", "1:0:0:0"), text("serialNumber", "0987654321"), text("wwn", "0x5000c500a1b2c3d4"))
+}
+
+// hintsCatalog is the compact topology whose first node declares every hint a
+// virtual node is admitted with, whose second selects its disk by size alone
+// and whose third names its device.
 func hintsCatalog() api.Catalog {
 	objects := append(base(),
-		withHints(guest("ocp-01", "198.51.100.31/24"), everyHint()...),
-		withHints(guest("ocp-02", "198.51.100.32/24"), text("wwn", "0x5000c500a1b2c3d5")),
+		withHints(guest("ocp-01", "198.51.100.31/24"), virtualHints()...),
+		withHints(guest("ocp-02", "198.51.100.32/24"), number("minSizeGigabytes", "100")),
 		guest("ocp-03", "198.51.100.33/24"))
 	compact, _ := compactCatalog().Find(api.ContainerCluster, "ocp")
 	return api.NewCatalog(append(objects, compact))
@@ -304,5 +313,21 @@ func physicalCatalog() api.Catalog {
 		node("master-0", "master", "metal-01", "master-0.metal.lab.example.test"),
 		node("master-1", "master", "metal-02", "master-1.metal.lab.example.test"),
 		node("master-2", "master", "metal-03", "master-2.metal.lab.example.test")))
+	return api.NewCatalog(objects)
+}
+
+// physicalHintsCatalog is the physical topology whose first node declares
+// every hint, whose second selects its disk by wwn alone and whose third names
+// its device.
+func physicalHintsCatalog() api.Catalog {
+	objects := physicalCatalog().Objects()
+	for index, object := range objects {
+		switch {
+		case object.Kind() == api.Machine && object.Name() == "metal-01":
+			objects[index] = withHints(object, everyHint()...)
+		case object.Kind() == api.Machine && object.Name() == "metal-02":
+			objects[index] = withHints(object, text("wwn", "0x5000c500a1b2c3d5"))
+		}
+	}
 	return api.NewCatalog(objects)
 }

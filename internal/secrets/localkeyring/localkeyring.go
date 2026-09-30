@@ -160,11 +160,7 @@ func (s *session) Inspect(ctx context.Context) (secretstore.Snapshot, error) {
 	}
 	result := secretstore.Snapshot{Versions: make([]secretstore.Version, 0, len(s.index.Versions)), Current: slices.Clone(s.index.Current), Bindings: cloneBindings(s.index.Bindings), Produced: slices.Clone(s.index.Produced), ActiveKey: s.index.ActiveKey, Keys: publicKeys(s.index), RetainedArtifacts: s.retained, CleanupRequired: s.cleanup}
 	for _, version := range s.index.Versions {
-		parts := make([]secrets.Part, len(version.Parts))
-		for i, part := range version.Parts {
-			parts[i] = part.Part
-		}
-		result.Versions = append(result.Versions, secretstore.Version{ID: version.ID, Declaration: version.Declaration, Parts: parts})
+		result.Versions = append(result.Versions, publicVersion(version))
 	}
 	return result, nil
 }

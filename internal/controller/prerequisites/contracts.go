@@ -6,6 +6,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type Compiler interface {
@@ -61,8 +62,10 @@ type PythonExecutionGuard interface {
 
 // BootstrapResolver may stage and execute a wheel-only resolver in a disposable
 // unprivileged workspace. It has no installed-host or shared-store authority.
+// The warnings it returns, with a resolution or with the error that stopped
+// one, are reported with setup's result.
 type BootstrapResolver interface {
-	Resolve(context.Context, Platform, controller.DependencyVersions, SetupEgress) (BootstrapDefinition, error)
+	Resolve(context.Context, Platform, controller.DependencyVersions, SetupEgress) (BootstrapDefinition, []diagnostics.Diagnostic, error)
 }
 
 // NativeResolver may use disposable unprivileged staging for repository

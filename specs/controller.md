@@ -50,11 +50,13 @@ is not a candidate, and an exact `ansible-core` intent selects its release only
 when it is one. `latest` and an exact intent alike read the candidates from the
 JSON form of the publisher's [Index API](https://peps.python.org/pep-0691/)
 project page, never from the project JSON, and refuse a page of any major API
-version but 1 or of a minor newer than the one the build was checked against.
-A newer minor may add what the build does not read;
-[PEP 629](https://peps.python.org/pep-0629/) asks a client to warn of one, and
-setup refuses it instead. The collection's `requires_ansible` names the same
-minor, and the embedded configuration makes a mismatch an error. No
+version but 1. A page of a minor newer than the one the build was checked
+against only adds what the build does not read, so, as
+[PEP 629](https://peps.python.org/pep-0629/) asks of a client, setup reads it
+as the minor it knows, continues and reports a warning with its result
+([owner decision D47](milestones/backlog.md#decisions)). The collection's
+`requires_ansible` names the same `ansible-core` minor, and the embedded
+configuration makes a mismatch an error. No
 Environment declares their versions, because setup reads none. The
 [Environment version policy](api/environment.md#dependency-versions) declares
 only the versions a controller stage installs. Resolve Python and Ansible
@@ -348,7 +350,12 @@ both compatibilities. A released `oc` names its release in its own bytes: the
 version, NUL-terminated, overwrites the head of a fixed 93-byte marker. The
 bytes must hold exactly one marker stamped with the frozen version and no
 unstamped one, or neither `oc` nor `kubectl` is published, and the retained
-source is all the refusal leaves. No downloaded tool
+source is all the refusal leaves. The adapter names this refusal to Go in a
+[`refused` record](architecture.md#the-adapter-result-protocol) before it
+fails, so its diagnostic's remedy names the release-stamp check and asks for a
+`release.version` or `downloads.openshiftClientsMirror` whose `oc` passes it:
+the same release and mirror reuse the retained source and refuse again, so
+restoring sources cannot help. No downloaded tool
 is ever executed, so the stamp is read, never asked of the tool. Inventory,
 request, downloads, expanded members and callback frames have fixed bounds,
 and a native package download a fixed 5-minute deadline. A native package
@@ -372,8 +379,9 @@ area that cannot stream a file is refused rather than read whole. When it
 projects an `openshift-clients` source, it also reads `oc`'s release stamp as
 the member streams, as the adapter does, and refuses a source whose `oc` does
 not hold exactly one marker stamped with the frozen version and no unstamped
-one. A client area's readiness stays presence only and reads no bytes, so the
-stamp of a client already in a sealed area is not read again.
+one with the same release-stamp diagnostic. A client area's readiness stays
+presence only and reads no bytes, so the stamp of a client already in a sealed
+area is not read again.
 
 The automation content digest covers every embedded automation file except
 documentation, the collection's root `README` and `CHANGELOG`, which stay in
@@ -659,6 +667,11 @@ transaction or target tool in flight as its detail and, while it acquires them,
 the share of its sources already published. Host fingerprints, private paths,
 credentials, environment dumps and raw native-tool output are not public
 results. Neither has JSON output, a lifecycle receipt or a private operation log.
+What setup's dependency resolution read but did not refuse, such as a
+publisher page of a newer Index API minor, is a `[WARN]` diagnostic on standard
+error with the result, whether that setup completes or stops; it never changes
+the outcome or exit status, and a setup that reuses a retained resolution reads
+no publisher and reports none.
 
 Each check reports `ready` or `not-ready`, or `unverified` where a dry run
 cannot verify it.

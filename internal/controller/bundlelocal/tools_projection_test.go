@@ -75,6 +75,16 @@ func failedWith(err error, message string) bool {
 	return len(found) == 1 && strings.Contains(found[0].Message, message)
 }
 
+// unreleased reports whether err refuses release's oc with a remedy that names
+// the release-stamp check. Restoring sources cannot help: the same release and
+// mirror reuse the retained source and refuse again.
+func unreleased(err error, release string) bool {
+	found := diagnostics.Of(err)
+	return len(found) == 1 && found[0].Code == "controller.setup" &&
+		found[0].Message == "the oc of OpenShift client release "+release+" does not name its frozen release" &&
+		strings.Contains(found[0].Remediation, "passes the release-stamp check") && !strings.Contains(found[0].Remediation, "Restore approved dependency sources")
+}
+
 func digestHex(data string) string {
 	digest := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(digest[:])
@@ -320,8 +330,8 @@ func TestToolProjectionRequiresOCToNameItsFrozenRelease(t *testing.T) {
 			if name == "okd unstamped" {
 				tool = clientsFixture(t, "okd", "4.18.0-okd-scos.8", archive)
 			}
-			if _, err := projectTool(t.Context(), tool, bytes.NewReader(archive)); !failedWith(err, "does not name its frozen release") {
-				t.Fatal("an oc that does not name its frozen release was proved:", err)
+			if _, err := projectTool(t.Context(), tool, bytes.NewReader(archive)); !unreleased(err, tool.Version) {
+				t.Fatal("an oc that does not name its frozen release was not refused by the release-stamp check:", diagnostics.Of(err))
 			}
 		})
 	}
@@ -354,7 +364,7 @@ func TestReadOnlyInspectionRefusesARetainedOCThatNamesNoRelease(t *testing.T) {
 		if proved && (err != nil || !got.ToolsReady || !got.Recoverable) {
 			t.Fatal(got, err)
 		}
-		if !proved && (got.ToolsReady || !failedWith(err, "does not name its frozen release")) {
+		if !proved && (got.ToolsReady || !unreleased(err, release)) {
 			t.Fatalf("inspection proved an oc that names no frozen release: %+v %v", got, err)
 		}
 	}

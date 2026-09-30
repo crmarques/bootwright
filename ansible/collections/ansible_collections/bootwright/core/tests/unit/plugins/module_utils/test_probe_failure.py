@@ -31,12 +31,33 @@ def test_a_refused_port_is_told_apart_from_an_absent_address():
         assert "Connection refused" in refused
 
 
-# A probe's timeout is socket.timeout, which Python 3.10 made an alias of
-# TimeoutError; on the 3.9 floor it is its own class, named timeout.
 def test_a_refusal_carrying_no_number_still_names_its_kind():
     for probe_failure in PROBES:
-        assert probe_failure(socket.timeout()) == socket.timeout.__name__
+        assert probe_failure(socket.timeout()) == "TimeoutError"
         assert probe_failure(ValueError("status line")) == "ValueError: status line"
+
+
+def timed_out():
+    """The error a probe's socket raises when its peer never answers."""
+    waiting, silent = socket.socketpair()
+    try:
+        waiting.settimeout(0.01)
+        waiting.recv(1)
+    except OSError as error:
+        return error
+    finally:
+        waiting.close()
+        silent.close()
+    raise AssertionError("a silent peer answered")
+
+
+# A probe's timeout is socket.timeout, which Python 3.10 made an alias of
+# TimeoutError while the 3.9 floor still names it timeout, so the name comes
+# from the kind of failure rather than from the interpreter's class.
+def test_a_timeout_reads_the_same_on_every_python():
+    error = timed_out()
+    for probe_failure in PROBES:
+        assert probe_failure(error) == "TimeoutError: timed out"
 
 
 def test_a_reason_is_bounded():

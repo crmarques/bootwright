@@ -24,6 +24,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 // leaveAnOrphan completes its run but leaves a descendant in a session of its
@@ -237,6 +238,38 @@ func TestAStaleRunDirectoryIsRemovedWithItsSecretFiles(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(kept, "keep")); err != nil {
 		t.Fatalf("removing a stale job followed a link inside it: %v", err)
+	}
+}
+
+// A material list naming one file twice, or binding one variable to two files,
+// refuses before the runner touches its run directories: no job or scratch is
+// created, no material file is written, no adapter starts, and even a stale
+// job the run would first have swept is left as it was.
+func TestARepeatedMaterialRefusesBeforeAnyJobExists(t *testing.T) {
+	certificate := lifecycle.MaterialFile{Name: "tls.crt", Part: secrets.CertificatePart, Secret: "artifact-server-tls", Variable: "certificate"}
+	for name, repeated := range map[string]lifecycle.MaterialFile{
+		"a repeated name":     {Name: "tls.crt", Part: secrets.PrivateKeyPart, Secret: "artifact-server-tls", Variable: "privateKey"},
+		"a repeated variable": {Name: "tls.key", Part: secrets.PrivateKeyPart, Secret: "artifact-server-tls", Variable: "certificate"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			started := false
+			runner := sweepingRunner(t, func() *exec.Cmd { started = true; return completing() })
+			plantJob(t, runner.jobParent, jobPrefix+"4242")
+			before := trees(t, runner.jobParent, runner.scratchParent)
+			var output bytes.Buffer
+			request := adapterRequest(t, &output)
+			request.Materials = []lifecycle.MaterialFile{certificate, repeated}
+			request.Material = map[string]secrets.Material{"artifact-server-tls": secrets.NewMaterial(map[secrets.Part][]byte{
+				secrets.CertificatePart: []byte("CERTIFICATE"), secrets.PrivateKeyPart: []byte("PRIVATE"),
+			})}
+			_, err := runner.Run(context.Background(), request)
+			if code, _ := codeOf(err); code != "lifecycle.state" || started {
+				t.Fatalf("%v, started=%t", err, started)
+			}
+			if after := trees(t, runner.jobParent, runner.scratchParent); !slices.Equal(after, before) {
+				t.Fatalf("the refused run changed its run directories from %v to %v", before, after)
+			}
+		})
 	}
 }
 

@@ -24,6 +24,7 @@ import (
 
 	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -215,6 +216,52 @@ func TestAProtocolRefusalEndsTheAdapterPromptly(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// An adapter failure its own output explains points where the request says
+// that output is named, because only the caller knows: an attempt beside its
+// log, a bounded run in its own file, and a run that names none nowhere. Every
+// failure an adapter can provoke does so: a failed exit, an exit without a
+// result, a malformed record and a record out of order.
+func TestAnAdapterFailureNamesTheOutputItsRequestNames(t *testing.T) {
+	child := func(mode string) func() *exec.Cmd {
+		return func() *exec.Cmd {
+			return exec.Command(os.Args[0], "-test.run=^TestLifecycleAdapterChild$", "--", "lifecycle-child-"+mode)
+		}
+	}
+	for _, failed := range []struct {
+		name    string
+		adapter func() *exec.Cmd
+		message string
+	}{
+		{"failed-exit", func() *exec.Cmd { return exec.Command("/bin/sh", "-c", "exit 3") }, "the adapter operation did not complete"},
+		{"no-result", func() *exec.Cmd { return exec.Command("/bin/sh", "-c", "exit 0") }, "the adapter operation has no complete result"},
+		{"malformed", child("malformed"), "the adapter structured result was incomplete"},
+		{"out-of-order", child("out-of-order"), "the adapter capability protocol was invalid"},
+	} {
+		for index, remediation := range []string{
+			"read the adapter output retained beside this attempt's log",
+			"read the adapter output retained in this run's run.output",
+			"",
+		} {
+			t.Run(fmt.Sprintf("%s/%d", failed.name, index), func(t *testing.T) {
+				runner := sweepingRunner(t, failed.adapter)
+				var output bytes.Buffer
+				request := adapterRequest(t, &output)
+				request.OutputRemediation = remediation
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				_, err := runner.Run(ctx, request)
+				if ctx.Err() != nil {
+					t.Fatalf("the failed adapter ran until the deadline (%v)", err)
+				}
+				reported := diagnostics.Of(err)
+				if len(reported) != 1 || reported[0].Message != failed.message || reported[0].Remediation != remediation {
+					t.Fatalf("a failed adapter under %q reported %+v (%v)", remediation, reported, err)
+				}
+			})
+		}
 	}
 }
 

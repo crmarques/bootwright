@@ -37,4 +37,9 @@ type Area interface {
 	// It is presentation material only: nothing resolves a path through it, and
 	// an implementation with no host location reports the empty string.
 	Location() string
+	// Reference is this subtree's slash-separated path relative to the state
+	// root, which is how a structured result names a log. Like Location it is
+	// presentation material only, and an implementation that cannot place the
+	// subtree under the state root reports the empty string.
+	Reference() string
 }

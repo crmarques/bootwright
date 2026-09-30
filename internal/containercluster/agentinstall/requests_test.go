@@ -2,10 +2,13 @@ package agentinstall
 
 import (
 	"bytes"
+	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/machine"
 )
 
 // A frozen request is read back exactly as it was written, because the digest
@@ -66,6 +69,92 @@ func TestAnInstallRequestOfThePreviousVersionRefuses(t *testing.T) {
 	}
 	if _, err := DecodeInstallRequest(data); err == nil {
 		t.Fatal("an install request of the previous version was read as this one")
+	} else if code := refusalCode(t, err); code != "lifecycle.state" {
+		t.Fatalf("refusal = %s", code)
+	}
+}
+
+// Planning places both blocks on the controller arm alone: connection local
+// and a Machine name, nothing else. A frozen request placed anywhere else, or
+// carrying any other placement field, refuses through its apply, its destroy,
+// both observations and its removal planning before an adapter runs, so no
+// run crosses the adapter with a placement's identity or host key.
+func TestAFrozenPlacementOffTheControllerRefusesEveryVerb(t *testing.T) {
+	for name, placement := range map[string]machine.Placement{
+		"an SSH placement": {
+			Address: "192.0.2.2", Connection: machine.ConnectionSSH, KnownHostsRef: "hv-01-host-key",
+			Machine: "hv-01", Port: 22, PrivateKeyRef: "hv-01-key", User: "root",
+		},
+		"a local placement with SSH access": {
+			Connection: machine.ConnectionLocal, KnownHostsRef: "hv-01-host-key", Machine: "controller", PrivateKeyRef: "hv-01-key",
+		},
+		"a local placement with an address": {Address: "192.0.2.2", Connection: machine.ConnectionLocal, Machine: "controller"},
+		"a local placement with a port":     {Connection: machine.ConnectionLocal, Machine: "controller", Port: 22},
+		"a local placement with a user":     {Connection: machine.ConnectionLocal, Machine: "controller", User: "root"},
+		"a local placement that escalates":  {Connection: machine.ConnectionLocal, Machine: "controller", SudoPasswordRef: "controller-sudo"},
+		"a local placement naming no host":  {Connection: machine.ConnectionLocal},
+		"no connection":                     {Machine: "controller"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			media, mediaRequest := mediaExecution(t, testDigest)
+			mediaRequest.Placement = placement
+			media.Block.Request = frozen(t, mediaRequest)
+			install, installRequest := installExecution(t, singleNodeCatalog(), testDigest)
+			installRequest.Placement = placement
+			install.Block.Request = frozen(t, installRequest)
+			runner := &fakeRunner{}
+			mediaCapability, installCapability := NewMedia(runner), NewInstall(runner)
+			ctx := context.Background()
+			for verb, attempt := range map[string]func() error{
+				"media apply":           func() error { _, err := mediaCapability.Apply(ctx, media); return err },
+				"media destroy":         func() error { _, err := mediaCapability.Destroy(ctx, media); return err },
+				"media observation":     func() error { _, err := mediaCapability.Observe(ctx, media); return err },
+				"media removal reading": func() error { _, err := mediaCapability.ObserveRemoval(ctx, media); return err },
+				"media removal":         func() error { _, err := mediaCapability.Removal(ctx, media.Block); return err },
+				"install apply":         func() error { _, err := installCapability.Apply(ctx, install); return err },
+				"install destroy":       func() error { _, err := installCapability.Destroy(ctx, install); return err },
+				"install observation":   func() error { _, err := installCapability.Observe(ctx, install); return err },
+				"install removal reading": func() error {
+					_, err := installCapability.ObserveRemoval(ctx, install)
+					return err
+				},
+				"install removal": func() error { _, err := installCapability.Removal(ctx, install.Block); return err },
+			} {
+				subject, _, _ := strings.Cut(verb, " ")
+				reported := diagnostics.Of(attempt())
+				if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+					reported[0].Message != "the frozen cluster "+subject+" request is placed off the controller" {
+					t.Fatalf("%s: refusal = %#v", verb, reported)
+				}
+			}
+			if len(runner.requests) != 0 {
+				t.Fatalf("a request placed off the controller reached the adapter: %+v", runner.requests)
+			}
+		})
+	}
+}
+
+func frozen(t *testing.T, request interface{ Canonical() ([]byte, error) }) []byte {
+	t.Helper()
+	canonical, err := request.Canonical()
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	return canonical
+}
+
+// A media request frozen by the build before its install configuration named
+// the additional trust bundles is not read as this one, so its apply, and even
+// its destroy, run only on the build that registered it.
+func TestAMediaRequestOfThePreviousVersionRefuses(t *testing.T) {
+	media, _, _ := onlyRequests(t, externalCatalog())
+	media.Version = "cluster-media-agent-v4"
+	data, err := media.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeMediaRequest(data); err == nil {
+		t.Fatal("a media request of the previous version was read as this one")
 	} else if code := refusalCode(t, err); code != "lifecycle.state" {
 		t.Fatalf("refusal = %s", code)
 	}

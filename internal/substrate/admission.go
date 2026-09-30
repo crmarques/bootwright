@@ -41,6 +41,12 @@ func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 		// so effective state always names the path a physical machine is
 		// booted by rather than leaving a consumer to assume one.
 		arm = arm.WithPath(arm.Get("boot").Default("method", api.StringValue(BootRedfishVirtualMedia)), "boot")
+	case "libvirt":
+		// One listener has one spelling, so its endpoint, its socket key and
+		// every comparison with another listener read the text netip prints.
+		if address, err := netip.ParseAddr(arm.Get("bmcEmulationDefaults", "bindAddress").Text()); err == nil {
+			arm = arm.WithPath(api.StringValue(address.String()), "bmcEmulationDefaults", "bindAddress")
+		}
 	case "vsphere":
 		for _, side := range []string{"external", "internal"} {
 			values := arm.Get("nodeNetworking", side, "networkSubnetCidr")
@@ -285,14 +291,21 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 }
 
 // NameableListener reports whether an emulated BMC may listen on address: one
-// IPv4 unicast address that every hosted Machine's controller endpoint, and
-// the socket key its listener claims, can name. A wildcard, multicast or the
-// broadcast address names no one listener. Every IPv6 literal refuses, mapped
-// ones included, because the endpoint concatenates the address without the
-// brackets an IPv6 literal needs.
+// unicast address, in the spelling netip prints, that every hosted Machine's
+// controller endpoint, and the socket key its listener claims, can name. A
+// wildcard, multicast or the IPv4 broadcast address names no one listener. An
+// IPv6 address is bracketed in the endpoint, but a link-local one means nothing
+// without a zone, a zone has no spelling a controller endpoint admits, and an
+// IPv4-mapped one is a second spelling of an IPv4 socket, so each refuses.
 func NameableListener(address string) bool {
 	parsed, err := netip.ParseAddr(address)
-	return err == nil && parsed.Is4() && !parsed.IsUnspecified() && !parsed.IsMulticast() && parsed != netip.AddrFrom4([4]byte{255, 255, 255, 255})
+	if err != nil || parsed.String() != address || parsed.Zone() != "" || parsed.IsUnspecified() || parsed.IsMulticast() {
+		return false
+	}
+	if parsed.Is6() {
+		return !parsed.Is4In6() && !parsed.IsLinkLocalUnicast()
+	}
+	return parsed != netip.AddrFrom4([4]byte{255, 255, 255, 255})
 }
 
 // validateEmulatedListener judges only an address that is present: the schema
@@ -303,7 +316,7 @@ func validateEmulatedListener(bmc api.Value) []api.Issue {
 		return nil
 	}
 	return []api.Issue{issue("$.spec.libvirt.bmcEmulationDefaults.bindAddress",
-		"the emulated BMC listens on one IPv4 unicast address its controller endpoints can name; an IPv6 listener is refused until the endpoint brackets it")}
+		"the emulated BMC listens on one unicast address its controller endpoints can name: not unspecified, multicast or the IPv4 broadcast address, and not an IPv6 link-local, zoned or IPv4-mapped address")}
 }
 
 // requirePositiveCapacity refuses a profile size its arm cannot create a

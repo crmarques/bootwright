@@ -63,5 +63,6 @@
     outcome: unchanged
     digest: '{{ bootwright_substrate_physical_digest }}'
     observation: '{{ substrate_baremetal_machine_observed.observation }}'
+    endpoint: '{{ bootwright_substrate_physical_request.controller.endpoint }}'
     expected: '{{ substrate_baremetal_machine_expected }}'
   no_log: true

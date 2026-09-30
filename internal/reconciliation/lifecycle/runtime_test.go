@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
@@ -172,24 +173,30 @@ func TestABoundedConsumerWhoseHeldBindingCannotBeReopenedFails(t *testing.T) {
 }
 
 // A bounded run has no attempt log for its output to sit beside, so it keeps
-// one file of its own under an identity of its own. The file exists before the
-// adapter runs, and what the adapter printed is on disk once the call returns.
+// one file of its own under an identity of its own, names it relative to the
+// state root as a structured result does, and points an adapter failure at it.
+// The file exists before the adapter runs, and what the adapter printed is on
+// disk once the call returns.
 func TestWithRuntimeRetainsWhatItsAdapterPrinted(t *testing.T) {
 	h := newHarness(t)
 	var identity string
 	err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName},
 		func(ctx context.Context, runtime Runtime) error {
-			if len(runtime.Logs) != 1 || !strings.HasSuffix(runtime.Logs[0], "/"+runOutputName) {
+			const runs = "contexts/" + testContextName + "/state/runs/"
+			if len(runtime.Logs) != 1 || !strings.HasPrefix(runtime.Logs[0], runs) || !strings.HasSuffix(runtime.Logs[0], "/"+runOutputName) {
 				t.Fatalf("retained paths = %+v", runtime.Logs)
 			}
-			identity = strings.TrimSuffix(runtime.Logs[0], "/"+runOutputName)
+			identity = strings.TrimSuffix(strings.TrimPrefix(runtime.Logs[0], runs), "/"+runOutputName)
 			if !reconciliation.ValidRunID(identity) {
 				t.Fatalf("run identity = %q", identity)
 			}
 			if !strings.HasSuffix(runtime.LogLocation, identity) {
 				t.Fatalf("named location %q does not hold %q", runtime.LogLocation, identity)
 			}
-			if _, found, err := h.workspace.runArea.Read(ctx, runtime.Logs[0], 16); err != nil || !found {
+			if runtime.OutputRemediation != "read the adapter output retained in this run's "+runOutputName {
+				t.Fatalf("an adapter failure is pointed at %q", runtime.OutputRemediation)
+			}
+			if _, found, err := h.workspace.runArea.Read(ctx, identity+"/"+runOutputName, 16); err != nil || !found {
 				t.Fatalf("the retained file did not exist before the adapter ran: %t (%v)", found, err)
 			}
 			_, _ = runtime.Output.Write([]byte("what the adapter printed\n"))
@@ -205,6 +212,35 @@ func TestWithRuntimeRetainsWhatItsAdapterPrinted(t *testing.T) {
 	if h.workspace.area.written(identity) {
 		t.Fatal("a bounded run wrote into the operation records")
 	}
+}
+
+// A run whose runtime is refused admission never reaches its adapter, and no
+// result names a file for it, so it keeps none: the run area stays empty.
+func TestARunRefusedAdmissionRetainsNothing(t *testing.T) {
+	h := newHarness(t)
+	refusal := errors.New("a native package transaction prevents coherent dependency execution")
+	h.service.guard = refusingGuard{refusal}
+	err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName},
+		func(context.Context, Runtime) error {
+			t.Fatal("a run refused admission reached its call")
+			return nil
+		})
+	if !errors.Is(err, refusal) {
+		t.Fatalf("the refused run reported %v", err)
+	}
+	h.workspace.runArea.mutex.Lock()
+	defer h.workspace.runArea.mutex.Unlock()
+	if len(h.workspace.runArea.files) != 0 || len(h.workspace.runArea.directories) != 0 {
+		t.Fatalf("a run refused admission left %v and %v", h.workspace.runArea.files, h.workspace.runArea.directories)
+	}
+}
+
+// refusingGuard refuses to admit the private runtime, as a native package
+// transaction holding its lock does.
+type refusingGuard struct{ err error }
+
+func (g refusingGuard) WithPython(context.Context, prerequisites.BundleArea, prerequisites.ExecutionRequirement, func(prerequisites.PythonLaunch, func() error) error) error {
+	return g.err
 }
 
 // A bounded operation is not a lifecycle operation: it registers nothing, so it

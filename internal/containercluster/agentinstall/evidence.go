@@ -216,9 +216,11 @@ func ValidateInstallReleased(data []byte, digest string) error {
 
 // ValidateInstallReleasePartial accepts evidence only when it positively
 // proves a removal part way through: at least one node presents boot media and
-// every such node presents the image this cluster published. A node presenting
-// any other image may belong to another installation, so it is never partial.
-func ValidateInstallReleasePartial(data []byte, digest string) error {
+// every such node is one of the Machines this request declares. The removal
+// ejects whatever each of those nodes presents, this cluster's image or any
+// other, so repeating it converges either; a name outside them is no node this
+// removal acts on.
+func ValidateInstallReleasePartial(data []byte, request InstallRequest, digest string) error {
 	evidence, err := decodeInstallEvidence(data, digest)
 	if err != nil {
 		return err
@@ -226,9 +228,10 @@ func ValidateInstallReleasePartial(data []byte, digest string) error {
 	if len(evidence.Media) == 0 {
 		return refusal("lifecycle.state", "no node presents boot media", "")
 	}
+	declared := request.Machines()
 	for _, node := range evidence.Media {
-		if !slices.Contains(evidence.OwnMedia, node) {
-			return refusal("lifecycle.state", "a node presents an image this cluster did not publish", "")
+		if !slices.Contains(declared, node) {
+			return refusal("lifecycle.state", "a Machine presenting boot media is not one of this cluster's nodes", "")
 		}
 	}
 	return nil

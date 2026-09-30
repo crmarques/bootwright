@@ -11,6 +11,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type resolvingFixture struct {
@@ -19,22 +20,23 @@ type resolvingFixture struct {
 	native                                   NativeResolvedPlan
 	bootstrapCalls, nativeCalls, inspections int
 	bootstrapError, nativeError              error
+	bootstrapWarnings                        []diagnostics.Diagnostic
 	beforeResolve                            func()
 	installedRelease                         string
 }
 
 type resolvingNative struct{ owner *resolvingFixture }
 
-func (f *resolvingFixture) Resolve(_ context.Context, platform Platform, versions controller.DependencyVersions, _ SetupEgress) (BootstrapDefinition, error) {
+func (f *resolvingFixture) Resolve(_ context.Context, platform Platform, versions controller.DependencyVersions, _ SetupEgress) (BootstrapDefinition, []diagnostics.Diagnostic, error) {
 	f.bootstrapCalls++
 	f.owner.events = append(f.owner.events, "resolve-bootstrap")
 	if f.beforeResolve != nil {
 		f.beforeResolve()
 	}
 	if platform != f.bootstrap.Platform || versions.Python != f.bootstrap.PythonIntent || versions.Ansible != f.bootstrap.AnsibleIntent {
-		return BootstrapDefinition{}, errors.New("wrong bootstrap version intent")
+		return BootstrapDefinition{}, nil, errors.New("wrong bootstrap version intent")
 	}
-	return f.bootstrap, f.bootstrapError
+	return f.bootstrap, f.bootstrapWarnings, f.bootstrapError
 }
 
 func (n resolvingNative) Resolve(_ context.Context, platform Platform, requirements NativeRequirements, versions controller.DependencyVersions, _ SetupEgress) (NativeResolvedPlan, error) {
@@ -115,6 +117,49 @@ func wireResolution(t *testing.T, f *fixture) (*fixture, *resolvingFixture) {
 	f.service.options.NativeInspector = r
 	f.resolution = r
 	return f, r
+}
+
+// A warning the resolution returns reaches the result of the setup that
+// resolved, whether it completes or stops after its plan, and a later setup
+// that reuses the retained resolution consults no publisher and reports none.
+func TestAResolutionWarningReachesTheSetupResult(t *testing.T) {
+	warning := diagnostics.Diagnostic{Severity: "warning", Code: "controller.unsupported", Message: "the publisher's Index API page is version 1.5, newer than the 1.4 this build reads"}
+	f, r := dynamicFixture(t)
+	r.bootstrapWarnings = []diagnostics.Diagnostic{warning}
+	f.confirmationError = failure("controller.setup", "setup was declined", "")
+	report, err := f.service.Setup(context.Background(), SetupRequest{})
+	if err == nil || report == nil || report.Outcome != "planned" || !reflect.DeepEqual(report.Warnings, r.bootstrapWarnings) {
+		t.Fatalf("a declined setup lost its resolution warning: %#v %v", report, err)
+	}
+	f.confirmationError = nil
+	report, err = f.service.Setup(context.Background(), SetupRequest{})
+	if err != nil || report.Outcome != "changed" || r.bootstrapCalls != 2 || !reflect.DeepEqual(report.Warnings, r.bootstrapWarnings) {
+		t.Fatalf("a completed setup lost its resolution warning: %#v %v", report, err)
+	}
+	report, err = f.service.Setup(context.Background(), SetupRequest{})
+	if err != nil || report.Outcome != "unchanged" || r.bootstrapCalls != 2 || len(report.Warnings) != 0 {
+		t.Fatalf("a retained resolution repeated a warning it did not read: %#v %v", report, err)
+	}
+}
+
+// A setup that its own dependency resolution stops, before any plan, still
+// reports the warning of what it read and did not refuse.
+func TestAResolutionWarningReachesTheResultOfASetupItStops(t *testing.T) {
+	warning := diagnostics.Diagnostic{Severity: "warning", Code: "controller.unsupported", Message: "the publisher's Index API page is version 1.5, newer than the 1.4 this build reads"}
+	for _, kind := range []string{"bootstrap", "native"} {
+		f, r := dynamicFixture(t)
+		r.bootstrapWarnings = []diagnostics.Diagnostic{warning}
+		stopped := errors.New(kind + " resolution unavailable")
+		if kind == "bootstrap" {
+			r.bootstrapError = stopped
+		} else {
+			r.nativeError = stopped
+		}
+		report, err := f.service.Setup(context.Background(), SetupRequest{})
+		if !errors.Is(err, stopped) || report == nil || report.Outcome != "planned" || report.PlanPresented || !reflect.DeepEqual(report.Warnings, r.bootstrapWarnings) {
+			t.Fatalf("a setup its %s resolution stopped lost the resolution warning: %#v %v", kind, report, err)
+		}
+	}
 }
 
 func TestLatestSetupResolvesOnceAndReusesRetainedNoop(t *testing.T) {

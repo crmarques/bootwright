@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func (s Service) selectedResolution(current inspection, requirements NativeRequirements, frozen []inspectionResolution) (Definition, bool, error) {
@@ -162,7 +163,9 @@ func (s Service) resolveDependencies(ctx context.Context, before inspection) (in
 	} else {
 		err := s.resolutionStep(ctx, &before.report, step, total, "Python and Ansible", func() (string, error) {
 			var err error
-			bootstrap, err = s.options.Bootstrap.Resolve(ctx, before.platform, before.selection.Versions(), before.route())
+			var warnings []diagnostics.Diagnostic
+			bootstrap, warnings, err = s.options.Bootstrap.Resolve(ctx, before.platform, before.selection.Versions(), before.route())
+			before.report.Warnings = append(before.report.Warnings, warnings...)
 			return "Python " + bootstrap.PythonVersion + ", Ansible " + bootstrap.AnsibleVersion, err
 		})
 		if err != nil {
@@ -267,6 +270,7 @@ func (s Service) rebind(ctx context.Context, before inspection, definition Defin
 			return err
 		}
 		after.report.ProgressPresented = before.report.ProgressPresented
+		after.report.Warnings = before.report.Warnings
 		if !before.host.Equal(after.host) || before.selection.Versions() != after.selection.Versions() || before.view.State.Receipt.ID != after.view.State.Receipt.ID || before.view.State.Receipt.Status != after.view.State.Receipt.Status {
 			return failure("controller.conflict", "controller requirements changed during dependency resolution", setupCommand())
 		}

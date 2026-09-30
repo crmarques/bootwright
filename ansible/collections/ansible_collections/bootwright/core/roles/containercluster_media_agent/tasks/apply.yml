@@ -2,7 +2,7 @@
 - name: Validate the frozen boot-media request
   ansible.builtin.assert:
     that:
-      - bootwright_cluster_media_request.version == 'cluster-media-agent-v4'
+      - bootwright_cluster_media_request.version == 'cluster-media-agent-v5'
       - bootwright_cluster_media_request.image.path.startswith('/var/lib/bootwright-services/')
       - bootwright_cluster_media_request.workRoot.startswith('/var/lib/bootwright-clusters/')
       - bootwright_cluster_media_digest is match('[0-9a-f]{64}')

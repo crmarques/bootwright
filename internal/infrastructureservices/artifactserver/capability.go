@@ -58,7 +58,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			ID:             request.Identity.Block,
 			Description:    description(input.Verb, request),
 			Stage:          reconciliation.StageInfraComponents,
-			Requires:       managedservice.BridgeRequirements(catalog, request.Placement.Machine, request.BindAddress),
+			Requires:       managedservice.BridgeRequirements(catalog, request.Placement.Machine, probedAddresses(request)),
 			Impacts:        impacts(input.Verb, request),
 			Groups:         groups(input.Verb, request),
 			Kind:           Kind,
@@ -180,8 +180,10 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 
 // Observe is read-only. Live state matching the frozen request in full is
 // positive completion; nothing present is positive no effect; this context's
-// own server part way realized is positive partial; anything else, including
-// an observation that could not be made, stays unknown.
+// own server part way realized, a present one whose listener stays silent
+// included, is positive partial; anything else, including an observation that
+// could not be made, stays unknown. A fresh destroy over an incomplete apply
+// resolves the apply's block through this reading too.
 func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	return c.observe(ctx, execution, func(evidence []byte, request Request, digest, fingerprint string) reconciliation.EffectState {
 		switch {
@@ -189,7 +191,7 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 			return reconciliation.EffectCompleted
 		case ValidateAbsence(evidence, digest) == nil:
 			return reconciliation.EffectNoEffect
-		case ValidatePartial(evidence, digest) == nil:
+		case ValidatePartial(evidence, request, digest, fingerprint) == nil:
 			return reconciliation.EffectPartial
 		}
 		return reconciliation.EffectUnknown

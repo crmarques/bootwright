@@ -19,7 +19,9 @@ a value, while deployment requires the host itself. One realization edge does
 exist: a service whose bind address is the host address of a
 [managed libvirt attachment](substrates.md#provider-host-realization) on its
 placement Machine names that provider as a requirement, because the socket
-cannot bind before the bridge exists.
+cannot bind before the bridge exists. A service bound to a wildcard names the
+provider of each declared endpoint address that is such a host address,
+because its readiness probes that address, which cannot answer before then.
 
 An unsupported required capability refuses before operation registration, with one
 diagnostic naming every unsupported object, the reason, and a safe next action.
@@ -90,6 +92,14 @@ leaves its reservations held, and its context protected by running
 releases them, or the context's next apply releases them as it finishes the
 removal they sit beside or replaces them.
 
+One context's own exclusive `socket:` keys are compared by the same rule while
+it plans a fresh apply: two of its claims whose sockets conflict refuse
+`api.invariant` before registration, naming each claim's kind, service and
+socket, because the second could never listen. One claim's keys never conflict
+with each other, and no other key class is compared within a context, because
+one context's claims may share a key by design, such as the `path:` of a
+package tree two installations of one profile publish.
+
 Dependency readiness never establishes service ownership, and
 [controller setup](controller.md#host-identity-and-shared-prerequisites)
 reserves nothing.
@@ -133,7 +143,10 @@ completes a handshake whose presented leaf certificate digest equals the bound
 certificate's; and the listener answers one bounded HTTP status line. A
 certificate mismatch or a refused connection after the service reports started
 is a definite failure. A socket that never answers within the bounded readiness
-window is unknown, not failure.
+window is unknown, not failure. A listener left unproved is reported with its
+last attempt's cause: the error's name, with the system's number and message
+when it carries them, and a timeout named `TimeoutError` on every Python a
+managed host may run.
 
 **Replay.** An apply whose frozen request already matches the live host reports
 `completed` with the same completion evidence and no change. The differences it
@@ -154,8 +167,14 @@ and no unrelated file.
 exact identity. Live state matching the frozen request in full is positive
 completion; nothing present, with a before-state that recorded nothing, is
 positive no effect; and any of the unit, container or content root present
-without the whole is a positive partial realization, which the next attempt
-converges. A removal's resolution reads the same observation for what the
+without the whole, its listeners' answers included, is a positive partial
+realization, which the next attempt converges. A service all present whose
+listener does not answer, or presents another certificate, is therefore this
+context's own service not yet ready rather than an unproved effect, so a fresh
+`destroy` that resolves an incomplete apply's block through this observation
+goes on to remove it. Presence evidence claiming the postcondition without the
+unit active and the content root present contradicts itself and stays unknown.
+A removal's resolution reads the same observation for what the
 removal takes back: nothing present is its completion; the unit active, the
 container of the frozen image and the content root all present is positive no
 effect; and any of the unit, container or content root present without all of
@@ -297,7 +316,8 @@ when the bind address is a wildcard. A proxy answers a bounded HTTP request
 with a well-formed status line; a resolver answers one of its own records over
 both UDP and TCP; a time service returns a server-mode reply, whose stratum may
 show it unsynchronized without being a failure. An address that never answers
-within the bounded readiness window is unknown, not failure.
+within the bounded readiness window is unknown, not failure, and is reported
+with its cause as [an unproved listener](#managed-artifact-serving) is.
 
 **Replay, inverse and unknown resolution.** Each follows the
 [artifact server's](#managed-artifact-serving) rules above.

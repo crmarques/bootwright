@@ -18,6 +18,10 @@ OUTCOMES = ("changed", "unchanged")
 POWER_STATES = ("", "On", "Off")
 MAX_MARKER = 4096
 MAX_HOST_KEY = 4096
+# Every piece of content this installation publishes, as its inspection names
+# it; treeContent is anything left at the package tree's path, which a removal
+# stopped part way can leave without the marker that makes the tree complete.
+CONTENT = ("image", "private", "tree", "treeContent")
 HEX = set("0123456789abcdef")
 
 
@@ -52,6 +56,7 @@ def presence(arguments, request_digest):
         "reachable": bool(arguments.get("reachable")),
         "request": digest(request_digest),
         "tree": bool(observation.get("tree")),
+        "treeContent": bool(observation.get("treeContent")),
     }
     evidence["postcondition"] = bool(
         evidence["marker"] and evidence["hostKey"] and evidence["address"]
@@ -68,7 +73,7 @@ def remaining(arguments):
     that `no_log` would otherwise censor along with the evidence.
     """
     observation = arguments.get("observation") or {}
-    return [name for name in ("image", "private", "tree") if observation.get(name)]
+    return [name for name in CONTENT if observation.get(name)]
 
 
 def unproved(evidence):
@@ -89,7 +94,7 @@ def unproved(evidence):
 
 def absence(arguments, request_digest):
     observation = arguments.get("observation") or {}
-    gone = not any(observation.get(name) for name in ("image", "private", "tree"))
+    gone = not any(observation.get(name) for name in CONTENT)
     return {
         "absent": True,
         "address": "",
@@ -103,6 +108,7 @@ def absence(arguments, request_digest):
         "reachable": False,
         "request": digest(request_digest),
         "tree": False,
+        "treeContent": False,
     }
 
 

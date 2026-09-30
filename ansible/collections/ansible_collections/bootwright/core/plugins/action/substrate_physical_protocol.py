@@ -20,6 +20,7 @@ GROUP_STATUSES = ("running", "ok", "failed", "skipped")
 OUTCOMES = ("changed", "unchanged")
 POWER_STATES = ("", "On", "Off")
 MAX_ADDRESSES = 64
+IDENTITY_LIMIT = 128
 HEX = set("0123456789abcdef")
 
 
@@ -36,6 +37,28 @@ def bounded(value, limit=128):
     return value
 
 
+class UnprovableIdentity(ValueError):
+    """A reported UUID or serial the evidence may not carry, named by its field
+    and its controller and never by its value."""
+
+
+def identity(value, field, endpoint):
+    """A reported UUID or serial as a proof records it and a pin later carries it.
+
+    It is what a management controller reported, trimmed of surrounding space,
+    and every later comparison and refusal repeats it, so a value longer than
+    the bound or holding any character that is not printable is refused.
+    """
+    value = str(value or "").strip()
+    if len(value) > IDENTITY_LIMIT:
+        raise UnprovableIdentity("the management controller at %s reported a %s longer than %d characters"
+                                 % (endpoint, field, IDENTITY_LIMIT))
+    if not value.isprintable():
+        raise UnprovableIdentity("the management controller at %s reported a %s holding a character that is not "
+                                 "printable" % (endpoint, field))
+    return value
+
+
 def presence(arguments, request_digest):
     observation = arguments.get("observation") or {}
     addresses = observation.get("addresses") or []
@@ -44,6 +67,13 @@ def presence(arguments, request_digest):
     power = observation.get("power")
     if power not in POWER_STATES:
         raise ValueError("power state")
+    # A refusal of the reported identity names this controller, so a
+    # publication that lost it publishes nothing rather than name none.
+    endpoint = str(arguments.get("endpoint") or "")
+    if not endpoint.strip():
+        raise ValueError("endpoint")
+    uuid = identity(observation.get("uuid"), "UUID", endpoint)
+    serial = identity(observation.get("serial"), "SerialNumber", endpoint)
     evidence = {
         "absent": False,
         "addresses": sorted({bounded(address, 32) for address in addresses}),
@@ -52,8 +82,8 @@ def presence(arguments, request_digest):
         "postcondition": False,
         "power": str(power),
         "request": digest(request_digest),
-        "serial": bounded(observation.get("serial")),
-        "uuid": bounded(observation.get("uuid")),
+        "serial": serial,
+        "uuid": uuid,
     }
     expected = {bounded(address, 32) for address in (arguments.get("expected") or [])}
     evidence["postcondition"] = bool(
@@ -144,5 +174,7 @@ class ActionModule(ActionBase):
                 }
             emit({"phase": "completed", "outcome": outcome, "evidence": evidence})
             return {"changed": False}
+        except UnprovableIdentity as refused:
+            return {"failed": True, "msg": str(refused)}
         except (ValueError, TypeError, OSError):
             return {"failed": True, "msg": "the physical machine result could not be published"}

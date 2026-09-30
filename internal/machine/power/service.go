@@ -98,7 +98,8 @@ func (s Service) Read(ctx context.Context, contextName string, names []string) (
 	// A reading names no retained output. An inspection that succeeds prints a
 	// table, and one that refuses reports its own diagnostic, so a path to an
 	// adapter log would be noise in the one case and the wrong answer in the
-	// other: nothing here is an operation an operator resumes or inspects.
+	// other: nothing here is an operation an operator resumes or inspects. Its
+	// request therefore carries no remediation pointing at that output.
 	err = s.runtime.WithRuntime(ctx, lifecycle.RuntimeRequest{ContextName: name, Secrets: references}, func(inner context.Context, runtime lifecycle.Runtime) error {
 		for _, survey := range surveys {
 			answered, err := s.observe(inner, runtime, survey)
@@ -270,19 +271,20 @@ func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, dig
 			lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: frozen.Controller.TrustBundleRef, Variable: "controllerCA"})
 	}
 	return lifecycle.RunRequest{
-		Implementation: Implementation,
-		Operation:      Operation,
-		Variable:       Variable,
-		Digest:         digest,
-		Canonical:      canonical,
-		Placement:      frozen.Placement,
-		Materials:      append(materials, lifecycle.Materials(frozen.Placement)...),
-		MaterialValues: pinValues(pin),
-		Launch:         runtime.Launch,
-		Bundle:         runtime.Bundle,
-		Area:           runtime.Area,
-		Material:       runtime.Material,
-		Output:         runtime.Output,
+		Implementation:    Implementation,
+		Operation:         Operation,
+		Variable:          Variable,
+		Digest:            digest,
+		Canonical:         canonical,
+		Placement:         frozen.Placement,
+		Materials:         append(materials, lifecycle.Materials(frozen.Placement)...),
+		MaterialValues:    pinValues(pin),
+		Launch:            runtime.Launch,
+		Bundle:            runtime.Bundle,
+		Area:              runtime.Area,
+		Material:          runtime.Material,
+		Output:            runtime.Output,
+		OutputRemediation: runtime.OutputRemediation,
 	}
 }
 

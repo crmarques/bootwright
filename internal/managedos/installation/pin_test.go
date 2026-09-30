@@ -50,7 +50,7 @@ func physicalRun(t *testing.T, operation string, capability Capability, physical
 	marker, _ := MarkerFor(request, "digest")
 	runner := &fakeRunner{}
 	capability.runner = runner
-	_, err := capability.run(context.Background(), call, operation, request, marker)
+	_, err := capability.run(context.Background(), call, operation, request, marker, "")
 	if len(runner.requests) == 0 {
 		return nil, runner, err
 	}

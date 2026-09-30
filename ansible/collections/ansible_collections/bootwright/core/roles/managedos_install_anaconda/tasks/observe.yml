@@ -17,6 +17,8 @@
     request: '{{ bootwright_os_install_request }}'
   register: managedos_install_anaconda_observed
 
+# A removal's resolution reads only the published content, which is all the
+# removal takes back, so none of the machine reads below runs for it.
 - name: Create the work directory an identity read may need
   ansible.builtin.file:
     path: '{{ managedos_install_anaconda_work }}'
@@ -25,9 +27,11 @@
     group: root
     mode: '0700'
   changed_when: false
+  when: not (managedos_install_anaconda_observes_removal | bool)
 
 - name: Read the machine through its own identity channel
   ansible.builtin.include_tasks: identity.yml
+  when: not (managedos_install_anaconda_observes_removal | bool)
 
 # An observation resolves a completed apply, so it has to prove what the apply
 # proves. Reading the marker and the host key says the disk was written; only
@@ -38,7 +42,9 @@
   vars:
     managedos_install_anaconda_reachable_retries: 1
     managedos_install_anaconda_reachable_pause: 1
-  when: managedos_install_anaconda_host_key | default('') | trim | length > 0
+  when:
+    - not (managedos_install_anaconda_observes_removal | bool)
+    - managedos_install_anaconda_host_key | default('') | trim | length > 0
 
 - name: Read the power state and media its controller reports
   bootwright.core.redfish_system_read:
@@ -50,8 +56,12 @@
     media: true
   register: managedos_install_anaconda_controller
   failed_when: false
+  when: not (managedos_install_anaconda_observes_removal | bool)
   no_log: true
 
+# Always the presence form, which carries the power the controller reported:
+# a powered-off machine holding no marker with nothing published is how an
+# apply stopped before it published anything proves it had no effect.
 - name: Publish bounded installation observation evidence
   bootwright.core.managedos_install_protocol:
     phase: completed
@@ -65,9 +75,4 @@
     address: '{{ bootwright_os_install_request.address }}'
     media: '{{ managedos_install_anaconda_controller.media | default("") }}'
     power: '{{ managedos_install_anaconda_controller.power | default("") }}'
-    removed: >-
-      {{ not managedos_install_anaconda_observed.observation.image
-         and not managedos_install_anaconda_observed.observation.tree
-         and not managedos_install_anaconda_observed.observation.private
-         and managedos_install_anaconda_marker | default('') | length == 0 }}
   no_log: true

@@ -29,8 +29,9 @@ const (
 )
 
 // installConfig projects the cluster's install configuration. It carries no
-// secret value: the pull secret and the cluster key are named in the request
-// and substituted by the attempt that writes this document.
+// secret value: the pull secret, the cluster key and the additional trust
+// bundles the cluster selects are named in the request and substituted by the
+// attempt that writes this document.
 func installConfig(catalog api.Catalog, cluster api.Object, nodes []nodeProjection) (map[string]any, error) {
 	zone := containerClusterZone(catalog)
 	if zone == "" {
@@ -61,6 +62,9 @@ func installConfig(catalog api.Catalog, cluster api.Object, nodes []nodeProjecti
 		"platform":   platform,
 		"pullSecret": placeholderPullToken,
 		"sshKey":     placeholderPullToken,
+	}
+	if len(cluster.Spec().Get("install", "additionalTrustBundleRefs").Strings()) != 0 {
+		config["additionalTrustBundle"] = placeholderPullToken
 	}
 	return config, nil
 }

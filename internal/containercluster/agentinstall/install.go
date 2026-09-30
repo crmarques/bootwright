@@ -179,7 +179,7 @@ func (c InstallCapability) mutate(ctx context.Context, execution lifecycle.Execu
 	if operation == "apply" {
 		outputs = kubeconfigOutputs()
 	}
-	result, err := c.runWithOutputs(ctx, execution, operation, request, outputs)
+	result, err := c.runWithOutputs(ctx, execution, operation, request, outputs, "")
 	if err != nil {
 		lifecycle.ClearProduced(result.Produced)
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
@@ -231,7 +231,7 @@ func offered(produced []lifecycle.Produced, proved bool) []lifecycle.Produced {
 // effect; that same cluster answering with the completion not yet true is a
 // positive partial realization the next attempt converges.
 func (c InstallCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, kubeconfigOutputs(), func(evidence []byte, request InstallRequest, digest string) reconciliation.EffectState {
+	return c.observe(ctx, execution, "", kubeconfigOutputs(), func(evidence []byte, request InstallRequest, digest string) reconciliation.EffectState {
 		switch {
 		case ValidateInstallPresence(evidence, request, digest) == nil:
 			return reconciliation.EffectCompleted
@@ -244,34 +244,41 @@ func (c InstallCapability) Observe(ctx context.Context, execution lifecycle.Exec
 	})
 }
 
-// ObserveRemoval reads the same observation for what a removal proves. The
-// removal takes back the media each node presents, and a completed
-// installation already presents none, so no node presenting media is its
-// completion whatever answers; only this cluster's own image on some nodes is
-// a positive partial removal; and a foreign image stays unknown.
+// observesRemoval scopes an observation to what a removal takes back: the
+// adapter reads the media each node's controller presents, and not the
+// cluster, which a removal leaves running.
+const observesRemoval = "removal"
+
+// ObserveRemoval reads, for what a removal proves, an observation of the
+// media each node presents. The removal ejects whatever each node presents,
+// and a completed installation already presents none, so no node presenting
+// media is its completion; one of this cluster's own nodes presenting any
+// image, this cluster's or another, is a positive partial removal the next
+// attempt converges; and a node that cannot be read fails the observation,
+// which stays unknown.
 func (c InstallCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, nil, func(evidence []byte, _ InstallRequest, digest string) reconciliation.EffectState {
+	return c.observe(ctx, execution, observesRemoval, nil, func(evidence []byte, request InstallRequest, digest string) reconciliation.EffectState {
 		switch {
 		case ValidateInstallReleased(evidence, digest) == nil:
 			return reconciliation.EffectCompleted
-		case ValidateInstallReleasePartial(evidence, digest) == nil:
+		case ValidateInstallReleasePartial(evidence, request, digest) == nil:
 			return reconciliation.EffectPartial
 		}
 		return reconciliation.EffectUnknown
 	})
 }
 
-// observe runs the one read-only observation both resolutions share and reads
-// its evidence for the verb the block was frozen for. Only the apply's
+// observe runs the read-only observation operation, scoped by observes, and
+// reads its evidence for the verb the block was frozen for. Only the apply's
 // observation declares the administrator access, and offers it only when it
 // reads the installation complete.
-func (c InstallCapability) observe(ctx context.Context, execution lifecycle.Execution, outputs []lifecycle.OutputFile, read func([]byte, InstallRequest, string) reconciliation.EffectState) (lifecycle.Observation, error) {
+func (c InstallCapability) observe(ctx context.Context, execution lifecycle.Execution, observes string, outputs []lifecycle.OutputFile, read func([]byte, InstallRequest, string) reconciliation.EffectState) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, err := c.prepare(ctx, execution, "observe")
 	if err != nil {
 		return unknown, err
 	}
-	result, err := c.runWithOutputs(ctx, execution, "observe", request, outputs)
+	result, err := c.runWithOutputs(ctx, execution, "observe", request, outputs, observes)
 	if err != nil {
 		lifecycle.ClearProduced(result.Produced)
 		recordObservationFailure(ctx, execution, err)
@@ -336,15 +343,18 @@ func refusedContinuation(request InstallRequest) error {
 }
 
 func (c InstallCapability) run(ctx context.Context, execution lifecycle.Execution, operation string, request InstallRequest) (lifecycle.RunResult, error) {
-	return c.runWithOutputs(ctx, execution, operation, request, nil)
+	return c.runWithOutputs(ctx, execution, operation, request, nil, "")
 }
 
-func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecycle.Execution, operation string, request InstallRequest, outputs []lifecycle.OutputFile) (lifecycle.RunResult, error) {
+func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecycle.Execution, operation string, request InstallRequest, outputs []lifecycle.OutputFile, observes string) (lifecycle.RunResult, error) {
 	canonical, err := request.Canonical()
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
 	values := map[string]string{}
+	if observes != "" {
+		values["observes"] = observes
+	}
 	for executable, tool := range map[string]Tool{
 		installerTool: request.Tool,
 		"oc":          {Compatibility: request.Release.Distribution, Kind: clientTool, Version: request.Release.Version},

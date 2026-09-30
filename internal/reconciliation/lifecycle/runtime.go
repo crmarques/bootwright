@@ -34,13 +34,16 @@ type Runtime struct {
 	Area     prerequisites.BundleArea
 	Material map[string]secrets.Material
 	// Output retains what this run's adapter prints. LogLocation names the
-	// directory holding it on this host, and Logs names the same file inside
-	// the context's own state. A caller hands Output to the adapter and names
-	// both in its result; nothing reads them back, and a retention fault never
-	// changes what the run reports.
-	Output      prerequisites.RunOutput
-	LogLocation string
-	Logs        []string
+	// directory holding it on this host, and Logs names the same file relative
+	// to the state root. A caller hands Output to the adapter and names both in
+	// its result; nothing reads them back, and a retention fault never changes
+	// what the run reports. OutputRemediation is what an adapter failure its
+	// output explains tells an operator to read, for a caller that names the
+	// file; one that names none leaves it out of its request.
+	Output            prerequisites.RunOutput
+	LogLocation       string
+	Logs              []string
+	OutputRemediation string
 }
 
 // WithRuntime lends the controller's approved execution boundary to one
@@ -77,46 +80,58 @@ func (s Service) WithRuntime(ctx context.Context, request RuntimeRequest, call f
 		if err != nil {
 			return err
 		}
-		output, target, directory, err := s.retain(ctx, view)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = output.Close(ctx) }()
+		// The file is kept only once the runtime is admitted, which is where a
+		// caller first names it, so a run refused before then leaves no unnamed
+		// file behind.
 		return s.guard.WithPython(ctx, approved.area, approved.requirement, func(launch prerequisites.PythonLaunch, _ func() error) error {
+			output, logs, directory, err := s.retain(ctx, view)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = output.Close(ctx) }()
 			return call(ctx, Runtime{
 				Context: view.Identity(), Launch: launch, Bundle: approved.location, Area: approved.area, Material: material,
-				Output: output, LogLocation: directory, Logs: []string{target},
+				Output: output, LogLocation: directory, Logs: logs, OutputRemediation: runOutputRemediation,
 			})
 		})
 	})
 }
 
+// runOutputRemediation points an adapter failure at the one file a bounded run
+// keeps, which has no attempt log to sit beside.
+const runOutputRemediation = "read the adapter output retained in this run's " + runOutputName
+
 // retain opens the file this run's adapter output is kept in, under an
-// identity of its own. The directory exists before the call, so the path a
-// result names is one an operator can open while the run is still going.
-func (s Service) retain(ctx context.Context, view RunView) (*operationstore.AdapterOutput, string, string, error) {
+// identity of its own, and names it relative to the state root. The directory
+// exists before the call, so the path a result names is one an operator can
+// open while the run is still going.
+func (s Service) retain(ctx context.Context, view RunView) (*operationstore.AdapterOutput, []string, string, error) {
 	area := view.Runs()
 	identity, err := reconciliation.AllocateRunID(s.options.Entropy, func(candidate string) bool {
 		_, found, _ := area.Read(ctx, path.Join(candidate, runOutputName), 1)
 		return found
 	})
 	if err != nil {
-		return nil, "", "", err
+		return nil, nil, "", err
 	}
 	target := path.Join(identity, runOutputName)
 	if err := area.EnsureDirectory(ctx, identity); err != nil {
-		return nil, "", "", err
+		return nil, nil, "", err
 	}
 	// Exclusive creation is what proves the name is this run's own, and it
 	// leaves the file an operator was told about already there to open.
 	if err := area.WriteExclusive(ctx, target, nil); err != nil {
-		return nil, "", "", err
+		return nil, nil, "", err
 	}
 	directory := area.Location()
 	if directory != "" {
 		directory = path.Join(directory, identity)
 	}
-	return s.options.Operations(area).OpenAdapterOutput(ctx, target), target, directory, nil
+	logs := []string{}
+	if reference := area.Reference(); reference != "" {
+		logs = append(logs, path.Join(reference, target))
+	}
+	return s.options.Operations(area).OpenAdapterOutput(ctx, target), logs, directory, nil
 }
 
 // MaterialRequest names the context whose Secret declarations one bounded

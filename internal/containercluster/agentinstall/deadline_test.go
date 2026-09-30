@@ -4,10 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"go.yaml.in/yaml/v3"
+
+	"github.com/crmarques/bootwright/ansible"
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -174,26 +180,279 @@ func TestTheDeadlineFollowsTheBudgetsTheRequestFroze(t *testing.T) {
 	}
 }
 
-// Each node adds to the installation's deadline the bound of every call the
-// installation makes to its controller outside the boot budget: its media read
-// in each of the two state reads (state.yml), and the eject and the disk
-// selection that release its media (release.yml, through the substrate's
-// boot_disk entry point, which it tells to power nothing on). A margin shorter
-// than those calls lets the runner kill an installation still inside them, so
-// the figures the specification states are the ones derived here.
-func TestEachNodeAddsTheBoundOfEveryControllerCallOutsideTheBootBudget(t *testing.T) {
-	calls := 2*substrate.ControllerMediaReadBound + substrate.ControllerEjectBound + substrate.ControllerBootSelectionBound
-	if nodeMargin < calls {
-		t.Fatalf("each node adds %s, less than the %s its controller calls may take", nodeMargin, calls)
+// collectionRoles is where the embedded collection keeps every role, and
+// installRole the one each install entry point runs.
+const (
+	collectionRoles = "collections/ansible_collections/bootwright/core/roles/"
+	installRole     = "containercluster_install_agent"
+)
+
+// roleTasks is one task file of a role in the embedded collection.
+func roleTasks(t *testing.T, role, file string) []map[string]any {
+	t.Helper()
+	path := collectionRoles + role + "/tasks/" + file
+	data, ok := ansible.Assets()[path]
+	if !ok {
+		t.Fatalf("the embedded collection carries no %s", path)
+	}
+	var tasks []map[string]any
+	if err := yaml.Unmarshal(data, &tasks); err != nil {
+		t.Fatalf("%s: %v", path, err)
+	}
+	return tasks
+}
+
+// controllerCall is one call a task makes to a node's management controller,
+// and the bound the substrate states for it.
+type controllerCall struct {
+	name  string
+	bound time.Duration
+}
+
+// controllerCallOf is the controller call one task makes, if it makes one. A
+// call whose bound the substrate does not state, because it polls more than
+// the default, repeats itself or settles the device's trust, fails the test.
+func controllerCallOf(t *testing.T, where string, task map[string]any) (controllerCall, bool) {
+	t.Helper()
+	call, found := controllerCall{}, false
+	if arguments, ok := task["bootwright.core.redfish_system_read"].(map[string]any); ok {
+		call, found = controllerCall{"power read", substrate.ControllerPowerReadBound}, true
+		if arguments["media"] == true {
+			call = controllerCall{"media read", substrate.ControllerMediaReadBound}
+		}
+	}
+	if arguments, ok := task["bootwright.core.redfish_boot"].(map[string]any); ok {
+		operation := fmt.Sprint(arguments["operation"])
+		bound, known := map[string]time.Duration{
+			"insert": substrate.ControllerInsertBound, "eject": substrate.ControllerEjectBound,
+			"boot": substrate.ControllerBootSelectionBound, "power-on": substrate.ControllerPowerBound,
+			"power-off": substrate.ControllerPowerBound, "shutdown": substrate.ControllerPowerBound,
+		}[operation]
+		for _, unbounded := range []string{"attempts", "remove_certificate", "restore_verification"} {
+			if _, set := arguments[unbounded]; set {
+				known = false
+			}
+		}
+		if !known {
+			t.Fatalf("%s: redfish_boot %s %v takes no bound the substrate states", where, operation, arguments)
+		}
+		call, found = controllerCall{operation, bound}, true
+	}
+	for key := range task {
+		if !found && strings.HasPrefix(key, "bootwright.core.redfish") {
+			t.Fatalf("%s: %s takes no bound the substrate states", where, key)
+		}
+	}
+	for _, repeats := range []string{"until", "retries"} {
+		if _, repeated := task[repeats]; found && repeated {
+			t.Fatalf("%s: a repeated %s takes no bound the substrate states", where, call.name)
+		}
+	}
+	return call, found
+}
+
+// callScope is what a task inherits from the tasks that run it: whether it runs
+// once for each node, whether a loop other than the one over the nodes repeats
+// it, the substrate its dispatch binds, and the variables it is handed. A task
+// a repeating loop reaches is repeated whatever loops run inside it.
+type callScope struct {
+	perNode   bool
+	repeated  bool
+	substrate string
+	vars      map[string]any
+}
+
+var (
+	substrateCondition = regexp.MustCompile(`^containercluster_install_agent_node\.substrate == '([a-z]+)'$`)
+	switchCondition    = regexp.MustCompile(`^([a-z_]+) \| bool$`)
+)
+
+// nodeLoop is the one loop that runs a task once for each node.
+const nodeLoop = "{{ bootwright_cluster_install_request.nodes }}"
+
+// builtinAction is the builtin action a task key names, however it is spelled:
+// ansible-core reads a bare name and its ansible.builtin and ansible.legacy
+// names as one action (utils/fqcn.py, add_internal_fqcns).
+func builtinAction(key string) string {
+	for _, prefix := range []string{"ansible.builtin.", "ansible.legacy."} {
+		if action, ok := strings.CutPrefix(key, prefix); ok {
+			return action
+		}
+	}
+	return key
+}
+
+// includedFile is the task file an import_tasks or include_tasks names, given
+// alone or as the file among its arguments (playbook/task_include.py reads
+// both). Any other form fails the test, because the walk cannot follow it.
+func includedFile(t *testing.T, where string, arguments any) string {
+	t.Helper()
+	if file, ok := arguments.(string); ok {
+		return file
+	}
+	if named, ok := arguments.(map[string]any); ok {
+		if file, ok := named["file"].(string); ok {
+			return file
+		}
+	}
+	t.Fatalf("%s: includes %v, which this walk cannot read", where, arguments)
+	return ""
+}
+
+// nodeCalls walks tasks as a run reaches them and records, under the substrate
+// that binds it, every controller call made once for each node. The boot phase
+// is not walked, because the boot budget bounds every call in it (boot.yml).
+// A condition the walk cannot read counts as true, so no call is dropped for a
+// reason it did not prove, and an include it cannot follow fails the test. A
+// call made other than once per node, including one a node loop makes inside
+// another loop, fails the test too, because the node margin cannot count it.
+func nodeCalls(t *testing.T, role, file string, tasks []map[string]any, scope callScope, calls map[string][]controllerCall) {
+	t.Helper()
+	for _, task := range tasks {
+		where := fmt.Sprintf("%s/tasks/%s: %v", role, file, task["name"])
+		inner, skipped := scope, false
+		inner.vars = map[string]any{}
+		maps.Copy(inner.vars, scope.vars)
+		if vars, ok := task["vars"].(map[string]any); ok {
+			maps.Copy(inner.vars, vars)
+		}
+		conditions, _ := task["when"].([]any)
+		if condition, ok := task["when"].(string); ok {
+			conditions = []any{condition}
+		}
+		for _, condition := range conditions {
+			text := strings.TrimSpace(fmt.Sprint(condition))
+			if match := substrateCondition.FindStringSubmatch(text); match != nil {
+				skipped = skipped || (inner.substrate != "" && inner.substrate != match[1])
+				inner.substrate = match[1]
+			}
+			if match := switchCondition.FindStringSubmatch(text); match != nil && inner.vars[match[1]] == false {
+				skipped = true
+			}
+		}
+		for _, key := range slices.Sorted(maps.Keys(task)) {
+			if key != "loop" && !strings.HasPrefix(key, "with_") {
+				continue
+			}
+			loop := task[key]
+			if inner.perNode || inner.repeated || key != "loop" || strings.TrimSpace(fmt.Sprint(loop)) != nodeLoop {
+				inner.perNode, inner.repeated = false, true
+				where += fmt.Sprintf(" (%s %v)", key, loop)
+			} else {
+				inner.perNode = true
+			}
+		}
+		if skipped {
+			continue
+		}
+		if call, found := controllerCallOf(t, where, task); found {
+			if !inner.perNode {
+				t.Fatalf("%s: a %s made other than once for each node is one the node margin cannot count", where, call.name)
+			}
+			calls[inner.substrate] = append(calls[inner.substrate], call)
+		}
+		for _, key := range slices.Sorted(maps.Keys(task)) {
+			switch builtinAction(key) {
+			case "import_tasks", "include_tasks":
+				if included := includedFile(t, where, task[key]); !(role == installRole && included == "boot.yml") {
+					nodeCalls(t, role, included, roleTasks(t, role, included), inner, calls)
+				}
+			case "import_role", "include_role":
+				arguments, _ := task[key].(map[string]any)
+				included, collected := strings.CutPrefix(fmt.Sprint(arguments["name"]), "bootwright.core.")
+				entry, named := arguments["tasks_from"].(string)
+				if !collected || !named {
+					t.Fatalf("%s: includes %v, which this walk cannot read", where, task[key])
+				}
+				nodeCalls(t, included, entry+".yml", roleTasks(t, included, entry+".yml"), inner, calls)
+			}
+		}
+		for _, key := range []string{"block", "rescue", "always"} {
+			nested, _ := task[key].([]any)
+			var blockTasks []map[string]any
+			for _, entry := range nested {
+				if blockTask, ok := entry.(map[string]any); ok {
+					blockTasks = append(blockTasks, blockTask)
+				}
+			}
+			nodeCalls(t, role, file, blockTasks, inner, calls)
+		}
+	}
+}
+
+// Each node adds to the installation's deadline exactly the bound of every
+// call the role makes to that node's controller outside the boot phase, read
+// from the embedded collection: an apply's media read in each of its two
+// state reads (state.yml), and the eject and the disk selection that release
+// the node's media (release.yml, through its substrate's boot_disk entry point,
+// which it tells to power nothing on). The margin covers whichever entry point
+// and substrate calls the most, so a call added to any of them, or dropped,
+// fails here until the margin moves with it; a poll's own requests count as
+// answered at once, as the bounds state.
+func TestTheNodeMarginIsTheBoundOfEveryControllerCallTheRoleMakesForANode(t *testing.T) {
+	largest, costliest := time.Duration(0), ""
+	for _, operation := range operations {
+		calls := map[string][]controllerCall{}
+		file := operation + ".yml"
+		nodeCalls(t, installRole, file, roleTasks(t, installRole, file), callScope{}, calls)
+		for bound := range calls {
+			made := calls[""]
+			if bound != "" {
+				made = slices.Concat(made, calls[bound])
+			}
+			total := time.Duration(0)
+			for _, call := range made {
+				total += call.bound
+			}
+			if total > largest {
+				largest, costliest = total, fmt.Sprintf("%s on %q: %v", operation, bound, made)
+			}
+		}
+	}
+	if nodeMargin != largest {
+		t.Fatalf("each node adds %s, but its controller calls outside the boot phase may take %s (%s)", nodeMargin, largest, costliest)
 	}
 	if nodeMargin != 11*time.Minute {
 		t.Errorf("each node adds %s, want the 11m0s the specification states", nodeMargin)
 	}
-	if got, want := installDeadline(installBudgets, 1), 3*time.Hour+56*time.Minute; got != want {
-		t.Errorf("a single node installs under %s, want the %s the specification states", got, want)
+}
+
+// The boot budget grows with the nodes a cluster boots, 300 seconds each and
+// never less than 900, so a cluster of up to three nodes freezes the 900 it
+// always did, and each node also adds its margin to the deadline. Nine nodes
+// fit within the runner's ceiling, and ten refuse before registration, naming
+// the deadline they would need and how many nodes fit. These are the figures
+// the specification states.
+func TestTheBootBudgetAndTheDeadlineGrowWithTheNodes(t *testing.T) {
+	for _, test := range []struct {
+		nodes    int
+		boot     int
+		deadline time.Duration
+	}{
+		{1, 900, 3*time.Hour + 56*time.Minute},
+		{3, 900, 4*time.Hour + 18*time.Minute},
+		{4, 1200, 4*time.Hour + 34*time.Minute},
+		{9, 2700, 5*time.Hour + 54*time.Minute},
+	} {
+		_, install, _ := onlyRequests(t, largeCatalog(test.nodes))
+		if len(install.Nodes) != test.nodes || install.Budgets.BootSeconds != test.boot {
+			t.Errorf("a cluster of %d nodes freezes a boot budget of %d seconds for %d nodes, want %d",
+				test.nodes, install.Budgets.BootSeconds, len(install.Nodes), test.boot)
+		}
+		if got := install.Deadline(); got != test.deadline {
+			t.Errorf("a cluster of %d nodes installs under %s, want %s", test.nodes, got, test.deadline)
+		}
 	}
-	if got := int((lifecycle.MaxDeadline - installDeadline(installBudgets, 0)) / nodeMargin); got != 12 {
-		t.Errorf("%d nodes fit within the %s ceiling, want the 12 the specification states", got, lifecycle.MaxDeadline)
+	_, _, _, err := Requests(largeCatalog(10), "controller", testContext)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" {
+		t.Fatalf("a cluster of 10 nodes refuses with %#v", reported)
+	}
+	if want := "installing 10 nodes needs a run deadline of 6h10m0s, past the 6h0m0s every adapter run is held to"; reported[0].Message != want {
+		t.Errorf("refusal = %q, want %q", reported[0].Message, want)
+	}
+	if want := "declare at most 9 nodes on ContainerCluster/ocp"; reported[0].Remediation != want {
+		t.Errorf("remediation = %q, want %q", reported[0].Remediation, want)
 	}
 }
 
@@ -225,11 +484,12 @@ func TestAClusterWhoseDeadlinePassesTheCeilingRefusesBeforeRegistration(t *testi
 	// The count is bounded, so a deadline that stops growing with its nodes
 	// fails here rather than holding the suite until go test's own timeout.
 	const most = 1000
+	deadlineOf := func(nodes int) time.Duration { return installDeadline(installBudgets(nodes), nodes) }
 	largest := 0
-	for ; largest < most && installDeadline(installBudgets, largest+1) <= lifecycle.MaxDeadline; largest++ {
-		if installDeadline(installBudgets, largest+1) <= installDeadline(installBudgets, largest) {
+	for ; largest < most && deadlineOf(largest+1) <= lifecycle.MaxDeadline; largest++ {
+		if deadlineOf(largest+1) <= deadlineOf(largest) {
 			t.Fatalf("a cluster of %d nodes has a deadline of %s, no longer than one of %d nodes: each node must add to it",
-				largest+1, installDeadline(installBudgets, largest+1), largest)
+				largest+1, deadlineOf(largest+1), largest)
 		}
 	}
 	if largest == most {
@@ -254,7 +514,7 @@ func TestAClusterWhoseDeadlinePassesTheCeilingRefusesBeforeRegistration(t *testi
 	if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" {
 		t.Fatalf("refusal = %#v", reported)
 	}
-	deadline := installDeadline(installBudgets, largest+1)
+	deadline := deadlineOf(largest + 1)
 	for _, want := range []string{fmt.Sprint(largest + 1), deadline.String(), lifecycle.MaxDeadline.String()} {
 		if !strings.Contains(reported[0].Message, want) {
 			t.Errorf("refusal %q does not name %s", reported[0].Message, want)

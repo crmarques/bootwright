@@ -26,6 +26,7 @@ func TestNoEffectRequiresAPoweredOffMachineWithNothingPublished(t *testing.T) {
 		"marker present":   {Marker: "{}", Power: "Off", Request: "digest"},
 		"image published":  {Image: true, Power: "Off", Request: "digest"},
 		"tree published":   {Power: "Off", Request: "digest", Tree: true},
+		"tree unmarked":    {Power: "Off", Request: "digest", TreeContent: true},
 		"no power reading": {Request: "digest"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -46,6 +47,7 @@ func TestAbsenceRequiresPositiveRemovalOfPublishedContent(t *testing.T) {
 		"no postcondition": {Absent: true, Request: "digest"},
 		"image remains":    {Absent: true, Postcondition: true, Image: true, Request: "digest"},
 		"tree remains":     {Absent: true, Postcondition: true, Request: "digest", Tree: true},
+		"tree unmarked":    {Absent: true, Postcondition: true, Request: "digest", TreeContent: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := ValidateAbsence(encode(t, evidence), "digest"); err == nil {
@@ -64,6 +66,7 @@ func TestPartialRequiresThisOperationsOwnUnfinishedWork(t *testing.T) {
 	for name, evidence := range map[string]Evidence{
 		"image published, guest never booted": {Image: true, Power: "Off", Request: "digest"},
 		"tree published, guest never booted":  {Power: "Off", Request: "digest", Tree: true},
+		"tree unmarked, guest never booted":   {Power: "Off", Request: "digest", TreeContent: true},
 		"installed, media still inserted":     {Marker: "{}", Media: "http://ip/os/m/install.iso", Power: "On", Image: true, Request: "digest"},
 		"installed, content withdrawn":        {Marker: "{}", Power: "On", Request: "digest"},
 	} {

@@ -151,7 +151,7 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 			ID:             request.Identity.Block,
 			Description:    machineDescription(input.Verb, request),
 			Stage:          reconciliation.StageMachines,
-			Requires:       []reconciliation.ObjectRef{{Kind: HostKind, Object: machine.Spec().Get("substrate", "providerRef").Text()}},
+			Requires:       machineRequires(catalog, machine.Spec().Get("substrate", "providerRef").Text(), request),
 			Impacts:        machineImpacts(input.Verb, request),
 			Groups:         machineGroups(input.Verb, request),
 			Kind:           MachineKind,
@@ -179,6 +179,19 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 	return plan, nil
 }
 
+// machineRequires names the Machine's own provider, and each other provider on
+// the same host whose managed bridge carries the emulated BMC's bind address,
+// because that listener cannot open before the bridge exists.
+func machineRequires(catalog api.Catalog, provider string, request MachineRequest) []reconciliation.ObjectRef {
+	requires := []reconciliation.ObjectRef{{Kind: HostKind, Object: provider}}
+	for _, bridged := range substrate.BridgeProviders(catalog, request.Placement.Machine, request.Controller.Address) {
+		if bridged != provider {
+			requires = append(requires, reconciliation.ObjectRef{Kind: HostKind, Object: bridged})
+		}
+	}
+	return requires
+}
+
 func machineDescription(verb reconciliation.Verb, request MachineRequest) string {
 	if verb == reconciliation.Destroy {
 		return "remove the virtual machine " + request.Identity.Object + " and its controller"
@@ -197,7 +210,7 @@ func machineImpacts(verb reconciliation.Verb, request MachineRequest) []string {
 		domain + " " + request.Domain,
 		unit + " " + request.Controller.Unit,
 		path + " " + request.Directory,
-		listener + " " + request.Controller.Address + ":" + substrate.FormatPort(request.Controller.Port),
+		listener + " " + substrate.ControllerSocket(request.Controller.Address, request.Controller.Port),
 	}
 	for _, declared := range request.Disks {
 		impacts = append(impacts, disk+" "+declared.Path)

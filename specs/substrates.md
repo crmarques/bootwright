@@ -63,8 +63,10 @@ controller it is a [context prerequisite](controller.md#the-controller-stage)
 selected by the provider's host reference, so the controller block installs it
 and this block proves presence only, refusing before it defines anything and
 naming the stage that supplies it. On an SSH host this block installs the named
-packages with the host's native package manager from the repositories that host
-already configures; versions are not pinned and no before-state is published.
+packages with the host's native package manager, which resolves them when the
+block applies from the repositories that host already configures: versions are
+not pinned, and no before-state is published or authorized, so this
+installation is not the frozen native transaction the controller stage makes.
 The libvirt driver daemons this provider's own resources
 live in — the hypervisor the `uri` answers on, the network driver that owns a
 managed attachment's bridge, and the storage driver that owns the media pool —
@@ -81,10 +83,6 @@ as nothing defined, and the bridge of a network set to autostart appears only
 once its driver runs. A managed network or the pool whose driver still does not
 answer refuses before anything is defined.
 
-Not yet met: an SSH-host installation frozen as an exact transaction and
-authorized under the controller stage's before-state rules; tracked as
-[B34](milestones/m1.md#b34).
-
 **Managed networks.** Each `networkAttachments[]` entry whose libvirt arm
 declares `management: managed` becomes one persistent libvirt network named
 `bootwright-<context>-<attachment>`, owning the declared `bridge`, carrying the
@@ -96,6 +94,17 @@ context and attachment. An `external` attachment is proved present as a link and
 defined, changed or removed. A network that exists without this context's
 ownership metadata is foreign and refuses; an owned network whose definition
 differs from the frozen request is redefined.
+
+The apply reads, for each managed network, both the definition it runs and the
+one libvirt keeps for its next start, and compares each value this contract
+sets, ignoring what libvirt adds of its own such as the UUID and the bridge MAC
+address. A network carrying the frozen request in both is left as it is, so a
+replay defines nothing; any other, a missing one included, is defined from the
+frozen request. Defining an active network changes only the definition it next
+starts from, and the apply never stops a network to apply it, because stopping
+a network disconnects every guest on it: an active network that runs another
+definition stays unproved, so its apply does not complete, until the network
+next starts.
 
 **Virtual-media pool.** One directory pool `bootwright-<context>-<provider>-vmedia`
 beneath `/var/lib/libvirt/images/bootwright/<context>/<provider>/vmedia`,
@@ -113,12 +122,12 @@ bridge name is host-global; `libvirt-network:<name>` for every managed network;
 
 **Evidence.** Completion requires the hypervisor present by package name, every
 driver daemon active and enabled to start with the host, the `uri` answering,
-every managed network active with the frozen
-definition and ownership metadata, every external bridge present, and the pool
-active. Replay reports `completed` with no change when live state matches. The
-differences it converges are an owned network whose definition differs, which
-is redefined under the identity it already holds, and a missing network or
-pool, which is defined again.
+every managed network active with its ownership metadata, running and keeping
+the frozen definition, every external bridge present, and the pool active.
+Replay reports `completed` with no change when live state matches. The
+differences it converges, each reported as a change, are an owned network whose
+definition differs, which is redefined under the identity it already holds, and
+a missing network or pool, which is defined again.
 The inverse refuses before its first effect when the `uri` does not answer,
 or when the network driver did not answer for a managed network or the storage
 driver for the pool, then destroys and undefines the networks and pool this
@@ -149,7 +158,11 @@ positive partial realization. The hypervisor closure proves nothing either way.
 ## Machine realization
 
 The block `machine-<machine>` realizes one Machine's virtual hardware together
-with its own management controller, and requires its provider host block.
+with its own management controller, and requires its provider host block. It
+also requires the host block of each other provider on the same host whose
+managed attachment's host address is the emulated BMC's `bindAddress`, because
+that listener cannot open before the bridge exists, so its removal also runs
+before that bridge's.
 
 **Domain.** One libvirt domain named `bootwright-<context>-<machine>` with a
 deterministic UUID derived from the context and Machine names, `q35` machine
@@ -158,7 +171,11 @@ a root disk of `diskGiB` and one disk per `dataDisks[]` entry as `qcow2` images
 beneath `/var/lib/libvirt/images/bootwright/<context>/<machine>/`, one
 interface per effective attachment with a deterministic locally administered
 MAC, an emulated TPM 2.0 when the profile declares `tpm`, a serial console, and
-ownership metadata naming the context and Machine. Each interface carries the
+ownership metadata naming the context and Machine. Each disk is presented on
+the virtio bus, the root disk as `vda` and the data disks as `vdb` onward in
+declared order, and carries no WWN, SCSI address or serial number for a
+[root-device hint](api/machines.md#bmc-and-root-device-shape) to match. Each
+interface carries the
 same derived address the realized target reports, so a consumer that must
 declare this Machine's hardware to an installer names exactly what the domain
 presents. An interface attaches to the
@@ -189,21 +206,35 @@ plain HTTP, requires the bound `auth.credentialsRef` credential through basic
 authentication with a bcrypt password file published `0600`, fetches inserted
 media into the provider's pool without verifying the artifact server's
 certificate, and mounts the host's libvirt socket and the pool. The controller
-endpoint is `http://<bindAddress>:<port>/redfish/v1/Systems/<uuid>`.
-`disableCertificateVerification` selects nothing while the emulator serves no
-TLS.
+endpoint is `http://<bindAddress>:<port>/redfish/v1/Systems/<uuid>`, with an
+IPv6 `bindAddress` bracketed (`http://[fd00::1]:8000/redfish/v1/Systems/<uuid>`),
+so it meets the controller address grammar of
+[machines](api/machines.md#bmc-and-root-device-shape); the plan's listener impact
+prints the socket in the same form. `disableCertificateVerification` selects
+nothing while the emulator serves no TLS. The password file keeps the hash it
+holds while bcrypt's `checkpw` still verifies the bound password with it,
+because bcrypt salts every hash afresh: hashing the password again would
+rewrite the file and restart the controller on every replay.
 
 **Reservations.** `libvirt-domain:<name>`, `unit:` for the BMC unit,
 `socket:<bindAddress>:<port>` for its listener, and `path:` for the Machine's
-disk directory.
+disk directory. The socket key never brackets the address: it is the form a
+managed service's listener claims, so another context's managed service on the
+same address and port conflicts with the emulated BMC.
 
 **Evidence.** Completion requires the domain defined with the frozen definition
 and ownership metadata, every disk present at its frozen size, the BMC unit
 active running the pinned image, and the ComputerSystem answering with the
 bound credential and a reported power state. Replay reports `completed` with no
 change when live state matches; the differences it converges are a missing
-disk, domain definition or controller unit, each realized again, while an owned
-domain whose root disk size differs refuses rather than resizing.
+disk, domain definition or controller unit, each realized again; a bound
+password the published hash no longer verifies, which is hashed again; and a
+running controller that started before its configuration, password file or unit
+was last published, or whose start cannot be read, which is restarted, because
+the controller reads only what it started with. An apply stopped between
+publishing a file and restarting the controller is therefore completed by the
+next one. An owned domain whose root disk size differs refuses rather than
+resizing.
 The inverse refuses a domain that is not shut off, as Quiescence states. It then
 stops and removes the BMC unit, container and state, undefines the domain,
 deletes the disks this context owns and proves each absent, and it proves
@@ -268,6 +299,21 @@ malformed body or no MAC leaves the proof unknown, never satisfied, because a
 partial inventory cannot show that this is the server the operator meant. A
 declared MAC the hardware does not report refuses. The power state is read and
 recorded but never changed here.
+
+A reported `UUID` and `SerialNumber` are recorded without their surrounding
+space, and each must then be at most 128 characters, every one of them
+printable: a letter, mark, number, punctuation, symbol or the ASCII space, by
+Go `unicode.IsPrint` and Python `str.isprintable`, the rule the CLI's
+[safe display text](cli/output.md#json-output) escapes by. One that is
+longer, or holds any other character, a control, a space other than U+0020 or
+a format character such as a bidi override, a zero-width space or a
+byte-order mark, refuses `lifecycle.state` naming the field and the controller
+endpoint, never the value, because a pin carries that identity into every later
+comparison and refusal. The adapter that publishes the proof and the decoder
+that accepts it each apply the rule, and so does every reading of a recorded
+proof, so a pin never holds such a character; a recorded proof that breaks it
+refuses naming the Machine and the field. `Manufacturer` and `Model` are only
+trimmed and bounded to 128 characters, because nothing compares or prints them.
 
 This proof is what the [installation](managed-os.md#physical-installation)
 relies on before it erases a disk, and it is deliberately stricter than a name

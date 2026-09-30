@@ -9,10 +9,10 @@
       "severity": "error",
       "code": "lifecycle.state",
       "message": "the adapter operation did not complete",
-      "remediation": "read the adapter output retained beside this attempt's log"
+      "remediation": "read the adapter output retained in this run's run.output"
     }
   ],
   "logs": [
-    "run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9a/run.output"
+    "contexts/lab/state/runs/run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9a/run.output"
   ]
 }

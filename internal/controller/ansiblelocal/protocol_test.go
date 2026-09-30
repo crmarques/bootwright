@@ -17,6 +17,8 @@ func TestProtocolRejectsDuplicateUnknownAndMixedPhaseFields(t *testing.T) {
 		`{"phase":"prepared","preparation":{"inventorySHA256":"x","inventorySHA256":"y","addedSources":[]}}`,
 		`{"phase":"prepared","preparation":{"inventorySHA256":"x","addedSources":null},"outcome":"changed"}`,
 		`{"phase":"loaded"} {"phase":"continue"}`,
+		`{"phase":"refused"}`,
+		`{"phase":"refused","reason":"release-stamp","outcome":"changed"}`,
 		strings.Repeat("x", 65536),
 		strings.Repeat("{\"phase\":\"loaded\"}\n", 133),
 	} {

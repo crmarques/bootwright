@@ -29,7 +29,18 @@ type Evidence struct {
 	// does, so one rule governs both paths.
 	Reachable bool   `json:"reachable"`
 	Request   string `json:"request"`
-	Tree      bool   `json:"tree"`
+	// Tree is the published package tree complete, its .treeinfo in place, and
+	// TreeContent anything at all at the tree's published path. A removal
+	// deletes the tree in whatever order the filesystem lists it, so one
+	// stopped part way can leave the directory without its marker: content a
+	// removal still takes back, though no complete tree.
+	Tree        bool `json:"tree"`
+	TreeContent bool `json:"treeContent"`
+}
+
+// published reports whether anything this installation publishes is left.
+func (e Evidence) published() bool {
+	return e.Image || e.Private || e.Tree || e.TreeContent
 }
 
 // ValidatePresence accepts evidence only when it proves the guest holds exactly
@@ -101,7 +112,7 @@ func ValidateAbsence(data []byte, digest string) error {
 	if !evidence.Postcondition || !evidence.Absent {
 		return refusal("lifecycle.state", "the installation adapter did not prove removal", "")
 	}
-	if evidence.Image || evidence.Private || evidence.Tree {
+	if evidence.published() {
 		return refusal("lifecycle.state", "the installation removal evidence still reports published content", "")
 	}
 	return nil
@@ -116,7 +127,7 @@ func ValidateWithdrawn(data []byte, digest string) error {
 	if err != nil {
 		return err
 	}
-	if evidence.Image || evidence.Private || evidence.Tree {
+	if evidence.published() {
 		return refusal("lifecycle.state", "the served root still carries this installation's content", "")
 	}
 	return nil
@@ -130,7 +141,7 @@ func ValidateWithdrawalUnfinished(data []byte, digest string) error {
 	if err != nil {
 		return err
 	}
-	if !evidence.Image && !evidence.Private && !evidence.Tree {
+	if !evidence.published() {
 		return refusal("lifecycle.state", "the served root carries none of this installation's content", "")
 	}
 	return nil
@@ -144,7 +155,7 @@ func ValidateNoEffect(data []byte, digest string) error {
 	if err != nil {
 		return err
 	}
-	if evidence.Marker != "" || evidence.Image || evidence.Private || evidence.Tree {
+	if evidence.Marker != "" || evidence.published() {
 		return refusal("lifecycle.state", "the machine or the served root still carries this installation", "")
 	}
 	if evidence.Power != "Off" {
@@ -175,7 +186,7 @@ func ValidatePartial(data []byte, digest, marker string) error {
 		if evidence.Power != "Off" {
 			return refusal("lifecycle.state", "the machine is not powered off, so its installation is unproved", "")
 		}
-		if !evidence.Image && !evidence.Private && !evidence.Tree {
+		if !evidence.published() {
 			return refusal("lifecycle.state", "the installation evidence reports nothing this operation published", "")
 		}
 	}

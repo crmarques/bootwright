@@ -127,6 +127,22 @@ func variables(request lifecycle.RunRequest, paths map[string]string) (map[strin
 	}, nil
 }
 
+// checkMaterials refuses a material list before anything is written: each file
+// is written once and its value cleared, so a name listed twice would be
+// rewritten with the cleared bytes, and a variable bound twice would name only
+// one of its files.
+func checkMaterials(request lifecycle.RunRequest) error {
+	names := make(map[string]bool, len(request.Materials))
+	bound := make(map[string]bool, len(request.Materials))
+	for _, file := range request.Materials {
+		if names[file.Name] || bound[file.Variable] {
+			return failure("lifecycle.state", "a material file is named twice, or two material files bind one variable", "")
+		}
+		names[file.Name], bound[file.Variable] = true, true
+	}
+	return nil
+}
+
 func materialBytes(request lifecycle.RunRequest) (map[string][]byte, error) {
 	out := map[string][]byte{}
 	for _, file := range request.Materials {
@@ -145,9 +161,10 @@ func materialBytes(request lifecycle.RunRequest) (map[string][]byte, error) {
 
 // Each adapter failure names the recovery its own cause needs. One shared
 // remediation was wrong for every failure that had nothing to do with Secrets.
+// A failure the adapter's own output explains names what its request says,
+// because only the caller knows where that output is named.
 const (
 	bindingRemediation = "repeat the operation so its Secret bindings are reopened"
-	outputRemediation  = "read the adapter output retained beside this attempt's log"
 	setupRemediation   = "run bootwright setup"
 )
 

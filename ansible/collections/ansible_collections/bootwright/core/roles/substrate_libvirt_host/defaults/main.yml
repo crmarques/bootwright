@@ -12,6 +12,21 @@ substrate_libvirt_host_incomplete_networks: >-
      | selectattr('managed')
      | rejectattr('state', 'equalto', 'active')
      | list }}
+# The names of the managed networks that already run, and keep for their next
+# start, the definition the request froze, read once the network driver runs.
+substrate_libvirt_host_carried: >-
+  {{ substrate_libvirt_host_running.observation.networks
+     | selectattr('managed')
+     | selectattr('definition')
+     | map(attribute='name')
+     | list }}
+# The managed networks this attempt defines: every one the host does not carry
+# as frozen, a missing one included. A replay over networks that carry it
+# defines none, and each one it defines makes the apply changed.
+substrate_libvirt_host_redefined: >-
+  {{ substrate_libvirt_host_managed
+     | rejectattr('name', 'in', substrate_libvirt_host_carried)
+     | list }}
 # The managed networks this context actually owns on the host right now. A
 # removal touches exactly these, never a foreign network of the same name.
 substrate_libvirt_host_owned_networks: >-

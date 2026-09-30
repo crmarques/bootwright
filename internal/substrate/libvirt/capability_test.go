@@ -7,6 +7,7 @@ import (
 	"slices"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -72,6 +73,82 @@ func TestMachinePlanRequiresItsProviderByObject(t *testing.T) {
 	}
 	if !slices.Equal(plan.Secrets, []string{"lab-bmc-credentials"}) {
 		t.Fatalf("secrets = %v", plan.Secrets)
+	}
+}
+
+// An emulated BMC bound to the host address of another provider's managed
+// bridge on its host cannot listen before that provider's host block creates
+// the bridge, so its machine block waits for that block too, and its removal
+// runs before the bridge's.
+func TestAnEmulatedBMCBoundToABridgeRequiresTheProviderThatCreatesIt(t *testing.T) {
+	bound := func(address string) api.Object {
+		arm := provider().Spec().Get("libvirt")
+		return provider(field("libvirt", arm.With("bmcEmulationDefaults", arm.Get("bmcEmulationDefaults").With("bindAddress", api.StringValue(address)))))
+	}
+	other := func(host, management, address string) api.Object {
+		attachment := api.MapValue(text("bridge", "virbr-storage"), text("management", management))
+		if address != "" {
+			attachment = attachment.With("address", api.StringValue(address)).With("forward", api.StringValue("nat"))
+		}
+		spec := provider(
+			field("libvirt", provider().Spec().Get("libvirt").With("machineRef", api.StringValue(host))),
+			field("networkAttachments", api.ListValue(api.MapValue(text("name", "storage"), field("libvirt", attachment)))),
+		).Spec()
+		return api.NewObject(api.InfraProvider, "lab-storage", api.Value{}, spec)
+	}
+	own := reconciliation.ObjectRef{Kind: "InfraProvider", Object: "lab-libvirt"}
+	storage := reconciliation.ObjectRef{Kind: "InfraProvider", Object: "lab-storage"}
+	for name, test := range map[string]struct {
+		bind  string
+		other api.Object
+		want  []reconciliation.ObjectRef
+	}{
+		"an address no bridge carries":              {"192.0.2.1", other("controller", "managed", "203.0.113.1/24"), []reconciliation.ObjectRef{own}},
+		"its own provider's bridge":                 {"198.51.100.1", other("controller", "managed", "203.0.113.1/24"), []reconciliation.ObjectRef{own}},
+		"another provider's bridge on its host":     {"203.0.113.1", other("controller", "managed", "203.0.113.1/24"), []reconciliation.ObjectRef{own, storage}},
+		"another provider's IPv6 bridge":            {"fd00:7::1", other("controller", "managed", "fd00:7::1/64"), []reconciliation.ObjectRef{own, storage}},
+		"another provider's bridge on another host": {"203.0.113.1", other("hypervisor", "managed", "203.0.113.1/24"), []reconciliation.ObjectRef{own}},
+		"another provider's external bridge":        {"203.0.113.1", other("controller", "external", ""), []reconciliation.ObjectRef{own}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			catalog := catalogOf(controller(), remoteHost(), bound(test.bind), test.other, networkConfig(), guest("rhel-01"))
+			input := lifecycle.PlanInput{
+				Verb: reconciliation.Apply, State: compilation.NewState(catalog, catalog, nil),
+				Controller: "controller", Context: lifecycle.ContextIdentity{Name: testContext},
+			}
+			machines, err := NewMachine(nil).Plan(context.Background(), input)
+			if err != nil || len(machines.Definitions) != 1 {
+				t.Fatalf("plan = %+v (%v)", machines, err)
+			}
+			if !slices.Equal(machines.Definitions[0].Requires, test.want) {
+				t.Fatalf("requires = %v, want %v", machines.Definitions[0].Requires, test.want)
+			}
+			hosts, err := NewHost(nil).Plan(context.Background(), input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			apply, err := reconciliation.NewPlan(reconciliation.Apply, append(hosts.Definitions, machines.Definitions...))
+			if err != nil {
+				t.Fatal(err)
+			}
+			block, _ := apply.Block("machine-rhel-01")
+			want := []string{"substrate-host-lab-libvirt"}
+			if len(test.want) == 2 {
+				want = append(want, "substrate-host-lab-storage")
+			}
+			if !slices.Equal(block.Dependencies, want) {
+				t.Fatalf("machine dependencies = %v, want %v", block.Dependencies, want)
+			}
+			removal, err := apply.Inverse()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, id := range want {
+				if host, _ := removal.Block(id); !slices.Equal(host.Dependencies, []string{"machine-rhel-01"}) {
+					t.Fatalf("removal of %s waits for %v", id, host.Dependencies)
+				}
+			}
+		})
 	}
 }
 
@@ -142,7 +219,7 @@ func hostEvidence(request HostRequest, digest string) json.RawMessage {
 	for _, network := range request.Networks {
 		entry := NetworkEvidence{Bridge: true, Managed: network.Managed, Name: network.Name}
 		if network.Managed {
-			entry.Answered, entry.Owned, entry.State = true, true, "active"
+			entry.Answered, entry.Definition, entry.Owned, entry.State = true, true, true, "active"
 		}
 		networks = append(networks, entry)
 	}

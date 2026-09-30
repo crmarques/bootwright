@@ -45,6 +45,15 @@ type ToolFile struct {
 	Path   string `json:"path"`
 }
 
+// UnreleasedClient refuses an OpenShift client whose oc does not name its
+// frozen release, whether the adapter's release-stamp check or Go's read-only
+// projection found it. The same release and mirror reuse the retained source,
+// so restoring sources cannot help; only another release or mirror can.
+func UnreleasedClient(tool ToolDefinition) error {
+	return failure("controller.setup", "the oc of OpenShift client release "+tool.Version+" does not name its frozen release",
+		"declare a release.version or downloads.openshiftClientsMirror whose oc passes the release-stamp check; the same release and mirror reuse the retained source and refuse again")
+}
+
 // WithTools creates a fresh immutable dependency closure. The base catalog
 // stays identifiable while exact resolved tool metadata names its own bundle.
 func WithTools(base Definition, tools []ToolDefinition) (Definition, error) {

@@ -14,6 +14,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -173,6 +174,66 @@ func TestTheFrozenRequestsMatchTheirGoldens(t *testing.T) {
 			matchesGolden(t, "request-"+name, canonical)
 			if _, err := DecodeRequest(canonical); err != nil {
 				t.Fatalf("decoding: %v", diagnostics.Of(err))
+			}
+		})
+	}
+}
+
+// The protocol plugin publishes evidence through a channel that encodes with
+// sorted keys and no spaces (plugins/module_utils/controller_channel.py), which
+// Freeze proves is also how Go encodes it. Each golden is what
+// managedos_install_protocol.py publishes for one run over the lab-rhel
+// request, whose profile hosts a package tree, and the reading that run's
+// resolution takes accepts exactly those bytes.
+func TestEvidenceMatchesItsGoldens(t *testing.T) {
+	request, _ := onlyRequest(t, labCatalog())
+	digest := strings.Repeat("1", 64)
+	marker, err := MarkerFor(request, digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, test := range map[string]struct {
+		evidence Evidence
+		validate func([]byte) error
+	}{
+		// presence() after an apply: the guest answers with the frozen marker
+		// on its own key, runs with its media ejected, and the image and the
+		// whole tree are published.
+		"completed": {
+			Evidence{
+				Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: string(marker),
+				Postcondition: true, Power: "On", Reachable: true, Request: digest, Tree: true, TreeContent: true,
+			},
+			func(data []byte) error { return ValidatePresence(data, request, digest, string(marker)) },
+		},
+		// absence() once every published path is gone.
+		"removed": {
+			Evidence{Absent: true, Postcondition: true, Request: digest},
+			func(data []byte) error { return ValidateAbsence(data, digest) },
+		},
+		// An observed presence() for an apply stopped before it published
+		// anything: the controller reports the machine off and nothing else
+		// is found, which is positive no effect.
+		"no-effect": {
+			Evidence{Address: request.Address, Power: "Off", Request: digest},
+			func(data []byte) error { return ValidateNoEffect(data, digest) },
+		},
+		// A removal's observation reads the published content alone, and a
+		// removal stopped while it deleted the tree left the directory
+		// without its .treeinfo: content the removal still takes back.
+		"removal-partial-tree": {
+			Evidence{Address: request.Address, Request: digest, TreeContent: true},
+			func(data []byte) error { return ValidateWithdrawalUnfinished(data, digest) },
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			canonical, err := reconciliation.Freeze(test.evidence, "installation evidence")
+			if err != nil {
+				t.Fatalf("encoding: %v", diagnostics.Of(err))
+			}
+			matchesGolden(t, "evidence-"+name, canonical)
+			if err := test.validate(canonical); err != nil {
+				t.Fatalf("the %s evidence was refused: %v", name, diagnostics.Of(err))
 			}
 		})
 	}

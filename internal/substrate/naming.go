@@ -74,7 +74,15 @@ func InterfaceMAC(contextName, machine, iface string) string {
 // management controller at. The emulator serves plain HTTP, so the scheme is
 // fixed rather than derived from a TLS choice it does not make.
 func ControllerEndpoint(address string, port int, uuid string) string {
-	return "http://" + address + ":" + FormatPort(port) + "/redfish/v1/Systems/" + uuid
+	return "http://" + ControllerSocket(address, port) + "/redfish/v1/Systems/" + uuid
+}
+
+// ControllerSocket is the socket one emulated controller listens on, as its
+// endpoint and the plan print it: an IPv6 address is bracketed, so the colon
+// before the port is never read as part of the address. The reservation key
+// keeps the unbracketed socket form every listener claims.
+func ControllerSocket(address string, port int) string {
+	return bracketed(address) + ":" + FormatPort(port)
 }
 
 // HostedMachines lists the Machines one provider realizes, in canonical name

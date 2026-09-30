@@ -8,6 +8,8 @@
 # certificate, which only this build's cluster accepts.
 # Every read passes --request-timeout, so an API that accepts the connection
 # and never answers ends each request oc makes rather than holding the read.
+# An observation for a removal's resolution reads none of the cluster, which
+# the removal leaves running: only the media each node presents decides it.
 - name: Read ClusterVersion through this build's own trust anchor
   ansible.builtin.command:
     argv:
@@ -23,6 +25,7 @@
   register: containercluster_install_agent_cluster
   changed_when: false
   failed_when: false
+  when: not (containercluster_install_agent_observes_removal | bool)
 
 - name: Read the release the cluster reports
   ansible.builtin.command:
@@ -39,6 +42,7 @@
   register: containercluster_install_agent_release
   changed_when: false
   failed_when: false
+  when: not (containercluster_install_agent_observes_removal | bool)
 
 # ClusterVersion's own report that the installation finished, one field per
 # line: the status of its Available condition, then the state and version of
@@ -62,6 +66,7 @@
   register: containercluster_install_agent_completion
   changed_when: false
   failed_when: false
+  when: not (containercluster_install_agent_observes_removal | bool)
 
 - name: Read the nodes the cluster holds
   ansible.builtin.command:
@@ -77,6 +82,7 @@
   register: containercluster_install_agent_nodes
   changed_when: false
   failed_when: false
+  when: not (containercluster_install_agent_observes_removal | bool)
 
 - name: Read each node through its own management controller
   bootwright.core.redfish_system_read:

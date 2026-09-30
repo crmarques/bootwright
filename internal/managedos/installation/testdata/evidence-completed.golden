@@ -1,0 +1,15 @@
+{
+  "absent": false,
+  "address": "198.51.100.11",
+  "hostKey": "ssh-ed25519 AAAAHOST",
+  "image": true,
+  "marker": "{\"context\":\"lab\",\"image\":\"rhel-9.8-x86_64-boot.iso\",\"machine\":\"rhel-01\",\"profile\":\"rhel-9-8\",\"request\":\"1111111111111111111111111111111111111111111111111111111111111111\"}",
+  "media": "",
+  "postcondition": true,
+  "power": "On",
+  "private": false,
+  "reachable": true,
+  "request": "1111111111111111111111111111111111111111111111111111111111111111",
+  "tree": true,
+  "treeContent": true
+}

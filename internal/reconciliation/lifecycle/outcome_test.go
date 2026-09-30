@@ -7,6 +7,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
 // Nothing retries, destroys or deletes past an unknown block, so reporting a
@@ -59,28 +60,52 @@ func TestTheTransitionTableRetriesFailedAndStopsAtUnknown(t *testing.T) {
 // an instruction to tear down what had just been built.
 func TestACompletedOperationCallsForNothing(t *testing.T) {
 	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
-		if action := nextAction(verb, reconciliation.OperationDone); action != "none" {
+		if action := nextActionOver(verb, reconciliation.OperationDone, reconciliation.BlockDone); action != "none" {
 			t.Fatalf("a done %s asks for %q", verb, action)
 		}
 	}
 }
 
-// An incomplete operation still names its own exact continuation, and an
-// unknown one still names the resolution, because those are instructions an
-// operator must act on.
+// An incomplete operation still names its own exact continuation, and one
+// holding an unknown block names the resolution, whatever state the operation
+// records, because those are instructions an operator must act on. A failed
+// removal holding a block not done, an unknown one included, names the fresh
+// removal that replaces it, and one whose blocks are all done the
+// finalization that completes it.
 func TestAnIncompleteOperationStillNamesItsContinuation(t *testing.T) {
-	for state, expected := range map[reconciliation.OperationState]string{
-		reconciliation.OperationFailed:  "continue-apply",
-		reconciliation.OperationRunning: "continue-apply",
-		reconciliation.OperationUnknown: "resolve",
+	for _, row := range []struct {
+		verb     reconciliation.Verb
+		state    reconciliation.OperationState
+		block    reconciliation.BlockState
+		expected string
+	}{
+		{reconciliation.Apply, reconciliation.OperationFailed, reconciliation.BlockFailed, "continue-apply"},
+		{reconciliation.Apply, reconciliation.OperationRunning, reconciliation.BlockRunning, "continue-apply"},
+		{reconciliation.Apply, reconciliation.OperationUnknown, reconciliation.BlockUnknown, "resolve"},
+		{reconciliation.Apply, reconciliation.OperationRunning, reconciliation.BlockUnknown, "resolve"},
+		{reconciliation.Apply, reconciliation.OperationUnknown, reconciliation.BlockDone, "continue-apply"},
+		{reconciliation.Destroy, reconciliation.OperationUnknown, reconciliation.BlockUnknown, "resolve"},
+		{reconciliation.Destroy, reconciliation.OperationRunning, reconciliation.BlockRunning, "continue-destroy"},
+		{reconciliation.Destroy, reconciliation.OperationFailed, reconciliation.BlockFailed, "destroy"},
+		{reconciliation.Destroy, reconciliation.OperationFailed, reconciliation.BlockRunning, "destroy"},
+		{reconciliation.Destroy, reconciliation.OperationFailed, reconciliation.BlockUnknown, "destroy"},
+		{reconciliation.Destroy, reconciliation.OperationFailed, reconciliation.BlockDone, "continue-destroy"},
 	} {
-		if action := nextAction(reconciliation.Apply, state); action != expected {
-			t.Fatalf("a %s apply asks for %q, want %q", state, action, expected)
+		if action := nextActionOver(row.verb, row.state, row.block); action != row.expected {
+			t.Fatalf("a %s %s beside a block reading %s asks for %q, want %q", row.state, row.verb, row.block, action, row.expected)
 		}
 	}
-	if action := nextAction(reconciliation.Destroy, reconciliation.OperationFailed); action != "continue-destroy" {
-		t.Fatalf("a failed destroy asks for %q", action)
-	}
+}
+
+// nextActionOver is what an operation of verb recorded in state calls for
+// beside a done block and one more block reading block.
+func nextActionOver(verb reconciliation.Verb, state reconciliation.OperationState, block reconciliation.BlockState) string {
+	frozen := reconciliation.Plan{Verb: verb, Blocks: []reconciliation.Block{
+		{BlockDefinition: reconciliation.BlockDefinition{ID: "alpha"}},
+		{BlockDefinition: reconciliation.BlockDefinition{ID: "bravo"}},
+	}}
+	return nextAction(operationstore.Operation{Verb: verb, State: state}, frozen,
+		map[string]reconciliation.BlockState{"alpha": reconciliation.BlockDone, "bravo": block})
 }
 
 // A next action names a transition, not a command. Concatenating it onto
@@ -98,6 +123,7 @@ func TestANextStepIsACommandAnOperatorCanRun(t *testing.T) {
 		{reconciliation.Apply, "apply", "bootwright apply"},
 		{reconciliation.Apply, "destroy", "bootwright destroy"},
 		{reconciliation.Destroy, "continue-destroy", "bootwright destroy"},
+		{reconciliation.Destroy, "destroy", "bootwright destroy"},
 		// An unproved effect is resolved by repeating the operation that left
 		// it, so each verb offers its own command rather than a `resolve` one.
 		{reconciliation.Apply, "resolve", "bootwright apply"},

@@ -1,6 +1,7 @@
 package machine
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -232,6 +233,63 @@ func TestManagedLibvirtAttachmentContainsTheInstallAddress(t *testing.T) {
 		if (len(issues) == 0) != valid {
 			t.Fatalf("%s: issues = %v", address, issues)
 		}
+	}
+}
+
+// withRootDeviceHints is a Machine of the catalog, normalized, with its
+// root-device hints replaced.
+func withRootDeviceHints(machine api.Object, catalog api.Catalog, hints api.Value) (api.Object, api.Catalog) {
+	machine = machine.WithSpec(machine.Spec().WithPath(hints, "os", "install", "rootDeviceHints"))
+	objects := []api.Object{machine}
+	for _, existing := range catalog.Objects() {
+		if existing.Identity() != machine.Identity() {
+			objects = append(objects, existing)
+		}
+	}
+	machine, _ = Normalize(machine, api.NewCatalog(objects))
+	objects[0] = machine
+	return machine, api.NewCatalog(objects)
+}
+
+// The disks a libvirt domain presents carry no WWN, SCSI address or serial
+// number, so a hint on any of them could match no disk and refuses at its own
+// path, while the other hints stay admitted. A physical machine's own disks
+// may carry every one of them, so bare metal keeps them all.
+func TestALibvirtMachineRefusesTheHintsItsDisksCannotMatch(t *testing.T) {
+	host := object(api.Machine, "host", m("capabilities", api.StringList("libvirt"), "os", m("provided", true)))
+	provider := object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulationDefaults", m("auth", m("credentialsRef", "bmc")), "machineProfiles", list(m("name", "small"))), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "virbr-lab", "management", "managed", "address", "192.0.2.1/24")))))
+	network := object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet")))))
+	env := object(api.Environment, "env", m("domains", m("base", "example.test")))
+	guest := object(api.Machine, "guest", m("substrate", m("providerRef", "lab", "profileRef", "small"), "os", m("provided", false), "network", m("configRef", "net", "attachmentRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11/24", "interface", "enp1s0")))))
+	virtual := api.NewCatalog([]api.Object{guest, host, provider, network, env})
+	server, physical := fixture()
+	admitted := []api.FieldValue{
+		{Name: "deviceName", Value: api.StringValue("/dev/vda")}, {Name: "minSizeGigabytes", Value: api.IntegerValue("0")},
+		{Name: "model", Value: api.StringValue("1e3")}, {Name: "vendor", Value: api.StringValue("0o17")},
+		{Name: "rotational", Value: api.BoolValue(false)},
+	}
+	if machine, catalog := withRootDeviceHints(guest, virtual, api.MapValue(admitted...)); len(Validate(machine, catalog)) != 0 {
+		t.Fatalf("a libvirt Machine's admitted hints were refused: %v", Validate(machine, catalog))
+	}
+	const reason = "the disks this substrate creates carry no WWN, SCSI address or serial number, so this hint can match none of them"
+	every := slices.Clone(admitted)
+	for hint, value := range map[string]string{"hctl": "1:0:0:0", "serialNumber": "0987654321", "wwn": "0x5000c500a1b2c3d4"} {
+		every = append(every, api.FieldValue{Name: hint, Value: api.StringValue(value)})
+		t.Run(hint, func(t *testing.T) {
+			declared := api.MapValue(append(slices.Clone(admitted), api.FieldValue{Name: hint, Value: api.StringValue(value)})...)
+			machine, catalog := withRootDeviceHints(guest, virtual, declared)
+			issues := Validate(machine, catalog)
+			if len(issues) != 1 || issues[0].Code != "api.invariant" ||
+				issues[0].Field != "$.spec.os.install.rootDeviceHints."+hint || issues[0].Message != reason {
+				t.Fatalf("a libvirt Machine's %s hint gave %v", hint, issues)
+			}
+			if machine, catalog := withRootDeviceHints(server, physical, declared); len(Validate(machine, catalog)) != 0 {
+				t.Fatalf("a bare-metal Machine's %s hint was refused: %v", hint, Validate(machine, catalog))
+			}
+		})
+	}
+	if machine, catalog := withRootDeviceHints(server, physical, api.MapValue(every...)); len(Validate(machine, catalog)) != 0 {
+		t.Fatalf("a bare-metal Machine's hints were refused: %v", Validate(machine, catalog))
 	}
 }
 

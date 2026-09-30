@@ -93,6 +93,13 @@ load balancer as user-managed.
 The frozen inputs carry no secret value. The pull secret, the cluster SSH
 public key and each additional trust bundle are named as declarations in the
 request and substituted into the input files by the attempt that writes them.
+A cluster that selects additional trust bundles freezes an empty
+`additionalTrustBundle` in `install-config.yaml`, and the attempt fills it with
+the certificate part of each bundle's Secret, in the order the cluster selects
+them, each trimmed of surrounding whitespace and joined to the next by one line
+break, because the installer refuses a bundle holding anything after its last
+certificate. No `additionalTrustBundlePolicy` is written, so the installer
+applies its own default.
 
 ## Boot media
 
@@ -269,11 +276,13 @@ stall, then as the budget spent, and only then as the installer's own timeout.
 **Budgets.** Each long phase of a cluster's two blocks is bounded in wall-clock
 time by a budget its frozen request carries, never by a value the adapter
 chooses: the media request's build budget of 1,800 seconds, and the install
-request's boot budget of 900 seconds and its bootstrap and installation wait
-budgets of 5,400 seconds each. The image build runs under `timeout` with the
-build budget and the same grace; a build the budget stopped fails the media
-block as the budget spent, publishes nothing, and is resumable, because the
-next apply discards the work area and builds again. The boot budget bounds
+request's boot budget of 300 seconds for each node it boots, never less than
+900 seconds, so a cluster of up to three nodes freezes 900, and its bootstrap
+and installation wait budgets of 5,400 seconds each. The image build runs
+under `timeout` with the build budget and the same grace; a build the budget
+stopped fails the media block as the budget spent, publishes nothing, and is
+resumable, because the next apply discards the work area and builds again.
+The boot budget bounds
 booting every node together: its deadline is taken once, before the first
 node, and each boot step, the substrate's own included, runs under
 ansible-core's task timeout with only what is left of it, so a node already
@@ -290,14 +299,16 @@ connection and never answers. Every run of either block is bounded by a
 budgets its request froze: the build budget plus 30 minutes for the media
 block, and for the installation its three budgets back to back plus 30 minutes
 and 11 minutes for each node it reads and releases, which is 3 hours 56
-minutes for a single node. A node's 11 minutes are the
+minutes for a single node, 4 hours 18 minutes for three and 5 hours 54 minutes
+for nine. A node's 11 minutes are exactly the
 [bounds](substrates.md#identity-and-power-operations) of the calls the
 installation makes to its controller outside the boot budget: its media read
 in each of the two state reads, and the eject and the disk selection that
-release its media. A cluster whose installation deadline would pass
-the runner's 6-hour ceiling, more than 12 nodes with these budgets, refuses
-before registration, naming that deadline and how many nodes fit, rather than
-being cut short part way through its installation.
+release its media. Those bounds count the requests of a call's polls as
+answered at once. A cluster whose installation deadline would pass the
+runner's 6-hour ceiling, more than 9 nodes with these budgets, refuses before
+registration, naming that deadline and how many nodes fit, rather than being
+cut short part way through its installation.
 
 Not yet met: `plan` and `apply` report that refusal without its reason and
 remedy, because the lifecycle's unsupported-shape refusal drops each object's
@@ -415,11 +426,15 @@ or the bootstrap wait leaves. Anything else stays unknown, including a foreign
 answer, a foreign image while nothing answers, and a node running while nothing
 answers and no node presents this cluster's own image, because the first two
 may belong to another installation and the last may be installing now. A
-removal's resolution reads only the media, because that is what the removal
-takes back and a completed installation already presents none: no node
-presenting media is its completion, whatever answers; only this cluster's own
-image on some nodes is a positive partial realization; and a foreign image
-stays unknown.
+removal's resolution observes only the media each node's controller presents,
+because that is what the removal takes back and a completed installation
+already presents none, so it reads nothing of the cluster: no node presenting
+media is its completion; any of this cluster's declared Machines presenting
+media, this cluster's own image or any other, is a positive partial
+realization, because the removal ejects whatever each node presents and
+repeating it converges; and it stays unknown when a node's controller cannot be
+read, which fails the observation, or when the evidence names a Machine that is
+not one of the cluster's nodes.
 
 **Quiescence and cancellation.** This block owns published boot media and
 controller-side state that a running cluster does not read, so its quiescence
@@ -441,6 +456,11 @@ substrate's pre-boot, boot and disk-boot entry points by fixed qualified name.
 Go locates the exact installer executable; the adapter substitutes bound
 material into the installer inputs and invokes the installer with exact
 argument vectors. No pull secret, private key or captured credential enters an
-argument, an environment variable, the evidence or a log. A run lists each
-operation-scoped material file once, the placement's identity and host key
-included.
+argument, an environment variable, the evidence or a log.
+
+Both frozen requests carry the controller arm alone: connection `local` and the
+controller Machine's name, with no other placement field, the only placement
+planning produces because [the image is built on the controller](#boot-media).
+Either decoder refuses any other placement with `lifecycle.state`, so apply,
+destroy, observation and removal planning each refuse such a block before an
+adapter runs, and no run carries a placement's identity or host key.

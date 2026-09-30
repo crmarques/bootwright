@@ -375,8 +375,8 @@ probe. Its result orders these fields:
 | `clusters`, `storageClusters` | Ordered `{name, kind, status}` rows for selected cluster roots. `status` is `unsupported` when this executable has no lifecycle capability for that cluster. |
 | `shared` | Ordered `{kind, name, machine, status}` rows for selected shared services. `status` is `unsupported`, `pending`, `done` or `unknown`, derived from the frozen plan and its durable evidence. |
 | `secrets` | `declared` and `bound` counts. |
-| `nextSteps` | Ordered safe command strings, empty when no action is available. |
-| `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe relative paths. |
+| `nextSteps` | Ordered command strings whose decision would pass over the records `status` read, as the [lifecycle receipt](../cli.md#lifecycle-receipt) states; empty when none would. |
+| `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe paths relative to the state root, in the order and form the envelope's [`logs`](#private-operation-logs) list them. |
 | `contradictions` | Ordered strings naming what the context's durable records contradict, each worded as the [refusal](../state-reconciliation.md#continuation-and-removal) that points at `status` names it; empty when nothing does. |
 
 Rows sort by their documented key: checks and blocks in frozen order,
@@ -415,9 +415,9 @@ it to a variable.
 | `input.limit` | A documented resource limit was exceeded. |
 | `yaml.syntax` | YAML is malformed or is not valid UTF-8. |
 | `yaml.duplicate-key` | A mapping repeats a key. |
-| `yaml.alias` | An anchor, alias, or merge key is present. |
-| `yaml.tag` | A YAML node uses an unsupported or forbidden tag. |
-| `yaml.shape` | A document or mapping key has the wrong YAML shape. |
+| `yaml.alias` | An anchor, alias, or merge key is present, on a value or a mapping key. |
+| `yaml.tag` | A YAML node, a mapping key included, uses an unsupported or forbidden tag. |
+| `yaml.shape` | A document is not a mapping, or a mapping key that carries no anchor, alias, merge, or forbidden tag is not a string. |
 | `api.version` | `apiVersion` is missing or unsupported. |
 | `api.kind` | `kind` is missing or unsupported. |
 | `api.field` | A field is unknown at its exact schema location. |
@@ -593,12 +593,16 @@ publishes no evidence, ownership or continuation: a run is never an operation,
 and nothing resumes, continues or is resolved through one.
 
 The file is created exclusively, under the same grammar, modes and retention
-bounds an attempt's retained output has, before the adapter runs, so the path
-an operator is given exists whether or not the run reaches its result. Its
-content is retained while the run produces it, under the same masking
-obligation: every adapter task that reads bound material marks itself `no_log`,
-so a retained run carries none. Neither retaining it nor failing to changes what
-the run reports.
+bounds an attempt's retained output has, once the controller admits the run's
+private Python runtime and before the adapter runs, so the path an operator is
+given exists whether or not the run reaches its result. Its content is retained
+while the run produces it, under the same masking obligation: every adapter
+task that reads bound material marks itself `no_log`, so a retained run carries
+none. Neither retaining it nor failing to changes what the run reports. An
+adapter failure that its output explains points its remediation at this file,
+as an attempt's points at the output beside that attempt's log; a
+[reading](../cli.md#resource-inspection-and-explicit-access), which names no
+retained output, points at none.
 
 Human output names the run's own directory as the same `Logs` field, before the
 adapter runs and again after the result, for the same reason an operation names
@@ -610,11 +614,10 @@ Python runtime, which is where human output first names the directory, names
 the file in its failure envelope: `result` is `null` and `logs` lists the file
 beside the diagnostic, whether the adapter refused or the run was interrupted,
 canceled or past its deadline. A run that fails before that admission lists
-none, as its human output names no directory, even when its file already
-exists: the file is created before the runtime is admitted, so a refused
-admission, such as a native package transaction holding its lock, or an
-interrupt, cancellation or deadline that lands first leaves that file empty and
-unnamed.
+none, as its human output names no directory, and keeps none: the file is
+created only once the runtime is admitted, so a refused admission, such as a
+native package transaction holding its lock, or an interrupt, cancellation or
+deadline that lands first leaves no unnamed file behind.
 
 ## Multi-machine presentation
 

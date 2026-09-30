@@ -80,12 +80,14 @@ func ValidatePresence(data []byte, request Request, digest string) error {
 
 // ValidatePartial accepts evidence only when it positively proves this
 // context's own service is part way realized: something the frozen request
-// names is present while the whole of it is not. The unit, container and
-// content root all carry the context in their names and are claimed by its
-// host reservation, so their presence is never another context's work. A
-// partial realization is converged by repeating the operation, so it leaves
-// the block failed rather than unproved.
-func ValidatePartial(data []byte, digest string) error {
+// names is present while the whole of it, its listeners' answers included, is
+// not. The unit, container and content root all carry the context in their
+// names and are claimed by its host reservation, so their presence is never
+// another context's work, and a service all present whose listener stays
+// silent is this context's own service not yet ready. A partial realization is
+// converged by repeating the operation, so it leaves the block failed rather
+// than unproved.
+func ValidatePartial(data []byte, request Request, digest string) error {
 	evidence, err := DecodeEvidence(data)
 	if err != nil {
 		return err
@@ -93,11 +95,17 @@ func ValidatePartial(data []byte, digest string) error {
 	if evidence.Request != digest {
 		return Refusal("lifecycle.state", "the managed service evidence names another request", "")
 	}
-	if evidence.Postcondition || evidence.Absent {
+	if evidence.Absent {
 		return Refusal("lifecycle.state", "the managed service evidence proves a settled state, not a partial one", "")
+	}
+	if evidence.Postcondition && (evidence.Unit != "active" || !evidence.ContentRoot) {
+		return Refusal("lifecycle.state", "the managed service evidence claims a postcondition it does not report", "")
 	}
 	if evidence.Unit == "" && evidence.Container == "" && !evidence.ContentRoot {
 		return Refusal("lifecycle.state", "the managed service evidence reports nothing this context owns", "")
+	}
+	if ValidatePresence(data, request, digest) == nil {
+		return Refusal("lifecycle.state", "the managed service evidence proves it complete, not partial", "")
 	}
 	return nil
 }

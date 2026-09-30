@@ -223,6 +223,9 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 	}
 	cancelled := ctx.Done()
 	var operationErr error
+	// exited records that operationErr is only the adapter's failed exit, which
+	// a refusal the adapter named just before it failed may still replace.
+	exited := false
 	for messages != nil || waited != nil {
 		select {
 		case <-cancelled:
@@ -257,6 +260,7 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 			}
 			if waitErr != nil && operationErr == nil {
 				operationErr = failure("controller.setup", "Ansible did not complete the authorized dependency operation")
+				exited = true
 			}
 		case message, open := <-messages:
 			if !open {
@@ -316,11 +320,25 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 					completed = true
 					result = prerequisites.ActionResult{Outcome: message.Outcome, Evidence: slices.Clone(message.Evidence)}
 				}
+			case "refused":
+				// The adapter names the one refusal with a remedy of its own
+				// before it fails, for the tool it is installing. Its exit can
+				// be read first, so the named refusal replaces that failure.
+				valid = !completed && !canceled && (operationErr == nil || exited) && loaded && prepared && continuations > 0 &&
+					message.Reason == "release-stamp" && request.Tools[continuations-1].Kind == "openshift-clients"
+				if valid {
+					operationErr, exited = prerequisites.UnreleasedClient(request.Tools[continuations-1]), false
+				}
 			default:
 				valid = false
 			}
-			if !valid && operationErr == nil {
-				operationErr = failure("controller.unknown", "the Ansible capability protocol was invalid")
+			if !valid {
+				// The named refusal is the adapter's last record, so any other
+				// record read after the failed exit keeps that failure.
+				exited = false
+				if operationErr == nil {
+					operationErr = failure("controller.unknown", "the Ansible capability protocol was invalid")
+				}
 			}
 			if ctx.Err() != nil {
 				canceled = true

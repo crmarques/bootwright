@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,7 +32,7 @@ func createCompletionDirectories(t *testing.T, directory string, names ...string
 func TestCompletionPathsOfferAtMost256Candidates(t *testing.T) {
 	for _, test := range []struct {
 		entries, want int
-	}{{256, 256}, {257, 256}, {300, 256}} {
+	}{{maxCompletionPaths, maxCompletionPaths}, {maxCompletionPaths + 1, maxCompletionPaths}, {2 * maxCompletionPaths, maxCompletionPaths}} {
 		t.Run(fmt.Sprint(test.entries), func(t *testing.T) {
 			directory := t.TempDir()
 			created := map[string]bool{}
@@ -53,9 +54,53 @@ func TestCompletionPathsOfferAtMost256Candidates(t *testing.T) {
 	}
 }
 
+func TestCompletionPathsReadNoFurtherThanTheirBounds(t *testing.T) {
+	directory := t.TempDir()
+	for index := range maxCompletionEntriesRead + maxCompletionPaths {
+		createCompletionFiles(t, directory, fmt.Sprintf("entry-%05d", index))
+	}
+	for _, test := range []struct {
+		name, partial   string
+		offered, readAt int
+	}{
+		{"every entry matches", "entry-", maxCompletionPaths, maxCompletionPaths},
+		{"no entry matches", "absent", 0, maxCompletionEntriesRead},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			listing, err := os.Open(directory)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer listing.Close()
+			read := 0
+			counted := func(n int) ([]os.DirEntry, error) {
+				entries, err := listing.ReadDir(n)
+				read += len(entries)
+				return entries, err
+			}
+			got := listCompletionPaths(counted, "file", directory, directory+"/", test.partial)
+			if len(got) != test.offered || read != test.readAt {
+				t.Fatalf("offered %d candidates after reading %d entries, want %d after %d", len(got), read, test.offered, test.readAt)
+			}
+		})
+	}
+	listing, err := os.Open(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listing.Close()
+	failed := func(n int) ([]os.DirEntry, error) {
+		entries, _ := listing.ReadDir(n)
+		return entries, errors.New("read failed")
+	}
+	if got := listCompletionPaths(failed, "file", directory, directory+"/", "entry-"); got != nil {
+		t.Fatalf("a failed read offered %d candidates", len(got))
+	}
+}
+
 // The directory is padded with repeated separators, which name the same
 // directory, so the prefix length varies while the directory stays readable:
-// only the bound, never ENAMETOOLONG, can refuse the 4097-byte prefix.
+// only the bound, never ENAMETOOLONG, can refuse the prefix one byte over it.
 func TestCompletionPathsRefuseAnOverlongOrMultilinePrefix(t *testing.T) {
 	directory := t.TempDir()
 	name := strings.Repeat("n", 200)
@@ -64,7 +109,7 @@ func TestCompletionPathsRefuseAnOverlongOrMultilinePrefix(t *testing.T) {
 	for _, test := range []struct {
 		length int
 		offers bool
-	}{{4096, true}, {4097, false}} {
+	}{{maxCompletionPrefix, true}, {maxCompletionPrefix + 1, false}} {
 		t.Run(fmt.Sprint(test.length), func(t *testing.T) {
 			padded := directory + strings.Repeat("/", test.length-len(directory)-len(partial))
 			prefix := padded + partial
@@ -123,8 +168,8 @@ func TestCompletionPathsWithholdUnsafeNames(t *testing.T) {
 	directory := t.TempDir()
 	safe := []string{"input.yaml", "naïve", "with-dash_under.score", strings.Repeat("l", 255)}
 	createCompletionFiles(t, directory, safe...)
-	for _, character := range "\x01\x1b\x1f\x7f\t\n\r \\\"'`$&|;<>*?[](){}!~#" {
-		createCompletionFiles(t, directory, "unsafe"+string(character)+"name")
+	for _, character := range "\x01\x1b\x1f\x7f\t\n\r \\\"'`$&|;<>*?[](){}!~#@=" {
+		createCompletionFiles(t, directory, "unsafe"+string(character)+"name", string(character)+"leading")
 	}
 	var want []string
 	for _, name := range safe {
@@ -147,8 +192,8 @@ func TestSafeCompletionEntryBoundsItsLength(t *testing.T) {
 		want bool
 	}{
 		{"", false},
-		{strings.Repeat("n", 255), true},
-		{strings.Repeat("n", 256), false},
+		{strings.Repeat("n", maxCompletionEntry), true},
+		{strings.Repeat("n", maxCompletionEntry+1), false},
 	} {
 		if got := safeCompletionEntry(test.name); got != test.want {
 			t.Fatalf("a %d-byte name is safe = %t; want %t", len(test.name), got, test.want)

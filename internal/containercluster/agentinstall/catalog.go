@@ -23,7 +23,7 @@ const (
 )
 
 const (
-	mediaRequestVersion   = "cluster-media-agent-v4"
+	mediaRequestVersion   = "cluster-media-agent-v5"
 	installRequestVersion = "cluster-install-agent-v3"
 )
 

@@ -32,6 +32,7 @@ READS = ("ansible.builtin.assert", PROTOCOL, "bootwright.core.redfish_system_ins
 
 DIGEST = "c" * 64
 DECLARED = ["aa:bb:cc:dd:ee:01", "aa:bb:cc:dd:ee:02"]
+ENDPOINT = "https://bmc.example.test/redfish/v1/Systems/1"
 
 
 def observation(**overrides):
@@ -56,9 +57,9 @@ PROOFS = {
 }
 
 
-def tasks():
-    """apply.yml as a play loads it: its templates trusted."""
-    loaded = LOADER.load_from_file(str(ROLE / "tasks" / "apply.yml"), trusted_as_template=True)
+def tasks(entry="apply.yml"):
+    """One of the role's task files as a play loads it: its templates trusted."""
+    loaded = LOADER.load_from_file(str(ROLE / "tasks" / entry), trusted_as_template=True)
     return [task for task in loaded if isinstance(task, dict)]
 
 
@@ -67,8 +68,8 @@ def completes(task):
     return isinstance(arguments, dict) and arguments.get("phase") == "completed"
 
 
-def completion():
-    found = [task for task in tasks() if completes(task)]
+def completion(entry="apply.yml"):
+    found = [task for task in tasks(entry) if completes(task)]
     assert len(found) == 1, "%d tasks publish the proof" % len(found)
     return found[0][PROTOCOL]
 
@@ -77,7 +78,8 @@ def scope(observed):
     """The role's defaults, the frozen request's addresses and one inspection."""
     variables = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
     variables.update(
-        bootwright_substrate_physical_request={"hardware": [{"macAddress": address} for address in DECLARED]},
+        bootwright_substrate_physical_request={
+            "controller": {"endpoint": ENDPOINT}, "hardware": [{"macAddress": address} for address in DECLARED]},
         bootwright_substrate_physical_digest=DIGEST,
         substrate_baremetal_machine_observed={"observation": observed},
     )
@@ -117,3 +119,19 @@ def test_a_bare_metal_apply_writes_nothing():
         actions = [key for key in task if "." in key]
         assert len(actions) == 1 and actions[0] in READS, "%s runs %s" % (task.get("name"), actions)
     assert len([task for task in loaded if completes(task)]) == 1
+
+
+# A reported identity the evidence may not carry refuses naming the controller
+# the frozen request declares, which both the apply's proof and the observe
+# run's observation hand their publication.
+@pytest.mark.parametrize("entry", ["apply.yml", "observe.yml"])
+def test_an_unprintable_identity_refuses_naming_the_declared_controller(entry, monkeypatch):
+    published = []
+    monkeypatch.setattr(protocol, "emit", lambda message, **kwargs: published.append(message))
+    arguments = Templar(loader=LOADER, variables=scope(observation(serial="SN\u202e1"))).template(completion(entry))
+    assert run(arguments) == {
+        "failed": True,
+        "msg": "the management controller at %s reported a SerialNumber holding a character that is not printable"
+               % ENDPOINT,
+    }
+    assert not published

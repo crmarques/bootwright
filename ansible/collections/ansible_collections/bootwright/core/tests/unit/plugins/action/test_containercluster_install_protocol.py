@@ -394,3 +394,72 @@ def test_a_node_running_from_its_own_image_is_not_booted_again():
         "another node running from its own image"])
 def test_every_other_node_is_booted(powered, own, media):
     assert boots(powered, own, media) is True
+
+
+# A removal's resolution reads only the media each node presents, so the
+# capability scopes that observation with the material value `observes:
+# removal`, and the state read then reads none of the cluster the removal
+# leaves running. Each node's controller is still read: a node that cannot be
+# read fails the read, which leaves the removal's resolution unknown.
+CLUSTER_READS = ("containercluster_install_agent_cluster", "containercluster_install_agent_release",
+                 "containercluster_install_agent_completion", "containercluster_install_agent_nodes")
+
+
+def defaults():
+    return LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True)
+
+
+def scoped(observes):
+    material = {} if observes is None else {"observes": observes}
+    return {
+        "bootwright_cluster_install_material": material,
+        "containercluster_install_agent_observes_removal": defaults()["containercluster_install_agent_observes_removal"],
+    }
+
+
+def reads(observes):
+    """Which of the state read's reads run under one observation scope."""
+    templar = Templar(loader=LOADER, variables=scoped(observes))
+    return {task["register"]: templar.evaluate_conditional(task["when"]) if "when" in task else True
+            for task in tasks("state.yml") if "register" in task}
+
+
+@pytest.mark.parametrize("observes", [None, ""], ids=["unscoped", "empty"])
+def test_every_other_observation_reads_the_cluster_and_every_node(observes):
+    ran = reads(observes)
+    assert all(ran[name] for name in CLUSTER_READS)
+    assert ran["containercluster_install_agent_controllers"] is True
+
+
+def test_a_removal_observation_reads_every_node_and_none_of_the_cluster():
+    ran = reads("removal")
+    assert not any(ran[name] for name in CLUSTER_READS)
+    assert ran["containercluster_install_agent_controllers"] is True
+
+
+# The state a removal's observation resolves when its node presents an image
+# this cluster did not publish, with every cluster read skipped: nothing reads
+# as answering and every declared node as missing, since none of the cluster
+# was read. The evidence it publishes is install-evidence-release-partial-foreign
+# in internal/containercluster/agentinstall/testdata, which Go reads as a
+# removal part way through, because repeating the removal ejects any image
+# (D27).
+def test_a_removal_observation_of_a_foreign_image_publishes_the_media_alone():
+    task = resolve()
+    variables = dict(task.get("vars") or {})
+    variables.update(scoped("removal"))
+    skipped = {"changed": False, "skipped": True}
+    variables.update({name: skipped for name in CLUSTER_READS})
+    variables["bootwright_cluster_install_request"] = {
+        "release": {"version": RELEASE}, "nodes": [{"machine": "sno-01", "name": "master-0"}]}
+    variables["containercluster_install_agent_controllers"] = {
+        "results": [controller("sno-01", BASE + "e0" * 32 + "/agent.iso")]}
+    variables["containercluster_install_agent_before"] = {"observation": {"identity": IDENTITY, "url": PUBLISHED}}
+    resolved = Templar(loader=LOADER, variables=variables).template(
+        task["ansible.builtin.set_fact"]["containercluster_install_agent_state"])
+    found = protocol.evidence(arguments(outcome="unchanged", observed=True, state=resolved), DIGEST, False)
+    assert found == {
+        "absent": False, "cluster": "", "completed": False, "identity": IDENTITY, "media": ["sno-01"],
+        "missing": ["master-0"], "ownMedia": [], "postcondition": False, "powered": ["sno-01"],
+        "release": "", "request": DIGEST,
+    }

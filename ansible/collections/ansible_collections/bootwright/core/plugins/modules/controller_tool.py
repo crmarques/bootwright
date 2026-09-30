@@ -8,6 +8,7 @@ short_description: Prepare one frozen controller target tool
 description:
   - Internal action capability invoked only by the fixed controller dependency role.
   - Verifies the retained source and fixed executable members before exclusive publication.
+  - Names an oc the release-stamp check refuses to its runner before it fails.
 version_added: '0.1.0'
 author: Bootwright contributors (@crmarques)
 options:

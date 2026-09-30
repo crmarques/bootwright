@@ -851,6 +851,43 @@ func TestAContextThatRanABoundedRunStaysUsableAndDeletable(t *testing.T) {
 	}
 }
 
+// A structured result names a log relative to the state root, so each area
+// names its own place under that root, and joined to the root it is the
+// directory the area writes into.
+func TestEachAreaIsNamedRelativeToTheStateRoot(t *testing.T) {
+	ctx := context.Background()
+	store, record := lifecycleFixture(t)
+	root, err := store.rootPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	named := map[string]operationstore.Area{}
+	if err := store.MutateLifecycle(ctx, record.Name, func(tx lifecycle.Transaction) error {
+		named["operations"] = tx.Operations()
+		return tx.Operations().Append(ctx, "op-one/logs/operation.jsonl", []byte("{}\n"))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RunLifecycle(ctx, record.Name, func(view lifecycle.RunView) error {
+		named["runs"] = view.Runs()
+		return view.Runs().Append(ctx, "run-one/run.output", []byte("printed\n"))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for subtree, written := range map[string]string{"operations": "op-one/logs/operation.jsonl", "runs": "run-one/run.output"} {
+		area := named[subtree]
+		if want := "contexts/" + record.Name + "/state/" + subtree; area.Reference() != want {
+			t.Fatalf("the %s area is named %q, not %q", subtree, area.Reference(), want)
+		}
+		if area.Location() != filepath.Join(root, area.Reference()) {
+			t.Fatalf("the %s area is named %q under %s but writes into %s", subtree, area.Reference(), root, area.Location())
+		}
+		if _, err := os.Stat(filepath.Join(root, area.Reference(), written)); err != nil {
+			t.Fatalf("the %s area's reference does not hold what it wrote: %v", subtree, err)
+		}
+	}
+}
+
 // The location a result prints has to be the directory the area actually
 // writes into, or an operator follows a path that never fills.
 func TestOperationAreaLocationIsWhereItWrites(t *testing.T) {

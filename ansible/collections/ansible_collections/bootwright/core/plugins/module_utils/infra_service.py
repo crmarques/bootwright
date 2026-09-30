@@ -26,9 +26,11 @@ def probe_failure(error):
 
     The exception class alone cannot tell a refused port from an address this
     host does not hold, and those need opposite repairs, so the system's own
-    number and message are carried with it.
+    number and message are carried with it. A timeout is socket.timeout, which
+    Python 3.10 made TimeoutError but the 3.9 floor still names timeout, so it
+    is named TimeoutError on every interpreter.
     """
-    name = type(error).__name__
+    name = "TimeoutError" if isinstance(error, socket.timeout) else type(error).__name__
     number = getattr(error, "errno", None)
     detail = getattr(error, "strerror", None) or str(error)
     if number is not None:

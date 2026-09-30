@@ -6,6 +6,7 @@
     {
       "answered": false,
       "bridge": false,
+      "definition": false,
       "managed": true,
       "name": "bootwright-lab-lab-guests",
       "owned": false,

@@ -59,6 +59,11 @@
     or (bootwright_machine_power_material.pinnedSerialBase64 | default('') | length > 0)
   no_log: true
 
+# The refusal prints what a management controller reported, then or now, and
+# a controller promises neither printable text nor a length: each identity
+# keeps only its printable characters and is then cut to the 128 characters
+# the evidence path bounds an identity to, so the run's retained output carries
+# no terminal escape, no bidi override and no unbounded value.
 - name: Refuse a machine that answers as another system
   ansible.builtin.assert:
     that:
@@ -75,14 +80,14 @@
       Machine/{{ bootwright_machine_power_request.identity.object }} answers at
       {{ bootwright_machine_power_request.controller.endpoint }} as UUID
       '{{ (machine_power_redfish_identity.observation.uuid | default('') | string
-      | regex_replace(machine_power_redfish_control_characters, ''))[:128] }}' and serial
+      | bootwright.core.printable)[:128] }}' and serial
       '{{ (machine_power_redfish_identity.observation.serial | default('') | string
-      | regex_replace(machine_power_redfish_control_characters, ''))[:128] }}', but this
+      | bootwright.core.printable)[:128] }}', but this
       context's current apply proved UUID
       '{{ (bootwright_machine_power_material.pinnedUUIDBase64 | default('') | b64decode
-      | regex_replace(machine_power_redfish_control_characters, ''))[:128] }}' and serial
+      | bootwright.core.printable)[:128] }}' and serial
       '{{ (bootwright_machine_power_material.pinnedSerialBase64 | default('') | b64decode
-      | regex_replace(machine_power_redfish_control_characters, ''))[:128] }}', so no
+      | bootwright.core.printable)[:128] }}', so no
       power request was sent. Correct spec.hardware.management.bmc.address, or destroy and apply
       this context so the machine is proved again.
   when: >-

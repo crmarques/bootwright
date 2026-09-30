@@ -118,12 +118,7 @@ func (d *decoder) value(node *desiredstate.Node, shape *api.Shape, path string) 
 	if _, recorded := d.locations[path]; !recorded {
 		d.locations[path] = diagnostics.SourceLocation{Path: d.document.Path, Document: d.document.Index, Line: node.Line, Column: node.Column}
 	}
-	if node.Kind == desiredstate.AliasKind || node.Anchor != "" {
-		d.fail(node, "yaml.alias", path, "anchors and aliases are not permitted")
-		return api.Value{}
-	}
-	if node.ExplicitTag && !allowedTag(node) {
-		d.fail(node, "yaml.tag", path, "the YAML tag is not permitted")
+	if d.refusedConstruct(node, path) {
 		return api.Value{}
 	}
 	if shape == nil {
@@ -157,12 +152,11 @@ func (d *decoder) value(node *desiredstate.Node, shape *api.Shape, path string) 
 				d.fail(key, "yaml.alias", path, "merge keys are not permitted")
 				continue
 			}
-			if key.Kind != desiredstate.ScalarKind || scalarType(key) != api.String {
-				d.fail(key, "yaml.shape", path, "mapping keys must be strings")
+			if d.refusedConstruct(key, path) {
 				continue
 			}
-			if key.Anchor != "" {
-				d.fail(key, "yaml.alias", path, "anchors are not permitted")
+			if key.Kind != desiredstate.ScalarKind || scalarType(key) != api.String {
+				d.fail(key, "yaml.shape", path, "mapping keys must be strings")
 				continue
 			}
 			if seen[key.Value] {
@@ -261,6 +255,18 @@ func (d *decoder) value(node *desiredstate.Node, shape *api.Shape, path string) 
 	}
 	d.fail(node, "yaml.shape", path, "unsupported YAML representation")
 	return api.Value{}
+}
+
+func (d *decoder) refusedConstruct(node *desiredstate.Node, path string) bool {
+	if node.Kind == desiredstate.AliasKind || node.Anchor != "" {
+		d.fail(node, "yaml.alias", path, "anchors and aliases are not permitted")
+		return true
+	}
+	if node.ExplicitTag && !allowedTag(node) {
+		d.fail(node, "yaml.tag", path, "the YAML tag is not permitted")
+		return true
+	}
+	return false
 }
 
 func (d *decoder) retiredFieldMessage(path, field string) string {

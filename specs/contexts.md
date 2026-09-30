@@ -442,13 +442,16 @@ created exclusively, so a second claim of the same name refuses while it
 lives. Its owner holds an exclusive advisory lock on the stage from the claim
 until it publishes or removes it, and copies or downloads the image into it,
 computing the digest as it writes, with no root lock held. The second hold
-re-proves the admission against the store as it then stands and proves that
-the stage is still the file its owner filled, holding exactly the bytes it
-measured, and that the record states their size and digest; a stage or record
-that fails that proof refuses before a replacement removes the image it
-supersedes. It then renames the stage to the image name without replacing
-anything, proves the renamed file is still that stage, and only then publishes
-the record.
+re-proves the admission against the store as it then stands and proves the
+stage unchanged since its bytes were measured: its status (inode, size, link
+count, modification and change times) is the one its owner took when it
+finished filling the stage or re-reading an adopted one, and the record states
+the size and digest measured then. The proof compares that status and does not
+read the bytes again. A stage or record that fails it refuses, publishing
+nothing, before a replacement removes the image it supersedes. The hold then
+renames the stage to the image name without replacing anything, proves the
+renamed file is still that stage with that status, apart from the change time
+the rename itself sets, and only then publishes the record.
 
 Without `--yes`, a `media add` and a `media delete` first take a shared hold
 that admits the request as the media store requires. A `media add` that
@@ -464,8 +467,11 @@ A command that cannot take the lock for the second hold refuses with
 root lock, it writes exclusively beside the stage the canonical media record it
 would have published, as
 `media/staging-<32 lowercase hexadecimal digits>.json`, and its refusal says
-that repeating the command publishes the image without acquiring it again. An
-unpinned stage is removed.
+that repeating the command publishes the image without acquiring it again. It
+retains a stage it filled only when the stage passes the second hold's proof
+that it is unchanged since its bytes were measured. A filled stage that fails
+that proof, and an unpinned stage, are removed, and the refusal is the lock's
+alone.
 
 A stage and the record beside it are a retained pair while no process holds
 the stage's lock, the record decodes as a canonical media record within its

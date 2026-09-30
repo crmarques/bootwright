@@ -1,10 +1,26 @@
 from __future__ import annotations
 
 from ansible.plugins.action import ActionBase
+from ansible_collections.bootwright.core.plugins.module_utils.controller_channel import (
+    emit,
+)
 from ansible_collections.bootwright.core.plugins.module_utils.controller_files import (
     MAX_DEADLINE,
+    Unreleased,
     prepare_tool,
 )
+
+
+def name_refusal(error):
+    """Name to the runner the one refusal with a remedy of its own, an oc the
+    release-stamp check refused, before the task fails. Without the record
+    the run still fails, only with the generic remedy."""
+    if not isinstance(error, Unreleased):
+        return
+    try:
+        emit({"phase": "refused", "reason": "release-stamp"})
+    except (OSError, ValueError):
+        pass
 
 
 def tool_arguments(args):
@@ -38,9 +54,10 @@ class ActionModule(ActionBase):
             )
             result.update(prepare_tool(bundle, tool, egress, deadline, inspect_only))
             return result
-        except Exception:
+        except Exception as error:
             # Exceptions can include source/proxy paths. Evidence and diagnostics
             # cross the public boundary only through the enclosing fixed role.
+            name_refusal(error)
             return dict(
                 result,
                 failed=True,

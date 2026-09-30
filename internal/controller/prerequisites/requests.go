@@ -1,5 +1,7 @@
 package prerequisites
 
+import "github.com/crmarques/bootwright/internal/diagnostics"
+
 type CheckRequest struct{ ContextName string }
 
 // SetupRequest carries no context. Setup prepares the prerequisites every
@@ -62,6 +64,9 @@ type Report struct {
 	// and either the setup it runs beside completed or that setup made room at
 	// the host's bound.
 	RetiredBundles []string
+	// Warnings are what dependency resolution read but did not refuse, such as
+	// a publisher page of a newer Index API minor. They never change Outcome.
+	Warnings []diagnostics.Diagnostic
 }
 
 // PendingScope names the narrowest scope that has an unmet check, so a result

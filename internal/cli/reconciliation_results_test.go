@@ -477,7 +477,8 @@ func TestStatusTextEscapesOnce(t *testing.T) {
 			Logs:       []string{raw("log")},
 			Executable: raw("build"),
 		},
-		LogLocation: raw("location"),
+		Contradictions: []string{raw("contradiction")},
+		LogLocation:    raw("location"),
 	}
 	var text bytes.Buffer
 	if err := writeLifecycleStatus(&text, result, false); err != nil {
@@ -495,6 +496,7 @@ func TestStatusTextEscapesOnce(t *testing.T) {
 		"  State      " + shown("opstate") + "\n", "  Next       " + shown("next") + "\n",
 		"  [FAIL]  " + shown("description") + "\n",
 		"  Registered by  " + shown("build") + "\n", "  Logs           " + shown("location") + "\n",
+		"Contradictions\n  " + shown("contradiction") + "\n",
 	} {
 		if !strings.Contains(text.String(), want) {
 			t.Fatalf("status text = %q, missing %q", text.String(), want)
@@ -528,6 +530,7 @@ func TestStatusTextEscapesOnce(t *testing.T) {
 		"lifecycle.blocks[0].id": "block", "lifecycle.blocks[0].description": "description",
 		"lifecycle.blocks[0].stage": "stage", "lifecycle.blocks[0].state": "bstate",
 		"lifecycle.logs[0]": "log",
+		"contradictions[0]": "contradiction",
 	} {
 		want[path] = shown(label)
 	}

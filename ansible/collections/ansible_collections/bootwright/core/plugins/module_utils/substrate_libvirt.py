@@ -32,6 +32,11 @@ DOMAIN_STATES = ("running", "idle", "paused", "in shutdown", "shut off", "crashe
 # object without it is foreign and is never changed or removed.
 OWNERSHIP = "https://bootwright.io/substrate/v1"
 
+# NETWORK_BRIDGE is what the network template sets on a managed bridge besides
+# its name: the firewall zone its guests reach the controller's services
+# through, and spanning tree on with no forwarding delay.
+NETWORK_BRIDGE = {"zone": "trusted", "stp": "on", "delay": "0"}
+
 # LOOKUP_REFUSED is how virsh reports that the connection opened and the name
 # lookup failed. Every domain command resolves its argument through
 # virshLookupDomainInternal, which discards libvirt's own reason and exits 1
@@ -134,12 +139,79 @@ def listed(runner, uri, command, name):
     return name in [line.strip() for line in output.splitlines()]
 
 
-def network_state(runner, uri, name):
-    """Report one network's state, ownership, bridge and identity, unchanged.
+def same_address(element, host, prefix):
+    """Whether one `ip` element holds exactly this host address and prefix."""
+    try:
+        return (
+            ipaddress.ip_address(element.get("address") or "") == ipaddress.ip_address(host)
+            and int(element.get("prefix") or "") == int(prefix)
+        )
+    except ValueError:
+        return False
+
+
+def carries_definition(root, network, context):
+    """Whether one network definition carries everything the request froze for it.
+
+    Only what the network template writes is compared: the bridge with its
+    zone and spanning tree, the forward mode or none, the resolver off, the one
+    host address with its prefix and no DHCP, and the ownership naming this
+    context and network. libvirt adds elements of its own, such as a UUID and a
+    bridge MAC address, which are not compared, and formats each compared value
+    as it was defined (virNetworkDefParseXML and virNetworkDefFormatBuf in
+    https://gitlab.com/libvirt/libvirt/-/blob/master/src/conf/network_conf.c).
+    """
+    bridge = root.find("./bridge")
+    if bridge is None or bridge.get("name") != network.get("bridge"):
+        return False
+    if any(bridge.get(name) != value for name, value in NETWORK_BRIDGE.items()):
+        return False
+    forward = root.find("./forward")
+    if (forward.get("mode") if forward is not None else "none") != str(network.get("forward") or "none"):
+        return False
+    resolver = root.find("./dns")
+    if resolver is None or resolver.get("enable") != "no":
+        return False
+    addresses = root.findall("./ip")
+    host, _separator, prefix = str(network.get("address") or "").partition("/")
+    if len(addresses) != 1 or not same_address(addresses[0], host, prefix) or addresses[0].find("./dhcp") is not None:
+        return False
+    owner = root.find("./metadata/{%s}owner" % OWNERSHIP)
+    if owner is None:
+        return False
+    return (
+        (owner.findtext("{%s}context" % OWNERSHIP) or "").strip() == context
+        and (owner.findtext("{%s}attachment" % OWNERSHIP) or "").strip() == network.get("name")
+    )
+
+
+def keeps_definition(runner, uri, name, network, context):
+    """Whether the definition libvirt starts the network from next carries it too.
+
+    Defining an active network leaves the running definition alone and keeps
+    the new one for when the network next starts (virNetworkObjUpdateAssignDef,
+    https://gitlab.com/libvirt/libvirt/-/blob/master/src/conf/virnetworkobj.c),
+    and `--inactive` reads that one (tools/virsh-network.c).
+    """
+    code, output = virsh(runner, uri, "net-dumpxml", "--inactive", name)
+    if code != 0:
+        return False
+    try:
+        return carries_definition(ElementTree.fromstring(output), network, context)
+    except ElementTree.ParseError:
+        return False
+
+
+def network_state(runner, uri, name, frozen=None, context=""):
+    """Report one network's state, ownership, bridge, identity and definition, unchanged.
 
     The UUID is read because libvirt refuses to define a name that already
     exists under a different one, so a repeated apply can only redefine a
     network by offering back the identity the host already carries.
+
+    `definition` is whether the network runs, and keeps for its next start,
+    everything the `frozen` request entry sets for this `context`, so a replay
+    defines nothing a network already carries and a redefinition is proved.
 
     A network is read through the network driver, a daemon of its own that may
     be silent while the hypervisor the uri names answers, and virsh reports a
@@ -147,7 +219,7 @@ def network_state(runner, uri, name):
     true only when the driver returned the definition, or completed a listing
     that does not name the network, because only that proves it absent.
     """
-    unanswered = {"answered": False, "state": "", "owned": False, "bridge": "", "uuid": ""}
+    unanswered = {"answered": False, "definition": False, "state": "", "owned": False, "bridge": "", "uuid": ""}
     code, output = virsh(runner, uri, "net-dumpxml", name)
     if code != 0:
         return dict(unanswered, answered=listed(runner, uri, "net-list", name) is False)
@@ -166,7 +238,12 @@ def network_state(runner, uri, name):
         uuid = (element.text or "").strip()
     code, active = virsh(runner, uri, "net-info", name)
     state = "active" if code == 0 and "Active:         yes" in active else "inactive"
-    return {"answered": True, "state": state, "owned": owned, "bridge": bridge, "uuid": uuid}
+    definition = (
+        frozen is not None
+        and carries_definition(root, frozen, context)
+        and keeps_definition(runner, uri, name, frozen, context)
+    )
+    return {"answered": True, "definition": definition, "state": state, "owned": owned, "bridge": bridge, "uuid": uuid}
 
 
 def bridge_present(name):
@@ -355,16 +432,19 @@ def observe_host(runner, request):
     each managed network's `answered` and `poolAnswered` report whether the
     driver that owns it answered for it, because the uri answering proves only
     that the hypervisor did. An external network is never read, so it is never
-    answered for. The pool directory is observed by its path either way.
+    answered for. The pool directory is observed by its path either way. Each
+    managed network's `definition` is whether it carries its frozen entry, and
+    an external network, never read, carries none.
     """
     networks = []
     answers = uri_answers(runner, request["uri"])
+    context = str((request.get("identity") or {}).get("context") or "")
     for network in request.get("networks") or []:
         entry = {"name": network["name"], "managed": bool(network["managed"]), "bridge": bridge_present(network["bridge"])}
-        entry["answered"], entry["state"], entry["owned"], entry["uuid"] = False, "", False, ""
+        entry["answered"], entry["definition"], entry["state"], entry["owned"], entry["uuid"] = False, False, "", False, ""
         if entry["managed"] and answers:
-            state = network_state(runner, request["uri"], network["name"])
-            entry["answered"], entry["state"] = state["answered"], state["state"]
+            state = network_state(runner, request["uri"], network["name"], network, context)
+            entry["answered"], entry["definition"], entry["state"] = state["answered"], state["definition"], state["state"]
             entry["owned"], entry["uuid"] = state["owned"], state["uuid"]
         networks.append(entry)
     pool = pool_state(runner, request["uri"], request["poolName"]) if answers else {"answered": False, "state": ""}

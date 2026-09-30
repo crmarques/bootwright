@@ -147,9 +147,14 @@ func TestAttemptLogPathsAreNumbered(t *testing.T) {
 	}
 }
 
+// A structured result names each log relative to the state root, so the area's
+// own place under it leads every path, and an area that cannot say where it is
+// names none rather than a path that reads as relative to the state root.
 func TestLogPathsFollowFrozenPlanOrder(t *testing.T) {
 	ctx := context.Background()
-	store, _ := newStore(t)
+	store, area := newStore(t)
+	const reference = "contexts/lab/state/operations"
+	area.reference = reference
 	plan := testPlan(t, "bravo", "alpha")
 	id := "op-" + strings.Repeat("ab", 16)
 	if _, err := store.OpenLog(ctx, OperationLogPath(id)); err != nil {
@@ -171,11 +176,11 @@ func TestLogPathsFollowFrozenPlanOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
-		OperationLogPath(id),
-		id + "/logs/blocks/alpha/attempt-000001.jsonl",
-		id + "/logs/blocks/alpha/attempt-000002.jsonl",
-		id + "/logs/blocks/bravo/attempt-000001.jsonl",
-		id + "/logs/blocks/bravo/attempt-000002.jsonl",
+		reference + "/" + OperationLogPath(id),
+		reference + "/" + id + "/logs/blocks/alpha/attempt-000001.jsonl",
+		reference + "/" + id + "/logs/blocks/alpha/attempt-000002.jsonl",
+		reference + "/" + id + "/logs/blocks/bravo/attempt-000001.jsonl",
+		reference + "/" + id + "/logs/blocks/bravo/attempt-000002.jsonl",
 	}
 	if len(paths) != len(want) {
 		t.Fatalf("log paths = %v", paths)
@@ -184,6 +189,10 @@ func TestLogPathsFollowFrozenPlanOrder(t *testing.T) {
 		if paths[index] != want[index] {
 			t.Fatalf("log paths = %v, want %v", paths, want)
 		}
+	}
+	area.reference = ""
+	if paths, err := store.LogPaths(ctx, id, plan); err != nil || len(paths) != 0 {
+		t.Fatalf("an area with no place under the state root named %v (%v)", paths, err)
 	}
 }
 

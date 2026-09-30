@@ -250,7 +250,7 @@ func resolveMembers(tool prerequisites.ToolDefinition, regular map[string]stream
 		}
 	}
 	if !released {
-		return nil, bundleFailure("selected oc executable does not name its frozen release")
+		return nil, prerequisites.UnreleasedClient(tool)
 	}
 	return result, nil
 }

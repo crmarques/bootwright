@@ -326,6 +326,25 @@ func TestMediaRefusesAStoreThatWasNeverInitialized(t *testing.T) {
 	}
 }
 
+func TestAMissingMediaCallbackIsRefusedAndCreatesNothing(t *testing.T) {
+	ctx := context.Background()
+	store := mediaFixture(t)
+	for name, call := range map[string]func() error{
+		"read":     func() error { return store.ReadMedia(ctx, nil) },
+		"mutation": func() error { return store.MutateMedia(ctx, nil) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			reported := diagnostics.Of(call())
+			if len(reported) != 1 || reported[0].Code != "context.state" || !strings.Contains(reported[0].Message, name+" callback is missing") {
+				t.Fatalf("refusal = %#v, want context.state naming the missing %s callback", reported, name)
+			}
+		})
+	}
+	if _, err := os.Lstat(filepath.Join(store.options.Root, mediaContainer)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("a refused mutation left the media directory (%v)", err)
+	}
+}
+
 // mediaSource serves an image and runs first once, on its first read, so a
 // test can act while an acquisition is in flight.
 type mediaSource struct {
@@ -587,35 +606,43 @@ func TestASubstitutedStageNeverReplacesTheStoredImage(t *testing.T) {
 	expectMedia(t, store, map[string]string{"demo.iso": mediaDigest("old image")})
 }
 
-// A stage replaced after publication proved it, but before its rename, is
-// caught once renamed: its bytes are never given a record.
-func TestAStageSubstitutedDuringItsRenameIsNeverRecorded(t *testing.T) {
-	store := mediaFixture(t)
-	stage := fillStage(t, store, "demo.iso", "new image")
-	fired := false
-	store.fail = func(point string) error {
-		if point == "before-media-rename" && !fired {
-			fired = true
-			substituteStage(t, store, "demo.iso", "bad image")
-		}
-		return nil
+// A stage replaced, or rewritten in place at its size, after publication
+// proved it but before its rename, is caught once renamed: its bytes are never
+// given a record.
+func TestAStageChangedDuringItsRenameIsNeverRecorded(t *testing.T) {
+	for name, change := range map[string]func(*testing.T, *Store){
+		"substituted":        func(t *testing.T, store *Store) { substituteStage(t, store, "demo.iso", "bad image") },
+		"rewritten in place": func(t *testing.T, store *Store) { rewriteInPlace(t, store, "demo.iso", "bad image") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := mediaFixture(t)
+			stage := fillStage(t, store, "demo.iso", "new image")
+			fired := false
+			store.fail = func(point string) error {
+				if point == "before-media-rename" && !fired {
+					fired = true
+					change(t, store)
+				}
+				return nil
+			}
+			err := publishStage(store, "demo.iso", "new image", stage, false)
+			store.fail = nil
+			if !fired {
+				t.Fatal("the publication never reached its rename; the case proves nothing")
+			}
+			if err == nil {
+				t.Fatal("a stage changed during its rename was published")
+			}
+			if _, err := os.Lstat(filepath.Join(store.options.Root, "media", "demo.iso.json")); !errors.Is(err, fs.ErrNotExist) {
+				t.Fatalf("changed bytes were given a record: %v", err)
+			}
+			expectMedia(t, store, map[string]string{})
+		})
 	}
-	err := publishStage(store, "demo.iso", "new image", stage, false)
-	store.fail = nil
-	if !fired {
-		t.Fatal("the publication never reached its rename; the case proves nothing")
-	}
-	if err == nil {
-		t.Fatal("a stage substituted during its rename was published")
-	}
-	if _, err := os.Lstat(filepath.Join(store.options.Root, "media", "demo.iso.json")); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("substituted bytes were given a record: %v", err)
-	}
-	expectMedia(t, store, map[string]string{})
 }
 
-// Publication proves the stage still holds exactly the bytes Fill measured:
-// bytes appended since are refused, never published under the image name.
+// Publication proves the stage unchanged since Fill measured its bytes: bytes
+// appended since are refused, never published under the image name.
 func TestAStageThatGrewAfterItWasFilledIsNeverPublished(t *testing.T) {
 	store := mediaFixture(t)
 	stage := fillStage(t, store, "demo.iso", "installer bytes")
@@ -638,6 +665,110 @@ func TestAStageThatGrewAfterItWasFilledIsNeverPublished(t *testing.T) {
 	}
 	if entries := mediaDirectory(t, store); len(entries) != 0 {
 		t.Fatalf("a refused publication left %v behind", entries)
+	}
+}
+
+// rewriteInPlace writes data over the start of an image's stage, at the size
+// it holds, until the stage's status shows the write: a filesystem may stamp a
+// write with a clock too coarse to tell it from the one before.
+func rewriteInPlace(t *testing.T, store *Store, name, data string) {
+	t.Helper()
+	file, err := os.OpenFile(filepath.Join(store.options.Root, "media", mediaStageName(name)), os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	var before syscall.Stat_t
+	if err := syscall.Fstat(int(file.Fd()), &before); err != nil {
+		t.Fatal(err)
+	}
+	after := before
+	for deadline := time.Now().Add(time.Second); after.Mtim == before.Mtim && after.Ctim == before.Ctim; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("a write in place never changed the stage's status")
+		}
+		if _, err := file.WriteAt([]byte(data), 0); err != nil {
+			t.Fatal(err)
+		}
+		if err := syscall.Fstat(int(file.Fd()), &after); err != nil {
+			t.Fatal(err)
+		}
+		if after.Size != before.Size {
+			t.Fatalf("the write in place changed the stage's size from %d to %d", before.Size, after.Size)
+		}
+	}
+}
+
+// rewrittenPublication is the media store with an image's stage rewritten in
+// place, at its size, just before an add's second media mutation, the one
+// that publishes: after Fill or Verify measured the stage's bytes. With locked,
+// another command then holds the root lock during that mutation.
+type rewrittenPublication struct {
+	*Store
+	t          *testing.T
+	name, data string
+	locked     bool
+	count      int
+}
+
+func (s *rewrittenPublication) MutateMedia(ctx context.Context, callback func(media.Transaction) error) error {
+	s.count++
+	if s.count == 2 {
+		rewriteInPlace(s.t, s.Store, s.name, s.data)
+		if s.locked {
+			release := holdRootLock(s.t, s.Store)
+			defer release()
+		}
+	}
+	return s.Store.MutateMedia(ctx, callback)
+}
+
+func expectChangedStageRefused(t *testing.T, rewritten *rewrittenPublication, err error) {
+	t.Helper()
+	if rewritten.count < 2 {
+		t.Fatal("the add never reached its publication; the case proves nothing")
+	}
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "context.state" ||
+		!strings.Contains(reported[0].Message, "changed before publication") {
+		t.Fatalf("publication of a stage rewritten in place = %#v", reported)
+	}
+}
+
+// Publication proves the stage unchanged since Fill measured its bytes, by the
+// status taken then: bytes rewritten in place at the same size before the
+// publication are refused, and the add publishes no image and no record.
+func TestAStageRewrittenInPlaceAfterItWasFilledIsNeverPublished(t *testing.T) {
+	store := mediaFixture(t)
+	acquirer := &mediaAcquirer{source: func() media.Payload { return mediaPayload("installer bytes") }}
+	rewritten := &rewrittenPublication{Store: store, t: t, name: "demo.iso", data: "INSTALLER BYTES"}
+	_, err := media.New(rewritten, acquirer, nil, mediaClock{}).Add(context.Background(), pinnedAdd("demo.iso", "installer bytes"))
+	expectChangedStageRefused(t, rewritten, err)
+	expectMedia(t, store, map[string]string{})
+	if entries := mediaDirectory(t, store); len(entries) != 0 {
+		t.Fatalf("a refused publication left %v behind", entries)
+	}
+}
+
+// A pinned add whose publication meets another command's lock retains only a
+// stage unchanged since Fill measured its bytes: one rewritten in place at its
+// size is removed, and the lock's refusal stands alone, never promising that a
+// repetition publishes it without acquiring it again.
+func TestAPinnedAddNeverRetainsAStageRewrittenInPlaceAfterItWasFilled(t *testing.T) {
+	store := mediaFixture(t)
+	acquirer := &mediaAcquirer{source: func() media.Payload { return mediaPayload("installer bytes") }}
+	rewritten := &rewrittenPublication{Store: store, t: t, name: "demo.iso", data: "INSTALLER BYTES", locked: true}
+	_, err := media.New(rewritten, acquirer, nil, mediaClock{}).Add(context.Background(), pinnedAdd("demo.iso", "installer bytes"))
+	if rewritten.count < 2 {
+		t.Fatal("the add never reached its publication; the case proves nothing")
+	}
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.lease" ||
+		strings.Contains(reported[0].Message, "verified but not published") ||
+		strings.Contains(reported[0].Remediation, "without acquiring it again") {
+		t.Fatalf("publication of a rewritten stage under a held root lock = %#v", reported)
+	}
+	expectMedia(t, store, map[string]string{})
+	if entries := mediaDirectory(t, store); len(entries) != 0 {
+		t.Fatalf("a rewritten stage left %v behind", entries)
 	}
 }
 
@@ -1072,6 +1203,29 @@ func TestARetainedStageWhoseBytesChangedIsNeverPublished(t *testing.T) {
 	_, err = mediaService(store, acquirer).Add(context.Background(), pinnedAdd("demo.iso", "installer bytes"))
 	expectMediaRefusal(t, err, "no longer holds the bytes it verified")
 	expectMedia(t, store, map[string]string{})
+	if entries := mediaDirectory(t, store); len(entries) != 0 || acquirer.opens.Load() != 0 {
+		t.Fatalf("media directory = %v, acquisitions %d", entries, acquirer.opens.Load())
+	}
+}
+
+// An adopted stage is proved unchanged since Verify re-read it: bytes rewritten
+// in place at the same size after that re-read are refused and the add
+// publishes no image and no record. The pair stays retained, and the
+// repetition's own re-read finds the other bytes and removes it.
+func TestAnAdoptedStageRewrittenInPlaceAfterItsVerificationIsNeverPublished(t *testing.T) {
+	ctx := context.Background()
+	store := mediaFixture(t)
+	retainStage(t, store, "demo.iso", "installer bytes")
+	acquirer := &mediaAcquirer{source: func() media.Payload { return mediaPayload("installer bytes") }}
+	rewritten := &rewrittenPublication{Store: store, t: t, name: "demo.iso", data: "INSTALLER BYTES"}
+	_, err := media.New(rewritten, acquirer, nil, mediaClock{}).Add(ctx, pinnedAdd("demo.iso", "installer bytes"))
+	expectChangedStageRefused(t, rewritten, err)
+	expectMedia(t, store, map[string]string{})
+	if entries := mediaDirectory(t, store); !slices.Equal(entries, retainedFiles("demo.iso")) || acquirer.opens.Load() != 0 {
+		t.Fatalf("media directory = %v, acquisitions %d", entries, acquirer.opens.Load())
+	}
+	_, err = mediaService(store, acquirer).Add(ctx, pinnedAdd("demo.iso", "installer bytes"))
+	expectMediaRefusal(t, err, "no longer holds the bytes it verified")
 	if entries := mediaDirectory(t, store); len(entries) != 0 || acquirer.opens.Load() != 0 {
 		t.Fatalf("media directory = %v, acquisitions %d", entries, acquirer.opens.Load())
 	}

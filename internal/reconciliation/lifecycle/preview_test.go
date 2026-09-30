@@ -10,6 +10,7 @@ import (
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -47,6 +48,18 @@ func TestFreshPlanAndApplyShareOneDecision(t *testing.T) {
 		},
 		{name: "a zero-block plan", refusal: "lifecycle.state"},
 		{name: "a stage boundary", definitions: controlled, stages: []string{"infra-components"}, refusal: "lifecycle.stage"},
+		{
+			name: "its own sockets in conflict", definitions: nestedDefinitions(), refusal: "api.invariant",
+			prepare: func(h *harness) { h.capability.reservations = conflictingSockets() },
+		},
+		{
+			name: "a wildcard beside its own endpoint socket", definitions: nestedDefinitions(),
+			prepare: func(h *harness) {
+				h.capability.reservations = append(reservationOf("alpha"), prerequisites.HostReservation{
+					Context: testContextName, Kind: "proxy", Service: "beta", Keys: []string{"socket:0.0.0.0:3128", "socket:192.0.2.1:3128"},
+				})
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -68,6 +81,29 @@ func TestFreshPlanAndApplyShareOneDecision(t *testing.T) {
 			}
 			agreeOnPlan(t, h, preview, result)
 		})
+	}
+}
+
+// conflictingSockets is two of one context's own services on one port, one of
+// them bound to a wildcard, so they could never both listen.
+func conflictingSockets() []prerequisites.HostReservation {
+	return append(reservationOf("alpha"), prerequisites.HostReservation{
+		Context: testContextName, Kind: "proxy", Service: "beta", Keys: []string{"socket::::8443", "socket:fd00::1:8443"},
+	})
+}
+
+// Two of one context's own blocks whose controller sockets conflict are
+// refused while the context plans, naming both and the socket each claims,
+// rather than failing at run time when the second one starts listening.
+func TestAPlanWhoseOwnSocketsConflictNamesBoth(t *testing.T) {
+	h := newPlannedHarness(t, nestedDefinitions())
+	h.capability.reservations = conflictingSockets()
+	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "api.invariant" ||
+		reported[0].Message != "this context's artifact-server alpha at 192.0.2.1:8443 and proxy beta at [::]:8443 cannot both listen on the controller" ||
+		reported[0].Remediation != "give one of them another bind address or port" {
+		t.Fatalf("refusal = %+v (%v)", reported, err)
 	}
 }
 

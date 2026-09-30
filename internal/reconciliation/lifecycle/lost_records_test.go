@@ -128,13 +128,20 @@ func TestACompletedDestroyHoldingABlockNotDoneRefusesEitherVerb(t *testing.T) {
 	requireRefused(t, h, reconciliation.Destroy, message)
 }
 
-// failedRemovalWithEveryBlockDone removes alpha with a removal that fails and
-// is then left running, as a kill before it recorded the failure leaves it;
-// continues it with a retry whose start lands and then reports a failure,
-// which records the removal failed beside alpha's running record; and then
-// supersedes it with a removal killed once its resolution proved alpha done,
-// before it recorded what that proved.
+// failedRemovalWithEveryBlockDone leaves a failed removal whose resolution
+// proved alpha done before a kill.
 func failedRemovalWithEveryBlockDone(t *testing.T) (*harness, string) {
+	t.Helper()
+	return failedRemovalResolvedAs(t, reconciliation.EffectCompleted, reconciliation.BlockDone)
+}
+
+// failedRemovalResolvedAs removes alpha with a removal that fails and is then
+// left running, as a kill before it recorded the failure leaves it; continues
+// it with a retry whose start lands and then reports a failure, which records
+// the removal failed beside alpha's running record; and then supersedes it
+// with a removal whose resolution observes effect and lands alpha's record
+// reading alpha, killed there, before it recorded what that proved.
+func failedRemovalResolvedAs(t *testing.T, effect reconciliation.EffectState, alpha reconciliation.BlockState) (*harness, string) {
 	t.Helper()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
@@ -154,10 +161,10 @@ func failedRemovalWithEveryBlockDone(t *testing.T) (*harness, string) {
 		t.Fatalf("the retry start did not land before it failed: %s", landed)
 	}
 	requireRemovalRecords(t, h, removal, reconciliation.OperationFailed, reconciliation.BlockRunning)
-	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+	h.capability.observations = []Observation{{Effect: effect}}
 	killed := false
 	h.workspace.area.landing = func(_, _ string, files map[string][]byte) error {
-		if strings.Contains(string(files[record]), `"state":"done"`) {
+		if strings.Contains(string(files[record]), `"state":"`+string(alpha)+`"`) {
 			killed = true
 			return errors.New("killed")
 		}
@@ -170,7 +177,7 @@ func failedRemovalWithEveryBlockDone(t *testing.T) (*harness, string) {
 	if !killed {
 		t.Fatal("the superseding removal never resolved alpha")
 	}
-	requireRemovalRecords(t, h, removal, reconciliation.OperationFailed, reconciliation.BlockDone)
+	requireRemovalRecords(t, h, removal, reconciliation.OperationFailed, alpha)
 	return h, removal
 }
 

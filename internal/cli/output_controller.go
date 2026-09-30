@@ -140,6 +140,11 @@ func validControllerReport(report *prerequisites.Report) bool {
 			return false
 		}
 	}
+	for _, warning := range report.Warnings {
+		if warning.Severity != "warning" || warning.Code == "" || warning.Message == "" {
+			return false
+		}
+	}
 	return !report.DryRun || report.Outcome == "planned"
 }
 
@@ -193,10 +198,14 @@ func controllerActionLabel(id string) string {
 	return id
 }
 
-// writeControllerReport closes the result. Whatever the presenter already
-// streamed is not repeated: the scope, checks and plan after a streamed
-// inspection, or everything but the outcome after a presented plan.
-func writeControllerReport(out io.Writer, command string, report *prerequisites.Report) error {
+// writeControllerReport closes the result, its warnings on errOut. Whatever
+// the presenter already streamed is not repeated: the scope, checks and plan
+// after a streamed inspection, or everything but the outcome after a
+// presented plan.
+func writeControllerReport(out, errOut io.Writer, command string, report *prerequisites.Report) error {
+	if err := writeHumanDiagnostics(errOut, displayDiagnostics(report.Warnings)); err != nil {
+		return err
+	}
 	var text display
 	presented := report.PlanPresented || report.ProgressPresented
 	if !presented {

@@ -184,22 +184,28 @@ def test_the_refusal_names_the_machine_both_identities_and_the_remedy(tmp_path):
         % (ENDPOINT, TEMPLATE, UUID, TEMPLATE, REMEDY))
 
 
-def test_the_refusal_prints_each_identity_bounded_and_without_control_characters(tmp_path):
+def test_the_refusal_prints_each_identity_bounded_and_printable(tmp_path):
     """What a controller reported, then or now, reaches the retained output printable and at most 128 characters.
 
-    Control characters are removed before the value is cut, so a value padded
-    with them still shows its first 128 printable characters. Each of the four
-    identities is longer than that and carries control characters, so each
-    one's removal and cut is proved on its own.
+    Every character str.isprintable() refuses is removed before the value is
+    cut, so a value padded with them still shows its first 128 printable
+    characters: the C0 and C1 controls and DEL, and the format characters and
+    separators that print as nothing or reorder what follows them, such as a
+    bidi override or isolate, a zero-width space, a byte-order mark, a line or
+    paragraph separator and a space other than U+0020. A printable letter
+    outside ASCII is kept. Each of the four identities is longer than the bound
+    and carries such characters, so each one's removal and cut is proved on its
+    own.
     """
-    variables = scope(tmp_path, reported(uuid="\x1b[31m" + UUID + "\x1b]0;owned\x07" + "U" * 200,
-                                         serial="S" * 100 + "\r\n\t\x00\x7f\x85\x9b" + "T" * 100),
-                      UUID + "\x08\x9b2J" + "V" * 200, "\x00\x1b\x9b" + "P" * 300)
+    variables = scope(tmp_path, reported(uuid="\x1b[31m" + UUID + "\u202e\x1b]0;owned\x07" + "U" * 200,
+                                         serial="S" * 100 + "\r\n\t\x00\x7f\x85\x9b\u200b\ufeff\u2028\u2029\xa0\u3000"
+                                         + "T" * 100),
+                      UUID + "\x08\x9b2J\u2066" + "V" * 200, "\x00\x1b\x9b\ufeff\u200b\xe9" + "P" * 300)
     assert accepts(variables) is False
     message = Templar(loader=LOADER, variables=variables).template(refusal()[ASSERT]["fail_msg"])
     assert message == (
         "Machine/metal answers at %s as UUID '%s' and serial '%s', but this context's current apply "
         "proved UUID '%s' and serial '%s', so no power request was sent. %s"
         % (ENDPOINT, "[31m" + UUID + "]0;owned" + "U" * 80, "S" * 100 + "T" * 28, UUID + "2J" + "V" * 90,
-           "P" * 128, REMEDY))
+           "\xe9" + "P" * 127, REMEDY))
     assert message.isprintable()

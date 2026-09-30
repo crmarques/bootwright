@@ -72,6 +72,30 @@ func TestRunnerProtocolChild(t *testing.T) {
 		_, _ = input.ReadString('\n')
 		os.Exit(19)
 	}
+	if strings.HasPrefix(mode, "unreleased") {
+		emit(map[string]any{"phase": "prepared", "preparation": prerequisites.NativePreparation{InventorySHA256: sha, AddedSources: []string{"tool-oc"}}}, true)
+		if mode != "unreleased-before-continue" {
+			emit(map[string]any{"phase": "continue"}, true)
+		}
+		records := []string{`{"phase":"refused","reason":"` + os.Getenv("BOOTWRIGHT_TEST_REASON") + `"}`}
+		if strings.HasPrefix(mode, "unreleased-after-completed") {
+			completed, _ := json.Marshal(map[string]any{"phase": "completed", "outcome": "changed", "evidence": map[string]any{"request": sha, "before": sha, "after": sha, "planDigest": "", "added": []string{}, "tools": []map[string]string{{"source": "tool-oc", "sha256": strings.Repeat("d", 64), "files": strings.Repeat("e", 64)}}, "postcondition": true}})
+			records = append([]string{string(completed)}, records...)
+		}
+		if mode == "unreleased-after-exit" || mode == "unreleased-after-completed-exit-first" {
+			// A descendant writes the records after this process has exited,
+			// so the runner reads the failed exit first.
+			descendant := exec.Command("/bin/sh", append([]string{"-c", `sleep 0.3; printf '%s\n' "$@" >&3`, "sh"}, records...)...)
+			descendant.ExtraFiles = []*os.File{output}
+			_ = descendant.Start()
+		} else {
+			_, _ = output.Write([]byte(strings.Join(records, "\n") + "\n"))
+		}
+		if mode == "unreleased-after-completed" {
+			os.Exit(0)
+		}
+		os.Exit(2)
+	}
 	if mode == "recover-native" {
 		emit(map[string]any{"phase": "native"}, true)
 		emit(map[string]any{"phase": "completed", "outcome": "changed", "evidence": map[string]any{"request": sha, "before": sha, "after": strings.Repeat("b", 64), "planDigest": strings.Repeat("c", 64), "added": []string{"native-one"}, "tools": []string{}, "postcondition": true}}, false)
@@ -257,6 +281,50 @@ func TestAProtocolRefusalReleasesAWaitingAdapter(t *testing.T) {
 			}
 			if _, err := os.Stat(transaction); mode == "refused-native" && err != nil {
 				t.Fatalf("the authorized native transaction did not finish: %v", err)
+			}
+		})
+	}
+}
+
+// An adapter that refuses an unstamped oc names the refusal before it fails, so
+// the operator is told of the release-stamp check rather than to restore the
+// source a rerun reuses. It is named whichever of the record and the failed
+// exit the runner reads first, and only for the client being installed. Out of
+// its place, before that client's continue or after completed, the record is
+// refused like any other, again whichever the runner reads first.
+func TestAnUnstampedClientRefusalNamesTheReleaseStampCheck(t *testing.T) {
+	for _, check := range []struct {
+		name, mode, reason, kind string
+		named                    bool
+		message                  string
+	}{
+		{"record first", "unreleased", "release-stamp", "openshift-clients", true, ""},
+		{"exit first", "unreleased-after-exit", "release-stamp", "openshift-clients", true, ""},
+		{"another reason", "unreleased", "source integrity", "openshift-clients", false, ""},
+		{"another tool", "unreleased", "release-stamp", "helm", false, ""},
+		{"before the client's continue", "unreleased-before-continue", "release-stamp", "openshift-clients", false, ""},
+		{"after completed", "unreleased-after-completed", "release-stamp", "openshift-clients", false, "the Ansible capability protocol was invalid"},
+		{"after completed, exit first", "unreleased-after-completed-exit-first", "release-stamp", "openshift-clients", false, ""},
+	} {
+		t.Run(check.name, func(t *testing.T) {
+			launch, request, boundary := runnerFixture(t, check.mode)
+			boundary.completedDrain, boundary.authorizedDrain = 5*time.Second, 5*time.Second
+			launch.Environment = append(launch.Environment, "BOOTWRIGHT_TEST_REASON="+check.reason)
+			request.Tools = []prerequisites.ToolDefinition{{Kind: check.kind, Version: "4.21.15", Source: prerequisites.DependencySource{ID: "tool-oc", SHA256: strings.Repeat("d", 64), Bytes: 1}}}
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary)
+			found := diagnostics.Of(err)
+			if len(found) != 1 || result.Outcome != "unknown" {
+				t.Fatalf("the refused client left the run %s (%v)", result.Outcome, err)
+			}
+			named := found[0].Code == "controller.setup" && found[0].Message == "the oc of OpenShift client release 4.21.15 does not name its frozen release" &&
+				strings.Contains(found[0].Remediation, "passes the release-stamp check")
+			if named != check.named {
+				t.Fatalf("diagnostic %+v, want the release-stamp refusal: %v", found[0], check.named)
+			}
+			if check.message != "" && found[0].Message != check.message {
+				t.Fatalf("diagnostic %+v, want %q", found[0], check.message)
 			}
 		})
 	}

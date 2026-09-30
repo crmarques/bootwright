@@ -12,7 +12,6 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -233,42 +232,6 @@ func TestAnInstallationCrossesTheAdapterWithItsClientsAndCredentials(t *testing.
 		}) {
 			t.Fatalf("materials = %+v", request.Materials)
 		}
-	}
-}
-
-// A frozen request placed over SSH crosses the adapter with its placement's
-// identity and host key once each, beside one controller credential per node:
-// the attempt adds the placement's material to every run, and the runner
-// clears each value once it has written it, so a file listed twice would be
-// rewritten with the cleared bytes.
-func TestAnSSHPlacedInstallationListsEachMaterialOnce(t *testing.T) {
-	execution, request := installExecution(t, singleNodeCatalog(), testDigest)
-	request.Placement = machine.Placement{
-		Address: "192.0.2.2", Connection: machine.ConnectionSSH, KnownHostsRef: "hv-01-host-key",
-		Machine: "hv-01", PrivateKeyRef: "hv-01-key", User: "root",
-	}
-	canonical, err := request.Canonical()
-	if err != nil {
-		t.Fatal(err)
-	}
-	execution.Block.Request = canonical
-	for _, reference := range request.Placement.SecretReferences() {
-		execution.Material[reference] = secrets.NewMaterial(nil)
-	}
-	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: installEvidence(t, testDigest, nil)}}
-	if _, err := NewInstall(runner).Apply(context.Background(), execution); err != nil {
-		t.Fatalf("apply: %v", err)
-	}
-	if len(runner.requests) != 1 || runner.requests[0].Placement != request.Placement {
-		t.Fatalf("invocations = %+v", runner.requests)
-	}
-	names := []string{}
-	for _, file := range runner.requests[0].Materials {
-		names = append(names, file.Name)
-	}
-	slices.Sort(names)
-	if want := []string{"bmc-password-sno-01", "bmc-user-sno-01", "id", "known_hosts"}; !slices.Equal(names, want) {
-		t.Fatalf("material files = %v, want %v", names, want)
 	}
 }
 
@@ -512,11 +475,14 @@ func TestARemovalProvesOnlyThatTheMediaIsReleased(t *testing.T) {
 	}
 }
 
-// A removal only ejects the media each node presents, and a completed
-// installation already presents none, so its resolution reads only the media:
-// none presented is its completion whatever answers, only this cluster's own
-// image on some nodes is partial, and any other image stays unknown. The
-// cluster the apply installed is kept, so nothing proves no effect.
+// A removal ejects whatever each node presents, and a completed installation
+// already presents none, so its resolution reads only the media: none
+// presented is its completion whatever answers, and any image on this
+// cluster's own nodes, its own or a foreign one (D27), is partial, because
+// repeating the removal ejects either. A node that cannot be read fails the
+// observation, and a Machine outside the cluster's nodes is none the removal
+// acts on, so both stay unknown. The cluster the apply installed is kept, so
+// nothing proves no effect.
 func TestAnInstallRemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 	for name, expectation := range map[string]struct {
 		mutate func(*InstallEvidence)
@@ -536,16 +502,22 @@ func TestAnInstallRemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 		"its own image on one node": {func(e *InstallEvidence) {
 			e.Postcondition, e.Media, e.OwnMedia = false, []string{"sno-01"}, []string{"sno-01"}
 		}, nil, reconciliation.EffectPartial},
-		"its own image beside a foreign one": {func(e *InstallEvidence) {
-			e.Postcondition, e.Media, e.OwnMedia = false, []string{"sno-01", "sno-02"}, []string{"sno-01"}
-		}, nil, reconciliation.EffectUnknown},
-		"a foreign image alone": {func(e *InstallEvidence) {
+		"a foreign image on its node": {func(e *InstallEvidence) {
 			e.Postcondition, e.Media, e.OwnMedia = false, []string{"sno-01"}, []string{}
+		}, nil, reconciliation.EffectPartial},
+		"a foreign image read with nothing of the cluster": {func(e *InstallEvidence) {
+			*e = InstallEvidence{
+				Identity: anchorIdentity, Media: []string{"sno-01"}, Missing: []string{"master-0"},
+				OwnMedia: []string{}, Powered: []string{"sno-01"}, Request: testDigest,
+			}
+		}, nil, reconciliation.EffectPartial},
+		"a Machine that is not one of its nodes": {func(e *InstallEvidence) {
+			e.Postcondition, e.Media, e.OwnMedia = false, []string{"sno-01", "sno-02"}, []string{"sno-01"}
 		}, nil, reconciliation.EffectUnknown},
 		"another block's evidence": {func(e *InstallEvidence) {
 			e.Request = testDigest[:63] + "0"
 		}, nil, reconciliation.EffectUnknown},
-		"adapter failed": {nil, errors.New("unreachable"), reconciliation.EffectUnknown},
+		"a node that cannot be read": {nil, errors.New("the management controller could not be read"), reconciliation.EffectUnknown},
 	} {
 		t.Run(name, func(t *testing.T) {
 			execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
@@ -558,6 +530,37 @@ func TestAnInstallRemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 			}
 			if len(runner.requests) != 1 || runner.requests[0].Operation != "observe" {
 				t.Fatalf("adapter invocation = %+v", runner.requests)
+			}
+			if runner.requests[0].MaterialValues["observes"] != "removal" {
+				t.Fatalf("the removal observation was not scoped to the media: %v", runner.requests[0].MaterialValues)
+			}
+		})
+	}
+}
+
+// A removal's resolution reads the media each node presents and none of the
+// cluster, while the apply's resolution reads the whole installation, so only
+// the removal scopes the observation it asks the adapter for.
+func TestOnlyARemovalScopesTheInstallObservationToTheMedia(t *testing.T) {
+	for name, test := range map[string]struct {
+		observe func(InstallCapability, context.Context, lifecycle.Execution) (lifecycle.Observation, error)
+		want    string
+	}{
+		"apply":   {InstallCapability.Observe, ""},
+		"removal": {InstallCapability.ObserveRemoval, "removal"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: installEvidence(t, testDigest, nil)}}
+			if _, err := test.observe(NewInstall(runner), context.Background(), execution); err != nil {
+				t.Fatal(err)
+			}
+			if len(runner.requests) != 1 {
+				t.Fatalf("adapter invocations = %d", len(runner.requests))
+			}
+			scope, scoped := runner.requests[0].MaterialValues["observes"]
+			if scope != test.want || scoped != (test.want != "") {
+				t.Fatalf("observation scope = %q (%v), want %q", scope, scoped, test.want)
 			}
 		})
 	}

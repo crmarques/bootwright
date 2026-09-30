@@ -262,6 +262,7 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 		current = fresh
 		current.report.PlanPresented = true
 		current.report.ProgressPresented = approved.report.ProgressPresented
+		current.report.Warnings = approved.report.Warnings
 		return s.prepare(ctx, tx, &current)
 	})
 	current.report.RetiredBundles = retired
@@ -650,6 +651,7 @@ func cloneReport(report Report) Report {
 	report.Checks = slices.Clone(report.Checks)
 	report.Actions = slices.Clone(report.Actions)
 	report.Dependencies = slices.Clone(report.Dependencies)
+	report.Warnings = slices.Clone(report.Warnings)
 	return report
 }
 

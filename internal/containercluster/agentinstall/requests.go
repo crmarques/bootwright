@@ -159,12 +159,24 @@ type InstallBudgets struct {
 	InstallSeconds   int `json:"installSeconds"`
 }
 
-// mediaBudgets and installBudgets are what every request this build plans
-// freezes, until a later contract admits declaring them.
-var (
-	mediaBudgets   = MediaBudgets{BuildSeconds: 1800}
-	installBudgets = InstallBudgets{BootSeconds: 900, BootstrapSeconds: 5400, InstallSeconds: 5400}
+// mediaBudgets is what every media request this build plans freezes, until a
+// later contract admits declaring it.
+var mediaBudgets = MediaBudgets{BuildSeconds: 1800}
+
+const (
+	bootSecondsPerNode = 300
+	minBootSeconds     = 900
 )
+
+// installBudgets is what every install request of that many nodes freezes,
+// until a later contract admits declaring them. One boot budget bounds booting
+// every node, so it grows with them: bootSecondsPerNode each, and never less
+// than minBootSeconds, which is what a cluster of up to three nodes freezes.
+func installBudgets(nodes int) InstallBudgets {
+	return InstallBudgets{
+		BootSeconds: max(minBootSeconds, nodes*bootSecondsPerNode), BootstrapSeconds: 5400, InstallSeconds: 5400,
+	}
+}
 
 func seconds(count int) time.Duration { return time.Duration(count) * time.Second }
 
@@ -203,7 +215,13 @@ func DecodeMediaRequest(data []byte) (MediaRequest, error) {
 		return MediaRequest{}, refusal("lifecycle.state",
 			"the frozen cluster media request has an unsupported version: "+request.Version, "")
 	}
-	return request, reconciliation.ProveCanonical(data, request, "cluster media")
+	if err := reconciliation.ProveCanonical(data, request, "cluster media"); err != nil {
+		return MediaRequest{}, err
+	}
+	if err := onTheController(request.Placement, "cluster media"); err != nil {
+		return MediaRequest{}, err
+	}
+	return request, nil
 }
 
 func DecodeInstallRequest(data []byte) (InstallRequest, error) {
@@ -215,7 +233,25 @@ func DecodeInstallRequest(data []byte) (InstallRequest, error) {
 		return InstallRequest{}, refusal("lifecycle.state",
 			"the frozen cluster install request has an unsupported version: "+request.Version, "")
 	}
-	return request, reconciliation.ProveCanonical(data, request, "cluster install")
+	if err := reconciliation.ProveCanonical(data, request, "cluster install"); err != nil {
+		return InstallRequest{}, err
+	}
+	if err := onTheController(request.Placement, "cluster install"); err != nil {
+		return InstallRequest{}, err
+	}
+	return request, nil
+}
+
+// onTheController refuses a frozen placement other than the controller arm:
+// connection local and a Machine name, nothing else. Planning places both
+// blocks there alone, because the installer is installed on the controller and
+// nowhere else, so apply, destroy, observation and removal planning refuse a
+// block placed anywhere else before an adapter runs.
+func onTheController(placement machineref.Placement, subject string) error {
+	if placement.Machine == "" || placement != (machineref.Placement{Connection: machineref.ConnectionLocal, Machine: placement.Machine}) {
+		return refusal("lifecycle.state", "the frozen "+subject+" request is placed off the controller", "")
+	}
+	return nil
 }
 
 // ReservationKeys are the exclusive host resources the media block claims

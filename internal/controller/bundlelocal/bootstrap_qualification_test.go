@@ -53,7 +53,7 @@ func TestQualifiedLatestBootstrapResolution(t *testing.T) {
 			return data, nil
 		}
 	}
-	resolved, err := resolver.Resolve(ctx, platform, controller.DefaultDependencyVersions(), prerequisites.SetupEgress{})
+	resolved, _, err := resolver.Resolve(ctx, platform, controller.DefaultDependencyVersions(), prerequisites.SetupEgress{})
 	if err != nil {
 		t.Fatalf("%v: %+v", err, diagnostics.Of(err))
 	}

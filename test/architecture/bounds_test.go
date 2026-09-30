@@ -48,6 +48,8 @@ func documentedBounds() []documentedBound {
 		setupRun         = "internal/controller/ansiblelocal/runner_linux_amd64.go"
 		mediaRecords     = "internal/managedos/media.go"
 		mediaStore       = "internal/workspace/contextfs/media_linux_amd64.go"
+		commands         = "specs/cli/commands.md"
+		completion       = "cmd/bootwright/completion_paths.go"
 	)
 	return []documentedBound{
 		{contexts, "| Active or reserved context names | %s |", store, "maxContexts", nil, false},
@@ -67,6 +69,10 @@ func documentedBounds() []documentedBound {
 		{contexts, "| Installer media stages at once, live, retained or abandoned | %s |", mediaStore, "maxStagedMedia", nil, false},
 		{contexts, "At most %s stages exist at once", mediaStore, "maxStagedMedia", nil, false},
 		{"specs/cli/commands.md", "basename of 5 through %s bytes", mediaRecords, "MaxMediaName", nil, false},
+		{commands, "It reads at most %s of those entries", completion, "maxCompletionEntriesRead", nil, false},
+		{commands, "stops once it holds %s candidates", completion, "maxCompletionPaths", nil, false},
+		{commands, "A prefix longer than %s bytes", completion, "maxCompletionPrefix", nil, false},
+		{commands, "an entry whose name is longer than %s bytes", completion, "maxCompletionEntry", nil, false},
 	}
 }
 

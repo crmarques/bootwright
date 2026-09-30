@@ -238,20 +238,27 @@ trust an interrupted attempt left set, a certificate imported or verification
 turned off, is settled by the next apply's eject, which converges to the
 frozen target rather than undoing its own writes.
 
-**Unknown resolution.** Observation reads the marker through the identity
-operation and the published content's presence. A matching marker with the
+**Unknown resolution.** The observation that resolves an apply reads the
+marker through the identity operation, the power the controller reports and
+the published content's presence, and its evidence carries that power whatever
+else it found. A matching marker with the
 content present is positive completion; a powered-off Machine with no marker
-and no published content is positive no effect; and this operation's own
+and no published content is positive no effect, which is what an apply stopped
+before it published anything leaves; and this operation's own
 unfinished work is a positive partial realization the next attempt converges,
 which is either content it published on a powered-off guest that never
 installed, or the frozen marker with the completion not yet true. Anything else
 stays unknown, including a guest answering with another marker and a powered-on
 guest with none, because the first belongs to another installation and the
-second may be running the installer now. A removal's resolution reads only the
-published content, which the removal withdraws whatever the guest holds: none
-left is its completion, whatever marker or power the guest reports; the whole
-completion is positive no effect; and any content left is a positive partial
-realization.
+second may be running the installer now. A removal's resolution observes only
+the published content, which the removal withdraws whatever the guest holds, so
+it reads neither the identity channel, the fleet account nor the controller:
+none left is its completion; the whole completion, which content alone never
+proves, is positive no effect; and any content left is a positive partial
+realization. The package tree counts as
+content left whenever anything is at its published path, because a removal
+stopped while it deleted the tree can leave the directory without the
+`.treeinfo` that marks it complete.
 
 **Quiescence and cancellation.** This block owns published installer content,
 which an installed Machine no longer reads, so its quiescence follows the

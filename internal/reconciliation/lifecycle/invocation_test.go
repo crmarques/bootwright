@@ -15,3 +15,11 @@ func TestRunForCarriesTheInvocationsDeadline(t *testing.T) {
 		}
 	}
 }
+
+// An attempt keeps its adapter's output beside its own log, so a failure that
+// output explains points there, whatever the capability asked for.
+func TestRunForPointsAnAdapterFailureBesideTheAttemptLog(t *testing.T) {
+	if got := RunFor(Execution{}, Invocation{}).OutputRemediation; got != "read the adapter output retained beside this attempt's log" {
+		t.Fatalf("an attempt's request points an adapter failure at %q", got)
+	}
+}

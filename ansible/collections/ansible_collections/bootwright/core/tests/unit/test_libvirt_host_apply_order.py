@@ -74,12 +74,14 @@ def test_every_network_and_pool_decision_reads_an_observation_taken_once_the_dri
     bridge = index_of(tasks, lambda task: conditions_of(task) == ["item.bridge"], "proves an external bridge")
     publish = index_of(tasks, lambda task: (task.get("ansible.builtin.template") or {}).get("src") == "network.xml.j2", "renders a network")
     pool = index_of(tasks, lambda task: "pool-define-as" in argv_of(task), "defines the pool")
+    define = index_of(tasks, lambda task: "net-define" in argv_of(task), "defines a network")
     defaults = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
 
     decisions = {
         "the foreign-network guard": (guard, observations(tasks[guard].get("loop"))),
         "the external bridge proof": (bridge, observations(tasks[bridge].get("loop"))),
         "each managed network's identity": (publish, observations(defaults["substrate_libvirt_host_network_uuids"])),
+        "which managed networks to define": (define, observations(defaults["substrate_libvirt_host_carried"])),
         "whether to define the pool": (pool, observations(tasks[pool].get("when"))),
     }
     for decision, (index, read) in decisions.items():

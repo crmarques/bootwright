@@ -105,8 +105,10 @@ func TestAnUnsafeOutputFailsTheRun(t *testing.T) {
 			if test.owner != nil {
 				runner = test.owner(runner)
 			}
-			result, err := runner.Run(context.Background(), outputRequest(t))
-			if code, _ := codeOf(err); code != "lifecycle.state" || len(result.Produced) != 0 {
+			request := outputRequest(t)
+			request.OutputRemediation = "read what this request names"
+			result, err := runner.Run(context.Background(), request)
+			if code, remediation := codeOf(err); code != "lifecycle.state" || remediation != request.OutputRemediation || len(result.Produced) != 0 {
 				t.Fatalf("an unsafe output returned %v with %d outputs", err, len(result.Produced))
 			}
 		})

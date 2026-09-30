@@ -164,3 +164,100 @@ func TestOnlyADoneBareMetalApplyProofPinsAMachine(t *testing.T) {
 		})
 	}
 }
+
+// Each character a reported identity may not hold: a C0 control, DEL, a C1
+// control, and three Unicode format characters that print as nothing.
+var unprintableCharacters = map[string]string{
+	"a C0 control":       "\x1b",
+	"DEL":                "\x7f",
+	"a C1 control":       "\u009b",
+	"a bidi override":    "\u202e",
+	"a zero-width space": "\u200b",
+	"a byte-order mark":  "\ufeff",
+}
+
+// A reported UUID or serial is proved only printable and at most 128
+// characters once its surrounding space is trimmed, because a pin carries it
+// into every later comparison and refusal. The presence proof names the field
+// and the controller, the reading of a recorded proof names the field, and a
+// pin read from a record that breaks the rule names the Machine and the field;
+// none of them names the value.
+func TestAReportedIdentityIsPrintableAndBounded(t *testing.T) {
+	request := fixtureRequest(t)
+	endpoint := request.Controller.Endpoint
+	const unprintable, unbounded = " holding a character that is not printable", " longer than 128 characters"
+	type row struct{ uuid, serial, fault string }
+	refused := map[string]row{
+		"a UUID of 129 characters":         {strings.Repeat("u", 129), "SN1", "a UUID" + unbounded},
+		"a serial of 129 characters":       {"uuid-1", strings.Repeat("s", 129), "a SerialNumber" + unbounded},
+		"a serial of 129 two-byte letters": {"uuid-1", strings.Repeat("\u00e9", 129), "a SerialNumber" + unbounded},
+		"a tab inside a serial":            {"uuid-1", "SN\t1", "a SerialNumber" + unprintable},
+	}
+	for name, character := range unprintableCharacters {
+		refused["a UUID holding "+name] = row{"uuid-" + character + "1", "SN1", "a UUID" + unprintable}
+		refused["a serial holding "+name] = row{"uuid-1", "SN" + character + "1", "a SerialNumber" + unprintable}
+	}
+	for name, test := range refused {
+		t.Run(name, func(t *testing.T) {
+			evidence := Evidence{
+				Addresses: request.Addresses(), Postcondition: true, Power: "Off", Request: provedDigest,
+				Serial: test.serial, UUID: test.uuid,
+			}
+			value := test.uuid
+			if strings.Contains(test.fault, "SerialNumber") {
+				value = test.serial
+			}
+			err := ValidatePresence(encode(t, evidence), request, provedDigest)
+			if err == nil {
+				t.Fatal("the proof accepted an identity the evidence may not carry")
+			}
+			assertRefusal(t, err, "the management controller at "+endpoint+" reported "+test.fault, "", value)
+			identity, err := ProvedIdentity(encode(t, evidence))
+			if err == nil || identity.Present() {
+				t.Fatalf("the recorded proof yielded %+v, %v", identity, err)
+			}
+			assertRefusal(t, err, "the machine evidence records "+test.fault, "", value)
+			identity, found, err := PinnedIdentity("server", []lifecycle.BlockEvidence{
+				published(Implementation, reconciliation.Apply, reconciliation.BlockDone, encode(t, evidence)),
+			})
+			if err == nil || found || identity.Present() {
+				t.Fatalf("pin = %+v, %t, %v", identity, found, err)
+			}
+			assertRefusal(t, err, "the proof that pins Machine/server records "+test.fault, reprove, value)
+		})
+	}
+	for name, test := range map[string]struct{ uuid, serial string }{
+		"a serial with inner spaces":          {"uuid-1", "SN 12 34"},
+		"128 characters each":                 {strings.Repeat("u", 128), strings.Repeat("s", 128)},
+		"128 two-byte letters":                {"uuid-1", strings.Repeat("\u00e9", 128)},
+		"128 characters in surrounding space": {" \t" + strings.Repeat("u", 128) + "\n ", " SN1\u00a0"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			evidence := encode(t, Evidence{
+				Addresses: request.Addresses(), Postcondition: true, Power: "Off", Request: provedDigest,
+				Serial: test.serial, UUID: test.uuid,
+			})
+			if err := ValidatePresence(evidence, request, provedDigest); err != nil {
+				t.Fatalf("a printable identity was refused: %v", err)
+			}
+			want := machineref.HardwareIdentity{UUID: strings.TrimSpace(test.uuid), Serial: strings.TrimSpace(test.serial)}
+			identity, found, err := PinnedIdentity("server", []lifecycle.BlockEvidence{
+				published(Implementation, reconciliation.Apply, reconciliation.BlockDone, evidence),
+			})
+			if err != nil || !found || identity != want {
+				t.Fatalf("pin = %+v, %t, %v; want %+v", identity, found, err, want)
+			}
+		})
+	}
+}
+
+func assertRefusal(t *testing.T, err error, message, remediation, value string) {
+	t.Helper()
+	reported := refusedAs(t, err)
+	if reported.Code != "lifecycle.state" || reported.Message != message || reported.Remediation != remediation {
+		t.Fatalf("refusal = %+v, want %q remedied by %q", reported, message, remediation)
+	}
+	if strings.Contains(reported.Message, value) || strings.Contains(reported.Remediation, value) {
+		t.Fatalf("the refusal %+v names the reported value", reported)
+	}
+}

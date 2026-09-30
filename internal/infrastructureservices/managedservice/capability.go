@@ -87,7 +87,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			ID:             request.Identity.Block,
 			Description:    c.definition.describe(input.Verb, request),
 			Stage:          reconciliation.StageInfraComponents,
-			Requires:       BridgeRequirements(catalog, request.Placement.Machine, request.BindAddress),
+			Requires:       BridgeRequirements(catalog, request.Placement.Machine, request.ProbeTargets()),
 			Impacts:        impacts(input.Verb, request),
 			Groups:         groups(input.Verb, request),
 			Kind:           string(c.definition.Kind),
@@ -185,12 +185,20 @@ func (c Capability) requestFor(catalog api.Catalog, object api.Object, controlle
 	return request, nil
 }
 
-// BridgeRequirements names the provider whose managed bridge carries a
-// service's bind address on its placement Machine, so the service's block
-// waits for the block that creates that bridge.
-func BridgeRequirements(catalog api.Catalog, machine, bindAddress string) []reconciliation.ObjectRef {
+// BridgeRequirements names, in name order, each provider whose managed bridge
+// carries one of addresses on a service's placement Machine, so the service's
+// block waits for the block that creates that bridge. The addresses are the
+// ones readiness probes: the bind address, whose socket cannot open before the
+// bridge exists, or each declared endpoint address of a wildcard bind, which
+// cannot answer before then.
+func BridgeRequirements(catalog api.Catalog, machine string, addresses []string) []reconciliation.ObjectRef {
+	var providers []string
+	for _, address := range addresses {
+		providers = append(providers, substrate.BridgeProviders(catalog, machine, address)...)
+	}
+	slices.Sort(providers)
 	var references []reconciliation.ObjectRef
-	for _, provider := range substrate.BridgeProviders(catalog, machine, bindAddress) {
+	for _, provider := range slices.Compact(providers) {
 		references = append(references, reconciliation.ObjectRef{Kind: string(api.InfraProvider), Object: provider})
 	}
 	return references
@@ -292,8 +300,10 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 
 // Observe is read-only. Live state matching the frozen request in full is
 // positive completion; nothing present is positive no effect; this context's
-// own service part way realized is positive partial; anything else, including
-// an observation that could not be made, stays unknown.
+// own service part way realized, a present one whose listener stays silent
+// included, is positive partial; anything else, including an observation that
+// could not be made, stays unknown. A fresh destroy over an incomplete apply
+// resolves the apply's block through this reading too.
 func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	return c.observe(ctx, execution, func(evidence []byte, request Request, digest string) reconciliation.EffectState {
 		switch {
@@ -301,7 +311,7 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 			return reconciliation.EffectCompleted
 		case ValidateAbsence(evidence, digest) == nil:
 			return reconciliation.EffectNoEffect
-		case ValidatePartial(evidence, digest) == nil:
+		case ValidatePartial(evidence, request, digest) == nil:
 			return reconciliation.EffectPartial
 		}
 		return reconciliation.EffectUnknown

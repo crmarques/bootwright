@@ -251,10 +251,11 @@ Context-free read-only commands do not access the root except available
 [Controller inspection](controller.md#selection-and-command-journeys), which
 may read shared host metadata without selecting a context. Context-backed reads
 acquire the existing store's shared lock and never create, repair or migrate
-state. A bounded run takes the same shared lock and creates exactly one thing:
+state. A bounded run takes the same shared lock and creates at most one thing:
 the file its own adapter output is
-[retained](cli/output.md#bounded-run-output) in. That file is troubleshooting
-material, never state, so a run still repairs and migrates nothing.
+[retained](cli/output.md#bounded-run-output) in, once its private runtime is
+admitted. That file is troubleshooting material, never state, so a run still
+repairs and migrates nothing.
 Workspace defines the narrow explicit retry of pending creation/deletion.
 
 State reconciliation owns `<operation-id>`, `<block-id>`, and effect- and
@@ -695,11 +696,12 @@ destroy, the `destroy` of a completed apply, and an incomplete operation's own
 verb. A fresh apply's decision refuses, over no operation, state no index
 accounts for, and over a completed destroy one holding a block that is not
 `done` ([lifecycle unit](#lifecycle-unit)); it then compiles the frozen input,
-refuses what this executable cannot realize, plans, refuses `lifecycle.state`
-for a plan with no block, and refuses a selection that admits no startable
-block; a continuation's refuses records that contradict what its operation
-started, and a continued apply's then refuses a selection as the rules above
-do; and a removal's refuses, as
+refuses what this executable cannot realize, plans, refusing two of its own
+blocks' conflicting [socket claims](infrastructure-services.md#host-reservations),
+refuses `lifecycle.state` for a plan with no block, and refuses a selection
+that admits no startable block; a continuation's refuses records that
+contradict what its operation started, and a continued apply's then refuses a
+selection as the rules above do; and a removal's refuses, as
 [continuation and removal](#continuation-and-removal) requires, a completed
 apply holding a block that is not `done`, records that leave nothing to remove,
 and a frozen request this executable cannot read. A failed removal is previewed

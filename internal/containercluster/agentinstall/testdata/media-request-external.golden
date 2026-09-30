@@ -184,6 +184,7 @@
     "url": "https://192.0.2.1:8443/private/clusters/ocp"
   },
   "installConfig": {
+    "additionalTrustBundle": "",
     "apiVersion": "v1",
     "baseDomain": "lab.example.test",
     "compute": [
@@ -252,6 +253,6 @@
     "lab-root-ca",
     "corp-proxy-ca"
   ],
-  "version": "cluster-media-agent-v4",
+  "version": "cluster-media-agent-v5",
   "workRoot": "/var/lib/bootwright-clusters/lab/ocp"
 }

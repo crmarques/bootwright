@@ -7,7 +7,6 @@ import (
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
-	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
 // CurrentSelection resolves the invoking user's context when none is explicit.
@@ -130,7 +129,7 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 	if err != nil {
 		return nil, err
 	}
-	finalizes := decided.finalize
+	marked, finalizes := decided, decided.finalize
 	if finalizes {
 		if decided, err = s.afterFinalization(ctx, view, verb, decideSelection, decided); err != nil {
 			return nil, err
@@ -145,16 +144,17 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 	switch {
 	case decided.noop:
 		// Only a finalization leads here, because no verb a preview decides as
-		// settles over a record whose finalization is not due.
+		// settles over a record whose finalization is not due. What it calls
+		// for is read from the record it finalizes, not the one it leaves.
 		result = planPreview(decided.plan, decided.states, nil)
 		result.Verb, result.Continuation, result.Finalizes = string(verb), true, true
-		result.Receipt = Receipt{Operation: decided.operation.ID, Verb: "plan", State: "preview", Next: continuationAction(decided.operation, decided.states)}
+		result.Receipt = Receipt{Operation: decided.operation.ID, Verb: "plan", State: "preview", Next: nextAction(marked.operation, marked.plan, marked.states)}
 	case decided.fresh:
 		result = presentation(decided)
 		result.Receipt = Receipt{Operation: "none", Verb: "plan", State: "preview", Next: string(decided.verb)}
 	default:
 		result = presentation(decided)
-		result.Receipt = Receipt{Operation: decided.operation.ID, Verb: "plan", State: "preview", Next: continuationAction(decided.operation, decided.states)}
+		result.Receipt = Receipt{Operation: decided.operation.ID, Verb: "plan", State: "preview", Next: nextAction(decided.operation, decided.plan, decided.states)}
 	}
 	result.Context = view.Identity()
 	return &result, nil
@@ -183,18 +183,6 @@ func (s Service) previewed(ctx context.Context, view View) (reconciliation.Verb,
 		return reconciliation.Destroy, nil
 	}
 	return reconciliation.Apply, nil
-}
-
-func continuationAction(operation operationstore.Operation, states map[string]reconciliation.BlockState) string {
-	for _, state := range states {
-		if state == reconciliation.BlockUnknown {
-			return "resolve"
-		}
-	}
-	if operation.Verb == reconciliation.Destroy {
-		return "continue-destroy"
-	}
-	return "continue-apply"
 }
 
 func steps(plan reconciliation.Plan, states map[string]reconciliation.BlockState) []PlanStep {

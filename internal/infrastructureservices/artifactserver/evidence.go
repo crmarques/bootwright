@@ -66,6 +66,15 @@ func (r Request) ProbeTargets() []ProbeTarget {
 	return targets
 }
 
+// probedAddresses is every address readiness probes, whatever the listener.
+func probedAddresses(r Request) []string {
+	var addresses []string
+	for _, target := range r.ProbeTargets() {
+		addresses = append(addresses, target.Address)
+	}
+	return addresses
+}
+
 func decodeEvidence(data []byte) (Evidence, error) {
 	if len(data) == 0 || len(data) > maxEvidenceBytes {
 		return Evidence{}, refusal("lifecycle.state", "the artifact-server adapter returned no bounded evidence", "")
@@ -154,10 +163,12 @@ func ValidateAbsence(data []byte, digest string) error {
 
 // ValidatePartial accepts evidence only when it positively proves this
 // context's own server is part way realized: the unit, container or content
-// root it names is present while the whole is not. Each carries the context in
-// its name and is claimed by its host reservation, so their presence is never
-// another context's work, and repeating the operation converges them.
-func ValidatePartial(data []byte, digest string) error {
+// root it names is present while the whole, its listeners' answers included,
+// is not. Each carries the context in its name and is claimed by its host
+// reservation, so their presence is never another context's work, a server all
+// present whose listener stays silent is this context's own server not yet
+// ready, and repeating the operation converges them.
+func ValidatePartial(data []byte, request Request, digest, fingerprint string) error {
 	evidence, err := decodeEvidence(data)
 	if err != nil {
 		return err
@@ -165,11 +176,17 @@ func ValidatePartial(data []byte, digest string) error {
 	if evidence.Request != digest {
 		return refusal("lifecycle.state", "the artifact-server evidence names another request", "")
 	}
-	if evidence.Postcondition || evidence.Absent {
+	if evidence.Absent {
 		return refusal("lifecycle.state", "the artifact-server evidence proves a settled state, not a partial one", "")
+	}
+	if evidence.Postcondition && (evidence.Unit != "active" || !evidence.ContentRoot) {
+		return refusal("lifecycle.state", "the artifact-server evidence claims a postcondition it does not report", "")
 	}
 	if evidence.Unit == "" && evidence.Container == "" && !evidence.ContentRoot {
 		return refusal("lifecycle.state", "the artifact-server evidence reports nothing this context owns", "")
+	}
+	if ValidatePresence(data, request, digest, fingerprint) == nil {
+		return refusal("lifecycle.state", "the artifact-server evidence proves it complete, not partial", "")
 	}
 	return nil
 }

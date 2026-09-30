@@ -17,6 +17,7 @@ type protocolMessage struct {
 	Preparation *prerequisites.NativePreparation `json:"preparation,omitempty"`
 	Outcome     string                           `json:"outcome,omitempty"`
 	Evidence    json.RawMessage                  `json:"evidence,omitempty"`
+	Reason      string                           `json:"reason,omitempty"`
 }
 
 func strictJSON(data []byte, target any, fields ...string) bool {
@@ -113,6 +114,8 @@ func readProtocol(reader io.Reader, messages chan<- protocolMessage) error {
 			fields = append(fields, "preparation")
 		case "completed":
 			fields = append(fields, "outcome", "evidence")
+		case "refused":
+			fields = append(fields, "reason")
 		default:
 			return errors.New("protocol phase")
 		}

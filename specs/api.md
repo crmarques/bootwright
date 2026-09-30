@@ -80,12 +80,17 @@ binary64 value. The owning storage rules define zero-as-omission and the
 non-zero ranges. Open-field numeric values follow the
 [native scalar rules](#native-and-implementation-shaped-fields).
 
-An explicit `null` document or mapping key is a `yaml.shape` error. An explicit
-`null` used for any schema field or collection element is an `api.type` error,
-including when the field is required. A document with such an error does not
-count as decoded. A missing `apiVersion` receives `api.version`, a missing
-`kind` receives `api.kind`, and an absent required envelope field receives
-`api.required`. Missing required spec fields are checked after Environment kind
+A mapping key is refused for the construct it carries, as a value is. A merge
+key, tagged or not, and an anchored or alias key receive `yaml.alias`. A key
+with an explicit tag that the same node could not carry as a value, such as a
+custom tag, `!!binary` or `!!timestamp`, receives `yaml.tag`. Any other key
+that is not a string, such as an explicit `null`, an integer, a boolean or a
+collection, receives `yaml.shape`, as does a document that is not a mapping,
+an explicit `null` document included. An explicit `null` used for any schema
+field or collection element is an `api.type` error, including when the field is
+required. A document with such an error does not count as decoded. A missing
+`apiVersion` receives `api.version`, a missing `kind` receives `api.kind`, and
+an absent required envelope field receives `api.required`. Missing required spec fields are checked after Environment kind
 defaults and owning-schema normalization; a field still missing then receives
 `api.required`.
 

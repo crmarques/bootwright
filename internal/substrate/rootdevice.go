@@ -34,6 +34,17 @@ func (h RootDeviceHints) Names() []string {
 	return names
 }
 
+// UnmatchableRootDeviceHints are the admitted names, sorted, of the hints no
+// disk the provider creates can match. A libvirt domain presents file-backed
+// virtio disks that carry no WWN, SCSI address or serial number, while a
+// physical machine's own disks may carry any of them.
+func UnmatchableRootDeviceHints(provider api.Object) []string {
+	if Variant(provider) == ArmLibvirt {
+		return []string{"hctl", "serialNumber", "wwn"}
+	}
+	return nil
+}
+
 func rootDeviceHints(machine api.Object) RootDeviceHints {
 	declared := machine.Spec().Get("os", "install", "rootDeviceHints")
 	hints := RootDeviceHints{

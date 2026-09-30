@@ -150,6 +150,8 @@ func strictYAMLRefusals() []strictYAMLRow {
 		{"null document", "null\n", []string{"yaml.shape $"}},
 		{"null key", strictYAMLSecret("  null: opaque\n"), []string{"yaml.shape $.spec"}},
 		{"integer key", strictYAMLSecret("  1: opaque\n"), []string{"yaml.shape $.spec"}},
+		{"tagged integer key", strictYAMLSecret("  !!int 1: opaque\n"), []string{"yaml.shape $.spec"}},
+		{"anchored integer key", strictYAMLSecret("  &k 1: opaque\n"), []string{"yaml.alias $.spec"}},
 		{"missing apiVersion", "kind: Secret\nmetadata:\n  name: probe\nspec:\n" + strictYAMLToken, []string{"api.version $.apiVersion"}},
 		{"unsupported apiVersion", "apiVersion: bootwright.io/v1beta1\nkind: Secret\nmetadata:\n  name: probe\nspec:\n" + strictYAMLToken, []string{"api.version $.apiVersion"}},
 		{"missing kind", "apiVersion: bootwright.io/v1alpha1\nmetadata:\n  name: probe\nspec:\n" + strictYAMLToken, []string{"api.kind $.kind"}},
@@ -165,6 +167,7 @@ func strictYAMLRefusals() []strictYAMLRow {
 		{"anchored value", strictYAMLSecret("  type: opaque\n  source: &s {}\n"), []string{"yaml.alias $.spec.source"}},
 		{"alias", "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: &n probe\nspec:\n  type: *n\n", []string{"yaml.alias $.metadata.name", "yaml.alias $.spec.type"}},
 		{"anchored key", strictYAMLSecret("  &k type: opaque\n"), []string{"yaml.alias $.spec"}},
+		{"alias key", "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: &k type\nspec:\n  *k : opaque\n", []string{"yaml.alias $.metadata.name", "yaml.alias $.spec"}},
 		{"plain merge key", strictYAMLSecret("  <<: {type: opaque}\n"), []string{"yaml.alias $.spec"}},
 		{"quoted merge key", strictYAMLSecret("  '<<': {type: opaque}\n"), []string{"yaml.alias $.spec"}},
 		{"tagged merge key", strictYAMLSecret("  !!merge <<: {type: opaque}\n"), []string{"yaml.alias $.spec"}},
@@ -172,7 +175,8 @@ func strictYAMLRefusals() []strictYAMLRow {
 		{"null capabilities element", strictYAMLMachine("  capabilities: [container-runtime, null]\n  os: {provided: true}\n  access: {local: true}\n"), []string{"api.type $.spec.capabilities[1]"}},
 	}
 	for _, tag := range []string{"!custom opaque", "!!binary b3BhcXVl", "!!timestamp 2001-12-14"} {
-		rows = append(rows, strictYAMLRow{"tag " + tag, strictYAMLSecret("  type: " + tag + "\n"), []string{"yaml.tag $.spec.type"}})
+		rows = append(rows, strictYAMLRow{"tag " + tag, strictYAMLSecret("  type: " + tag + "\n"), []string{"yaml.tag $.spec.type"}},
+			strictYAMLRow{"key tag " + tag, strictYAMLSecret("  " + tag + ": opaque\n"), []string{"yaml.tag $.spec"}})
 	}
 	for _, scalar := range []string{"2001-12-14", "1", "3.5"} {
 		rows = append(rows, strictYAMLRow{"type " + scalar, strictYAMLSecret("  type: " + scalar + "\n"), []string{"api.type $.spec.type"}})

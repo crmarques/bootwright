@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -165,6 +166,15 @@ func (a *operationArea) Location() string {
 		return ""
 	}
 	return filepath.Join(root, "contexts", a.name, "state", a.subtree)
+}
+
+// Reference names the same subtree relative to the state root, the form a
+// structured result names a log in.
+func (a *operationArea) Reference() string {
+	if a.name == "" || a.subtree == "" {
+		return ""
+	}
+	return path.Join("contexts", a.name, "state", a.subtree)
 }
 
 func (a *operationArea) available(ctx context.Context, mutation bool) error {

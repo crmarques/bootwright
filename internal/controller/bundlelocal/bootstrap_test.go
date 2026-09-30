@@ -117,24 +117,24 @@ func TestAnsibleLatestIsTheNewestQualifiedPatch(t *testing.T) {
 	files = append(files, indexRelease("2.21.11", true)...)
 	files = append(files, indexRelease("2.21.14", "incorrect build")...)
 	for _, api := range []string{"1.0", "1.4"} {
-		if got, err := selectAnsibleRelease(ansibleIndexFixture(t, api, files...), "latest", "3.14.7"); err != nil || got != "2.21.10" {
+		if got, _, err := selectAnsibleRelease(ansibleIndexFixture(t, api, files...), "latest", "3.14.7"); err != nil || got != "2.21.10" {
 			t.Fatalf("api-version %s: latest is not the newest qualified patch with a live wheel: %s %+v", api, got, diagnostics.Of(err))
 		}
 	}
 	unmarked := indexEntry("2.21.15", "wheel", nil)
 	delete(unmarked, "yanked")
-	if got, err := selectAnsibleRelease(ansibleIndexFixture(t, "1.4", append(files, unmarked)...), "latest", "3.14.7"); err != nil || got != "2.21.15" {
+	if got, _, err := selectAnsibleRelease(ansibleIndexFixture(t, "1.4", append(files, unmarked)...), "latest", "3.14.7"); err != nil || got != "2.21.15" {
 		t.Fatalf("a wheel without a yanked key is not live: %s %+v", got, diagnostics.Of(err))
 	}
 	none := append(indexRelease("2.20.9", false), indexEntry("2.21.13", "sdist", false), indexEntry("2.21.14", "wheel", true))
-	got, err := selectAnsibleRelease(ansibleIndexFixture(t, "1.4", append(none, indexRelease("2.22.0", false)...)...), "latest", "3.14.7")
+	got, _, err := selectAnsibleRelease(ansibleIndexFixture(t, "1.4", append(none, indexRelease("2.22.0", false)...)...), "latest", "3.14.7")
 	if found := diagnostics.Of(err); len(found) != 1 || !strings.Contains(found[0].Message, "ansible-core "+prerequisites.QualifiedAnsibleMinor+" ") {
 		t.Fatalf("latest did not fail closed on the qualified minor: %s %+v", got, found)
 	}
 }
 
-// PEP 691 requires a client to hard fail on a major API version it does not
-// know, and allows a yank only as a Boolean or a non-empty reason.
+// A page without a well-formed PEP 629 API version is not an Index API page,
+// and PEP 691 allows a yank only as a Boolean or a non-empty reason.
 func TestAnsibleLatestRefusesAnIndexPageOutsidePEP691(t *testing.T) {
 	valid := indexEntry("2.21.4", "wheel", false)
 	page := func(api string, files ...map[string]any) []byte {
@@ -145,9 +145,10 @@ func TestAnsibleLatestRefusesAnIndexPageOutsidePEP691(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, data := range map[string][]byte{
-		"major 2":           page("2.0"),
+		"major 0":           page("0.4"),
 		"no api-version":    page(""),
 		"major only":        page("1"),
+		"unbounded minor":   page("1.99999999999999999999"),
 		"foreign project":   []byte(strings.Replace(string(page("1.4")), `"name":"ansible-core"`, `"name":"ansible"`, 1)),
 		"null yank":         page("1.4", indexEntry("2.21.3", "sdist", nil)),
 		"empty yank reason": page("1.4", indexEntry("2.21.3", "sdist", "")),
@@ -155,12 +156,12 @@ func TestAnsibleLatestRefusesAnIndexPageOutsidePEP691(t *testing.T) {
 		"project JSON":      projectJSON,
 		"HTML page":         []byte(`<!DOCTYPE html><html><body><a href="https://files.pythonhosted.org/packages/ansible_core-2.21.4-py3-none-any.whl">ansible_core-2.21.4-py3-none-any.whl</a></body></html>`),
 	} {
-		got, err := selectAnsibleRelease(data, "latest", "3.14.7")
+		got, _, err := selectAnsibleRelease(data, "latest", "3.14.7")
 		if found := diagnostics.Of(err); len(found) != 1 || !strings.Contains(found[0].Message, "no valid publisher metadata") {
 			t.Fatalf("%s: an index page outside PEP 691 was read: %s %+v", name, got, found)
 		}
 	}
-	if got, err := selectAnsibleRelease(page("1.4"), "latest", "3.14.7"); err != nil || got != "2.21.4" {
+	if got, _, err := selectAnsibleRelease(page("1.4"), "latest", "3.14.7"); err != nil || got != "2.21.4" {
 		t.Fatalf("the unmutated page was refused: %s %+v", got, diagnostics.Of(err))
 	}
 }
@@ -223,7 +224,7 @@ func TestAnsibleIsSelectedFromTheIndexAPI(t *testing.T) {
 		}
 		versions := controller.DefaultDependencyVersions()
 		versions.Ansible = intent
-		_, err := resolver.Resolve(t.Context(), prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, versions, prerequisites.SetupEgress{})
+		_, _, err := resolver.Resolve(t.Context(), prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, versions, prerequisites.SetupEgress{})
 		if !errors.Is(err, selected) || !slices.Contains(requested, http.MethodGet+" "+ansibleIndexURL) {
 			t.Fatalf("%s was not selected from the Index API: %v %+v %v", intent, requested, diagnostics.Of(err), err)
 		}
@@ -236,10 +237,10 @@ func TestAnsibleDoesNotDowngradeForIncompatiblePython(t *testing.T) {
 	newer := indexEntry("2.21.5", "wheel", false)
 	newer["requires-python"] = ">=3.15"
 	project := ansibleIndexFixture(t, "1.4", indexEntry("2.21.4", "wheel", false), newer)
-	if version, err := selectAnsibleRelease(project, "latest", "3.14.7"); err != nil || version != "2.21.5" {
+	if version, _, err := selectAnsibleRelease(project, "latest", "3.14.7"); err != nil || version != "2.21.5" {
 		t.Fatalf("latest yielded to an older release for the selected Python: %s %v", version, err)
 	}
-	if version, err := selectAnsibleRelease(project, "latest", "3.15.0"); err == nil {
+	if version, _, err := selectAnsibleRelease(project, "latest", "3.15.0"); err == nil {
 		t.Fatalf("an unqualified controller Python was accepted: %s", version)
 	}
 }
@@ -253,18 +254,18 @@ func TestAnExactAnsibleIsOneOfTheIndexPagesCandidates(t *testing.T) {
 	files = append(files, indexRelease("2.21.6", "incorrect build")...)
 	files = append(files, indexEntry("2.21.7", "sdist", false))
 	page := ansibleIndexFixture(t, "1.4", files...)
-	if version, err := selectAnsibleRelease(page, "2.21.4", "3.14.7"); err != nil || version != "2.21.4" {
+	if version, _, err := selectAnsibleRelease(page, "2.21.4", "3.14.7"); err != nil || version != "2.21.4" {
 		t.Fatalf("an exact live release was not selected: %s %+v", version, diagnostics.Of(err))
 	}
 	for requested, reason := range map[string]string{
 		"2.21.5": "yanked", "2.21.6": "yanked with a reason", "2.21.7": "without a wheel", "2.21.3": "unlisted",
 	} {
-		version, err := selectAnsibleRelease(page, requested, "3.14.7")
+		version, _, err := selectAnsibleRelease(page, requested, "3.14.7")
 		if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "controller.setup" || !strings.Contains(found[0].Message, "no live wheel of ansible-core "+requested) {
 			t.Fatalf("an exact release %s was selected: %s %+v", reason, version, found)
 		}
 	}
-	version, err := selectAnsibleRelease(page, "2.20.9", "3.14.7")
+	version, _, err := selectAnsibleRelease(page, "2.20.9", "3.14.7")
 	if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "controller.unsupported" || !strings.Contains(found[0].Message, "ansible-core "+prerequisites.QualifiedAnsibleMinor+" ") {
 		t.Fatalf("an exact release outside the qualified minor was selected: %s %+v", version, found)
 	}
@@ -272,24 +273,37 @@ func TestAnExactAnsibleIsOneOfTheIndexPagesCandidates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	version, err = selectAnsibleRelease(projectJSON, "2.21.4", "3.14.7")
+	version, _, err = selectAnsibleRelease(projectJSON, "2.21.4", "3.14.7")
 	if found := diagnostics.Of(err); len(found) != 1 || !strings.Contains(found[0].Message, "no valid publisher metadata") {
 		t.Fatalf("an exact release was read from the version-specific project JSON: %s %+v", version, found)
 	}
 }
 
-// PEP 629 asks a client to warn of an Index API minor newer than it knows;
-// setup refuses one instead, for latest and an exact intent alike.
-func TestAnIndexPageOfANewerMinorRefuses(t *testing.T) {
+// PEP 629 has a client warn of an Index API minor newer than it knows and
+// refuse a newer major, for latest and an exact intent alike.
+func TestAnIndexPageOfANewerMinorWarnsAndANewerMajorRefuses(t *testing.T) {
 	files := indexRelease("2.21.4", false)
+	known := "1." + strconv.Itoa(indexAPIMinor)
 	for _, requested := range []string{"latest", "2.21.4"} {
-		if version, err := selectAnsibleRelease(ansibleIndexFixture(t, "1."+strconv.Itoa(indexAPIMinor), files...), requested, "3.14.7"); err != nil || version != "2.21.4" {
-			t.Fatalf("%s: the newest minor this build reads was refused: %s %+v", requested, version, diagnostics.Of(err))
+		if version, warnings, err := selectAnsibleRelease(ansibleIndexFixture(t, known, files...), requested, "3.14.7"); err != nil || version != "2.21.4" || len(warnings) != 0 {
+			t.Fatalf("%s: the newest minor this build reads was not read plainly: %s %+v %+v", requested, version, warnings, diagnostics.Of(err))
 		}
 		for _, api := range []string{"1." + strconv.Itoa(indexAPIMinor+1), "1.10"} {
-			version, err := selectAnsibleRelease(ansibleIndexFixture(t, api, files...), requested, "3.14.7")
-			if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "controller.unsupported" || !strings.Contains(found[0].Message, "version "+api+", newer than the 1."+strconv.Itoa(indexAPIMinor)+" ") || found[0].Remediation == "" {
-				t.Fatalf("%s: an Index API page of version %s was read silently: %s %+v", requested, api, version, found)
+			version, warnings, err := selectAnsibleRelease(ansibleIndexFixture(t, api, files...), requested, "3.14.7")
+			if err != nil || version != "2.21.4" || len(warnings) != 1 || warnings[0].Severity != "warning" || warnings[0].Code != "controller.unsupported" || !strings.Contains(warnings[0].Message, "version "+api+", newer than the "+known+" ") || warnings[0].Remediation == "" {
+				t.Fatalf("%s: an Index API page of version %s was not read with a warning: %s %+v %+v", requested, api, version, warnings, diagnostics.Of(err))
+			}
+			for _, refused := range [][]map[string]any{indexRelease("2.21.4", true), indexRelease("2.21.4", 42)} {
+				version, warnings, err := selectAnsibleRelease(ansibleIndexFixture(t, api, refused...), requested, "3.14.7")
+				if err == nil || version != "" || len(warnings) != 1 || !strings.Contains(warnings[0].Message, "version "+api+", newer than the "+known+" ") {
+					t.Fatalf("%s: an Index API page of version %s whose releases were refused lost its warning: %s %+v %+v", requested, api, version, warnings, diagnostics.Of(err))
+				}
+			}
+		}
+		for _, api := range []string{"2.0", "2." + strconv.Itoa(indexAPIMinor), "10.0"} {
+			version, warnings, err := selectAnsibleRelease(ansibleIndexFixture(t, api, files...), requested, "3.14.7")
+			if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "controller.unsupported" || !strings.Contains(found[0].Message, "version "+api+", a major version this build does not read") || found[0].Remediation == "" || version != "" || warnings != nil {
+				t.Fatalf("%s: an Index API page of version %s was read: %s %+v %+v", requested, api, version, warnings, found)
 			}
 		}
 	}
@@ -317,7 +331,7 @@ func TestExactReleasesOutsideTheQualifiedSetRefuseBeforeResolverEffects(t *testi
 		}
 		versions := controller.DefaultDependencyVersions()
 		versions.Python, versions.Ansible = exact.python, exact.ansible
-		_, err := resolver.Resolve(context.Background(), prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, versions, prerequisites.SetupEgress{})
+		_, _, err := resolver.Resolve(context.Background(), prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, versions, prerequisites.SetupEgress{})
 		found := diagnostics.Of(err)
 		if len(found) != 1 || found[0].Code != "controller.unsupported" || !strings.Contains(found[0].Message, exact.message) {
 			t.Fatalf("exact Python %s, Ansible %s lacks the qualified-set diagnostic: %+v", exact.python, exact.ansible, found)

@@ -605,16 +605,45 @@ func hostHints(t *testing.T, media MediaRequest) map[string]any {
 
 // Every root-device hint a node declares reaches the agent configuration under
 // its admitted name and with its declared type, a size of zero and a disk that
-// is not rotational included. A node that selects its disk by wwn alone keeps
-// that selection rather than rendering none.
+// is not rotational included. Only a bare-metal Machine is admitted with every
+// hint, and selection refuses a physical cluster today, so its configuration is
+// projected directly beneath that refusal. A node that selects its disk by wwn
+// alone keeps that selection rather than rendering none.
 func TestEveryDeclaredRootDeviceHintReachesTheAgentConfig(t *testing.T) {
-	media, _, _ := onlyRequests(t, hintsCatalog())
+	catalog := physicalHintsCatalog()
+	declared, _ := catalog.Find(api.ContainerCluster, "metal")
+	nodes, err := nodeProjections(catalog, declared, testContext, "controller", &Requirements{})
+	if err != nil {
+		t.Fatalf("projecting: %v", diagnostics.Of(err))
+	}
+	config, err := agentConfig(declared, nodes, nil)
+	if err != nil {
+		t.Fatalf("configuring: %v", diagnostics.Of(err))
+	}
 	want := map[string]any{
 		"master-0": map[string]any{
 			"deviceName": "/dev/disk/by-path/pci-0000:00:04.0", "hctl": "1:0:0:0", "model": "1e3", "vendor": "0o17",
 			"serialNumber": "0987654321", "wwn": "0x5000c500a1b2c3d4", "minSizeGigabytes": int64(0), "rotational": false,
 		},
 		"master-1": map[string]any{"wwn": "0x5000c500a1b2c3d5"},
+		"master-2": map[string]any{"deviceName": "/dev/sda"},
+	}
+	if got := hostHints(t, MediaRequest{AgentConfig: config}); !reflect.DeepEqual(got, want) {
+		t.Fatalf("hints =\n%#v\nwant\n%#v", got, want)
+	}
+}
+
+// Every hint a virtual node is admitted with reaches the agent configuration
+// through selection, and a node that selects its disk by size alone keeps that
+// selection rather than rendering none.
+func TestEveryHintAVirtualNodeDeclaresReachesTheAgentConfig(t *testing.T) {
+	media, _, _ := onlyRequests(t, hintsCatalog())
+	want := map[string]any{
+		"master-0": map[string]any{
+			"deviceName": "/dev/disk/by-path/pci-0000:00:04.0", "model": "1e3", "vendor": "0o17",
+			"minSizeGigabytes": int64(0), "rotational": false,
+		},
+		"master-1": map[string]any{"minSizeGigabytes": int64(100)},
 		"master-2": map[string]any{"deviceName": "/dev/vda"},
 	}
 	if got := hostHints(t, media); !reflect.DeepEqual(got, want) {

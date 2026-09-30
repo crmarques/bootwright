@@ -127,19 +127,30 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 
 // pastTheCeiling says why a cluster's installation could not finish within the
 // deadline its runs are held to, or nothing when it can. The deadline grows with
-// the nodes the installation reads and releases, and the runner cuts
+// the nodes the installation boots, reads and releases, and the runner cuts
 // every run short at its ceiling rather than honoring a longer one, so a
 // cluster too large for it refuses here instead of being killed mid-install.
 func pastTheCeiling(cluster api.Object) (reason, remediation string) {
 	nodes := cluster.Spec().Get("nodes").Len()
-	deadline := installDeadline(installBudgets, nodes)
+	deadline := installDeadline(installBudgets(nodes), nodes)
 	if deadline <= lifecycle.MaxDeadline {
 		return "", ""
 	}
-	largest := int((lifecycle.MaxDeadline - installDeadline(installBudgets, 0)) / nodeMargin)
 	return "installing " + strconv.Itoa(nodes) + " nodes needs a run deadline of " + deadline.String() +
 			", past the " + lifecycle.MaxDeadline.String() + " every adapter run is held to",
-		"declare at most " + strconv.Itoa(largest) + " nodes on " + cluster.Identity()
+		"declare at most " + strconv.Itoa(largestCluster()) + " nodes on " + cluster.Identity()
+}
+
+// largestCluster is the most nodes whose installation deadline fits within the
+// ceiling. Each node adds at least nodeMargin to that deadline, so no more than
+// the ceiling divided by it can fit.
+func largestCluster() int {
+	for nodes := int(lifecycle.MaxDeadline / nodeMargin); nodes > 0; nodes-- {
+		if installDeadline(installBudgets(nodes), nodes) <= lifecycle.MaxDeadline {
+			return nodes
+		}
+	}
+	return 0
 }
 
 // mediaServer is the artifact server the cluster's boot image is published
@@ -269,7 +280,7 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 		Version:         mediaRequestVersion, WorkRoot: WorkRoot(contextName, name),
 	}
 	installRequest := InstallRequest{
-		Budgets: installBudgets, Endpoints: endpointNames(catalog, cluster),
+		Budgets: installBudgets(len(nodes)), Endpoints: endpointNames(catalog, cluster),
 		Identity: identity(InstallBlockID(name)), Image: image, Nodes: frozenNodes(nodes),
 		Placement: placement, Release: release, Tool: tool,
 		Version: installRequestVersion, WorkRoot: WorkRoot(contextName, name),

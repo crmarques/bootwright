@@ -217,7 +217,7 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
-	result, err := c.run(ctx, execution, operation, request, marker)
+	result, err := c.run(ctx, execution, operation, request, marker, "")
 	if err != nil {
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
@@ -249,7 +249,7 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 // anything else stays unknown, including a guest that answers with a different
 // marker and one powered on without any.
 func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, func(evidence []byte, request Request, digest, marker string) reconciliation.EffectState {
+	return c.observe(ctx, execution, "", func(evidence []byte, request Request, digest, marker string) reconciliation.EffectState {
 		switch {
 		case ValidatePresence(evidence, request, digest, marker) == nil:
 			return reconciliation.EffectCompleted
@@ -262,13 +262,19 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 	})
 }
 
-// ObserveRemoval reads the same observation for what a removal proves. The
-// removal withdraws published content whatever the guest holds, so no content
-// left is its completion whatever marker or power the guest reports; the
-// whole completion is positive no effect; and any content left is a positive
-// partial removal the next attempt converges.
+// observesRemoval scopes an observation to what a removal takes back: the
+// adapter reads the published content alone, and neither the machine's
+// identity channel, its fleet account nor its controller, none of which a
+// removal changes.
+const observesRemoval = "removal"
+
+// ObserveRemoval reads, for what a removal proves, an observation of the
+// published content alone. The removal withdraws that content whatever the
+// guest holds, so no content left is its completion; the whole completion is
+// positive no effect; and any content left, a package tree without its
+// marker included, is a positive partial removal the next attempt converges.
 func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, func(evidence []byte, request Request, digest, marker string) reconciliation.EffectState {
+	return c.observe(ctx, execution, observesRemoval, func(evidence []byte, request Request, digest, marker string) reconciliation.EffectState {
 		switch {
 		case ValidateWithdrawn(evidence, digest) == nil:
 			return reconciliation.EffectCompleted
@@ -281,15 +287,15 @@ func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Exec
 	})
 }
 
-// observe runs the one read-only observation both resolutions share and reads
-// its evidence for the verb the block was frozen for.
-func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, read func([]byte, Request, string, string) reconciliation.EffectState) (lifecycle.Observation, error) {
+// observe runs the read-only observation operation, scoped by observes, and
+// reads its evidence for the verb the block was frozen for.
+func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, observes string, read func([]byte, Request, string, string) reconciliation.EffectState) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, marker, err := c.prepare(ctx, execution, "observe")
 	if err != nil {
 		return unknown, err
 	}
-	result, err := c.run(ctx, execution, "observe", request, marker)
+	result, err := c.run(ctx, execution, "observe", request, marker, observes)
 	if err != nil {
 		recordObservationFailure(ctx, execution, err)
 		return unknown, nil
@@ -342,12 +348,15 @@ func refusedContinuation(request Request) error {
 	return nil
 }
 
-func (c Capability) run(ctx context.Context, execution lifecycle.Execution, operation string, request Request, marker []byte) (lifecycle.RunResult, error) {
+func (c Capability) run(ctx context.Context, execution lifecycle.Execution, operation string, request Request, marker []byte, observes string) (lifecycle.RunResult, error) {
 	canonical, err := request.Canonical()
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
 	values := map[string]string{"marker": string(marker)}
+	if observes != "" {
+		values["observes"] = observes
+	}
 	if operation == "apply" {
 		key, err := authorizedKey(execution, request)
 		if err != nil {

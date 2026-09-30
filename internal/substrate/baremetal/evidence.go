@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"slices"
+	"strconv"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -11,6 +15,11 @@ import (
 )
 
 const maxEvidenceBytes = 64 << 10
+
+// maxIdentityCharacters bounds a reported UUID and serial, counted in
+// characters once their surrounding space is trimmed, as the adapter that
+// publishes them bounds them.
+const maxIdentityCharacters = 128
 
 // Evidence is the only result shape this adapter may return. It records what
 // the controller said the machine is, so a later operation can compare the
@@ -42,7 +51,11 @@ func ValidatePresence(data []byte, request Request, digest string) error {
 	if !evidence.Postcondition || evidence.Absent {
 		return refusal("lifecycle.state", "the machine adapter did not prove its postcondition", "")
 	}
-	if evidence.UUID == "" && evidence.Serial == "" {
+	proved, fault := reportedIdentity(evidence)
+	if fault != "" {
+		return refusal("lifecycle.state", "the management controller at "+request.Controller.Endpoint+" reported "+fault, "")
+	}
+	if !proved.Present() {
 		return refusal("lifecycle.state", "the management controller reported no identity for this machine", "")
 	}
 	if evidence.Power == "" {
@@ -80,17 +93,56 @@ func ValidateAbsence(data []byte, digest string) error {
 // ProvedIdentity reads the identity one presence proof recorded. It reads the
 // evidence as strictly as the proof accepted it, without the request digest
 // the proof was bound to, and refuses anything that is not a proof of a
-// present machine with an identity.
+// present machine with an identity the evidence may carry.
 func ProvedIdentity(data []byte) (machineref.HardwareIdentity, error) {
+	identity, fault, err := provedIdentity(data)
+	if fault != "" {
+		return machineref.HardwareIdentity{}, refusal("lifecycle.state", "the machine evidence records "+fault, "")
+	}
+	return identity, err
+}
+
+// provedIdentity is ProvedIdentity with a recorded identity the evidence may
+// not carry named apart, so a reader can say which field it refused.
+func provedIdentity(data []byte) (machineref.HardwareIdentity, string, error) {
 	evidence, err := decodeStrict(data)
 	if err != nil {
-		return machineref.HardwareIdentity{}, err
+		return machineref.HardwareIdentity{}, "", err
 	}
-	if !evidence.Postcondition || evidence.Absent || (evidence.UUID == "" && evidence.Serial == "") {
-		return machineref.HardwareIdentity{}, refusal("lifecycle.state", "the machine evidence proves no identity", "")
+	if !evidence.Postcondition || evidence.Absent {
+		return machineref.HardwareIdentity{}, "", refusal("lifecycle.state", "the machine evidence proves no identity", "")
 	}
-	return machineref.HardwareIdentity{UUID: evidence.UUID, Serial: evidence.Serial}, nil
+	identity, fault := reportedIdentity(evidence)
+	if fault != "" {
+		return machineref.HardwareIdentity{}, fault, nil
+	}
+	if !identity.Present() {
+		return machineref.HardwareIdentity{}, "", refusal("lifecycle.state", "the machine evidence proves no identity", "")
+	}
+	return identity, "", nil
 }
+
+// reportedIdentity is the UUID and serial a proof carries, each without its
+// surrounding space. Both are what a management controller reported, and a pin
+// carries them into every later comparison and refusal, so a value longer than
+// the bound or holding any character that is not printable is refused, named by
+// its Redfish property and never by its value.
+func reportedIdentity(evidence Evidence) (machineref.HardwareIdentity, string) {
+	identity := machineref.HardwareIdentity{UUID: strings.TrimSpace(evidence.UUID), Serial: strings.TrimSpace(evidence.Serial)}
+	for _, field := range []struct{ property, value string }{{"UUID", identity.UUID}, {"SerialNumber", identity.Serial}} {
+		if utf8.RuneCountInString(field.value) > maxIdentityCharacters {
+			return machineref.HardwareIdentity{}, "a " + field.property + " longer than " + strconv.Itoa(maxIdentityCharacters) + " characters"
+		}
+		if strings.IndexFunc(field.value, notPrintable) >= 0 {
+			return machineref.HardwareIdentity{}, "a " + field.property + " holding a character that is not printable"
+		}
+	}
+	return identity, ""
+}
+
+func notPrintable(r rune) bool { return !unicode.IsPrint(r) }
+
+const reprove = "destroy and apply this context so the machine is proved again"
 
 // PinnedIdentity is the identity the context's current apply proved for one
 // Machine: the evidence of its done bare-metal block, recorded by the attempt
@@ -104,10 +156,14 @@ func PinnedIdentity(machine string, blocks []lifecycle.BlockEvidence) (machinere
 		if len(block.Evidence) == 0 || bytes.Equal(block.Evidence, []byte("null")) {
 			return machineref.HardwareIdentity{}, false, nil
 		}
-		identity, err := ProvedIdentity(block.Evidence)
-		if err != nil {
+		identity, fault, err := provedIdentity(block.Evidence)
+		switch {
+		case fault != "":
 			return machineref.HardwareIdentity{}, false, refusal("lifecycle.state",
-				"the proof that pins Machine/"+machine+" cannot be read", "destroy and apply this context so the machine is proved again")
+				"the proof that pins Machine/"+machine+" records "+fault, reprove)
+		case err != nil:
+			return machineref.HardwareIdentity{}, false, refusal("lifecycle.state",
+				"the proof that pins Machine/"+machine+" cannot be read", reprove)
 		}
 		return identity, true, nil
 	}

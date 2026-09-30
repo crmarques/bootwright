@@ -15,12 +15,16 @@ from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt 
 
 DIGEST = "a" * 64
 
+# One managed network the host carries as frozen: answered for, owned, active
+# and running, as it keeps for its next start, the definition its entry sets.
+CARRIED = {"answered": True, "bridge": True, "definition": True, "managed": True, "name": "n", "owned": True, "state": "active", "uuid": "u"}
+
 
 def host_observation(**overrides):
     observation = {
         "directory": True,
         "hypervisor": True,
-        "networks": [{"answered": True, "bridge": True, "managed": True, "name": "n", "owned": True, "state": "active", "uuid": "u"}],
+        "networks": [dict(CARRIED)],
         "pool": "active",
         "poolAnswered": True,
         "services": [{"enabled": True, "name": "virtnetworkd.service", "state": "active"}],
@@ -39,16 +43,18 @@ def test_a_provider_host_postcondition_needs_every_proof():
         {"uri": False},
         {"pool": ""},
         {"poolAnswered": False},
-        {"networks": [{"answered": True, "bridge": True, "managed": True, "name": "n", "owned": False, "state": "active", "uuid": "u"}]},
-        {"networks": [{"answered": True, "bridge": True, "managed": True, "name": "n", "owned": True, "state": "inactive", "uuid": "u"}]},
-        {"networks": [{"answered": False, "bridge": True, "managed": True, "name": "n", "owned": True, "state": "active", "uuid": "u"}]},
-        {"networks": [{"answered": False, "bridge": False, "managed": False, "name": "n", "owned": False, "state": "", "uuid": ""}]},
+        {"networks": [dict(CARRIED, owned=False)]},
+        {"networks": [dict(CARRIED, state="inactive")]},
+        {"networks": [dict(CARRIED, answered=False)]},
+        {"networks": [dict(CARRIED, definition=False)]},
+        {"networks": [{"answered": False, "bridge": False, "definition": False, "managed": False, "name": "n", "owned": False,
+                       "state": "", "uuid": ""}]},
     ):
         assert not substrate_host_protocol.presence(host_observation(**overrides), DIGEST)["postcondition"]
 
 
 def forgotten_network():
-    return {"answered": True, "bridge": False, "managed": True, "name": "n", "owned": False, "state": "", "uuid": ""}
+    return {"answered": True, "bridge": False, "definition": False, "managed": True, "name": "n", "owned": False, "state": "", "uuid": ""}
 
 
 # `managed` echoes the request and stays true after removal, so an absence proof
@@ -67,7 +73,7 @@ def test_a_provider_host_removal_names_what_is_still_defined():
 
 
 def test_an_unmanaged_network_never_blocks_a_removal():
-    foreign = {"answered": False, "bridge": True, "managed": False, "name": "n", "owned": False, "state": "active", "uuid": ""}
+    foreign = {"answered": False, "bridge": True, "definition": False, "managed": False, "name": "n", "owned": False, "state": "active", "uuid": ""}
     removed = host_observation(pool="", networks=[foreign], directory=False)
     assert substrate_host_protocol.absence(removed, DIGEST)["postcondition"]
 
@@ -95,7 +101,7 @@ def test_a_provider_host_removal_proves_only_what_it_owns():
     external = substrate_host_protocol.absence(
         host_observation(
             pool="", directory=False,
-            networks=[{"answered": False, "bridge": True, "managed": False, "name": "n", "owned": False, "state": "", "uuid": ""}],
+            networks=[{"answered": False, "bridge": True, "definition": False, "managed": False, "name": "n", "owned": False, "state": "", "uuid": ""}],
         ),
         DIGEST,
     )
@@ -105,12 +111,12 @@ def test_a_provider_host_removal_proves_only_what_it_owns():
 def test_a_networks_identity_is_observed_but_never_reported_as_evidence():
     """Go rejects an evidence field it does not know, so the UUID stays here."""
     evidence = substrate_host_protocol.presence(host_observation(), DIGEST)
-    assert set(evidence["networks"][0]) == {"answered", "bridge", "managed", "name", "owned", "state"}
+    assert set(evidence["networks"][0]) == {"answered", "bridge", "definition", "managed", "name", "owned", "state"}
     # An observation that does not carry the identity is refused rather than
     # silently shaped into evidence, because a definition without it collides.
     with pytest.raises(ValueError):
         substrate_host_protocol.presence(
-            host_observation(networks=[{"answered": True, "bridge": True, "managed": True, "name": "n", "owned": True, "state": "active"}]),
+            host_observation(networks=[{key: value for key, value in CARRIED.items() if key != "uuid"}]),
             DIGEST,
         )
 
@@ -212,6 +218,19 @@ def test_an_installation_removal_proves_the_published_content_is_gone():
     assert gone["postcondition"] and gone["absent"]
     remaining = managedos_install_protocol.absence({"observation": {"image": True, "tree": False}}, DIGEST)
     assert not remaining["postcondition"]
+
+
+# A removal stopped while it deleted the package tree can leave the directory
+# without its .treeinfo. That is content the removal still takes back, so it is
+# carried as evidence, keeps the removal's absence unproved and is named.
+def test_a_tree_left_without_its_marker_is_content_a_removal_still_takes_back():
+    left = {"observation": {"image": False, "tree": False, "treeContent": True}}
+    assert managedos_install_protocol.presence(dict(install_arguments(), **left), DIGEST)["treeContent"] is True
+    evidence = managedos_install_protocol.absence(left, DIGEST)
+    assert not evidence["postcondition"]
+    assert evidence["treeContent"] is False
+    assert managedos_install_protocol.remaining(left) == ["treeContent"]
+    assert managedos_install_protocol.presence(install_arguments(), DIGEST)["treeContent"] is False
 
 
 def test_an_unmet_installation_names_what_is_unproved():
@@ -395,7 +414,7 @@ def test_a_provider_host_absence_needs_an_answer_and_no_directory(monkeypatch):
     assert host_action(dict(arguments, observation=HOST_GONE)).run(task_vars={}) == {"changed": False}
     evidence = published[0]["evidence"]
     assert (evidence["absent"], evidence["postcondition"], evidence["uri"], evidence["directory"]) == (True, True, True, False)
-    assert evidence["networks"] == [{"answered": True, "bridge": False, "managed": True, "name": "n", "owned": False, "state": ""}]
+    assert evidence["networks"] == [{"answered": True, "bridge": False, "definition": False, "managed": True, "name": "n", "owned": False, "state": ""}]
     assert (evidence["hypervisor"], evidence["services"]) == (True, [{"enabled": True, "name": "virtnetworkd.service", "state": "active"}])
 
 

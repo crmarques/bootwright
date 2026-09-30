@@ -1,0 +1,19 @@
+{
+  "absent": false,
+  "cluster": "",
+  "completed": false,
+  "identity": "d21b91799c1b2d06e949151732b30343fc42b122f785c10685fad98570b00a02",
+  "media": [
+    "sno-01"
+  ],
+  "missing": [
+    "master-0"
+  ],
+  "ownMedia": [],
+  "postcondition": false,
+  "powered": [
+    "sno-01"
+  ],
+  "release": "",
+  "request": "1111111111111111111111111111111111111111111111111111111111111111"
+}
