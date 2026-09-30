@@ -100,7 +100,10 @@
       "logs": [
         "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/logs/operation.jsonl"
       ]
-    }
+    },
+    "contradictions": [
+      "os-install-rhel-01 (no block record, yet an attempt of it is recorded)"
+    ]
   },
   "diagnostics": [],
   "logs": []

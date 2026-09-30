@@ -76,7 +76,7 @@ func decodeEvidence(data []byte) (Evidence, error) {
 	if err := decoder.Decode(&evidence); err != nil {
 		return Evidence{}, refusal("lifecycle.state", "the artifact-server adapter returned malformed evidence", "")
 	}
-	if decoder.More() {
+	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
 		return Evidence{}, refusal("lifecycle.state", "the artifact-server adapter returned trailing evidence", "")
 	}
 	return evidence, nil

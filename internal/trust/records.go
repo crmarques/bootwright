@@ -56,7 +56,7 @@ func Decode(data []byte) (Store, error) {
 	if err := decoder.Decode(&store); err != nil {
 		return Store{}, failure("the SSH trust store could not be decoded", "")
 	}
-	if decoder.More() {
+	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
 		return Store{}, failure("the SSH trust store carries trailing content", "")
 	}
 	if store.FormatVersion != FormatVersion {

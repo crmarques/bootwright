@@ -129,12 +129,6 @@ def source_identity(source):
         raise Refused("source identity")
 
 
-def verify_source(source, data):
-    source_identity(source)
-    if len(data) != source["bytes"] or sha256(data) != source["sha256"]:
-        raise Refused("source integrity")
-
-
 def bypass_matches(rule, target):
     if not isinstance(rule, str) or not rule or len(rule) > 1024:
         raise Refused("proxy bypass")
@@ -254,30 +248,33 @@ def alarm(seconds):
             )
 
 
-def download(source, egress):
-    """Read only exact approved bytes using explicit routing and system trust."""
+def download(source, egress, descriptor):
+    """Stream only exact approved bytes into descriptor, each chunk written
+    before the next is read, using explicit routing and system trust.
+
+    What the descriptor holds is proved only when this returns; a refused
+    download leaves its caller a partial file to discard."""
     try:
         with alarm(DOWNLOAD_SECONDS):
-            return _download(source, egress)
+            _download(source, egress, descriptor)
     except Exception:
         raise Refused("approved source acquisition was refused or incomplete") from None
 
 
-def _download(source, egress):
+def _download(source, egress, descriptor):
     deadline = time.monotonic() + DOWNLOAD_SECONDS
 
-    def collect(response):
-        data = bytearray()
-        stream_copy(
+    def store(response):
+        digest = stream_copy(
             functools.partial(response.read, decode_content=False),
             source["bytes"],
             deadline,
-            observers=(data.extend,),
+            descriptor,
         )
-        verify_source(source, data)
-        return bytes(data)
+        if digest != source["sha256"]:
+            raise Refused("source integrity")
 
-    return respond(source, egress, deadline, collect)
+    respond(source, egress, deadline, store)
 
 
 def respond(source, egress, deadline, consume):
@@ -666,30 +663,29 @@ class Bundle:
 
     @contextlib.contextmanager
     def staged(self, name, mode):
-        """Yield an unlinked file in name's directory; only link names it.
+        """Yield an unlinked file in the bundle's own directory; only link
+        names it, and only link creates name's directories.
 
         However the block ends, the file is closed, so one never linked leaves
-        nothing behind."""
+        nothing behind, not even a directory."""
         if mode not in (0o600, 0o700):
             raise Refused("publication bounds")
+        relative(name)
         self.writable()
-        parent, leaf = self.parent(name, create=True)
+        temporary = os.open(
+            ".", os.O_TMPFILE | os.O_RDWR | os.O_CLOEXEC, mode, dir_fd=self.fd
+        )
         try:
-            temporary = os.open(
-                ".", os.O_TMPFILE | os.O_RDWR | os.O_CLOEXEC, mode, dir_fd=parent
-            )
-            try:
-                os.fchmod(temporary, mode)
-                yield temporary, parent, leaf, mode
-            finally:
-                os.close(temporary)
+            os.fchmod(temporary, mode)
+            yield temporary, name, mode
         finally:
-            os.close(parent)
+            os.close(temporary)
 
     def link(self, name, staged, size, digest):
-        """Name one complete staged file, then prove the name by its digest."""
-        temporary, parent, leaf, mode = staged
-        if relative(name)[-1] != leaf:
+        """Name one complete staged file, creating its directories now, then
+        prove the name by its digest."""
+        temporary, staged_name, mode = staged
+        if staged_name != name:
             raise Refused("publication name")
         os.fsync(temporary)
         created = os.fstat(temporary)
@@ -702,15 +698,12 @@ class Bundle:
         ):
             raise Refused("temporary artifact metadata")
         self.writable()
-        current_parent, _leaf = self.parent(name)
+        parent, leaf = self.parent(name, create=True)
         try:
-            before, current = os.fstat(parent), os.fstat(current_parent)
-            if (before.st_dev, before.st_ino) != (current.st_dev, current.st_ino):
-                raise Refused("publication parent changed")
+            link_at(temporary, parent, leaf)
+            os.fsync(parent)
         finally:
-            os.close(current_parent)
-        link_at(temporary, parent, leaf)
-        os.fsync(parent)
+            os.close(parent)
         if self.digest(name, size, mode) != (digest, size):
             raise Refused("published artifact integrity")
 

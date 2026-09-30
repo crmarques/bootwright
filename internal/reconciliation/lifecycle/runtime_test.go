@@ -8,6 +8,9 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/secrets/custody"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
 // Ownership answers what the current operation proved. Nothing is proved before
@@ -101,6 +104,70 @@ func TestWithRuntimeReleasesItsBindingWhenTheOperationFails(t *testing.T) {
 	}
 	if len(h.binder.released) != 1 {
 		t.Fatalf("released bindings = %+v", h.binder.released)
+	}
+}
+
+// reopenThen runs then once, right before the first reopen of a binding.
+type reopenThen struct {
+	*testBinder
+	then func()
+}
+
+func (b *reopenThen) Reopen(ctx context.Context, request custody.BindingRequest) ([]secretstore.BoundMaterial, error) {
+	if then := b.then; then != nil {
+		b.then = nil
+		then()
+	}
+	return b.testBinder.Reopen(ctx, request)
+}
+
+// A binding names no consumer, so a registration that lists a bounded run's
+// binding between its bind and its reopen collects it with the bindings no
+// operation names. The run finds its binding gone rather than unreadable and
+// binds again, so it still runs, with material, and gives back what it bound;
+// the operation keeps its own binding.
+func TestABoundedRunWhoseBindingARegistrationCollectedBindsAgain(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, "alpha")
+	raced := &reopenThen{testBinder: h.binder}
+	h.service.binder = raced
+	raced.then = func() {
+		if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
+			t.Fatalf("the apply racing the run failed: %v", err)
+		}
+	}
+	lent := 0
+	err := h.service.WithRuntime(ctx, RuntimeRequest{ContextName: testContextName, Secrets: []string{"artifact-server-tls"}},
+		func(_ context.Context, runtime Runtime) error {
+			if _, ok := runtime.Material["artifact-server-tls"]; ok {
+				lent++
+			}
+			return nil
+		})
+	if err != nil || lent != 1 || raced.then != nil {
+		t.Fatalf("the run = %v with material %d times; the race ran %t", err, lent, raced.then == nil)
+	}
+	record, _ := durableOperation(t, h)
+	if !slices.Equal(record.Bindings, []string{"bind-2"}) || h.binder.issued != 3 {
+		t.Fatalf("the apply registered %v and the store issued %d bindings", record.Bindings, h.binder.issued)
+	}
+	if !slices.Contains(h.binder.released, "bind-1") || !slices.Contains(h.binder.released, "bind-3") || slices.Contains(h.binder.released, "bind-2") {
+		t.Fatalf("released %v", h.binder.released)
+	}
+}
+
+// A binding that is still held but cannot be reopened is no collection, so a
+// bounded consumer reports the failure after binding once and releases it.
+func TestABoundedConsumerWhoseHeldBindingCannotBeReopenedFails(t *testing.T) {
+	h := newHarness(t)
+	h.service.binder = unopenable{h.binder}
+	err := h.service.WithMaterial(context.Background(), MaterialRequest{ContextName: testContextName, Secrets: []string{"artifact-server-tls"}},
+		func(context.Context, map[string]secrets.Material) error {
+			t.Fatal("the consumer ran without its material")
+			return nil
+		})
+	if err == nil || h.binder.issued != 1 || !slices.Equal(h.binder.released, []string{"bind-1"}) {
+		t.Fatalf("the consumer = %v after %d bindings, released %v", err, h.binder.issued, h.binder.released)
 	}
 }
 

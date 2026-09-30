@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -227,6 +228,77 @@ func TestEncryptionStatusOmitsImplementationConfiguration(t *testing.T) {
 	orderedKeys := "\"keys\":[{\"id\":\"key-1\",\"state\":\"retired\",\"seals\":8},{\"id\":\"key-2\",\"state\":\"active\",\"seals\":3}]"
 	if code != 0 || errOut != "" || strings.Contains(out, "\"config\"") || !strings.Contains(out, "\"implementation\":{\"type\":\"local-keyring\"") || !strings.Contains(out, orderedKeys) {
 		t.Fatalf("status code=%d stdout=%q stderr=%q", code, out, errOut)
+	}
+}
+
+// Display escapes each value once, so a backslash in the encryption status or
+// in a secret's parts reads as the two JSON's safe display text carries, and
+// the keys keep the order JSON gives them.
+func TestSecretTextEscapesOnce(t *testing.T) {
+	raw := func(label string) string { return label + `\x` }
+	shown := func(label string) string { return label + `\\x` }
+	active := raw("active-key")
+	status := &encryption.StatusResult{
+		Initialized: true,
+		Implementation: &encryption.ImplementationStatus{
+			Type:       raw("type"),
+			Store:      encryption.ComponentStatus{ID: raw("store"), InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1},
+			KeyCustody: encryption.ComponentStatus{ID: raw("custody"), InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1},
+			State:      raw("state"),
+		},
+		ActiveKey: &active,
+		Keys:      []secretstore.Key{{ID: raw("b-key"), State: raw("retired"), Seals: 8}, {ID: raw("a-key"), State: raw("active"), Seals: 3}},
+	}
+	var out bytes.Buffer
+	if err := writeEncryptionStatus(&out, "secret encryption status", status, false); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	if strings.Contains(text, `\\\\`) {
+		t.Fatalf("encryption status text escaped a value twice: %q", text)
+	}
+	for _, want := range []string{
+		"  Implementation  " + shown("type") + "\n", "  State           " + shown("state") + "\n",
+		"  Store           " + shown("store") + "\n", "  Key custody     " + shown("custody") + "\n",
+		"  Active key      " + shown("active-key") + "\n",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("encryption status text = %q, missing %q", text, want)
+		}
+	}
+	first := strings.Index(text, "  "+shown("a-key")+"  "+shown("active")+"   3\n")
+	second := strings.Index(text, "  "+shown("b-key")+"  "+shown("retired")+"  8\n")
+	if first < 0 || second < first {
+		t.Fatalf("encryption status keys = %q, want %s then %s", text, shown("a-key"), shown("b-key"))
+	}
+	part := secrets.Part(raw("part"))
+	var check, list, mutation bytes.Buffer
+	checked := &custody.CheckResult{Context: secretResultContext(), Secrets: []custody.CheckRow{
+		{Name: raw("name"), Type: raw("type"), Source: raw("source"), Parts: []secrets.Part{part}, Status: raw("status")},
+	}}
+	listed := &custody.ListResult{Context: secretResultContext(), Secrets: []custody.ListRow{
+		{Name: raw("name"), Type: raw("type"), Source: raw("source"), Parts: []secrets.Part{part}, State: raw("state")},
+	}}
+	changed := &custody.MutationResult{Context: secretResultContext(), Name: raw("name"), Changed: 1, Parts: []secrets.Part{part}}
+	if err := writeSecretCheckText(&check, checked); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeSecretListText(&list, listed); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeSecretMutation(&mutation, "secret set", changed); err != nil {
+		t.Fatal(err)
+	}
+	checkRow := []string{shown("name"), shown("type"), shown("source"), shown("part"), shown("status"), "-"}
+	listRow := []string{shown("name"), shown("type"), shown("source"), shown("part"), shown("state"), "-", "0"}
+	if rows := strings.Split(strings.TrimSuffix(check.String(), "\n"), "\n"); len(rows) != 2 || !slices.Equal(strings.Fields(rows[1]), checkRow) {
+		t.Fatalf("secret check text = %q, want the row %q", check.String(), checkRow)
+	}
+	if rows := strings.Split(strings.TrimSuffix(list.String(), "\n"), "\n"); len(rows) != 2 || !slices.Equal(strings.Fields(rows[1]), listRow) {
+		t.Fatalf("secret list text = %q, want the row %q", list.String(), listRow)
+	}
+	if !strings.Contains(mutation.String(), "  Name       "+shown("name")+"\n") || !strings.Contains(mutation.String(), "  Parts      "+shown("part")+"\n") {
+		t.Fatalf("secret mutation text = %q", mutation.String())
 	}
 }
 

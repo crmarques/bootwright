@@ -87,6 +87,30 @@ func TestDestroyPlanUsesRemovalGroups(t *testing.T) {
 	}
 }
 
+// A server bound to a managed bridge's host address waits for the provider
+// block that creates the bridge, as every managed service does.
+func TestAServerBoundToAManagedBridgeRequiresItsProvider(t *testing.T) {
+	provider := api.NewObject(api.InfraProvider, "lab-libvirt", api.Value{}, api.MapValue(
+		field("libvirt", api.MapValue(text("machineRef", "controller"), text("uri", "qemu:///system"))),
+		field("networkAttachments", api.ListValue(api.MapValue(text("name", "lab-guests"), field("libvirt", api.MapValue(
+			text("bridge", "virbr-lab"), text("management", "managed"), text("address", "198.51.100.1/24"),
+		))))),
+	))
+	capability := New(&fakeRunner{}, fixedClock{})
+	for bind, want := range map[string][]reconciliation.ObjectRef{
+		"198.51.100.1": {{Kind: "InfraProvider", Object: "lab-libvirt"}},
+		"192.0.2.1":    nil,
+	} {
+		plan, err := capability.Plan(context.Background(), planInput(t, reconciliation.Apply, controller(), provider, artifactServer(text("bindAddress", bind))))
+		if err != nil || len(plan.Definitions) != 1 {
+			t.Fatalf("plan = %+v (%v)", plan, err)
+		}
+		if !slices.Equal(plan.Definitions[0].Requires, want) {
+			t.Fatalf("a server bound to %s requires %+v, want %+v", bind, plan.Definitions[0].Requires, want)
+		}
+	}
+}
+
 func TestSSHPlacementReservesNothing(t *testing.T) {
 	ssh := api.MapValue(
 		text("addressRef", "ip"),

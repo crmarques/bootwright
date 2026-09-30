@@ -362,6 +362,39 @@ func TestReservationsRefuseAnotherContextsKeys(t *testing.T) {
 	}
 }
 
+// A wildcard bind holds its port on every address, so it and a socket at any
+// other address on that port refuse each other across contexts.
+func TestAWildcardSocketReservationRefusesEveryAddressAtItsPort(t *testing.T) {
+	ctx := context.Background()
+	store, record := lifecycleFixture(t)
+	_, sources := fixture(t)
+	publish(t, store, "second", sources)
+	reserveFixture(t, store, record)
+	reserve := func(name, key string) error {
+		return store.MutateLifecycle(ctx, name, func(tx lifecycle.Transaction) error {
+			return tx.Reserve(ctx, []prerequisites.HostReservation{{
+				Context: name, Kind: "proxy", Service: "lab-proxy", Keys: []string{key},
+			}})
+		})
+	}
+	for _, test := range []struct{ held, wanted string }{
+		{"socket:0.0.0.0:3128", "socket:192.0.2.9:3128"},
+		{"socket:192.0.2.9:3128", "socket:0.0.0.0:3128"},
+		{"socket::::3128", "socket:192.0.2.9:3128"},
+	} {
+		if err := reserve(record.Name, test.held); err != nil {
+			t.Fatalf("reserving %s failed: %#v", test.held, diagnostics.Of(err))
+		}
+		err := reserve("second", test.wanted)
+		if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "controller.conflict" || !strings.Contains(reported[0].Message, record.Name) {
+			t.Fatalf("%s beside %s = %#v, want controller.conflict naming %s", test.wanted, test.held, reported, record.Name)
+		}
+	}
+	if err := reserve("second", "socket:192.0.2.9:3129"); err != nil {
+		t.Fatalf("a socket at another port was refused: %#v", diagnostics.Of(err))
+	}
+}
+
 func TestReservationRequiresACompletedSetup(t *testing.T) {
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)

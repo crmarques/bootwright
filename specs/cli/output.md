@@ -84,7 +84,10 @@ a command supplies content and never its own spacing, padding, or separators.
 Trailing padding is never written, so no line ends in whitespace. Column width
 is measured in Unicode code points after display escaping. Values cross the
 display boundary inside the renderer, so alignment can never be widened by an
-unescaped control sequence. Layout adds no color, cursor control, or box
+unescaped control sequence. A command passes each value raw and the renderer
+escapes it exactly once, so a value reads in text as the
+[safe display text](#json-output) JSON carries: a backslash prints as two, not
+four. Layout adds no color, cursor control, or box
 drawing, and does not vary with terminal width; only the redrawn
 [progress row](#long-running-progress) is bounded by it.
 
@@ -242,7 +245,7 @@ Successful result objects have stable top-level fields:
 | `media list` | `media` |
 | `validate` | `counts`, `excludedContainerClusters`, `excludedStorageClusters`, `excludedResourceFiles`, `advisories` |
 | `preflight infra`, `preflight clusters`, `preflight container-cluster`, `preflight storage-cluster`, `preflight add-ons`, `preflight all` | `context`, `target`, `checks`, `summary` |
-| `status` | `context`, `setupChecks`, `desired`, `clusters`, `storageClusters`, `shared`, `secrets`, `nextSteps`, `lifecycle` |
+| `status` | `context`, `setupChecks`, `desired`, `clusters`, `storageClusters`, `shared`, `secrets`, `nextSteps`, `lifecycle`, `contradictions` |
 | `render` | `inputDir`, `outputDir`, `effectiveStatePath`, `lockPath`, `inventoryPath`, `varsPath`, `installer`, `storage` |
 | `render effective` | `counts`, `effectiveState` |
 | `render installer` | `clusters` |
@@ -374,10 +377,12 @@ probe. Its result orders these fields:
 | `secrets` | `declared` and `bound` counts. |
 | `nextSteps` | Ordered safe command strings, empty when no action is available. |
 | `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe relative paths. |
+| `contradictions` | Ordered strings naming what the context's durable records contradict, each worded as the [refusal](../state-reconciliation.md#continuation-and-removal) that points at `status` names it; empty when nothing does. |
 
 Rows sort by their documented key: checks and blocks in frozen order,
-everything else in ascending bytewise name order. Human `status` presents the
-same membership and order, omitting empty sections.
+contradictions in the order their refusal names them, everything else in
+ascending bytewise name order. Human `status` presents the same membership and
+order, omitting empty sections.
 Its Lifecycle section also names the build that registered the operation and
 the host directory of its logs, which JSON leaves out.
 
@@ -464,9 +469,6 @@ package-level variable initializer, and nothing else
 A command context that needs a narrower code adds its row with the code's
 first emission. A namespace alone is not a fallback code. New codes may be
 added, but the meaning of an existing code cannot change.
-
-Not yet met: a plain `<<` merge key is refused as `yaml.shape`, not
-`yaml.alias`; tracked as [B123](../milestones/m1.md#b123).
 
 Diagnostics are sorted by:
 
@@ -591,11 +593,17 @@ Human output names the run's own directory as the same `Logs` field, before the
 adapter runs and again after the result, for the same reason an operation names
 its log tree twice. Naming it first is what a refused run depends on, because a
 run that fails reports a diagnostic instead of a result. JSON `logs` names the
-retained file the same way an operation's logs are named.
-
-Not yet met: a `machine start`, `stop` or `restart` with `--output json` whose
-run fails reports `logs: []`, so no stream names the retained run output;
-tracked as [B115](../milestones/m1.md#b115).
+retained file the same way an operation's logs are named. A JSON invocation
+reports no progress, so a run that fails once the controller admits its private
+Python runtime, which is where human output first names the directory, names
+the file in its failure envelope: `result` is `null` and `logs` lists the file
+beside the diagnostic, whether the adapter refused or the run was interrupted,
+canceled or past its deadline. A run that fails before that admission lists
+none, as its human output names no directory, even when its file already
+exists: the file is created before the runtime is admitted, so a refused
+admission, such as a native package transaction holding its lock, or an
+interrupt, cancellation or deadline that lands first leaves that file empty and
+unnamed.
 
 ## Multi-machine presentation
 

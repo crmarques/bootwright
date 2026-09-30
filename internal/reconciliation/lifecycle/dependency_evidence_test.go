@@ -90,8 +90,8 @@ func applyOnce(h *harness) error {
 // An apply attempt is handed what each block it depends on durably proved in
 // this operation, in frozen plan order and unread, and nothing of a block it
 // does not depend on. A dependency a resolution completed after its attempt
-// never recorded an outcome is handed with its state and no evidence, because
-// the attempt the evidence would come from proved nothing.
+// never recorded an outcome is handed what that resolution observed, because
+// the resolution, not the attempt, is what proved it.
 func TestAnApplyAttemptReceivesWhatItsDependenciesProved(t *testing.T) {
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
 		definition("alpha"), definition("bravo"), definition("delta"), dependent("charlie", "alpha", "delta"),
@@ -107,7 +107,7 @@ func TestAnApplyAttemptReceivesWhatItsDependenciesProved(t *testing.T) {
 		t.Fatal("an apply whose block could not record its completion succeeded")
 	}
 	clearFault(h, recorded)
-	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted, Evidence: json.RawMessage(`{"observed":"delta"}`)}}
 	if err := applyOnce(h); err != nil {
 		t.Fatalf("continuing the apply: %v", err)
 	}
@@ -131,15 +131,12 @@ func TestAnApplyAttemptReceivesWhatItsDependenciesProved(t *testing.T) {
 	for index, want := range []struct {
 		object   string
 		evidence string
-	}{{"alpha", `{"proved":"alpha"}`}, {"delta", ""}} {
+	}{{"alpha", `{"proved":"alpha"}`}, {"delta", `{"observed":"delta"}`}} {
 		got := charlie[index]
 		if got.Kind != "ArtifactServer" || got.Object != want.object || got.Implementation != "artifact-server-nginx-v1" ||
 			got.Verb != reconciliation.Apply || got.State != reconciliation.BlockDone || string(got.Evidence) != want.evidence {
 			t.Fatalf("charlie was handed %+v for %s, want its done apply with %q", got, want.object, want.evidence)
 		}
-	}
-	if charlie[1].Evidence != nil {
-		t.Fatalf("a dependency proved only by resolution handed %q", charlie[1].Evidence)
 	}
 }
 

@@ -56,7 +56,7 @@ func (e Elevator) Run(ctx context.Context, invocation Invocation) Outcome {
 	// Without a terminal sudo cannot prompt, so its refusal text carries no
 	// operator action until the child proves it started.
 	errorStream := newStartFilter(invocation.Error, invocation.JSON, noninteractive)
-	options := SudoOptions{Executable: executable, Sudo: sudo, Executor: e.Executor, Delay: e.Delay, NonInteractive: noninteractive, Assignments: RouteAssignments(invocation.Route), Input: invocation.Input, Output: output, Error: errorStream}
+	options := SudoOptions{Executable: executable, Sudo: sudo, Executor: e.Executor, Delay: e.Delay, NonInteractive: noninteractive, Quiet: invocation.JSON, Assignments: RouteAssignments(invocation.Route), Input: invocation.Input, Output: output, Error: errorStream}
 	if !noninteractive {
 		// Sudo relays the terminal only while the child inherits it on stdin
 		// and stdout; behind a pipe it parks the child in the background of a
@@ -228,14 +228,16 @@ type sudoLines int
 const (
 	passSudoLines sudoLines = iota
 	holdSudoLines
-	dropSudoLines
+	// dropBeforeStart discards every byte before the start, whatever line it
+	// belongs to: only sudo writes there, and JSON leaves standard error empty.
+	dropBeforeStart
 )
 
 // startFilter carries the elevated child's standard error, on which sudo
 // writes too. It removes the child's start announcement and, until then, holds
-// or drops complete lines beginning with sudo's prefix. It holds bytes at a
-// line start only while they remain a prefix of a line it could hold, so a
-// prompt without a line feed passes at once.
+// complete lines beginning with sudo's prefix or, for JSON, drops everything.
+// It holds bytes at a line start only while they remain a prefix of a line it
+// could hold, so a prompt without a line feed passes at once.
 type startFilter struct {
 	writer io.Writer
 	sudo   sudoLines
@@ -253,7 +255,7 @@ type startFilter struct {
 func newStartFilter(writer io.Writer, json, noninteractive bool) *startFilter {
 	switch {
 	case json:
-		return &startFilter{writer: writer, sudo: dropSudoLines}
+		return &startFilter{writer: writer, sudo: dropBeforeStart}
 	case noninteractive:
 		return &startFilter{writer: writer, sudo: holdSudoLines}
 	}
@@ -276,12 +278,13 @@ func (f *startFilter) step(data []byte) (int, error) {
 	case f.started:
 		return f.forward(data)
 	case f.midLine:
-		end := bytes.IndexByte(data, '\n')
-		if end < 0 {
-			return f.forward(data)
+		if end := bytes.IndexByte(data, '\n'); end >= 0 {
+			f.midLine, data = false, data[:end+1]
 		}
-		f.midLine = false
-		return f.forward(data[:end+1])
+		if f.sudo == dropBeforeStart {
+			return len(data), nil
+		}
+		return f.forward(data)
 	}
 	f.line = append(f.line, data[0])
 	return 1, f.judge(false)
@@ -299,18 +302,18 @@ func (f *startFilter) Close() error {
 func (f *startFilter) judge(final bool) error {
 	line := f.line
 	complete := final || line[len(line)-1] == '\n'
-	sudoLine := f.sudo == dropSudoLines || f.sudo == holdSudoLines && !f.other
+	sudoLine := f.sudo == holdSudoLines && !f.other
 	switch {
 	case string(line) == startAnnouncement || final && string(line)+"\n" == startAnnouncement:
 		f.line, f.started = nil, true
 		return f.release()
 	case !complete && strings.HasPrefix(startAnnouncement, string(line)):
 		return nil
+	case f.sudo == dropBeforeStart:
+		f.line, f.midLine = nil, !complete
+		return nil
 	case sudoLine && complete && bytes.HasPrefix(line, []byte(sudoLinePrefix)):
 		f.line = nil
-		if f.sudo == dropSudoLines {
-			return nil
-		}
 		if f.count < heldLineCount {
 			f.held, f.count = append(f.held, line...), f.count+1
 			return nil

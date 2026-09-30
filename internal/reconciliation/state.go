@@ -115,6 +115,24 @@ func ResolutionTransition(observed EffectState) (EffectState, BlockState, error)
 	return "", "", stateError("lifecycle resolution evidence is not recognized")
 }
 
+// ResolutionOutcome is the outcome a resolution records beside the effect it
+// resolved. A completed effect records the outcome its capability proves it
+// had, and changed when it proves neither, because the attempt it completed
+// may have changed the target; an effect a retry must converge records failed,
+// and an unproved one unknown, whatever the capability said.
+func ResolutionOutcome(resolved EffectState, proved Outcome) Outcome {
+	switch resolved {
+	case EffectCompleted:
+		if proved == OutcomeChanged || proved == OutcomeUnchanged {
+			return proved
+		}
+		return OutcomeChanged
+	case EffectNoEffect, EffectPartial:
+		return OutcomeFailed
+	}
+	return OutcomeUnknown
+}
+
 // NextOperationState derives the operation from its blocks. An unknown block
 // dominates, because no retry, dependent block or replacement may start while
 // one effect remains unproved. A boundary means execution stopped because the

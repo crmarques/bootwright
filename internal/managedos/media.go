@@ -138,7 +138,7 @@ func DecodeMediaRecord(data []byte, name string) (MediaEntry, error) {
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data[:len(data)-1]))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&record); err != nil || decoder.More() {
+	if err := decoder.Decode(&record); err != nil || len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
 		return MediaEntry{}, mediaError("media record is malformed")
 	}
 	if record.Version != MediaRecordVersion || record.Name != name {

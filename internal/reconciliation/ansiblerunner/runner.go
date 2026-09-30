@@ -49,7 +49,7 @@ func readProtocol(reader io.Reader, messages chan<- protocolMessage) error {
 		var message protocolMessage
 		decoder := json.NewDecoder(bytes.NewReader(scanner.Bytes()))
 		decoder.DisallowUnknownFields()
-		if decoder.Decode(&message) != nil || decoder.More() {
+		if decoder.Decode(&message) != nil || decoder.Decode(new(any)) != io.EOF {
 			return errors.New("protocol record")
 		}
 		switch message.Phase {

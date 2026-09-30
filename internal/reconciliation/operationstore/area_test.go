@@ -210,6 +210,34 @@ func (a *memoryArea) Append(ctx context.Context, target string, data []byte) err
 	return nil
 }
 
+// RemoveDirectory removes only an empty directory, as the kernel does, and
+// never the area itself.
+func (a *memoryArea) RemoveDirectory(ctx context.Context, target string) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	if err := a.admit(ctx, target, false); err != nil {
+		return err
+	}
+	if target == "" {
+		return errors.New("the area itself is not removable")
+	}
+	if err := a.check("remove", target); err != nil {
+		return err
+	}
+	for name := range a.directories {
+		if strings.HasPrefix(name, target+"/") {
+			return errors.New("directory not empty")
+		}
+	}
+	for name := range a.files {
+		if strings.HasPrefix(name, target+"/") {
+			return errors.New("directory not empty")
+		}
+	}
+	delete(a.directories, target)
+	return nil
+}
+
 // Sync refuses a record, as the contract requires, so a caller that names one
 // fails in a test rather than on a host.
 func (a *memoryArea) Sync(ctx context.Context, target string) error {

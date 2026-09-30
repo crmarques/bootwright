@@ -395,8 +395,10 @@ func retainControllerSources(before, next prerequisites.HostState) (prerequisite
 	return next, nil
 }
 
-// validateControllerReservations keeps the stored claim set canonical so two
-// contexts can be compared for conflict without interpreting a key.
+// validateControllerReservations keeps the stored claim set canonical and one
+// key to one context. The wildcard socket relation is enforced where a claim
+// is published, so a record an earlier build wrote stays readable and
+// releasable.
 func validateControllerReservations(values []prerequisites.HostReservation) error {
 	if len(values) > maxControllerReservations {
 		return state("controller host reservations exceed their bound")

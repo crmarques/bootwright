@@ -24,6 +24,10 @@ type Area interface {
 	// exactly expected. A nil expectation requires the destination to be absent.
 	Replace(ctx context.Context, path string, data, expected []byte) error
 	Append(ctx context.Context, path string, data []byte) error
+	// RemoveDirectory removes one empty directory, durably when it returns. It
+	// refuses a directory that holds anything, a record and the area itself,
+	// and a directory that is already absent is removed.
+	RemoveDirectory(ctx context.Context, path string) error
 	// Sync makes a directory durable and resolves every component of its path
 	// as one, so it names a directory and never a record. A record is already
 	// durable when WriteExclusive or Replace returns.

@@ -251,8 +251,10 @@ removes. Every later byte passes unchanged. In a human noninteractive
 invocation, lines beginning with `sudo:` and a space that arrive before the
 start line are held, at most 16 of at most 4096 bytes each, and reach standard
 error once the child starts; any other line releases the held lines in order
-and ends the holding. JSON mode discards those lines, and an interactive
-invocation passes them at once. When sudo cannot be run or waited for and no
+and ends the holding. An interactive invocation passes them at once. JSON mode
+discards everything that arrives before the start line, whatever it begins
+with, such as a sudoers denial, so its standard error stays empty. When sudo
+cannot be run or waited for and no
 result was written, the supervisor reports `runtime.interrupted` after an
 interrupt and `runtime.privilege` otherwise. An interactive invocation whose
 sudo ran ends with the child's status and no report of the supervisor's own,
@@ -267,14 +269,18 @@ exited 1 having held a line. A report the supervisor writes replaces the held
 lines and exits `130` after an interrupt and `1` otherwise, as
 [streams and exit status](cli/output.md#streams-and-exit-status) requires;
 every other ending forwards the held lines and exits with the child's status,
-never `0` when sudo could not be waited for.
+never `0` when sudo could not be waited for. A child that ends after the
+supervisor relayed an interrupt to it chose that status, so it stands, `0`
+included, unless its output is still open when the relay's grace ends, which
+counts as sudo not being waited for.
 
 The supervisor owns bounded `sudo -n -v` refresh subprocesses during that child.
 Keep the same parent and terminal identity. An unambiguous positive effective
 timeout refreshes at half its duration, including fractional minutes. Zero and
 negative timeouts need no expiry refresh. Unknown policy uses a 30-second
 best-effort interval; never assume a five-minute timeout. Refresh failure or
-timeout warns once and stops refresh without terminating the elevated command.
+timeout warns once on standard error, except in JSON mode, whose standard error
+stays empty, and stops refresh without terminating the elevated command.
 Completion/cancellation stops and reaps every refresh process. Never leave a
 daemon or invalidate the user's wider sudo cache.
 
@@ -382,7 +388,8 @@ an incomplete operation it previews that exact continuation point instead,
 showing which blocks are already done and which block resumes, and never a
 re-planned alternative, except that a failed destroy previews the fresh removal
 `destroy` starts over what it has not yet proved gone. When every block of a
-`running` or `unknown` operation is done, its own verb completes the
+`running` or `unknown` operation, or of a `failed` destroy, is done, its own
+verb completes the
 operation's [finalization](state-reconciliation.md#lifecycle-unit) and then
 settles, and the preview says so in one line above those blocks; an `apply`
 whose input changed refuses there instead, and so does its preview. With a
@@ -638,7 +645,9 @@ as settled.
 A physical Machine whose [pin](substrates.md#physical-machine-realization) the
 context's current apply recorded is held to it: a controller reporting another
 identity refuses `lifecycle.state` with exit `1` before any power request, and
-the run's retained output names the Machine and both identities. A
+the run's retained output names the Machine and both identities. Each identity
+is what a controller reported, so it is printed with its control characters
+removed and then cut to 128 characters, the bound its evidence holds it to. A
 current-operation record or pin of that Machine that cannot be read refuses
 `lifecycle.state` before any confirmation or run.
 

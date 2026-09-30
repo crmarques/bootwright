@@ -2,6 +2,10 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -198,8 +202,99 @@ func TestPowerResultNamesWhereItsAdapterOutputWasRetained(t *testing.T) {
 	}
 }
 
+// Display escapes each cell and field once, so a backslash reads as the two
+// JSON's safe display text carries and never as four.
+func TestMachineListAndPowerTextEscapeOnce(t *testing.T) {
+	raw := func(label string) string { return label + `\x` }
+	shown := func(label string) string { return label + `\\x` }
+	listing := &inventory.ListResult{Context: "lab", PowerRead: true, Machines: []inventory.MachineRow{{
+		Name: raw("name"), Address: raw("address"), IPs: []string{raw("ip1"), raw("ip2")}, OS: raw("os"),
+		Provider: raw("provider"), Clusters: []string{raw("c1"), raw("c2")}, Lifecycle: raw("lifecycle"), Power: raw("power"),
+	}}}
+	var list bytes.Buffer
+	if err := writeMachineList(&list, "machine list", listing, false, false); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSuffix(list.String(), "\n"), "\n")
+	want := []string{
+		shown("name"), shown("address"), shown("ip1") + "," + shown("ip2"), shown("os"), shown("provider"),
+		shown("c1") + "," + shown("c2"), shown("lifecycle"), shown("power"),
+	}
+	if len(lines) != 2 || !slices.Equal(strings.Fields(lines[1]), want) {
+		t.Fatalf("machine list = %q, want the row %q", list.String(), want)
+	}
+	result := &power.Result{
+		Context: "lab", Machine: raw("machine"), Verb: "stop", Power: raw("power"), Previous: raw("previous"),
+		Changed: true, LogLocation: raw("location"),
+	}
+	var text bytes.Buffer
+	if err := writeMachinePower(&text, "machine stop", result, false); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(text.String(), `\\\\`) {
+		t.Fatalf("power text escaped a value twice: %q", text.String())
+	}
+	for _, want := range []string{
+		"[OK] Machine is " + shown("power") + "\n", "  Machine   " + shown("machine") + "\n",
+		"  Power     " + shown("power") + "\n", "  Previous  " + shown("previous") + "\n",
+		"  Logs      " + shown("location") + "\n",
+	} {
+		if !strings.Contains(text.String(), want) {
+			t.Fatalf("power text = %q, missing %q", text.String(), want)
+		}
+	}
+}
+
 func TestPowerRefusesToPresentAStateItCannotName(t *testing.T) {
 	if validMachinePower(nil) || validMachinePower(&power.Result{Machine: "guest", Verb: "stop", Power: "paused"}) {
 		t.Fatal("an unreportable power state was presented")
+	}
+}
+
+// A run that fails once its runtime is lent, however it fails, names the
+// output it retained in its JSON failure envelope: an adapter that timed out,
+// a canceled or interrupted run, and one whose service answered nothing
+// presentable.
+func TestAFailedPowerRunNamesItsOutputInEveryFailureEnvelope(t *testing.T) {
+	const retained = "run-abc/run.output"
+	for _, test := range []struct {
+		name      string
+		err       error
+		interrupt bool
+		code      int
+		want      string
+	}{
+		{name: "deadline", err: context.DeadlineExceeded, code: 1, want: "runtime.deadline"},
+		{name: "canceled", err: context.Canceled, code: 1, want: "runtime.canceled"},
+		{name: "interrupted", interrupt: true, code: 130, want: "runtime.interrupted"},
+		{name: "unsupported", err: errors.New("the adapter answered nothing"), code: 1, want: "runtime.internal"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var cancel context.CancelCauseFunc
+			record := &dispatchRecord{err: test.err}
+			record.result.power = &power.Result{LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/run-abc", Logs: []string{retained}}
+			if test.interrupt {
+				record.afterCall = func() { cancel(ErrInterrupted) }
+			}
+			var out, errOut bytes.Buffer
+			code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record), BeginOperation: func(ctx context.Context) (context.Context, func()) {
+				ctx, cancel = context.WithCancelCause(ctx)
+				return ctx, func() { cancel(nil) }
+			}}).Run(context.Background(), []string{"machine", "stop", "--name", "guest", "--yes", "--output", "json"})
+			var envelope struct {
+				Result      any
+				Diagnostics []diagnostic
+				Logs        []string
+			}
+			if err := json.Unmarshal(out.Bytes(), &envelope); err != nil || code != test.code || errOut.Len() != 0 {
+				t.Fatalf("exit %d, stdout %q, stderr %q: %v", code, out.String(), errOut.String(), err)
+			}
+			if envelope.Result != nil || len(envelope.Diagnostics) != 1 || envelope.Diagnostics[0].Code != test.want {
+				t.Fatalf("envelope = %s", out.String())
+			}
+			if !slices.Equal(envelope.Logs, []string{retained}) {
+				t.Fatalf("the failure envelope named %q, not the run's retained output", envelope.Logs)
+			}
+		})
 	}
 }

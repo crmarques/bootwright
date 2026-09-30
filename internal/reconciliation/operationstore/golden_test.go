@@ -263,7 +263,7 @@ func TestOperationRecordsMatchTheirGoldens(t *testing.T) {
 	if err != nil || resolution != 1 {
 		t.Fatalf("starting the resolution: %d (%v)", resolution, err)
 	}
-	if err := store.CompleteResolution(ctx, applied.ID, "install-node-01", 1, 1, reconciliation.EffectCompleted,
+	if err := store.CompleteResolution(ctx, applied.ID, "install-node-01", 1, 1, reconciliation.OutcomeChanged, reconciliation.EffectCompleted,
 		reconciliation.BlockDone, json.RawMessage(`{"installed":true}`)); err != nil {
 		t.Fatalf("completing the resolution: %v", diagnostics.Of(err))
 	}

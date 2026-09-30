@@ -48,8 +48,18 @@ func TestARemovalPlansTheBlocksItsApplyFrozeAndNotWhatThisBuildDerives(t *testin
 	for _, execution := range frozen {
 		applied[execution.Block.ID] = execution.Block
 	}
+	removed := make([]string, 0, len(h.capability.executions))
 	for _, execution := range h.capability.executions {
-		before := applied[execution.Block.ID]
+		removed = append(removed, execution.Block.ID)
+	}
+	if !slices.Equal(removed, h.capability.destroys) || !slices.Equal(removed, []string{"artifacts", "network"}) {
+		t.Fatalf("the removal performed %v through %v; want every block its apply froze", h.capability.destroys, removed)
+	}
+	for _, execution := range h.capability.executions {
+		before, found := applied[execution.Block.ID]
+		if !found {
+			t.Fatalf("%s was removed but never applied", execution.Block.ID)
+		}
 		if execution.Block.RequestDigest != before.RequestDigest {
 			t.Fatalf("%s was removed under digest %s, not the frozen %s",
 				execution.Block.ID, execution.Block.RequestDigest, before.RequestDigest)

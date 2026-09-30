@@ -326,7 +326,9 @@ func (c InstallCapability) run(ctx context.Context, execution lifecycle.Executio
 		}
 		maps.Copy(values, pins)
 	}
-	materials := lifecycle.Materials(request.Placement)
+	// The attempt adds the placement's identity and host key, so only the
+	// nodes' own credentials are listed here.
+	var materials []lifecycle.MaterialFile
 	for index, node := range request.Nodes {
 		materials = append(materials,
 			lifecycle.MaterialFile{

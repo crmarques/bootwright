@@ -72,11 +72,15 @@
     fail_msg: >-
       Machine/{{ bootwright_machine_power_request.identity.object }} answers at
       {{ bootwright_machine_power_request.controller.endpoint }} as UUID
-      '{{ machine_power_redfish_identity.observation.uuid | default('') }}' and serial
-      '{{ machine_power_redfish_identity.observation.serial | default('') }}', but this
+      '{{ (machine_power_redfish_identity.observation.uuid | default('') | string
+      | regex_replace(machine_power_redfish_control_characters, ''))[:128] }}' and serial
+      '{{ (machine_power_redfish_identity.observation.serial | default('') | string
+      | regex_replace(machine_power_redfish_control_characters, ''))[:128] }}', but this
       context's current apply proved UUID
-      '{{ bootwright_machine_power_material.pinnedUUIDBase64 | default('') | b64decode }}' and serial
-      '{{ bootwright_machine_power_material.pinnedSerialBase64 | default('') | b64decode }}', so no
+      '{{ (bootwright_machine_power_material.pinnedUUIDBase64 | default('') | b64decode
+      | regex_replace(machine_power_redfish_control_characters, ''))[:128] }}' and serial
+      '{{ (bootwright_machine_power_material.pinnedSerialBase64 | default('') | b64decode
+      | regex_replace(machine_power_redfish_control_characters, ''))[:128] }}', so no
       power request was sent. Correct spec.hardware.management.bmc.address, or destroy and apply
       this context so the machine is proved again.
   when: >-

@@ -48,7 +48,9 @@ type Request struct {
 }
 
 // Result is what the operation proved. Power is the state the controller
-// reported after the operation settled, never the state it was asked for.
+// reported after the operation settled, never the state it was asked for. A
+// run that fails once its runtime is lent proves nothing, so it returns,
+// beside its error, a Result naming only where its adapter output is retained.
 type Result struct {
 	Context  string
 	Machine  string

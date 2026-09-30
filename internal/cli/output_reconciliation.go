@@ -229,7 +229,7 @@ func writeLifecycleOperation(out io.Writer, result *lifecycle.OperationResult) e
 		status = "UNKNOWN"
 	}
 	verb := strings.ToUpper(result.Verb[:1]) + result.Verb[1:]
-	text.headline(status, verb+" "+escapeDisplayLine(result.Receipt.State))
+	text.headline(status, verb+" "+result.Receipt.State)
 	if result.Settled {
 		text.section("")
 		text.lines([]string{settledNote(result.Verb, result.Recovered)})
@@ -238,13 +238,13 @@ func writeLifecycleOperation(out io.Writer, result *lifecycle.OperationResult) e
 		text.section("Result")
 		rows := make([][]string, 0, len(result.Blocks))
 		for _, block := range result.Blocks {
-			rows = append(rows, []string{blockStatusToken(block.State), escapeDisplayLine(block.Description)})
+			rows = append(rows, []string{blockStatusToken(block.State), block.Description})
 		}
 		text.rows(rows)
 	}
 	if result.LogLocation != "" {
 		text.section("")
-		text.fields(field{Label: logLocationLabel, Value: escapeDisplayLine(result.LogLocation)})
+		text.fields(field{Label: logLocationLabel, Value: result.LogLocation})
 	}
 	if err := text.writeTo(out); err != nil {
 		return err

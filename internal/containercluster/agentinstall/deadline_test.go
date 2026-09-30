@@ -11,6 +11,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // operations are every entry point a cluster block's role offers, and runs
@@ -170,6 +171,29 @@ func TestTheDeadlineFollowsTheBudgetsTheRequestFroze(t *testing.T) {
 	one.Nodes = one.Nodes[:1]
 	if got, want := installRunDeadline(t, one, "apply"), installRunDeadline(t, install, "apply")-2*nodeMargin; got != want {
 		t.Errorf("an installation of one node runs under %s, want %s: each node adds %s", got, want, nodeMargin)
+	}
+}
+
+// Each node adds to the installation's deadline the bound of every call the
+// installation makes to its controller outside the boot budget: its media read
+// in each of the two state reads (state.yml), and the eject and the disk
+// selection that release its media (release.yml, through the substrate's
+// boot_disk entry point, which it tells to power nothing on). A margin shorter
+// than those calls lets the runner kill an installation still inside them, so
+// the figures the specification states are the ones derived here.
+func TestEachNodeAddsTheBoundOfEveryControllerCallOutsideTheBootBudget(t *testing.T) {
+	calls := 2*substrate.ControllerMediaReadBound + substrate.ControllerEjectBound + substrate.ControllerBootSelectionBound
+	if nodeMargin < calls {
+		t.Fatalf("each node adds %s, less than the %s its controller calls may take", nodeMargin, calls)
+	}
+	if nodeMargin != 11*time.Minute {
+		t.Errorf("each node adds %s, want the 11m0s the specification states", nodeMargin)
+	}
+	if got, want := installDeadline(installBudgets, 1), 3*time.Hour+56*time.Minute; got != want {
+		t.Errorf("a single node installs under %s, want the %s the specification states", got, want)
+	}
+	if got := int((lifecycle.MaxDeadline - installDeadline(installBudgets, 0)) / nodeMargin); got != 12 {
+		t.Errorf("%d nodes fit within the %s ceiling, want the 12 the specification states", got, lifecycle.MaxDeadline)
 	}
 }
 

@@ -161,7 +161,9 @@ func (c MachineCapability) mutate(ctx context.Context, execution lifecycle.Execu
 // Observe is read-only. The exact machine answering with its complete declared
 // inventory is positive completion. There is no absence to observe, because
 // this block created nothing whose removal could be seen, and no partial
-// realization for the same reason: the proof either holds or it does not.
+// realization for the same reason: the proof either holds or it does not. The
+// observation repeats the apply's own proof, so the outcome its adapter
+// publishes is the one the apply's would have been.
 func (c MachineCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, err := c.prepare(ctx, execution)
@@ -174,7 +176,9 @@ func (c MachineCapability) Observe(ctx context.Context, execution lifecycle.Exec
 		return unknown, nil
 	}
 	if ValidatePresence(result.Evidence, request, execution.Block.RequestDigest) == nil {
-		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: result.Evidence}, nil
+		return lifecycle.Observation{
+			Effect: reconciliation.EffectCompleted, Outcome: reconciliation.Outcome(result.Outcome), Evidence: result.Evidence,
+		}, nil
 	}
 	return lifecycle.Observation{Effect: reconciliation.EffectUnknown, Evidence: result.Evidence}, nil
 }

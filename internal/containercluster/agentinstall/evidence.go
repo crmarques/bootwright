@@ -105,7 +105,7 @@ func decodeMediaEvidence(data []byte, digest string) (MediaEvidence, error) {
 	if err := decoder.Decode(&evidence); err != nil {
 		return MediaEvidence{}, refusal("lifecycle.state", "the boot-media adapter returned malformed evidence", "")
 	}
-	if decoder.More() {
+	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
 		return MediaEvidence{}, refusal("lifecycle.state", "the boot-media adapter returned trailing evidence", "")
 	}
 	if evidence.Request != digest {
@@ -299,7 +299,7 @@ func decodeInstallEvidence(data []byte, digest string) (InstallEvidence, error) 
 	if err := decoder.Decode(&evidence); err != nil {
 		return InstallEvidence{}, refusal("lifecycle.state", "the installation adapter returned malformed evidence", "")
 	}
-	if decoder.More() {
+	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
 		return InstallEvidence{}, refusal("lifecycle.state", "the installation adapter returned trailing evidence", "")
 	}
 	if evidence.Request != digest {

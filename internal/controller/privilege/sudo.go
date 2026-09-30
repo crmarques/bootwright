@@ -42,6 +42,9 @@ type SudoOptions struct {
 	Executor         Executor
 	Delay            Delay
 	NonInteractive   bool
+	// Quiet keeps the supervisor's own refresh warning off the error stream,
+	// which a JSON invocation leaves empty.
+	Quiet bool
 	// Terminal is the terminal type an interactive invocation carries. The
 	// elevated child runs the operator's own interactive programs, so it needs
 	// the terminal identity the caller had; every other ambient value stays out.
@@ -118,7 +121,7 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 			code, err := options.Executor.Run(refresh, Command{Executable: options.Sudo, Arguments: []string{"-n", "-u", "#0", "-v"}, Environment: append([]string(nil), environment...), Output: io.Discard, Error: io.Discard})
 			cancel()
 			if err != nil || code != 0 {
-				if refreshCtx.Err() == nil && options.Error != nil {
+				if refreshCtx.Err() == nil && options.Error != nil && !options.Quiet {
 					// This warning contains no policy contents or captured sudo text.
 					io.WriteString(options.Error, "[WARN] sudo credential refresh stopped; the active operation continues.\n")
 				}

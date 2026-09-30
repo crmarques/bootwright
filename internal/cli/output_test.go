@@ -12,7 +12,7 @@ import (
 func TestFailureRepresentations(t *testing.T) {
 	for _, jsonMode := range []bool{false, true} {
 		var out, errOut bytes.Buffer
-		err := writeFailure(&out, &errOut, "validate", "cli.not-implemented", "bootwright validate is not implemented", 1, jsonMode)
+		err := writeFailure(&out, &errOut, "validate", "cli.not-implemented", "bootwright validate is not implemented", 1, jsonMode, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -48,7 +48,7 @@ func TestDiagnosticRemediationRepresentations(t *testing.T) {
 	}}
 	for _, jsonMode := range []bool{false, true} {
 		var out, errOut bytes.Buffer
-		if err := writeDiagnostics(&out, &errOut, "validate", diagnostics, 1, jsonMode); err != nil {
+		if err := writeDiagnostics(&out, &errOut, "validate", diagnostics, 1, jsonMode, nil); err != nil {
 			t.Fatal(err)
 		}
 		if jsonMode {
@@ -72,7 +72,7 @@ func TestSafeDisplay(t *testing.T) {
 		t.Fatalf("escaped = %q, want %q", got, want)
 	}
 	var out, errOut bytes.Buffer
-	if err := writeFailure(&out, &errOut, "validate", "cli.usage", "<value>\n\x1b", 2, true); err != nil {
+	if err := writeFailure(&out, &errOut, "validate", "cli.usage", "<value>\n\x1b", 2, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(out.String(), `\u003c`) || !strings.Contains(out.String(), `<value>\\n\\u001b`) || errOut.Len() != 0 {
@@ -94,7 +94,7 @@ func TestFailureWriterDoesNotFallback(t *testing.T) {
 	want := errors.New("writer unavailable")
 	out := &failedOutput{err: want}
 	var errOut bytes.Buffer
-	if err := writeFailure(out, &errOut, "validate", "cli.usage", "invalid invocation", 2, true); !errors.Is(err, want) {
+	if err := writeFailure(out, &errOut, "validate", "cli.usage", "invalid invocation", 2, true, nil); !errors.Is(err, want) {
 		t.Fatalf("error = %v, want writer error", err)
 	}
 	if out.calls != 1 || errOut.Len() != 0 {

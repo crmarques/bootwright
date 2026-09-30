@@ -148,6 +148,8 @@ COMPARED = {
     "another uuid": (reported(uuid="4c4c4544-0042-3510-8052-b4c04f4d4e32"), UUID, SERIAL, False),
     "another serial": (reported(serial="CZJ2440ABD"), UUID, SERIAL, False),
     "the uuid in other case and space": (reported(uuid=" " + UUID.upper() + "\n"), UUID, SERIAL, True),
+    "a pin recorded in upper case": (reported(uuid=UUID.upper()), UUID.upper(), SERIAL, True),
+    "a pin in upper case against a lower-case report": (reported(), UUID.upper(), SERIAL, True),
     "the serial in surrounding space": (reported(serial=" " + SERIAL + " "), UUID, SERIAL, True),
     "the serial in other case": (reported(serial=SERIAL.lower()), UUID, SERIAL, False),
     "no pinned serial": (reported(serial="another"), UUID, None, True),
@@ -180,3 +182,24 @@ def test_the_refusal_names_the_machine_both_identities_and_the_remedy(tmp_path):
         "Machine/metal answers at %s as UUID '4c4c4544-0042-3510-8052-b4c04f4d4e32' and serial '%s', but this "
         "context's current apply proved UUID '%s' and serial '%s', so no power request was sent. %s"
         % (ENDPOINT, TEMPLATE, UUID, TEMPLATE, REMEDY))
+
+
+def test_the_refusal_prints_each_identity_bounded_and_without_control_characters(tmp_path):
+    """What a controller reported, then or now, reaches the retained output printable and at most 128 characters.
+
+    Control characters are removed before the value is cut, so a value padded
+    with them still shows its first 128 printable characters. Each of the four
+    identities is longer than that and carries control characters, so each
+    one's removal and cut is proved on its own.
+    """
+    variables = scope(tmp_path, reported(uuid="\x1b[31m" + UUID + "\x1b]0;owned\x07" + "U" * 200,
+                                         serial="S" * 100 + "\r\n\t\x00\x7f\x85\x9b" + "T" * 100),
+                      UUID + "\x08\x9b2J" + "V" * 200, "\x00\x1b\x9b" + "P" * 300)
+    assert accepts(variables) is False
+    message = Templar(loader=LOADER, variables=variables).template(refusal()[ASSERT]["fail_msg"])
+    assert message == (
+        "Machine/metal answers at %s as UUID '%s' and serial '%s', but this context's current apply "
+        "proved UUID '%s' and serial '%s', so no power request was sent. %s"
+        % (ENDPOINT, "[31m" + UUID + "]0;owned" + "U" * 80, "S" * 100 + "T" * 28, UUID + "2J" + "V" * 90,
+           "P" * 128, REMEDY))
+    assert message.isprintable()

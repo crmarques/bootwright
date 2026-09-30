@@ -89,7 +89,7 @@ func DecodeRequest(data []byte) (Request, error) {
 	if err := decoder.Decode(&request); err != nil {
 		return Request{}, failure("lifecycle.state", "the frozen artifact-server request is malformed", "")
 	}
-	if decoder.More() {
+	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
 		return Request{}, failure("lifecycle.state", "the frozen artifact-server request contains trailing data", "")
 	}
 	if request.Version != requestVersion {

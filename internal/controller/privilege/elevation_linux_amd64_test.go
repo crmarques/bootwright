@@ -34,6 +34,7 @@ func TestElevationOutcomesAfterAnInterrupt(t *testing.T) {
 		{elevationCase: elevationCase{name: "a started human child killed at the deadline", child: scriptedChild{stderr: []string{startAnnouncement}, code: 128 + int(syscall.SIGKILL)}, exit: 130, code: "runtime.interrupted", message: "operation interrupted"}, signal: syscall.SIGINT},
 		{elevationCase: elevationCase{name: "an interactive child killed at the deadline", terminal: true, errorTerminal: true, child: scriptedChild{code: 128 + int(syscall.SIGKILL)}, exit: 130, code: "runtime.interrupted", message: "operation interrupted"}, signal: syscall.SIGINT},
 		{elevationCase: elevationCase{name: "a JSON child killed at the deadline after its document", json: true, child: scriptedChild{stdout: document, stderr: []string{startAnnouncement}, code: 128 + int(syscall.SIGKILL)}, exit: 130}, signal: syscall.SIGTERM},
+		{elevationCase: elevationCase{name: "a JSON child that finished before the relayed SIGTERM", json: true, child: scriptedChild{stdout: `{"exitCode":0}` + "\n", stderr: []string{startAnnouncement}}}, signal: syscall.SIGTERM},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancelCause(context.Background())

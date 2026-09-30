@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -39,8 +40,8 @@ type registering struct {
 	// running evidence it found, which makes every older claim refuse.
 	raised bool
 	// known are the operation directories read before anything was raised,
-	// with the one this invocation claimed or registered. Nothing removes an
-	// operation directory, so one beyond them is a newer invocation's claim,
+	// with the one this invocation claimed or registered. A reclaim only
+	// removes directories, so one beyond them is a newer invocation's claim,
 	// and the evidence is then that invocation's.
 	known []string
 }
@@ -113,7 +114,7 @@ func (s Service) settle(ctx context.Context, tx Transaction, verb reconciliation
 // controller host or reserves anything, so none of those is ever held under
 // evidence that lets the context be updated or deleted. The claim comes first
 // so that no raise, even one interrupted before it returns, ever lands without
-// moving the claim count an older apply still in flight re-proves. A claim
+// adding a directory an older apply still in flight re-proves. A claim
 // that fails may have created its directory, and that directory makes every
 // older apply refuse, so the evidence is then this invocation's to give back
 // unless a listing proves the directory absent. The transition it returns
@@ -145,7 +146,7 @@ func (s Service) protect(ctx context.Context, name string, decided transition, r
 		if err != nil {
 			return err
 		}
-		protected.basis.evidence, protected.basis.claimed, protected.basis.claims = tx.Evidence(), identity, len(claimed)
+		protected.basis.evidence, protected.basis.claimed, protected.basis.claims = tx.Evidence(), identity, claimed
 		return nil
 	})
 	if err != nil {
@@ -176,10 +177,18 @@ func (s Service) verifyFreshApply(ctx context.Context, tx Transaction, store Ope
 // publish registers the operation and records whether it did. A registration
 // that failed is read back: an index that provably does not name the operation
 // registered nothing, and one that names it, or that cannot be read, may have.
+// A registration that landed reclaims every claim that holds nothing before
+// the lock is released. The index then names an operation no earlier decision
+// read, so every fresh apply planned before it refuses at its re-proof whether
+// or not its claim is still listed, and none claims again before it decides
+// from this one. The claims running evidence kept beside a reservation no
+// operation owned go here, rather than toward the bound this operation's
+// removal registers under.
 func (s Service) publish(ctx context.Context, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, record *registering) error {
 	err := store.Register(ctx, operation, plan)
 	if err == nil {
 		record.outcome = registered
+		_, _ = store.Reclaim(ctx)
 		return nil
 	}
 	if index, read := store.Index(recordingContext(ctx)); read != nil || index.Current == operation.ID {
@@ -210,7 +219,9 @@ func (s Service) unregistered(ctx context.Context, name string, decided transiti
 // the index names no operation or a completed removal and the context holds a
 // reservation, because those reservations are what an interrupted registration
 // published and no operation owns them: the evidence keeps the context from
-// being deleted until a destroy or the next apply releases them.
+// being deleted until a destroy or the next apply releases them. Pristine
+// evidence reclaims the claim this invocation left, with every other claim
+// that holds nothing.
 func (s Service) restoreEvidence(ctx context.Context, name string, record *registering) error {
 	if !record.raised {
 		return nil
@@ -236,8 +247,31 @@ func (s Service) restoreEvidence(ctx context.Context, name string, record *regis
 		if verb == reconciliation.Destroy && state == reconciliation.OperationDone && holdsReservation(tx) {
 			return nil
 		}
-		return s.settle(ctx, tx, verb, state)
+		if err := s.settle(ctx, tx, verb, state); err != nil {
+			return err
+		}
+		reclaim(ctx, tx, store)
+		return nil
 	})
+}
+
+// reclaim removes, once the evidence reads pristine and while the transaction
+// that published it still holds the lock, every claim that holds nothing. Such
+// a claim is a fresh apply that never registered, so without this each refused
+// retry would keep one toward the retained-operation bound until even a
+// removal could not register. Removing one only under pristine evidence, or
+// once a registration moved the index (publish), keeps a claim's directory a
+// proof: every raise over no operation or a completed removal claims first, so
+// the claim that raised the evidence again after a release stays listed while
+// that evidence stands, and an apply in flight still refuses on it.
+// Reclaiming is housekeeping, so one that fails refuses nothing and leaves the
+// rest for the next pristine publication or registration.
+func reclaim(ctx context.Context, tx Transaction, store OperationStore) {
+	pristine, err := projection(reconciliation.Destroy, reconciliation.OperationDone)
+	if err != nil || !bytes.Equal(tx.Evidence(), pristine) {
+		return
+	}
+	_, _ = store.Reclaim(ctx)
 }
 
 // beside reports a failed restoration after the error that caused it.
@@ -278,59 +312,86 @@ func (s Service) collect(ctx context.Context, name string, held, keep []string) 
 	}
 }
 
-// unclaimed decides a destroy of a context holding no operation. It settles
-// while nothing claims the context: pristine evidence and no reservation.
-// Running evidence, or a reservation beside pristine evidence, is what a
-// registration interrupted before the index named its operation leaves, so the
-// destroy releases it. Any other evidence, or an unindexed operation directory
-// that lists block records, is state no index accounts for, which the destroy
-// refuses without writing anything.
+// unclaimed decides a destroy of a context holding no operation. Evidence no
+// interrupted registration leaves, or an operation directory that lists block
+// records, is state no index accounts for, which the destroy refuses without
+// writing anything, even beside pristine evidence. Otherwise it settles while
+// nothing claims the context: pristine evidence and no reservation. Running
+// evidence, or a reservation beside pristine evidence, is what a registration
+// interrupted before the index named its operation leaves, so the destroy
+// releases it.
 func unclaimed(ctx context.Context, view View, store OperationStore) (transition, error) {
+	if err := refuseUnindexed(ctx, view, store); err != nil {
+		return transition{}, err
+	}
 	pristine, err := projection(reconciliation.Destroy, reconciliation.OperationDone)
 	if err != nil {
 		return transition{}, err
 	}
-	running, err := projection(reconciliation.Apply, reconciliation.OperationRunning)
-	if err != nil {
-		return transition{}, err
-	}
 	evidence := view.Evidence()
-	switch {
-	case bytes.Equal(evidence, pristine) && !holdsReservation(view):
+	if bytes.Equal(evidence, pristine) && !holdsReservation(view) {
 		return transition{noop: true, verb: reconciliation.Destroy}, nil
-	case !bytes.Equal(evidence, pristine) && !bytes.Equal(evidence, running):
-		return transition{}, unaccounted()
-	}
-	if err := refuseStarted(ctx, store); err != nil {
-		return transition{}, err
 	}
 	return transition{unclaimed: true, verb: reconciliation.Destroy, basis: basis{evidence: evidence}}, nil
 }
 
-// refuseStarted refuses when any operation directory lists a block record: no
-// index names it, so it is an operation whose index was lost rather than a
-// claim or an interrupted registration, and its effects may be on a host.
-func refuseStarted(ctx context.Context, store OperationStore) error {
+// refuseUnindexed refuses what a context holding no operation holds that no
+// index accounts for, before a verb over it settles, releases or registers.
+func refuseUnindexed(ctx context.Context, view View, store OperationStore) error {
+	entries, err := unindexed(ctx, view, store)
+	if err != nil || len(entries) == 0 {
+		return err
+	}
+	return failure("lifecycle.state",
+		"the context holds operation records or evidence that no index names: "+strings.Join(entries, ", "),
+		"review its durable state with bootwright status")
+}
+
+// unindexed names, beside no operation, evidence that neither reads pristine
+// nor reads as the running evidence an interrupted registration leaves, and
+// each operation directory that lists a block record. No index names such a
+// directory, so it is an operation whose index was lost rather than a claim or
+// an interrupted registration, and its effects may be on a host.
+func unindexed(ctx context.Context, view View, store OperationStore) ([]string, error) {
+	pristine, err := projection(reconciliation.Destroy, reconciliation.OperationDone)
+	if err != nil {
+		return nil, err
+	}
+	running, err := projection(reconciliation.Apply, reconciliation.OperationRunning)
+	if err != nil {
+		return nil, err
+	}
+	entries := []string{}
+	if evidence := view.Evidence(); !bytes.Equal(evidence, pristine) && !bytes.Equal(evidence, running) {
+		entries = append(entries, "the mutation evidence reads "+evidenceReading(evidence))
+	}
 	claimed, err := store.Claimed(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, directory := range claimed {
 		started, err := store.Started(ctx, directory)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if started {
-			return unaccounted()
+			entries = append(entries, "the operation directory "+directory+" lists block records")
 		}
 	}
-	return nil
+	return entries, nil
 }
 
-func unaccounted() error {
-	return failure("lifecycle.state",
-		"the context holds operation records or evidence that no index names",
-		"review its durable state with bootwright status")
+// evidenceReading names recognized evidence by its operation and ownership.
+func evidenceReading(data []byte) string {
+	for _, operation := range []reconciliation.MutationOperation{reconciliation.MutationNone, reconciliation.MutationPending, reconciliation.MutationFailed, reconciliation.MutationUnknown, reconciliation.MutationApplied} {
+		for _, ownership := range []reconciliation.MutationOwnership{reconciliation.OwnershipNone, reconciliation.OwnershipRetained} {
+			recognized, err := reconciliation.Evidence{Operation: operation, Ownership: ownership}.Bytes()
+			if err == nil && bytes.Equal(data, recognized) {
+				return string(operation) + " and " + string(ownership)
+			}
+		}
+	}
+	return "an unrecognized record"
 }
 
 // releaseUnclaimed gives back what an interrupted registration left. Under the
@@ -354,13 +415,17 @@ func (s Service) releaseUnclaimed(ctx context.Context, name string, decided tran
 			moved.evidence = current
 			return changed(moved)
 		}
-		if err := refuseStarted(ctx, store); err != nil {
+		if err := refuseUnindexed(ctx, tx, store); err != nil {
 			return err
 		}
 		if err := releaseHeld(ctx, tx); err != nil {
 			return err
 		}
-		return s.settle(ctx, tx, reconciliation.Destroy, reconciliation.OperationDone)
+		if err := s.settle(ctx, tx, reconciliation.Destroy, reconciliation.OperationDone); err != nil {
+			return err
+		}
+		reclaim(ctx, tx, store)
+		return nil
 	})
 	if err != nil {
 		return err

@@ -318,16 +318,12 @@ func previewRows(ctx context.Context) []previewRow {
 			removalOutcome(t, h, reconciliation.OutcomeFailed)
 			return harnessCase(h, reconciliation.Destroy)
 		}},
-		{
-			name: "a failed destroy whose blocks are all done", refusal: "lifecycle.state",
-			message: "the operation this removal supersedes records no block it still owns",
-			prepare: func(t *testing.T) previewCase {
-				h := newHarness(t, "alpha")
-				removalOutcome(t, h, reconciliation.OutcomeFailed)
-				rewriteState(t, h, path.Join(currentOperation(t, h), "blocks", "alpha", "state.json"), string(reconciliation.BlockDone))
-				return harnessCase(h, reconciliation.Destroy)
-			},
-		},
+		{name: "a failed destroy whose blocks are all done", settles: true, prepare: func(t *testing.T) previewCase {
+			h := newHarness(t, "alpha")
+			removalOutcome(t, h, reconciliation.OutcomeFailed)
+			rewriteState(t, h, path.Join(currentOperation(t, h), "blocks", "alpha", "state.json"), string(reconciliation.BlockDone))
+			return harnessCase(h, reconciliation.Destroy)
+		}},
 		{
 			// The harness answers an unscripted observation as still unknown,
 			// so the repeated destroy presents its plan and then fails again.

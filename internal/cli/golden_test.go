@@ -275,7 +275,10 @@ func cliGoldens() []cliGolden {
 				Operation: operationID, Verb: "apply", State: "failed", Next: "continue-apply", Blocks: attempted,
 				Logs: []string{operationID + "/logs/operation.jsonl"}, Executable: "1.4.0 (9f2c1ab)",
 			},
-			LogLocation: logs,
+			// The pending block reads so because its record was lost beside
+			// the attempt that started it.
+			Contradictions: []string{"os-install-rhel-01 (no block record, yet an attempt of it is recorded)"},
+			LogLocation:    logs,
 		}
 	}
 	// A context no operation has touched: an unbound controller, no cluster
@@ -377,6 +380,15 @@ func cliGoldens() []cliGolden {
 			Context: "lab", Machine: "rhel-01", Verb: verb, Power: now, Previous: previous, Changed: changed,
 			LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/" + runID, Logs: []string{runID + "/run.output"},
 		}
+	}
+	// A run whose adapter refuses proves no power state: the service returns
+	// only where its output was retained, beside the runner's own refusal
+	// (internal/reconciliation/ansiblerunner/process_linux_amd64.go).
+	refusedRun := func(r *dispatchRecord) {
+		r.result.power = &power.Result{
+			LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/" + runID, Logs: []string{runID + "/run.output"},
+		}
+		r.err = diagnostics.NewFailureWithRemediation("lifecycle.state", "the adapter operation did not complete", "", "read the adapter output retained beside this attempt's log")
 	}
 	trusted := func() *enrollment.Report {
 		return &enrollment.Report{Context: "lab", Pending: 2, Recorded: 2, Hosts: []enrollment.HostReport{
@@ -613,6 +625,14 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-machine-stop-json", args: "machine stop --name rhel-01 --yes --output json", record: func(r *dispatchRecord) { r.result.power = powered("stop", "off", "off", false) }},
 		{golden: "cli-machine-restart", args: "machine restart --name rhel-01 --force --yes", record: func(r *dispatchRecord) { r.result.power = powered("restart", "on", "on", true) }},
 		{golden: "cli-machine-restart-json", args: "machine restart --name rhel-01 --force --yes --output json", record: func(r *dispatchRecord) { r.result.power = powered("restart", "on", "on", true) }},
+		// A refused run: text named the run's directory while it ran, so it
+		// adds only the diagnostic; JSON reported no progress, so its failure
+		// envelope names the retained file.
+		{
+			args: "machine stop --name rhel-01 --yes", code: 1, record: refusedRun,
+			stderr: "[FAIL] lifecycle.state: the adapter operation did not complete; next: read the adapter output retained beside this attempt's log\n",
+		},
+		{golden: "cli-machine-stop-refused-json", args: "machine stop --name rhel-01 --yes --output json", code: 1, record: refusedRun},
 		{golden: "cli-machine-trust", args: "machine trust --replace db-01 --yes", record: func(r *dispatchRecord) { r.result.trust = trusted() }},
 		{golden: "cli-machine-trust-json", args: "machine trust --replace db-01 --yes --output json", record: func(r *dispatchRecord) { r.result.trust = trusted() }},
 

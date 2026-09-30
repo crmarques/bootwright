@@ -197,6 +197,7 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 	}
 	result, err := r.config.Services.invoke(ctx, path, command.Flags(), command.Flags().Args())
 	defer result.clearSensitive()
+	logs := result.createdLogs()
 	if r.config.FinishProgress != nil {
 		r.config.FinishProgress()
 	}
@@ -213,16 +214,16 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 		err = canceled
 	}
 	if errors.Is(context.Cause(ctx), ErrInterrupted) {
-		return r.failure(command, path, "runtime.interrupted", "operation interrupted", 130, selectedJSON(command))
+		return r.failureNaming(command, path, "runtime.interrupted", "operation interrupted", 130, selectedJSON(command), logs)
 	}
 	if errors.Is(err, availability.ErrNotImplemented) {
 		return r.failure(command, path, "cli.not-implemented", "bootwright "+path+" is not implemented", 1, selectedJSON(command))
 	}
 	if errors.Is(err, context.Canceled) {
-		return r.failure(command, path, "runtime.canceled", "operation canceled", 1, selectedJSON(command))
+		return r.failureNaming(command, path, "runtime.canceled", "operation canceled", 1, selectedJSON(command), logs)
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return r.failure(command, path, "runtime.deadline", "operation deadline exceeded", 1, selectedJSON(command))
+		return r.failureNaming(command, path, "runtime.deadline", "operation deadline exceeded", 1, selectedJSON(command), logs)
 	}
 	if diagnostics := diagnostics.Of(err); len(diagnostics) != 0 {
 		if handled, presentErr := r.writeNegativeSecretCheck(command, path, result, diagnostics); handled {
@@ -237,7 +238,7 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 			}
 			return 1
 		}
-		if err := writeDiagnostics(r.config.Out, r.config.ErrOut, path, diagnostics, 1, selectedJSON(command)); err != nil {
+		if err := writeDiagnostics(r.config.Out, r.config.ErrOut, path, diagnostics, 1, selectedJSON(command), logs); err != nil {
 			return 1
 		}
 		return 1
@@ -261,7 +262,7 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 			return 0
 		}
 	}
-	return r.failure(command, path, "runtime.internal", "application service returned an unsupported result", 1, selectedJSON(command))
+	return r.failureNaming(command, path, "runtime.internal", "application service returned an unsupported result", 1, selectedJSON(command), logs)
 }
 
 func selectedJSON(command *cobra.Command) bool {
@@ -269,7 +270,13 @@ func selectedJSON(command *cobra.Command) bool {
 }
 
 func (r *Runner) failure(command *cobra.Command, path, code, message string, exitCode int, jsonMode bool) int {
-	if err := writeFailure(r.config.Out, r.config.ErrOut, path, code, message, exitCode, jsonMode); err != nil {
+	return r.failureNaming(command, path, code, message, exitCode, jsonMode, nil)
+}
+
+// failureNaming is failure for an invocation that may have created private
+// logs before it failed, so its envelope still lists them.
+func (r *Runner) failureNaming(command *cobra.Command, path, code, message string, exitCode int, jsonMode bool, logs []string) int {
+	if err := writeFailure(r.config.Out, r.config.ErrOut, path, code, message, exitCode, jsonMode, logs); err != nil {
 		return 1
 	}
 	if exitCode == 2 && !jsonMode && command != nil {

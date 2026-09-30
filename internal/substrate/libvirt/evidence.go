@@ -385,7 +385,7 @@ func decodeEvidence(data []byte, target any, subject string) error {
 	if err := decoder.Decode(target); err != nil {
 		return refusal("lifecycle.state", "the "+subject+" adapter returned malformed evidence", "")
 	}
-	if decoder.More() {
+	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
 		return refusal("lifecycle.state", "the "+subject+" adapter returned trailing evidence", "")
 	}
 	return nil

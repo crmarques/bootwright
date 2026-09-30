@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -94,6 +95,31 @@ func TestTrustReportJSONCarriesTheWholePlan(t *testing.T) {
 	}
 	if envelope.Result.Hosts[2].Action != enrollment.ActionSkip {
 		t.Fatalf("hosts = %+v", envelope.Result.Hosts)
+	}
+}
+
+// Display escapes each cell once, the fingerprints of a supersede and the
+// reason for a skip included.
+func TestTrustReportTextEscapesOnce(t *testing.T) {
+	raw := func(label string) string { return label + `\x` }
+	shown := func(label string) string { return label + `\\x` }
+	report := &enrollment.Report{Context: "lab", Pending: 1, Recorded: 1, Hosts: []enrollment.HostReport{
+		{Machine: raw("replaced"), Address: raw("address"), Port: 2222, Action: raw("action"),
+			KeyType: raw("key"), Fingerprint: raw("fingerprint"), PreviousFingerprint: raw("previous")},
+		{Machine: raw("skipped"), Action: enrollment.ActionSkip, Reason: raw("reason")},
+	}}
+	var out bytes.Buffer
+	if err := writeTrustReport(&out, "machine trust", report, false); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
+	replaced := []string{
+		shown("replaced"), "[" + shown("address") + "]:2222", shown("action"), shown("key"),
+		shown("fingerprint"), "(was", shown("previous") + ")",
+	}
+	skipped := []string{shown("skipped"), "-", "skip", "-", shown("reason")}
+	if len(lines) != 5 || !slices.Equal(strings.Fields(lines[3]), replaced) || !slices.Equal(strings.Fields(lines[4]), skipped) {
+		t.Fatalf("trust text = %q, want the rows %q and %q", out.String(), replaced, skipped)
 	}
 }
 

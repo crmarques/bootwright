@@ -37,7 +37,7 @@ func Thaw[T any](data []byte, subject string) (T, error) {
 	if err := decoder.Decode(&request); err != nil {
 		return empty, frozenFailure("the frozen " + subject + " request is malformed")
 	}
-	if decoder.More() {
+	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
 		return empty, frozenFailure("the frozen " + subject + " request contains trailing data")
 	}
 	return request, nil

@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"context"
 	"path"
+	"slices"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -154,27 +155,41 @@ func (s Service) WithMaterial(ctx context.Context, request MaterialRequest, use 
 	return use(ctx, material)
 }
 
+// lendAttempts bounds how often one bounded operation binds its Secrets, once
+// and again each time a collection released its binding before it reopened
+// it.
+const lendAttempts = 3
+
 // lend freezes exactly the Secret versions one bounded operation reads. The
 // binding is transient: it exists so the operation reads a coherent set, and
-// is released as soon as the call returns.
+// is released as soon as the call returns. A binding names no consumer, so a
+// lifecycle collection that listed this one before it was reopened may release
+// it; a reopen that fails while the binding is no longer listed binds again,
+// and any other failure, or a listing that fails, is reported.
 func (s Service) lend(ctx context.Context, name string, references []string) (string, map[string]secrets.Material, error) {
 	if len(references) == 0 {
 		return "", map[string]secrets.Material{}, nil
 	}
-	result, err := s.binder.Bind(ctx, custody.BindRequest{ContextName: name, Names: references})
-	if err != nil {
-		return "", nil, err
+	for attempt := 1; ; attempt++ {
+		result, err := s.binder.Bind(ctx, custody.BindRequest{ContextName: name, Names: references})
+		if err != nil {
+			return "", nil, err
+		}
+		request := custody.BindingRequest{ContextName: name, BindingID: result.ID}
+		bound, err := s.binder.Reopen(ctx, request)
+		if err == nil {
+			material := make(map[string]secrets.Material, len(bound))
+			for _, item := range bound {
+				material[item.Version.Declaration.Name] = item.Material
+			}
+			return result.ID, material, nil
+		}
+		listed, listing := s.binder.Bindings(ctx, custody.BindingsRequest{ContextName: name})
+		_, _ = s.binder.Release(ctx, request)
+		if listing != nil || slices.Contains(listed, result.ID) || attempt == lendAttempts {
+			return "", nil, err
+		}
 	}
-	bound, err := s.binder.Reopen(ctx, custody.BindingRequest{ContextName: name, BindingID: result.ID})
-	if err != nil {
-		_, _ = s.binder.Release(ctx, custody.BindingRequest{ContextName: name, BindingID: result.ID})
-		return "", nil, err
-	}
-	material := make(map[string]secrets.Material, len(bound))
-	for _, item := range bound {
-		material[item.Version.Declaration.Name] = item.Material
-	}
-	return result.ID, material, nil
 }
 
 // bundle is the approved execution boundary one operation runs inside: the

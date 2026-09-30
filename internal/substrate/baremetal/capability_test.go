@@ -281,6 +281,48 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 	}
 }
 
+// An observation repeats the apply's proof, so a resolution that proves the
+// machine reads back the outcome the proof published, no change, with the
+// evidence that pins the machine. One that proves nothing states no outcome.
+func TestAnObservationCarriesTheOutcomeAndEvidenceItsProofPublished(t *testing.T) {
+	frozen, err := reconciliation.NewPlan(reconciliation.Apply, planOf(t, reconciliation.Apply).Definitions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := lifecycle.Execution{Operation: "op-1", Attempt: 1, Block: frozen.Blocks[0]}
+	digest := call.Block.RequestDigest
+	addresses := fixtureRequest(t).Addresses()
+	proved := encode(t, Evidence{Addresses: addresses, Postcondition: true, Power: "On", Request: digest, Serial: "SN1", UUID: "uuid-1"})
+	runner := &scriptedRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: proved}}
+	observation, err := NewMachine(runner).Observe(context.Background(), call)
+	if err != nil || observation.Effect != reconciliation.EffectCompleted || observation.Outcome != reconciliation.OutcomeUnchanged {
+		t.Fatalf("observation = %+v (%v), want completed with no change", observation, err)
+	}
+	if len(runner.requests) != 1 || runner.requests[0].Operation != "observe" {
+		t.Fatalf("the observation ran %+v", runner.requests)
+	}
+	pinned, found, err := PinnedIdentity("server", []lifecycle.BlockEvidence{{
+		Kind: Kind, Object: "server", Implementation: Implementation, Verb: reconciliation.Apply,
+		State: reconciliation.BlockDone, Evidence: observation.Evidence,
+	}})
+	if err != nil || !found || pinned.UUID != "uuid-1" || pinned.Serial != "SN1" {
+		t.Fatalf("the observation's evidence pins %+v, %t (%v)", pinned, found, err)
+	}
+	for name, runner := range map[string]*scriptedRunner{
+		"the machine unproved": {result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, Evidence{
+			Addresses: addresses, Power: "On", Request: digest, UUID: "uuid-1",
+		})}},
+		"the adapter failing": {err: errors.New("unreachable")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			observation, err := NewMachine(runner).Observe(context.Background(), call)
+			if err != nil || observation.Effect != reconciliation.EffectUnknown || observation.Outcome != "" {
+				t.Fatalf("observation = %+v (%v), want unknown with no outcome", observation, err)
+			}
+		})
+	}
+}
+
 // The removal takes back a claim nothing reads and leaves the machine running
 // exactly as it was, so it can never interrupt anything.
 func TestARemovalHereInterruptsNothing(t *testing.T) {

@@ -128,7 +128,7 @@ func DecodeRequest(data []byte) (Request, error) {
 	var request Request
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil || decoder.More() {
+	if err := decoder.Decode(&request); err != nil || len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
 		return Request{}, refuse("lifecycle.state", "the frozen controller prerequisites request is malformed", "")
 	}
 	if request.Version != Version {

@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -232,6 +233,42 @@ func TestAnInstallationCrossesTheAdapterWithItsClientsAndCredentials(t *testing.
 		}) {
 			t.Fatalf("materials = %+v", request.Materials)
 		}
+	}
+}
+
+// A frozen request placed over SSH crosses the adapter with its placement's
+// identity and host key once each, beside one controller credential per node:
+// the attempt adds the placement's material to every run, and the runner
+// clears each value once it has written it, so a file listed twice would be
+// rewritten with the cleared bytes.
+func TestAnSSHPlacedInstallationListsEachMaterialOnce(t *testing.T) {
+	execution, request := installExecution(t, singleNodeCatalog(), testDigest)
+	request.Placement = machine.Placement{
+		Address: "192.0.2.2", Connection: machine.ConnectionSSH, KnownHostsRef: "hv-01-host-key",
+		Machine: "hv-01", PrivateKeyRef: "hv-01-key", User: "root",
+	}
+	canonical, err := request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution.Block.Request = canonical
+	for _, reference := range request.Placement.SecretReferences() {
+		execution.Material[reference] = secrets.NewMaterial(nil)
+	}
+	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: installEvidence(t, testDigest, nil)}}
+	if _, err := NewInstall(runner).Apply(context.Background(), execution); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if len(runner.requests) != 1 || runner.requests[0].Placement != request.Placement {
+		t.Fatalf("invocations = %+v", runner.requests)
+	}
+	names := []string{}
+	for _, file := range runner.requests[0].Materials {
+		names = append(names, file.Name)
+	}
+	slices.Sort(names)
+	if want := []string{"bmc-password-sno-01", "bmc-user-sno-01", "id", "known_hosts"}; !slices.Equal(names, want) {
+		t.Fatalf("material files = %v, want %v", names, want)
 	}
 }
 

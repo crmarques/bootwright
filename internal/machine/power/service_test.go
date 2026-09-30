@@ -174,6 +174,46 @@ func TestAPowerRunRetainsItsAdapterOutputAndNamesWhereFirst(t *testing.T) {
 	}
 }
 
+// A run that fails once its runtime is lent proves no power state, but a JSON
+// invocation reports no progress, so the refusal itself must carry where that
+// output is. A refusal before the runtime is lent names no file.
+func TestARefusedRunReturnsOnlyWhereItsOutputIs(t *testing.T) {
+	location := "/var/lib/bootwright/contexts/lab/state/runs/run-" + strings.Repeat("a", 32)
+	logs := []string{"run-" + strings.Repeat("a", 32) + "/run.output"}
+	for _, test := range []struct {
+		name   string
+		runner *adapter
+	}{
+		{"the adapter refuses", &adapter{err: errors.New("the adapter operation did not complete")}},
+		{"its evidence is refused", &adapter{power: "on"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result, err := service(&boundary{}, test.runner, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest", SkipConfirmation: true})
+			if err == nil {
+				t.Fatal("a failed run succeeded")
+			}
+			if result == nil || result.LogLocation != location || !slices.Equal(result.Logs, logs) {
+				t.Fatalf("the refusal named %+v, not the run's retained output", result)
+			}
+			if result.Context != "" || result.Machine != "" || result.Verb != "" || result.Power != "" || result.Previous != "" || result.Changed {
+				t.Fatalf("a refused run reported what it never proved: %+v", result)
+			}
+		})
+	}
+	refused := unlent{errors.New("the approved execution bundle is unavailable")}
+	result, err := service(refused, &adapter{power: "off"}, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest", SkipConfirmation: true})
+	if !errors.Is(err, refused.err) || result != nil {
+		t.Fatalf("a runtime that was never lent returned %+v, %v", result, err)
+	}
+}
+
+// unlent refuses before it lends a runtime, so no run output is named.
+type unlent struct{ err error }
+
+func (u unlent) WithRuntime(context.Context, lifecycle.RuntimeRequest, func(context.Context, lifecycle.Runtime) error) error {
+	return u.err
+}
+
 // Powering a machine on interrupts nothing, so it asks nothing. Stopping and
 // restarting interrupt a running system, so they always do.
 func TestOnlyAnInterruptingVerbAsksForConfirmation(t *testing.T) {
@@ -373,6 +413,11 @@ func TestEvidenceIsAcceptedOnlyForTheExactFrozenRequest(t *testing.T) {
 	}
 	if _, err := validate([]byte(`{"power":"on","unexpected":true}`), request, "digest"); err == nil {
 		t.Fatal("evidence with an unknown field was accepted")
+	}
+	for _, closer := range []string{"}", "]"} {
+		if _, err := validate([]byte(string(encode(t, valid))+closer), request, "digest"); err == nil {
+			t.Errorf("evidence followed by %s was accepted", closer)
+		}
 	}
 	if _, err := validate(nil, request, "digest"); err == nil {
 		t.Fatal("absent evidence was accepted")

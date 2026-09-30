@@ -120,6 +120,16 @@ func (d *display) lines(items []string) {
 	d.rows(rows)
 }
 
+// displayValue shows an empty value as absent, so a column or field reads as
+// absent rather than blank. Every other value stays raw for display to escape
+// once.
+func displayValue(value string) string {
+	if value == "" {
+		return "-"
+	}
+	return value
+}
+
 func (d *display) writeTo(out io.Writer) error {
 	text := d.text.String()
 	if n, err := io.WriteString(out, text); err != nil || n != len(text) {

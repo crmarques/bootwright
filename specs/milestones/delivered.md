@@ -899,8 +899,8 @@ records earlier builds wrote now refuse where they used to proceed.
 empty ledger.
 
 **Constraints left behind:** a killed keyring initialization
-(B26, was S28, delivered by [X20](delivered.md#x20--substrate-port-pre-boot-proof-and-observations)), lost and lagging records ([B27](m1.md#b27), was
-S29), claims and bindings ([B28](m1.md#b28), was S30), resolution gaps that
+(B26, was S28, delivered by [X20](delivered.md#x20--substrate-port-pre-boot-proof-and-observations)), lost and lagging records (B27, was
+S29, delivered by [X26](#x26--follow-ups-from-x19-to-x25)), claims and bindings (B28, was S30, delivered by X26), resolution gaps that
 need adapter changes ([B29](m1.md#b29), was S31) and the protocols the
 primitive leaves (B35, was R3 (rest), delivered by X20), with clauses added to B8,
 B11, B16, B21 and B30. Gates: `make check` in CI, `make race` and the kill
@@ -1129,3 +1129,59 @@ B49, B108, B109, B112 and B127. The install request is version 3 and the
 automation digest moves: finish or destroy in-flight operations with the build
 that registered them, then run `setup`. The emulated labs repeat their rows on
 a build with X20.
+
+### X26 — follow-ups from X19 to X25
+
+**Owner:** State reconciliation, with Container cluster, CLI, Controller,
+Substrate, Machine, Desired state, Infrastructure services and Workspace.
+Integrated on local `main` on 2026-09-30 as one commit, beside X27, on
+explicit request. **Items:** B27 (was S29), B28 (was S30), B109, B119, B108,
+B129, B110, B112, B113, B114, B115, B121, B123, B132, B133, B33 (was F8).
+
+**Outcome:** each lost or lagging record path refuses or converges, and
+`status` names every record contradiction (B27); refused fresh applies reclaim
+their empty claims, a bounded run's collected binding binds again, a stranded
+binding is released and an interrupted done destroy finishes (B28); a block a
+resolution completed reads back the evidence and outcome the resolution proved
+(B109); the removal-plan test can fail (B119); the node and media margins
+derive from the Redfish client's documented bounds (B108); an SSH-placed
+install lists each material once (B129); the installer configuration keeps
+every value's type (B110); the identity refusal bounds and strips what it
+prints (B112); strict JSON refuses trailing closers (B113); human output
+escapes each value once (B114); a failed JSON power run names its output in
+every failure envelope (B115); the read-only tool inspection streams (B121);
+a plain merge key refuses as `yaml.alias` and B123's ledger entry is gone
+(B123); the libvirt host apply observes after enabling its driver daemons
+(B132); elevated JSON keeps stderr empty and a relayed interrupt leaves the
+child its own status (B133); and bridge edges and wildcard-aware socket
+reservations order and refuse as the spec says (B33).
+
+**Guard tests:** `TestAVerbOverALostIndexRefusesAndStatusNamesWhatNoIndexAccountsFor`,
+`TestAFailedRemovalWhoseBlocksAreAllDoneIsFinalizedByTheDestroy`,
+`TestRefusedFreshAppliesReclaimTheirClaims`,
+`TestABoundedRunWhoseBindingARegistrationCollectedBindsAgain`,
+`TestEvidenceReportsWhatAResolutionProved`,
+`TestResolutionOutcomeRecordsWhatTheCapabilityProved`,
+`TestTheMarginAllowsEveryControllerCallAnApplyMakes`,
+`TestAnSSHPlacedInstallationListsEachMaterialOnce`,
+`TestNoDecoderTakesMoreAsTheEndOfItsDocument`,
+`TestOperationResultTextEscapesOnce`,
+`TestAFailedPowerRunNamesItsOutputInEveryFailureEnvelope`,
+`TestReadOnlyToolInspectionStreamsTheSourceAndEachMember`,
+`TestARefreshWarningNeverReachesJSONStandardError`,
+`TestARelayedInterruptLeavesTheChildItsOwnStatus`,
+`TestAServiceBoundToAManagedBridgeRequiresItsProvider` and
+`TestAWildcardSocketReservationRefusesEveryAddressAtItsPort`.
+
+**Review:** one finding, rejected. Every item was researched from its own item
+text; no separate brief was drafted.
+
+**Gates:** `make check-offline tidy-check modules-check vulncheck docs-check
+race` and `./scripts/ansible-check --suite units`, `sanity`, `integration` and
+`lint` pass on the integrated slice and on the squashed commit. No real-host
+run.
+
+**Constraints left behind:** new items B136 to B147 and clauses on B32, B49,
+B67 and B73. The automation digest moves: finish or destroy in-flight
+operations with the build that registered them, then run `setup`. Refused
+record states have no recovery yet (B136).

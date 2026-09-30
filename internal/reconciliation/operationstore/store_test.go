@@ -656,7 +656,7 @@ func TestResolutionNumbersNeverReuseAPath(t *testing.T) {
 		if err != nil || got != want {
 			t.Fatalf("resolution = %d (%v), want %d", got, err, want)
 		}
-		if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, got, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil); err != nil {
+		if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, got, reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -666,8 +666,81 @@ func TestResolutionNumbersNeverReuseAPath(t *testing.T) {
 			t.Fatalf("resolution %d lost its record", number)
 		}
 	}
-	if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, 4, reconciliation.EffectCompleted, reconciliation.BlockDone, nil); err == nil {
+	if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, 4, reconciliation.OutcomeChanged, reconciliation.EffectCompleted, reconciliation.BlockDone, nil); err == nil {
 		t.Fatal("a resolution completed without a durable start")
+	}
+}
+
+// The last resolution of an attempt is the record that settled its block, so
+// it reads back with the outcome and evidence it was completed with, and one
+// still running reads back running rather than as an earlier one. A record
+// under that name that is not the one the name promises refuses.
+func TestLastResolutionReadsTheRecordThatSettledTheBlock(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	plan := testPlan(t, "alpha")
+	operation := testOperation(t, plan)
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Register(ctx, operation, plan); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, err := store.LastResolution(ctx, operation.ID, "alpha", 1); err != nil || found {
+		t.Fatalf("an attempt nothing resolved read back a resolution (%t, %v)", found, err)
+	}
+	for _, step := range []struct {
+		outcome  reconciliation.Outcome
+		effect   reconciliation.EffectState
+		state    reconciliation.BlockState
+		evidence string
+	}{
+		{reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, `{"seen":1}`},
+		{reconciliation.OutcomeUnchanged, reconciliation.EffectCompleted, reconciliation.BlockDone, `{"seen":2}`},
+	} {
+		number, err := store.StartResolution(ctx, operation.ID, "alpha", 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, number, step.outcome, step.effect, step.state, json.RawMessage(step.evidence)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	settled, found, err := store.LastResolution(ctx, operation.ID, "alpha", 1)
+	if err != nil || !found || settled.Resolution != 2 || settled.Phase != "observed" ||
+		settled.Outcome != reconciliation.OutcomeUnchanged || settled.Effect != reconciliation.EffectCompleted || string(settled.Evidence) != `{"seen":2}` {
+		t.Fatalf("the settling resolution read back as %+v, %t (%v)", settled, found, err)
+	}
+	if _, found, err := store.LastResolution(ctx, operation.ID, "alpha", 2); err != nil || found {
+		t.Fatalf("a resolution of attempt 1 read back for attempt 2 (%t, %v)", found, err)
+	}
+	if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1); err != nil {
+		t.Fatal(err)
+	}
+	running, found, err := store.LastResolution(ctx, operation.ID, "alpha", 1)
+	if err != nil || !found || running.Resolution != 3 || running.Phase != "running" || running.Outcome != "" || string(running.Evidence) != "null" {
+		t.Fatalf("a running resolution read back as %+v, %t (%v)", running, found, err)
+	}
+	third := operation.ID + "/blocks/alpha/attempt-000001-resolution-000003.json"
+	for name, corrupt := range map[string]func(){
+		"another number under its name": func() {
+			area.files[third] = area.files[operation.ID+"/blocks/alpha/attempt-000001-resolution-000002.json"]
+		},
+		"a noncanonical number": func() {
+			area.files[operation.ID+"/blocks/alpha/attempt-000001-resolution-0000x4.json"] = area.files[third]
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			saved := maps.Clone(area.files)
+			defer func() { area.files = saved }()
+			corrupt()
+			if _, _, err := store.LastResolution(ctx, operation.ID, "alpha", 1); err == nil {
+				t.Fatal("a resolution record that is not the one its name promises was read")
+			}
+		})
 	}
 }
 
@@ -776,6 +849,68 @@ func TestAClaimedOperationRegistersIntoItsDirectory(t *testing.T) {
 	unclaimed.ID = other
 	if err := store.Register(ctx, unclaimed, plan); err == nil || area.directories[other] {
 		t.Fatal("a registration without a claim exceeded the retained operation bound")
+	}
+}
+
+// A reclaim removes every claim that holds nothing, including one a reclaim
+// interrupted part way left, and keeps the current operation even once its
+// records were lost, a registration's directory once its plan landed, a claim
+// whose blocks/ or logs/ holds anything and every name that is no operation
+// identity. A reclaimed claim no longer counts toward the retention bound, so
+// a claim refused there then succeeds.
+func TestAReclaimRemovesOnlyClaimsThatHoldNothing(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	claim := func(id string) string {
+		id = "op-" + strings.Repeat(id, 16)
+		if err := store.Claim(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	plan := testPlan(t, "alpha")
+	current := testOperation(t, plan)
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Register(ctx, current, plan); err != nil {
+		t.Fatal(err)
+	}
+	delete(area.files, current.ID+"/plan.json")
+	delete(area.files, current.ID+"/operation.json")
+	empty, partial := claim("01"), claim("02")
+	delete(area.directories, partial+"/logs")
+	interrupted, logged, blocked := claim("03"), claim("04"), claim("05")
+	area.files[interrupted+"/plan.json"] = []byte("{}\n")
+	area.files[logged+"/logs/operation.jsonl"] = []byte("{}\n")
+	area.directories[blocked+"/blocks/alpha"] = true
+	for index := range MaxOperations - 6 {
+		area.directories["slot-"+FormatIndex(index)] = true
+	}
+	next := "op-" + strings.Repeat("0f", 16)
+	if err := store.Claim(ctx, next); err == nil {
+		t.Fatal("a claim exceeded the retained operation bound")
+	}
+	reclaimed, err := store.Reclaim(ctx)
+	if err != nil || !slices.Equal(reclaimed, []string{empty, partial}) {
+		t.Fatalf("reclaimed %v (%v), want %v", reclaimed, err, []string{empty, partial})
+	}
+	for _, removed := range []string{empty, empty + "/blocks", empty + "/logs", partial, partial + "/blocks"} {
+		if area.directories[removed] {
+			t.Fatalf("the reclaim kept %s", removed)
+		}
+	}
+	for _, kept := range []string{current.ID, interrupted, logged, blocked, "slot-0"} {
+		if !area.isDirectory(kept) {
+			t.Fatalf("the reclaim removed %s", kept)
+		}
+	}
+	if err := store.Claim(ctx, next); err != nil {
+		t.Fatalf("a claim refused once a reclaim freed the bound: %v", err)
+	}
+	area.fail["remove "+next+"/blocks"] = errors.New("the directory could not be removed")
+	if reclaimed, err := store.Reclaim(ctx); err == nil || len(reclaimed) != 0 || !area.directories[next] {
+		t.Fatalf("a failed removal reclaimed %v (%v)", reclaimed, err)
 	}
 }
 

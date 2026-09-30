@@ -75,10 +75,11 @@ type ControllerBinding struct {
 }
 
 // HostReservation records the host resources one context's locally hosted
-// service claims. Workspace stores and compares the keys; only the owning
-// capability knows what a key means. Setup reserves nothing. A shared claim is
-// held by any number of contexts at once and conflicts with nothing; it records
-// that a resource is still in use rather than who owns it.
+// service claims. Workspace stores the keys and compares them through
+// ConflictingContext, which reads no key beyond a socket's address and port;
+// only the owning capability knows what a key means. Setup reserves nothing.
+// A shared claim is held by any number of contexts at once and conflicts with
+// nothing; it records that a resource is still in use rather than who owns it.
 type HostReservation struct {
 	Context string   `json:"context"`
 	Kind    string   `json:"kind"`

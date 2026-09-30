@@ -17,7 +17,7 @@ Supported operation modes are:
 
 - a fresh full-context `apply`, optionally stopping at a stage boundary;
 - continuation of a paused, interrupted or failed `apply`, or of an
-  interrupted or failed `destroy`, against its exact frozen plan; and
+  interrupted `destroy`, against its exact frozen plan; and
 - a `destroy` of everything the apply [owns](#continuation-and-removal),
   whether that apply completed or stopped at a boundary, at a failure, or at an
   interruption.
@@ -29,8 +29,9 @@ can start, and an edited input refuses by naming that removal.
 A verb whose work durable state already proves performs none of it and
 succeeds: an `apply` repeated over the unchanged input its completed apply
 froze, while every block of that apply's plan is `done`, and a `destroy` of a
-context that owns nothing, which is one holding a completed destroy or holding
-no operation while nothing claims it, below, each report the completed
+context that owns nothing, which is one holding a completed destroy every block
+of whose plan is `done` or holding no operation while nothing claims it, below,
+each report the completed
 operation and `done` without registering an operation, opening a transaction,
 binding a Secret, claiming a reservation or reaching a host. Such
 an invocation requires no authorization and no confirmation, because it has no
@@ -40,7 +41,11 @@ an operator or a script ask whether anything is left to do. A verb settles
 only once its operation's finalization, below, is complete. A completed apply
 whose records hold a block that is not `done` proves no such thing, so an
 `apply` of its unchanged input refuses, as
-[its removal does](#continuation-and-removal), rather than settling.
+[its removal does](#continuation-and-removal), rather than settling. A
+completed destroy whose records hold one proves nothing removed that block's
+effect, so both verbs refuse `lifecycle.state` over it, naming each such block
+with the state its record reads, rather than settle or start a fresh apply
+beside that effect.
 
 Before any verb, an operation whose blocks are all `done` but whose record,
 [evidence](#context-mutation-evidence), reservations or Secret bindings do not
@@ -51,39 +56,53 @@ authorization, presentation or confirmation, because it performs only the
 record, the releases and the projection its records prove: it records the
 operation `done`, then publishes an apply's projection, or releases a
 removal's reservations and then its Secret bindings, its own and its apply's,
-and only then publishes pristine evidence. A running or unknown operation is
-finalized only by its own verb, because the other verb decides for itself: a
-`destroy` supersedes an incomplete apply and an `apply` refuses an incomplete
-destroy. An unknown one whose blocks are all `done` has a record that lags
-behind them, as a removal stopped after its resolution proved an unknown
-apply's block and before it recorded the apply leaves it. A completed
+and only then publishes pristine evidence. A running or unknown operation or a
+failed removal is finalized only by its own verb, because the other verb
+decides for itself: a `destroy` supersedes an incomplete apply and an `apply`
+refuses an incomplete destroy. An unknown one whose blocks are all `done` has a
+record that lags behind them, as a removal stopped after its resolution proved
+an unknown apply's block and before it recorded the apply leaves it. A failed
+removal whose blocks are all `done` lags the same way: a removal superseding it
+records nothing of it before it resolves the `running` block a failed retry
+start left, so one stopped after that resolution leaves it `failed` beside
+blocks that are all `done`. A failed apply is never finalized, because it
+records `failed` only while a block does. A completed
 operation is finalized under either verb. The verb then decides
 again from what the finalization left and goes on as it would over it, and a
 finalization that leaves another one due refuses `lifecycle.state` rather than
 repeating. An operation holding a block that is not `done` proves no
-completion and is never finalized. When the Secret-binding releases or the
-pristine publication that follow a removal's completion fail, the invocation
-fails `lifecycle.state`, beside any log fault it reports, naming the repeated
-`destroy` that finishes it, and an invocation that completed the removal itself
-still reports it `done`.
+completion and is never finalized. Once a removal's record reads `done`, the
+releases and the pristine publication that follow it are made even when the
+invocation is interrupted, whether it ran that removal or finalizes it. When
+the Secret-binding releases or the pristine publication that follow a
+removal's completion fail, the invocation fails `lifecycle.state`, beside any
+log fault it reports, naming the repeated `destroy` that finishes it, and an
+invocation that completed the removal itself still reports it `done`.
 
-Nothing claims a context holding no operation only while its evidence is
-pristine and it holds no reservation. Running evidence, or a reservation
-beside pristine evidence, is what a
+A lost index reads as no operation, so what a context holding no operation
+holds is proved before anything else about it. Evidence beside no operation
+other than pristine evidence and the running evidence an interrupted
+registration leaves, and an operation directory whose `blocks/` lists anything
+while no index names it, is state no index accounts for: a `destroy` and a
+fresh `apply` over it each refuse `lifecycle.state`, naming each such evidence
+and directory and `bootwright status`, and write nothing, whatever else the
+context holds.
+
+Otherwise nothing claims a context holding no operation only while its
+evidence is pristine and it holds no reservation. Running evidence, or a
+reservation beside pristine evidence, is what a
 [registration](#context-mutation-evidence) interrupted before its index named
 its operation leaves, and the destroy releases it first, under the exclusive
 lock and without authorization, presentation or confirmation, because it
 performs no effect: once it re-proves that the context still holds no
-operation, the evidence it decided from and no operation directory holding
-block records, it releases the context's reservations and publishes pristine
+operation, the evidence it decided from and no state no index accounts for,
+it releases the context's reservations and publishes pristine
 evidence, and only then releases every Secret binding the context held before
-it began; it then settles, reporting no operation and `done`. Any other
-evidence beside no operation, or an operation directory whose `blocks/` lists
-anything while no index names it, is state no index accounts for, so the
-destroy refuses `lifecycle.state`, naming `bootwright status`, and writes
-nothing. A binding stranded beside pristine evidence and no reservation cannot
-be told from a context at rest, so that destroy settles and keeps it for the
-next registration to release.
+it began; it then settles, reporting no operation and `done`. A destroy that
+settles over pristine evidence and no reservation, beside no operation or a
+completed destroy, still opens no transaction, but no operation names a Secret
+binding there, so it releases every binding it listed before it read that
+evidence and reports only that it settled.
 
 Plans remain complete and immutable; later artifact generation cannot append
 blocks or expand the operation. Expansion requires destroy followed by fresh
@@ -111,12 +130,18 @@ A fresh apply claims its [operation directory](#operation-records) and then
 raises its running evidence, in an exclusive transaction of its own, before it
 binds a Secret, claims the controller host, reserves or registers, so nothing
 it holds is ever covered by evidence that permits update or deletion. Before it
-registers, it re-proves that this evidence still holds and that no operation
-directory was claimed since its own, because evidence bytes are no token: a
-release that lowered them and a later claim that raised them again leave the
-same bytes, and only a claim, which nothing removes, tells the two apart. The
-claim precedes the evidence so that no running evidence, even from an
-invocation interrupted between the two, lands without one. A fresh removal
+registers, it re-proves that this evidence still holds and that the operation
+directories are exactly those it listed right after its own claim, because
+evidence bytes are no token: a release that lowered them and a later claim that
+raised them again leave the same bytes, and only that claim's directory tells
+the two apart. A directory is reclaimed, below, only while the evidence reads
+pristine or once a registration has moved the index, which refuses the apply
+on its own, and every raise over no operation or a completed destroy claims
+first, so the claim that raised the evidence again stays listed while that
+evidence stands. The directories themselves are proved rather than their
+number, because a reclaim of an older claim beside a newer one leaves the same
+number. The claim precedes the evidence so that no running evidence, even from
+an invocation interrupted between the two, lands without one. A fresh removal
 raises its running evidence immediately before it registers, and a
 continuation before it marks its operation running; each publication is
 skipped when the evidence already reads so.
@@ -142,15 +167,38 @@ which the operation it may have registered needs. A Secret binding no operation
 names, which an interrupted registration or a release that failed leaves, is
 released once the context's next fresh operation registers, after its pristine
 evidence when that operation is a removal that completes, once a removal's
-[finalization](#lifecycle-unit) publishes pristine evidence, or by a destroy's
-release of what an interrupted registration left; a continuation collects
-nothing, and a release that fails leaves the binding for the next of them. Each
-reads the context's bindings before its first transaction and
-releases only what it read and does not itself keep, so a binding issued since
-is never touched, and each fresh apply still in flight that bound one of them
-refuses at its re-proof rather than register it. The releases are made even
-once the invocation is interrupted. A listing that fails collects nothing,
-because collection is housekeeping no transition may be refused for.
+[finalization](#lifecycle-unit) publishes pristine evidence, by a destroy's
+release of what an interrupted registration left, or by a destroy that
+[settles](#lifecycle-unit) over pristine evidence and no reservation; a
+continuation collects nothing, and a release that fails leaves the binding for
+the next of them. Each reads the context's bindings before its first
+transaction, or a settling destroy before its decision, and releases only what
+it read and does not itself keep, so a binding issued since is never touched,
+and each fresh apply still in flight that bound one of them refuses at its
+re-proof rather than register it. The releases are made even once the
+invocation is interrupted. A listing that fails collects nothing, because
+collection is housekeeping no transition may be refused for.
+
+A claim that holds nothing, only the empty `blocks/` and `logs/` a claim
+creates, is what a fresh apply that never registered leaves, as does a
+registration stopped before its plan landed. A transaction that gives back
+pristine evidence, which is a restoration, a destroy's release of what an
+interrupted registration left and a completed removal's pristine publication,
+then reclaims each such directory other than the one its index names, once the
+evidence reads pristine and before it releases the lock, children before their
+directory, so one reclaimed part way still holds nothing and goes with the
+next. A restoration beside a reservation no operation owns keeps its running
+evidence, and with it its claim, so the transaction that registers a fresh
+operation reclaims the same way once its index names that operation: every
+fresh apply planned before it then refuses at its re-proof whether or not its
+claim is still listed, and none claims again before it decides from the new
+operation. A refused retry's claim therefore lasts only until the next
+pristine publication or registration, so none is left to count toward the
+[retained-operation bound](contexts.md#storage-locking-and-publication) or the
+operation area's entry bound when a removal registers. A directory holding
+anything else is kept, and a reclaim that fails is housekeeping: it refuses
+nothing and leaves the rest for the next pristine publication or
+registration.
 
 The guard allows update only without pending, failed or unknown operations;
 recreation/final deletion requires `none` operation and `none` ownership.
@@ -253,23 +301,25 @@ contexts/<name>/state/operations/
 
 `index.json` names at most one current operation and nothing else. Every other
 operation directory is kept for audit and never named by the index: a
-completed operation, one a removal superseded, the unreferenced directory an
-interrupted registration leaves, and the claimed directory of a fresh apply
-that never registered. A later command reads one again only as the current
-operation's `source`, and each counts toward the
+completed operation, one a removal superseded, and the unreferenced directory
+an interrupted registration leaves once its plan landed. A later command reads
+one again only as the current operation's `source`, and each counts toward the
 [retained-operation bound](contexts.md#storage-locking-and-publication). A
 fresh apply's `<operation-id>/` exists, holding only its empty `blocks/` and
 `logs/`, from the transaction that raises its
 [evidence](#context-mutation-evidence); its identity is allocated against every
 operation directory, and its registration fills that directory without
-counting it against the bound a second time.
+counting it against the bound a second time. A claim that never registered
+holds nothing to audit, so the next pristine publication or registration
+[reclaims](#context-mutation-evidence) it.
 `operation.json` binds the operation to its verb, context
 identity, input revision and digest, plan digest, selected implementation and
 automation identities, executable identity, secret bindings, durable state and
 log-fault flag. `plan.json` is the immutable frozen plan: every block with its
 description, dependencies, impacts, presentation groups, resolved
 implementation identity, content digest and canonical secret-free request.
-Block records carry the block state and its next attempt number; attempt and
+Block records carry the block state and the number of attempts started, one
+less than the next attempt's number; attempt and
 resolution records carry their block, attempt and resolution numbers, phase,
 outcome, effect, bounded evidence and timestamps, and never restate the
 request: the request an attempt or resolution acted on is its block's in
@@ -303,20 +353,22 @@ complete, synchronized bytes.
 
 | Durable state | Allowed lifecycle transition |
 | --- | --- |
-| no operation, or completed destroy | start a fresh apply; a `destroy` settles without effect, over no operation first releasing what an interrupted registration left and refusing evidence or records no index accounts for |
+| no operation, or completed destroy | start a fresh apply; a `destroy` settles without effect, over no operation first releasing what an interrupted registration left; both refuse evidence or records no index accounts for, and a completed destroy holding a block that is not `done` |
 | apply running | continue that exact apply, or start a fresh destroy of the blocks it started |
 | apply failed | continue that exact apply, or start a fresh destroy of the blocks it started |
 | apply paused | continue that exact apply under any stage selection, or start a fresh destroy of the blocks it started |
 | apply unknown | resolve the exact unknown block, or start a fresh destroy of the blocks it started, which resolves that block first; start no other effect or retry |
 | apply done | start a fresh destroy; an `apply` of the unchanged input settles without effect, and of a changed input refuses; both the destroy and that apply refuse while a block of the plan is not `done` |
 | destroy running | continue that exact destroy |
-| destroy failed | continue that exact destroy, or start a fresh destroy of what it has not removed |
+| destroy failed | start a fresh destroy of what it has not removed |
 | destroy unknown | resolve the exact unknown block; start no effect or retry |
 
 Before any row, an operation whose blocks are all `done` is
 [finalized](#lifecycle-unit) first while its record, evidence, reservations or
-Secret bindings do not yet say it completed; a running or unknown one only by
-its own verb.
+Secret bindings do not yet say it completed; a running or unknown one, and a
+failed destroy, only by its own verb. A continuation refuses records that
+contradict what its operation started before it restores, raises or marks
+anything ([continuation and removal](#continuation-and-removal)).
 
 Changed desired state never turns continuation into reconciliation. A
 continuation verifies, before doing work, the operation's verb, its context
@@ -390,6 +442,14 @@ The operation then takes the state its blocks give it under
 [precedence](#operation-state-precedence), and a block resolved `failed` is
 retried by a new attempt, which converges it.
 
+A resolution records an outcome beside that effect. A completed effect records
+the outcome its capability proves the effect had, `changed` or `unchanged`, as
+an observation that repeats its apply's own proof does, and `changed` when the
+capability proves neither, because the attempt it completed may have changed
+its target. Positive no effect and a positive partial realization record
+`failed`, and an unproved observation `unknown`: an outcome the capability
+states counts only beside a completion.
+
 ### Block transitions
 
 | Block state | Step | Leads to |
@@ -409,11 +469,16 @@ unproved blocks are observed before any other step starts.
 
 An attempt that cannot start, because this executable lacks its implementation
 or the store refuses to allocate its number and record `running`, performs no
-effect and records no outcome. Its block record and the log-fault flag are
-unchanged, so the block keeps the state it had: `pending`, or the `failed` it
-was retrying. The invocation that meets it admits nothing further, never admits
+effect and records no outcome. The log-fault flag is unchanged, and so is its
+block record, so the block keeps the state it had: `pending`, or the `failed`
+it was retrying. A start whose final publication lands and then reports a
+failure is the one exception: its block record reads `running` and counts the
+attempt, although the invocation still holds the block in the state it had, so
+a retry stopped this way leaves its operation `failed` beside that `running`
+block, which the next invocation observes as it does any. The invocation that
+meets it admits nothing further, never admits
 that block again, and waits for what is already running. Its operation then
-takes the state its blocks give it under
+takes the state its blocks give it, as the invocation holds them, under
 [precedence](#operation-state-precedence), and the stop is never a pause. The
 result names that failure as its block's cause, as `runtime.internal` naming
 the block when the failure carries no diagnostic of its own, and never in the
@@ -494,14 +559,15 @@ carries only resolved dependencies.
 
 An apply attempt receives what each block it depends on durably proved in this
 operation: that block's kind, object, implementation, verb and state, and the
-evidence its last attempt recorded when that attempt completed, handed over
-unread in frozen plan order. It is read before the attempt starts, so a record
-that cannot be read leaves the block as it was. A removal's attempts, every
-resolution and every quiescence probe receive none.
-
-Not yet met: a block a resolution completed hands over what its last attempt
-recorded, which is no evidence when that attempt never completed, rather than
-what the resolution observed; tracked as [B109](milestones/m1.md#b109).
+evidence of the record that last settled it, handed over unread in frozen plan
+order. That record is the block's last attempt, or, when a resolution observed
+that attempt, the highest-numbered resolution allocated against it, because
+only an unproved attempt is resolved and what the resolution observed is then
+what the block proved. Its evidence is handed over once that record completed;
+a block that never started, or whose settling record is still running, hands
+over none rather than an earlier record's. It is read before the attempt
+starts, so a record that cannot be read leaves the block as it was. A
+removal's attempts, every resolution and every quiescence probe receive none.
 
 A definition may also name the authorization tokens its effects *consume*,
 frozen with the plan and covered by its digest; the
@@ -593,14 +659,19 @@ refused this way.
 Every `plan` previews exactly the decision the verb it previews takes, and one
 path takes both. That verb is a fresh `apply` over no operation or a completed
 destroy, the `destroy` of a completed apply, and an incomplete operation's own
-verb. A fresh apply's decision compiles the frozen input, refuses what this
-executable cannot realize, plans, refuses `lifecycle.state` for a plan with no
-block, and refuses a selection that admits no startable block; a continued
-apply's refuses a selection as the rules above do; and a removal's refuses, as
+verb. A fresh apply's decision refuses, over no operation, state no index
+accounts for, and over a completed destroy one holding a block that is not
+`done` ([lifecycle unit](#lifecycle-unit)); it then compiles the frozen input,
+refuses what this executable cannot realize, plans, refuses `lifecycle.state`
+for a plan with no block, and refuses a selection that admits no startable
+block; a continuation's refuses records that contradict what its operation
+started, and a continued apply's then refuses a selection as the rules above
+do; and a removal's refuses, as
 [continuation and removal](#continuation-and-removal) requires, a completed
 apply holding a block that is not `done`, records that leave nothing to remove,
 and a frozen request this executable cannot read. A failed removal is previewed
-as the fresh removal `destroy` starts over what it has not yet proved gone.
+as the fresh removal `destroy` starts over what it has not yet proved gone,
+unless its blocks are all `done`, when its finalization is due.
 `plan` over an incomplete apply previews its continuation, never the removal a
 `destroy` would start over it, so the refusal of records that contradict what
 an incomplete apply started stays that `destroy`'s. A `destroy` accepts no
@@ -842,8 +913,12 @@ the exact input it froze could continue; its removal is therefore not a settled
 verb but a removal that carries no block: it registers, performs no effect and
 completes, which releases what the apply claimed and leaves the context at
 rest. No other operation can leave nothing to remove: a completed apply's
-blocks are all `done`, a `failed` or `unknown` apply holds the block that made
-it so, and a failed removal holds the block that failed. Records that say
+blocks are all `done`, and a `failed` or `unknown` apply holds the block that
+made it so. A failed removal holds a block it has not proved gone, whether the
+one that failed or the `running` one a retry start that failed left, unless a
+removal superseding it resolved that block `done` and stopped before recording
+what it proved; its blocks are then all `done`, and the removal is
+[finalized](#lifecycle-unit) rather than superseded. Records that say
 otherwise contradict themselves, so a removal over them refuses before it
 registers, reaches a host, or releases a binding the effects still on the host
 need.
@@ -854,28 +929,30 @@ removing only the `done` rest. A lost block record reads back as `pending`, and
 a removal that skipped that block would leave its effect in place and then
 release the binding it needs. The refusal names the apply and every such block
 with the state its record reads, points at `bootwright status`, and comes
-before the removal binds, probes, registers or releases anything. An incomplete
-apply and a failed removal are not held to this, because blocks that are not
-`done` are legitimate in both.
+before the removal binds, probes, registers or releases anything. A completed
+removal is held to the same rule by both verbs, as the
+[lifecycle unit](#lifecycle-unit) states. An incomplete apply and a failed
+removal are not held to this, because blocks that are not `done` are
+legitimate in both.
 
 A removal of an incomplete apply refuses instead where the apply's records
 contradict what it started, with the completed-apply refusal's code, remedy
 and timing. The refusal names the apply and each contradiction, per block in
 frozen plan order and then the apply's own:
 
-- a block that reads `pending` while a block that depends on it directly
-  reads anything else, because a block starts only once every dependency is
-  `done`;
+- a block that reads anything but `done` while a block that depends on it
+  directly reads anything but `pending`, because a block starts only once
+  every dependency is `done` and a `done` block never changes;
 - a block with no block record beside an attempt or resolution record of its
   own, because a start publishes a block's record before any attempt record of
   it, so only a lost record leaves one;
-- an apply recorded `failed` that holds no `failed`, `running` or `unknown`
-  block, because an apply records `failed` only once a block failed, a
-  `failed` block changes only through a retry, which first records the apply
-  `running`, and a `running` or `unknown` block changes only through a
-  resolution, before which a continuation records the apply `running` and a
-  removal records it in the state its blocks give it, which is `failed` only
-  while another block is.
+- an apply recorded `failed` that holds no `failed` or `unknown` block and no
+  `running` block whose record counts more than one attempt, because an apply
+  records `failed` only once a block failed, a `failed` block changes only
+  through a retry, which first records the apply `running`, and a `running` or
+  `unknown` block changes only through a resolution, before which a
+  continuation records the apply `running` and a removal records it in the
+  state its blocks give it, which is `failed` only while another block is.
 
 Each shows the records no longer say what the apply started, and a started
 block whose record was lost reads back as `pending`, which a removal planned
@@ -888,7 +965,10 @@ block without a block record and only to refuse: nothing listed is read,
 adopted or written. A `failed` apply need not hold a `failed` block: a retry
 whose start published the block's `running` record and then reported a
 failure leaves the apply `failed` beside that `running` block, which is not a
-contradiction. A `running` or `unknown` block started and its outcome is
+contradiction, and whose record counts the attempt it retried as well as its
+own. A `running` block with one attempt is never that retry, so it accounts for
+no failure, and a `failed` block whose whole directory was lost cannot hide
+behind it. A `running` or `unknown` block started and its outcome is
 unproved, so the removal resolves it before it registers and counting it skips
 no effect. A removal stopped after resolving that block leaves the apply in the
 state it recorded before the resolution, `running` or `unknown`, rather than
@@ -897,7 +977,29 @@ not hold an `unknown` block either: a removal interrupted after resolving that
 block and before recording the apply's new state leaves it `done` or `failed`,
 and still owned. A lost record that leaves none of the three cannot be told
 from a block that never started, and the rule holds whatever executable wrote
-the records.
+the records, including the attempt beside no block record that a first start
+an executable before `83dcbebe` interrupted leaves.
+
+A continuation refuses, with the same code and remedy and before it restores
+its operation's log, raises evidence or marks its operation `running`, where
+its operation's records contradict what it started: a block with no block
+record beside an attempt or resolution record of its own, whose start would
+otherwise refuse only after the operation was marked, and an apply recorded
+`failed` whose blocks are all `done`, which leaves the continuation nothing to
+start and no block that records the failure. It names the operation and each
+contradiction in frozen plan order. A continuation is not held to the other
+contradictions above, because it removes nothing: a started block whose whole
+directory was lost is started again, and its attempt
+[converges](#converging-an-effect) what the lost one left.
+
+Every refusal of records that contradict themselves points at
+`bootwright status`, whose
+[`contradictions`](cli/output.md#lifecycle-and-status-results) name what each
+of those refusals names over the context's records: each block a completed
+operation does not show `done`, each contradiction of an incomplete apply
+above and an incomplete apply that records a state only a started block
+explains beside no block that started, each lost record of an incomplete
+removal, and, beside no operation, each state no index accounts for.
 
 A frozen block records what creating it did; removing it is the other half of
 the same request. Each capability therefore reads its own frozen request and
@@ -934,11 +1036,12 @@ every plan obeys, so a frozen removal is rebuilt from its own record exactly as
 it was written.
 
 A fresh removal may supersede any apply that has not completed, and a failed
-destroy, which is removed over what it has not yet proved gone. An apply
+destroy, which is removed over what it has not yet proved gone and is never
+continued. An apply
 qualifies however it stopped, because the set it owns is the same at a
 boundary, at a failure, and at an interruption.
 An unproved effect is not an exception: the removal resolves it first and
-refuses, registering nothing, when it cannot. An incomplete removal is
+refuses, registering nothing, when it cannot. A running or unknown removal is
 continued rather than replaced, because a removal that lost an outcome is
 resolved by repeating itself. Replacement is the only road out of a repaired
 adapter, because a continuation is frozen to the automation its operation

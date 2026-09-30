@@ -180,14 +180,22 @@ fleet account accepting the reported key (30 retries 10 seconds apart), 7,500
 seconds of pauses in all. A read the controller does not answer spends one
 retry of the installer wait rather than ending it. Every run of the block is
 bounded by a [deadline](architecture.md#the-adapter-result-protocol) derived
-from the budgets it froze: their pauses back to back plus one hour for the
-media work, the boot and each read's own time, which is 3 hours 5 minutes for
-these budgets and within the runner's ceiling. A run that reaches its deadline is killed, and
+from the budgets it froze: their pauses back to back, one hour for the rest of
+the media work and each read's own time, and the
+[bound](substrates.md#identity-and-power-operations) of every call an apply
+makes to the machine's controller, 1 hour 1 minute 20 seconds, which is 4 hours
+6 minutes 20 seconds for these budgets and within the runner's ceiling. Those
+calls are the pre-boot power read, the insert, the power-off, boot selection
+and power-on that boot the installer, the eject, disk selection and power-on
+that boot the installed system, and the eject the verification repeats. A
+physical target powers nothing off and is inspected where a virtual one's power
+is read, which stays within those bounds while the inspection reads at most six
+interfaces. A run that reaches its deadline is killed, and
 the attempt becomes unknown and is resolved from the marker, as after a
-cancellation. The controller's own power and media polls, which the adapter
-bounds with fixed counts, and the single retry, one second later, of an
-observation's reachability check are not budgets: they are part of the media
-work, the boot and the reads that hour allows for.
+cancellation. The controller's own polls, which the client bounds with fixed
+counts, are not budgets: they are part of each call's bound. Nor is the single
+retry, one second later, of an observation's reachability check, which is part
+of the reads that hour allows for.
 
 **Completion.** Completion requires the identity channel answering, the install
 marker it returns matching the frozen marker byte for byte, the machine's SSH

@@ -153,16 +153,16 @@ func (d *decoder) value(node *desiredstate.Node, shape *api.Shape, path string) 
 		seen := map[string]bool{}
 		for i := 0; i+1 < len(node.Content) && !d.sink.stopped(); i += 2 {
 			key, n := node.Content[i], node.Content[i+1]
+			if key.Kind == desiredstate.ScalarKind && key.Value == "<<" && (key.Tag == "!!merge" || scalarType(key) == api.String) {
+				d.fail(key, "yaml.alias", path, "merge keys are not permitted")
+				continue
+			}
 			if key.Kind != desiredstate.ScalarKind || scalarType(key) != api.String {
 				d.fail(key, "yaml.shape", path, "mapping keys must be strings")
 				continue
 			}
 			if key.Anchor != "" {
 				d.fail(key, "yaml.alias", path, "anchors are not permitted")
-				continue
-			}
-			if key.Value == "<<" {
-				d.fail(key, "yaml.alias", path, "merge keys are not permitted")
 				continue
 			}
 			if seen[key.Value] {

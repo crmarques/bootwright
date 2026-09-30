@@ -22,10 +22,10 @@ type BlockEvidence struct {
 	Evidence       json.RawMessage
 }
 
-// Evidence reports what the current operation's completed attempts proved
-// about one exact object. It performs no probe and writes nothing, and an
-// object no frozen block names has no entry: the absence of a record is not
-// evidence that nothing was realized.
+// Evidence reports what the current operation's completed attempts and
+// resolutions proved about one exact object. It performs no probe and writes
+// nothing, and an object no frozen block names has no entry: the absence of a
+// record is not evidence that nothing was realized.
 func (s Service) Evidence(ctx context.Context, contextName, kind, object string) ([]BlockEvidence, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
@@ -92,9 +92,12 @@ func provedDependencies(ctx context.Context, store OperationStore, operation ope
 	return proved, nil
 }
 
-// blockEvidence reads the last attempt a block durably completed. A block that
-// never started, or whose last attempt is still running, proves nothing and
-// carries no evidence rather than the bytes of an earlier attempt.
+// blockEvidence reads the record that last settled a block: its last attempt,
+// or the last resolution of that attempt when one observed it, since only an
+// unproved attempt is resolved and what the resolution observed is then what
+// the block proved. A block that never started, or whose settling record is
+// still running, proves nothing and carries no evidence rather than the bytes
+// of an earlier record.
 func blockEvidence(ctx context.Context, store OperationStore, operation string, block reconciliation.Block, verb reconciliation.Verb) (BlockEvidence, error) {
 	evidence := BlockEvidence{
 		Kind: block.Kind, Object: block.Object, Implementation: block.Implementation,
@@ -108,12 +111,19 @@ func blockEvidence(ctx context.Context, store OperationStore, operation string, 
 	if record.Attempts < 1 {
 		return evidence, nil
 	}
-	attempt, err := store.Attempt(ctx, operation, block.ID, record.Attempts)
+	settled, err := store.Attempt(ctx, operation, block.ID, record.Attempts)
 	if err != nil {
 		return BlockEvidence{}, err
 	}
-	if attempt.Phase == "observed" {
-		evidence.Evidence = attempt.Evidence
+	resolution, resolved, err := store.LastResolution(ctx, operation, block.ID, record.Attempts)
+	if err != nil {
+		return BlockEvidence{}, err
+	}
+	if resolved {
+		settled = resolution
+	}
+	if settled.Phase == "observed" {
+		evidence.Evidence = settled.Evidence
 	}
 	return evidence, nil
 }

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/controller"
@@ -134,6 +135,7 @@ func TestElevationOutcomes(t *testing.T) {
 		{name: "a JSON child that started and was killed", json: true, child: scriptedChild{stderr: []string{startAnnouncement}, code: 137}, exit: 1, code: "runtime.internal", message: "the elevated command exited with status 137 without a result"},
 		{name: "a JSON child that started and panicked", json: true, child: scriptedChild{stderr: []string{startAnnouncement, "panic: boom\n"}, code: 2}, exit: 1, code: "runtime.internal", message: "the elevated command exited with status 2 without a result", stderr: "panic: boom\n"},
 		{name: "a JSON refusal", json: true, child: scriptedChild{stderr: []string{passwordNeeded}, code: 1}, exit: 1, code: "runtime.privilege", message: authorization},
+		{name: "a JSON policy denial leaves standard error empty", json: true, child: scriptedChild{stderr: []string{hostWarning, denial}, code: 1}, exit: 1, code: "runtime.privilege", message: authorization},
 		{name: "a warning before a child's own failure", child: scriptedChild{stderr: []string{hostWarning, startAnnouncement, stateFailure}, code: 1}, exit: 1, stderr: hostWarning + stateFailure},
 		{name: "a warning before an unannounced child's own failure", child: scriptedChild{stderr: []string{hostWarning, stateFailure}, code: 1}, exit: 1, stderr: hostWarning + stateFailure},
 		{name: "a relayed remote refusal", child: scriptedChild{stderr: []string{startAnnouncement, passwordNeeded}, code: 1}, exit: 1, stderr: passwordNeeded},
@@ -143,6 +145,52 @@ func TestElevationOutcomes(t *testing.T) {
 		{name: "a silent failure keeps its status", child: scriptedChild{code: 1}, exit: 1},
 	} {
 		t.Run(c.name, func(t *testing.T) { c.check(t, context.Background()) })
+	}
+}
+
+// The supervisor's own refresh warning reaches a human invocation's standard
+// error and never a JSON one's, which stays empty around the child's document.
+// The refresh fails once the child announced, and the child ends only after
+// the refresh has warned.
+func TestARefreshWarningNeverReachesJSONStandardError(t *testing.T) {
+	const warning = "[WARN] sudo credential refresh stopped; the active operation continues.\n"
+	for _, test := range []struct {
+		name           string
+		json           bool
+		stdout, stderr string
+	}{
+		{name: "JSON", json: true, stdout: `{"exitCode":0}` + "\n"},
+		{name: "human", stdout: "[OK] done\n", stderr: warning},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				announced := make(chan struct{})
+				elevator := scriptedElevator(scriptedChild{}, nil)
+				elevator.Delay = delayFunc(func(ctx context.Context, _ time.Duration) error {
+					select {
+					case <-announced:
+						return nil
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				})
+				elevator.Executor = executorFunc(func(_ context.Context, c Command) (int, error) {
+					if slices.Equal(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) || slices.Equal(c.Arguments, []string{"-n", "-u", "#0", "-v"}) {
+						return 1, nil
+					}
+					io.WriteString(c.Error, startAnnouncement)
+					close(announced)
+					synctest.Wait()
+					io.WriteString(c.Output, test.stdout)
+					return 0, nil
+				})
+				var stdout, stderr bytes.Buffer
+				outcome := elevator.Run(context.Background(), Invocation{JSON: test.json, Arguments: []string{"status"}, Output: &stdout, Error: &stderr})
+				if outcome != (Outcome{}) || stdout.String() != test.stdout || stderr.String() != test.stderr {
+					t.Fatalf("outcome %+v, stdout %q, stderr %q; want stdout %q, stderr %q", outcome, stdout.String(), stderr.String(), test.stdout, test.stderr)
+				}
+			})
+		})
 	}
 }
 
@@ -390,25 +438,28 @@ func TestStartFilterStripsOneAnnouncementAndPassesTheRestUnchanged(t *testing.T)
 		{name: "an interactive announcement", mode: "interactive", writes: []string{startAnnouncement, stateFailure}, want: stateFailure, started: true},
 		{name: "a long line before the start", mode: "human", writes: []string{long}, want: long},
 		{name: "a long sudo line before the start", mode: "human", writes: []string{"sudo: " + long}, want: "sudo: " + long},
-		{name: "a long JSON sudo line", mode: "json", writes: []string{"sudo: " + long}, want: "sudo: " + long},
+		{name: "a long JSON sudo line", mode: "json", writes: []string{"sudo: " + long}},
 		{name: "a long line after the start", mode: "json", writes: []string{startAnnouncement, long}, want: long, started: true},
-		{name: "JSON drops a refusal before a line", mode: "json", writes: []string{passwordNeeded + stateFailure}, want: stateFailure},
-		{name: "JSON drops a refusal after a line", mode: "json", writes: []string{stateFailure + passwordNeeded}, want: stateFailure},
+		{name: "JSON drops a refusal before a line", mode: "json", writes: []string{passwordNeeded + stateFailure}},
+		{name: "JSON drops a refusal after a line", mode: "json", writes: []string{stateFailure + passwordNeeded}},
+		{name: "JSON drops every line before the start", mode: "json", writes: []string{denial[:20], denial[20:] + hostWarning, long, startAnnouncement, stateFailure}, want: stateFailure, started: true},
+		{name: "JSON drops a line that only began like the announcement", mode: "json", writes: []string{"bootwright: elevated", " command failed\n", startAnnouncement}, started: true},
 		{name: "an unterminated JSON refusal", mode: "json", writes: []string{"sudo: a password is required"}},
 		{name: "an unterminated human refusal", mode: "human", writes: []string{"sudo: a password is required"}, held: "sudo: a password is required"},
-		{name: "an unterminated fragment", mode: "json", writes: []string{"sudo"}, want: "sudo"},
+		{name: "an unterminated fragment", mode: "json", writes: []string{"sudo"}},
+		{name: "an unterminated human fragment", mode: "human", writes: []string{"sudo"}, want: "sudo"},
 		{name: "an unterminated announcement", mode: "human", writes: []string{hostWarning, strings.TrimSuffix(startAnnouncement, "\n")}, want: hostWarning, started: true},
 		{name: "an unterminated diagnostic", mode: "human", writes: []string{"[FAIL] cli.usage: bad"}, want: "[FAIL] cli.usage: bad"},
 	} {
 		t.Run(c.name, c.check)
 	}
-	for _, mode := range []string{"interactive", "human", "json"} {
-		t.Run("a prompt passes at once in "+mode, func(t *testing.T) {
+	const prompt = "[sudo] password for operator: "
+	for mode, want := range map[string]string{"interactive": prompt, "human": prompt, "json": ""} {
+		t.Run("a prompt is decided at once in "+mode, func(t *testing.T) {
 			var out bytes.Buffer
 			filter := filterFor(mode, &out)
-			const prompt = "[sudo] password for operator: "
-			if _, err := filter.Write([]byte(prompt)); err != nil || out.String() != prompt {
-				t.Fatalf("forwarded %q, %v before any further write", out.String(), err)
+			if _, err := filter.Write([]byte(prompt)); err != nil || out.String() != want || len(filter.line) != 0 {
+				t.Fatalf("forwarded %q, %v with %d bytes undecided before any further write, want %q", out.String(), err, len(filter.line), want)
 			}
 		})
 	}

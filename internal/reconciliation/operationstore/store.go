@@ -139,10 +139,11 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 }
 
 // Claim creates an operation's directory, empty, before anything names or
-// fills it, so the identity is one invocation's own from then on: nothing
-// removes an operation directory, and every later claim or registration
-// allocates around it. It refuses an identity that already has a directory,
-// and refuses at the retained-operation bound exactly as a registration does.
+// fills it, so the identity is one invocation's own from then on: only a
+// reclaim removes it, while it still holds nothing, and every later claim or
+// registration allocates around it. It refuses an identity that already has a
+// directory, and refuses at the retained-operation bound exactly as a
+// registration does.
 func (s *Store) Claim(ctx context.Context, id string) error {
 	if !reconciliation.ValidOperationID(id) {
 		return recordError("lifecycle operation identity is invalid")
@@ -175,6 +176,70 @@ func (s *Store) Claimed(ctx context.Context) ([]string, error) {
 		}
 	}
 	return claimed, nil
+}
+
+// Reclaim removes every operation directory that holds nothing but the empty
+// blocks/ and logs/ a claim creates, which a fresh apply that never registered
+// leaves, as does a registration stopped before its plan landed. Children go
+// before their directory, so one reclaimed part way still holds nothing and
+// goes with the next reclaim. The index's current operation and every
+// directory holding anything else are kept, and no record is read. It returns
+// the directories it removed.
+func (s *Store) Reclaim(ctx context.Context) ([]string, error) {
+	index, err := s.Index(ctx)
+	if err != nil {
+		return nil, err
+	}
+	claimed, err := s.Claimed(ctx)
+	if err != nil {
+		return nil, err
+	}
+	reclaimed := []string{}
+	for _, id := range claimed {
+		if id == index.Current || !reconciliation.ValidOperationID(id) {
+			continue
+		}
+		children, empty, err := s.holdsNothing(ctx, id)
+		if err != nil {
+			return reclaimed, err
+		}
+		if !empty {
+			continue
+		}
+		for _, child := range children {
+			if err := s.area.RemoveDirectory(ctx, path.Join(id, child)); err != nil {
+				return reclaimed, err
+			}
+		}
+		if err := s.area.RemoveDirectory(ctx, id); err != nil {
+			return reclaimed, err
+		}
+		reclaimed = append(reclaimed, id)
+	}
+	return reclaimed, nil
+}
+
+// holdsNothing reports whether an operation directory holds at most an empty
+// blocks/ and an empty logs/, and names the ones it holds.
+func (s *Store) holdsNothing(ctx context.Context, id string) ([]string, bool, error) {
+	entries, err := s.area.Entries(ctx, id)
+	if err != nil {
+		return nil, false, err
+	}
+	for _, entry := range entries {
+		if !entry.Directory || entry.Name != "blocks" && entry.Name != "logs" {
+			return nil, false, nil
+		}
+	}
+	children := []string{}
+	for _, entry := range entries {
+		nested, err := s.area.Entries(ctx, path.Join(id, entry.Name))
+		if err != nil || len(nested) != 0 {
+			return nil, false, err
+		}
+		children = append(children, entry.Name)
+	}
+	return children, true, nil
 }
 
 // Started reports whether an operation directory lists anything under its
@@ -662,7 +727,10 @@ func (s *Store) StartResolution(ctx context.Context, id, block string, attempt i
 	return next, nil
 }
 
-func (s *Store) CompleteResolution(ctx context.Context, id, block string, attempt, resolution int, effect reconciliation.EffectState, state reconciliation.BlockState, evidence json.RawMessage) error {
+// CompleteResolution records the outcome it is given, as CompleteAttempt does,
+// so a resolution reads back what its capability proved rather than an
+// outcome the store derived from the effect.
+func (s *Store) CompleteResolution(ctx context.Context, id, block string, attempt, resolution int, outcome reconciliation.Outcome, effect reconciliation.EffectState, state reconciliation.BlockState, evidence json.RawMessage) error {
 	attemptName, err := reconciliation.FormatNumber(attempt)
 	if err != nil {
 		return err
@@ -671,15 +739,66 @@ func (s *Store) CompleteResolution(ctx context.Context, id, block string, attemp
 	if err != nil {
 		return err
 	}
-	outcome := reconciliation.OutcomeUnknown
-	switch effect {
-	case reconciliation.EffectCompleted:
-		outcome = reconciliation.OutcomeChanged
-	case reconciliation.EffectNoEffect, reconciliation.EffectPartial:
-		outcome = reconciliation.OutcomeFailed
-	}
 	target := path.Join(id, "blocks", block, "attempt-"+attemptName+"-resolution-"+name+".json")
 	return s.completeRecord(ctx, id, block, target, attempt, resolution, outcome, effect, state, evidence)
+}
+
+// LastResolution reads the last resolution allocated against one attempt and
+// reports whether there is one. Only an unproved attempt is resolved, and each
+// resolution supersedes the one before it, so the last one is the record that
+// settled its block. Only a file named as a resolution record of that attempt
+// is read, and one whose number is not canonical refuses rather than being
+// passed over.
+func (s *Store) LastResolution(ctx context.Context, id, block string, attempt int) (Attempt, bool, error) {
+	attemptName, err := reconciliation.FormatNumber(attempt)
+	if err != nil {
+		return Attempt{}, false, err
+	}
+	entries, err := s.area.Entries(ctx, path.Join(id, "blocks", block))
+	if err != nil {
+		return Attempt{}, false, err
+	}
+	prefix := "attempt-" + attemptName + "-resolution-"
+	last := 0
+	for _, entry := range entries {
+		digits, found := strings.CutPrefix(entry.Name, prefix)
+		if entry.Directory || !found {
+			continue
+		}
+		if digits, found = strings.CutSuffix(digits, ".json"); !found {
+			continue
+		}
+		number, err := reconciliation.ParseNumber(digits)
+		if err != nil {
+			return Attempt{}, false, err
+		}
+		last = max(last, number)
+	}
+	if last == 0 {
+		return Attempt{}, false, nil
+	}
+	name, err := reconciliation.FormatNumber(last)
+	if err != nil {
+		return Attempt{}, false, err
+	}
+	data, found, err := s.area.Read(ctx, path.Join(id, "blocks", block, prefix+name+".json"), MaxAttemptBytes)
+	if err != nil {
+		return Attempt{}, false, err
+	}
+	if !found {
+		return Attempt{}, false, recordError("the lifecycle resolution record is missing")
+	}
+	var record Attempt
+	if err := decode(data, MaxAttemptBytes, &record); err != nil {
+		return Attempt{}, false, err
+	}
+	if err := validateAttempt(record); err != nil {
+		return Attempt{}, false, err
+	}
+	if record.Block != block || record.Number != attempt || record.Resolution != last {
+		return Attempt{}, false, recordError("the lifecycle resolution record contradicts its location")
+	}
+	return record, true, nil
 }
 
 func (s *Store) completeRecord(ctx context.Context, id, block, target string, number, resolution int, outcome reconciliation.Outcome, effect reconciliation.EffectState, state reconciliation.BlockState, evidence json.RawMessage) error {

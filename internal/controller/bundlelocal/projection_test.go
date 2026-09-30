@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io"
 	"io/fs"
 	"maps"
 	"slices"
@@ -162,6 +163,26 @@ func (a *memoryArea) Read(ctx context.Context, name string, limit int) ([]byte, 
 		return nil, errors.New("read limit exceeded")
 	}
 	return slices.Clone(file.data), nil
+}
+func (a *memoryArea) Stream(ctx context.Context, name string, maximum int64, consume func(prerequisites.BundleReader) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	file, found := a.files[name]
+	if !found {
+		return fs.ErrNotExist
+	}
+	if int64(len(file.data)) > maximum {
+		return errors.New("stream limit exceeded")
+	}
+	reader := bytes.NewReader(file.data)
+	if err := consume(struct{ io.Reader }{reader}); err != nil {
+		return err
+	}
+	if reader.Len() != 0 {
+		return errors.New("stream was not read whole")
+	}
+	return nil
 }
 func (a *memoryArea) Write(ctx context.Context, name string, data []byte, executable bool) error {
 	if err := ctx.Err(); err != nil {

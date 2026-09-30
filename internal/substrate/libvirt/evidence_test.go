@@ -276,6 +276,16 @@ func TestEvidenceIsBoundedAndStrictlyShaped(t *testing.T) {
 			}
 		})
 	}
+	host := encode(t, HostEvidence{Absent: true, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true})
+	machine := encode(t, MachineEvidence{Absent: true, Answered: true, Listener: observed(false), Postcondition: true, Request: "digest"})
+	for _, closer := range []string{"}", "]"} {
+		if err := ValidateHostAbsence([]byte(string(host)+closer), "digest"); err == nil {
+			t.Errorf("host evidence followed by %s was accepted", closer)
+		}
+		if err := ValidateMachineAbsence([]byte(string(machine)+closer), "digest"); err == nil {
+			t.Errorf("machine evidence followed by %s was accepted", closer)
+		}
+	}
 	oversized := make([]byte, maxEvidenceBytes+1)
 	for index := range oversized {
 		oversized[index] = ' '

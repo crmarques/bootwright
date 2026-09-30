@@ -148,6 +148,11 @@ func TestReadingEvidenceMustAnswerTheExactSurvey(t *testing.T) {
 			}
 		})
 	}
+	for _, closer := range []string{"}", "]"} {
+		if _, err := validateReading([]byte(string(encodeReading(t, answered))+closer), survey, "digest"); err == nil {
+			t.Errorf("evidence followed by %s was accepted", closer)
+		}
+	}
 }
 
 // One reading opens the runtime once, runs once per host, and reports what

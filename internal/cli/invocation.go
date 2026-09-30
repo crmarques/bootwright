@@ -71,7 +71,7 @@ func contextFreeAcquisition(path string, flags *pflag.FlagSet) bool {
 // Failure preserves the already-established output contract for errors at the
 // privilege boundary, before application dispatch becomes possible.
 func (c InvocationClass) Failure(out, errOut io.Writer, code, message string, exitCode int) int {
-	if writeFailure(out, errOut, c.Command, code, message, exitCode, c.JSON) != nil {
+	if writeFailure(out, errOut, c.Command, code, message, exitCode, c.JSON, nil) != nil {
 		return 1
 	}
 	return exitCode
@@ -80,7 +80,7 @@ func (c InvocationClass) Failure(out, errOut io.Writer, code, message string, ex
 // Diagnostic reports a boundary refusal that already carries its own code and
 // operator action, so the remediation survives the same output contract.
 func (c InvocationClass) Diagnostic(out, errOut io.Writer, reported diagnostics.Diagnostic, exitCode int) int {
-	if writeDiagnostics(out, errOut, c.Command, []diagnostic{reported}, exitCode, c.JSON) != nil {
+	if writeDiagnostics(out, errOut, c.Command, []diagnostic{reported}, exitCode, c.JSON, nil) != nil {
 		return 1
 	}
 	return exitCode

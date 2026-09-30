@@ -93,9 +93,9 @@ func ProvedIdentity(data []byte) (machineref.HardwareIdentity, error) {
 }
 
 // PinnedIdentity is the identity the context's current apply proved for one
-// Machine: the evidence of its done bare-metal block. A block resolved by
-// observation recorded no evidence of its own attempt, and a Machine this
-// capability never proved has no such block, so either pins nothing.
+// Machine: the evidence of its done bare-metal block, recorded by the attempt
+// or the resolution that proved it. A done block that carries no evidence,
+// and a Machine this capability never proved, pin nothing.
 func PinnedIdentity(machine string, blocks []lifecycle.BlockEvidence) (machineref.HardwareIdentity, bool, error) {
 	for _, block := range blocks {
 		if block.Implementation != Implementation || block.Verb != reconciliation.Apply || block.State != reconciliation.BlockDone {
@@ -135,7 +135,7 @@ func decodeStrict(data []byte) (Evidence, error) {
 	if err := decoder.Decode(&evidence); err != nil {
 		return Evidence{}, refusal("lifecycle.state", "the machine adapter returned malformed evidence", "")
 	}
-	if decoder.More() {
+	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
 		return Evidence{}, refusal("lifecycle.state", "the machine adapter returned trailing evidence", "")
 	}
 	return evidence, nil

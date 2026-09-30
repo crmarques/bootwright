@@ -128,6 +128,34 @@ func TestOperationResultLeadsWithItsOutcomeAndNamesItsLog(t *testing.T) {
 	}
 }
 
+// The headline state, a block description and the log directory read in the
+// result exactly as the receipt below it escapes them, once.
+func TestOperationResultTextEscapesOnce(t *testing.T) {
+	raw := func(label string) string { return label + `\x` }
+	shown := func(label string) string { return label + `\\x` }
+	result := &lifecycle.OperationResult{
+		Context: lifecycle.ContextIdentity{Name: "lab"}, Verb: "apply",
+		Blocks:      []lifecycle.BlockResult{{ID: "artifact-server-lab", Description: raw("description"), State: "done"}},
+		LogLocation: raw("location"),
+		Receipt:     lifecycle.Receipt{Operation: raw("operation"), Verb: "apply", State: raw("state"), Next: raw("next")},
+	}
+	var out bytes.Buffer
+	if err := writeLifecycleOperation(&out, result); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), `\\\\`) {
+		t.Fatalf("operation text escaped a value twice: %q", out.String())
+	}
+	for _, want := range []string{
+		"[FAIL] Apply " + shown("state") + "\n", "  [DONE]  " + shown("description") + "\n",
+		"  Logs  " + shown("location") + "\n", "\nstate: " + shown("state") + "\n",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("operation text = %q, missing %q", out.String(), want)
+		}
+	}
+}
+
 // A settled result lists blocks an earlier operation completed, so it says so
 // rather than leaving them to read as work this invocation performed.
 func TestSettledOperationSaysItDidNothing(t *testing.T) {

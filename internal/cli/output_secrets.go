@@ -266,23 +266,22 @@ func writeEncryptionMutation(out io.Writer, path string, result *encryption.Muta
 }
 
 func writeEncryptionStatus(out io.Writer, command string, result *encryption.StatusResult, jsonMode bool) error {
-	presentation := displayEncryptionStatus(result)
 	if jsonMode {
 		encoder := json.NewEncoder(out)
 		encoder.SetEscapeHTML(false)
-		return encoder.Encode(commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0, Result: presentation, Diagnostics: []diagnostic{}, Logs: []string{}})
+		return encoder.Encode(commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0, Result: displayEncryptionStatus(result), Diagnostics: []diagnostic{}, Logs: []string{}})
 	}
 	var text display
 	text.headline("", "Secret encryption")
 	text.section("")
-	status := []field{{Label: "Initialized", Value: strconv.FormatBool(presentation.Initialized)}}
-	if presentation.Implementation == nil {
+	status := []field{{Label: "Initialized", Value: strconv.FormatBool(result.Initialized)}}
+	if result.Implementation == nil {
 		status = append(status, field{Label: "Implementation", Value: "-"}, field{Label: "Active key", Value: "-"})
 	} else {
-		implementation := presentation.Implementation
+		implementation := result.Implementation
 		activeKey := "-"
-		if presentation.ActiveKey != nil {
-			activeKey = *presentation.ActiveKey
+		if result.ActiveKey != nil {
+			activeKey = *result.ActiveKey
 		}
 		status = append(status,
 			field{Label: "Implementation", Value: implementation.Type},
@@ -294,24 +293,34 @@ func writeEncryptionStatus(out io.Writer, command string, result *encryption.Sta
 	}
 	text.fields(status...)
 	text.section("Keys")
-	if len(presentation.Keys) == 0 {
+	if len(result.Keys) == 0 {
 		text.lines([]string{"none"})
 	} else {
-		rows := make([][]string, 0, len(presentation.Keys))
-		for _, key := range presentation.Keys {
+		rows := make([][]string, 0, len(result.Keys))
+		for _, key := range sortedEncryptionKeys(result.Keys) {
 			rows = append(rows, []string{key.ID, key.State, strconv.FormatUint(key.Seals, 10)})
 		}
 		text.rows(rows)
 	}
 	text.section("Items")
 	text.fields(
-		field{Label: "Current versions", Value: strconv.Itoa(presentation.Items.CurrentVersions)},
-		field{Label: "Bound versions", Value: strconv.Itoa(presentation.Items.BoundVersions)},
-		field{Label: "Material parts", Value: strconv.Itoa(presentation.Items.MaterialParts)},
-		field{Label: "Retained artifacts", Value: strconv.Itoa(presentation.Items.RetainedArtifacts)},
-		field{Label: "Cleanup required", Value: strconv.FormatBool(presentation.Items.CleanupRequired)},
+		field{Label: "Current versions", Value: strconv.Itoa(result.Items.CurrentVersions)},
+		field{Label: "Bound versions", Value: strconv.Itoa(result.Items.BoundVersions)},
+		field{Label: "Material parts", Value: strconv.Itoa(result.Items.MaterialParts)},
+		field{Label: "Retained artifacts", Value: strconv.Itoa(result.Items.RetainedArtifacts)},
+		field{Label: "Cleanup required", Value: strconv.FormatBool(result.Items.CleanupRequired)},
 	)
 	return text.writeTo(out)
+}
+
+// sortedEncryptionKeys orders keys by the identifier a reader is shown, so
+// text lists them in the order JSON does.
+func sortedEncryptionKeys(keys []secretstore.Key) []secretstore.Key {
+	keys = slices.Clone(keys)
+	slices.SortStableFunc(keys, func(a, b secretstore.Key) int {
+		return strings.Compare(escapeDisplayLine(a.ID), escapeDisplayLine(b.ID))
+	})
+	return keys
 }
 
 type secretCheckResult struct {
@@ -391,10 +400,14 @@ func displaySecretContext(value secretstore.Context) resultContext {
 }
 
 func displaySecretParts(parts []secrets.Part) string {
-	values := displaySecretPartValues(parts)
-	if len(values) == 0 {
+	if len(parts) == 0 {
 		return "-"
 	}
+	values := make([]string, len(parts))
+	for i, part := range parts {
+		values[i] = string(part)
+	}
+	slices.Sort(values)
 	return strings.Join(values, ",")
 }
 
@@ -475,10 +488,9 @@ func displayEncryptionStatus(result *encryption.StatusResult) *encryptionStatusR
 		implementation := result.Implementation
 		out.Implementation = &implementationStatus{Type: escapeDisplayLine(implementation.Type), Store: displayComponent(implementation.Store), KeyCustody: displayComponent(implementation.KeyCustody), State: escapeDisplayLine(implementation.State)}
 	}
-	for i, key := range result.Keys {
+	for i, key := range sortedEncryptionKeys(result.Keys) {
 		out.Keys[i] = encryptionKey{ID: escapeDisplayLine(key.ID), State: escapeDisplayLine(key.State), Seals: key.Seals}
 	}
-	slices.SortStableFunc(out.Keys, func(a, b encryptionKey) int { return strings.Compare(a.ID, b.ID) })
 	return out
 }
 

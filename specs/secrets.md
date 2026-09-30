@@ -134,11 +134,15 @@ the [collection rule](state-reconciliation.md#context-mutation-evidence): after
 the context's next fresh registration, a removal's finalization, or a destroy's
 release of what the interrupted registration left, and only when read before
 that invocation began and never kept by it. Beside a context at rest, with
-pristine evidence and no reservation, it waits for the next registration. A
+pristine evidence and no reservation, the destroy that
+[settles](state-reconciliation.md#lifecycle-unit) there releases it. A
 consumer may list a context's binding identities for this; the listing unlocks
 nothing, reveals no material or version, and a store never initialized lists
-none. A bounded consumer's transient binding read in such a listing before it
-was reopened may be released with them, and that consumer then fails without
+none. A binding names no consumer, so a bounded consumer's transient binding
+read in such a listing before it was reopened may be released with them. A
+bounded consumer whose reopen fails while its binding is no longer listed binds
+again, at most three bindings in all, and releases each it made; one whose
+binding is still listed, or whose listing fails, reports the failure without
 reading any material. Binding and release occur outside the lifecycle
 operation's own store transaction, because acquisition holds the same store
 lock.

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "machine stop",
+  "ok": false,
+  "exitCode": 1,
+  "result": null,
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "lifecycle.state",
+      "message": "the adapter operation did not complete",
+      "remediation": "read the adapter output retained beside this attempt's log"
+    }
+  ],
+  "logs": [
+    "run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9a/run.output"
+  ]
+}

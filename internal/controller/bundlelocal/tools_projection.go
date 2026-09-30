@@ -2,11 +2,12 @@ package bundlelocal
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"hash"
 	"io"
 	"path"
 	"slices"
@@ -17,29 +18,67 @@ import (
 
 const maxToolExpandedBytes int64 = 2 << 30
 
-func approvedToolBytes(source prerequisites.DependencySource, data []byte) bool {
-	if source.Bytes <= 0 || source.Bytes > maxToolSourceBytes || int64(len(data)) != source.Bytes {
-		return false
-	}
-	digest := sha256.Sum256(data)
-	return hex.EncodeToString(digest[:]) == source.SHA256
+type streamedFile struct {
+	sha256     string
+	size       int64
+	executable bool
 }
 
-// projectTool is a read-only integrity calculation. The Ansible dependency role
-// alone publishes tool payloads. No archive entry obtains filesystem authority.
-func projectTool(ctx context.Context, tool prerequisites.ToolDefinition, data []byte) (map[string]projectedFile, error) {
-	if !approvedToolBytes(tool.Source, data) {
-		return nil, bundleFailure("retained target source differs from its approved size and checksum")
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r contextReader) Read(data []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
 	}
+	return r.reader.Read(data)
+}
+
+type digestReader struct {
+	reader io.Reader
+	digest hash.Hash
+	read   int64
+}
+
+func (r *digestReader) Read(data []byte) (int, error) {
+	n, err := r.reader.Read(data)
+	r.digest.Write(data[:n])
+	r.read += int64(n)
+	return n, err
+}
+
+// projectTool is a read-only integrity calculation over a retained source
+// streamed once. Neither the source nor a member is held whole: each selected
+// member is reduced to its digest as it streams. The Ansible dependency role
+// alone publishes tool payloads. No archive entry obtains filesystem authority.
+func projectTool(ctx context.Context, tool prerequisites.ToolDefinition, source io.Reader) (map[string]streamedFile, error) {
 	if err := validateFrozenTool(tool); err != nil {
 		return nil, err
 	}
-	result := map[string]projectedFile{}
-	if tool.Archive == "binary" {
-		result[tool.Files[0].Path] = projectedFile{data: data, executable: true}
-		return result, ctx.Err()
+	if tool.Source.Bytes <= 0 || tool.Source.Bytes > maxToolSourceBytes {
+		return nil, bundleFailure("retained target source differs from its approved size and checksum")
 	}
-	compressed, err := gzip.NewReader(bytes.NewReader(data))
+	retained := &digestReader{reader: contextReader{ctx: ctx, reader: io.LimitReader(source, tool.Source.Bytes+1)}, digest: sha256.New()}
+	result, projected := projectMembers(ctx, tool, retained)
+	if errors.Is(projected, context.Canceled) || errors.Is(projected, context.DeadlineExceeded) {
+		return nil, projected
+	}
+	if _, err := io.Copy(io.Discard, retained); err != nil {
+		return nil, err
+	}
+	if retained.read != tool.Source.Bytes || hex.EncodeToString(retained.digest.Sum(nil)) != tool.Source.SHA256 {
+		return nil, bundleFailure("retained target source differs from its approved size and checksum")
+	}
+	return result, projected
+}
+
+func projectMembers(ctx context.Context, tool prerequisites.ToolDefinition, source io.Reader) (map[string]streamedFile, error) {
+	if tool.Archive == "binary" {
+		return map[string]streamedFile{tool.Files[0].Path: {sha256: tool.Source.SHA256, size: tool.Source.Bytes, executable: true}}, nil
+	}
+	compressed, err := gzip.NewReader(source)
 	if err != nil {
 		return nil, bundleFailure("retained target archive cannot be decoded")
 	}
@@ -50,7 +89,7 @@ func projectTool(ctx context.Context, tool prerequisites.ToolDefinition, data []
 	for _, file := range tool.Files {
 		selected[file.Member] = true
 	}
-	regular := map[string][]byte{}
+	regular := map[string]streamedFile{}
 	links := map[string]string{}
 	seen := map[string]bool{}
 	var expanded int64
@@ -86,11 +125,11 @@ func projectTool(ctx context.Context, tool prerequisites.ToolDefinition, data []
 			if !selected[name] {
 				continue
 			}
-			content, err := io.ReadAll(io.LimitReader(reader, header.Size+1))
-			if err != nil || int64(len(content)) != header.Size || len(content) == 0 || header.Mode&0111 == 0 {
-				return nil, bundleFailure("selected target executable is incomplete or lacks executable mode")
+			member, err := streamMember(ctx, reader, header)
+			if err != nil {
+				return nil, err
 			}
-			regular[name] = content
+			regular[name] = member
 		case tar.TypeSymlink, tar.TypeLink:
 			target := header.Linkname
 			if header.Typeflag == tar.TypeSymlink {
@@ -104,6 +143,25 @@ func projectTool(ctx context.Context, tool prerequisites.ToolDefinition, data []
 			return nil, bundleFailure("target archive contains an unsupported member type")
 		}
 	}
+	return resolveMembers(tool, regular, links)
+}
+
+func streamMember(ctx context.Context, reader io.Reader, header *tar.Header) (streamedFile, error) {
+	member := &digestReader{reader: contextReader{ctx: ctx, reader: io.LimitReader(reader, header.Size+1)}, digest: sha256.New()}
+	if _, err := io.Copy(io.Discard, member); err != nil {
+		if ctx.Err() != nil {
+			return streamedFile{}, ctx.Err()
+		}
+		return streamedFile{}, bundleFailure("selected target executable is incomplete or lacks executable mode")
+	}
+	if member.read != header.Size || member.read == 0 || header.Mode&0111 == 0 {
+		return streamedFile{}, bundleFailure("selected target executable is incomplete or lacks executable mode")
+	}
+	return streamedFile{sha256: hex.EncodeToString(member.digest.Sum(nil)), size: member.read, executable: true}, nil
+}
+
+func resolveMembers(tool prerequisites.ToolDefinition, regular map[string]streamedFile, links map[string]string) (map[string]streamedFile, error) {
+	result := map[string]streamedFile{}
 	for _, file := range tool.Files {
 		member := file.Member
 		for depth := 0; links[member] != ""; depth++ {
@@ -116,7 +174,7 @@ func projectTool(ctx context.Context, tool prerequisites.ToolDefinition, data []
 		if !found {
 			return nil, bundleFailure("target archive omits a required executable member")
 		}
-		result[file.Path] = projectedFile{data: content, executable: true}
+		result[file.Path] = content
 	}
 	return result, nil
 }

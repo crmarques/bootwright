@@ -81,7 +81,7 @@ func HostKeyEvidence(data []byte) (address, hostKey string, err error) {
 	var evidence Evidence
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&evidence); err != nil || decoder.More() {
+	if err := decoder.Decode(&evidence); err != nil || len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
 		return "", "", refusal("lifecycle.state", "the installation evidence could not be decoded", "")
 	}
 	if evidence.Absent || evidence.HostKey == "" || evidence.Address == "" {
@@ -192,7 +192,7 @@ func decodeEvidence(data []byte, digest string) (Evidence, error) {
 	if err := decoder.Decode(&evidence); err != nil {
 		return Evidence{}, refusal("lifecycle.state", "the installation adapter returned malformed evidence", "")
 	}
-	if decoder.More() {
+	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
 		return Evidence{}, refusal("lifecycle.state", "the installation adapter returned trailing evidence", "")
 	}
 	if evidence.Request != digest {

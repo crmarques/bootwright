@@ -96,11 +96,15 @@ type basis struct {
 	// destroy of a context holding no operation decided to release.
 	evidence []byte
 	// claimed is the operation directory a fresh apply claimed, and claims the
-	// number of operation directories right after that claim. Nothing removes
-	// one, so a larger number proves another claim since, even under evidence
-	// that reads the same bytes again.
+	// operation directories right after that claim. A reclaim removes one only
+	// while the evidence reads pristine, or once a registration moved the
+	// index, which refuses this apply on its own, so a claim that raised the
+	// evidence again after a release lowered it is still listed, even under
+	// evidence that reads the same bytes again. The set is compared rather
+	// than its size, because a reclaim of an older claim and that newer claim
+	// leave the same number.
 	claimed string
-	claims  int
+	claims  []string
 }
 
 // describe names the operation a basis holds and that operation's state, in
@@ -124,6 +128,12 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	name, err := s.resolve(ctx, contextName)
 	if err != nil {
 		return nil, err
+	}
+	// A destroy lists the context's bindings before it decides, so one that
+	// settles releases only what existed before it read pristine evidence.
+	var stranded []string
+	if verb == reconciliation.Destroy {
+		stranded = s.held(ctx, name)
 	}
 	decided, identity, err := s.decideShared(ctx, name, verb, selection)
 	if err != nil {
@@ -153,7 +163,18 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	// no consequence to acknowledge and nothing a habitual token could
 	// pre-authorize, and repeating a completed verb stays safe. A finalization
 	// this invocation completed first is the only thing it did, and it says so.
+	//
+	// A destroy settles only over pristine evidence and no reservation, where
+	// no operation names a binding, so every binding it listed before it read
+	// that evidence is stranded and released, still without a transaction. An
+	// apply in flight that bound one of them raised the evidence before it
+	// bound, so a release lowered it since and that apply refuses at its
+	// re-proof rather than register the binding. A removal's finalization this
+	// invocation completed already collected what it listed after this one.
 	if decided.noop {
+		if verb == reconciliation.Destroy && !finalized {
+			s.collect(ctx, name, stranded, nil)
+		}
 		recovered := ""
 		if finalized {
 			recovered = RecoveredFinalization
@@ -238,6 +259,11 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 		if verb == reconciliation.Destroy {
 			return unclaimed(ctx, view, store)
 		}
+		// A lost index reads as no operation, and an apply registered over it
+		// would leave the effects its records name to nothing.
+		if err := refuseUnindexed(ctx, view, store); err != nil {
+			return transition{}, err
+		}
 		return s.freshApply(ctx, view, selection)
 	}
 	operation, err := store.ReadOperation(ctx, index.Current)
@@ -271,6 +297,9 @@ func (s Service) decideOver(ctx context.Context, view View, store OperationStore
 				"an incomplete "+string(operation.Verb)+" must be continued before another operation",
 				"run "+string(operation.Verb)+" to continue it")
 		}
+		if err := refuseUncontinuable(ctx, store, operation, frozen, states); err != nil {
+			return transition{}, err
+		}
 		if verb == reconciliation.Apply {
 			if err := refuseStageBoundary(frozen, states, selection); err != nil {
 				return transition{}, err
@@ -300,6 +329,11 @@ func (s Service) decideOver(ctx context.Context, view View, store OperationStore
 			return transition{}, err
 		}
 		return plannedFrom(decided, operation, states, attempts), nil
+	}
+	if unfinished := unfinishedBlocks(frozen, states); len(unfinished) != 0 {
+		return transition{}, failure("lifecycle.state",
+			"the completed destroy "+operation.ID+" records no block completion for these blocks, so nothing proves their effects removed: "+strings.Join(unfinished, ", "),
+			"review its durable state with bootwright status")
 	}
 	if verb == reconciliation.Destroy {
 		return transition{noop: true, verb: verb, operation: operation, plan: frozen, states: states}, nil
@@ -483,7 +517,8 @@ func supersedable(operation operationstore.Operation) bool {
 // owns no effect. An apply registers before its first block starts, so one that
 // stopped before starting any is still running or paused. A completed apply's
 // blocks are all done, a failed or unknown apply holds the block that made it
-// so, and a failed removal holds the block that failed.
+// so, and a failed removal whose blocks are all done is finalized before any
+// decision reaches here.
 func mayHaveStartedNothing(operation operationstore.Operation) bool {
 	return operation.Verb == reconciliation.Apply &&
 		(operation.State == reconciliation.OperationRunning || operation.State == reconciliation.OperationPaused)
@@ -497,7 +532,7 @@ func (s Service) supersede(ctx context.Context, view View, store OperationStore,
 		// freshDestroy first, whatever else the records say.
 		owned, startedNothing := reconciliation.OwnedSubset(frozen, states), mayHaveStartedNothing(operation)
 		if len(owned.Blocks) != 0 || startedNothing {
-			if err := refuseContradictions(ctx, store, operation, frozen, states); err != nil {
+			if err := refuseContradictions(ctx, store, operation, frozen, states, attempts); err != nil {
 				return transition{}, err
 			}
 		}
@@ -747,9 +782,11 @@ func (s Service) execute(ctx context.Context, name string, decided transition) (
 		// The state a completed removal's record left is captured here, after
 		// finish wrote it, because the pristine publication re-proves exactly
 		// that once the releases are done. What it gives back is what its
-		// transition releases and the binding this invocation reopened.
+		// transition releases and the binding this invocation reopened. A
+		// removal whose record reads done owes both even once the invocation
+		// is interrupted, so they run under the recording boundary.
 		if completedRemoval(decided, result) {
-			completion, unreleased = captureRemoval(ctx, s.store(tx), result.Receipt.Operation, joinBindings(slices.Clone(decided.release), binding))
+			completion, unreleased = captureRemoval(recordingContext(ctx), s.store(tx), result.Receipt.Operation, joinBindings(slices.Clone(decided.release), binding))
 		}
 		return err
 	})
@@ -768,7 +805,7 @@ func (s Service) execute(ctx context.Context, name string, decided transition) (
 	// receipt stays done whether or not everything it owned was given back.
 	if completedRemoval(decided, result) {
 		if unreleased == nil {
-			unreleased = s.completeRemoval(ctx, name, completion)
+			unreleased = s.completeRemoval(recordingContext(ctx), name, completion)
 		}
 		if unreleased != nil {
 			err, collect = withCause(err, incompleteRemoval(unreleased)), false
@@ -1053,7 +1090,7 @@ func contextChanged(verb reconciliation.Verb, planned, current basis) error {
 		message += " with different input content"
 	case !bytes.Equal(current.evidence, planned.evidence):
 		message += " with different mutation evidence"
-	case current.claims != planned.claims:
+	case !slices.Equal(current.claims, planned.claims):
 		message += " with an operation claimed since it was read"
 	}
 	return failure("lifecycle.state", message, "repeat bootwright "+string(verb)+" to plan from what the context holds now")
@@ -1343,12 +1380,12 @@ func (s Service) resume(ctx context.Context, tx Transaction, store OperationStor
 
 // reprove holds a fresh apply's registering transaction to what its
 // protecting transaction left: the same basis and input, the running evidence
-// it raised, and no operation directory claimed since its own. Evidence bytes
-// are no token, since a release that lowered them and a later claim that
-// raised them again leave the same bytes, so the claim count is proved too. A
-// fresh apply is then where a context claims its controller host. Binding
-// precedes every reservation and effect, so an operation never leaves work
-// behind on a host the context is not recorded against.
+// it raised, and exactly the operation directories it listed after its own
+// claim. Evidence bytes are no token, since a release that lowered them and a
+// later claim that raised them again leave the same bytes, so the directories
+// are proved too. A fresh apply is then where a context claims its controller
+// host. Binding precedes every reservation and effect, so an operation never
+// leaves work behind on a host the context is not recorded against.
 func (s Service) reprove(ctx context.Context, tx Transaction, store OperationStore, decided transition) error {
 	previous, err := s.verifyFreshApply(ctx, tx, store, decided)
 	if err != nil {
@@ -1359,8 +1396,8 @@ func (s Service) reprove(ctx context.Context, tx Transaction, store OperationSto
 		return err
 	}
 	current := decided.basis
-	current.evidence, current.claims = tx.Evidence(), len(claimed)
-	if !bytes.Equal(current.evidence, decided.basis.evidence) || current.claims != decided.basis.claims {
+	current.evidence, current.claims = tx.Evidence(), claimed
+	if !bytes.Equal(current.evidence, decided.basis.evidence) || !slices.Equal(current.claims, decided.basis.claims) {
 		return contextChanged(decided.verb, decided.basis, current)
 	}
 	// A completed removal that latched a log fault blocks the next apply

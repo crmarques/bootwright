@@ -126,6 +126,20 @@ type BundleArea interface {
 	Location(context.Context) (BundleLocation, error)
 }
 
+// BundleStream is how a bundle area that holds target tools lets inspection
+// prove a source or member far larger than memory should hold. consume reads
+// the file at path, no larger than maximum bytes, chunk by chunk; the stream
+// fails unless consume read it whole and the file kept its identity.
+type BundleStream interface {
+	Stream(ctx context.Context, path string, maximum int64, consume func(BundleReader) error) error
+}
+
+// BundleReader is one bundle file's stream. Its shape is declared here rather
+// than imported, as RunOutput's is.
+type BundleReader interface {
+	Read([]byte) (int, error)
+}
+
 // PlanPresenter opens the result with its scope before inspection streams the
 // host checks, and presents the plan before confirmation.
 type PlanPresenter interface {

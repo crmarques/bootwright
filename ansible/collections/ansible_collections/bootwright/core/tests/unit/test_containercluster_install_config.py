@@ -1,0 +1,93 @@
+"""The install configuration reaches the installer with every value it froze.
+
+The media request freezes the cluster's install configuration (installConfig in
+internal/containercluster/agentinstall/projection.go), and the attempt
+substitutes the pull secret and the cluster key into it. The installer reads
+install-config.yaml with sigs.k8s.io/yaml, whose YAML 1.1 resolver reads a plain
+1e3, 0o17 or 08 as a number and a plain y or n as a boolean and hands the
+installer different text, while to_nice_yaml leaves exactly those scalars plain
+(.agents/knowledge/installer-input-yaml-scalars.md). This check renders the real
+task over cluster names that are such scalars, requires that no string is
+written plain, and reads every value back.
+
+Rendering the role's task file needs Ansible's controller (DataLoader and
+Templar), which ansible-test does not offer to unit tests under
+tests/unit/plugins.
+"""
+
+from __future__ import annotations
+
+import json
+import pathlib
+
+import pytest
+import yaml
+from ansible.parsing.dataloader import DataLoader
+from ansible.template import Templar
+
+MEDIA = pathlib.Path(__file__).resolve().parents[2] / "roles" / "containercluster_media_agent"
+LOADER = DataLoader()
+STRING = "tag:yaml.org,2002:str"
+
+# Each a cluster name the installer's YAML 1.1 reader takes for a number or a
+# boolean when it is written plain.
+READ_AS_ANOTHER_TYPE = ["1e3", "1E+3", "5E2", "12E45", "0o17", "08", "09876", "0987654321", "y", "Y", "n", "N"]
+
+PULL_SECRET = '{"auths": {"registry.example.test": {"auth": "Ym9vdHdyaWdodDpwcm9iZQ=="}}}'
+SSH_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPbootwrightprobekey0000000000000000000000 core"
+
+
+def install_config(name):
+    """A single-node install configuration as the media request freezes it."""
+    return {
+        "apiVersion": "v1",
+        "baseDomain": "lab.example.test",
+        "compute": [{"name": "worker", "replicas": 0}],
+        "controlPlane": {"name": "master", "replicas": 1},
+        "metadata": {"name": name},
+        "networking": {
+            "clusterNetwork": [{"cidr": "10.128.0.0/14", "hostPrefix": 23}],
+            "machineNetwork": [{"cidr": "198.51.100.0/24"}],
+            "serviceNetwork": ["172.30.0.0/16"],
+        },
+        "platform": {"none": {}},
+        "pullSecret": "",
+        "sshKey": "",
+    }
+
+
+def walk(tasks):
+    for task in tasks:
+        yield task
+        for section in ("block", "rescue", "always"):
+            yield from walk([child for child in task.get(section) or [] if isinstance(child, dict)])
+
+
+def render(config, pull_secret):
+    loaded = LOADER.load_from_file(str(MEDIA / "tasks" / "build.yml"), trusted_as_template=True)
+    written = [task for task in walk([task for task in loaded if isinstance(task, dict)])
+               if task.get("name") == "Write the install configuration with its bound material"]
+    assert len(written) == 1, "build.yml has %d tasks writing the install configuration" % len(written)
+    templar = Templar(loader=LOADER, variables={
+        "bootwright_cluster_media_request": {"installConfig": config},
+        "bootwright_cluster_media_material": {"pullSecret": str(pull_secret), "sshKey": SSH_KEY},
+    })
+    return templar.template(written[0]["ansible.builtin.copy"]["content"])
+
+
+def plain_strings(node):
+    """Every string the document writes as a plain scalar."""
+    if isinstance(node, yaml.ScalarNode):
+        return [node.value] if node.style is None and node.tag == STRING else []
+    if isinstance(node, yaml.MappingNode):
+        return [value for pair in node.value for child in pair for value in plain_strings(child)]
+    return [value for child in node.value for value in plain_strings(child)]
+
+
+@pytest.mark.parametrize("name", READ_AS_ANOTHER_TYPE)
+def test_the_install_configuration_is_written_with_every_value_typed(tmp_path, name):
+    pull_secret = tmp_path / "pull-secret"
+    pull_secret.write_text(PULL_SECRET + "\n")
+    rendered = render(install_config(name), pull_secret)
+    assert plain_strings(yaml.compose(rendered)) == [], rendered
+    assert json.loads(rendered) == dict(install_config(name), pullSecret=PULL_SECRET, sshKey=SSH_KEY)

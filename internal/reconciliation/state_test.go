@@ -55,6 +55,33 @@ func TestResolutionTransitionFollowsTheEvidenceTable(t *testing.T) {
 	}
 }
 
+// A resolution records the outcome its capability proved for a completed
+// effect, never one it invents: a proof that changed nothing reads back
+// unchanged, and only a completion whose outcome nothing proved reads changed.
+func TestResolutionOutcomeRecordsWhatTheCapabilityProved(t *testing.T) {
+	for name, tc := range map[string]struct {
+		resolved EffectState
+		proved   Outcome
+		want     Outcome
+	}{
+		"completed unchanged":      {EffectCompleted, OutcomeUnchanged, OutcomeUnchanged},
+		"completed changed":        {EffectCompleted, OutcomeChanged, OutcomeChanged},
+		"completed unproved":       {EffectCompleted, "", OutcomeChanged},
+		"completed as failed":      {EffectCompleted, OutcomeFailed, OutcomeChanged},
+		"completed as unknown":     {EffectCompleted, OutcomeUnknown, OutcomeChanged},
+		"no effect":                {EffectNoEffect, OutcomeUnchanged, OutcomeFailed},
+		"partial":                  {EffectPartial, OutcomeChanged, OutcomeFailed},
+		"unknown":                  {EffectUnknown, OutcomeUnchanged, OutcomeUnknown},
+		"an unrecognized evidence": {"half", OutcomeChanged, OutcomeUnknown},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := ResolutionOutcome(tc.resolved, tc.proved); got != tc.want {
+				t.Fatalf("ResolutionOutcome(%s, %q) = %s, want %s", tc.resolved, tc.proved, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestNextOperationStateLetsUnknownDominate(t *testing.T) {
 	for name, tc := range map[string]struct {
 		states   []BlockState

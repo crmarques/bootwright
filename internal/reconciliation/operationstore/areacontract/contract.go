@@ -30,6 +30,7 @@ func Verify(t *testing.T, within Within) {
 		{"expectation requires the exact bytes", expectationRequiresTheExactBytes},
 		{"append creates then extends in order", appendCreatesThenExtendsInOrder},
 		{"entries list each name once in order", entriesListEachNameOnceInOrder},
+		{"a removal takes only an empty directory", removalTakesOnlyAnEmptyDirectory},
 		{"read refuses a record beyond its maximum", readRefusesARecordBeyondItsMaximum},
 		{"sync names a directory never a record", syncNamesADirectoryNeverARecord},
 		{"records and directories never share a path", recordsAndDirectoriesNeverShareAPath},
@@ -119,6 +120,24 @@ func entriesListEachNameOnceInOrder(t *testing.T, area operationstore.Area) {
 	lists(t, area, "d")
 	lists(t, area, "absent")
 	lists(t, area, "absent/deeper")
+}
+
+func removalTakesOnlyAnEmptyDirectory(t *testing.T, area operationstore.Area) {
+	ctx := context.Background()
+	succeeds(t, area.EnsureDirectory(ctx, "d/e"), "a nested directory")
+	succeeds(t, area.WriteExclusive(ctx, "p/f.json", []byte("nested\n")), "a nested record")
+	for _, refused := range []string{"", "d", "p", "p/f.json"} {
+		if err := area.RemoveDirectory(ctx, refused); err == nil {
+			t.Fatalf("a removal of %q succeeded", refused)
+		}
+	}
+	holds(t, area, "p/f.json", "nested\n")
+	succeeds(t, area.RemoveDirectory(ctx, "d/e"), "a removal of an empty directory")
+	lists(t, area, "d")
+	succeeds(t, area.RemoveDirectory(ctx, "d/e"), "a removal of an absent directory")
+	succeeds(t, area.RemoveDirectory(ctx, "d"), "a removal of an emptied directory")
+	succeeds(t, area.RemoveDirectory(ctx, "absent/deeper"), "a removal beneath an absent directory")
+	lists(t, area, "", operationstore.Entry{Name: "p", Directory: true})
 }
 
 func readRefusesARecordBeyondItsMaximum(t *testing.T, area operationstore.Area) {
@@ -241,6 +260,7 @@ func directoryCalls(ctx context.Context, area operationstore.Area, target string
 		{"Entries", entries},
 		{"EnsureDirectory", area.EnsureDirectory(ctx, target)},
 		{"Sync", area.Sync(ctx, target)},
+		{"RemoveDirectory", area.RemoveDirectory(ctx, target)},
 	}
 }
 

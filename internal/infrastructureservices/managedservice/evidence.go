@@ -35,7 +35,7 @@ func DecodeEvidence(data []byte) (Evidence, error) {
 	var evidence Evidence
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&evidence); err != nil || decoder.More() {
+	if err := decoder.Decode(&evidence); err != nil || len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
 		return Evidence{}, Refusal("lifecycle.state", "the managed service adapter returned malformed evidence", "")
 	}
 	return evidence, nil

@@ -44,7 +44,8 @@
       "bootwright plan",
       "bootwright apply"
     ],
-    "lifecycle": null
+    "lifecycle": null,
+    "contradictions": []
   },
   "diagnostics": [],
   "logs": []

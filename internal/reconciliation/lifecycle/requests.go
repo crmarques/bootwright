@@ -233,6 +233,9 @@ type StatusResult struct {
 	Secrets         SecretSummary
 	NextSteps       []string
 	Lifecycle       *LifecycleSummary
+	// Contradictions names what the context's records contradict, in the
+	// words a refusal that points at status names each of them.
+	Contradictions []string
 	// LogLocation is the host path of the reported operation's logs, presented
 	// to a human and absent from the structured result.
 	LogLocation string

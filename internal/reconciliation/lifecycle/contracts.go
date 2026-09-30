@@ -225,9 +225,12 @@ type OperationStore interface {
 	// Claim creates a fresh apply's operation directory, empty, before it binds
 	// anything; Register then fills that directory under the same identity.
 	Claim(context.Context, string) error
-	// Claimed names every operation directory, which nothing removes, so a
-	// directory added since a count was taken proves a newer claim.
+	// Claimed names every operation directory. Only a reclaim removes one,
+	// so a directory added since a listing was taken proves a newer claim.
 	Claimed(context.Context) ([]string, error)
+	// Reclaim removes every operation directory that holds nothing, which a
+	// claim that never registered leaves, and names those it removed.
+	Reclaim(context.Context) ([]string, error)
 	// Started reports whether an operation directory lists a block record.
 	Started(context.Context, string) (bool, error)
 	Register(context.Context, operationstore.Operation, reconciliation.Plan) error
@@ -243,7 +246,8 @@ type OperationStore interface {
 	CompleteAttempt(context.Context, string, string, int, reconciliation.Outcome, reconciliation.EffectState, reconciliation.BlockState, json.RawMessage) error
 	LastAttempt(context.Context, string, string) (int, error)
 	StartResolution(context.Context, string, string, int) (int, error)
-	CompleteResolution(context.Context, string, string, int, int, reconciliation.EffectState, reconciliation.BlockState, json.RawMessage) error
+	LastResolution(context.Context, string, string, int) (operationstore.Attempt, bool, error)
+	CompleteResolution(context.Context, string, string, int, int, reconciliation.Outcome, reconciliation.EffectState, reconciliation.BlockState, json.RawMessage) error
 	OpenLog(context.Context, string) (*operationstore.Log, error)
 	OpenAdapterOutput(context.Context, string) *operationstore.AdapterOutput
 	LogPaths(context.Context, string, reconciliation.Plan) ([]string, error)
@@ -304,10 +308,10 @@ type Execution struct {
 	Area       prerequisites.BundleArea
 	Material   map[string]secrets.Material
 	// Proved is what each block this apply attempt's block depends on durably
-	// proved in this operation, read from that block's last observed attempt
-	// and handed over unread. A capability decodes it only through the owner
-	// of that evidence, which composition wires. A destroy, a resolution and a
-	// probe receive none.
+	// proved in this operation, read from the record that settled it, its
+	// last attempt or that attempt's last resolution, and handed over unread.
+	// A capability decodes it only through the owner of that evidence, which
+	// composition wires. A destroy, a resolution and a probe receive none.
 	Proved []BlockEvidence
 	// LocateTool answers where the controller stage installed one executable,
 	// so a block runs the exact file that stage published for the release its
@@ -345,7 +349,13 @@ type Result struct {
 	Evidence json.RawMessage
 }
 
+// Observation is what a resolution proved. Outcome is what the completed
+// effect's attempt did, changed or unchanged, and only a capability whose
+// observation proves it states one: an observation the apply's own proof
+// repeats does, and one that cannot tell whether a lost attempt changed its
+// target leaves it empty and is recorded as changed.
 type Observation struct {
 	Effect   reconciliation.EffectState
+	Outcome  reconciliation.Outcome
 	Evidence json.RawMessage
 }

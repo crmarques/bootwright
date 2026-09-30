@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path"
 	"slices"
 	"strings"
@@ -193,7 +194,7 @@ func TestARemovalRaisesItsEvidenceBeforeItRegisters(t *testing.T) {
 
 // A fresh apply claims its operation's directory in the transaction that
 // raises its evidence, and before it raises it, so no running evidence ever
-// lands without moving the claim count. The directory already exists, empty,
+// lands without adding a directory. The directory already exists, empty,
 // when the apply binds its Secrets, and the operation it registers is that
 // directory's.
 func TestAFreshApplyClaimsItsOperationBeforeItBinds(t *testing.T) {
@@ -231,9 +232,10 @@ func TestAFreshApplyClaimsItsOperationBeforeItBinds(t *testing.T) {
 }
 
 // Evidence that cannot be raised protects nothing, so the apply binds,
-// reserves and registers nothing, leaving only its empty claim. A publication
-// that landed before it failed is restored to what the index implies, and one
-// that never landed is left alone, so the failure is the only one reported.
+// reserves and registers nothing. A publication that landed before it failed
+// is restored to what the index implies, and one that never landed is left
+// alone, so the failure is the only one reported. Either way the evidence
+// reads pristine again, so the apply's empty claim is reclaimed.
 func TestAFailedEvidencePublicationBindsNothing(t *testing.T) {
 	refused := failure("lifecycle.state", "the evidence could not be published", "restore the context store")
 	for name, landed := range map[string]bool{"refused before it landed": false, "failed after it landed": true} {
@@ -251,7 +253,7 @@ func TestAFailedEvidencePublicationBindsNothing(t *testing.T) {
 			}
 			current, directories := operations(t, h.workspace)
 			if h.binder.issued != 0 || h.workspace.binds != 0 || len(h.workspace.reservations) != 0 || current != "" ||
-				len(directories) != 1 || h.workspace.area.written(directories[0]) {
+				len(directories) != 0 {
 				t.Fatalf("the apply bound %d, claimed the host %d times, reserved %v and left %q %v",
 					h.binder.issued, h.workspace.binds, h.workspace.reservations, current, directories)
 			}
@@ -286,7 +288,7 @@ func TestARegistrationThatProvablyFailedRestoresTheEvidence(t *testing.T) {
 			t.Fatal("an apply without its material reported success")
 		}
 		current, directories := operations(t, h.workspace)
-		if current != "" || len(directories) != 1 || h.workspace.area.written(directories[0]) {
+		if current != "" || len(directories) != 0 {
 			t.Fatalf("the apply left %q %v", current, directories)
 		}
 		if !bytes.Equal(h.workspace.evidence, killPristine(t)) || !slices.Equal(h.binder.released, []string{"bind-1"}) {
@@ -581,7 +583,8 @@ func TestTheNextRegistrationReleasesBindingsNoOperationNames(t *testing.T) {
 // A destroy of a context holding no operation, over what an interrupted
 // registration left, releases its reservations, publishes pristine evidence
 // and only then releases every binding the context held, without presenting a
-// plan or asking for confirmation, and settles.
+// plan or asking for confirmation, and settles. Its pristine evidence reclaims
+// the claim that registration left, which holds nothing.
 func TestADestroyReleasesWhatAnInterruptedRegistrationLeft(t *testing.T) {
 	pristine := killPristine(t)
 	running := evidenceBytes(t, reconciliation.Apply, reconciliation.OperationRunning)
@@ -598,6 +601,9 @@ func TestADestroyReleasesWhatAnInterruptedRegistrationLeft(t *testing.T) {
 			h.workspace.evidence = slices.Clone(test.evidence)
 			if test.reserved {
 				h.workspace.reservations = reservationOf("alpha")
+			}
+			if err := operationstore.New(h.workspace.area, killClock).Claim(context.Background(), "op-"+strings.Repeat("0e", 16)); err != nil {
+				t.Fatal(err)
 			}
 			stranded := ""
 			if test.stranded {
@@ -757,7 +763,8 @@ func (a claimFaultArea) Entries(ctx context.Context, target string) ([]operation
 // flight may still have created its directory, and every earlier claimant then
 // refuses at its re-proof, so the evidence is the failed apply's to give back
 // unless its directory is provably absent. Nothing is left raised with nothing
-// in flight, and an apply the failed claim provably left alone keeps its
+// in flight, and the pristine evidence given back reclaims both claims, which
+// hold nothing. An apply the failed claim provably left alone keeps its
 // evidence and registers.
 func TestAFreshApplyWhoseClaimFailedRestoresTheEvidenceItsDirectoryMayHold(t *testing.T) {
 	ctx := context.Background()
@@ -769,11 +776,11 @@ func TestAFreshApplyWhoseClaimFailedRestoresTheEvidenceItsDirectoryMayHold(t *te
 		registers       bool
 		directories     []string
 	}{
-		{name: "after it created its directory", directory: path.Join(second, "blocks"), directories: []string{first, second}},
+		{name: "after it created its directory", directory: path.Join(second, "blocks")},
 		{name: "before it created anything", directory: second, registers: true, directories: []string{first}},
-		{name: "interrupted after it created its directory", directory: path.Join(second, "blocks"), interrupted: true, directories: []string{first, second}},
+		{name: "interrupted after it created its directory", directory: path.Join(second, "blocks"), interrupted: true},
 		{name: "interrupted before it created anything", directory: second, interrupted: true, registers: true, directories: []string{first}},
-		{name: "where the directories cannot be listed again", directory: second, unlisted: true, directories: []string{first}},
+		{name: "where the directories cannot be listed again", directory: second, unlisted: true},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			h := newHarness(t, "alpha")
@@ -904,6 +911,125 @@ func TestAnApplyRefusesWhenAnotherClaimRaisedTheEvidenceAgain(t *testing.T) {
 	}
 }
 
+// A reclaim of an older claim and a newer claim leave as many directories as
+// an apply in flight listed after its own claim, although a release lowered
+// the evidence and took its binding in between. The apply proves the
+// directories themselves, so it refuses on the newer claims rather than
+// register over the released binding.
+func TestAnApplyRefusesWhenReclaimsAndNewerClaimsKeepTheCount(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, "alpha")
+	store := operationstore.New(h.workspace.area, killClock)
+	running := evidenceBytes(t, reconciliation.Apply, reconciliation.OperationRunning)
+	// An apply killed after its claim and its raise left both.
+	h.workspace.evidence = slices.Clone(running)
+	if err := store.Claim(ctx, "op-"+strings.Repeat("0e", 16)); err != nil {
+		t.Fatal(err)
+	}
+	start := h.workspace.mutations
+	h.workspace.beforeMutation = func() {
+		if h.workspace.mutations != start+1 {
+			return
+		}
+		h.workspace.beforeMutation = nil
+		if result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil || result.Recovered != RecoveredRelease {
+			t.Fatalf("the destroy = %+v (%v)", result, err)
+		}
+		if _, directories := operations(t, h.workspace); len(directories) != 0 {
+			t.Fatalf("the release kept the claims %v", directories)
+		}
+		h.workspace.evidence = slices.Clone(running)
+		for _, claim := range []string{"0c", "0d"} {
+			if err := store.Claim(ctx, "op-"+strings.Repeat(claim, 16)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	_, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+	requireContextChanged(t, err, "apply", "it was planned from no operation, and the context now holds no operation with an operation claimed since it was read")
+	requireRefusedRegistration(t, h, "", 0)
+	if !slices.Contains(h.binder.released, "bind-1") || !bytes.Equal(h.workspace.evidence, running) {
+		t.Fatalf("released %v under evidence %q", h.binder.released, h.workspace.evidence)
+	}
+}
+
+// A fresh apply refused after its claim restores pristine evidence, which
+// reclaims that claim because it holds nothing. Refused retries therefore keep
+// nothing toward the retained-operation bound: with the context two
+// operations short of it, an apply and its removal still register after them.
+func TestRefusedFreshAppliesReclaimTheirClaims(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, "alpha")
+	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
+		if err := killInvoke(ctx, h.service, verb); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, recorded := operations(t, h.workspace)
+	for index := range operationstore.MaxOperations - len(recorded) - 2 {
+		h.workspace.area.directories[fmt.Sprintf("retained-%d", index)] = true
+	}
+	h.binder.bindErr = failure("secret.source", "binding requires current material matching every declaration", "")
+	for range 3 {
+		if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
+			t.Fatal("an apply whose binding failed reported success")
+		}
+		if _, directories := operations(t, h.workspace); len(directories) != operationstore.MaxOperations-2 || !bytes.Equal(h.workspace.evidence, killPristine(t)) {
+			t.Fatalf("the refused apply left %d directories under evidence %q", len(directories), h.workspace.evidence)
+		}
+	}
+	h.binder.bindErr = nil
+	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
+		if err := killInvoke(ctx, h.service, verb); err != nil {
+			t.Fatalf("the %s after the refused applies failed: %v", verb, err)
+		}
+	}
+	if record, _ := durableOperation(t, h); record.Verb != reconciliation.Destroy || record.State != reconciliation.OperationDone {
+		t.Fatalf("the removal after the refused applies is %s %s", record.Verb, record.State)
+	}
+}
+
+// A fresh apply refused beside a reservation no operation owns keeps the
+// running evidence that protects the context, and with it the claim it left,
+// so refused retries there add a claim each. The next registration moves the
+// index past every apply planned before it, so it reclaims them once it lands:
+// with the context four operations short of the bound before three refused
+// retries, the removal of the apply that registers after them still registers.
+func TestARegistrationReclaimsWhatRefusedAppliesKeptBesideAnUnownedReservation(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, "alpha")
+	running := evidenceBytes(t, reconciliation.Apply, reconciliation.OperationRunning)
+	h.workspace.evidence = slices.Clone(running)
+	h.workspace.reservations = reservationOf("alpha")
+	const refused = 3
+	retained := operationstore.MaxOperations - refused - 1
+	for index := range retained {
+		h.workspace.area.directories[fmt.Sprintf("retained-%d", index)] = true
+	}
+	h.binder.bindErr = failure("secret.source", "binding requires current material matching every declaration", "")
+	for attempt := 1; attempt <= refused; attempt++ {
+		if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
+			t.Fatal("an apply whose binding failed reported success")
+		}
+		if _, directories := operations(t, h.workspace); len(directories) != retained+attempt || !bytes.Equal(h.workspace.evidence, running) {
+			t.Fatalf("refused apply %d left %d directories under evidence %q", attempt, len(directories), h.workspace.evidence)
+		}
+	}
+	h.binder.bindErr = nil
+	if err := killInvoke(ctx, h.service, reconciliation.Apply); err != nil {
+		t.Fatalf("the apply after the refused applies failed: %v", err)
+	}
+	if current, directories := operations(t, h.workspace); len(directories) != retained+1 || !slices.Contains(directories, current) {
+		t.Fatalf("the registration kept %d directories beside its operation %s", len(directories)-retained-1, current)
+	}
+	if err := killInvoke(ctx, h.service, reconciliation.Destroy); err != nil {
+		t.Fatalf("the removal after the refused applies failed: %v", err)
+	}
+	if record, _ := durableOperation(t, h); record.Verb != reconciliation.Destroy || record.State != reconciliation.OperationDone {
+		t.Fatalf("the removal after the refused applies is %s %s", record.Verb, record.State)
+	}
+}
+
 // An apply over a completed removal raises the evidence that removal's
 // finalization reads as unfinished, so another verb finalizes it back to
 // pristine and takes the apply's binding. The apply refuses at its
@@ -938,10 +1064,10 @@ func TestAnApplyOverACompletedDestroyRefusesWhenAFinalizationTookItsBinding(t *t
 }
 
 // A completed removal collects only once its pristine publication landed.
-// Until then the evidence an apply in flight raised still stands and its claim
-// count has not moved, so that apply registers over a finalization that failed
-// there, and the binding it registers must still be held. A fresh removal
-// whose publication failed keeps a stranded binding for the next one.
+// Until then the evidence an apply in flight raised still stands and its
+// directories have not moved, so that apply registers over a finalization that
+// failed there, and the binding it registers must still be held. A fresh
+// removal whose publication failed keeps a stranded binding for the next one.
 func TestARemovalWhosePublicationFailedCollectsNothing(t *testing.T) {
 	ctx := context.Background()
 	unpublished := errors.New("the evidence could not be published")
@@ -1016,47 +1142,156 @@ func (tx pristineFailing) PublishEvidence(ctx context.Context, data []byte) erro
 
 // A context holding no operation beside evidence no interrupted registration
 // leaves, or beside an operation directory with block records, holds state no
-// index accounts for, so its destroy refuses before it opens a transaction.
+// index accounts for, so its destroy refuses before it opens a transaction,
+// naming each, even beside pristine evidence and no reservation.
 func TestADestroyOverUnindexedRecordsRefuses(t *testing.T) {
+	lost := "op-" + strings.Repeat("0a", 16)
 	for name, test := range map[string]struct {
-		state   reconciliation.OperationState
-		started bool
+		verb     reconciliation.Verb
+		state    reconciliation.OperationState
+		reserved bool
+		started  bool
+		named    string
 	}{
-		"running evidence beside an operation whose index was lost": {state: reconciliation.OperationRunning, started: true},
-		"failed evidence": {state: reconciliation.OperationFailed},
+		"running evidence beside an operation whose index was lost": {
+			verb: reconciliation.Apply, state: reconciliation.OperationRunning, reserved: true, started: true,
+			named: "the operation directory " + lost + " lists block records",
+		},
+		"pristine evidence beside an operation whose index was lost": {
+			verb: reconciliation.Destroy, state: reconciliation.OperationDone, started: true,
+			named: "the operation directory " + lost + " lists block records",
+		},
+		"failed evidence": {
+			verb: reconciliation.Apply, state: reconciliation.OperationFailed, reserved: true,
+			named: "the mutation evidence reads failed and retained",
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newHarness(t, "alpha")
-			h.workspace.evidence = evidenceBytes(t, reconciliation.Apply, test.state)
-			h.workspace.reservations = reservationOf("alpha")
+			h.workspace.evidence = evidenceBytes(t, test.verb, test.state)
+			if test.reserved {
+				h.workspace.reservations = reservationOf("alpha")
+			}
 			if test.started {
-				h.workspace.area.files[path.Join("op-"+strings.Repeat("0a", 16), "blocks", "alpha", "state.json")] = []byte("{}")
+				h.workspace.area.files[path.Join(lost, "blocks", "alpha", "state.json")] = []byte("{}")
 			}
 			stranded := strand(t, h)
 			records, evidence, mutations := h.workspace.area.clone(), slices.Clone(h.workspace.evidence), h.workspace.mutations
+			reservations := slices.Clone(h.workspace.reservations)
 			_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
 			reported := diagnostics.Of(err)
 			if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
-				reported[0].Message != "the context holds operation records or evidence that no index names" ||
+				reported[0].Message != "the context holds operation records or evidence that no index names: "+test.named ||
 				reported[0].Remediation != "review its durable state with bootwright status" {
 				t.Fatalf("the destroy = %+v (%v)", reported, err)
 			}
 			if !sameFiles(h.workspace.area, records) || !bytes.Equal(h.workspace.evidence, evidence) || h.workspace.mutations != mutations ||
-				len(h.workspace.reservations) == 0 || slices.Contains(h.binder.released, stranded) {
+				len(h.workspace.reservations) != len(reservations) || slices.Contains(h.binder.released, stranded) {
 				t.Fatal("the refused destroy wrote or released something")
 			}
 		})
 	}
 }
 
-// A binding stranded beside pristine evidence and no reservation is
-// indistinguishable from a context at rest, so a destroy settles over it
-// without a transaction and keeps it for the next registration to release.
-func TestADestroyOverOnlyAStrandedBindingSettles(t *testing.T) {
-	h := newHarness(t, "alpha")
-	strand(t, h)
-	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
-	if err != nil || !result.Settled || result.Recovered != "" || h.workspace.mutations != 0 || len(h.binder.released) != 0 {
-		t.Fatalf("the destroy = %+v (%v) after %d transactions, released %v", result, err, h.workspace.mutations, h.binder.released)
+// A destroy that settles over pristine evidence and no reservation, over no
+// operation or a completed removal, releases the binding stranded there, which
+// no operation names, without a transaction, and reports only that it settled.
+// It releases what it listed before it read that evidence, so a binding issued
+// after the listing, as a bounded run's is, stays.
+func TestADestroyOverOnlyAStrandedBindingSettlesAndReleasesIt(t *testing.T) {
+	ctx := context.Background()
+	for name, removed := range map[string]bool{"no operation": false, "a completed removal": true} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t, "alpha")
+			if removed {
+				for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
+					if err := killInvoke(ctx, h.service, verb); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			stranded, mutations, released := strand(t, h), h.workspace.mutations, len(h.binder.released)
+			late := ""
+			h.service.binder = &listedThen{testBinder: h.binder, then: func() { late = strand(t, h) }}
+			result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+			if err != nil || !result.Settled || result.Recovered != "" || h.workspace.mutations != mutations {
+				t.Fatalf("the destroy = %+v (%v) after %d transactions", result, err, h.workspace.mutations-mutations)
+			}
+			if late == "" || !slices.Equal(h.binder.released[released:], []string{stranded}) {
+				t.Fatalf("released %v; %s was stranded and %s issued after the listing", h.binder.released[released:], stranded, late)
+			}
+		})
 	}
+}
+
+// A destroy that settles releases only the bindings it listed before it
+// decided. A fresh apply that claims, binds, registers and completes after
+// that decision and before the destroy settles names its own binding, which
+// its removal reopens, so the settling destroy leaves that binding bound.
+func TestADestroyThatSettlesKeepsTheBindingOfAnApplyRegisteredAfterItDecided(t *testing.T) {
+	ctx := context.Background()
+	for name, removed := range map[string]bool{"no operation": false, "a completed removal": true} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t, "alpha")
+			if removed {
+				for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
+					if err := killInvoke(ctx, h.service, verb); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			var registered operationstore.Operation
+			h.service.workspace = &readThen{testWorkspace: h.workspace, then: func() {
+				if err := killInvoke(ctx, h.service, reconciliation.Apply); err != nil {
+					t.Fatalf("the apply after the destroy's decision failed: %v", err)
+				}
+				registered, _ = durableOperation(t, h)
+			}}
+			released := len(h.binder.released)
+			result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+			if err != nil || !result.Settled || result.Recovered != "" {
+				t.Fatalf("the destroy = %+v (%v)", result, err)
+			}
+			if registered.Verb != reconciliation.Apply || registered.State != reconciliation.OperationDone || len(registered.Bindings) != 1 {
+				t.Fatalf("the apply after the destroy's decision registered %+v", registered)
+			}
+			for _, binding := range registered.Bindings {
+				if slices.Contains(h.binder.released[released:], binding) {
+					t.Fatalf("the settling destroy released %s, which the registered apply %s names", binding, registered.ID)
+				}
+			}
+		})
+	}
+}
+
+// readThen runs then once, right after the first lifecycle read's callback
+// returns, which for a destroy is right after its decision.
+type readThen struct {
+	*testWorkspace
+	then func()
+}
+
+func (w *readThen) ReadLifecycle(ctx context.Context, name string, callback func(View) error) error {
+	err := w.testWorkspace.ReadLifecycle(ctx, name, callback)
+	if then := w.then; then != nil {
+		w.then = nil
+		then()
+	}
+	return err
+}
+
+// listedThen runs then once, right after the first listing of the context's
+// bindings returns.
+type listedThen struct {
+	*testBinder
+	then func()
+}
+
+func (b *listedThen) Bindings(ctx context.Context, request custody.BindingsRequest) ([]string, error) {
+	listed, err := b.testBinder.Bindings(ctx, request)
+	if then := b.then; then != nil {
+		b.then = nil
+		then()
+	}
+	return listed, err
 }

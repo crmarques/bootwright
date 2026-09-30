@@ -209,6 +209,82 @@ func TestReservationKeysCoverTheUnitPathAndSocket(t *testing.T) {
 	}
 }
 
+func libvirtProvider(host, management, address string) api.Object {
+	attachment := api.MapValue(text("bridge", "virbr-lab"), text("management", management))
+	if address != "" {
+		attachment = attachment.With("address", api.StringValue(address))
+	}
+	return api.NewObject(api.InfraProvider, "lab-libvirt", api.Value{}, api.MapValue(
+		field("libvirt", api.MapValue(text("machineRef", host), text("uri", "qemu:///system"))),
+		field("networkAttachments", api.ListValue(api.MapValue(text("name", "lab-guests"), field("libvirt", attachment)))),
+	))
+}
+
+// A socket bound to a managed bridge's host address cannot open before the
+// provider's host block creates that bridge, so the service waits for it and
+// its removal runs first.
+func TestAServiceBoundToAManagedBridgeRequiresItsProvider(t *testing.T) {
+	bound := func(address string) api.Object {
+		spec := service(api.Proxy, "lab-proxy").Spec().With("bindAddress", api.StringValue(address))
+		return api.NewObject(api.Proxy, "lab-proxy", api.Value{}, spec)
+	}
+	for name, test := range map[string]struct {
+		provider api.Object
+		bind     string
+		requires bool
+	}{
+		"the bridge host address":   {libvirtProvider("controller", "managed", "198.51.100.1/24"), "198.51.100.1", true},
+		"another address":           {libvirtProvider("controller", "managed", "198.51.100.1/24"), "192.0.2.1", false},
+		"a wildcard":                {libvirtProvider("controller", "managed", "198.51.100.1/24"), "0.0.0.0", false},
+		"an external bridge":        {libvirtProvider("controller", "external", ""), "198.51.100.1", false},
+		"a bridge on another host":  {libvirtProvider("services", "managed", "198.51.100.1/24"), "198.51.100.1", false},
+		"an IPv6 bridge address":    {libvirtProvider("controller", "managed", "fd00:5::1/64"), "fd00:5::1", true},
+		"an IPv6 network's address": {libvirtProvider("controller", "managed", "fd00:5::1/64"), "fd00:5::", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			catalog := catalogOf(controller(), test.provider, bound(test.bind))
+			plan, err := NewCapability(testDefinition(), nil).Plan(context.Background(), lifecycle.PlanInput{
+				Verb: reconciliation.Apply, Controller: "controller",
+				Context: lifecycle.ContextIdentity{Name: testContext},
+				State:   compilation.NewState(catalog, catalog, nil),
+			})
+			if err != nil || len(plan.Definitions) != 1 {
+				t.Fatalf("plan = %+v (%v)", plan, err)
+			}
+			want := []reconciliation.ObjectRef(nil)
+			if test.requires {
+				want = []reconciliation.ObjectRef{{Kind: "InfraProvider", Object: "lab-libvirt"}}
+			}
+			if !slices.Equal(plan.Definitions[0].Requires, want) {
+				t.Fatalf("requires = %+v, want %+v", plan.Definitions[0].Requires, want)
+			}
+			if !test.requires {
+				return
+			}
+			host := reconciliation.BlockDefinition{
+				ID: "substrate-host-lab-libvirt", Description: "realize the libvirt host", Stage: reconciliation.StageSubstrates,
+				Impacts: []string{}, Groups: []reconciliation.Group{{ID: "define-networks", Description: "define", Machines: []string{"controller"}}},
+				Kind: "InfraProvider", Object: "lab-libvirt", Implementation: "substrate-host-libvirt-v2",
+				ContentDigest: strings.Repeat("c", 64), Request: json.RawMessage(`{}`),
+			}
+			apply, err := reconciliation.NewPlan(reconciliation.Apply, append(plan.Definitions, host))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ids := []string{apply.Blocks[0].ID, apply.Blocks[1].ID}; !slices.Equal(ids, []string{host.ID, "proxy-lab-proxy"}) || !slices.Equal(apply.Blocks[1].Dependencies, []string{host.ID}) {
+				t.Fatalf("apply order = %v, service dependencies = %v", ids, apply.Blocks[1].Dependencies)
+			}
+			removal, err := apply.Inverse()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if removal.Blocks[0].ID != "proxy-lab-proxy" || !slices.Equal(removal.Blocks[1].Dependencies, []string{"proxy-lab-proxy"}) {
+				t.Fatalf("removal order = %s first, host dependencies = %v", removal.Blocks[0].ID, removal.Blocks[1].Dependencies)
+			}
+		})
+	}
+}
+
 func TestRequestsRefuseAnInvalidContextName(t *testing.T) {
 	capability := NewCapability(testDefinition(), nil)
 	for _, name := range []string{"", "Lab", "-lab", "lab-", "lab/other", strings.Repeat("c", 64)} {
@@ -282,6 +358,11 @@ func TestAbsenceRequiresEveryOwnedResourceGone(t *testing.T) {
 	}
 	if err := ValidateAbsence(nil, digest); err == nil {
 		t.Fatal("empty evidence proved absence")
+	}
+	for _, closer := range []string{"}", "]"} {
+		if err := ValidateAbsence([]byte(string(encode(t, gone))+closer), digest); err == nil {
+			t.Errorf("evidence followed by %s proved absence", closer)
+		}
 	}
 }
 

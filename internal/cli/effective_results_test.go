@@ -134,6 +134,18 @@ func TestEffectiveWriterFailuresAndCancellation(t *testing.T) {
 	}
 }
 
+// The envelope's command is safe display text in every JSON result, the
+// effective render's included.
+func TestEffectiveJSONEscapesItsCommand(t *testing.T) {
+	var out bytes.Buffer
+	if err := writeEffective(context.Background(), &out, "render\x1b effective", syntheticEffectiveResult(), true, stateencoding.JSON); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(out.String(), `{"schemaVersion":"v1alpha1","command":"render\\u001b effective",`) {
+		t.Fatalf("effective JSON = %q, want its command escaped once", out.String())
+	}
+}
+
 func TestEffectiveEncoderCapabilitiesAreLazyAndModeSpecific(t *testing.T) {
 	for _, mode := range []string{"text", "json"} {
 		calls := 0

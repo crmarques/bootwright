@@ -21,11 +21,6 @@ exist: a service whose bind address is the host address of a
 placement Machine names that provider as a requirement, because the socket
 cannot bind before the bridge exists.
 
-Not yet met: no service block names that requirement, so nothing orders a
-service bound to a managed bridge address after the block that creates the
-bridge; tracked as
-[B33](milestones/m1.md#b33).
-
 An unsupported required capability refuses before operation registration, with one
 diagnostic naming every unsupported object, the reason, and a safe next action.
 Refusal never registers an operation, reserves a host resource, binds a Secret
@@ -71,7 +66,7 @@ A reservation key is one of:
 
 | Key | Claims |
 | --- | --- |
-| `socket:<address>:<port>` | One effective listening socket on every transport, so a service listening on UDP and TCP at one port holds one key. A wildcard bind address claims every declared endpoint address at that port and additionally conflicts with any other bind address at that port. |
+| `socket:<address>:<port>` | One effective listening socket on every transport, so a service listening on UDP and TCP at one port holds one key. A wildcard bind address, `0.0.0.0` or `::`, claims every declared endpoint address at that port and additionally conflicts with any other bind address at that port, either wildcard included. |
 | `unit:<name>` | One host service-manager unit and its container name. |
 | `path:<absolute path>` | One owned directory tree. |
 | `bridge:<name>` | One host bridge, whichever network defines it. |

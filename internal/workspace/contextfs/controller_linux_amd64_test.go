@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -445,6 +446,62 @@ func TestControllerBundleCapabilityBoundsModesSealAndLifetime(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestControllerBundleStreamsAFileOnlyWhole(t *testing.T) {
+	store, _ := fixture(t)
+	value := syntheticControllerState(t, prerequisites.SetupContext{})
+	value.Receipt.Actions[0].Phase = "intent"
+	publishControllerState(t, store, prerequisites.SetupContext{}, value)
+	content := bytes.Repeat([]byte("retained tool source "), 8192)
+	refused := errors.New("consumer refused")
+	err := store.MutateController(context.Background(), prerequisites.SetupContext{}, false, func(tx prerequisites.StorageTransaction) error {
+		area, err := tx.Bundle(context.Background(), value.Receipt.CatalogDigest)
+		if err != nil {
+			return err
+		}
+		if err := area.Write(context.Background(), "source", content, false); err != nil {
+			return err
+		}
+		stream, streams := area.(prerequisites.BundleStream)
+		if !streams {
+			t.Fatal("the controller bundle area cannot stream")
+		}
+		var streamed bytes.Buffer
+		if err := stream.Stream(context.Background(), "source", int64(len(content)), func(reader prerequisites.BundleReader) error {
+			_, err := io.Copy(&streamed, reader)
+			return err
+		}); err != nil || !bytes.Equal(streamed.Bytes(), content) {
+			t.Fatalf("a whole stream did not yield the file: %v", err)
+		}
+		drain := func(reader prerequisites.BundleReader) error {
+			_, err := io.Copy(io.Discard, reader)
+			return err
+		}
+		for name, test := range map[string]struct {
+			maximum int64
+			consume func(prerequisites.BundleReader) error
+			message string
+		}{
+			"partial": {int64(len(content)), func(reader prerequisites.BundleReader) error {
+				_, err := reader.Read(make([]byte, 16))
+				return err
+			}, "was not read whole"},
+			"bound": {int64(len(content)) - 1, drain, "metadata is unsafe"},
+		} {
+			err := stream.Stream(context.Background(), "source", test.maximum, test.consume)
+			if found := diagnostics.Of(err); len(found) != 1 || !strings.Contains(found[0].Message, test.message) {
+				t.Errorf("%s stream: %v", name, err)
+			}
+		}
+		if err := stream.Stream(context.Background(), "source", int64(len(content)), func(prerequisites.BundleReader) error { return refused }); !errors.Is(err, refused) {
+			t.Errorf("a consumer's refusal was not returned: %v", err)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("bundle operation failed: %#v", diagnostics.Of(err))
 	}
 }
 

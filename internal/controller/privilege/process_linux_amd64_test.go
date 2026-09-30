@@ -4,11 +4,13 @@ package privilege
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -83,9 +85,129 @@ func TestMain(m *testing.M) {
 				os.Exit(2)
 			}
 			os.Exit(0)
+		case "__bootwright_relay_success", "__bootwright_relay_interrupted", "__bootwright_relay_orphaned":
+			relayedChild(os.Args[1])
+		case "__bootwright_hold_output":
+			time.Sleep(time.Minute)
+			os.Exit(0)
 		}
 	}
 	os.Exit(m.Run())
+}
+
+// relayedChild waits for the signal its supervisor relays and then ends as its
+// mode says: with its document and 0, with 130, or with its document and 0
+// while a process it started still holds its standard output.
+func relayedChild(mode string) {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGTERM)
+	if mode == "__bootwright_relay_orphaned" {
+		self, err := os.Executable()
+		if err != nil {
+			os.Exit(2)
+		}
+		holder := exec.Command(self, "__bootwright_hold_output")
+		holder.Stdout = os.Stdout
+		if holder.Start() != nil {
+			os.Exit(2)
+		}
+		fmt.Printf("holder %d\n", holder.Process.Pid)
+	}
+	fmt.Println("ready")
+	<-signals
+	if mode == "__bootwright_relay_interrupted" {
+		os.Exit(130)
+	}
+	fmt.Println(`{"exitCode":0}`)
+	os.Exit(0)
+}
+
+// readyOutput is a child's standard output that says when the child is ready
+// for the relayed signal. It holds its buffer in a field, since an embedded
+// one would lend io.Copy a ReadFrom that bypasses Write.
+type readyOutput struct {
+	written bytes.Buffer
+	ready   chan struct{}
+	seen    bool
+}
+
+func (o *readyOutput) Write(data []byte) (int, error) {
+	n, err := o.written.Write(data)
+	if !o.seen && strings.Contains(o.written.String(), "ready\n") {
+		o.seen = true
+		close(o.ready)
+	}
+	return n, err
+}
+
+// relayInterrupt runs one child in mode, relays SIGTERM once it is ready and
+// returns what it wrote and how it ended.
+func relayInterrupt(t *testing.T, mode string, grace time.Duration) (string, int, error) {
+	t.Helper()
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+	output := &readyOutput{ready: make(chan struct{})}
+	type ending struct {
+		code int
+		err  error
+	}
+	ended := make(chan ending, 1)
+	go func() {
+		code, err := runProcess(ctx, Command{Executable: self, Arguments: []string{mode}, Environment: []string{"LANG=C"}, Output: output}, grace)
+		ended <- ending{code, err}
+	}()
+	select {
+	case <-output.ready:
+	case end := <-ended:
+		t.Fatalf("the child ended before it was ready: %d, %v", end.code, end.err)
+	case <-time.After(30 * time.Second):
+		cancel(nil)
+		<-ended
+		t.Fatal("the child never became ready")
+	}
+	cancel(signalCause{signal: syscall.SIGTERM})
+	end := <-ended
+	return output.written.String(), end.code, end.err
+}
+
+// A child that ends after the supervisor relayed an interrupt chose its status
+// itself, so the cancellation that relayed it never replaces that status, 0
+// included.
+func TestARelayedInterruptLeavesTheChildItsOwnStatus(t *testing.T) {
+	for _, test := range []struct {
+		name, mode, output string
+		code               int
+	}{
+		{name: "a child that finished with its document", mode: "__bootwright_relay_success", output: "ready\n" + `{"exitCode":0}` + "\n", code: 0},
+		{name: "a child that reported the interrupt", mode: "__bootwright_relay_interrupted", output: "ready\n", code: 130},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			output, code, err := relayInterrupt(t, test.mode, relayGrace)
+			if err != nil || code != test.code || output != test.output {
+				t.Fatalf("status %d, error %v, output %q; want status %d, no error, output %q", code, err, output, test.code, test.output)
+			}
+		})
+	}
+}
+
+// A child that exits 0 after the relay while a process it started still holds
+// its standard output at the end of the grace may have lost output, so it
+// stays a run error.
+func TestARelayedChildWhoseOutputOutlivesTheGraceFails(t *testing.T) {
+	output, code, err := relayInterrupt(t, "__bootwright_relay_orphaned", 2*time.Second)
+	first, _, _ := strings.Cut(output, "\n")
+	if holder, parsed := strconv.Atoi(strings.TrimPrefix(first, "holder ")); parsed == nil && holder > 1 {
+		syscall.Kill(holder, syscall.SIGKILL)
+	} else {
+		t.Errorf("no holder in output %q", output)
+	}
+	if code != 1 || err == nil {
+		t.Fatalf("status %d, error %v; want a run error", code, err)
+	}
 }
 
 func TestGuardedCommandDiesAndIsReapedAfterParentExit(t *testing.T) {

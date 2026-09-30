@@ -144,13 +144,21 @@ class ControllerFilesTests(unittest.TestCase):
         retained.write_bytes(data)
         retained.chmod(0o600)
 
-    def published(self, root=None):
+    def left(self, root=None):
+        """Every entry under root, directories included, so an empty directory
+        a refusal leaves behind is seen."""
         root = root or self.root
-        return sorted(
-            path.relative_to(root).as_posix()
-            for path in root.rglob("*")
-            if path.is_file()
-        )
+        return sorted(path.relative_to(root).as_posix() for path in root.rglob("*"))
+
+    def retained_only(self, definition):
+        return ["sources", "sources/" + definition["source"]["id"]]
+
+    def sink(self):
+        """A private scratch file a download streams into."""
+        descriptor, path = tempfile.mkstemp(prefix="bootwright-download-", dir="/tmp")
+        self.addCleanup(os.unlink, path)
+        self.addCleanup(os.close, descriptor)
+        return descriptor, Path(path)
 
     def another_bundle(self, name):
         root = self.root / name
@@ -208,8 +216,7 @@ class ControllerFilesTests(unittest.TestCase):
             ):
                 with self.assertRaises(OSError):
                     files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
-        self.assertEqual(self.published(), [])
-        self.assertFalse(any("tmp" in path.name for path in self.root.rglob("*")))
+        self.assertEqual(self.left(), [])
 
     def test_sealed_missing_target_is_never_refilled(self):
         definition = tool(b"complete source")
@@ -286,9 +293,7 @@ class ControllerFilesTests(unittest.TestCase):
                 self.retain(definition, data, root)
                 with self.assertRaises(files.Refused):
                     files.prepare_tool(location, definition, EGRESS, DEADLINE)
-                self.assertEqual(
-                    self.published(root), ["sources/" + definition["source"]["id"]]
-                )
+                self.assertEqual(self.left(root), self.retained_only(definition))
 
     def test_invalid_projection_and_integrity_fail_before_download(self):
         for change in (
@@ -312,7 +317,7 @@ class ControllerFilesTests(unittest.TestCase):
         with serve(body(b"wrong")):
             with self.assertRaises(files.Refused):
                 files.prepare_tool(self.location, tool(b"bytes"), EGRESS, DEADLINE)
-        self.assertEqual(self.published(), [])
+        self.assertEqual(self.left(), [])
 
     def test_frozen_tool_requires_exact_stable_release(self):
         for version in ("latest", "v1.2.3-rc.1", "1.02.3", "1.2.3+build"):
@@ -386,7 +391,9 @@ class ControllerFilesTests(unittest.TestCase):
             with mock.patch.dict(
                 os.environ, HTTPS_PROXY="http://attacker.example.test", NO_PROXY="*"
             ):
-                self.assertEqual(files.download(source, egress), body)
+                descriptor, path = self.sink()
+                files.download(source, egress, descriptor)
+                self.assertEqual(path.read_bytes(), body)
         self.assertEqual(observed[0][0], (egress["httpsProxy"],))
         self.assertIs(observed[0][1]["ssl_context"], trust)
         self.assertIs(observed[0][1]["proxy_ssl_context"], trust)
@@ -420,7 +427,7 @@ class ControllerFilesTests(unittest.TestCase):
                 files, "trusted_roots", return_value=object()
             ):
                 with self.assertRaises(files.Refused) as error:
-                    files.download(source, EGRESS)
+                    files.download(source, EGRESS, self.sink()[0])
             self.assertEqual(
                 str(error.exception),
                 "approved source acquisition was refused or incomplete",
@@ -429,7 +436,7 @@ class ControllerFilesTests(unittest.TestCase):
             files, "_download", side_effect=OSError("sensitive source or proxy detail")
         ):
             with self.assertRaises(files.Refused) as error:
-                files.download(source, EGRESS)
+                files.download(source, EGRESS, self.sink()[0])
         self.assertNotIn("sensitive", str(error.exception))
 
     def test_bundle_and_archive_capacity_bounds_precede_publication(self):
@@ -446,7 +453,7 @@ class ControllerFilesTests(unittest.TestCase):
             with mock.patch.object(files, bound, value):
                 with self.assertRaises(files.Refused):
                     files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
-            self.assertEqual(self.published(), ["sources/" + definition["source"]["id"]])
+            self.assertEqual(self.left(), self.retained_only(definition))
 
     def test_each_acquired_chunk_is_written_before_the_next_read(self):
         data = bytes(range(256)) * (5 * files.CHUNK // 256) + b"tail"
@@ -483,9 +490,13 @@ class ControllerFilesTests(unittest.TestCase):
             digest.update(pattern)
         definition = tool(b"")
         definition["source"].update(bytes=size, sha256=digest.hexdigest())
-        streamed = Response(
-            size, lambda offset, amount: pattern[offset % len(pattern):][:amount]
-        )
+
+        def streamed():
+            return Response(
+                size, lambda offset, amount: pattern[offset % len(pattern):][:amount]
+            )
+
+        descriptor, package = self.sink()
         oc = stamped(body=pattern * (size // len(pattern)))
         data = archive([("oc", oc, "file"), ("kubectl", "oc", "symlink")])
         del oc
@@ -496,8 +507,9 @@ class ControllerFilesTests(unittest.TestCase):
         for name, prepare in (
             ("acquisition", lambda: files.prepare_tool(self.location, definition, EGRESS, DEADLINE)),
             ("projection", lambda: files.prepare_tool(location, clients, EGRESS, DEADLINE)),
+            ("native package", lambda: files.download(definition["source"], EGRESS, descriptor)),
         ):
-            with self.subTest(name), serve(streamed):
+            with self.subTest(name), serve(streamed()):
                 tracemalloc.start()
                 try:
                     prepare()
@@ -506,6 +518,7 @@ class ControllerFilesTests(unittest.TestCase):
                     tracemalloc.stop()
                 self.assertLess(peak, 2 << 20)
         self.assertEqual((root / clients["files"][1]["path"]).stat().st_size, size + len(stamped(body=b"")))
+        self.assertEqual(package.stat().st_size, size)
 
     def test_a_source_deadline_replaces_the_fixed_one(self):
         data = bytes(8 * files.CHUNK)
@@ -522,10 +535,10 @@ class ControllerFilesTests(unittest.TestCase):
                 with self.assertRaises(files.Refused) as refused:
                     files.prepare_tool(location, tool(data), EGRESS, 10)
             self.assertEqual(str(refused.exception), "acquisition deadline")
-            self.assertEqual(self.published(root), [])
+            self.assertEqual(self.left(root), [])
             with serve(body(data, advance=advance)):
                 with self.assertRaises(files.Refused):
-                    files.download(tool(data)["source"], EGRESS)
+                    files.download(tool(data)["source"], EGRESS, self.sink()[0])
         self.assertEqual(
             (self.root / tool(data)["files"][0]["path"]).read_bytes(), data
         )
@@ -556,7 +569,7 @@ class ControllerFilesTests(unittest.TestCase):
             ), mock.patch.object(files.signal, "setitimer", record):
                 for path, expected in (
                     (lambda: files.prepare_tool(location, tool(data), EGRESS, 1000), tool_armed),
-                    (lambda: files.download(tool(data)["source"], EGRESS), download_armed),
+                    (lambda: files.download(tool(data)["source"], EGRESS, self.sink()[0]), download_armed),
                 ):
                     del armed[:]
                     with serve(body(data, advance=advance)):
@@ -662,7 +675,7 @@ class ControllerFilesTests(unittest.TestCase):
                     with self.assertRaises(files.Refused) as refused:
                         files.prepare_tool(location, definition, EGRESS, DEADLINE)
                 self.assertEqual(str(refused.exception), "openshift client release")
-                self.assertEqual(self.published(root), ["sources/" + definition["source"]["id"]])
+                self.assertEqual(self.left(root), self.retained_only(definition))
 
     def test_inspection_refuses_a_changed_member_and_an_unstamped_retained_oc(self):
         data = archive([("oc", stamped(), "file"), ("kubectl", "oc", "symlink")])

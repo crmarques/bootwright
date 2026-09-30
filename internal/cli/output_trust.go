@@ -39,8 +39,8 @@ func writeTrustReport(out io.Writer, command string, report *enrollment.Report, 
 	rows := make([][]string, 0, len(report.Hosts))
 	for _, host := range report.Hosts {
 		rows = append(rows, []string{
-			escapeDisplayLine(host.Machine), displayValue(trustEndpoint(host)),
-			escapeDisplayLine(host.Action), displayValue(host.KeyType),
+			host.Machine, displayValue(trustEndpoint(host)),
+			host.Action, displayValue(host.KeyType),
 			displayValue(trustDetail(host)),
 		})
 	}

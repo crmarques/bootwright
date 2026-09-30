@@ -14,16 +14,21 @@ import (
 // finalization marks an operation whose block records already prove it
 // complete while its record, evidence, reservations or Secret bindings do not
 // yet say so, which is what an invocation interrupted between its last outcome
-// and its last write leaves. A running or unknown operation is finalized only
-// by its own verb, because the other verb over it decides for itself: a
-// destroy supersedes an incomplete apply and an apply refuses an incomplete
-// destroy. An unknown one whose blocks are all done has a record that lags
-// behind them, as a removal stopped after its resolution proved an unknown
-// apply's block and before it recorded the apply leaves it, so its blocks
-// prove completion exactly as a running one's do. A completed one is
-// finalized under either verb, since only its own bookkeeping is left.
-// Records that hold a block that is not done prove no completion, so they are
-// never finalized. Anything else returns no mark and keeps its decision.
+// and its last write leaves. A running or unknown operation or a failed
+// removal is finalized only by its own verb, because the other verb over it
+// decides for itself: a destroy supersedes an incomplete apply and an apply
+// refuses an incomplete destroy. An unknown one whose blocks are all done has
+// a record that lags behind them, as a removal stopped after its resolution
+// proved an unknown apply's block and before it recorded the apply leaves it,
+// so its blocks prove completion exactly as a running one's do. A failed
+// removal whose blocks are all done lags the same way: a removal superseding
+// it records nothing of it before it resolves the running block a failed retry
+// start left, so one stopped after that resolution leaves it failed beside
+// done blocks. A completed one is finalized under either verb, since only its
+// own bookkeeping is left. Records that hold a block that is not done prove no
+// completion, so they are never finalized, and neither is a failed apply,
+// which records failed only while a block does. Anything else returns no mark
+// and keeps its decision.
 func finalization(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (transition, error) {
 	if pendingRemains(frozen, states) {
 		return transition{}, nil
@@ -31,6 +36,10 @@ func finalization(ctx context.Context, view View, store OperationStore, verb rec
 	switch operation.State {
 	case reconciliation.OperationRunning, reconciliation.OperationUnknown:
 		if operation.Verb != verb {
+			return transition{}, nil
+		}
+	case reconciliation.OperationFailed:
+		if operation.Verb != reconciliation.Destroy || verb != reconciliation.Destroy {
 			return transition{}, nil
 		}
 	case reconciliation.OperationDone:
@@ -178,16 +187,19 @@ func (s Service) finalize(ctx context.Context, name string, decided transition) 
 		if operation.Verb == reconciliation.Apply {
 			return s.project(ctx, tx, operation.Verb, next)
 		}
-		if err := releaseHeld(ctx, tx); err != nil {
+		// The removal's record reads done from here, so what it still owes is
+		// given back under the recording boundary, interrupted or not.
+		recording := recordingContext(ctx)
+		if err := releaseHeld(recording, tx); err != nil {
 			return err
 		}
-		completion, err = captureRemoval(ctx, store, operation.ID, decided.release)
+		completion, err = captureRemoval(recording, store, operation.ID, decided.release)
 		return err
 	})
 	if err != nil || decided.operation.Verb == reconciliation.Apply {
 		return err
 	}
-	if err := incompleteRemoval(s.completeRemoval(ctx, name, completion)); err != nil {
+	if err := incompleteRemoval(s.completeRemoval(recordingContext(ctx), name, completion)); err != nil {
 		return err
 	}
 	s.collect(ctx, name, held, decided.release)
@@ -225,7 +237,9 @@ func captureRemoval(ctx context.Context, store OperationStore, id string, releas
 // marks the finalization unfinished for the next verb. The
 // releases happen outside any transaction, because releasing a binding takes
 // the store lock a transaction holds, and the publication re-proves that the
-// removal is still the context's operation, in the state it was left in.
+// removal is still the context's operation, in the state it was left in. Its
+// callers pass the recording boundary, because a removal whose record reads
+// done owes these even once its invocation is interrupted.
 func (s Service) completeRemoval(ctx context.Context, name string, completion removalCompletion) error {
 	for _, binding := range completion.release {
 		if _, err := s.binder.Release(ctx, custody.BindingRequest{ContextName: name, BindingID: binding}); err != nil {
@@ -233,14 +247,19 @@ func (s Service) completeRemoval(ctx context.Context, name string, completion re
 		}
 	}
 	return s.workspace.MutateLifecycle(ctx, name, func(tx Transaction) error {
+		store := s.store(tx)
 		changed := func(current basis) error { return contextChanged(reconciliation.Destroy, completion.basis, current) }
-		if _, _, _, err := s.verifyBasis(ctx, s.store(tx), completion.basis, changed); err != nil {
+		if _, _, _, err := s.verifyBasis(ctx, store, completion.basis, changed); err != nil {
 			return err
 		}
 		if err := releaseHeld(ctx, tx); err != nil {
 			return err
 		}
-		return s.project(ctx, tx, reconciliation.Destroy, reconciliation.OperationDone)
+		if err := s.project(ctx, tx, reconciliation.Destroy, reconciliation.OperationDone); err != nil {
+			return err
+		}
+		reclaim(ctx, tx, store)
+		return nil
 	})
 }
 

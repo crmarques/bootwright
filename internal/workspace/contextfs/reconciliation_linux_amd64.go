@@ -441,29 +441,14 @@ func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []p
 		}
 		return controllerFailure("controller.identity", "locally hosted services require a completed controller setup on this host")
 	}
-	claimed := map[string]string{}
 	retained := []prerequisites.HostReservation{}
 	for _, reservation := range t.stored.value.Reservations {
-		if reservation.Context == t.identity.Name {
-			continue
-		}
-		retained = append(retained, reservation)
-		if reservation.Shared {
-			continue
-		}
-		for _, key := range reservation.Keys {
-			claimed[key] = reservation.Context
+		if reservation.Context != t.identity.Name {
+			retained = append(retained, reservation)
 		}
 	}
-	for _, reservation := range next {
-		if reservation.Shared {
-			continue
-		}
-		for _, key := range reservation.Keys {
-			if owner, taken := claimed[key]; taken {
-				return controllerFailure("controller.conflict", "another context already reserves a host resource this service needs; destroy or continue context "+owner+" first")
-			}
-		}
+	if owner, taken := prerequisites.ConflictingContext(retained, next); taken {
+		return controllerFailure("controller.conflict", "another context already reserves a host resource this service needs; destroy or continue context "+owner+" first")
 	}
 	combined := append(retained, next...)
 	slices.SortFunc(combined, func(x, y prerequisites.HostReservation) int {

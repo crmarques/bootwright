@@ -9,18 +9,20 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
+const failedWithoutFailure = "the apply records failed, yet no block records the failure"
+
 // refuseContradictions refuses the removal of an incomplete apply whose records
 // prove it started a block they no longer show as started. Such a block reads
 // back as pending, so a removal planned from these records would skip it, leave
 // its effect in place and then release the binding that effect needs. It reads
 // only, under the lock the decision holds, before anything is presented,
 // bound, probed, registered or released.
-func refuseContradictions(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) error {
+func refuseContradictions(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) error {
 	lost, err := store.LostBlockRecords(ctx, operation.ID, frozen)
 	if err != nil {
 		return err
 	}
-	entries := contradictions(operation, frozen, states, lost)
+	entries := contradictions(operation, frozen, states, attempts, lost)
 	if len(entries) == 0 {
 		return nil
 	}
@@ -30,22 +32,25 @@ func refuseContradictions(ctx context.Context, store OperationStore, operation o
 }
 
 // contradictions names what an apply's own records prove impossible, per block
-// in frozen order and then for the operation: a pending block a direct
-// dependent of which started, since a block starts only once every dependency
-// is done; a block that lost its record beside an attempt of it, since a start
-// publishes the block record first; and a failed apply with no failed, running
-// or unknown block, since an apply records failed only once a block failed, a
-// failed block changes only through a retry that first marks the apply
-// running, and a running or unknown block changes only through a resolution,
-// before which a continuation marks the apply running and a removal records a
-// failed apply in the state its blocks give it, which is failed only while
-// another block is. A retry whose start published its running record and then
-// reported a failure leaves the apply failed beside that running block, which
-// is no contradiction: a running or unknown block started and its outcome is
-// unproved, so the removal resolves it before it registers. An unknown apply
-// without an unknown block is not one of them either: a removal interrupted
-// after resolving that block and before recording the apply leaves it so.
-func contradictions(operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, lost []string) []string {
+// in frozen order and then for the operation: a block that is not done while a
+// direct dependent of it started, since a block starts only once every
+// dependency is done and a done block never changes; a block that lost its
+// record beside an attempt of it, since a start publishes the block record
+// first; and a failed apply with no failed or unknown block and no running
+// block its record counts as retried, since an apply records failed only once
+// a block failed, a failed block changes only through a retry that first marks
+// the apply running, and a running or unknown block changes only through a
+// resolution, before which a continuation marks the apply running and a
+// removal records a failed apply in the state its blocks give it, which is
+// failed only while another block is. A retry whose start published its
+// running record and then reported a failure leaves the apply failed beside
+// that running block, which is no contradiction: the block counts the attempt
+// it retried as well, and its outcome is unproved, so the removal resolves it
+// before it registers. A running block with a single attempt is never that
+// retry, so it accounts for nothing. An unknown apply without an unknown block
+// is not one of them either: a removal interrupted after resolving that block
+// and before recording the apply leaves it so.
+func contradictions(operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int, lost []string) []string {
 	read := func(id string) reconciliation.BlockState {
 		if state := states[id]; state != "" {
 			return state
@@ -55,24 +60,86 @@ func contradictions(operation operationstore.Operation, frozen reconciliation.Pl
 	entries := []string{}
 	accounted := false
 	for _, block := range frozen.Blocks {
-		switch read(block.ID) {
-		case reconciliation.BlockFailed, reconciliation.BlockRunning, reconciliation.BlockUnknown:
+		state := read(block.ID)
+		switch {
+		case state == reconciliation.BlockFailed, state == reconciliation.BlockUnknown:
+			accounted = true
+		case state == reconciliation.BlockRunning && attempts[block.ID] > 1:
 			accounted = true
 		}
-		if read(block.ID) == reconciliation.BlockPending {
+		if state != reconciliation.BlockDone {
 			for _, dependent := range frozen.Blocks {
 				if slices.Contains(dependent.Dependencies, block.ID) && read(dependent.ID) != reconciliation.BlockPending {
-					entries = append(entries, block.ID+" (pending, yet "+dependent.ID+", which depends on it, started)")
+					entries = append(entries, block.ID+" ("+string(state)+", yet "+dependent.ID+", which depends on it, started)")
 					break
 				}
 			}
 		}
 		if slices.Contains(lost, block.ID) {
-			entries = append(entries, block.ID+" (no block record, yet an attempt of it is recorded)")
+			entries = append(entries, lostRecord(block.ID))
 		}
 	}
 	if operation.State == reconciliation.OperationFailed && !accounted {
-		entries = append(entries, "the apply records failed, yet no block records the failure")
+		entries = append(entries, failedWithoutFailure)
 	}
 	return entries
+}
+
+func lostRecord(block string) string {
+	return block + " (no block record, yet an attempt of it is recorded)"
+}
+
+// refuseUncontinuable refuses a continuation over records that contradict what
+// its operation started, before it restores, raises or marks anything: a block
+// that lost its record beside an attempt of it, whose start would refuse
+// rather than skip the observation an effect that may have begun requires,
+// and a failed apply whose every block is done, which leaves the continuation
+// nothing to start although no block records the failure.
+func refuseUncontinuable(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) error {
+	entries, err := uncontinuable(ctx, store, operation, frozen, states)
+	if err != nil || len(entries) == 0 {
+		return err
+	}
+	return failure("lifecycle.state",
+		"the incomplete "+string(operation.Verb)+" "+operation.ID+" holds records that contradict what it started, so it cannot be continued: "+strings.Join(entries, ", "),
+		"review its durable state with bootwright status")
+}
+
+func uncontinuable(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) ([]string, error) {
+	lost, err := store.LostBlockRecords(ctx, operation.ID, frozen)
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]string, 0, len(lost)+1)
+	for _, block := range lost {
+		entries = append(entries, lostRecord(block))
+	}
+	if operation.Verb == reconciliation.Apply && operation.State == reconciliation.OperationFailed && !pendingRemains(frozen, states) {
+		entries = append(entries, failedWithoutFailure)
+	}
+	return entries, nil
+}
+
+// recordContradictions names everything the current operation's records
+// contradict, as the refusals that point at bootwright status name it: each
+// block a completed operation's records do not show done, what an incomplete
+// apply's records prove impossible and an incomplete apply that started no
+// block although its own state says it did, and each block of an incomplete
+// removal that lost its record beside an attempt of it.
+func recordContradictions(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) ([]string, error) {
+	if operation.State == reconciliation.OperationDone {
+		return unfinishedBlocks(frozen, states), nil
+	}
+	if operation.Verb == reconciliation.Destroy {
+		return uncontinuable(ctx, store, operation, frozen, states)
+	}
+	lost, err := store.LostBlockRecords(ctx, operation.ID, frozen)
+	if err != nil {
+		return nil, err
+	}
+	entries := contradictions(operation, frozen, states, attempts, lost)
+	if len(reconciliation.OwnedSubset(frozen, states).Blocks) == 0 && !mayHaveStartedNothing(operation) {
+		entries = append(entries, "the apply records "+string(operation.State)+", yet no block of it started")
+	}
+	return entries, nil
 }

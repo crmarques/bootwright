@@ -406,7 +406,7 @@ func canonicalRequest(request json.RawMessage) error {
 	if err := decoder.Decode(&value); err != nil {
 		return planError("lifecycle block request is malformed")
 	}
-	if decoder.More() {
+	if len(bytes.Trim(request[decoder.InputOffset():], " \t\r\n")) != 0 {
 		return planError("lifecycle block request contains trailing data")
 	}
 	canonical, err := json.Marshal(value)

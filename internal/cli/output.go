@@ -57,11 +57,14 @@ func displayCounts(counts compilation.Counts) admissionCounts {
 	return admissionCounts{FilesSeen: counts.FilesSeen, ObjectsDecoded: counts.ObjectsDecoded}
 }
 
-func writeFailure(out, errOut io.Writer, command, code, message string, exitCode int, jsonMode bool) error {
-	return writeDiagnostics(out, errOut, command, []diagnostic{{Severity: "error", Code: code, Message: message}}, exitCode, jsonMode)
+func writeFailure(out, errOut io.Writer, command, code, message string, exitCode int, jsonMode bool, logs []string) error {
+	return writeDiagnostics(out, errOut, command, []diagnostic{{Severity: "error", Code: code, Message: message}}, exitCode, jsonMode, logs)
 }
 
-func writeDiagnostics(out, errOut io.Writer, command string, diagnostics []diagnostic, exitCode int, jsonMode bool) error {
+// writeDiagnostics reports a failure. Its JSON envelope lists the private logs
+// the invocation created before it failed, because a JSON invocation reports
+// no progress that could name them; text named them while the work ran.
+func writeDiagnostics(out, errOut io.Writer, command string, diagnostics []diagnostic, exitCode int, jsonMode bool, logs []string) error {
 	diagnostics = displayDiagnostics(diagnostics)
 	if jsonMode {
 		encoder := json.NewEncoder(out)
@@ -71,7 +74,7 @@ func writeDiagnostics(out, errOut io.Writer, command string, diagnostics []diagn
 			Command:       escapeDisplayLine(command),
 			ExitCode:      exitCode,
 			Diagnostics:   diagnostics,
-			Logs:          []string{},
+			Logs:          displayLines(logs),
 		})
 	}
 	return writeHumanDiagnostics(errOut, diagnostics)

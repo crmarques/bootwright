@@ -98,6 +98,8 @@ func TestATrustStoreRefusesContentNoSessionCouldRead(t *testing.T) {
 		{"unknown field", `{"formatVersion":1,"hosts":[],"extra":true}`},
 		{"another version", `{"formatVersion":2,"hosts":[]}`},
 		{"trailing content", `{"formatVersion":1,"hosts":[]}{}`},
+		{"a closing brace", `{"formatVersion":1,"hosts":[]}}`},
+		{"a closing bracket", `{"formatVersion":1,"hosts":[]}]`},
 		{"malformed", `{"formatVersion":1,`},
 		{"unqualified key type", `{"formatVersion":1,"hosts":[{"machine":"a","address":"192.0.2.10","port":22,"keyType":"ssh-dss","publicKey":"` + valid.PublicKey + `"}]}`},
 		{"no machine", `{"formatVersion":1,"hosts":[{"machine":"","address":"192.0.2.10","port":22,"keyType":"` + valid.KeyType + `","publicKey":"` + valid.PublicKey + `"}]}`},

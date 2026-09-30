@@ -156,6 +156,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 		StorageClusters: []ClusterSummary{},
 		Shared:          []ServiceSummary{},
 		NextSteps:       []string{},
+		Contradictions:  []string{},
 	}
 	state, report, err := s.compiler.Compile(ctx, view.Inputs())
 	if err != nil {
@@ -182,6 +183,9 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 		return nil, err
 	}
 	if index.Current == "" {
+		if result.Contradictions, err = unindexed(ctx, view, store); err != nil {
+			return nil, err
+		}
 		result.NextSteps = append(result.NextSteps, "bootwright plan", "bootwright apply")
 		return result, nil
 	}
@@ -197,6 +201,9 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	// its record's count shows the retry.
 	states, attempts, err := blockRecords(ctx, store, operation.ID, plan)
 	if err != nil {
+		return nil, err
+	}
+	if result.Contradictions, err = recordContradictions(ctx, store, operation, plan, states, attempts); err != nil {
 		return nil, err
 	}
 	logs, err := store.LogPaths(ctx, operation.ID, plan)

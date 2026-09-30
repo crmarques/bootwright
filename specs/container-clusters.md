@@ -72,14 +72,16 @@ the Machine declares, under its own name and with its declared type, and the
 node's own network configuration with its install address applied. The
 selected NTP servers become additional time sources.
 
-The attempt writes `agent-config.yaml` in JSON's syntax, which is YAML whose
-every string is quoted, because the installer's YAML reader reads a plain
-`1e3`, `0o17` or `0987654321` as a number and passes the installer different
-text. Every character outside printable ASCII is escaped, a code point above
-U+FFFF as the YAML escape `\UXXXXXXXX` rather than JSON's surrogate pair,
-because that reader refuses a raw DEL or C1 control and any surrogate escape.
-Every value therefore reaches the installer with the type and the text the
-request froze.
+The attempt writes `install-config.yaml`, with the bound material substituted,
+and `agent-config.yaml` in JSON's syntax, which is YAML whose every string is
+quoted, because the installer's YAML reader reads a plain `1e3`, `0o17` or
+`0987654321` as a number and a plain `y` or `n` as a boolean, and passes the
+installer different text, such as the name `1000` for a cluster named `1e3`.
+Every character outside printable ASCII is escaped, a code point above U+FFFF
+as the YAML escape `\UXXXXXXXX` rather than JSON's surrogate pair, because that
+reader refuses a raw DEL or C1 control and any surrogate escape. Every value
+therefore reaches the installer with the type and the text the request froze or
+the bound material holds.
 
 Two values are derived rather than authored, because the agent installer
 refuses the alternatives. A single-node cluster renders `platform: none`
@@ -283,9 +285,13 @@ connection and never answers. Every run of either block is bounded by a
 [deadline](architecture.md#the-adapter-result-protocol) derived from the
 budgets its request froze: the build budget plus 30 minutes for the media
 block, and for the installation its three budgets back to back plus 30 minutes
-and 5 minutes for each node it reads and releases, which is 3 hours 50
-minutes for a single node. A cluster whose installation deadline would pass
-the runner's 6-hour ceiling, more than 27 nodes with these budgets, refuses
+and 11 minutes for each node it reads and releases, which is 3 hours 56
+minutes for a single node. A node's 11 minutes are the
+[bounds](substrates.md#identity-and-power-operations) of the calls the
+installation makes to its controller outside the boot budget: its media read
+in each of the two state reads, and the eject and the disk selection that
+release its media. A cluster whose installation deadline would pass
+the runner's 6-hour ceiling, more than 12 nodes with these budgets, refuses
 before registration, naming that deadline and how many nodes fit, rather than
 being cut short part way through its installation.
 
@@ -417,4 +423,6 @@ substrate's pre-boot, boot and disk-boot entry points by fixed qualified name.
 Go locates the exact installer executable; the adapter substitutes bound
 material into the installer inputs and invokes the installer with exact
 argument vectors. No pull secret, private key or captured credential enters an
-argument, an environment variable, the evidence or a log.
+argument, an environment variable, the evidence or a log. A run lists each
+operation-scoped material file once, the placement's identity and host key
+included.

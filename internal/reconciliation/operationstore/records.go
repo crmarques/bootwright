@@ -99,7 +99,7 @@ func decode(data []byte, maximum int, target any) error {
 	if err := decoder.Decode(target); err != nil {
 		return recordError("lifecycle record is malformed or unsupported")
 	}
-	if decoder.More() {
+	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
 		return recordError("lifecycle record contains trailing data")
 	}
 	canonical, err := encode(target, maximum)

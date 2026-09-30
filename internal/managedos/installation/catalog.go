@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"strings"
 	"time"
+
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // Implementation is the frozen identity of this capability. A plan records it,
@@ -28,15 +30,28 @@ var installationBudgets = Budgets{
 	Reachability: Budget{Attempts: 30, DelaySeconds: 10},
 }
 
-// mediaMargin is what a run's deadline allows beyond its budgets: publishing
-// the package tree, building the installer image, booting it, the controller's
-// own power and media polls, which the adapter bounds with fixed counts rather
-// than budgets, and each read's own time between the budgets' pauses. A
-// recorded lab-rhel installation took 1h10m7s, a flat hour of it the identity
-// poll, so everything else, the installer's own wait included, took about ten
-// minutes (.agents/knowledge/installation-completion-proof.md); an hour is six
-// times that.
-const mediaMargin = time.Hour
+// mediaMargin is what a run's deadline allows beyond its budgets: the bound of
+// every call an apply makes to the machine's controller, and an hour for
+// everything else, publishing the package tree, building the installer image
+// and each read's own time between the budgets' pauses. A recorded lab-rhel
+// installation took 1h10m7s, a flat hour of it the identity poll, so
+// everything else, its controller calls and the installer's own wait
+// included, took about ten minutes
+// (.agents/knowledge/installation-completion-proof.md); an hour is six times
+// that.
+const mediaMargin = time.Hour + controllerCalls
+
+// controllerCalls are the calls an apply makes to the machine's controller,
+// each allowed its bound: the pre-boot power read, the insert, the power-off,
+// the boot selection and the power-on that boot the installer, the eject and
+// the disk selection and power-on that boot the installed system, and the
+// eject the verification repeats. That is the libvirt arm's sequence. The
+// bare-metal arm powers nothing off and inspects its machine where the libvirt
+// arm reads its power, so its sequence stays within this one while that
+// inspection makes at most eight requests: the system, its interface
+// collection and six interfaces.
+const controllerCalls = substrate.ControllerPowerReadBound + substrate.ControllerInsertBound +
+	3*substrate.ControllerPowerBound + 2*substrate.ControllerBootSelectionBound + 2*substrate.ControllerEjectBound
 
 // consumerPrefix is the subtree this capability owns beneath a managed artifact
 // server's served root. The server owns the root; this block owns exactly

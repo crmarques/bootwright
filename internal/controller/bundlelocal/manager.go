@@ -3,7 +3,10 @@ package bundlelocal
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"io"
 	"path"
 	"slices"
 	"sort"
@@ -515,53 +518,16 @@ func inspectFiles(ctx context.Context, area prerequisites.BundleArea, record cat
 	for _, name := range projected.directories() {
 		directories[name] = true
 	}
-	toolsReady := true
-	var toolBytes, toolExpanded int64
 	if len(selectedTools) > 1 {
 		return prerequisites.BundleInspection{}, entries, bundleFailure("target tool inspection has ambiguous closure inputs")
 	}
+	var selected []prerequisites.ToolDefinition
 	if len(selectedTools) == 1 {
-		for _, tool := range selectedTools[0] {
-			if err := validateFrozenTool(tool); err != nil {
-				return prerequisites.BundleInspection{}, entries, err
-			}
-			if tool.Source.Bytes <= 0 || tool.Source.Bytes > maxToolSourceBytes || toolBytes > maxToolExpandedBytes-tool.Source.Bytes {
-				return prerequisites.BundleInspection{}, entries, bundleFailure("target source closure exceeds its bounded inspection size")
-			}
-			toolBytes += tool.Source.Bytes
-			for _, file := range tool.Files {
-				for directory := path.Dir(file.Path); directory != "."; directory = path.Dir(directory) {
-					directories[directory] = true
-				}
-			}
-			name := sourcePath(tool.Source)
-			entry, found := entries[name]
-			if !found {
-				toolsReady = false
-				continue
-			}
-			if entry.Directory || entry.Executable || entry.Size != tool.Source.Bytes {
-				return prerequisites.BundleInspection{}, entries, nil
-			}
-			data, err := area.Read(ctx, name, int(tool.Source.Bytes))
-			if err != nil {
-				return prerequisites.BundleInspection{}, entries, err
-			}
-			files, err := projectTool(ctx, tool, data)
-			if err != nil {
-				return prerequisites.BundleInspection{}, entries, err
-			}
-			expected[name] = projectedFile{data: data}
-			for name, file := range files {
-				if _, exists := expected[name]; exists || toolExpanded > maxToolExpandedBytes-int64(len(file.data)) {
-					return prerequisites.BundleInspection{}, entries, bundleFailure("target executable closure conflicts or exceeds its bounded size")
-				}
-				toolExpanded += int64(len(file.data))
-				expected[name] = file
-				_, exists := entries[name]
-				toolsReady = toolsReady && exists
-			}
-		}
+		selected = selectedTools[0]
+	}
+	tools, err := inspectTools(ctx, area, selected, entries, directories, expected)
+	if err != nil || !tools.consistent {
+		return prerequisites.BundleInspection{}, entries, err
 	}
 	for name, entry := range entries {
 		if err := ctx.Err(); err != nil {
@@ -576,6 +542,13 @@ func inspectFiles(ctx context.Context, area prerequisites.BundleArea, record cat
 		if entry.Directory {
 			if !directories[name] {
 				return prerequisites.BundleInspection{}, entries, nil
+			}
+			continue
+		}
+		if tool, streamed := tools.files[name]; streamed {
+			matches, err := tools.matches(ctx, name, entry, tool)
+			if err != nil || !matches {
+				return prerequisites.BundleInspection{}, entries, err
 			}
 			continue
 		}
@@ -606,7 +579,93 @@ func inspectFiles(ctx context.Context, area prerequisites.BundleArea, record cat
 	if err := area.Verify(ctx); err != nil {
 		return prerequisites.BundleInspection{}, entries, err
 	}
-	return prerequisites.BundleInspection{Ready: ready, ToolsReady: toolsReady, Recoverable: true}, entries, nil
+	return prerequisites.BundleInspection{Ready: ready, ToolsReady: tools.ready, Recoverable: true}, entries, nil
+}
+
+type toolInspection struct {
+	stream     prerequisites.BundleStream
+	files      map[string]streamedFile
+	ready      bool
+	consistent bool
+}
+
+// inspectTools streams each selected tool's retained source once through its
+// projection, so inspection holds of a tool only the digests it streamed.
+func inspectTools(ctx context.Context, area prerequisites.BundleArea, tools []prerequisites.ToolDefinition, entries map[string]prerequisites.BundleEntry, directories map[string]bool, expected map[string]projectedFile) (toolInspection, error) {
+	inspection := toolInspection{files: map[string]streamedFile{}, ready: true, consistent: true}
+	if len(tools) == 0 {
+		return inspection, nil
+	}
+	stream, streams := area.(prerequisites.BundleStream)
+	if !streams {
+		return inspection, bundleFailure("bundle streaming capability is unavailable")
+	}
+	inspection.stream = stream
+	var sourceBytes, expandedBytes int64
+	for _, tool := range tools {
+		if err := validateFrozenTool(tool); err != nil {
+			return inspection, err
+		}
+		if tool.Source.Bytes <= 0 || tool.Source.Bytes > maxToolSourceBytes || sourceBytes > maxToolExpandedBytes-tool.Source.Bytes {
+			return inspection, bundleFailure("target source closure exceeds its bounded inspection size")
+		}
+		sourceBytes += tool.Source.Bytes
+		for _, file := range tool.Files {
+			for directory := path.Dir(file.Path); directory != "."; directory = path.Dir(directory) {
+				directories[directory] = true
+			}
+		}
+		name := sourcePath(tool.Source)
+		entry, found := entries[name]
+		if !found {
+			inspection.ready = false
+			continue
+		}
+		if entry.Directory || entry.Executable || entry.Size != tool.Source.Bytes {
+			inspection.consistent = false
+			return inspection, nil
+		}
+		var files map[string]streamedFile
+		if err := stream.Stream(ctx, name, tool.Source.Bytes, func(source prerequisites.BundleReader) (err error) {
+			files, err = projectTool(ctx, tool, source)
+			return err
+		}); err != nil {
+			return inspection, err
+		}
+		inspection.files[name] = streamedFile{sha256: tool.Source.SHA256, size: tool.Source.Bytes}
+		for member, file := range files {
+			_, projected := expected[member]
+			_, repeated := inspection.files[member]
+			if projected || repeated || expandedBytes > maxToolExpandedBytes-file.size {
+				return inspection, bundleFailure("target executable closure conflicts or exceeds its bounded size")
+			}
+			expandedBytes += file.size
+			inspection.files[member] = file
+			_, exists := entries[member]
+			inspection.ready = inspection.ready && exists
+		}
+	}
+	return inspection, nil
+}
+
+// matches reports whether a published tool entry is the streamed file. A
+// retained source was streamed whole by inspectTools, so only its metadata is
+// compared again.
+func (inspection toolInspection) matches(ctx context.Context, name string, entry prerequisites.BundleEntry, file streamedFile) (bool, error) {
+	if entry.Executable != file.executable || entry.Size != file.size {
+		return false, nil
+	}
+	if strings.HasPrefix(name, "sources/") {
+		return true, nil
+	}
+	digest := sha256.New()
+	if err := inspection.stream.Stream(ctx, name, file.size, func(published prerequisites.BundleReader) error {
+		_, err := io.Copy(digest, contextReader{ctx: ctx, reader: published})
+		return err
+	}); err != nil {
+		return false, err
+	}
+	return hex.EncodeToString(digest.Sum(nil)) == file.sha256, nil
 }
 
 func projectSource(ctx context.Context, projected *projection, index int, data []byte) error {

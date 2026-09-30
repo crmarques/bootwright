@@ -210,8 +210,9 @@ func (s Service) execute(ctx context.Context, name string, frozen Request, pin m
 		return nil, err
 	}
 	references := append([]string{frozen.Controller.CredentialsRef}, frozen.Placement.SecretReferences()...)
-	var result *Result
+	var result, retained *Result
 	err = s.runtime.WithRuntime(ctx, lifecycle.RuntimeRequest{ContextName: name, Secrets: references}, func(inner context.Context, runtime lifecycle.Runtime) error {
+		retained = &Result{LogLocation: runtime.LogLocation, Logs: slices.Clone(runtime.Logs)}
 		// The location is named before the adapter runs, because a run that
 		// refuses reports a diagnostic rather than this result, and its output
 		// is exactly what the operator is then told to read.
@@ -234,7 +235,7 @@ func (s Service) execute(ctx context.Context, name string, frozen Request, pin m
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return retained, err
 	}
 	return result, nil
 }

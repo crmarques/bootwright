@@ -135,6 +135,16 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 	return false, nil
 }
 
+// createdLogs names the private logs an invocation created before it failed.
+// A power verb's run retains its output before its adapter runs and returns
+// that name beside a refusal, so its failure envelope can list the file.
+func (r commandResult) createdLogs() []string {
+	if r.power == nil {
+		return nil
+	}
+	return r.power.Logs
+}
+
 func (r *Runner) writeNegativeSecretCheck(command *cobra.Command, path string, result commandResult, diagnostics []diagnostic) (bool, error) {
 	if path != "secret check" || !negativeSecretCheck(result.secretCheck) {
 		return false, nil
@@ -157,5 +167,5 @@ func (r *Runner) writeExecutedLifecycle(path string, result commandResult, diagn
 	if err := writeLifecycleOperation(r.config.Out, result.lifecycleOperation); err != nil {
 		return true, err
 	}
-	return true, writeDiagnostics(r.config.Out, r.config.ErrOut, path, diagnostics, 1, false)
+	return true, writeDiagnostics(r.config.Out, r.config.ErrOut, path, diagnostics, 1, false, nil)
 }

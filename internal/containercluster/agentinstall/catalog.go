@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"strings"
 	"time"
+
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // Kind is the API kind these capabilities realize.
@@ -38,14 +40,14 @@ const mediaMargin = 30 * time.Minute
 // cluster reads before and after the waits, each request of which oc gives up
 // on after the role's request timeout, each wait's kill-after grace, and
 // Ansible's own time between tasks. nodeMargin is what each node adds beyond
-// the boot budget: the eject its media release polls for, pausing at most two
-// minutes (MEDIA_PROBES times MEDIA_PROBE_DELAY in redfish_control.py), and
-// its controller read in each of the two state reads, each request of which
-// the adapter bounds at 30 seconds (REQUEST_TIMEOUT). A cluster whose deadline
-// would pass the runner's ceiling refuses before registration.
+// the boot budget: the bound of every call the installation makes to its
+// controller outside that budget, which is its media read in each of the two
+// state reads, and the eject and the disk selection that release its media. A
+// cluster whose deadline would pass the runner's ceiling refuses before
+// registration.
 const (
 	installMargin = 30 * time.Minute
-	nodeMargin    = 5 * time.Minute
+	nodeMargin    = 2*substrate.ControllerMediaReadBound + substrate.ControllerEjectBound + substrate.ControllerBootSelectionBound
 )
 
 // consumerPrefix is the subtree these blocks own beneath a managed artifact

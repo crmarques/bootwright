@@ -154,7 +154,8 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 		_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "observation-failed", Block: block.ID, Detail: reported.Code + ": " + reported.Message})
 	}
 	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "resolution", Block: block.ID, Detail: string(resolvedEffect)})
-	if err := store.CompleteResolution(recording, operation.ID, block.ID, attemptNumber, number, resolvedEffect, state, observation.Evidence); err != nil {
+	outcome := reconciliation.ResolutionOutcome(resolvedEffect, observation.Outcome)
+	if err := store.CompleteResolution(recording, operation.ID, block.ID, attemptNumber, number, outcome, resolvedEffect, state, observation.Evidence); err != nil {
 		return reconciliation.BlockUnknown, err
 	}
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: string(state), Position: position, Total: total})

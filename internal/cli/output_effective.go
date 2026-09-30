@@ -41,7 +41,7 @@ func writeEffective(ctx context.Context, out io.Writer, command string, result *
 		var encoded bytes.Buffer
 		encoder := json.NewEncoder(&encoded)
 		encoder.SetEscapeHTML(false)
-		if err := encoder.Encode(commandEnvelope{SchemaVersion: "v1alpha1", Command: command, OK: true, Result: payload, Diagnostics: []diagnostic{}, Logs: []string{}}); err != nil {
+		if err := encoder.Encode(commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, Result: payload, Diagnostics: []diagnostic{}, Logs: []string{}}); err != nil {
 			return encodingFailure(ctx, err)
 		}
 		data = encoded.Bytes()

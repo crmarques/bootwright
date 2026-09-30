@@ -10,6 +10,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // runDeadline is the deadline one operation's run states for a frozen request.
@@ -103,9 +104,16 @@ func pauses(budgets Budgets) time.Duration {
 func TestTheDeadlineFollowsTheBudgetsTheRequestFroze(t *testing.T) {
 	request, _ := onlyRequest(t, labCatalog())
 	request.Budgets = Budgets{
-		Installer:    Budget{Attempts: 211, DelaySeconds: 23},
-		Identity:     Budget{Attempts: 137, DelaySeconds: 31},
-		Reachability: Budget{Attempts: 401, DelaySeconds: 11},
+		Installer:    Budget{Attempts: 211, DelaySeconds: 37},
+		Identity:     Budget{Attempts: 137, DelaySeconds: 59},
+		Reachability: Budget{Attempts: 401, DelaySeconds: 19},
+	}
+	for wait, budget := range map[string]Budget{
+		"installer": request.Budgets.Installer, "identity": request.Budgets.Identity, "reachability": request.Budgets.Reachability,
+	} {
+		if pause := time.Duration(budget.Attempts*budget.DelaySeconds) * time.Second; pause <= mediaMargin {
+			t.Fatalf("the %s wait pauses %s, no longer than the %s margin it could hide in", wait, pause, mediaMargin)
+		}
 	}
 	fields := map[string]func(*Budgets) *int{
 		"nothing":                   nil,
@@ -127,5 +135,29 @@ func TestTheDeadlineFollowsTheBudgetsTheRequestFroze(t *testing.T) {
 				t.Errorf("%s with %s moved runs under %s, want %s for the frozen budgets %+v", operation, name, got, want, frozen.Budgets)
 			}
 		}
+	}
+}
+
+// An apply's calls to the machine's controller run outside its budgets, so the
+// margin allows each its bound beside the hour for the rest of the media work:
+// the pre-boot power read, the insert, the power-off, boot selection and
+// power-on that boot the installer (boot.yml and the libvirt boot_media entry
+// point), the eject, disk selection and power-on that boot the installed
+// system (await.yml and the boot_disk entry point), and the eject the
+// verification repeats (apply.yml). A margin shorter than those calls lets
+// the runner kill an installation still inside them, so the figures the
+// specification states are the ones derived here.
+func TestTheMarginAllowsEveryControllerCallAnApplyMakes(t *testing.T) {
+	calls := substrate.ControllerPowerReadBound + substrate.ControllerInsertBound + 3*substrate.ControllerPowerBound +
+		2*substrate.ControllerBootSelectionBound + 2*substrate.ControllerEjectBound
+	if mediaMargin < time.Hour+calls {
+		t.Fatalf("the margin is %s, less than an hour and the %s the controller calls may take", mediaMargin, calls)
+	}
+	if want := time.Hour + time.Minute + 20*time.Second; calls != want {
+		t.Errorf("the controller calls may take %s, want the %s the specification states", calls, want)
+	}
+	request, _ := onlyRequest(t, labCatalog())
+	if got, want := request.Deadline(), 4*time.Hour+6*time.Minute+20*time.Second; got != want {
+		t.Errorf("lab-rhel installs under %s, want the %s the specification states", got, want)
 	}
 }

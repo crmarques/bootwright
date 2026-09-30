@@ -4,14 +4,20 @@ Observed in September 2026 while carrying every root-device hint to the agent
 installer (X19, item B4).
 [Container clusters](../../specs/container-clusters.md#installer-inputs)
 owns what the installer inputs carry; this page records why the role writes
-`agent-config.yaml` through the collection's `to_installer_yaml` filter rather
-than through `to_nice_yaml` or `to_nice_json`.
+`install-config.yaml` and `agent-config.yaml` through the collection's
+`to_installer_yaml` filter rather than through `to_nice_yaml` or
+`to_nice_json`.
 
 ## What each side does with a plain scalar
 
 The installer reads `agent-config.yaml` in one place,
 [`(*AgentConfig).Load`](https://github.com/openshift/installer/blob/006669f5812a47dbc733b6736584b87ef696e898/pkg/asset/agent/agentconfig/agent_config.go#L128-L154),
-with `sigs.k8s.io/yaml` `UnmarshalStrict`. Installer 006669f (release-4.21)
+with `sigs.k8s.io/yaml` `UnmarshalStrict`, and `install-config.yaml` the same
+way: the agent flow's
+[`(*OptionalInstallConfig).Load`](https://github.com/openshift/installer/blob/006669f5812a47dbc733b6736584b87ef696e898/pkg/asset/agent/installconfig.go#L59-L72)
+calls
+[`(*AssetBase).LoadFromFile`](https://github.com/openshift/installer/blob/006669f5812a47dbc733b6736584b87ef696e898/pkg/asset/installconfig/installconfigbase.go#L38-L60),
+whose `UnmarshalStrict` is on line 48. Installer 006669f (release-4.21)
 pins `sigs.k8s.io/yaml` v1.6.0
 ([go.mod](https://github.com/openshift/installer/blob/006669f5812a47dbc733b6736584b87ef696e898/go.mod#L150))
 over `go.yaml.in/yaml/v2` v2.4.2
@@ -100,15 +106,13 @@ code point above U+FFFF written as the eight-digit YAML escape. The
 writes exactly that; its output read back unchanged through the probe for every
 case in both tables. The role's
 [build task](../../ansible/collections/ansible_collections/bootwright/core/roles/containercluster_media_agent/tasks/build.yml)
-writes the agent configuration through it.
-[The task's regression test](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_containercluster_root_device_hints.py)
-renders that task over such values and reads them back, and
+writes the agent configuration through it and, since X26 (item B110), the
+install configuration with its pull secret and cluster key substituted.
+[The agent configuration's regression test](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_containercluster_root_device_hints.py)
+renders that task over such values and reads them back,
+[the install configuration's](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_containercluster_install_config.py)
+renders its task over a cluster named by each scalar in the first table and
+requires that no string is written plain, and
 [the filter's test](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/filter/test_to_installer_yaml.py)
-pins each escape.
-
-## Remaining exposure
-
-The same task file still writes `install-config.yaml` through `to_nice_yaml`,
-so a declared string there that YAML 1.1 reads as a number or a boolean is
-exposed the same way until that file is written through `to_installer_yaml`
-too.
+pins each escape. The probe above ran over `agent-config.yaml` only; the
+install configuration's reader was read, not probed.

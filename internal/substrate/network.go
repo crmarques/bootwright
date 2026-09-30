@@ -1,6 +1,8 @@
 package substrate
 
 import (
+	"net/netip"
+
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
@@ -66,6 +68,33 @@ func DefaultGateway(template api.Value) string {
 		}
 	}
 	return ""
+}
+
+// BridgeProviders names, in canonical order, the libvirt providers hosted on
+// machine whose managed attachment carries address as its host address. That
+// address exists only once the provider's host block creates the bridge, so a
+// socket bound to it cannot open before then.
+func BridgeProviders(catalog api.Catalog, machine, address string) []string {
+	bound, err := netip.ParseAddr(address)
+	if err != nil {
+		return nil
+	}
+	bound = bound.WithZone("").Unmap()
+	var found []string
+	for _, provider := range ProvidersOn(catalog, ArmLibvirt) {
+		if provider.Spec().Get("libvirt", "machineRef").Text() != machine {
+			continue
+		}
+		for _, attachment := range provider.Spec().Get("networkAttachments").Items() {
+			arm := attachment.Get("libvirt")
+			prefix, err := netip.ParsePrefix(arm.Get("address").Text())
+			if err == nil && arm.Get("management").Text() == "managed" && prefix.Addr().Unmap() == bound {
+				found = append(found, provider.Name())
+				break
+			}
+		}
+	}
+	return found
 }
 
 // refusal is the one shape every pure substrate derivation refuses in, so a

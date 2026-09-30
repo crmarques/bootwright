@@ -359,6 +359,40 @@ func (a *operationArea) EnsureDirectory(ctx context.Context, target string) erro
 	return nil
 }
 
+// RemoveDirectory removes one empty directory of this subtree and syncs its
+// parent. The kernel refuses a directory that holds anything, so a record is
+// never removed through it, and one already absent is left so.
+func (a *operationArea) RemoveDirectory(ctx context.Context, target string) error {
+	if err := a.available(ctx, true); err != nil {
+		return err
+	}
+	parts, err := operationPath(target, 1)
+	if err != nil {
+		return err
+	}
+	parent, name, release, err := a.descend(ctx, parts, false)
+	if errors.Is(err, syscall.ENOENT) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer release()
+	child, err := openDirectory(parent, name)
+	if errors.Is(err, syscall.ENOENT) {
+		return nil
+	}
+	if err != nil {
+		return unsafeEntry(parent, name, err)
+	}
+	identity := child.identity
+	child.file.Close()
+	if err := unlinkVerified(parent, name, identity, true); err != nil {
+		return state("lifecycle operation directory could not be removed: " + filepath.Join(parent.path, name))
+	}
+	return a.store.syncDirectory(ctx, parent)
+}
+
 func (a *operationArea) WriteExclusive(ctx context.Context, target string, data []byte) error {
 	if err := a.available(ctx, true); err != nil {
 		return err

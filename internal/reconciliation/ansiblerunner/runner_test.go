@@ -199,6 +199,8 @@ func TestProtocolAcceptsOnlyItsThreeBoundedPhases(t *testing.T) {
 		"bad outcome":     `{"phase":"completed","outcome":"done","evidence":{"a":1}}`,
 		"no evidence":     `{"phase":"completed","outcome":"changed"}`,
 		"not json":        `not json`,
+		"closing brace":   `{"phase":"loaded"}}`,
+		"closing bracket": `{"phase":"loaded"}]`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			drain := make(chan protocolMessage, 8)

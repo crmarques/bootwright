@@ -13,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // Definition is everything that distinguishes one managed network service from
@@ -70,7 +71,8 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	if input.State == nil {
 		return lifecycle.CapabilityPlan{}, Refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
 	}
-	requests, err := c.Requests(input.State.Effective(), input.Controller, input.Context.Name)
+	catalog := input.State.Effective()
+	requests, err := c.Requests(catalog, input.Controller, input.Context.Name)
 	if err != nil {
 		return lifecycle.CapabilityPlan{}, err
 	}
@@ -85,6 +87,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			ID:             request.Identity.Block,
 			Description:    c.definition.describe(input.Verb, request),
 			Stage:          reconciliation.StageInfraComponents,
+			Requires:       BridgeRequirements(catalog, request.Placement.Machine, request.BindAddress),
 			Impacts:        impacts(input.Verb, request),
 			Groups:         groups(input.Verb, request),
 			Kind:           string(c.definition.Kind),
@@ -180,6 +183,17 @@ func (c Capability) requestFor(catalog api.Catalog, object api.Object, controlle
 		}
 	}
 	return request, nil
+}
+
+// BridgeRequirements names the provider whose managed bridge carries a
+// service's bind address on its placement Machine, so the service's block
+// waits for the block that creates that bridge.
+func BridgeRequirements(catalog api.Catalog, machine, bindAddress string) []reconciliation.ObjectRef {
+	var references []reconciliation.ObjectRef
+	for _, provider := range substrate.BridgeProviders(catalog, machine, bindAddress) {
+		references = append(references, reconciliation.ObjectRef{Kind: string(api.InfraProvider), Object: provider})
+	}
+	return references
 }
 
 func (d Definition) describe(verb reconciliation.Verb, request Request) string {

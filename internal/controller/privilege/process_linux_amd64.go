@@ -5,6 +5,7 @@ package privilege
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -87,12 +88,32 @@ func (ProcessExecutor) Run(ctx context.Context, request Command) (int, error) {
 			break
 		}
 	}
-	command := exec.CommandContext(ctx, sudo, args...)
+	request.Executable, request.Arguments = sudo, args
+	return runProcess(ctx, request, relayGrace)
+}
+
+// relayGrace is how long a command and its streams have to finish after the
+// relayed signal before the command is killed or its streams are closed.
+const relayGrace = 5 * time.Second
+
+// errRelayed is what cancellation returns once it relayed the signal. It wraps
+// os.ErrProcessDone, which keeps os/exec reporting the command's own status
+// (Cmd.Cancel): the child chose that status after the relay, 0 included, while
+// streams still open at the end of the grace remain an error.
+var errRelayed = fmt.Errorf("signal relayed: %w", os.ErrProcessDone)
+
+func runProcess(ctx context.Context, request Command, grace time.Duration) (int, error) {
+	command := exec.CommandContext(ctx, request.Executable, request.Arguments...)
 	command.Env = append([]string(nil), request.Environment...)
 	command.Stdin, command.Stdout, command.Stderr = request.Input, request.Output, request.Error
-	command.Cancel = func() error { return command.Process.Signal(cancellationSignal(ctx)) }
-	command.WaitDelay = 5 * time.Second
-	err = command.Run()
+	command.Cancel = func() error {
+		if err := command.Process.Signal(cancellationSignal(ctx)); err != nil {
+			return err
+		}
+		return errRelayed
+	}
+	command.WaitDelay = grace
+	err := command.Run()
 	if err == nil {
 		return 0, nil
 	}

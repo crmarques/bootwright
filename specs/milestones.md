@@ -27,7 +27,7 @@ every other command `bootwright --help` lists returns the
 
 No slice is active.
 
-- **Next for agents:** X21, then the next enabling slice.
+- **Next for agents:** X21 and X27.
 - **Next for operator:** on a clean build that contains X20, run
   [lab-rhel](../examples/lab-rhel/README.md#run-it) for
   [B72](milestones/m4.md#b72) and [lab-sno](../examples/lab-sno/README.md) for

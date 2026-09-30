@@ -80,6 +80,44 @@
   until: substrate_libvirt_host_connection.rc == 0
   changed_when: false
 
+# The first observation was taken before the driver daemons ran, and a driver
+# that was stopped then answered for none of its networks or its pool, which
+# reads exactly as nothing defined: the foreign-network guard would pass, a
+# definition would drop the identity libvirt holds, and a pool the host carries
+# would be defined again. Every network and pool decision below reads this one.
+- name: Observe the provider host once its drivers run
+  bootwright.core.libvirt_host_inspect:
+    request: '{{ bootwright_substrate_host_request }}'
+  register: substrate_libvirt_host_running
+
+# A driver that still does not answer proves neither presence nor absence, so
+# the apply refuses before it defines anything and names that driver.
+- name: Refuse to define a network its driver did not answer for
+  ansible.builtin.assert:
+    that:
+      - item.answered
+    fail_msg: >-
+      the libvirt network driver (virtnetworkd) behind
+      {{ bootwright_substrate_host_request.uri }} did not answer for network
+      {{ item.name }}, so nothing proves whether it exists; restore that
+      driver and repeat the apply
+    quiet: true
+  loop: '{{ substrate_libvirt_host_running.observation.networks }}'
+  loop_control:
+    label: '{{ item.name }}'
+  when: item.managed
+
+- name: Refuse to define a pool its driver did not answer for
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_host_running.observation.poolAnswered
+    fail_msg: >-
+      the libvirt storage driver (virtstoraged) behind
+      {{ bootwright_substrate_host_request.uri }} did not answer for pool
+      {{ bootwright_substrate_host_request.poolName }}, so nothing proves
+      whether it exists; restore that driver and repeat the apply
+    quiet: true
+
 - name: Report hypervisor preparation completion
   bootwright.core.substrate_host_protocol:
     phase: group
@@ -100,7 +138,7 @@
       - item.state | length == 0 or item.owned
     fail_msg: a libvirt network of the same name exists without this context's ownership
     quiet: true
-  loop: '{{ substrate_libvirt_host_before.observation.networks }}'
+  loop: '{{ substrate_libvirt_host_running.observation.networks }}'
   loop_control:
     label: '{{ item.name }}'
   when: item.managed
@@ -111,7 +149,7 @@
       - item.bridge
     fail_msg: an external attachment names a bridge this host does not carry
     quiet: true
-  loop: '{{ substrate_libvirt_host_before.observation.networks }}'
+  loop: '{{ substrate_libvirt_host_running.observation.networks }}'
   loop_control:
     label: '{{ item.name }}'
   when: not item.managed
@@ -220,8 +258,8 @@
       - dir
       - --target
       - '{{ bootwright_substrate_host_request.poolPath }}'
-  when: substrate_libvirt_host_before.observation.pool | length == 0
-  changed_when: substrate_libvirt_host_before.observation.pool | length == 0
+  when: substrate_libvirt_host_running.observation.pool | length == 0
+  changed_when: substrate_libvirt_host_running.observation.pool | length == 0
 
 - name: Autostart the virtual-media pool
   ansible.builtin.command:
@@ -267,7 +305,7 @@
          if (substrate_libvirt_host_packages is changed
              or substrate_libvirt_host_daemon is changed
              or substrate_libvirt_host_pool_directory is changed
-             or substrate_libvirt_host_before.observation.pool != 'active'
+             or substrate_libvirt_host_running.observation.pool != 'active'
              or substrate_libvirt_host_incomplete_networks | length > 0)
          else 'unchanged' }}
     digest: '{{ bootwright_substrate_host_digest }}'

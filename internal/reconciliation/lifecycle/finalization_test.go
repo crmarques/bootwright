@@ -219,7 +219,8 @@ func TestAnInterruptedRemovalFinalizationIsCompletedByTheNextDestroy(t *testing.
 // under the running evidence the apply raised first. That removal's
 // finalization is then incomplete, so the next destroy releases them without
 // the token or a confirmation and settles, presenting nothing and reaching no
-// host.
+// host. Its pristine publication reclaims the claim the killed apply left,
+// which holds nothing, and keeps every operation directory that holds records.
 func TestAReservationHeldBesideACompletedRemovalIsReleasedByTheNextDestroy(t *testing.T) {
 	ctx := context.Background()
 	pristine := killPristine(t)
@@ -231,6 +232,10 @@ func TestAReservationHeldBesideACompletedRemovalIsReleasedByTheNextDestroy(t *te
 	}
 	service, host := run.repairing()
 	current, directories := operations(t, w)
+	claim := directories[len(directories)-1]
+	if w.area.written(claim) {
+		t.Fatalf("the killed apply's claim %s holds records", claim)
+	}
 	presented, effects := len(run.rig.harness.presenter.presented), maps.Clone(run.snapshot.host.effects)
 	result, err := service.Destroy(ctx, DestroyRequest{ContextName: testContextName})
 	if err != nil || !result.Settled || result.Recovered != RecoveredFinalization || result.Receipt.Operation != current {
@@ -242,9 +247,84 @@ func TestAReservationHeldBesideACompletedRemovalIsReleasedByTheNextDestroy(t *te
 	if len(run.rig.harness.presenter.presented) != presented || host.reads.Load() != 0 || !maps.Equal(run.snapshot.host.effects, effects) {
 		t.Fatal("the next destroy presented a plan or reached the host")
 	}
-	if now, found := operations(t, w); now != current || !slices.Equal(found, directories) {
-		t.Fatalf("the next destroy registered an operation: %s %v, was %s %v", now, found, current, directories)
+	if now, found := operations(t, w); now != current || !slices.Equal(found, directories[:len(directories)-1]) {
+		t.Fatalf("the next destroy left %s %v, was %s %v with the killed apply's claim %s", now, found, current, directories, claim)
 	}
+}
+
+// doneInterrupts cancels its invocation right after a removal's record is
+// published done, as an operator's interrupt landing there does.
+type doneInterrupts struct {
+	OperationStore
+	interrupt context.CancelFunc
+}
+
+func (s doneInterrupts) UpdateOperation(ctx context.Context, operation operationstore.Operation) error {
+	err := s.OperationStore.UpdateOperation(ctx, operation)
+	if err == nil && operation.Verb == reconciliation.Destroy && operation.State == reconciliation.OperationDone {
+		s.interrupt()
+	}
+	return err
+}
+
+// interruptOnceDone routes service's records through doneInterrupts and
+// returns the context it interrupts.
+func interruptOnceDone(t *testing.T, service *Service) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	base := service.options.Operations
+	service.options.Operations = func(area operationstore.Area) OperationStore {
+		return doneInterrupts{OperationStore: base(area), interrupt: cancel}
+	}
+	return ctx
+}
+
+// A destroy interrupted once its removal's record reads done still releases
+// what that removal owned, its reservations and Secret bindings, and publishes
+// pristine evidence, whether it ran the removal or finalized one an earlier
+// invocation left running, so the next destroy has nothing left to finish.
+func TestADestroyInterruptedOnceItsRemovalReadsDoneStillFinishesIt(t *testing.T) {
+	pristine := killPristine(t)
+	t.Run("the removal it ran", func(t *testing.T) {
+		h := newHarness(t, "alpha")
+		h.capability.reservations = reservationOf("alpha")
+		if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
+			t.Fatal(err)
+		}
+		service := h.service
+		ctx := interruptOnceDone(t, &service)
+		result, err := service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+		if ctx.Err() == nil || err != nil || result == nil || result.Receipt.State != "done" {
+			t.Fatalf("the destroy interrupted %t = %+v (%v)", ctx.Err() != nil, result, err)
+		}
+		if !bytes.Equal(h.workspace.evidence, pristine) || len(h.workspace.reservations) != 0 || !slices.Equal(h.binder.released, []string{"bind-1"}) {
+			t.Fatalf("the interrupted removal left %v under evidence %q, released %v", h.workspace.reservations, h.workspace.evidence, h.binder.released)
+		}
+		settled, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+		if err != nil || !settled.Settled || settled.Recovered != "" {
+			t.Fatalf("the next destroy = %+v (%v)", settled, err)
+		}
+	})
+	t.Run("a finalization", func(t *testing.T) {
+		run := killedAt(context.Background(), t, []reconciliation.Verb{reconciliation.Apply}, reconciliation.Destroy, "replace <op>/operation.json#1")
+		requireRunningWithEveryBlockDone(t, run, reconciliation.Destroy)
+		service, _ := run.repairing()
+		ctx := interruptOnceDone(t, &service)
+		if _, err := service.Destroy(ctx, DestroyRequest{ContextName: testContextName}); ctx.Err() == nil || !errors.Is(err, context.Canceled) {
+			t.Fatalf("the finalizing destroy interrupted %t = %v", ctx.Err() != nil, err)
+		}
+		w := run.snapshot.workspace
+		if killRest(w) != "removed" || !bytes.Equal(w.evidence, pristine) || len(w.reservations) != 0 || killUnreleased(run.snapshot.binder) != 0 {
+			t.Fatalf("the interrupted finalization left %s holding %v and %d bindings under evidence %q",
+				killRest(w), w.reservations, killUnreleased(run.snapshot.binder), w.evidence)
+		}
+		repaired, _ := run.repairing()
+		settled, err := repaired.Destroy(context.Background(), DestroyRequest{ContextName: testContextName})
+		if err != nil || !settled.Settled || settled.Recovered != "" {
+			t.Fatalf("the next destroy = %+v (%v)", settled, err)
+		}
+	})
 }
 
 // A completed removal that cannot release its Secret binding still reports
@@ -757,8 +837,8 @@ func TestAFinalizationRefusesWhenTheContextChangedBeforeIt(t *testing.T) {
 
 // Records that hold a block that is not done prove no completion, so nothing
 // finalizes them: a completed apply refuses as its repeat always does over
-// such records, and a completed removal settles, both leaving the evidence,
-// the bindings and every record exactly as they were.
+// such records, and so does a completed removal rather than settle, both
+// leaving the evidence, the bindings and every record exactly as they were.
 func TestNoFinalizationOverContradictedRecords(t *testing.T) {
 	ctx := context.Background()
 	for name, test := range map[string]struct {
@@ -773,6 +853,7 @@ func TestNoFinalizationOverContradictedRecords(t *testing.T) {
 		},
 		"a completed destroy with a lost block record": {
 			prepare: []reconciliation.Verb{reconciliation.Apply}, verb: reconciliation.Destroy, point: "release secret binding#1",
+			refusal: "records no block completion for these blocks, so nothing proves their effects removed: b (pending)",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

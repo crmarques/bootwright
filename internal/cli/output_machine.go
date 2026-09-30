@@ -90,9 +90,9 @@ func writeMachineList(out io.Writer, command string, result *inventory.ListResul
 	rows := make([][]string, 0, len(result.Machines))
 	for _, row := range result.Machines {
 		cells := []string{
-			escapeDisplayLine(row.Name), displayValue(row.Address), displayValue(strings.Join(row.IPs, ",")),
-			escapeDisplayLine(row.OS), displayValue(row.Provider),
-			displayValue(strings.Join(row.Clusters, ",")), escapeDisplayLine(row.Lifecycle),
+			row.Name, displayValue(row.Address), displayValue(strings.Join(row.IPs, ",")),
+			row.OS, displayValue(row.Provider),
+			displayValue(strings.Join(row.Clusters, ",")), row.Lifecycle,
 		}
 		if result.PowerRead {
 			cells = append(cells, displayValue(row.Power))
@@ -101,15 +101,6 @@ func writeMachineList(out io.Writer, command string, result *inventory.ListResul
 	}
 	text.table(headings, rows)
 	return text.writeTo(out)
-}
-
-// displayValue keeps a table column aligned when a Machine declares nothing
-// for it, so an absent value reads as absent rather than as an empty cell.
-func displayValue(value string) string {
-	if value == "" {
-		return "-"
-	}
-	return escapeDisplayLine(value)
 }
 
 func displayMachineList(result *inventory.ListResult) machineListPresentation {
@@ -159,12 +150,12 @@ func writeMachinePower(out io.Writer, command string, result *power.Result, json
 	text.headline(status, headline)
 	text.section("")
 	fields := []field{
-		{Label: "Machine", Value: escapeDisplayLine(result.Machine)},
-		{Label: "Power", Value: escapeDisplayLine(result.Power)},
+		{Label: "Machine", Value: result.Machine},
+		{Label: "Power", Value: result.Power},
 		{Label: "Previous", Value: displayValue(result.Previous)},
 	}
 	if result.LogLocation != "" {
-		fields = append(fields, field{Label: logLocationLabel, Value: escapeDisplayLine(result.LogLocation)})
+		fields = append(fields, field{Label: logLocationLabel, Value: result.LogLocation})
 	}
 	text.fields(fields...)
 	return text.writeTo(out)

@@ -254,6 +254,40 @@ func (a *memoryArea) Append(ctx context.Context, target string, data []byte) err
 	return nil
 }
 
+// RemoveDirectory removes only an empty directory, as the kernel does, and
+// never the area itself. It lands like a write, so a test can stop an
+// invocation at a removal.
+func (a *memoryArea) RemoveDirectory(ctx context.Context, target string) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	if err := a.admit(ctx, target, false); err != nil {
+		return err
+	}
+	if target == "" {
+		return errors.New("the area itself is not removable")
+	}
+	if a.landing != nil {
+		if err := a.landing("remove", target, a.files); err != nil {
+			return err
+		}
+	}
+	if err := a.fail["remove "+target]; err != nil {
+		return err
+	}
+	for name := range a.directories {
+		if strings.HasPrefix(name, target+"/") {
+			return errors.New("directory not empty")
+		}
+	}
+	for name := range a.files {
+		if strings.HasPrefix(name, target+"/") {
+			return errors.New("directory not empty")
+		}
+	}
+	delete(a.directories, target)
+	return nil
+}
+
 func (a *memoryArea) Sync(ctx context.Context, target string) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
@@ -590,6 +624,7 @@ func (c *testCapability) Apply(ctx context.Context, execution Execution) (Result
 
 func (c *testCapability) Destroy(_ context.Context, execution Execution) (Result, error) {
 	c.record(&c.destroys, execution.Block.ID)
+	c.recordExecution(execution)
 	c.mutex.Lock()
 	hold := c.destroyHold
 	c.mutex.Unlock()
@@ -2181,10 +2216,11 @@ func TestADestroyOverAnApplyThatStartedNothingCompletes(t *testing.T) {
 	}
 }
 
-// Only an apply still running or paused may have started nothing. Any other
-// operation whose records leave nothing to remove contradicts them, so its
-// removal refuses before it registers, reaches a host, or releases the
-// material the effects still on that host need.
+// Only an apply still running or paused may have started nothing, and a failed
+// removal left nothing to remove is finalized first. Any other operation whose
+// records leave nothing to remove contradicts them, so its removal refuses
+// before it registers, reaches a host, or releases the material the effects
+// still on that host need.
 func TestARemovalOverRecordsThatContradictThemselvesRefuses(t *testing.T) {
 	const block = "artifact-server-lab"
 	for name, arrange := range map[string]func(*testing.T, *harness){
@@ -2206,16 +2242,6 @@ func TestARemovalOverRecordsThatContradictThemselvesRefuses(t *testing.T) {
 			}
 			h.workspace.controller.OpenBundle = open
 			rewriteState(t, h, path.Join(currentOperation(t, h), "operation.json"), string(reconciliation.OperationFailed))
-		},
-		"a failed removal with nothing remaining": func(t *testing.T, h *harness) {
-			if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
-				t.Fatal(err)
-			}
-			h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
-			if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
-				t.Fatal("a failed removal reported success")
-			}
-			rewriteState(t, h, path.Join(currentOperation(t, h), "blocks", block, "state.json"), string(reconciliation.BlockDone))
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

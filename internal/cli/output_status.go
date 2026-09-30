@@ -18,6 +18,7 @@ type statusResult struct {
 	Secrets         statusSecrets    `json:"secrets"`
 	NextSteps       []string         `json:"nextSteps"`
 	Lifecycle       *statusLifecycle `json:"lifecycle"`
+	Contradictions  []string         `json:"contradictions"`
 }
 
 func (statusResult) documentedResult() {}
@@ -83,6 +84,7 @@ func displayStatus(result *lifecycle.StatusResult) statusResult {
 		Shared:          make([]statusService, 0, len(result.Shared)),
 		Secrets:         statusSecrets{Declared: result.Secrets.Declared, Bound: result.Secrets.Bound},
 		NextSteps:       displayLines(result.NextSteps),
+		Contradictions:  displayLines(result.Contradictions),
 	}
 	for _, check := range result.SetupChecks {
 		out.SetupChecks = append(out.SetupChecks, statusCheck{ID: escapeDisplayLine(check.ID), Status: escapeDisplayLine(check.Status)})
@@ -134,7 +136,7 @@ func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMod
 	var text display
 	text.headline("OK", "Context "+result.Context.Name)
 	text.section("")
-	text.fields(field{Label: "Mode", Value: statusValue(result.Context.Mode)})
+	text.fields(field{Label: "Mode", Value: displayValue(result.Context.Mode)})
 	writeStatusSetup(&text, result.SetupChecks)
 	writeStatusDesired(&text, result.Desired)
 	writeStatusClusters(&text, "Clusters", result.Clusters)
@@ -150,16 +152,11 @@ func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMod
 		text.lines(result.NextSteps)
 	}
 	writeStatusLifecycle(&text, result)
-	return text.writeTo(out)
-}
-
-// statusValue shows an empty field as absent. It leaves every other value raw
-// for display to escape once.
-func statusValue(value string) string {
-	if value == "" {
-		return "-"
+	if len(result.Contradictions) != 0 {
+		text.section("Contradictions")
+		text.lines(result.Contradictions)
 	}
-	return value
+	return text.writeTo(out)
 }
 
 func writeStatusSetup(text *display, checks []lifecycle.SetupCheck) {
@@ -177,8 +174,8 @@ func writeStatusSetup(text *display, checks []lifecycle.SetupCheck) {
 func writeStatusDesired(text *display, desired lifecycle.DesiredSummary) {
 	text.section("Desired")
 	text.fields(
-		field{Label: "Revision", Value: statusValue(desired.Revision)},
-		field{Label: "Environment", Value: statusValue(desired.Environment)},
+		field{Label: "Revision", Value: displayValue(desired.Revision)},
+		field{Label: "Environment", Value: displayValue(desired.Environment)},
 		field{Label: "Files seen", Value: strconv.Itoa(desired.Files)},
 		field{Label: "Objects decoded", Value: strconv.Itoa(desired.Objects)},
 	)
@@ -203,7 +200,7 @@ func writeStatusShared(text *display, services []lifecycle.ServiceSummary) {
 	text.section("Shared services")
 	rows := make([][]string, 0, len(services))
 	for _, service := range services {
-		rows = append(rows, []string{serviceStatusToken(service.Status), service.Kind + "/" + service.Name, statusValue(service.Machine)})
+		rows = append(rows, []string{serviceStatusToken(service.Status), service.Kind + "/" + service.Name, displayValue(service.Machine)})
 	}
 	text.rows(rows)
 }
@@ -218,10 +215,10 @@ func writeStatusLifecycle(text *display, result *lifecycle.StatusResult) {
 	}
 	text.section("Lifecycle")
 	text.fields(
-		field{Label: "Operation", Value: statusValue(summary.Operation)},
-		field{Label: "Verb", Value: statusValue(summary.Verb)},
-		field{Label: "State", Value: statusValue(summary.State)},
-		field{Label: "Next", Value: statusValue(summary.Next)},
+		field{Label: "Operation", Value: displayValue(summary.Operation)},
+		field{Label: "Verb", Value: displayValue(summary.Verb)},
+		field{Label: "State", Value: displayValue(summary.State)},
+		field{Label: "Next", Value: displayValue(summary.Next)},
 	)
 	if len(summary.Blocks) != 0 {
 		text.section("")

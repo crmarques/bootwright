@@ -66,6 +66,8 @@ func TestTheProvedIdentityIsReadOnlyFromAPresenceProof(t *testing.T) {
 		"an unknown field":  []byte(strings.TrimSuffix(valid, "}") + `,"unexpected":true}`),
 		"a trailing object": []byte(valid + "{}"),
 		"trailing bytes":    []byte(valid + "x"),
+		"a closing brace":   []byte(valid + "}"),
+		"a closing bracket": []byte(valid + "]"),
 		"empty":             nil,
 		"beyond the bound": encode(t, Evidence{
 			Addresses: fixtureRequest(t).Addresses(), Model: strings.Repeat("m", maxEvidenceBytes), Postcondition: true,
@@ -95,9 +97,8 @@ func published(implementation string, verb reconciliation.Verb, state reconcilia
 
 // A Machine is pinned by the evidence its bare-metal block recorded while the
 // context's current apply proved it, and by nothing else: another
-// implementation's block, a removal, a block that is not done, and a block
-// completed by resolving an attempt that recorded no evidence of its own
-// (stored as JSON null) pin nothing.
+// implementation's block, a removal, a block that is not done, and a done
+// block that carries no evidence (stored as JSON null) pin nothing.
 func TestOnlyADoneBareMetalApplyProofPinsAMachine(t *testing.T) {
 	proved := proof(t, "uuid-1", "SN1")
 	installed := json.RawMessage(`{"hostKey":"ssh-ed25519 AAAA"}`)

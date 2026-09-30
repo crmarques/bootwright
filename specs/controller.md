@@ -304,15 +304,20 @@ source streams to disk under its own
 [acquisition deadline](#the-controller-stage), each chunk written and
 digested before the next is read, and its members stream into place the same
 way, so neither a source nor a member is ever held whole in memory; an
-interrupted transfer leaves only an unlinked file. Before any member of
+interrupted transfer leaves only an unlinked file. Only naming a complete,
+proved file creates the directories it is named in, so a refused source or
+member leaves no directory behind. Before any member of
 `openshift-clients` is published, its `oc` must name the frozen release, for
 both compatibilities. A released `oc` names its release in its own bytes: the
 version, NUL-terminated, overwrites the head of a fixed 93-byte marker. The
 bytes must hold exactly one marker stamped with the frozen version and no
-unstamped one, or neither `oc` nor `kubectl` is published. No downloaded tool
+unstamped one, or neither `oc` nor `kubectl` is published, and the retained
+source is all the refusal leaves. No downloaded tool
 is ever executed, so the stamp is read, never asked of the tool. Inventory,
 request, downloads, expanded members and callback frames have fixed bounds,
-and a native package download a fixed 5-minute deadline.
+and a native package download a fixed 5-minute deadline. A native package
+streams into its own file in disposable scratch the same way, chunk by chunk,
+and is proved by its digest before the transaction may name it.
 
 Go publishes only the pinned private Python/Ansible runtime and embedded
 repository automation needed to start Ansible. All host-package and target-CLI
@@ -325,6 +330,9 @@ authorization, host/context coordination, durable state and product output;
 Ansible returns bounded structured evidence through the runner protocol.
 Task output is not an application API. Read-only Go verification reconstructs
 installed bootstrap and target file inventories from approved retained sources.
+It streams each target source once and each published target member it proves,
+holding only their digests, so neither is ever held whole in memory; a bundle
+area that cannot stream a file is refused rather than read whole.
 
 The automation content digest covers every embedded automation file except
 documentation, the collection's root `README` and `CHANGELOG`, which stay in

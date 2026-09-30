@@ -82,6 +82,8 @@ func TestEvidenceMustBeBoundedAndClosed(t *testing.T) {
 		"empty":         nil,
 		"unknown field": []byte(`{"absent":false,"surprise":1}`),
 		"trailing":      append(presenceEvidence(request, testDigest, testFingerprint), '{'),
+		"a closing }":   append(presenceEvidence(request, testDigest, testFingerprint), '}'),
+		"a closing ]":   append(presenceEvidence(request, testDigest, testFingerprint), ']'),
 		"oversized":     []byte(`{"container":"` + strings.Repeat("x", maxEvidenceBytes) + `"}`),
 	} {
 		t.Run(name, func(t *testing.T) {

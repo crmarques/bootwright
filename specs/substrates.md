@@ -72,7 +72,14 @@ are each started and enabled to start with the host, because a network or pool
 set to autostart is only restored by the driver that owns it: a socket-activated
 driver leaves both absent until something asks for them, so a host that
 restarts carries neither. The declared `uri` must answer before any network or
-pool is defined.
+pool is defined. The apply reads every network, bridge and pool it decides on —
+the foreign-network refusal, the proof that each external bridge is present,
+the identity a definition offers back, and whether the pool is defined — from
+an observation taken once those daemons run and the `uri` answers, because a
+driver that was stopped answers for none of them and virsh reports that exactly
+as nothing defined, and the bridge of a network set to autostart appears only
+once its driver runs. A managed network or the pool whose driver still does not
+answer refuses before anything is defined.
 
 Not yet met: an SSH-host installation frozen as an exact transaction and
 authorized under the controller stage's before-state rules; tracked as
@@ -291,19 +298,20 @@ path, unit, socket or hypervisor object.
 **Evidence.** Completion requires the ComputerSystem answering with the bound
 credential, its recorded identity, every declared MAC observed, and a reported
 power state. An apply that proves the machine reports `completed` with no
-change, the first proof included: the claim the block contributes is taken as
-the operation's reservation when the operation registers, not by the adapter,
-and the block realizes nothing that could drift. The differences it converges
-are none: hardware is not converged, and a machine whose MAC set no longer
-matches fails naming what it lacks rather than adopting the new hardware. The
-`UUID` and `SerialNumber` recorded by the apply attempt that proved the machine
-are its pin while that apply is the context's current operation: the pre-boot
-proof above compares the controller's answer with them before any media is
-inserted, and the day-2 power operations below before any power request, and
-each refuses a machine that answers as a different system. A block
-a [resolution](state-reconciliation.md#resolution-outcomes) completed after an
-attempt whose outcome was not proved pins nothing, because the pin is read from
-the attempt and that attempt recorded no evidence. A destroy ends the pin once
+change, the first proof included, and so does a resolution that proves it,
+because its observation repeats that proof: the claim the block contributes is
+taken as the operation's reservation when the operation registers, not by the
+adapter, and the block realizes nothing that could drift. The differences it
+converges are none: hardware is not converged, and a machine whose MAC set no
+longer matches fails naming what it lacks rather than adopting the new
+hardware. The
+`UUID` and `SerialNumber` recorded by the apply attempt that proved the machine,
+or by the [resolution](state-reconciliation.md#resolution-outcomes) that proved
+it after an attempt whose outcome was not proved, are its pin while that apply
+is the context's current operation: the pre-boot proof above compares the
+controller's answer with them before any media is inserted, and the day-2 power
+operations below before any power request, and each refuses a machine that
+answers as a different system. A destroy ends the pin once
 it is the context's current operation and releases the claim when it completes;
 the next apply pins what its own proof finds, the MAC set still required.
 Observation is read-only: the exact identity with its complete MAC set is
@@ -351,6 +359,20 @@ is not a Redfish resource, fails rather than answering empty, and the target
 proof reports what it could not read as unobserved, which proves nothing; a
 controller that offers no virtual media reports none, and inserting into it
 refuses.
+
+Each call's worst case follows from the Redfish client's fixed bounds, and a
+consumer's run [deadline](architecture.md#the-adapter-result-protocol) allows
+every call it makes that bound: every pause the call's polls may take, and
+every request outside those polls at its full timeout, 5 minutes for an attach
+and 30 seconds for any other. A power read is bounded by 30 seconds; a media
+read by 2 minutes, the four requests the pinned emulator takes to report its
+power and find its device; an insert by 36 minutes 20 seconds, three attaches
+with their polls and the release and pause between each two; an eject by 4
+minutes 30 seconds; a boot selection by 2 minutes 30 seconds; and a power
+operation, polling 60 times, by 3 minutes 30 seconds. A controller that needs
+more requests to find its device takes longer, and one whose polled reads also
+run to their timeout can take up to the second bound the client documents; a
+run that reaches its deadline then leaves its attempt unknown.
 
 Booting a machine from inserted media is one operation, `boot_media`, rather
 than a fixed sequence every consumer repeats, because how a boot is selected is

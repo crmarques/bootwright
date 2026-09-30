@@ -36,7 +36,9 @@
       changed_when: false
 
     # The bound material reaches the installer inputs here and nowhere else: the
-    # frozen request carries the declarations, never their values.
+    # frozen request carries the declarations, never their values. The filter
+    # quotes every string, because the installer's YAML reader would read a
+    # plain cluster name 1e3 or y as 1000 or true.
     - name: Write the install configuration with its bound material
       ansible.builtin.copy:
         content: >-
@@ -45,7 +47,7 @@
                  'pullSecret': lookup('ansible.builtin.file', bootwright_cluster_media_material.pullSecret),
                  'sshKey': bootwright_cluster_media_material.sshKey,
                })
-             | to_nice_yaml(indent=2) }}
+             | bootwright.core.to_installer_yaml }}
         dest: '{{ containercluster_media_agent_work }}/install-config.yaml'
         owner: root
         group: root

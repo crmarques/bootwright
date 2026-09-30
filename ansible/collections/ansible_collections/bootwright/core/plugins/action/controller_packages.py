@@ -1,5 +1,7 @@
 """Apply one frozen native solver transaction through the supplied DNF API."""
 
+from __future__ import annotations
+
 import os
 from pathlib import Path
 import tempfile
@@ -16,6 +18,40 @@ from ansible_collections.bootwright.core.plugins.module_utils.controller_files i
 from ansible_collections.bootwright.core.plugins.module_utils.controller_native import (
     invoke,
 )
+
+
+def stage_payloads(packages, egress, scratch):
+    """Stream each approved package into its own scratch file under one
+    deadline, so no package is ever held whole in memory, and name each file
+    by its source."""
+    payloads, total = {}, 0
+    deadline = time.monotonic() + 300
+    for package in packages:
+        if time.monotonic() > deadline:
+            raise ValueError("native acquisition deadline")
+        source = package["source"]
+        total += source["bytes"]
+        if (
+            not 0 < source["bytes"] <= 256 << 20
+            or total > 4 << 30
+            or source["id"] in payloads
+        ):
+            raise ValueError("native source limit")
+        destination = Path(scratch) / (str(len(payloads)) + ".rpm")
+        descriptor = os.open(
+            destination,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            0o600,
+        )
+        try:
+            download(source, egress, descriptor)
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        payloads[source["id"]] = str(destination)
+    if time.monotonic() > deadline:
+        raise ValueError("native acquisition deadline")
+    return payloads
 
 
 class ActionModule(ActionBase):
@@ -41,33 +77,7 @@ class ActionModule(ActionBase):
             bundle = Bundle(request["publicationBundle"])
             bundle.writable()
             with tempfile.TemporaryDirectory(prefix="bootwright-dnf-apply-") as scratch:
-                payloads, total = {}, 0
-                deadline = time.monotonic() + 300
-                for package in plan["packages"]:
-                    if time.monotonic() > deadline:
-                        raise ValueError("native acquisition deadline")
-                    source = package["source"]
-                    total += source["bytes"]
-                    if (
-                        not 0 < source["bytes"] <= 256 << 20
-                        or total > 4 << 30
-                        or source["id"] in payloads
-                    ):
-                        raise ValueError("native source limit")
-                    data = download(source, request["egress"])
-                    destination = Path(scratch) / (str(len(payloads)) + ".rpm")
-                    descriptor = os.open(
-                        destination,
-                        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                        0o600,
-                    )
-                    with os.fdopen(descriptor, "wb") as stream:
-                        stream.write(data)
-                        stream.flush()
-                        os.fsync(stream.fileno())
-                    payloads[source["id"]] = str(destination)
-                if time.monotonic() > deadline:
-                    raise ValueError("native acquisition deadline")
+                payloads = stage_payloads(plan["packages"], request["egress"], scratch)
                 bundle.writable()
                 emit({"phase": "native"}, acknowledge=True)
                 proof = invoke(

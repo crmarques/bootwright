@@ -43,3 +43,6 @@ Lifecycle
 
   Registered by  1.4.0 (9f2c1ab)
   Logs           /var/lib/bootwright/contexts/lab/state/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/logs
+
+Contradictions
+  os-install-rhel-01 (no block record, yet an attempt of it is recorded)

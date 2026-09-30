@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -87,6 +88,8 @@ type controllerBundleArea struct {
 	bytes        int64
 	scanned      bool
 }
+
+var _ prerequisites.BundleStream = (*controllerBundleArea)(nil)
 
 func (a *controllerBundleArea) close() {
 	for index := len(a.owned) - 1; index >= 0; index-- {
@@ -299,62 +302,117 @@ func privateBundleFile(stat syscall.Stat_t, parent *directory) bool {
 }
 
 func (a *controllerBundleArea) Read(ctx context.Context, path string, maximum int) ([]byte, error) {
-	if err := a.available(ctx, false); err != nil {
+	var data []byte
+	err := a.within(ctx, path, int64(maximum), func(file *os.File, size int64) (int64, error) {
+		data = make([]byte, 0, int(size))
+		buffer := make([]byte, min(32768, maximum+1))
+		for len(data) <= maximum {
+			if err := ctx.Err(); err != nil {
+				return 0, err
+			}
+			n, readErr := file.Read(buffer[:min(len(buffer), maximum+1-len(data))])
+			data = append(data, buffer[:n]...)
+			if errors.Is(readErr, io.EOF) {
+				break
+			}
+			if readErr != nil || len(data) > maximum {
+				return 0, state("controller bundle read failed or exceeded its bound")
+			}
+		}
+		return int64(len(data)), nil
+	})
+	if err != nil {
 		return nil, err
+	}
+	return data, nil
+}
+
+func (a *controllerBundleArea) Stream(ctx context.Context, path string, maximum int64, consume func(prerequisites.BundleReader) error) error {
+	return a.within(ctx, path, maximum, func(file *os.File, size int64) (int64, error) {
+		stream := &bundleFileStream{ctx: ctx, file: file, size: size}
+		if err := consume(stream); err != nil {
+			return 0, err
+		}
+		if stream.read != size {
+			return 0, state("controller bundle stream was not read whole")
+		}
+		return stream.read, nil
+	})
+}
+
+// within hands use one private bundle file and its size, then proves the file
+// kept its identity and its name while use read the returned byte count.
+func (a *controllerBundleArea) within(ctx context.Context, path string, maximum int64, use func(*os.File, int64) (int64, error)) error {
+	if err := a.available(ctx, false); err != nil {
+		return err
 	}
 	parts, err := bundleParts(path)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if maximum < 0 || maximum > maxBundleFileBytes {
-		return nil, state("controller bundle read exceeds its byte bound")
+		return state("controller bundle read exceeds its byte bound")
 	}
 	parent, name, close, err := a.parent(parts)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer close()
 	file, err := openRelative(parent, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
-		return nil, safeError(err)
+		return safeError(err)
 	}
 	defer file.Close()
 	before, err := statHandle(file)
-	if err != nil || !privateBundleFile(before, parent) || before.Size < 0 || before.Size > int64(maximum) {
-		return nil, state("controller bundle file metadata is unsafe")
+	if err != nil || !privateBundleFile(before, parent) || before.Size < 0 || before.Size > maximum {
+		return state("controller bundle file metadata is unsafe")
 	}
-	data := make([]byte, 0, int(before.Size))
-	buffer := make([]byte, min(32768, maximum+1))
-	for len(data) <= maximum {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		n, readErr := file.Read(buffer[:min(len(buffer), maximum+1-len(data))])
-		data = append(data, buffer[:n]...)
-		if errors.Is(readErr, io.EOF) {
-			break
-		}
-		if readErr != nil || len(data) > maximum {
-			return nil, state("controller bundle read failed or exceeded its bound")
-		}
+	read, err := use(file, before.Size)
+	if err != nil {
+		return err
 	}
 	after, err := statHandle(file)
-	if err != nil || !sameFile(before, after) || after.Size != int64(len(data)) {
-		return nil, state("controller bundle file changed during inspection")
+	if err != nil || !sameFile(before, after) || after.Size != read {
+		return state("controller bundle file changed during inspection")
 	}
 	current, err := openRelative(parent, name, pathHandle, 0)
 	if err != nil {
-		return nil, state("controller bundle file was replaced")
+		return state("controller bundle file was replaced")
 	}
 	actual, err := statHandle(current)
 	current.Close()
 	if err != nil || !sameFile(after, actual) {
-		return nil, state("controller bundle file was replaced")
+		return state("controller bundle file was replaced")
 	}
-	if err := a.available(ctx, false); err != nil {
-		return nil, err
+	return a.available(ctx, false)
+}
+
+type bundleFileStream struct {
+	ctx  context.Context
+	file *os.File
+	size int64
+	read int64
+}
+
+func (s *bundleFileStream) Read(data []byte) (int, error) {
+	if err := s.ctx.Err(); err != nil {
+		return 0, err
 	}
-	return data, nil
+	if len(data) == 0 {
+		return 0, nil
+	}
+	n, err := s.file.Read(data[:min(int64(len(data)), s.size+1-s.read)])
+	s.read += int64(n)
+	if s.read > s.size {
+		return 0, state("controller bundle read failed or exceeded its bound")
+	}
+	if errors.Is(err, io.EOF) {
+		return n, io.EOF
+	}
+	if err != nil {
+		return n, state("controller bundle read failed or exceeded its bound")
+	}
+	return n, nil
 }
 
 func (a *controllerBundleArea) EnsureDirectory(ctx context.Context, path string) error {

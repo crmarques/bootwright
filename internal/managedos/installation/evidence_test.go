@@ -113,6 +113,19 @@ func TestEvidenceIsBoundedAndStrictlyShaped(t *testing.T) {
 			}
 		})
 	}
+	gone := encode(t, Evidence{Absent: true, Postcondition: true, Request: "digest"})
+	installed := encode(t, Evidence{Address: "192.0.2.10", HostKey: "ssh-ed25519 AAAA", Postcondition: true, Request: "digest"})
+	if _, _, err := HostKeyEvidence(installed); err != nil {
+		t.Fatalf("a proved host key was refused: %v", err)
+	}
+	for _, closer := range []string{"}", "]"} {
+		if err := ValidateAbsence([]byte(string(gone)+closer), "digest"); err == nil {
+			t.Errorf("evidence followed by %s was accepted", closer)
+		}
+		if _, _, err := HostKeyEvidence([]byte(string(installed) + closer)); err == nil {
+			t.Errorf("a host key followed by %s was accepted", closer)
+		}
+	}
 	oversized := make([]byte, maxEvidenceBytes+1)
 	for index := range oversized {
 		oversized[index] = ' '

@@ -71,7 +71,7 @@ func decode(data []byte) (Evidence, error) {
 	if err := decoder.Decode(&evidence); err != nil {
 		return Evidence{}, failure("lifecycle.state", "the power adapter returned malformed evidence", "")
 	}
-	if decoder.More() {
+	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
 		return Evidence{}, failure("lifecycle.state", "the power adapter returned trailing evidence", "")
 	}
 	return evidence, nil
@@ -135,7 +135,7 @@ func decodeReading(data []byte) (ReadEvidence, error) {
 	if err := decoder.Decode(&evidence); err != nil {
 		return ReadEvidence{}, failure("lifecycle.state", "the power reading adapter returned malformed evidence", "")
 	}
-	if decoder.More() {
+	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
 		return ReadEvidence{}, failure("lifecycle.state", "the power reading adapter returned trailing evidence", "")
 	}
 	return evidence, nil

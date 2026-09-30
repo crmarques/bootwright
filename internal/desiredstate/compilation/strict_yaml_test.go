@@ -140,9 +140,7 @@ func TestStrictYAMLAcceptsWhatTheGrammarPermits(t *testing.T) {
 }
 
 func strictYAMLKnownDeviations() map[string]strictYAMLDeviation {
-	return map[string]strictYAMLDeviation{
-		"plain merge key": {item: "B123", got: []string{"yaml.shape $.spec"}},
-	}
+	return map[string]strictYAMLDeviation{}
 }
 
 func strictYAMLRefusals() []strictYAMLRow {
@@ -168,6 +166,8 @@ func strictYAMLRefusals() []strictYAMLRow {
 		{"alias", "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: &n probe\nspec:\n  type: *n\n", []string{"yaml.alias $.metadata.name", "yaml.alias $.spec.type"}},
 		{"anchored key", strictYAMLSecret("  &k type: opaque\n"), []string{"yaml.alias $.spec"}},
 		{"plain merge key", strictYAMLSecret("  <<: {type: opaque}\n"), []string{"yaml.alias $.spec"}},
+		{"quoted merge key", strictYAMLSecret("  '<<': {type: opaque}\n"), []string{"yaml.alias $.spec"}},
+		{"tagged merge key", strictYAMLSecret("  !!merge <<: {type: opaque}\n"), []string{"yaml.alias $.spec"}},
 		{"unknown field", strictYAMLSecret("  type: opaque\n  unexpected: value\n"), []string{"api.field $.spec"}},
 		{"null capabilities element", strictYAMLMachine("  capabilities: [container-runtime, null]\n  os: {provided: true}\n  access: {local: true}\n"), []string{"api.type $.spec.capabilities[1]"}},
 	}
