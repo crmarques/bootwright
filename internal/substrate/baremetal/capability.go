@@ -224,6 +224,10 @@ func (c MachineCapability) run(ctx context.Context, execution lifecycle.Executio
 		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: request.Controller.CredentialsRef, Variable: "controllerUser"},
 		{Name: "bmc-password", Part: secrets.PasswordPart, Secret: request.Controller.CredentialsRef, Variable: "controllerPassword"},
 	}
+	if request.Controller.TrustBundleRef != "" {
+		materials = append(materials,
+			lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: request.Controller.TrustBundleRef, Variable: "controllerCA"})
+	}
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: Implementation, Operation: operation, Variable: machineVariable,
 		Canonical: canonical, Placement: request.Placement, Materials: materials,

@@ -39,6 +39,7 @@ Alias cell.
 | [B165](#b165) | split from B44 on 2026-09-30 (D40) | enabling | Controller setup and Workspace | The automation projection as a layer over a shared foundation | B44 fixes only the remaining limit (D40) |
 | [B166](#b166) | split from B45 on 2026-09-30 (D41) | safety | State reconciliation | Scoped removal | A state-contract candidate (D41) |
 | [B167](#b167) | split from B34 on 2026-09-30 (D28) | safety | Substrate and Controller | Frozen remote package transactions | The SSH-host install contract was narrowed instead (D28) |
+| [B171](#b171) | new, 2026-09-30 (X21) | enabling | State reconciliation and Secrets | Custody checks each held by its own test | Parked under the 2026-09-30 triage rule: test depth |
 
 ### B94
 
@@ -97,7 +98,7 @@ acceptance tests.
 ### B101
 
 One additional view of available evidence or explicit access, or a dashboard or
-completion extension. Its custody half is [B10](m1.md#b10). **Exit evidence:**
+completion extension. Its custody half is B10, which [X21](delivered.md#x21--bmc-trust-and-administrator-custody) delivered. **Exit evidence:**
 a complete human and machine journey, diagnostics, safety and end-to-end
 tests; a cluster inspection or access item also meets the cluster evidence
 below.
@@ -202,6 +203,10 @@ An automation-only revision still names a whole new bundle area and republishes 
 
 An SSH-host provider's hypervisor install frozen as one exact transaction under the controller stage's before-state rules. **Exit evidence:** a frozen-transaction test for the SSH arm.
 
+### B171
+
+Three of X21's custody mutations are caught only by defence in depth: removing the lent area's close, dropping the closed-transaction check, and withdrawing before the removal's record reads done. **Exit evidence:** one test that fails for each mutation alone.
+
 ## Retired
 
 IDs no longer issued. Where an item took one over, its line here names that
@@ -285,6 +290,10 @@ Requires cell as `owner decision: <question>`.
 - **D22** (2026-09-29, taken likewise; pending review): an elevated command
   that exits without a result reports `runtime.internal` with exit status 1;
   `runtime.interrupted` still wins after an interrupt (X20).
+- **D23** (2026-09-30, taken by the session under the owner's instruction to proceed with recommendations): B9: a controller's CA bundle is the only anchor of its Redfish calls; without one, the system trust store.
+- **D24** (2026-09-30, taken by the session under the owner's instruction to proceed with recommendations): B9: a physical Machine's virtual media imports the media certificate by default; `disable-verification` is admitted only on one Machine and refused beside private delivery.
+- **D25** (2026-09-30, taken by the session under the owner's instruction to proceed with recommendations): B10: the local keyring becomes `local-keyring-v4`, which holds produced material; an earlier keyring refuses and names the build that reads it.
+- **D26** (2026-09-30, taken by the session under the owner's instruction to proceed with recommendations): B10: the custodied kubeconfig is withdrawn when the context's removal of its cluster completes.
 - **D27** (2026-09-30, accepted by the owner from the session's recommendations): B29: a foreign image on one of the cluster's own Machines reads as partial during an agent-install removal.
 - **D28** (2026-09-30, accepted by the owner from the session's recommendations): B34: an SSH-host provider's hypervisor packages resolve at apply time; the frozen transaction is parked (B167).
 - **D29** (2026-09-30, accepted by the owner from the session's recommendations): B40: admission refuses `spec.lifecycle.rescue` until a rescue journey exists.

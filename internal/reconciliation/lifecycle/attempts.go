@@ -80,6 +80,8 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	if runErr != nil && errors.Is(runErr, context.Canceled) {
 		outcome = reconciliation.OutcomeCanceled
 	}
+	// What the attempt produced is in custody before its record says done.
+	outcome, runErr = s.capturedAttempt(ctx, tx, boundary, log, operation.Verb, block, outcome, result.Produced, runErr)
 	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "outcome", Block: block.ID, Detail: string(outcome)})
 	// A typed failure proves less than completion, so an attempt whose log
 	// failed before its outcome was logged records it unknown.
@@ -146,12 +148,18 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	}
 	resolvedEffect, state, err := reconciliation.ResolutionTransition(effect)
 	if err != nil {
+		ClearProduced(observation.Produced)
 		return reconciliation.BlockUnknown, err
 	}
 	// A log failure here still permits the transition positive evidence
 	// proves; the fault it latches is what blocks the work that would follow.
 	for _, reported := range diagnostics.Of(runErr) {
 		_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "observation-failed", Block: block.ID, Detail: reported.Code + ": " + reported.Message})
+	}
+	// A resolution that proves an apply's block done places what it produced
+	// in custody first; one that cannot leaves the block unknown.
+	if captured := s.capture(ctx, tx, boundary, log, operation.Verb, block, state, observation.Produced); captured != nil {
+		resolvedEffect, state, runErr = reconciliation.EffectUnknown, reconciliation.BlockUnknown, captured
 	}
 	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "resolution", Block: block.ID, Detail: string(resolvedEffect)})
 	outcome := reconciliation.ResolutionOutcome(resolvedEffect, observation.Outcome)
@@ -296,8 +304,9 @@ func (s Service) project(ctx context.Context, tx Transaction, verb reconciliatio
 	return tx.PublishEvidence(ctx, data)
 }
 
-// finish records the operation's terminal state, releases the reservations a
-// completed removal no longer owns, and assembles the result the CLI renders. A
+// finish records the operation's terminal state, withdraws the produced
+// material and releases the reservations a completed removal no longer owns,
+// and assembles the result the CLI renders. A
 // log fault this invocation latched is recorded again here, so the operation
 // keeps it even when the latch could not write it. A completed removal
 // publishes no evidence here: its pristine evidence follows the release of its
@@ -317,6 +326,9 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 		return result, err
 	}
 	if next == reconciliation.OperationDone && operation.Verb == reconciliation.Destroy {
+		if err := s.withdraw(ctx, tx); err != nil {
+			return result, err
+		}
 		if err := tx.ReleaseReservations(ctx); err != nil {
 			return result, err
 		}

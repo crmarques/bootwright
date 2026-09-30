@@ -30,6 +30,7 @@
   vars:
     substrate_baremetal_machine_target_endpoint: '{{ managedos_install_anaconda_endpoint }}'
     substrate_baremetal_machine_target_verify: '{{ managedos_install_anaconda_verify }}'
+    substrate_baremetal_machine_target_ca: '{{ managedos_install_anaconda_controller_ca }}'
     substrate_baremetal_machine_target_expected: '{{ managedos_install_anaconda_expected }}'
     substrate_baremetal_machine_target_user: '{{ bootwright_os_install_material.controllerUser }}'
     substrate_baremetal_machine_target_password: '{{ bootwright_os_install_material.controllerPassword }}'
@@ -53,8 +54,11 @@
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
     verify: '{{ managedos_install_anaconda_verify }}'
+    ca_data: '{{ managedos_install_anaconda_ca_data }}'
     operation: insert
     image: '{{ bootwright_os_install_request.image.url }}'
+    trust: '{{ managedos_install_anaconda_media_trust.trust }}'
+    certificate: '{{ managedos_install_anaconda_certificate }}'
   no_log: true
 
 - name: Boot a machine this substrate created from that media
@@ -76,6 +80,7 @@
   vars:
     substrate_baremetal_machine_boot_endpoint: '{{ managedos_install_anaconda_endpoint }}'
     substrate_baremetal_machine_boot_verify: '{{ managedos_install_anaconda_verify }}'
+    substrate_baremetal_machine_boot_ca: '{{ managedos_install_anaconda_controller_ca }}'
     substrate_baremetal_machine_boot_user: '{{ bootwright_os_install_material.controllerUser }}'
     substrate_baremetal_machine_boot_password: '{{ bootwright_os_install_material.controllerPassword }}'
   when: bootwright_os_install_request.target.substrate == 'baremetal'

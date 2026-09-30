@@ -6,7 +6,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -33,6 +35,7 @@ type memoryState struct {
 	material map[string]secrets.Material
 	current  map[string]string
 	bindings map[string]secretstore.Binding
+	produced map[string]secretstore.Produced
 	key      string
 }
 
@@ -84,7 +87,7 @@ func (i *memoryImplementation) Initialize(ctx context.Context, selected secretst
 		return i.Open(ctx, selected, area, record.Selector, capability)
 	}
 	i.mu.Lock()
-	state := &memoryState{versions: map[string]secretstore.Version{}, material: map[string]secrets.Material{}, current: map[string]string{}, bindings: map[string]secretstore.Binding{}, key: "memory-key"}
+	state := &memoryState{versions: map[string]secretstore.Version{}, material: map[string]secrets.Material{}, current: map[string]string{}, bindings: map[string]secretstore.Binding{}, produced: map[string]secretstore.Produced{}, key: "memory-key"}
 	session := &memorySession{implementation: i, context: selected, area: area, state: state, unlocked: i.accepts(capability)}
 	if err := session.authorized(); err != nil {
 		session.Close()
@@ -169,6 +172,11 @@ func (s *memorySession) Inspect(ctx context.Context) (secretstore.Snapshot, erro
 	for _, binding := range s.state.bindings {
 		result.Bindings = append(result.Bindings, binding)
 	}
+	result.Produced = []secretstore.Produced{}
+	for _, entry := range s.state.produced {
+		result.Produced = append(result.Produced, entry)
+	}
+	slices.SortFunc(result.Produced, func(a, b secretstore.Produced) int { return compareTestID(a.Block+"/"+a.Name, b.Block+"/"+b.Name) })
 	slices.SortFunc(result.Versions, func(a, b secretstore.Version) int { return compareTestID(a.ID, b.ID) })
 	slices.SortFunc(result.Current, func(a, b secretstore.Current) int { return compareTestID(a.Name, b.Name) })
 	slices.SortFunc(result.Bindings, func(a, b secretstore.Binding) int { return compareTestID(a.ID, b.ID) })
@@ -281,6 +289,69 @@ func (s *memorySession) Rotate(ctx context.Context) (string, error) {
 	return s.state.key, s.publish(ctx)
 }
 
+// Produce keeps one version per block and name, and publishes only when an
+// output's bytes changed, as the conformance contract requires.
+func (s *memorySession) Produce(ctx context.Context, block string, outputs []secretstore.ProducedInput) ([]secretstore.Produced, error) {
+	if err := s.authorized(); err != nil {
+		return nil, err
+	}
+	changed := false
+	result := make([]secretstore.Produced, 0, len(outputs))
+	for _, output := range outputs {
+		key := block + "/" + output.Name
+		if entry, exists := s.state.produced[key]; exists && equalTestMaterial(s.state.material[entry.Version], output.Material) {
+			result = append(result, entry)
+			continue
+		}
+		version := s.add(secrets.Declaration{Name: output.Name, Type: "opaque", Source: "produced", Fingerprint: strings.Repeat("0", 64)}, output.Material)
+		entry := secretstore.Produced{Block: block, Name: output.Name, Version: version.ID}
+		s.state.produced[key] = entry
+		result = append(result, entry)
+		changed = true
+	}
+	if !changed {
+		return result, nil
+	}
+	return result, s.publish(ctx)
+}
+
+func (s *memorySession) Withdraw(ctx context.Context) (bool, error) {
+	if err := s.authorized(); err != nil {
+		return false, err
+	}
+	if len(s.state.produced) == 0 {
+		return false, nil
+	}
+	clear(s.state.produced)
+	return true, s.publish(ctx)
+}
+
+func (s *memorySession) ReadProduced(ctx context.Context, block, name string) (secrets.Material, bool, error) {
+	entry, exists := s.state.produced[block+"/"+name]
+	if !exists {
+		return secrets.Material{}, false, ctx.Err()
+	}
+	material, err := s.Read(ctx, entry.Version)
+	return material, err == nil, err
+}
+
+func equalTestMaterial(a, b secrets.Material) bool {
+	if !slices.Equal(a.Parts(), b.Parts()) {
+		return false
+	}
+	for _, part := range a.Parts() {
+		left, _ := a.Part(part)
+		right, _ := b.Part(part)
+		equal := string(left) == string(right)
+		clear(left)
+		clear(right)
+		if !equal {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *memorySession) Close() error {
 	if !s.closed {
 		s.state.clear()
@@ -303,7 +374,7 @@ func cloneTestMaterial(value secrets.Material) secrets.Material {
 }
 
 func (s *memoryState) clone() *memoryState {
-	result := &memoryState{versions: map[string]secretstore.Version{}, material: map[string]secrets.Material{}, current: map[string]string{}, bindings: map[string]secretstore.Binding{}, key: s.key}
+	result := &memoryState{versions: map[string]secretstore.Version{}, material: map[string]secrets.Material{}, current: map[string]string{}, bindings: map[string]secretstore.Binding{}, produced: map[string]secretstore.Produced{}, key: s.key}
 	for id, version := range s.versions {
 		version.Parts = slices.Clone(version.Parts)
 		result.versions[id] = version
@@ -316,6 +387,7 @@ func (s *memoryState) clone() *memoryState {
 		binding.Versions = slices.Clone(binding.Versions)
 		result.bindings[id] = binding
 	}
+	maps.Copy(result.produced, s.produced)
 	return result
 }
 
@@ -328,6 +400,9 @@ func (s *memoryState) collect() {
 		for _, id := range binding.Versions {
 			used[id] = true
 		}
+	}
+	for _, entry := range s.produced {
+		used[entry.Version] = true
 	}
 	for id := range s.versions {
 		if !used[id] {

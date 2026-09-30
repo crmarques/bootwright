@@ -8,8 +8,8 @@
         "tlsVerify": true,
         "virtualMedia": {
           "removeCertificate": false,
-          "restoreVerification": true,
-          "trust": "disable-verification"
+          "restoreVerification": false,
+          "trust": "import-certificate"
         }
       },
       "hardware": {
@@ -33,8 +33,8 @@
         "tlsVerify": true,
         "virtualMedia": {
           "removeCertificate": false,
-          "restoreVerification": true,
-          "trust": "disable-verification"
+          "restoreVerification": false,
+          "trust": "import-certificate"
         }
       },
       "hardware": {
@@ -58,8 +58,8 @@
         "tlsVerify": true,
         "virtualMedia": {
           "removeCertificate": false,
-          "restoreVerification": true,
-          "trust": "disable-verification"
+          "restoreVerification": false,
+          "trust": "import-certificate"
         }
       },
       "hardware": {

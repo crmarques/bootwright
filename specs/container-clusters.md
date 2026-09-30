@@ -133,9 +133,10 @@ inputs frozen now, unless an installation has booted from it.
 
 **A work area an installation booted from is never rebuilt.** The area also
 holds the state the [installation](#installation) boots its nodes into and the
-only administrator access to the cluster they install, and a rebuild starts by
-discarding it. The installation block therefore marks the area with the file
-`.bootwright-booted` before it hands any node the image, whether or not that
+installer's own copy of the administrator access to the cluster they install,
+the only one until the installation block proves the installation complete,
+and a rebuild starts by discarding it. The installation block therefore marks
+the area with the file `.bootwright-booted` before it hands any node the image, whether or not that
 attempt then boots one, and this block's observation reports the mark. An
 attempt that finds the area marked and would build again, because no image
 built there is published, no receipt there records what it was built from, or
@@ -153,7 +154,10 @@ published beneath the served root under the
 [private consumer publication contract](infrastructure-services.md#private-consumer-publication),
 at `private/clusters/<cluster>/<token>/`, with the token minted by the attempt
 and appearing in no frozen request, evidence, progress output or log. The block
-owns `private/clusters/<cluster>/` as its reserved path.
+owns `private/clusters/<cluster>/` as its reserved path. Its request names the
+selected server's serving certificate Secret among its bindings, and its apply
+hands the adapter that Secret's certificate part alone, as the authority the
+fetch proving the publication verifies the listener against.
 
 That contract requires the fetching controller to verify the serving
 certificate. A physical management controller does so under the trust its
@@ -303,11 +307,23 @@ reason; tracked as [B32](milestones/m1.md#b32).
 kubeconfig and the initial administrator password into the work area when it
 builds the image, beside the state it keeps there, and a completed installation
 is what they then grant access to. That area is root-owned, `0700` and never
-served, and it already holds the material the installer was given, so the
-access lives there with it rather than somewhere more protected than its own
-inputs. It is never written to evidence, progress output or a log. Moving it
-into this context's confidential custody, and revealing it through
-`cluster kubeconfig`, is a separate contract this one does not claim.
+served. Once an apply's attempt proves the installation complete, or a
+resolution of an apply's block reads it complete, including a destroy's
+resolution of an incomplete apply, the role copies the kubeconfig into a
+private output file of its run and the engine keeps it in the context's
+[custody](secrets.md#produced-material), keyed by this block and `kubeconfig`,
+before it records the block done; a copy of equal bytes publishes nothing. A
+removal offers nothing. The custodied copy is withdrawn when the context's
+removal completes, not with this block's inverse, so a destroy that stops part
+way keeps the only access, and `cluster kubeconfig` reveals it until then
+([administrator access export](cli.md#administrator-access-export)). The
+initial administrator password stays in the work area. Every read of the
+cluster, before and after completion is proved, uses the installer's own file,
+which keeps its hazards: each rerun of `agent wait-for install-complete`
+prepends the router CA to that file again, growing it toward the inspection's
+64 KiB read bound, and a budget kill during the installer's in-place write of
+it could truncate it. Neither copy is ever written to evidence, progress output or a
+log.
 
 **Releasing the media.** Once the installation has completed, and only then,
 each node's virtual media is ejected and its controller is pointed at the
@@ -379,10 +395,12 @@ cluster's nodes to be destroyed and applied again.
 
 **Inverse.** Destroy ejects the media each node still presents and proves none
 is left. The work area and the published image leave with the media block's own
-inverse, which the plan orders after this one. The installed cluster leaves with its nodes' disks, so this block
-removes nothing from a node and consumes no authorization of its own on
-removal. A cluster whose nodes are physical keeps running after its context is
-destroyed, exactly as a physically installed operating system does.
+inverse, which the plan orders after this one. The custodied administrator
+access leaves when the removal completes, not with this inverse. The installed
+cluster leaves with its nodes' disks, so this block removes nothing from a
+node and consumes no authorization of its own on removal. A cluster whose nodes
+are physical keeps running after its context is destroyed, exactly as a
+physically installed operating system does.
 
 **Unknown resolution.** Observation is read-only against the frozen request. A
 cluster answering with this operation's identity at the declared release,

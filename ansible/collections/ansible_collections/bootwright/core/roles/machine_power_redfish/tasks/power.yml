@@ -5,7 +5,7 @@
 - name: Validate the frozen power request
   ansible.builtin.assert:
     that:
-      - bootwright_machine_power_request.version == 'machine-power-redfish-v1'
+      - bootwright_machine_power_request.version == 'machine-power-redfish-v2'
       - bootwright_machine_power_request.verb in ['start', 'stop', 'restart']
       - bootwright_machine_power_digest is match('[0-9a-f]{64}')
     quiet: true
@@ -29,6 +29,7 @@
     user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerPassword) }}'
     verify: '{{ bootwright_machine_power_request.controller.tlsVerify }}'
+    ca_data: '{{ machine_power_redfish_ca_data }}'
     media: false
   register: machine_power_redfish_before
   no_log: true
@@ -51,6 +52,7 @@
     user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerPassword) }}'
     verify: '{{ bootwright_machine_power_request.controller.tlsVerify }}'
+    ca_data: '{{ machine_power_redfish_ca_data }}'
   register: machine_power_redfish_identity
   when: >-
     (bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length > 0)
@@ -103,6 +105,7 @@
     user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerPassword) }}'
     verify: '{{ bootwright_machine_power_request.controller.tlsVerify }}'
+    ca_data: '{{ machine_power_redfish_ca_data }}'
     media: false
   register: machine_power_redfish_after
   no_log: true

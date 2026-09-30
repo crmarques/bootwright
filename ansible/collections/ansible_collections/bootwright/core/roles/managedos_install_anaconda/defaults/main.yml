@@ -36,6 +36,16 @@ managedos_install_anaconda_publish_tree: >-
 # supplies the terms and never learns which substrate answered.
 managedos_install_anaconda_endpoint: '{{ bootwright_os_install_request.target.controller.endpoint }}'
 managedos_install_anaconda_verify: '{{ bootwright_os_install_request.target.controller.tlsVerify }}'
+# The controller's trust bundle, the one anchor its transport is verified
+# against, as the path of its material file and as its PEM; both are empty
+# when the controller declares none and the system trust store anchors it.
+managedos_install_anaconda_controller_ca: "{{ bootwright_os_install_material.controllerCA | default('') }}"
+managedos_install_anaconda_ca_data: >-
+  {{ lookup('ansible.builtin.file', managedos_install_anaconda_controller_ca)
+     if managedos_install_anaconda_controller_ca | length > 0 else '' }}
+# How the controller is made to trust the artifact server it fetches the
+# installer from, exactly as the request froze it.
+managedos_install_anaconda_media_trust: '{{ bootwright_os_install_request.target.controller.virtualMedia }}'
 managedos_install_anaconda_expected: >-
   {{ bootwright_os_install_request.target.hardware.interfaces | default([]) | map(attribute='macAddress') | list }}
 # The subtree this block owns for material only the installing machine may read,
@@ -51,9 +61,11 @@ managedos_install_anaconda_private_dir: >-
 managedos_install_anaconda_private_url: >-
   {{ (bootwright_os_install_request.private.url ~ '/' ~ (managedos_install_anaconda_token.stdout | default('') | trim))
      if managedos_install_anaconda_delivers_key | bool else '' }}
+# The artifact server's certificate: what the installing machine verifies its
+# private fetch against, and what a controller importing it is given.
 managedos_install_anaconda_certificate: >-
   {{ lookup('ansible.builtin.file', bootwright_os_install_material.artifactCertificate)
-     if managedos_install_anaconda_delivers_key | bool else '' }}
+     if bootwright_os_install_material.artifactCertificate is defined else '' }}
 
 # The installer's power-off, the identity answer and the fleet account's
 # reachability, the waits an apply performs while the machine installs and

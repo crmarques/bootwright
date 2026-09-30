@@ -211,7 +211,7 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 	if err != nil {
 		return empty(err)
 	}
-	published, _, err := artifactserver.PrivatePath(catalog, server, selection, contextName, consumerPrefix, name, cluster.Identity())
+	published, certificate, err := artifactserver.PrivatePath(catalog, server, selection, contextName, consumerPrefix, name, cluster.Identity())
 	if err != nil {
 		return empty(err)
 	}
@@ -264,7 +264,7 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 	mediaRequest := MediaRequest{
 		AgentConfig: agent, Budgets: mediaBudgets, Identity: identity(MediaBlockID(name)), Image: image,
 		InstallConfig: install, Placement: placement, PullSecretRef: pullSecret,
-		Release: release, SSHKeyRef: sshKey, Tool: tool,
+		Release: release, SSHKeyRef: sshKey, TLSCertificateRef: certificate, Tool: tool,
 		TrustBundleRefs: cluster.Spec().Get("install", "additionalTrustBundleRefs").Strings(),
 		Version:         mediaRequestVersion, WorkRoot: WorkRoot(contextName, name),
 	}

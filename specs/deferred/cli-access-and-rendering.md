@@ -1,8 +1,7 @@
 # Deferred CLI access, rendering and preflight
 
-[B10](../milestones/m1.md#b10) revives the `cluster kubeconfig` access detail
-on this page, the parked item [B101](../milestones/backlog.md#b101) the rest of
-its cluster inspection, access and node-selection detail, the items
+The parked item [B101](../milestones/backlog.md#b101) revives this page's
+cluster inspection, access and node-selection detail, the items
 [B52](../milestones/m2.md#b52) and [B55](../milestones/m2.md#b55) its rendering
 detail, and the first slice that implements an Environment preflight family its
 preflight detail. None of it is a contract until that slice moves it back into
@@ -18,7 +17,9 @@ code enforce.
 each cluster's kind and the applicability and availability of its access
 commands under the [discovery output contract](#cluster-discovery).
 
-For an available cluster access or credential-export use case, load and validate
+`cluster kubeconfig` resolves its target, applicability and readiness under the
+[administrator access export](../cli.md#administrator-access-export). For an
+available cluster access handoff, load and validate
 the complete selected graph, resolve `--name` to one selected cluster, then check the
 [applicability table](../cli/commands.md#cluster-command-applicability). An unknown
 or excluded name fails `access.target`; it never selects another cluster or
@@ -220,6 +221,5 @@ with their first emission:
 
 | Code | Meaning |
 | --- | --- |
-| `cluster.not-applicable` | A cluster command does not apply to the selected cluster's kind. |
 | `render.publish` | A requested artifact could not be safely rendered or published. |
 | `preflight.unknown` | Required readiness could not be positively determined. |

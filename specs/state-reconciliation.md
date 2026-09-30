@@ -48,16 +48,17 @@ with the state its record reads, rather than settle or start a fresh apply
 beside that effect.
 
 Before any verb, an operation whose blocks are all `done` but whose record,
-[evidence](#context-mutation-evidence), reservations or Secret bindings do not
-yet say so is finalized first; an invocation interrupted between its last
-outcome and its last write leaves exactly that. The finalization runs under
+[evidence](#context-mutation-evidence), reservations, Secret bindings or
+[produced material](#produced-material-custody) do not yet say so is finalized
+first; an invocation interrupted between its last outcome and its last write
+leaves exactly that. The finalization runs under
 the exclusive lock after re-proving the state it was decided from, without
 authorization, presentation or confirmation, because it performs only the
 record, the releases and the projection its records prove: it records the
-operation `done`, then publishes an apply's projection, or releases a
-removal's reservations and then its Secret bindings, its own and its apply's,
-and only then publishes pristine evidence. A running or unknown operation or a
-failed removal is finalized only by its own verb, because the other verb
+operation `done`, then publishes an apply's projection, or withdraws a
+removal's produced material, releases its reservations and then its Secret
+bindings, its own and its apply's, and only then publishes pristine evidence.
+A running or unknown operation or a failed removal is finalized only by its own verb, because the other verb
 decides for itself: a `destroy` supersedes an incomplete apply and an `apply`
 refuses an incomplete destroy. An unknown one whose blocks are all `done` has a
 record that lags behind them, as a removal stopped after its resolution proved
@@ -77,7 +78,10 @@ invocation is interrupted, whether it ran that removal or finalizes it. When
 the Secret-binding releases or the pristine publication that follow a
 removal's completion fail, the invocation fails `lifecycle.state`, beside any
 log fault it reports, naming the repeated `destroy` that finishes it, and an
-invocation that completed the removal itself still reports it `done`.
+invocation that completed the removal itself still reports it `done`. A
+withdrawal that fails fails the invocation as a reservation release that fails
+does, and leaves the evidence short of pristine, so the next verb's
+finalization withdraws again.
 
 A lost index reads as no operation, so what a context holding no operation
 holds is proved before anything else about it. Evidence beside no operation
@@ -116,6 +120,7 @@ Reconciliation owns a closed version-1 mutation record initialized with
 A paused operation records `pending` and `retained`, exactly as a running one
 does, because a pause leaves its [ownership](#continuation-and-removal) in
 place. A completed removal's evidence becomes `none` and `none` only once its
+[produced material](#produced-material-custody) is withdrawn and its
 reservations and Secret bindings are released, so evidence that is not its
 completed operation's projection marks a [finalization](#lifecycle-unit) that
 did not complete, or a fresh apply over it that has not registered, which the
@@ -449,6 +454,29 @@ capability proves neither, because the attempt it completed may have changed
 its target. Positive no effect and a positive partial realization record
 `failed`, and an unproved observation `unknown`: an outcome the capability
 states counts only beside a completion.
+
+### Produced material custody
+
+Material a block's proved effect leaves, such as an installation's
+administrator kubeconfig, enters the context's
+[custody](secrets.md#produced-material) before its apply block is recorded
+`done`, whether an attempt or a resolution proves it, including a fresh
+`destroy`'s resolution of an incomplete apply's block. The engine publishes
+one block's outputs in one publication, inside the operation's transaction
+through the secret area the Workspace lends it, and a capability offers them
+only from a proved completion. A publication that fails records the attempt
+or the resolution `unknown`, never `failed`, because the effect it follows was
+proved: it never leaves a block `done` whose material custody does not hold,
+and the next invocation of either verb, including a `destroy` before it
+registers, observes the block again and captures what that proves before any
+effect or inverse follows. A `failed` block would be retried by an `apply` but
+never observed by a `destroy`, whose inverses could then delete the only copy.
+A removal's attempt and resolution capture nothing. A completed removal
+withdraws every entry inside the transaction that records or finalizes its
+completion, before it releases its reservations, and a removal that stops part
+way keeps them, so the only access a partly removed context still has is never
+the first thing it loses. No record, log, evidence or adapter output carries
+the material.
 
 ### Block transitions
 

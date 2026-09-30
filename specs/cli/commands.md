@@ -126,8 +126,11 @@ The three `media` commands follow the host-wide
 ### Cluster command applicability
 
 `--name` selects from the shared ContainerCluster/StorageCluster name namespace
-in the selected context. The following table owns applicability; access evidence
-and resolution are [deferred](../deferred/cli-access-and-rendering.md#cluster-inspection-and-explicit-access).
+in the selected context. The following table owns applicability. Target
+resolution, readiness and diagnostics of `cluster kubeconfig` live in the
+[administrator access export](../cli.md#administrator-access-export); those of
+the other cluster commands are
+[deferred](../deferred/cli-access-and-rendering.md#cluster-inspection-and-explicit-access).
 
 | Command | Applicable targets |
 | --- | --- |

@@ -13,6 +13,9 @@ type StoreAccess interface {
 	Context(context.Context, string) (secretstore.ContextSnapshot, error)
 	View(context.Context, secretstore.Context, bool, func(secretstore.StoreSession, secretstore.Selection) error) error
 	Mutate(context.Context, secretstore.Context, func(secretstore.StoreSession, secretstore.Selection) error) error
+	// MutateArea opens the store in an area the caller already holds, so a
+	// lifecycle transaction publishes produced material without a second lock.
+	MutateArea(context.Context, secretstore.Context, secretstore.Area, func(secretstore.StoreSession, secretstore.Selection) error) error
 }
 
 type Materializer interface {

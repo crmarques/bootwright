@@ -12,7 +12,14 @@ Every reference the controller returns is held to that one endpoint before a
 request or its credential is built. A resource that cannot be read is a
 failure rather than an empty answer, and the one failure, ControllerError, is a
 line naming what was being done, where and the status, never a body or the
-credential.
+credential. Its one subclass, UnverifiedCertificate, is a controller whose
+certificate the declared trust refuses, which is never read as no answer.
+
+The controller's own transport is verified against the declared CA bundle
+alone when one is given, against the system trust store otherwise, and not at
+all only when verification is declared off. The leg on which the controller
+fetches media from the artifact server is set on the discovered device around
+an insert and an eject, exactly as the frozen trust says and with no fallback.
 """
 
 from __future__ import annotations
@@ -53,6 +60,26 @@ HOST_LIMIT = 64
 # 401 and 403 mean the account lacks the privilege, which no retry and no
 # other request changes, so they end an operation at once.
 PRIVILEGE = (401, 403)
+# The virtual-media trusts a frozen request names for the BMC-to-artifact-server
+# leg. established asks nothing of the device.
+TRUST_ESTABLISHED = "established"
+TRUST_IMPORT = "import-certificate"
+TRUST_DISABLED = "disable-verification"
+# A device's certificate collection is read in full before anything is added to
+# or removed from it, so one listing more members than this fails closed rather
+# than being read in part.
+CERTIFICATE_MEMBERS = 8
+# The answers of a controller whose VerifyCertificate cannot be written: 501 on
+# iBMC, 400 or 405 elsewhere (.agents/knowledge/redfish-physical-bmc.md).
+READ_ONLY = (400, 405, 501)
+PEM_BEGIN = "-----BEGIN CERTIFICATE-----"
+PEM_END = "-----END CERTIFICATE-----"
+# What importing leaves an operator when a controller cannot take it: no other
+# trust is ever substituted.
+NO_IMPORT = "no fallback: established, or disable-verification on this Machine, which private delivery refuses"
+NO_DISABLE = "verification stays on; use import-certificate or established"
+STALE = ("remove the stale certificate from the controller's virtual-media certificate collection,"
+         " or set removeCertificateAfterBoot")
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -62,7 +89,33 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise urllib.error.HTTPError(req.full_url, code, "redirect refused", headers, fp)
 
 
-def _opener(verify=True):
+def _trust_context(verify, ca_data):
+    """The TLS context a controller is reached with, or None for urllib's own.
+
+    A declared bundle is the only anchor: create_default_context loads the
+    cadata it is given and, given some, never the system store, while keeping
+    CERT_REQUIRED and the hostname check. No bundle leaves urllib's default,
+    which verifies against the system store, and verification turned off is
+    the one context that verifies nothing. A bundle beside verification turned
+    off, and one ssl cannot load, are refused here rather than read as a
+    controller that did not answer.
+    """
+    if ca_data and not verify:
+        raise ControllerError("a controller trust bundle requires verification, and verification is off")
+    if not verify:
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        return context
+    if not ca_data:
+        return None
+    try:
+        return ssl.create_default_context(cadata=ca_data)
+    except (OSError, ValueError, TypeError) as refused:
+        raise ControllerError("the controller trust bundle cannot be loaded as PEM CA certificates") from refused
+
+
+def _opener(verify=True, ca_data=""):
     """An opener that reaches exactly one endpoint with exactly one trust.
 
     The empty proxy handler is load-bearing rather than tidiness: urllib reads
@@ -72,10 +125,8 @@ def _opener(verify=True):
     urllib's own environment-reading handler from the chain.
     """
     handlers = [NoRedirect(), urllib.request.ProxyHandler({})]
-    if not verify:
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
+    context = _trust_context(verify, ca_data)
+    if context is not None:
         handlers.append(urllib.request.HTTPSHandler(context=context))
     return urllib.request.build_opener(*handlers)
 
@@ -93,6 +144,15 @@ class ControllerError(Exception):
         super().__init__(_printable(line, LINE_LIMIT, " "))
 
 
+class UnverifiedCertificate(ControllerError):
+    """The controller answered with a certificate its declared trust refuses.
+
+    That is an answer, not silence: no retry changes it, so it ends any poll at
+    once and is never read as a controller that did not answer or as an empty
+    reading.
+    """
+
+
 class Client:
     """One controller, driven by what it advertises rather than by its vendor.
 
@@ -107,9 +167,10 @@ class Client:
     reported, which is what an operation reports back.
     """
 
-    def __init__(self, endpoint, user, password, verify=True):
+    def __init__(self, endpoint, user, password, verify=True, ca_data=""):
         self.endpoint = endpoint.rstrip("/")
-        self.user, self.password, self.verify = user, password, verify
+        self.user, self.password, self.verify, self.ca_data = user, password, verify, ca_data or ""
+        _trust_context(self.verify, self.ca_data)
         self.home = _authority(self.endpoint)
         self.root = redfish_discovery.service_root(self.endpoint) if self.home else ""
         self.sleep = time.sleep
@@ -126,17 +187,25 @@ class Client:
         a status means, because the same code is fatal in one place and
         expected in another: a controller that answers 404 for an ejected
         device has told us it is ejected. A write drops what was kept, because
-        the controller has changed.
+        the controller has changed. A certificate the declared trust refuses is
+        the one transport failure that is an answer, so it raises
+        UnverifiedCertificate rather than reading as status 0.
         """
-        url = self._own(reference or self.endpoint, doing or ("reading" if method == "GET" else "writing"))
+        doing = doing or ("reading" if method == "GET" else "writing")
+        url = self._own(reference or self.endpoint, doing)
         if method != "GET":
             self._system = self._member = None
         try:
-            with _opener(self.verify).open(self._request(url, method, payload, headers), timeout=timeout) as answer:
+            with _opener(self.verify, self.ca_data).open(
+                    self._request(url, method, payload, headers), timeout=timeout) as answer:
                 return answer.status, _body(answer.read(MAX_BODY + 1), method), _lowered(answer.headers)
         except urllib.error.HTTPError as refused:
             return refused.code, _body(_drain(refused), method), _lowered(refused.headers)
-        except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException):
+        except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as failed:
+            if _unverified(failed):
+                raise UnverifiedCertificate("%s %s: the controller's certificate did not verify against %s" % (
+                    doing, _shown(url), "its declared trust bundle" if self.ca_data else "the system trust store"
+                )) from None
             return 0, None, {}
 
     def _request(self, url, method, payload, headers):
@@ -192,7 +261,7 @@ class Client:
             except ControllerError as failure:
                 self._system = failure
         if isinstance(self._system, ControllerError):
-            raise ControllerError(str(self._system))
+            raise type(self._system)(str(self._system))
         return self._system[0]
 
     def identity(self):
@@ -210,10 +279,14 @@ class Client:
 
         The collection must be readable in full: a partial inventory cannot show
         that this is the machine the declaration names, so an unreadable or
-        refused member is a failure rather than an absent address.
+        refused member is a failure rather than an absent address. A
+        certificate the declared trust refuses is raised instead: it is not an
+        unreadable inventory but a controller that must not be believed.
         """
         try:
             status, collection, _headers = self.fetch(self._interfaces_path())
+        except UnverifiedCertificate:
+            raise
         except ControllerError:
             status, collection = 0, None
         listed = collection.get("Members") if isinstance(collection, dict) else None
@@ -227,6 +300,8 @@ class Client:
     def _interfaces_path(self):
         try:
             declared = self.system().get("EthernetInterfaces")
+        except UnverifiedCertificate:
+            raise
         except ControllerError:
             declared = None
         if isinstance(declared, dict) and isinstance(declared.get("@odata.id"), str) and declared["@odata.id"]:
@@ -240,6 +315,8 @@ class Client:
             return None
         try:
             status, member, _headers = self.fetch(reference)
+        except UnverifiedCertificate:
+            raise
         except ControllerError:
             return None
         return member if status == 200 and isinstance(member, dict) else None
@@ -258,7 +335,7 @@ class Client:
             except ControllerError as failure:
                 self._media = failure
         if isinstance(self._media, ControllerError):
-            raise ControllerError(str(self._media))
+            raise type(self._media)(str(self._media))
         return self._media
 
     def _discover(self):
@@ -350,19 +427,22 @@ class Client:
             self.last_image = redfish_discovery.inserted_image(self._member)
         return self.last_image
 
-    def insert(self, image):
+    def insert(self, image, trust=TRUST_ESTABLISHED, certificate=""):
         """Attach an image and confirm the device presents it; True when it changed.
 
         The response is never the evidence. An accepted request may still be
         reported as a failure by an asynchronous task, and a completed task may
         still leave nothing attached, so the device itself is read back. A
-        failed attempt is retried only from a device proved empty.
+        failed attempt is retried only from a device proved empty. The device
+        is made to trust the server it fetches from once, before the first
+        attempt, and never again inside the retry.
         """
         member = self.media_member()
         if not member:
             raise ControllerError("attaching: the controller exposes no virtual-media device")
         if redfish_discovery.image_matches(self.inserted(), image):
             return False
+        self._trust_media(member, trust, certificate)
         reason = ""
         for attempt in range(INSERT_ATTEMPTS):
             if attempt:
@@ -459,11 +539,13 @@ class Client:
                 self.sleep(MEDIA_PROBE_DELAY)
         return str(_failure("attaching", member, status, body, "the device does not present the image"))
 
-    def eject(self):
+    def eject(self, restore_verification=False, remove_certificate=False, certificate=""):
         """Detach whatever the device presents and confirm it reports nothing.
 
-        True when something was detached. A controller that removes the device
-        entirely has ejected it too, so a device answering 404 is empty.
+        True when something was detached or settled. A controller that removes
+        the device entirely has ejected it too, so a device answering 404 is
+        empty and has nothing left to settle. Once the device is proved empty,
+        including one found empty already, the per-boot trust is settled.
         """
         member = self.media_member()
         if not member:
@@ -472,7 +554,139 @@ class Client:
         changed, reason = self._release(member)
         if reason:
             raise ControllerError(reason)
-        return changed
+        return self._settle(member, restore_verification, remove_certificate, certificate) or changed
+
+    def _trust_media(self, member, trust, certificate=""):
+        """Make the device trust the server it fetches media from as the frozen
+        trust says: whether a write was sent.
+
+        established asks nothing. import-certificate adds the server's
+        certificate unless it is present and turns verification on;
+        disable-verification turns it off when it reads on. Neither falls back
+        to the other or to anything else.
+        """
+        if trust == TRUST_IMPORT:
+            return self._import(member, certificate)
+        if trust == TRUST_DISABLED:
+            return self._verification(member, False, "disabling verification", NO_DISABLE)
+        if trust != TRUST_ESTABLISHED:
+            raise ControllerError("attaching: %s is not a virtual-media trust" % _printable(trust, 32))
+        return False
+
+    def _import(self, member, certificate):
+        """Add the server's certificate to the device unless its DER is there,
+        then turn verification on and read it back: whether a write was sent."""
+        doing = "importing"
+        leaf = _leaf(certificate)
+        if leaf is None:
+            raise ControllerError(doing + ": the server certificate given is not PEM")
+        collection, present = self._certificates(member, doing)
+        if not collection:
+            raise ControllerError("%s %s: no Certificates; %s" % (doing, _shown(member), NO_IMPORT))
+        written = False
+        if leaf[1] not in [der for _url, der in present]:
+            status, body, _headers = self.fetch(
+                collection, "POST", {"CertificateString": leaf[0], "CertificateType": "PEM"}, doing=doing)
+            if status in PRIVILEGE:
+                raise _privilege(doing, collection, status, body)
+            if status != 0 and not 200 <= status < 300 and present:
+                raise ControllerError("%s: HTTP %d; %s" % (doing, status, STALE))
+            if not 200 <= status < 300:
+                raise _failure(doing, collection, status, body)
+            written = True
+        return self._verification(member, True, doing, NO_IMPORT) or written
+
+    def _settle(self, member, restore, remove, certificate):
+        """Undo what a boot's trust needed once the device is proved empty:
+        whether a write was sent.
+
+        Each is a convergent target rather than the inverse of this attempt's
+        own writes, so the eject after an interrupted attempt settles what that
+        attempt left. Restoring tolerates exactly a controller that cannot write
+        VerifyCertificate; removal deletes only the given certificate.
+        """
+        if self._member is None or not (restore or remove):
+            return False
+        restored = self._verification(member, True, "restoring verification") if restore else False
+        return (self._remove(member, certificate) if remove else False) or restored
+
+    def _remove(self, member, certificate):
+        doing = "removing a certificate"
+        leaf = _leaf(certificate)
+        if leaf is None:
+            raise ControllerError(doing + ": the server certificate given is not PEM")
+        _collection, present = self._certificates(member, doing)
+        for url, der in present:
+            if der != leaf[1]:
+                continue
+            status, body, _headers = self.fetch(url, "DELETE", doing=doing)
+            if status in PRIVILEGE:
+                raise _privilege(doing, url, status, body)
+            if status != 404 and not 200 <= status < 300:
+                raise _failure(doing, url, status, body)
+            return True
+        return False
+
+    def _certificates(self, member, doing):
+        """The certificate collection a device links and each member's URL and
+        DER, or ("", []) when it links none.
+
+        The collection is read in full, and one listing more than
+        CERTIFICATE_MEMBERS fails rather than being read in part. A member whose
+        certificate cannot be read as PEM has a DER of None, which matches
+        nothing.
+        """
+        link = self._device(member, doing).get("Certificates")
+        reference = link.get("@odata.id") if isinstance(link, dict) else None
+        if not isinstance(reference, str) or not reference:
+            return "", []
+        collection = self._own(reference, doing)
+        listed = self._read(collection, doing)[0].get("Members")
+        if not isinstance(listed, list):
+            raise _failure(doing, collection, 200, {}, "the collection lists no members")
+        if len(listed) > CERTIFICATE_MEMBERS:
+            raise _failure(doing, collection, 200, {}, "it lists %d certificates, more than the %d read" % (
+                len(listed), CERTIFICATE_MEMBERS))
+        found = []
+        for url in self._references(listed, collection):
+            string = self._read(url, doing)[0].get("CertificateString")
+            leaf = _leaf(string)
+            found.append((url, leaf[1] if leaf else None))
+        return collection, found
+
+    def _verification(self, member, wanted, doing, remedy=""):
+        """Bring the device's VerifyCertificate to wanted unless it already
+        reads so, and read it back: whether a write was sent.
+
+        On is only a VerifyCertificate that reads true; the schema reads an
+        absent one as off. The write carries the device's entity tag when it
+        has one, and `*` is the one retry after a 412. With a remedy, any
+        refused write fails naming it, because no other trust is substituted;
+        without one, restoring, exactly 400, 405 and 501 pass as a controller
+        that cannot write the property.
+        """
+        status, body, headers = self.fetch(member, doing=doing)
+        if status != 200 or not isinstance(body, dict):
+            raise _failure(doing, member, status, body)
+        if (body.get("VerifyCertificate") is True) == wanted:
+            return False
+        tag = headers.get("etag") or body.get("@odata.etag")
+        payload = {"VerifyCertificate": wanted}
+        status, body, _headers = self.fetch(
+            member, "PATCH", payload, headers={"If-Match": tag} if isinstance(tag, str) and tag else {}, doing=doing)
+        if status == 412:
+            status, body, _headers = self.fetch(member, "PATCH", payload, headers={"If-Match": "*"}, doing=doing)
+        if status in PRIVILEGE:
+            raise _privilege(doing, member, status, body)
+        if status in READ_ONLY and not remedy:
+            return False
+        if status != 0 and not 200 <= status < 300:
+            raise _failure(doing, member, status, body, remedy)
+        status, body = self._probe(member)
+        if status != 200 or not isinstance(body, dict) or (body.get("VerifyCertificate") is True) != wanted:
+            raise _failure(doing, member, status, body, remedy or "the device does not report VerifyCertificate %s" % (
+                "true" if wanted else "false"))
+        return True
 
     def _release(self, member):
         """Detach what the device presents: whether a detach was sent, and why the
@@ -690,6 +904,37 @@ def _refused(doing, reference, scheme):
         port = redfish_discovery.DEFAULT_PORTS.get(scheme, 0)
     return ControllerError("%s: refused %s://%s:%d because %s" % (
         doing, _printable(scheme, 16), _printable(parts.hostname or "", HOST_LIMIT), port, why))
+
+
+def _unverified(failed):
+    """Whether a transport failure is a certificate the declared trust refused."""
+    reason = failed.reason if isinstance(failed, urllib.error.URLError) else failed
+    return isinstance(reason, ssl.SSLCertVerificationError)
+
+
+def _leaf(pem):
+    """The first certificate of a PEM text and its DER, or None.
+
+    ssl.PEM_cert_to_DER_cert decodes everything between the first header and
+    the last footer, so over a chain it returns bytes that are no certificate
+    at all; the first block is cut out before it is converted.
+    """
+    if not isinstance(pem, str):
+        return None
+    start = pem.find(PEM_BEGIN)
+    end = pem.find(PEM_END, start) if start >= 0 else -1
+    if end < 0:
+        return None
+    block = pem[start:end + len(PEM_END)]
+    try:
+        return block + "\n", ssl.PEM_cert_to_DER_cert(block)
+    except ValueError:
+        return None
+
+
+def _privilege(doing, reference, status, body):
+    """The line for a write the account's role may not make."""
+    return _failure(doing, reference, status, body, "the account's role lacks the privilege to configure virtual media")
 
 
 def _failure(doing, reference, status, body=None, detail=""):

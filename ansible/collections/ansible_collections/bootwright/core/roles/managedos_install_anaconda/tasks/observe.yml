@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v4'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v5'
       - bootwright_os_install_digest is match('[0-9a-f]{64}')
     quiet: true
   no_log: true
@@ -46,6 +46,7 @@
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
     verify: '{{ managedos_install_anaconda_verify }}'
+    ca_data: '{{ managedos_install_anaconda_ca_data }}'
     media: true
   register: managedos_install_anaconda_controller
   failed_when: false

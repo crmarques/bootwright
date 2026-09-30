@@ -1,0 +1,30 @@
+{
+  "context": "lab",
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "targets": [
+    {
+      "controller": {
+        "credentialsRef": "metal-bmc",
+        "endpoint": "https://bmc.example.test/redfish/v1/Systems/1",
+        "tlsVerify": true
+      },
+      "object": "metal",
+      "passwordVariable": "controllerPassword0",
+      "userVariable": "controllerUser0"
+    },
+    {
+      "controller": {
+        "credentialsRef": "rack-bmc",
+        "endpoint": "https://rack.example.test/redfish/v1/Systems/7",
+        "tlsVerify": true
+      },
+      "object": "rack",
+      "passwordVariable": "controllerPassword1",
+      "userVariable": "controllerUser1"
+    }
+  ],
+  "version": "machine-power-read-v2"
+}

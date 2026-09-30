@@ -14,6 +14,7 @@
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
     verify: '{{ managedos_install_anaconda_verify }}'
+    ca_data: '{{ managedos_install_anaconda_ca_data }}'
     media: false
   register: managedos_install_anaconda_installer
   retries: '{{ bootwright_os_install_request.budgets.installer.attempts | int }}'
@@ -27,7 +28,11 @@
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
     verify: '{{ managedos_install_anaconda_verify }}'
+    ca_data: '{{ managedos_install_anaconda_ca_data }}'
     operation: eject
+    restore_verification: '{{ managedos_install_anaconda_media_trust.restoreVerification }}'
+    remove_certificate: '{{ managedos_install_anaconda_media_trust.removeCertificate }}'
+    certificate: '{{ managedos_install_anaconda_certificate }}'
   no_log: true
 
 - name: Boot the installed disk of a machine this substrate created
@@ -49,6 +54,7 @@
   vars:
     substrate_baremetal_machine_disk_endpoint: '{{ managedos_install_anaconda_endpoint }}'
     substrate_baremetal_machine_disk_verify: '{{ managedos_install_anaconda_verify }}'
+    substrate_baremetal_machine_disk_ca: '{{ managedos_install_anaconda_controller_ca }}'
     substrate_baremetal_machine_disk_user: '{{ bootwright_os_install_material.controllerUser }}'
     substrate_baremetal_machine_disk_password: '{{ bootwright_os_install_material.controllerPassword }}'
     substrate_baremetal_machine_disk_power_on: true

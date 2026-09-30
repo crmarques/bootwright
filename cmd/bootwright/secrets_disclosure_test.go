@@ -13,7 +13,7 @@ import (
 )
 
 func TestSecretNormalOutputsAndStateNeverContainMaterialOrDigests(t *testing.T) {
-	services, _, input, root := contextFixture(t)
+	services, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", strings.Join([]string{
 		secretDocument("payload", "opaque", ""),
 		secretDocument("password", "usernamePassword", ""),
@@ -21,7 +21,7 @@ func TestSecretNormalOutputsAndStateNeverContainMaterialOrDigests(t *testing.T) 
 	}, "\n---\n"))
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	contextRun(t, services, 0, "secret", "encryption", "init")
-	canaries := []string{"synthetic-output-opaque-canary", "synthetic-output-password-canary", "synthetic-invalid-docker-canary"}
+	canaries := []string{"synthetic-output-opaque-canary", "synthetic-output-password-canary", "synthetic-invalid-docker-canary", "synthetic-produced-kubeconfig-canary"}
 	for _, value := range append([]string{}, canaries...) {
 		digest := sha256.Sum256([]byte(value))
 		canaries = append(canaries, hex.EncodeToString(digest[:]))
@@ -38,6 +38,7 @@ func TestSecretNormalOutputsAndStateNeverContainMaterialOrDigests(t *testing.T) 
 			}
 		}
 	}
+	produceThroughLentArea(t, services, repository, "alpha", "cluster-install-alpha", "kubeconfig", canaries[3])
 	run(0, "secret", "set", "--name", "payload", "--value-file", payload)
 	run(0, "secret", "set", "--name", "password", "--username", "fixture-user", "--password-file", password)
 	for _, output := range []string{"text", "json"} {

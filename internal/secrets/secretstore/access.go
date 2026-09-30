@@ -67,6 +67,29 @@ func (a *Access) Mutate(ctx context.Context, selected Context, callback func(Sto
 	})
 }
 
+// MutateArea opens the store in an area the caller already holds under the
+// Workspace lock, as Mutate opens its own. A store never initialized passes a
+// nil session, as View does, so the caller decides what its absence means.
+func (a *Access) MutateArea(ctx context.Context, selected Context, area Area, callback func(StoreSession, Selection) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if a == nil || area == nil || callback == nil {
+		return Failure("store.implementation", "secret storage is not configured")
+	}
+	if selected.Mode != "ready" {
+		return Failure("store.conflict", "secret publication requires a ready context")
+	}
+	selector, exists, err := ReadSelector(ctx, area, selected.Name)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return callback(nil, Selection{})
+	}
+	return a.open(ctx, selected, area, selector, true, callback)
+}
+
 func (a *Access) Initialize(ctx context.Context, selected Context, kind string, callback func(StoreSession, Selection, bool) error) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -119,10 +142,13 @@ func (a *Access) initializeArea(ctx context.Context, selected Context, implement
 	if err != nil {
 		return err
 	}
-	if exists {
-		if selector.Backend != implementation.Backend() {
-			return Failure("store.implementation", "initialization cannot change an existing store implementation")
+	if exists && selector.Backend != implementation.Backend() {
+		// A backend this build no longer carries refuses with its own identity
+		// and the way out, as every other access to that store does.
+		if _, err := a.resolver.Reopen(selector.Backend); err != nil {
+			return err
 		}
+		return Failure("store.implementation", "initialization cannot change an existing store implementation")
 	}
 	material, err := a.acquire(ctx, selected, implementation, true)
 	if err != nil {

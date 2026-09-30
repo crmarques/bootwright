@@ -211,12 +211,16 @@ fetch it must not publish confidentially this way.
 The attempt that publishes proves the publication before its block completes.
 From the placement Machine it requests the first byte of the published file
 through the selected listener, with no proxy, verifying the listener's
-certificate against the serving certificate the server installed from its
-bound material. Any answer but `200` or `206` fails the block with its cause:
-the status, or the connection or verification failure. The request names the
-token, so neither it nor the response reaches output; only that cause does,
-with the token redacted. The proof precedes anything that lets a later attempt
-treat the publication as complete.
+certificate against the server's serving certificate as the consumer's own
+operation binds it: the consumer block names the server's certificate Secret
+among its bindings, and only that Secret's certificate part reaches its
+adapter. The copy the server installed beneath its content root is never the
+authority, because it proves only itself and not the certificate a verifying
+fetcher is given. Any answer but `200` or `206` fails the block with its cause:
+the status, the connection failure, or the verification failure naming that
+Secret. The request names the token, so neither it nor the response reaches
+output; only that cause does, with the token redacted. The proof precedes
+anything that lets a later attempt treat the publication as complete.
 
 Not yet met: the physical installation's host-key publication carries no such
 proof, and its refusal before registration leaves that publication unreachable;

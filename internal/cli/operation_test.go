@@ -22,7 +22,7 @@ func TestOperationBoundaryIsLazyForInformationalMalformedAndUnavailablePaths(t *
 		"validate --output json --unknown", "render effective -f input", "render --output json",
 		"add-ons list", "preflight all", "preflight container-cluster",
 		"preflight storage-cluster", "preflight add-ons", "cluster list",
-		"cluster kubeconfig --name example", "cluster oc --name example get pods",
+		"cluster oc --name example get pods",
 		"render --output-dir artifacts --sensitive", "render installer", "render storage",
 	} {
 		t.Run(invocation, func(t *testing.T) {

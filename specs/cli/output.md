@@ -474,6 +474,7 @@ it to a variable.
 | `access.unavailable` | An applicable access request lacks required local access metadata or an available credential artifact. |
 | `access.target` | Explicit access cannot resolve one exact authorized target. |
 | `access.handoff` | An explicit access descriptor cannot be safely resolved or encoded. |
+| `cluster.not-applicable` | A cluster command does not apply to the selected cluster's kind. |
 | `machine.power` | A power transition was refused before it ran, or its confirmation could not be answered. |
 
 A command context that needs a narrower code adds its row with the code's

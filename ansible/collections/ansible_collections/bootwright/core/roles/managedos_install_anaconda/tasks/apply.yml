@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v4'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v5'
       - bootwright_os_install_request.image.path.startswith('/var/lib/bootwright-services/')
       - bootwright_os_install_request.markerPath == '/etc/bootwright/install-marker.json'
       - bootwright_os_install_request.hostKeyPath == '/etc/bootwright/host-key.pub'
@@ -310,7 +310,11 @@
     user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
     verify: '{{ managedos_install_anaconda_verify }}'
+    ca_data: '{{ managedos_install_anaconda_ca_data }}'
     operation: eject
+    restore_verification: '{{ managedos_install_anaconda_media_trust.restoreVerification }}'
+    remove_certificate: '{{ managedos_install_anaconda_media_trust.removeCertificate }}'
+    certificate: '{{ managedos_install_anaconda_certificate }}'
   register: managedos_install_anaconda_ejected
   no_log: true
 

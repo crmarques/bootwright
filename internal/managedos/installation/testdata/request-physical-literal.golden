@@ -1,0 +1,72 @@
+{
+  "address": "198.51.100.41/24",
+  "bootMedia": {
+    "name": "rhel-9.8-x86_64-boot.iso"
+  },
+  "budgets": {
+    "identity": {
+      "attempts": 120,
+      "delaySeconds": 30
+    },
+    "installer": {
+      "attempts": 180,
+      "delaySeconds": 20
+    },
+    "reachability": {
+      "attempts": 30,
+      "delaySeconds": 10
+    }
+  },
+  "fleetKeyRef": "bootwright-machine-key",
+  "hostKeyPath": "/etc/bootwright/host-key.pub",
+  "hostname": "metal-01.lab.example.test",
+  "identity": {
+    "block": "os-install-metal-01",
+    "context": "lab",
+    "object": "metal-01",
+    "profile": "rhel-9-8"
+  },
+  "image": {
+    "path": "/srv/public/os/metal-01/install.iso",
+    "url": "https://artifacts.lab.example.test/public/os/metal-01/install.iso"
+  },
+  "kickstart": "text\n",
+  "markerPath": "/etc/bootwright/install-marker.json",
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "private": {
+    "path": "/srv/private/os/metal-01",
+    "url": "https://artifacts.lab.example.test/private/os/metal-01"
+  },
+  "target": {
+    "channel": "delivered-key",
+    "controller": {
+      "credentialsRef": "lab-bmc-credentials",
+      "endpoint": "https://bmc-01.lab.example.test/redfish/v1/Systems/1",
+      "tlsVerify": true,
+      "trustBundleRef": "lab-bmc-ca",
+      "virtualMedia": {
+        "removeCertificate": true,
+        "restoreVerification": false,
+        "trust": "import-certificate"
+      }
+    },
+    "hardware": {
+      "interfaces": [
+        {
+          "macAddress": "52:54:00:9a:1b:01",
+          "name": "enp1s0"
+        }
+      ],
+      "rootDevice": "/dev/sda"
+    },
+    "hostKeyRef": "metal-01-host-key",
+    "physical": true,
+    "substrate": "baremetal"
+  },
+  "tlsCertificateRef": "lab-artifacts-tls",
+  "user": "bootwright",
+  "version": "os-install-anaconda-v5"
+}

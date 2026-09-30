@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -12,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 func m(kv ...any) api.Value {
@@ -56,9 +58,25 @@ func catalogOf() api.Catalog {
 	})
 }
 
+// catalogWithControllerTLS is catalogOf with the server's controller-to-BMC
+// trust declared as given.
+func catalogWithControllerTLS(tls api.Value) api.Catalog {
+	objects := catalogOf().Objects()
+	for index, object := range objects {
+		if object.Kind() == api.Machine && object.Name() == "server" {
+			objects[index] = object.WithSpec(object.Spec().WithPath(tls, "hardware", "management", "bmc", "tls"))
+		}
+	}
+	return api.NewCatalog(objects)
+}
+
 func planOf(t *testing.T, verb reconciliation.Verb) lifecycle.CapabilityPlan {
 	t.Helper()
-	catalog := catalogOf()
+	return planIn(t, verb, catalogOf())
+}
+
+func planIn(t *testing.T, verb reconciliation.Verb, catalog api.Catalog) lifecycle.CapabilityPlan {
+	t.Helper()
 	state := compilation.NewState(catalog, catalog, nil)
 	plan, err := NewMachine(nil).Plan(context.Background(), lifecycle.PlanInput{
 		Verb: verb, Context: lifecycle.ContextIdentity{Name: "lab"}, State: state, Controller: "controller",
@@ -128,6 +146,79 @@ func TestTheFrozenRequestCarriesEveryDeclaredAddress(t *testing.T) {
 	}
 	if request.Controller.Endpoint != "https://bmc.example.test/redfish/v1/Systems/1" {
 		t.Fatalf("endpoint = %q", request.Controller.Endpoint)
+	}
+}
+
+// A controller that declares a trust bundle is proved through it: the claim
+// freezes the bundle, binds it before the operation registers, and hands it to
+// the adapter as its own file. One that declares none carries nothing for it,
+// and its controller is reached through the system trust store.
+func TestTheClaimReadsTheControllerThroughItsBundle(t *testing.T) {
+	for name, test := range map[string]struct {
+		catalog api.Catalog
+		bundle  string
+	}{
+		"declared": {catalogWithControllerTLS(m("verify", true, "trustBundleRef", "server-bmc-ca")), "server-bmc-ca"},
+		"absent":   {catalogOf(), ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			plan := planIn(t, reconciliation.Apply, test.catalog)
+			request, err := DecodeRequest(plan.Definitions[0].Request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if request.Controller.TrustBundleRef != test.bundle {
+				t.Fatalf("frozen bundle = %q, want %q", request.Controller.TrustBundleRef, test.bundle)
+			}
+			frozen, err := reconciliation.NewPlan(reconciliation.Apply, plan.Definitions)
+			if err != nil {
+				t.Fatal(err)
+			}
+			runner := &scriptedRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, Evidence{
+				Addresses: request.Addresses(), Postcondition: true, Power: "On", Request: frozen.Blocks[0].RequestDigest, UUID: "uuid-1",
+			})}}
+			if _, err := NewMachine(runner).Apply(context.Background(), lifecycle.Execution{Operation: "op-1", Attempt: 1, Block: frozen.Blocks[0]}); err != nil {
+				t.Fatalf("apply: %v", diagnostics.Of(err))
+			}
+			var files []lifecycle.MaterialFile
+			for _, file := range runner.requests[0].Materials {
+				if file.Name == "bmc-ca" || file.Variable == "controllerCA" {
+					files = append(files, file)
+				}
+			}
+			if test.bundle == "" {
+				if len(files) != 0 || !slices.Equal(plan.Secrets, []string{"server-bmc"}) {
+					t.Fatalf("a controller with no bundle carried %+v, bound %v", files, plan.Secrets)
+				}
+				return
+			}
+			want := lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: test.bundle, Variable: "controllerCA"}
+			if len(files) != 1 || files[0] != want {
+				t.Fatalf("bundle files = %+v", files)
+			}
+			if !slices.Equal(plan.Secrets, []string{"server-bmc", "server-bmc-ca"}) {
+				t.Fatalf("bound Secrets = %v", plan.Secrets)
+			}
+		})
+	}
+}
+
+// A claim reads exactly the version it writes, with no conversion, so a claim
+// an earlier build froze refuses both its continuation and its removal here.
+func TestAFrozenClaimOfAnotherVersionRefuses(t *testing.T) {
+	current := planOf(t, reconciliation.Apply).Definitions[0].Request
+	for _, version := range []string{"machine-baremetal-v1", "machine-baremetal-v3"} {
+		frozen := []byte(strings.Replace(string(current), `"version":"`+requestVersion+`"`, `"version":"`+version+`"`, 1))
+		if string(frozen) == string(current) {
+			t.Fatalf("the fixture claim does not carry %s", requestVersion)
+		}
+		if _, err := DecodeRequest(frozen); err == nil {
+			t.Fatalf("a %s claim decoded", version)
+		}
+		block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: "machine-server", Request: frozen}}
+		if _, err := NewMachine(nil).Removal(context.Background(), block); err == nil {
+			t.Fatalf("a %s claim was removable", version)
+		}
 	}
 }
 

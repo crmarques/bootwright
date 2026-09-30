@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type ImplementationCatalog struct {
@@ -74,7 +75,9 @@ func (c *ImplementationCatalog) Reopen(backend string) (SecretStoreImplementatio
 			return implementation, nil
 		}
 	}
-	return nil, Failure("store.implementation", "persisted secret store implementation is incompatible")
+	return nil, diagnostics.NewFailureWithRemediation("secret.store.implementation",
+		"this context's secret store is "+backend+", which this Bootwright build cannot open", "",
+		"destroy this context's effects with the Bootwright build that created it, then run bootwright context delete --name <context> --purge and create the context again")
 }
 
 func validSelection(s Selection) bool {

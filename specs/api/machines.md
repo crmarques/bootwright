@@ -38,8 +38,9 @@ required fields inside the selected arm.
 | `spec.baremetal.boot.method` | string | no | `redfishVirtualMedia` | `redfishVirtualMedia`; the default materializes. Another value fails validation rather than naming a boot path no implementation performs. |
 | `spec.baremetal.defaults.bmc.credentialsRef` | string | no | — | Default `usernamePassword` `Secret` reference for a Machine that omits its own BMC credentials. |
 | `spec.baremetal.defaults.bmc.tls.verify` | boolean | no | `true` | Default for a machine BMC whose own `tls.verify` is absent. |
-| `spec.baremetal.defaults.bmc.virtualMedia.tls.trust` | string | no | `disable-verification` | `disable-verification`, `import-certificate`, or `established`. |
-| `spec.baremetal.defaults.bmc.virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | `true` | Valid only with `disable-verification`. |
+| `spec.baremetal.defaults.bmc.tls.trustBundleRef` | string | no | — | Default `caBundle` `Secret` reference for a machine BMC that keeps verification; refused beside `tls.verify: false`. |
+| `spec.baremetal.defaults.bmc.virtualMedia.tls.trust` | string | no | `import-certificate` | `import-certificate` or `established`. `disable-verification` is refused here: it is a per-Machine exception and never a provider default. |
+| `spec.baremetal.defaults.bmc.virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | — | Refused: it is valid only with `disable-verification`, which a provider never defaults. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Valid only with `import-certificate`. |
 
 Normalization inherits a configured provider `credentialsRef` or `tls.verify`
@@ -48,6 +49,20 @@ block only when the machine omits that block. A machine-local value always
 wins. Missing credentials never select a same-named Secret, another provider,
 or ambient identity; a consuming bare-metal installation requires the
 resolved reference and its `usernamePassword` type.
+
+A provider `tls.trustBundleRef` is inherited only by a machine that keeps
+verification: one that authors `tls.verify: false` inherits no bundle, and a
+machine-local bundle always wins. An Environment kind-default bundle likewise
+never reaches an object that authors `tls.verify: false`. A bundle beside
+verification turned off, whether either half was authored or inherited, fails
+admission at `tls.trustBundleRef`. A bundle replaces the system trust store
+rather than adding to it: it is the one anchor of the controller-to-BMC leg.
+A placement host reached over SSH verifies with its own interpreter, which may
+not accept a partial chain, so the bundle holds the issuing root rather than
+only an intermediate. A `caBundle` Secret holds CA certificates only
+([secrets](../secrets.md)), so a controller presenting a self-signed
+certificate that is not a CA cannot be anchored by one and keeps
+`tls.verify: false`.
 
 ### Libvirt arm
 
@@ -186,10 +201,11 @@ lowercase colon-separated EUI-48 values.
 | `address` | string | with the BMC block | — | Redfish endpoint naming one exact ComputerSystem, in the one canonical spelling below, on every Machine that authors it. |
 | `protocol` | string | no | `redfish` | `redfish`. |
 | `credentialsRef` | string | resolved with the BMC block | configured provider default | `usernamePassword` `Secret`; machine-local values take precedence. |
-| `tls.verify` | boolean | no | `true` | Controls the controller-to-BMC TLS leg. |
-| `virtualMedia.tls.trust` | string | no | `disable-verification` | `disable-verification`, `import-certificate`, or `established`; controls the BMC-to-artifact-server leg. |
-| `virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | `true` | Only with `disable-verification`. |
-| `virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Only with `import-certificate`. |
+| `tls.verify` | boolean | no | `true` | Whether the controller-to-BMC TLS leg is verified: against `tls.trustBundleRef` alone when it is set, and against the system trust store otherwise. |
+| `tls.trustBundleRef` | string | no | configured provider default | `caBundle` `Secret`; the one anchor of the controller-to-BMC leg. Refused beside `tls.verify: false`. |
+| `virtualMedia.tls.trust` | string | no | `import-certificate` | How the BMC is made to trust the artifact server it fetches media from. `import-certificate` adds that server's certificate to the virtual-media device and turns its verification on before the insert; `established` changes nothing, because the BMC already trusts the server; `disable-verification` turns the device's verification off before the insert and is the per-Machine exception below. |
+| `virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | `true` | Only with `disable-verification`; the eject turns verification back on. |
+| `virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Only with `import-certificate`; the eject deletes the imported certificate. |
 
 `address` is what a destructive operation is aimed at, so it has one spelling:
 admission accepts only that spelling, and nothing rewrites it before the
@@ -206,7 +222,14 @@ and every `redfish+` or `redfish-virtualmedia+` scheme are refused.
 
 If `virtualMedia.tls` is authored, it sets at least one option. The two TLS
 legs stay independent; no BMC verification opt-out changes artifact-server
-trust.
+trust. `disable-verification` is an explicit per-Machine exception, admitted
+only where a Machine authors it and visible in its effective state: a
+provider default of it is refused at
+`$.spec.baremetal.defaults.bmc.virtualMedia.tls.trust`, and an Environment
+kind default of it, for a Machine or an InfraProvider, is refused at its
+`$.spec.defaults.<Kind>` path. A managed-OS installation that delivers private
+material refuses it before registration
+([managed OS](../managed-os.md#installation)).
 
 `os.install.rootDeviceHints` admits only `deviceName`, `hctl`, `model`,
 `vendor`, `serialNumber`, `minSizeGigabytes`, `wwn`, and boolean `rotational`.

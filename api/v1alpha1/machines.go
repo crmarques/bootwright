@@ -18,8 +18,14 @@ func machineVirtualMediaSchema() *Shape {
 	return record(field("tls", tls))
 }
 
+func machineBMCTLSSchema() *Shape {
+	tls := record(field("verify", boolean()), field("trustBundleRef", secret("caBundle")))
+	tls.Suppress = []Suppression{{Field: "verify", Value: BoolValue(false), Fields: []string{"trustBundleRef"}}}
+	return tls
+}
+
 func machineBMCSchema() *Shape {
-	return record(required("address", nonempty()), field("protocol", enumeration("redfish")), field("credentialsRef", secret("usernamePassword")), field("tls", record(field("verify", boolean()))), field("virtualMedia", machineVirtualMediaSchema()))
+	return record(required("address", nonempty()), field("protocol", enumeration("redfish")), field("credentialsRef", secret("usernamePassword")), field("tls", machineBMCTLSSchema()), field("virtualMedia", machineVirtualMediaSchema()))
 }
 
 func machineSchema() *Shape {
@@ -65,7 +71,7 @@ func machineProfileSchema(variant string) *Shape {
 }
 
 func machineProviderSchema() *Shape {
-	baremetal := record(field("boot", record(defaulted("method", enumeration("redfishVirtualMedia"), StringValue("redfishVirtualMedia")))), field("defaults", record(field("bmc", record(field("credentialsRef", secret("usernamePassword")), field("tls", record(field("verify", boolean()))), field("virtualMedia", machineVirtualMediaSchema()))))))
+	baremetal := record(field("boot", record(defaulted("method", enumeration("redfishVirtualMedia"), StringValue("redfishVirtualMedia")))), field("defaults", record(field("bmc", record(field("credentialsRef", secret("usernamePassword")), field("tls", machineBMCTLSSchema()), field("virtualMedia", machineVirtualMediaSchema()))))))
 	libvirt := record(required("machineRef", ref(Machine)), required("uri", nonempty()), required("bmcEmulationDefaults", record(defaulted("enabled", boolean(), BoolValue(true)), defaulted("protocol", enumeration("redfish"), StringValue("redfish")), defaulted("emulator", enumeration("sushy-tools"), StringValue("sushy-tools")), required("bindAddress", ip()), defaulted("port", port(), IntegerValue("8000")), required("auth", record(required("credentialsRef", secret("usernamePassword")))), defaulted("disableCertificateVerification", boolean(), BoolValue(false)))), defaulted("machineProfiles", machineProfileSchema("libvirt"), ListValue()))
 	vcenters := nonemptyArray(&Shape{Type: Sequence, Atomic: true, NameKey: "server", Element: record(required("server", lexical("host")), field("port", integer("0", "65535")), required("datacenters", nonemptyArray(set(nonempty()))), required("credentialsRef", secret("usernamePassword")), defaulted("disableCertificateVerification", boolean(), BoolValue(false)))})
 	topology := record(required("datacenter", nonempty()), required("computeCluster", nonempty()), required("datastore", nonempty()), required("networks", nonemptyArray(set(nonempty()))), field("folder", nonempty()), field("resourcePool", nonempty()))

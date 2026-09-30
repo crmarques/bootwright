@@ -212,7 +212,7 @@ confirmed setup:
 | `state/operations/` | [Reconciliation-owned operation records and logs](state-reconciliation.md#operation-records). Workspace supplies the held area and its publication primitives; it never interprets their content. |
 | `state/runs/` | Retained adapter output of [bounded runs](cli/output.md#bounded-run-output), in an area Workspace supplies and never interprets; removed with the context. |
 | `state/trust/hosts.json` | The context-managed SSH host-key trust an [SSH session](cli.md#machine-ssh-sessions) proves a Machine against when it declares no `knownHostsRef` and Bootwright did not install it: one public-key record per Machine, and one key per address. Written only by `machine trust` and by an explicitly confirmed first use, published atomically against its exact prior content, and removed with the context. It holds no confidential material. |
-| `secrets/` | Context-bound encrypted custody with its own independently versioned [storage contract](secrets.md#local-keyring-v3). |
+| `secrets/` | Context-bound encrypted custody with its own independently versioned [storage contract](secrets.md#local-keyring-v4). |
 
 Every directory is owned by `root:root` with mode `0700`; every file is owned
 by `root:root` with mode `0600`, except the catalogued controller executables
@@ -289,7 +289,12 @@ Narrowing that boundary to the lease alone is
 [B18](milestones/m1.md#b18). Within it, Workspace
 supplies the operation area, the mutation-evidence replacement primitive and
 the reservation publication; Reconciliation owns what they contain and when
-they advance.
+they advance. It also lends a transaction-scoped secrets area, re-proving the
+context's exact record, its layout and its secret directory as a secret
+mutation does but under the lock and lease it already holds, fresh for each
+caller, closed when that caller returns and serialized between an operation's
+blocks. Only Secrets interprets it: the engine keeps
+[produced material](secrets.md#produced-material) in custody through it.
 
 Init validates supplied configuration/input before effects, records its
 initializing name, and creates the final named directory directly. It
@@ -339,12 +344,12 @@ verification that already refuses it. An operation, run or trust area refuses
 a record or directory named as a stage, so collection never removes one.
 Reads never collect.
 
-The [secret store](secrets.md#local-keyring-v3)'s exclusive writes keep what
+The [secret store](secrets.md#local-keyring-v4)'s exclusive writes keep what
 they leave for its own recovery. Its replacement stages through the same
 publication and removes its stage on any failure before the rename, keeping
 its exact read expectation, its publication phase and its not-committed,
 committed or uncertain outcome; what a killed write leaves follows
-[Local keyring v3](secrets.md#local-keyring-v3).
+[Local keyring v4](secrets.md#local-keyring-v4).
 The context reservation write also keeps what it leaves: until the registry
 records the context directory's identity, the reservation alone lets an init
 retry attribute that directory and record the identity that deletion
@@ -490,7 +495,7 @@ abandoned; a claim beyond them refuses until another `media add` finishes or
 ## Format and restore boundary
 
 Under the [pre-1.0 format policy](project.md#design-priorities-and-non-goals),
-no stored format is converted. A registry, [secret store](secrets.md#local-keyring-v3),
+no stored format is converted. A registry, [secret store](secrets.md#local-keyring-v4),
 [controller record](contexts/controller-record.md) or frozen request written in
 any other format is refused, not upgraded, and unsupported past and future
 formats refuse before effects. A format change states the refusal its
@@ -520,7 +525,12 @@ deletion abandons the objects rather than removing them: it is otherwise the
 same permanent local deletion, it needs `--purge` and ordinary confirmation
 like any other, its confirmation names the abandonment, its result reports it,
 and it has no remote resource effect. There is no recovery-only mode or
-archival.
+archival. It still removes the keyring, and with it the
+[produced material](secrets.md#produced-material) no completed removal
+withdrew, such as the administrator kubeconfig of an installed cluster, which
+nothing else keeps: export it first with `bootwright cluster kubeconfig --name
+<cluster>`. The orphan confirmation names that custodied access and the
+export command, with the context, beside the abandoned objects.
 
 After proof and ordinary confirmation, durably mark the exact context deleting
 before removing any file. Remove only verified objects through bounded held

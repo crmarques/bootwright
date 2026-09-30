@@ -485,11 +485,11 @@ state calls for.
 
 List and info commands derive their result from validated desired state,
 context-owned artifacts, and durable ownership evidence. A name can locate an
-entry but never proves identity or ownership. The detailed contract of cluster
-inspection, access handoff and node selection is
-[deferred](deferred/cli-access-and-rendering.md): the administrator-access
-export `cluster kubeconfig` to [B10](milestones/m1.md#b10), and the rest to the
-parked item [B101](milestones/backlog.md#b101).
+entry but never proves identity or ownership. The one cluster access command
+available is the [administrator access export](#administrator-access-export);
+the detailed contract of cluster inspection, access handoff and node selection
+is [deferred](deferred/cli-access-and-rendering.md) to the parked item
+[B101](milestones/backlog.md#b101).
 
 `secret show` and `cluster kubeconfig` are raw sensitive-byte exports.
 They require an exact context and object, perform no implicit fallback, emit
@@ -551,6 +551,36 @@ A reading names no retained output. It is an inspection, not an operation: it
 either succeeds into a listing or refuses with its own diagnostic, so there is
 nothing for an operator to resume or read afterwards and no log location is
 reported for it.
+
+### Administrator access export
+
+`cluster kubeconfig --name <cluster>` reveals the administrator kubeconfig a
+[completed installation](container-clusters.md#installation) left in
+the context's [custody](secrets.md#produced-material). It resolves the explicit
+`--context`, or the current context, once; compiles that context's effective
+state; and resolves `--name` in the selected graph's shared
+ContainerCluster/StorageCluster name namespace. It never searches outside the
+selected graph and never selects another cluster. Every ContainerCluster is
+OpenShift or OKD, so every selected ContainerCluster is applicable. The checks
+run in this order, each before the next:
+
+| Condition | Diagnostic, exit `1` | Next action |
+| --- | --- | --- |
+| No selected ContainerCluster or StorageCluster has the name, including one only an excluded file declares | `access.target`, naming the context and the name | name a ContainerCluster the context selects; `bootwright render effective --context <context>` lists them |
+| The name is a managed or external Ceph StorageCluster | `cluster.not-applicable`, naming `bootwright cluster kubeconfig`, the cluster, its kind and the applicable targets, OpenShift and OKD ContainerClusters | `bootwright render effective --context <context>` lists the clusters the context selects and their kinds |
+| The context's custody holds no kubeconfig for the ContainerCluster | `access.unavailable`, naming the cluster | `bootwright apply --context <context>` |
+
+The target and its applicability are settled from the compiled graph before
+any custody read, so a name that selects nothing, or selects a StorageCluster,
+reads no credential bytes. A store this build cannot open refuses with its own
+[`secret.store.*` diagnostic](secrets.md#local-keyring-v4). The discovery
+action is `render effective` because `cluster list` and `cluster info` are
+unavailable. On success, standard output is exactly the custodied bytes with no
+added LF, and standard error is empty; on any failure, standard output is empty
+and standard error holds exactly one diagnostic. The entry exists from the
+apply that proves the installation complete until the destroy that completes
+the context's removal withdraws it, and `context delete --purge
+--allow-orphans` removes it with the keyring.
 
 ### Machine SSH sessions
 

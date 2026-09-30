@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"go.yaml.in/yaml/v3"
+
+	"github.com/crmarques/bootwright/ansible"
 	controllerscope "github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
@@ -76,6 +79,9 @@ func mediaExecution(t *testing.T, digest string) (lifecycle.Execution, MediaRequ
 			RequestDigest:   digest,
 		},
 		Material: map[string]secrets.Material{
+			"artifact-server-tls": secrets.NewMaterial(map[secrets.Part][]byte{
+				secrets.CertificatePart: []byte("-----BEGIN CERTIFICATE-----\nSERVING\n-----END CERTIFICATE-----\n"),
+			}),
 			"openshift-pull-secret": secrets.NewMaterial(nil),
 			"sno-cluster-admin-ssh-key": secrets.NewMaterial(map[secrets.Part][]byte{
 				secrets.PublicKeyPart: []byte("ssh-ed25519 AAAAPUBLIC cluster\n"),
@@ -160,7 +166,7 @@ func TestMediaPlanContributesOneBlockPerCluster(t *testing.T) {
 			t.Fatalf("an apply plans %q", impact)
 		}
 	}
-	if !slices.Equal(plan.Secrets, []string{"openshift-pull-secret", "sno-cluster-admin-ssh-key"}) {
+	if !slices.Equal(plan.Secrets, []string{"artifact-server-tls", "openshift-pull-secret", "sno-cluster-admin-ssh-key"}) {
 		t.Fatalf("secrets = %v", plan.Secrets)
 	}
 	if len(plan.Reservations) != 1 || plan.Reservations[0].Service != "sno" {
@@ -233,6 +239,50 @@ func TestAnApplyCrossesTheAdapterWithItsInstallerAndBoundMaterial(t *testing.T) 
 		return file.Secret == "openshift-pull-secret" && file.Part == secrets.ValuePart
 	}) {
 		t.Fatalf("materials = %+v", request.Materials)
+	}
+}
+
+// The fetch that proves the publication verifies the listener against the
+// serving certificate bound from the selected server's Secret: the apply hands
+// exactly that Secret's certificate part to the adapter, and the role's probe
+// names the file it lands in as its one authority, never the copy the server
+// installed beneath its content root.
+func TestTheProbeVerifiesTheListenerAgainstTheBoundServingCertificate(t *testing.T) {
+	execution, request := mediaExecution(t, testDigest)
+	if request.TLSCertificateRef != "artifact-server-tls" {
+		t.Fatalf("the request binds serving certificate %q", request.TLSCertificateRef)
+	}
+	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: mediaEvidence(t, testDigest, nil)}}
+	if _, err := NewMedia(runner).Apply(context.Background(), execution); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	var bound []lifecycle.MaterialFile
+	for _, file := range runner.requests[0].Materials {
+		if file.Secret == request.TLSCertificateRef {
+			bound = append(bound, file)
+		}
+	}
+	want := lifecycle.MaterialFile{Name: "artifact-ca", Part: secrets.CertificatePart, Secret: "artifact-server-tls", Variable: "artifactCertificate"}
+	if len(bound) != 1 || bound[0] != want {
+		t.Fatalf("the serving certificate Secret reaches the adapter as %+v", bound)
+	}
+	const path = "collections/ansible_collections/bootwright/core/roles/containercluster_media_agent/tasks/build.yml"
+	var tasks []map[string]any
+	if err := yaml.Unmarshal(ansible.Assets()[path], &tasks); err != nil {
+		t.Fatalf("%s: %v", path, err)
+	}
+	var probes []map[string]any
+	for _, task := range tasks {
+		if uri, ok := task["ansible.builtin.uri"].(map[string]any); ok {
+			probes = append(probes, uri)
+		}
+	}
+	if len(probes) != 1 {
+		t.Fatalf("build.yml holds %d fetches through the listener", len(probes))
+	}
+	authority := "{{ " + mediaVariablePrefix + "_material." + want.Variable + " }}"
+	if probes[0]["ca_path"] != authority || probes[0]["validate_certs"] != true {
+		t.Fatalf("the probe verifies against %v (validate_certs %v), not %s", probes[0]["ca_path"], probes[0]["validate_certs"], authority)
 	}
 }
 

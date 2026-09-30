@@ -18,10 +18,12 @@ import (
 const maxReadingBytes = 64 << 10
 
 // ReadTarget names one Machine, the controller its reading comes from, and the
-// operation-scoped files that controller's account is written to. Each target
-// carries its own variable names because one run reads many controllers and no
-// two may resolve to the same material.
+// operation-scoped files that controller's account and trust bundle are written
+// to. Each target carries its own variable names because one run reads many
+// controllers and no two may resolve to the same material. CAVariable is set
+// only for a controller that declares a bundle.
 type ReadTarget struct {
+	CAVariable       string     `json:"caVariable,omitempty"`
 	Controller       Controller `json:"controller"`
 	Object           string     `json:"object"`
 	PasswordVariable string     `json:"passwordVariable"`
@@ -78,11 +80,15 @@ func readSurveysFor(catalog api.Catalog, contextName string, names []string, own
 		survey := grouped[placement.Machine]
 		survey.Context, survey.Placement, survey.Version = contextName, placement, ReadImplementation
 		index := strconv.Itoa(len(survey.Targets))
-		survey.Targets = append(survey.Targets, ReadTarget{
+		target := ReadTarget{
 			Controller: controller, Object: object.Name(),
 			PasswordVariable: "controllerPassword" + index,
 			UserVariable:     "controllerUser" + index,
-		})
+		}
+		if controller.TrustBundleRef != "" {
+			target.CAVariable = "controllerCA" + index
+		}
+		survey.Targets = append(survey.Targets, target)
 		grouped[placement.Machine] = survey
 	}
 	surveys := make([]ReadSurvey, 0, len(grouped))
@@ -96,27 +102,34 @@ func readSurveysFor(catalog api.Catalog, contextName string, names []string, own
 }
 
 // readMaterials names the operation-scoped file each target's controller
-// account is written to. The file name is the target's own, so two Machines
-// answered by one credential still read their own copy.
+// account and trust bundle are written to. The file name is the target's own,
+// so two Machines answered by one credential or one bundle still read their
+// own copy.
 func readMaterials(survey ReadSurvey) []lifecycle.MaterialFile {
-	files := make([]lifecycle.MaterialFile, 0, 2*len(survey.Targets))
+	files := make([]lifecycle.MaterialFile, 0, 3*len(survey.Targets))
 	for index, target := range survey.Targets {
 		position := strconv.Itoa(index)
 		files = append(files,
 			lifecycle.MaterialFile{Name: "bmc-user-" + position, Part: secrets.UsernamePart, Secret: target.Controller.CredentialsRef, Variable: target.UserVariable},
 			lifecycle.MaterialFile{Name: "bmc-password-" + position, Part: secrets.PasswordPart, Secret: target.Controller.CredentialsRef, Variable: target.PasswordVariable},
 		)
+		if target.CAVariable != "" {
+			files = append(files,
+				lifecycle.MaterialFile{Name: "bmc-ca-" + position, Part: secrets.CertificatePart, Secret: target.Controller.TrustBundleRef, Variable: target.CAVariable})
+		}
 	}
 	return files
 }
 
 // readReferences names every declaration one survey needs bound: each
-// controller's account, and the placement host's own access.
+// controller's account and trust bundle, and the placement host's own access.
 func readReferences(survey ReadSurvey) []string {
 	references := survey.Placement.SecretReferences()
 	for _, target := range survey.Targets {
-		if !slices.Contains(references, target.Controller.CredentialsRef) {
-			references = append(references, target.Controller.CredentialsRef)
+		for _, reference := range []string{target.Controller.CredentialsRef, target.Controller.TrustBundleRef} {
+			if reference != "" && !slices.Contains(references, reference) {
+				references = append(references, reference)
+			}
 		}
 	}
 	return references

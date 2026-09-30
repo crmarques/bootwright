@@ -188,8 +188,12 @@ func (s Service) finalize(ctx context.Context, name string, decided transition) 
 			return s.project(ctx, tx, operation.Verb, next)
 		}
 		// The removal's record reads done from here, so what it still owes is
-		// given back under the recording boundary, interrupted or not.
+		// given back under the recording boundary, interrupted or not: the
+		// produced material first, then the reservations.
 		recording := recordingContext(ctx)
+		if err := s.withdraw(recording, tx); err != nil {
+			return err
+		}
 		if err := releaseHeld(recording, tx); err != nil {
 			return err
 		}

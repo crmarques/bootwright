@@ -262,3 +262,32 @@ func TestAPhysicalMachineWithoutDeclaredHardwareRefuses(t *testing.T) {
 		t.Fatal("a physical machine with no declared NIC was accepted")
 	}
 }
+
+// A controller that declares a trust bundle carries it to every consumer, so
+// the bundle is the one anchor of that leg whether the Machine is on a
+// bare-metal provider or on none. An emulated controller serves plain HTTP
+// and never carries one.
+func TestTargetCarriesTheControllerTrustBundle(t *testing.T) {
+	bundled := map[string]string{"server": "server-bmc-ca", "bastion": "bastion-bmc-ca"}
+	objects := targetCatalog().Objects()
+	for index, object := range objects {
+		if bundle, ok := bundled[object.Name()]; ok && object.Kind() == api.Machine {
+			objects[index] = object.WithSpec(object.Spec().WithPath(m("verify", true, "trustBundleRef", bundle),
+				"hardware", "management", "bmc", "tls"))
+		}
+	}
+	catalog := api.NewCatalog(objects)
+	for _, name := range []string{"server", "bastion", "guest"} {
+		machine, _ := catalog.Find(api.Machine, name)
+		target, err := TargetFor(catalog, machine, "lab", "controller")
+		if err != nil {
+			t.Fatalf("deriving %s: %v", name, diagnostics.Of(err))
+		}
+		if target.Controller.TrustBundleRef != bundled[name] || !target.Controller.TLSVerify {
+			t.Fatalf("%s's controller = %+v, want bundle %q", name, target.Controller, bundled[name])
+		}
+	}
+	if bundle := targetOf(t, "server").Controller.TrustBundleRef; bundle != "" {
+		t.Fatalf("a controller declaring no bundle carries %q", bundle)
+	}
+}

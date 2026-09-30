@@ -7,6 +7,14 @@
 substrate_baremetal_machine_expected: >-
   {{ bootwright_substrate_physical_request.hardware | map(attribute='macAddress') | list }}
 
+# The controller's trust bundle as PEM, the one anchor its transport is
+# verified against, or empty when the controller declares none and the system
+# trust store anchors it. Only the lifecycle entry points read this; each port
+# entry point reads the path its consumer passes.
+substrate_baremetal_machine_ca_data: >-
+  {{ lookup('ansible.builtin.file', bootwright_substrate_physical_material.controllerCA)
+     if bootwright_substrate_physical_material.controllerCA | default('') | length > 0 else '' }}
+
 # How long an identity read waits for a machine that has not answered yet.
 # Zero is one attempt: only an installation waiting for a machine it just
 # booted sets a budget.

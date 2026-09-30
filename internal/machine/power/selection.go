@@ -69,5 +69,6 @@ func controllerFor(catalog api.Catalog, object api.Object, contextName, controll
 		CredentialsRef: target.Controller.CredentialsRef,
 		Endpoint:       target.Controller.Endpoint,
 		TLSVerify:      target.Controller.TLSVerify,
+		TrustBundleRef: target.Controller.TrustBundleRef,
 	}, placement, target.Physical, nil
 }

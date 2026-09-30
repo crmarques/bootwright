@@ -16,6 +16,9 @@
     user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_disk_user) }}'
     password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_disk_password) }}'
     verify: '{{ substrate_baremetal_machine_disk_verify }}'
+    ca_data: >-
+      {{ lookup('ansible.builtin.file', substrate_baremetal_machine_disk_ca)
+         if substrate_baremetal_machine_disk_ca | length > 0 else '' }}
     operation: boot
     target: Hdd
   no_log: true
@@ -26,6 +29,9 @@
     user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_disk_user) }}'
     password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_disk_password) }}'
     verify: '{{ substrate_baremetal_machine_disk_verify }}'
+    ca_data: >-
+      {{ lookup('ansible.builtin.file', substrate_baremetal_machine_disk_ca)
+         if substrate_baremetal_machine_disk_ca | length > 0 else '' }}
     operation: power-on
   no_log: true
   when: substrate_baremetal_machine_disk_power_on | bool

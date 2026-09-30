@@ -120,6 +120,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	})
 	services.MachineInventory, services.MachineAccess = machine.MachineInventory, machine.MachineAccess
 	services.MachinePower, services.MachineTrust = machine.MachinePower, machine.MachineTrust
+	services.ClusterAccess = wireClusterAccess(services.DesiredState, secrets.binder, deps.Selection)
 	return services
 }
 

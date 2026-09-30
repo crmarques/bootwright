@@ -240,8 +240,11 @@
   changed_when: true
 
 # Publication is proved by the fetch a controller will make: through the
-# listener, verified against the serving certificate the server installed from
-# its bound material beneath its content root, and never through a proxy. One
+# listener, verified against the serving certificate the server's Secret binds
+# to this operation, and never through a proxy. A verifying fetcher is handed
+# that bound certificate, never the copy the server installed beneath its
+# content root, so a listener presenting anything else is refused here. The
+# block runs on the controller, where the runner wrote that material. One
 # byte proves the worker can open the image. The result carries the token, so
 # it is judged in a separate step that names only what failed, and before the
 # receipt, so a refused image is built again rather than replayed. A replay
@@ -253,7 +256,7 @@
     method: GET
     headers:
       Range: bytes=0-0
-    ca_path: '{{ containercluster_media_agent_private | dirname | dirname | dirname | dirname }}/tls/server.crt'
+    ca_path: '{{ bootwright_cluster_media_material.artifactCertificate }}'
     validate_certs: true
     use_proxy: false
     follow_redirects: none
@@ -273,8 +276,8 @@
          if containercluster_media_agent_probe_status == 403 else
          'the listener answered 404, so the worker it serves as finds no image at the path this attempt published'
          if containercluster_media_agent_probe_status == 404 else
-         ('its certificate did not verify against the serving certificate the server installed: '
-          ~ containercluster_media_agent_probe_cause)
+         ('its certificate did not verify against the serving certificate Secret '
+          ~ bootwright_cluster_media_request.tlsCertificateRef ~ ' holds: ' ~ containercluster_media_agent_probe_cause)
          if containercluster_media_agent_probe_cause is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed') else
          ('the request failed before any status line: ' ~ containercluster_media_agent_probe_cause)
          if containercluster_media_agent_probe_status == -1 else

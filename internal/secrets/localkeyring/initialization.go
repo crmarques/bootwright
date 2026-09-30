@@ -230,8 +230,8 @@ func (i *Implementation) resumeInitialization(ctx context.Context, selected secr
 			return nil, true, marker, nil
 		}
 	}
-	selector := secretstore.Selector{SelectorVersion: formatVersion, Context: selected.Name, Backend: i.Backend(), Generation: attempt.Generation}
-	index := indexRecord{FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, ActiveKey: attempt.KeyID, Keys: []storedKey{{ID: attempt.KeyID, Seals: ledger.Seals}}, Versions: []storedVersion{}, Current: []secretstore.Current{}, Bindings: []secretstore.Binding{}}
+	selector := secretstore.Selector{SelectorVersion: secretstore.RecordVersion, Context: selected.Name, Backend: i.Backend(), Generation: attempt.Generation}
+	index := indexRecord{FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, ActiveKey: attempt.KeyID, Keys: []storedKey{{ID: attempt.KeyID, Seals: ledger.Seals}}, Versions: []storedVersion{}, Current: []secretstore.Current{}, Bindings: []secretstore.Binding{}, Produced: []secretstore.Produced{}}
 	if !freshLedger {
 		ledgerData, exists, err := area.ReadMutable(ctx, ledgerPath(attempt.KeyID), ledgerMaximum)
 		if err != nil || !exists {

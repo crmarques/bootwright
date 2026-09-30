@@ -38,10 +38,12 @@ type Publication struct {
 type Controller struct {
 	CredentialsRef string `json:"credentialsRef"`
 	Endpoint       string `json:"endpoint"`
-	// TLSVerify covers the controller's own transport; VirtualMedia covers the
-	// separate leg on which it fetches what this block publishes.
-	TLSVerify    bool         `json:"tlsVerify"`
-	VirtualMedia VirtualMedia `json:"virtualMedia"`
+	// TLSVerify covers the controller's own transport, and TrustBundleRef,
+	// when set, names the one anchor it verifies against; VirtualMedia covers
+	// the separate leg on which it fetches what this block publishes.
+	TLSVerify      bool         `json:"tlsVerify"`
+	TrustBundleRef string       `json:"trustBundleRef,omitempty"`
+	VirtualMedia   VirtualMedia `json:"virtualMedia"`
 }
 
 // VirtualMedia is how the controller is made to trust the artifact server it
@@ -244,7 +246,7 @@ func (r Request) ExclusiveKeys() []string {
 // SecretReferences names every declaration this request's execution needs
 // bound, so the operation freezes them before it registers.
 func (r Request) SecretReferences() []string {
-	references := append(r.Placement.SecretReferences(), r.Target.Controller.CredentialsRef, r.FleetKeyRef)
+	references := append(r.Placement.SecretReferences(), r.Target.Controller.CredentialsRef, r.Target.Controller.TrustBundleRef, r.FleetKeyRef)
 	if r.Target.HostKeyRef != "" {
 		references = append(references, r.Target.HostKeyRef)
 	}

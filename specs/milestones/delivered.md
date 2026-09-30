@@ -1257,3 +1257,45 @@ run.
 warning on a newer Index API minor; until then a PyPI minor bump stops fresh
 setups. X28 pins five more Ansible test artifacts, so each ansible-check cache
 runs `python3 scripts/tools/ansible_test_prepare.py` again.
+
+### X21 — BMC trust and administrator custody
+
+**Owner:** Managed OS and Container cluster, with Secrets, Infrastructure
+services and CLI. Integrated on local `main` on 2026-09-30 as one commit.
+**Items:** B9, B25, B10. **Decisions:** D23 to D26.
+
+**Outcome:** a physical management controller may name a CA bundle as
+`tls.trustBundleRef`, the only anchor of every Redfish call to it, and every
+Redfish task passes it; a certificate the declared trust refuses fails as
+unverified instead of reading as an empty answer (D23). A physical Machine's
+virtual media imports the media certificate by default and settles it at
+eject, with bounded reads, `If-Match` and no fallback; `disable-verification`
+is admitted only on one Machine and refused beside private delivery (D24). The
+managed-OS, bare-metal and power requests moved version (B9). The cluster media
+probe verifies the listener against the certificate part of the server's
+Secret, which the media request now names, never the installed copy (B25). The
+access a completed installation leaves moves into context custody: the keyring
+becomes `local-keyring-v4` with produced material (D25), the install block's
+kubeconfig is captured before its attempt completes, withdrawn when the
+context's removal completes (D26), revealed by `cluster kubeconfig`, and named
+by the orphan-acknowledged delete's confirmation (B10).
+
+**Review:** three findings; one confirmed and fixed: a failed custody capture
+recorded the attempt failed, so a later destroy could delete the only
+kubeconfig; it now records it unknown, and a continuation or destroy observes
+and recaptures first. Two were rejected as behavior the specs require.
+
+**Gates:** `make check-offline tidy-check modules-check vulncheck docs-check
+race` and `./scripts/ansible-check --suite units`, `sanity`, `integration` and
+`lint` pass on the integrated slice and on the squashed commit. No real-host
+run.
+
+**Constraints left behind:** a context holding a managed-OS installation, a
+bare-metal claim, a power request or a cluster media block frozen by an earlier
+build refuses both continuation and removal under this build, and a keyring
+written before it refuses, so such contexts are destroyed with the build that
+applied them before `setup` runs with this one. The import flow is proved only
+in-tree ([B73](m4.md#b73)); the media probe names the controller's file because
+media blocks run only on the controller; and every cluster read still uses the
+installer's kubeconfig ([B170](m1.md#b170)). New items B168 to B170 entered M1,
+B171 was parked, and B67 records the refusal its physical nodes lift.

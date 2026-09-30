@@ -21,7 +21,7 @@ func TestCanonicalEncodedSizeMatchesJSONEncoding(t *testing.T) {
 	invalidUTF8 := string(allBytes)
 	values := []any{
 		envelope{FormatVersion: formatVersion, Algorithm: algorithm, Purpose: invalidUTF8, KeyID: "key", BlobID: "blob", Nonce: "nonce", Ciphertext: "ciphertext\u2028\u2029"},
-		secretstore.Selector{SelectorVersion: formatVersion, Context: "ctx", Backend: New().Backend(), Generation: "generation"},
+		secretstore.Selector{SelectorVersion: secretstore.RecordVersion, Context: "ctx", Backend: New().Backend(), Generation: "generation"},
 		indexRecord{FormatVersion: formatVersion, Algorithm: algorithm, Keys: nil, Versions: []storedVersion{}, Current: nil, Bindings: []secretstore.Binding{}},
 		initializationRecord{FormatVersion: formatVersion, Context: "ctx", Selection: New().Backend(), Attempts: []initializationAttempt{}, MACKeyID: "", MAC: ""},
 	}
@@ -104,6 +104,7 @@ func TestIndexStructuralPreflightEnforcesTypedArrayLimits(t *testing.T) {
 		{name: "bindings", prefix: `{"bindings":[`, suffix: `]}`, element: `{}`, limit: maxBindings},
 		{name: "version parts", prefix: `{"versions":[{"parts":[`, suffix: `]}]}`, element: `{}`, limit: 2},
 		{name: "binding versions", prefix: `{"bindings":[{"versions":[`, suffix: `]}]}`, element: `"id"`, limit: secrets.MaxVersions},
+		{name: "produced", prefix: `{"produced":[`, suffix: `]}`, element: `{}`, limit: secrets.MaxVersions},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -128,6 +129,10 @@ func TestIndexStructuralPreflightEnforcesTypedArrayLimits(t *testing.T) {
 		`{"versions":[{"Parts":[]}]}`,
 		`{"versions":[{"Pa\u0072ts":[]}]}`,
 		`{"bindings":[{"Versions":[]}]}`,
+		`{"produced":[],"produced":[]}`,
+		`{"Produced":[]}`,
+		`{"Pr\u006fduced":[]}`,
+		`{"produced":null}`,
 	} {
 		if boundedIndexJSON([]byte(duplicate)) {
 			t.Fatalf("duplicate bounded array was accepted: %s", duplicate)
@@ -148,7 +153,7 @@ func TestIndexStructuralPreflightEnforcesTypedArrayLimits(t *testing.T) {
 }
 
 func TestMaximumLogicalIndexRoundTrips(t *testing.T) {
-	selector := secretstore.Selector{SelectorVersion: formatVersion, Context: "example", Backend: New().Backend(), Generation: fixedID("gen-", 1)}
+	selector := secretstore.Selector{SelectorVersion: secretstore.RecordVersion, Context: "example", Backend: New().Backend(), Generation: fixedID("gen-", 1)}
 	keyID := fixedID("key-", 1)
 	index := indexRecord{
 		FormatVersion: formatVersion,
@@ -159,6 +164,7 @@ func TestMaximumLogicalIndexRoundTrips(t *testing.T) {
 		Versions:      make([]storedVersion, 0, secrets.MaxVersions),
 		Current:       make([]secretstore.Current, 0, secrets.MaxVersions),
 		Bindings:      []secretstore.Binding{},
+		Produced:      []secretstore.Produced{},
 	}
 	for item := 0; item < secrets.MaxVersions; item++ {
 		name := fmt.Sprintf("secret-%04x", item)
@@ -220,7 +226,7 @@ func TestPublishRejectsOversizedProjectedEnvelopeBeforeEffects(t *testing.T) {
 	next := indexRecord{
 		FormatVersion: formatVersion,
 		Algorithm:     algorithm,
-		Selector:      secretstore.Selector{SelectorVersion: formatVersion, Context: contextName, Backend: selection, Generation: oldGeneration},
+		Selector:      secretstore.Selector{SelectorVersion: secretstore.RecordVersion, Context: contextName, Backend: selection, Generation: oldGeneration},
 		ActiveKey:     keyID,
 		Keys:          []storedKey{{ID: keyID}},
 		Versions: []storedVersion{{
@@ -234,6 +240,7 @@ func TestPublishRejectsOversizedProjectedEnvelopeBeforeEffects(t *testing.T) {
 		}},
 		Current:  []secretstore.Current{{Name: declaration.Name, Version: versionID}},
 		Bindings: []secretstore.Binding{},
+		Produced: []secretstore.Produced{},
 	}
 	ids := make([]string, secrets.MaxVersions)
 	for n := range ids {

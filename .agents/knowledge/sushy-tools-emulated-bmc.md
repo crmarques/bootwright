@@ -38,6 +38,22 @@ on 2026-09-28:
   `TransferProtocolType`, and downloads the image inside the request (184-186)
   before answering 204 (204): the attach is synchronous and bounded by the
   client's media timeout.
+- Virtual-media certificate trust, read from the upstream source at `3b57e7a`
+  on 2026-09-30 and not driven against the image: the device links its
+  `Certificates` collection and reports `VerifyCertificate`
+  ([templates/virtual_media.json](https://github.com/openstack/sushy-tools/blob/3b57e7a/sushy_tools/emulator/templates/virtual_media.json)
+  27-30). A PATCH of `VerifyCertificate` answers 204 and reads no `If-Match`;
+  the collection's POST takes `CertificateString` and a `PEM`
+  `CertificateType`, refuses any other type, and answers 204 with a
+  `Location`; a member's GET and DELETE are served beside it
+  ([controllers/virtual_media.py](https://github.com/openstack/sushy-tools/blob/3b57e7a/sushy_tools/emulator/controllers/virtual_media.py)
+  59-145). A device holds one certificate, `Default`, and a second POST answers
+  409; the insert fetches with `requests` `verify=` set from the device's
+  `Verify`, defaulting to `SUSHY_EMULATOR_VMEDIA_VERIFY_SSL`, and uses the
+  imported certificate as that trust when verification is on
+  ([resources/vmedia.py](https://github.com/openstack/sushy-tools/blob/3b57e7a/sushy_tools/emulator/resources/vmedia.py)
+  49, 128-165, 231-275). Bootwright's emulated controllers are `established`
+  and never import, so this surface is used only by the client's tests.
 
 ## The stock command must not be used
 

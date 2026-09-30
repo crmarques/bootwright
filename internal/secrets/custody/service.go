@@ -251,7 +251,9 @@ func (s Service) List(ctx context.Context, request ListRequest) (*ListResult, er
 		rows := map[string]ListRow{}
 		for _, v := range snapshot.Versions {
 			d := v.Declaration
-			if d.Source == "file" {
+			// Produced material belongs to the lifecycle block that captured
+			// it, never to a Secret declaration, so no secret command lists it.
+			if d.Source == "file" || d.Source == "produced" {
 				continue
 			}
 			current, exists := currentVersion(snapshot, d.Name)

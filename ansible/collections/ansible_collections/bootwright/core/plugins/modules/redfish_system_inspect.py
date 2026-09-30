@@ -17,6 +17,9 @@ description:
     address it reports, and its power state.
   - A system that cannot be read reports an empty identity and power state,
     which prove nothing.
+  - A controller whose certificate the declared trust refuses fails the
+    module rather than reporting an empty identity, and so does a trust bundle
+    that cannot be loaded.
   - An interface collection that cannot be read in full reports no addresses
     and names why, because a partial inventory proves nothing about which
     machine this is.
@@ -38,6 +41,13 @@ options:
     description: Whether the controller's own transport is verified.
     type: bool
     default: true
+  ca_data:
+    description:
+      - PEM CA certificates that are the only anchors the controller's own
+        transport is verified against.
+      - Empty verifies against the system trust store. Refused beside I(verify=false).
+    type: str
+    default: ""
 author:
   - Bootwright contributors (@crmarques)
 """
@@ -68,14 +78,20 @@ def main():
             "user": {"type": "str", "required": True},
             "password": {"type": "str", "required": True, "no_log": True},
             "verify": {"type": "bool", "default": True},
+            "ca_data": {"type": "str", "default": ""},
         },
         supports_check_mode=True,
     )
-    client = redfish_control.Client(
-        module.params["endpoint"], module.params["user"], module.params["password"],
-        verify=bool(module.params["verify"]),
-    )
-    module.exit_json(changed=False, observation=observe(client))
+    try:
+        client = redfish_control.Client(
+            module.params["endpoint"], module.params["user"], module.params["password"],
+            verify=bool(module.params["verify"]), ca_data=module.params["ca_data"] or "",
+        )
+        observation = observe(client)
+    except redfish_control.ControllerError as failure:
+        module.fail_json(msg="the management controller could not be inspected: %s" % failure)
+    else:
+        module.exit_json(changed=False, observation=observation)
 
 
 def observe(client):
@@ -83,11 +99,15 @@ def observe(client):
 
     The system is read once. One that cannot be read leaves the identity and
     the power state empty, which proves nothing, and the interface inventory
-    then reports its own failures. Virtual media is not looked for: the proof
-    does not need it, and an inspection makes no request it does not need.
+    then reports its own failures. A certificate the declared trust refuses is
+    raised rather than read as that, because it is a controller that must not
+    be believed. Virtual media is not looked for: the proof does not need it,
+    and an inspection makes no request it does not need.
     """
     try:
         identity, power = client.identity(), client.power_state()
+    except redfish_control.UnverifiedCertificate:
+        raise
     except redfish_control.ControllerError:
         identity, power = dict.fromkeys(("UUID", "SerialNumber", "Manufacturer", "Model"), ""), ""
     addresses, failures = client.hardware_addresses()

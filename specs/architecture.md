@@ -497,7 +497,12 @@ Workspace owns the durable boundary: the lifecycle transaction, the operation
 area and the reservation record are Workspace primitives, and Reconciliation
 alone decides what they contain. Secret custody, controller host evidence and
 the private execution runtime are consumed through their owning contexts'
-published capabilities rather than reimplemented here.
+published capabilities rather than reimplemented here. The lifecycle
+transaction also lends its secret area, one caller at a time and only for the
+length of that caller's callback, so the engine keeps
+[produced material](secrets.md#produced-material) in Secrets custody inside
+the transaction that records it, without taking the store lock the transaction
+already holds; only Secrets interprets the area.
 
 One attempt's `Execution` carries only what every capability consumes. Work
 belonging to a single stage travels in its own value, present on the blocks the
@@ -514,6 +519,13 @@ as the identity a physical Machine's block pins is what an installation's
 pre-boot proof compares, so the consumer decodes that evidence only through the
 evidence's owner, which composition wires to it. The engine never interprets
 it, and the consumer never learns its shape.
+
+A `Result` or an `Observation` may carry produced material beside its
+evidence: named confidential bytes a proved completion left, such as an
+installation's administrator kubeconfig. It is never evidence. Only the engine
+places it in custody, and only for an apply's block it records `done`
+([produced material custody](state-reconciliation.md#produced-material-custody));
+everything else it discards and clears.
 
 ### Native projection and publication
 
@@ -702,6 +714,15 @@ or a zero exit without `completed`; `failed` after a non-zero exit that broke no
 protocol rule; and `canceled` when the operator cancels. The controller runner
 reports `failed` for any failure before `prepared` is published, since no
 host-wide effect was yet permitted, and `unknown` after it or on cancellation.
+
+A lifecycle run on the controller may also declare output files: each is a
+named path under a private `outputs/` directory of its job, passed to the
+adapter as `<prefix>_output` only when the run declares one. After a completed
+run the runner reads each back through the job's held handles, admitting only
+a regular file of its owner, of mode `0600`, with one link, of one byte up to
+the secret part bound, and fails the run on anything else; an absent file
+offers nothing, and the job's removal removes every output. Output files are
+neither records nor evidence, and a run elsewhere declares none.
 
 A completion publishes evidence proving no postcondition only when the run is a
 read-only observation, because the engine resolves a part-way effect from that

@@ -48,6 +48,13 @@ options:
     description: Whether the controller's own transport is verified.
     type: bool
     default: true
+  ca_data:
+    description:
+      - PEM CA certificates that are the only anchors the controller's own
+        transport is verified against.
+      - Empty verifies against the system trust store. Refused beside I(verify=false).
+    type: str
+    default: ""
   media:
     description: Whether to discover the virtual-media device and report the image it presents.
     type: bool
@@ -100,13 +107,15 @@ def main():
             "user": {"type": "str", "required": True},
             "password": {"type": "str", "required": True, "no_log": True},
             "verify": {"type": "bool", "default": True},
+            "ca_data": {"type": "str", "default": ""},
             "media": {"type": "bool", "default": False},
         },
         supports_check_mode=True,
     )
     params = module.params
-    client = redfish_control.Client(params["endpoint"], params["user"], params["password"], verify=bool(params["verify"]))
     try:
+        client = redfish_control.Client(params["endpoint"], params["user"], params["password"],
+                                        verify=bool(params["verify"]), ca_data=params["ca_data"] or "")
         power, media = read(client, bool(params["media"]))
     except redfish_control.ControllerError as failure:
         module.fail_json(msg="the management controller could not be read: %s" % failure)

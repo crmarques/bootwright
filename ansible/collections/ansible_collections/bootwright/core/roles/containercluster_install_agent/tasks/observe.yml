@@ -21,6 +21,23 @@
 - name: Read the cluster and its nodes back, without changing any of it
   ansible.builtin.import_tasks: state.yml
 
+# Declared only by the observation that resolves an apply; the engine keeps the
+# copy only when it reads the installation complete.
+- name: Offer the administrator access of a completed installation for custody
+  ansible.builtin.copy:
+    src: '{{ containercluster_install_agent_kubeconfig }}'
+    dest: '{{ bootwright_cluster_install_output.kubeconfig }}'
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - bootwright_cluster_install_output is defined
+    - (containercluster_install_agent_before.observation.identity | default('')) | length > 0
+    - containercluster_install_agent_state.cluster == containercluster_install_agent_before.observation.identity
+    - containercluster_install_agent_state.completed is sameas true
+  no_log: true
+
 - name: Publish what the observation found
   bootwright.core.containercluster_install_protocol:
     phase: completed

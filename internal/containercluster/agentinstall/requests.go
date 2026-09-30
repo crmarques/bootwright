@@ -98,24 +98,29 @@ type Endpoint struct {
 // MediaRequest is the complete frozen intent for one cluster's boot image. It
 // carries the installer inputs as data rather than as text, so the adapter
 // writes them and the plan digest covers exactly what they say. It carries no
-// secret value: the pull secret, the cluster key and each trust bundle are
-// named as declarations and reach the adapter at execution.
+// secret value: the pull secret, the cluster key, the serving certificate and
+// each trust bundle are named as declarations and reach the adapter at
+// execution.
 type MediaRequest struct {
 	AgentConfig map[string]any `json:"agentConfig"`
 	// Budgets bound the build in wall-clock time, and the run's deadline is
 	// derived from them.
-	Budgets         MediaBudgets         `json:"budgets"`
-	Identity        Identity             `json:"identity"`
-	Image           Publication          `json:"image"`
-	InstallConfig   map[string]any       `json:"installConfig"`
-	Placement       machineref.Placement `json:"placement"`
-	PullSecretRef   string               `json:"pullSecretRef"`
-	Release         Release              `json:"release"`
-	SSHKeyRef       string               `json:"sshKeyRef"`
-	Tool            Tool                 `json:"tool"`
-	TrustBundleRefs []string             `json:"trustBundleRefs,omitempty"`
-	Version         string               `json:"version"`
-	WorkRoot        string               `json:"workRoot"`
+	Budgets       MediaBudgets         `json:"budgets"`
+	Identity      Identity             `json:"identity"`
+	Image         Publication          `json:"image"`
+	InstallConfig map[string]any       `json:"installConfig"`
+	Placement     machineref.Placement `json:"placement"`
+	PullSecretRef string               `json:"pullSecretRef"`
+	Release       Release              `json:"release"`
+	SSHKeyRef     string               `json:"sshKeyRef"`
+	// TLSCertificateRef names the selected server's serving certificate, which
+	// the fetch proving the publication verifies the listener against. Only its
+	// certificate part reaches the adapter, at execution.
+	TLSCertificateRef string   `json:"tlsCertificateRef"`
+	Tool              Tool     `json:"tool"`
+	TrustBundleRefs   []string `json:"trustBundleRefs,omitempty"`
+	Version           string   `json:"version"`
+	WorkRoot          string   `json:"workRoot"`
 }
 
 // InstallRequest is the complete frozen intent for installing one cluster from
@@ -225,7 +230,7 @@ func (r MediaRequest) ReservationKeys() []string {
 // SecretReferences names every declaration this request's execution needs
 // bound, so the operation freezes them before it registers.
 func (r MediaRequest) SecretReferences() []string {
-	references := append(r.Placement.SecretReferences(), r.PullSecretRef, r.SSHKeyRef)
+	references := append(r.Placement.SecretReferences(), r.PullSecretRef, r.SSHKeyRef, r.TLSCertificateRef)
 	return sortedUnique(append(references, r.TrustBundleRefs...))
 }
 

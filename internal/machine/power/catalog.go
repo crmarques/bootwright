@@ -3,7 +3,7 @@ package power
 // Implementation is the automation identity a power operation runs through.
 // Implementation, not kind, selects the adapter entrypoint, so a Machine
 // realized by one substrate never runs another's power automation.
-const Implementation = "machine-power-redfish-v1"
+const Implementation = "machine-power-redfish-v2"
 
 // Operation is the fixed adapter entrypoint every power verb crosses. The
 // verb travels inside the frozen request, so one bounded entrypoint answers
@@ -25,7 +25,7 @@ const (
 // ReadImplementation is the automation identity a power reading runs through.
 // Driving power and reading it are separate implementations, so automation
 // that changes a Machine can never answer an inspection that only observes.
-const ReadImplementation = "machine-power-read-v1"
+const ReadImplementation = "machine-power-read-v2"
 
 // ReadOperation is the bounded adapter entrypoint a reading crosses, and
 // ReadVariable prefixes its frozen survey, digest and material paths in the

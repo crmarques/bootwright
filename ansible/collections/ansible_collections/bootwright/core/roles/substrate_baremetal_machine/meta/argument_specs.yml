@@ -19,6 +19,9 @@ argument_specs:
               tlsVerify:
                 type: bool
                 required: true
+              trustBundleRef:
+                type: str
+                required: false
           hardware:
             type: list
             elements: dict
@@ -35,7 +38,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [machine-baremetal-v1]
+            choices: [machine-baremetal-v2]
       bootwright_substrate_physical_material:
         type: dict
         required: true
@@ -69,6 +72,11 @@ argument_specs:
       substrate_baremetal_machine_target_password:
         type: str
         required: true
+      # The path of the controller's trust bundle material, or empty when the
+      # controller declares none.
+      substrate_baremetal_machine_target_ca:
+        type: str
+        required: true
       substrate_baremetal_machine_target_expected:
         type: list
         elements: str
@@ -97,6 +105,11 @@ argument_specs:
       substrate_baremetal_machine_boot_password:
         type: str
         required: true
+      # The path of the controller's trust bundle material, or empty when the
+      # controller declares none.
+      substrate_baremetal_machine_boot_ca:
+        type: str
+        required: true
 
   boot_disk:
     short_description: Point an operator-owned machine at its installed disk.
@@ -111,6 +124,11 @@ argument_specs:
         type: str
         required: true
       substrate_baremetal_machine_disk_password:
+        type: str
+        required: true
+      # The path of the controller's trust bundle material, or empty when the
+      # controller declares none.
+      substrate_baremetal_machine_disk_ca:
         type: str
         required: true
       substrate_baremetal_machine_disk_power_on:

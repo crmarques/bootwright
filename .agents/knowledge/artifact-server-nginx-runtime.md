@@ -60,7 +60,12 @@ against podman 5.8.4 on Fedora 43 with nginx 1.24.0 inside the image.
   `ca_path` file both returned `-1` without it. None of these messages named
   the URL. Because `status_code` lists both `200` and `206`, the module never
   reads the body of a `200`, so a server that ignores the range does not
-  stream the image into memory.
+  stream the image into memory. Since X21's B25 the probe's `ca_path` is the
+  certificate part of the server's Secret, which the runner writes for the
+  attempt, instead of `tls/server.crt`: the same bytes while the server is
+  applied from that Secret, and the only authority once the installed copy
+  falls behind it. `tests/unit/test_served_content_is_readable.py` runs the
+  module against an in-process listener both ways.
 
 Revisit when the image stream changes its user, entrypoint or writable-path
 layout, or when a second server implementation is added behind the same

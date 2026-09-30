@@ -64,6 +64,9 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if err := ctx.Err(); err != nil {
 		return lifecycle.RunResult{}, err
 	}
+	if err := checkOutputs(request); err != nil {
+		return lifecycle.RunResult{}, err
+	}
 	if err := verifyAutomation(ctx, request); err != nil {
 		return lifecycle.RunResult{}, err
 	}
@@ -102,6 +105,13 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
+	outputs, err := prepareOutputs(job, request)
+	if err != nil {
+		return lifecycle.RunResult{}, err
+	}
+	if outputs != nil {
+		values[request.Variable+"_output"] = outputs
+	}
 	interpreter := filepath.Join(job, "interpreter")
 	if err := os.WriteFile(interpreter, []byte(request.Launch.InterpreterScript()), 0700); err != nil {
 		return lifecycle.RunResult{}, failure("lifecycle.state", "the pinned module interpreter could not be published", "")
@@ -112,7 +122,18 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if err := writeJSON(job, "request.json", values); err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	return r.execute(ctx, job, scratch, lock, playbook, request)
+	result, err := r.execute(ctx, job, scratch, lock, playbook, request)
+	if err != nil || len(request.Outputs) == 0 {
+		return result, err
+	}
+	// What a completed run left is read before the deferred release removes
+	// the job, and with it every output.
+	produced, err := r.readOutputs(job, request.Outputs)
+	if err != nil {
+		return lifecycle.RunResult{}, err
+	}
+	result.Produced = produced
+	return result, nil
 }
 
 func (r Runner) materialize(job string, request lifecycle.RunRequest) (map[string]string, error) {

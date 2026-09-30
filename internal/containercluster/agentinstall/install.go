@@ -167,14 +167,21 @@ func (c InstallCapability) Destroy(ctx context.Context, execution lifecycle.Exec
 	return c.mutate(ctx, execution, "destroy")
 }
 
+// mutate offers the administrator access only from an apply whose evidence
+// this run proved complete; a removal declares no output at all.
 func (c InstallCapability) mutate(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.Result, error) {
 	unknown := lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}
 	request, err := c.prepare(ctx, execution, operation)
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
-	result, err := c.run(ctx, execution, operation, request)
+	var outputs []lifecycle.OutputFile
+	if operation == "apply" {
+		outputs = kubeconfigOutputs()
+	}
+	result, err := c.runWithOutputs(ctx, execution, operation, request, outputs)
 	if err != nil {
+		lifecycle.ClearProduced(result.Produced)
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
 	var outcome reconciliation.Outcome
@@ -184,6 +191,7 @@ func (c InstallCapability) mutate(ctx context.Context, execution lifecycle.Execu
 	case "unchanged":
 		outcome = reconciliation.OutcomeUnchanged
 	default:
+		lifecycle.ClearProduced(result.Produced)
 		return unknown, refusal("lifecycle.state", "the installation adapter reported no usable outcome", "")
 	}
 	digest := execution.Block.RequestDigest
@@ -193,9 +201,28 @@ func (c InstallCapability) mutate(ctx context.Context, execution lifecycle.Execu
 		err = ValidateInstallAbsence(result.Evidence, digest)
 	}
 	if err != nil {
+		lifecycle.ClearProduced(result.Produced)
 		return unknown, err
 	}
-	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
+	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence, Produced: offered(result.Produced, operation == "apply")}, nil
+}
+
+func kubeconfigOutputs() []lifecycle.OutputFile {
+	return []lifecycle.OutputFile{{Name: KubeconfigOutput, Variable: KubeconfigOutput}}
+}
+
+// offered keeps the administrator access when the run proved completion and
+// clears everything it discards.
+func offered(produced []lifecycle.Produced, proved bool) []lifecycle.Produced {
+	var kept []lifecycle.Produced
+	for _, output := range produced {
+		if proved && output.Name == KubeconfigOutput && len(kept) == 0 {
+			kept = append(kept, output)
+			continue
+		}
+		output.Material.Clear()
+	}
+	return kept
 }
 
 // Observe is read-only. The cluster this operation installed, answering at the
@@ -204,7 +231,7 @@ func (c InstallCapability) mutate(ctx context.Context, execution lifecycle.Execu
 // effect; that same cluster answering with the completion not yet true is a
 // positive partial realization the next attempt converges.
 func (c InstallCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, func(evidence []byte, request InstallRequest, digest string) reconciliation.EffectState {
+	return c.observe(ctx, execution, kubeconfigOutputs(), func(evidence []byte, request InstallRequest, digest string) reconciliation.EffectState {
 		switch {
 		case ValidateInstallPresence(evidence, request, digest) == nil:
 			return reconciliation.EffectCompleted
@@ -223,7 +250,7 @@ func (c InstallCapability) Observe(ctx context.Context, execution lifecycle.Exec
 // completion whatever answers; only this cluster's own image on some nodes is
 // a positive partial removal; and a foreign image stays unknown.
 func (c InstallCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, func(evidence []byte, _ InstallRequest, digest string) reconciliation.EffectState {
+	return c.observe(ctx, execution, nil, func(evidence []byte, _ InstallRequest, digest string) reconciliation.EffectState {
 		switch {
 		case ValidateInstallReleased(evidence, digest) == nil:
 			return reconciliation.EffectCompleted
@@ -235,19 +262,24 @@ func (c InstallCapability) ObserveRemoval(ctx context.Context, execution lifecyc
 }
 
 // observe runs the one read-only observation both resolutions share and reads
-// its evidence for the verb the block was frozen for.
-func (c InstallCapability) observe(ctx context.Context, execution lifecycle.Execution, read func([]byte, InstallRequest, string) reconciliation.EffectState) (lifecycle.Observation, error) {
+// its evidence for the verb the block was frozen for. Only the apply's
+// observation declares the administrator access, and offers it only when it
+// reads the installation complete.
+func (c InstallCapability) observe(ctx context.Context, execution lifecycle.Execution, outputs []lifecycle.OutputFile, read func([]byte, InstallRequest, string) reconciliation.EffectState) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, err := c.prepare(ctx, execution, "observe")
 	if err != nil {
 		return unknown, err
 	}
-	result, err := c.run(ctx, execution, "observe", request)
+	result, err := c.runWithOutputs(ctx, execution, "observe", request, outputs)
 	if err != nil {
+		lifecycle.ClearProduced(result.Produced)
 		recordObservationFailure(ctx, execution, err)
 		return unknown, nil
 	}
-	return lifecycle.Observation{Effect: read(result.Evidence, request, execution.Block.RequestDigest), Evidence: result.Evidence}, nil
+	effect := read(result.Evidence, request, execution.Block.RequestDigest)
+	produced := offered(result.Produced, len(outputs) != 0 && effect == reconciliation.EffectCompleted)
+	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence, Produced: produced}, nil
 }
 
 // Quiescent is derived rather than probed. This block owns the media each node
@@ -304,6 +336,10 @@ func refusedContinuation(request InstallRequest) error {
 }
 
 func (c InstallCapability) run(ctx context.Context, execution lifecycle.Execution, operation string, request InstallRequest) (lifecycle.RunResult, error) {
+	return c.runWithOutputs(ctx, execution, operation, request, nil)
+}
+
+func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecycle.Execution, operation string, request InstallRequest, outputs []lifecycle.OutputFile) (lifecycle.RunResult, error) {
 	canonical, err := request.Canonical()
 	if err != nil {
 		return lifecycle.RunResult{}, err
@@ -345,7 +381,7 @@ func (c InstallCapability) run(ctx context.Context, execution lifecycle.Executio
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: InstallImplementation, Operation: operation, Variable: installVariablePrefix,
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
-		Deadline: request.Deadline(),
+		Outputs: outputs, Deadline: request.Deadline(),
 	}))
 }
 

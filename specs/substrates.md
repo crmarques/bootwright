@@ -417,10 +417,34 @@ compared, and a Machine with no pin is compared with nothing.
 The [CLI journey](cli.md#machine-power-operations) owns the rest.
 
 Every controller leg carries the trust its declaration sets. The
-controller-to-BMC leg follows `bmc.tls.verify`, so a physical controller with
-an internal certificate authority is reached exactly as the operator declared
-and an opt-out is endpoint-scoped, recorded in effective state and never a
-global default. The emulated controller serves plain HTTP and selects nothing.
+controller-to-BMC leg follows `bmc.tls.verify` and, when the Machine declares
+`bmc.tls.trustBundleRef`, verifies against that bundle alone and never against
+the system trust store beside it. A physical controller whose certificate an
+internal authority issued is therefore verified against that authority, and an
+opt-out is endpoint-scoped, recorded in effective state and never a global
+default. A certificate the declared trust refuses fails the operation at once,
+as an answer rather than a controller that did not answer. The emulated
+controller serves plain HTTP and selects nothing.
+
+The BMC-to-artifact-server leg follows `bmc.virtualMedia.tls.trust`, which the
+realized target freezes. `import-certificate`, the default, adds the artifact
+server's certificate to the virtual-media device's certificate collection
+unless that certificate is already there and turns the device's certificate
+verification on, before the consumer's insert. `disable-verification` turns
+that verification off before the insert when it reads on. `established` changes
+nothing on the device. Each is set once, before the first attach and never
+inside its retry, and nothing falls back from one mode to another: a device
+that cannot import fails, naming the exceptions an operator may declare
+instead. The consumer's eject, once the device is proved empty, settles what
+the insert needed: it turns verification back on after `disable-verification`
+unless the Machine declares otherwise, and deletes the imported certificate
+after `import-certificate` when the Machine asks. Settling converges to that
+target rather than undoing the attempt's own writes, so the eject after an
+interrupted attempt settles what it left. On the emulated arm `established`
+means that no per-boot setting is made, not that the fetch is verified: the
+emulator is configured to fetch media without verifying the server
+([container clusters](container-clusters.md#boot-media) records the one
+exception this allows).
 
 The identity operation proves what a machine holds without trusting the
 network, and each substrate supplies the channel it has. Two exist.
@@ -481,7 +505,9 @@ substrate supplies them or its installation path is not promoted. Because they
 are named entry points of a role rather than free variables, the binding is
 allowlisted and frozen: authored data can never select which of them runs. An
 input is a value or the path of a material file, never secret bytes, because
-the validation is not hidden from output and echoes a value it refuses.
+the validation is not hidden from output and echoes a value it refuses. The
+bare-metal entry points that reach the controller also take the path of its
+trust-bundle material, empty when it declares none.
 
 A Redfish client speaks to one endpoint and follows no redirect, uses no
 ambient proxy or credential, bounds every request and response, and treats a

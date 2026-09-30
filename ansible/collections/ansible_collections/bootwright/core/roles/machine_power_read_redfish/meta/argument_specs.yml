@@ -17,6 +17,9 @@ argument_specs:
             required: true
             elements: dict
             options:
+              caVariable:
+                type: str
+                required: false
               controller:
                 type: dict
                 required: true
@@ -30,6 +33,9 @@ argument_specs:
                   tlsVerify:
                     type: bool
                     required: true
+                  trustBundleRef:
+                    type: str
+                    required: false
               object:
                 type: str
                 required: true
@@ -42,7 +48,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [machine-power-read-v1]
+            choices: [machine-power-read-v2]
       bootwright_machine_power_read_material:
         type: dict
         required: true

@@ -22,15 +22,18 @@ type Identity struct {
 }
 
 // Controller is the Redfish endpoint this Machine is managed through, the
-// declaration whose credential answers it, and whether its transport is
-// verified. No material is named here.
+// declaration whose credential answers it, and how its transport is verified.
+// No material is named here.
 type Controller struct {
 	CredentialsRef string `json:"credentialsRef"`
 	Endpoint       string `json:"endpoint"`
-	// TLSVerify carries the Machine's own declared trust to the adapter, so a
-	// controller with an internal certificate authority is reached exactly as
-	// the operator declared rather than always verified or never.
-	TLSVerify bool `json:"tlsVerify"`
+	// TLSVerify and TrustBundleRef carry the Machine's declared trust to the
+	// adapter: a controller whose certificate an internal authority issued is
+	// verified against the bundle naming that authority alone, one with no
+	// bundle against the system trust store, and one declared unverified is
+	// not verified at all.
+	TLSVerify      bool   `json:"tlsVerify"`
+	TrustBundleRef string `json:"trustBundleRef,omitempty"`
 }
 
 // Request is the complete frozen intent for one power operation. It carries no

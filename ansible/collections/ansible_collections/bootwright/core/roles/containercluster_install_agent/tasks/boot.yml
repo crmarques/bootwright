@@ -82,6 +82,9 @@
             substrate_baremetal_machine_target_expected: "{{ containercluster_install_agent_node.hardware.interfaces | map(attribute='macAddress') | list }}"
             substrate_baremetal_machine_target_user: '{{ containercluster_install_agent_user }}'
             substrate_baremetal_machine_target_password: '{{ containercluster_install_agent_password }}'
+            # A cluster node's controller is reached through no bundle until physical
+            # nodes are delivered (B67); agentinstall refuses physical nodes today.
+            substrate_baremetal_machine_target_ca: ''
             substrate_baremetal_machine_target_pinned_uuid_base64: >-
               {{ bootwright_cluster_install_material['pinnedUUIDBase64Node' ~ containercluster_install_agent_index] | default('') }}
             substrate_baremetal_machine_target_pinned_serial_base64: >-
@@ -130,6 +133,9 @@
             substrate_baremetal_machine_boot_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
             substrate_baremetal_machine_boot_user: '{{ containercluster_install_agent_user }}'
             substrate_baremetal_machine_boot_password: '{{ containercluster_install_agent_password }}'
+            # A cluster node's controller is reached through no bundle until physical
+            # nodes are delivered (B67); agentinstall refuses physical nodes today.
+            substrate_baremetal_machine_boot_ca: ''
           when: containercluster_install_agent_node.substrate == 'baremetal'
 
         - name: Refuse a substrate this installation has no media-boot binding for

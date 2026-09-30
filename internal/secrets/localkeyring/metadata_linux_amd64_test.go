@@ -18,7 +18,7 @@ import (
 )
 
 func TestMetadataHeaderAndCiphertextAreAuthenticated(t *testing.T) {
-	selector := secretstore.Selector{SelectorVersion: formatVersion, Context: "example", Backend: New().Backend(), Generation: fixedID("gen-", 1)}
+	selector := secretstore.Selector{SelectorVersion: secretstore.RecordVersion, Context: "example", Backend: New().Backend(), Generation: fixedID("gen-", 1)}
 	keyID := fixedID("key-", 1)
 	key := bytes.Repeat([]byte{7}, 32)
 	plain := []byte("synthetic-authenticated-metadata")

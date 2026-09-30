@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -50,11 +51,16 @@ type commandResult struct {
 	secretReveal       *custody.RevealResult
 	encryptionMutation *encryption.MutationResult
 	encryptionStatus   *encryption.StatusResult
+
+	kubeconfig *containeraccess.KubeconfigResult
 }
 
 func (r commandResult) clearSensitive() {
 	if r.secretReveal != nil {
 		r.secretReveal.Material.Clear()
+	}
+	if r.kubeconfig != nil {
+		r.kubeconfig.Material.Clear()
 	}
 }
 
@@ -110,7 +116,7 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 	case "machine trust":
 		return s.invokeMachineTrust(ctx, path, &values, args)
 	case "cluster oc", "cluster kubectl", "cluster kubeconfig":
-		return commandResult{}, s.invokeClusterAccess(ctx, path, &values, args)
+		return s.invokeClusterAccess(ctx, path, &values, args)
 	default:
 		return commandResult{}, errors.New("command has no application dispatch")
 	}

@@ -108,15 +108,66 @@ The bound, 12 reads 5 s apart, is borrowed from the reference's power-state
 poll below and has never been observed for a boot selection.
 
 `VerifyCertificate` on a VirtualMedia member is read-only on some firmware,
-which answers 501 (iBMC), 400 or 405. Tolerate exactly those. Do **not**
-tolerate 401 and 403: they mean the account authenticated but its BMC role
-lacks the privilege the write needs, which on iBMC the fixed Operator and
-Common User roles do not hold. Surfacing that distinctly is the difference
-between "this controller cannot do it" and "use an Administrator account".
+which answers 501 (iBMC), 400 or 405. Bootwright's client tolerates exactly
+those, and only when it **restores** verification after an eject: a controller
+that cannot write the property leaves nothing to restore. Importing a
+certificate and disabling verification tolerate none of them, because the
+insert that follows would fetch under a trust nobody declared (see the next
+section). Do **not** tolerate 401 and 403 anywhere: they mean the account
+authenticated but its BMC role lacks the privilege the write needs, which on
+iBMC the fixed Operator and Common User roles do not hold. Surfacing that
+distinctly is the difference between "this controller cannot do it" and "use an
+Administrator account".
 
 When the per-resource property is refused, the manager's
 `SecurityService.HttpsTransferCertVerification` is the equivalent control on
-iBMC and is writable by an administrator.
+iBMC and is writable by an administrator. Bootwright does not write it.
+
+## Virtual-media certificate trust
+
+What the schema says, from the
+[DMTF VirtualMedia schema](https://github.com/DMTF/Redfish-Publications/blob/main/json-schema/VirtualMedia.v1_6_3.json)
+(both properties added in v1_4_0): the read-only `Certificates` link names a
+`CertificateCollection` whose members a service compares with the image
+server's handshake certificate when `VerifyCertificate` is `true`, and it does
+not complete the media connection when that fails. `VerifyCertificate` is
+writable, "should default to `false`", and is assumed `false` when a service
+does not support it. Either way a service may add checks of its own from its
+`SecurityPolicy` resource, so a certificate the collection holds is necessary
+but not always sufficient. The
+[DMTF CertificateCollection schema](https://github.com/DMTF/Redfish-Publications/blob/main/json-schema/CertificateCollection.json)
+publishes that collection only beneath `Systems/{id}/VirtualMedia/{id}` (and
+the ResourceBlocks copies), never beneath a manager, so a manager-scoped device
+such as iBMC's may offer no collection at all; the client follows the link the
+member itself carries and builds no path. The
+[DMTF Certificate schema](https://github.com/DMTF/Redfish-Publications/blob/main/json-schema/Certificate.json)
+defines `CertificateType` `PEM` as a single certificate and `PEMchain` as a
+chain; the client posts `PEM` with the server's own certificate, the first
+block of what it was given, and compares members by DER.
+
+The rules Bootwright's client applies, set once before the first attach and
+settled after a proved eject:
+
+- `import-certificate` reads the collection in full (at most 8 members, failing
+  closed beyond that), posts the server's certificate unless its DER is
+  already there, turns `VerifyCertificate` on unless it reads `true`, and reads
+  the member back.
+- `disable-verification` writes `VerifyCertificate` `false` only when it reads
+  `true`; a refused write fails, because verification stays on.
+- There is **no fallback**. A member without `Certificates`, or a
+  `VerifyCertificate` write answered 501, 400 or 405, fails the import naming
+  the two exceptions an operator may declare instead, and a post refused while
+  another certificate is present names removing that stale certificate.
+- Restoring after an eject writes `true` unless it reads `true`, whatever the
+  attempt itself wrote, and removal deletes only the member that is the given
+  certificate.
+
+**UNVERIFIED on real firmware.** None of this has been driven against a
+physical controller. Whether iBMC, iDRAC-style or OpenBMC controllers expose
+`Certificates` on their device, accept a single-certificate `PEM`, and apply
+`VerifyCertificate` to the next insert rather than only to a new session is
+unknown; qualify it on the first physical controller before relying on the
+default.
 
 ## `no_log` hides the BMC's own explanation
 
@@ -153,6 +204,19 @@ applied to Redfish, not an observed firmware behavior.
 rejects an `HTTP` value outright before it creates the insert task; with
 Bootwright's HTTPS artifact endpoint the value is `HTTPS` and the BMC must
 either trust that certificate or have verification disabled for the fetch.
+
+The controller's own certificate is verified against the Machine's declared
+`caBundle` alone when it declares one: Python's `ssl.create_default_context`
+loads the `cadata` it is given and never the system store beside it, keeping
+`CERT_REQUIRED` and the host-name check
+([CPython v3.13.15 ssl.py](https://github.com/python/cpython/blob/v3.13.15/Lib/ssl.py)).
+From Python 3.13 that context also sets `VERIFY_X509_PARTIAL_CHAIN` and
+`VERIFY_X509_STRICT`; v3.12.11 sets neither. The controller-local runtime is
+3.13, but an SSH placement runs the host's own interpreter, which may predate
+it and then anchors only at a self-signed root, so the bundle holds the issuing
+root rather than an intermediate alone. A refused
+certificate is an answer, not silence: the client raises it at once rather than
+reading it as status 0 and spending a poll's attempts on it.
 
 ## Multi-system chassis
 

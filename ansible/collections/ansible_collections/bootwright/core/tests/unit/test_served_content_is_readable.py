@@ -6,20 +6,35 @@ an error, while a file others can read is readable by every account on the
 host. The syntax check, lint and the server's own readiness, which proves only
 that each listener answers, accept either. This ties every file task beneath a
 served root to the worker identity the template declares, and holds the agent
-image to the fetch that proves its publication end to end.
+image to the fetch that proves its publication end to end: the probe itself is
+run against a listener on 127.0.0.1, verifying it against the serving
+certificate bound from the server's Secret. Its certificates are built with
+cryptography at test time, so no key is committed.
 """
 
 from __future__ import annotations
 
+import datetime
 import http.client
+import http.server
+import ipaddress
+import json
 import pathlib
 import re
 import ssl
+import threading
 import urllib.error
 
+import pytest
 import yaml
+from ansible.module_utils.testing import patch_module_args
+from ansible.modules import uri as uri_module
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 from ansible_collections.bootwright.core.plugins.modules import containercluster_install_inspect
 
@@ -35,6 +50,9 @@ CONTENT_ROOT = "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts"
 IMAGE = {"path": CONTENT_ROOT + "/public/private/clusters/sno", "url": "https://192.0.2.1:8443/private/clusters/sno"}
 # What `openssl rand -hex 32` mints: 64 hexadecimal digits.
 TOKEN = "0123456789abcdef" * 4
+# The Secret the selected server's serving certificate is bound from, as the
+# fixtures of internal/containercluster/agentinstall declare it.
+SERVING_SECRET = "artifact-server-tls"
 
 # The worker directive, the served root and the serving certificate, as the
 # template spells them. nginx takes the user's own name as the group when the
@@ -251,21 +269,33 @@ def trusted_build_task(description, predicate):
     return tasks[position(tasks, description, predicate)]
 
 
-def media_scope(image, **variables):
-    return dict(variables, bootwright_cluster_media_request={"image": image},
+def media_scope(image, material="", **variables):
+    """What the media role renders the probe from: the frozen request, the file
+    the runner wrote the bound certificate to, and the minted token."""
+    return dict(variables, bootwright_cluster_media_request={"image": image, "tlsCertificateRef": SERVING_SECRET},
+                bootwright_cluster_media_material={"artifactCertificate": material},
                 containercluster_media_agent_token={"stdout": TOKEN})
 
 
-def test_the_fetch_reads_the_address_a_machine_boots_from_verified_by_the_certificate_the_server_installed(tmp_path):
+def installed_certificate(content_root):
+    """Where the server installs its copy of the serving certificate, as the template names it."""
+    server = templar(SERVER, {"bootwright_artifact_server_request": {"contentRoot": content_root}})
+    variable, leaf = CERTIFICATE.search(TEMPLATE.read_text()).groups()
+    return server.resolve_variable_expression(variable) + leaf
+
+
+def test_the_fetch_reads_the_address_a_machine_boots_from_verified_by_the_bound_certificate(tmp_path):
     uri = trusted_build_task("fetch through the listener", lambda task: "ansible.builtin.uri" in task)["ansible.builtin.uri"]
     text = TEMPLATE.read_text()
     server = templar(SERVER, {"bootwright_artifact_server_request": {"contentRoot": CONTENT_ROOT}})
     # The image the requests carry lies beneath the root the template serves,
-    # in PrivatePath's layout, so the certificate is found from it.
+    # in PrivatePath's layout.
     assert IMAGE["path"] == server.resolve_variable_expression(ROOT.search(text).group(1)) + "/private/clusters/sno"
-    variable, leaf = CERTIFICATE.search(text).groups()
-    media = templar(MEDIA, media_scope(IMAGE))
-    assert media.template(uri["ca_path"]) == server.resolve_variable_expression(variable) + leaf
+    # The one authority is the file the runner wrote the bound certificate to,
+    # never the copy the server installed beneath that root.
+    bound = str(tmp_path / "artifact-ca")
+    media = templar(MEDIA, media_scope(IMAGE, bound))
+    assert media.template(uri["ca_path"]) == bound != installed_certificate(CONTENT_ROOT)
     # The address is the one the install block reads back from what the
     # rename published, and hands to the machine that boots it.
     rename = trusted_build_task("publish the image by rename",
@@ -298,7 +328,8 @@ OUTCOMES = [
     ({"status": 404, "msg": REFUSED % 404 + str(urllib.error.HTTPError(ADDRESS, 404, "Not Found", None, None))},
      "the listener answered 404, so the worker it serves as finds no image at the path this attempt published"),
     ({"status": -1, "msg": REFUSED % -1 + UNVERIFIED},
-     "its certificate did not verify against the serving certificate the server installed: " + REFUSED % -1 + UNVERIFIED),
+     "its certificate did not verify against the serving certificate Secret %s holds: " % SERVING_SECRET
+     + REFUSED % -1 + UNVERIFIED),
     ({"status": -1, "msg": REFUSED % -1 + UNREACHED},
      "the request failed before any status line: " + REFUSED % -1 + UNREACHED),
     ({"failed": True, "msg": UNREAD},
@@ -320,3 +351,108 @@ def test_a_refused_fetch_fails_with_its_diagnosed_cause_and_never_the_token():
         assert message.endswith(": " + diagnosis), message
     for status in (200, 206):
         assert not templar(MEDIA, media_scope(IMAGE, **{probe["register"]: {"status": status}})).evaluate_conditional(guard["when"])
+
+
+def serving_certificate():
+    """A key and a certificate for 127.0.0.1 shaped as `secret generate` makes a
+    serving one (internal/secrets/material/generation.go): self-signed, not a
+    certificate authority, digital signature and server authentication only."""
+    key = ec.generate_private_key(ec.SECP256R1())
+    now = datetime.datetime.now(datetime.timezone.utc)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "127.0.0.1")])
+    certificate = (
+        x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - datetime.timedelta(minutes=5)).not_valid_after(now + datetime.timedelta(days=1))
+        .add_extension(x509.SubjectAlternativeName([x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]), critical=False)
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .add_extension(x509.KeyUsage(digital_signature=True, content_commitment=False, key_encipherment=False,
+                                     data_encipherment=False, key_agreement=False, key_cert_sign=False,
+                                     crl_sign=False, encipher_only=False, decipher_only=False), critical=True)
+        .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
+        .sign(key, hashes.SHA256()))
+    return key, certificate.public_bytes(serialization.Encoding.PEM).decode("ascii")
+
+
+class Serving(http.server.BaseHTTPRequestHandler):
+    """A listener that serves the first byte of one published image, at the
+    path its server names, and nothing else."""
+
+    def do_GET(self):
+        if self.path != self.server.published or self.headers.get("Range") != "bytes=0-0":
+            self.send_error(404)
+            return
+        self.send_response(206)
+        self.send_header("Content-Range", "bytes 0-0/1")
+        self.send_header("Content-Length", "1")
+        self.end_headers()
+        self.wfile.write(b"\0")
+
+    def log_message(self, *args):
+        return
+
+
+def listening(request, directory, key, certificate):
+    """A listener on 127.0.0.1 presenting the given certificate, and its port."""
+    chain, private = directory / "presented.crt", directory / "presented.key"
+    chain.write_text(certificate)
+    private.write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                                          serialization.NoEncryption()))
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(str(chain), str(private))
+    server = http.server.HTTPServer(("127.0.0.1", 0), Serving)
+    server.published = "/private/clusters/sno/%s/agent.iso" % TOKEN
+    server.socket = context.wrap_socket(server.socket, server_side=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    def stop():
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+    request.addfinalizer(stop)
+    return server.server_address[1]
+
+
+def probed(arguments, directory, capsys):
+    """What ansible.builtin.uri registers for the probe's rendered arguments,
+    run in process as the task runs it."""
+    module_tmp = directory / "module"
+    module_tmp.mkdir()
+    capsys.readouterr()
+    with patch_module_args(dict(arguments, _ansible_tmpdir=str(module_tmp))), pytest.raises(SystemExit):
+        uri_module.main()
+    return json.loads(capsys.readouterr().out)
+
+
+# The probe is run as the task runs it, against a listener on 127.0.0.1. Its
+# server installed a copy of a certificate its Secret no longer holds, as it
+# would after the Secret was replaced and before the server was applied
+# again, so a probe anchored in that copy would prove the wrong certificate:
+# the listener presenting the bound certificate is fetched, and one presenting
+# the installed copy is refused as unverified, naming the Secret.
+@pytest.mark.parametrize("presented", ["bound", "installed"])
+def test_the_probe_verifies_the_listener_against_the_bound_certificate_alone(presented, tmp_path, request, capsys):
+    certificates = {"bound": serving_certificate(), "installed": serving_certificate()}
+    root = tmp_path / "content"
+    installed = pathlib.Path(installed_certificate(str(root)))
+    installed.parent.mkdir(parents=True)
+    installed.write_text(certificates["installed"][1])
+    bound = tmp_path / "artifact-ca"
+    bound.write_text(certificates["bound"][1])
+    port = listening(request, tmp_path, *certificates[presented])
+    image = {"path": str(root / "public/private/clusters/sno"), "url": "https://127.0.0.1:%d/private/clusters/sno" % port}
+    probe = trusted_build_task("fetch through the listener", lambda task: "ansible.builtin.uri" in task)
+    guard = trusted_build_task("refuse a failed fetch", lambda task: "ansible.builtin.fail" in task)
+    result = probed(templar(MEDIA, media_scope(image, str(bound))).template(probe["ansible.builtin.uri"]), tmp_path, capsys)
+    rendering = templar(MEDIA, media_scope(image, str(bound), **guard.get("vars", {}), **{probe["register"]: result}))
+    if presented == "bound":
+        assert result["status"] == 206, result
+        assert not rendering.evaluate_conditional(guard["when"])
+        return
+    assert result["status"] == -1 and "CERTIFICATE_VERIFY_FAILED" in result["msg"], result
+    assert rendering.evaluate_conditional(guard["when"])
+    message = rendering.template(guard["ansible.builtin.fail"]["msg"])
+    assert "its certificate did not verify against the serving certificate Secret %s holds: " % SERVING_SECRET in message, message
+    assert TOKEN not in message, message

@@ -9,6 +9,9 @@
     user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_target_user) }}'
     password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_target_password) }}'
     verify: '{{ substrate_baremetal_machine_target_verify }}'
+    ca_data: >-
+      {{ lookup('ansible.builtin.file', substrate_baremetal_machine_target_ca)
+         if substrate_baremetal_machine_target_ca | length > 0 else '' }}
   register: substrate_baremetal_machine_target
   no_log: true
 

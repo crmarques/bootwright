@@ -571,3 +571,90 @@ func TestTheInstallationIsAlwaysQuiescent(t *testing.T) {
 		t.Fatalf("quiescence = %+v (%v)", quiescence, err)
 	}
 }
+
+// The administrator access leaves the installation only with a proved
+// completion: an apply whose evidence proves this cluster installed, or an
+// apply's observation that reads it complete. Every other run offers nothing,
+// a removal declares no output at all, and whatever a run hands back that is
+// not offered is cleared rather than dropped.
+func TestTheInstallOffersItsKubeconfigOnlyOnProvedCompletion(t *testing.T) {
+	const access = "apiVersion: v1\nkind: Config\n"
+	notCompleted := func(e *InstallEvidence) { e.Completed = false }
+	partial := func(e *InstallEvidence) {
+		e.Postcondition, e.Completed, e.Media, e.OwnMedia = false, false, []string{"sno-01"}, []string{"sno-01"}
+	}
+	noEffect := func(e *InstallEvidence) {
+		*e = InstallEvidence{Request: testDigest, Media: []string{}, Missing: []string{}, Powered: []string{}}
+	}
+	released := func(e *InstallEvidence) { e.Absent, e.Postcondition, e.Media = true, true, []string{} }
+	for _, test := range []struct {
+		name, outcome string
+		mutate        func(*InstallEvidence)
+		invoke        func(InstallCapability, lifecycle.Execution) ([]lifecycle.Produced, error)
+		declares      bool
+		offers        bool
+	}{
+		{"apply proving presence", "changed", nil, applied, true, true},
+		{"apply settled", "unchanged", nil, applied, true, true},
+		{"apply without completion", "changed", notCompleted, applied, true, false},
+		{"apply without an outcome", "", nil, applied, true, false},
+		{"observe reading completion", "unchanged", nil, observed, true, true},
+		{"observe reading a partial installation", "unchanged", partial, observed, true, false},
+		{"observe reading no effect", "unchanged", noEffect, observed, true, false},
+		{"observe reading an unknown state", "unchanged", notCompleted, observed, true, false},
+		{"destroy", "changed", released, destroyed, false, false},
+		{"observe-removal", "unchanged", released, removalObserved, false, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
+			handed := []lifecycle.Produced{
+				{Name: KubeconfigOutput, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(access)})},
+				{Name: "password", Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("kubeadmin")})},
+			}
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: test.outcome, Evidence: installEvidence(t, testDigest, test.mutate), Produced: handed}}
+			produced, _ := test.invoke(NewInstall(runner), execution)
+			declared := slices.Equal(runner.requests[0].Outputs, []lifecycle.OutputFile{{Name: KubeconfigOutput, Variable: KubeconfigOutput}})
+			if declared != test.declares || !test.declares && len(runner.requests[0].Outputs) != 0 {
+				t.Fatalf("the run declared %v", runner.requests[0].Outputs)
+			}
+			if test.offers {
+				if len(produced) != 1 || produced[0].Name != KubeconfigOutput {
+					t.Fatalf("offered %v", produced)
+				}
+				if value, _ := produced[0].Material.Part(secrets.ValuePart); string(value) != access {
+					t.Fatalf("offered %q", value)
+				}
+			} else if len(produced) != 0 {
+				t.Fatalf("offered %v without a proved completion", produced)
+			}
+			for index, output := range handed {
+				if test.offers && index == 0 {
+					continue
+				}
+				if value, _ := output.Material.Part(secrets.ValuePart); strings.Trim(string(value), "\x00") != "" {
+					t.Fatalf("the discarded %s was not cleared", output.Name)
+				}
+			}
+		})
+	}
+}
+
+func applied(c InstallCapability, execution lifecycle.Execution) ([]lifecycle.Produced, error) {
+	result, err := c.Apply(context.Background(), execution)
+	return result.Produced, err
+}
+
+func destroyed(c InstallCapability, execution lifecycle.Execution) ([]lifecycle.Produced, error) {
+	result, err := c.Destroy(context.Background(), execution)
+	return result.Produced, err
+}
+
+func observed(c InstallCapability, execution lifecycle.Execution) ([]lifecycle.Produced, error) {
+	observation, err := c.Observe(context.Background(), execution)
+	return observation.Produced, err
+}
+
+func removalObserved(c InstallCapability, execution lifecycle.Execution) ([]lifecycle.Produced, error) {
+	observation, err := c.ObserveRemoval(context.Background(), execution)
+	return observation.Produced, err
+}

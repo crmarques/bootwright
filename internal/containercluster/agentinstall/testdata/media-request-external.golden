@@ -242,6 +242,7 @@
     "version": "4.21.15"
   },
   "sshKeyRef": "sno-cluster-admin-ssh-key",
+  "tlsCertificateRef": "artifact-server-tls",
   "tool": {
     "compatibility": "openshift",
     "kind": "openshift-install",
@@ -251,6 +252,6 @@
     "lab-root-ca",
     "corp-proxy-ca"
   ],
-  "version": "cluster-media-agent-v3",
+  "version": "cluster-media-agent-v4",
   "workRoot": "/var/lib/bootwright-clusters/lab/ocp"
 }

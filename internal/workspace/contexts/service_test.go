@@ -23,6 +23,8 @@ import (
 
 const pristineEvidence = `{"version":1,"operation":"none","ownership":"none"}`
 
+const orphanAction = "delete with orphaned objects and any custodied cluster kubeconfig (export it first with bootwright cluster kubeconfig --context example --name <cluster>)"
+
 const environmentInput = `apiVersion: bootwright.io/v1alpha1
 kind: Environment
 metadata:
@@ -264,7 +266,7 @@ func (c confirmer) Confirm(ctx context.Context, action, name string) error {
 	if !c.r.locked || !c.r.leased || !slices.Contains(c.r.calls, "guard") {
 		c.r.t.Fatal("confirmation preceded locked mutation safeguards")
 	}
-	if name == "" || action != "update" && action != "delete" && action != "delete with orphaned objects" {
+	if name == "" || action != "update" && action != "delete" && action != orphanAction {
 		c.r.t.Fatal("unexpected confirmation request", action, name)
 	}
 	c.r.confirmed = action
@@ -1013,7 +1015,7 @@ func TestOrdinaryConfirmationNamesTheObjectsADeletionAbandons(t *testing.T) {
 	r := existingRepository(t)
 	r.evidence["example"] = []byte(`{"version":1,"operation":"applied","ownership":"retained"}`)
 	got, err := service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, AllowOrphans: true})
-	if err != nil || got == nil || !got.OrphansAbandoned || r.confirmed != "delete with orphaned objects" {
+	if err != nil || got == nil || !got.OrphansAbandoned || r.confirmed != orphanAction {
 		t.Fatalf("confirmation did not name the abandonment: %#v %v %q", got, err, r.confirmed)
 	}
 	r = existingRepository(t)

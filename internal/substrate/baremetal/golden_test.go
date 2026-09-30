@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -126,6 +127,30 @@ func lineDiff(want, got string) string {
 		}
 	}
 	return out.String()
+}
+
+// A frozen claim is what a removal under this build decodes, so its exact
+// bytes are pinned, and each golden must still decode as this build's claim.
+func TestClaimRequestsMatchTheirGoldens(t *testing.T) {
+	for name, catalog := range map[string]api.Catalog{
+		"request-claim":        catalogOf(),
+		"request-claim-bundle": catalogWithControllerTLS(m("verify", true, "trustBundleRef", "server-bmc-ca")),
+	} {
+		t.Run(name, func(t *testing.T) {
+			matchesGolden(t, name, planIn(t, reconciliation.Apply, catalog).Definitions[0].Request, false)
+			golden, err := os.ReadFile(filepath.Join("testdata", name+".golden"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var compact bytes.Buffer
+			if err := json.Compact(&compact, golden); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := DecodeRequest(compact.Bytes()); err != nil {
+				t.Fatalf("the golden claim no longer decodes: %v", err)
+			}
+		})
+	}
 }
 
 // The proof an apply records is what a later power operation reads a pin from,

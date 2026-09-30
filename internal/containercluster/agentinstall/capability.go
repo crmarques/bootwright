@@ -267,8 +267,13 @@ func (c MediaCapability) run(ctx context.Context, execution lifecycle.Execution,
 			return lifecycle.RunResult{}, err
 		}
 		values["installer"], values["sshKey"] = installer, key
+		// The fetch that proves the publication verifies the listener against
+		// the certificate its Secret binds to this operation, never against
+		// the copy the server installed, which proves only itself.
 		materials = append(materials, lifecycle.MaterialFile{
 			Name: "pull-secret", Part: secrets.ValuePart, Secret: request.PullSecretRef, Variable: "pullSecret",
+		}, lifecycle.MaterialFile{
+			Name: "artifact-ca", Part: secrets.CertificatePart, Secret: request.TLSCertificateRef, Variable: "artifactCertificate",
 		})
 		for index, reference := range request.TrustBundleRefs {
 			materials = append(materials, lifecycle.MaterialFile{

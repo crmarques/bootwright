@@ -297,6 +297,9 @@ type testWorkspace struct {
 	// outside its operation area, named by the point it would publish, so a
 	// test can stop an invocation there; an error it returns fails it.
 	kill func(point string) error
+	// transacting is true while a MutateLifecycle callback runs, the only time
+	// a secret area may be lent.
+	transacting bool
 }
 
 func (w *testWorkspace) view() *testView {
@@ -361,6 +364,8 @@ func (w *testWorkspace) MutateLifecycle(ctx context.Context, name string, callba
 		w.beforeMutation()
 	}
 	w.mutations++
+	w.transacting = true
+	defer func() { w.transacting = false }()
 	view, release := w.held(true, false)
 	defer release()
 	return callback(view)
@@ -571,6 +576,19 @@ func (v *testView) SealClientArea(_ context.Context, id string) error {
 		v.workspace.areas[id] = true
 	}
 	return nil
+}
+
+// Secrets lends the context's secret area only inside a transaction, as the
+// store does; the binder these tests use keeps its produced entries itself, so
+// the area it is handed is nil.
+func (v *testView) Secrets(ctx context.Context, callback func(secretstore.Context, secretstore.Area) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !v.workspace.transacting {
+		return errors.New("a secret area is lent only inside a lifecycle transaction")
+	}
+	return callback(secretstore.Context{Name: testContextName, Mode: "ready", Revision: v.workspace.revision}, nil)
 }
 
 func (v *testView) RetainDependencies(_ context.Context, definition *prerequisites.Definition, sources []prerequisites.DependencySource) error {
@@ -819,10 +837,90 @@ type testBinder struct {
 	// bindingsErr fails every listing, as a custody store that cannot be read
 	// does.
 	bindingsErr error
-	// kill runs first in every Bind and Release, named by the point it would
-	// publish, so a test can stop an invocation there; an error it returns
-	// fails it before anything is bound or released.
+	// kill runs first in every Bind and Release, and in every Produce and
+	// Withdraw that publishes, named by the point it would publish, so a test
+	// can stop an invocation there; an error it returns fails it before
+	// anything is bound, released, produced or withdrawn.
 	kill func(point string) error
+	// produced holds each produced entry's bytes by "<block>/<name>", as the
+	// custody store keys it; journal lists every produced publication and
+	// withdrawal in order. produceErr and withdrawErr fail every Produce and
+	// Withdraw before anything changes.
+	produced    map[string]string
+	journal     []string
+	produceErr  error
+	withdrawErr error
+}
+
+// Produce models the custody store: one publication for the block, which an
+// output equal to its entry does not need.
+func (b *testBinder) Produce(ctx context.Context, selected secretstore.Context, _ secretstore.Area, request custody.ProduceRequest) ([]secretstore.Produced, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if selected.Name != testContextName || selected.Mode != "ready" {
+		return nil, errors.New("produced material was offered for another context")
+	}
+	next := maps.Clone(b.produced)
+	if next == nil {
+		next = map[string]string{}
+	}
+	result := make([]secretstore.Produced, 0, len(request.Outputs))
+	for _, output := range request.Outputs {
+		value, _ := output.Material.Part(secrets.ValuePart)
+		next[request.Block+"/"+output.Name] = string(value)
+		clear(value)
+		result = append(result, secretstore.Produced{Block: request.Block, Name: output.Name, Version: "ver-" + request.Block + "-" + output.Name})
+	}
+	if maps.Equal(next, b.produced) {
+		return result, nil
+	}
+	if b.kill != nil {
+		if err := b.kill("publish produced material"); err != nil {
+			return nil, err
+		}
+	}
+	if b.produceErr != nil {
+		return nil, b.produceErr
+	}
+	b.produced = next
+	b.journal = append(b.journal, "produce "+request.Block)
+	return result, nil
+}
+
+// producedEntries names every produced entry with its bytes, sorted.
+func (b *testBinder) producedEntries() []string {
+	entries := make([]string, 0, len(b.produced))
+	for key, value := range b.produced {
+		entries = append(entries, key+"="+value)
+	}
+	slices.Sort(entries)
+	return entries
+}
+
+// Withdraw removes every entry in one publication, and publishes nothing when
+// there is none.
+func (b *testBinder) Withdraw(ctx context.Context, selected secretstore.Context, _ secretstore.Area) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if selected.Name != testContextName {
+		return false, errors.New("produced material was withdrawn from another context")
+	}
+	if len(b.produced) == 0 {
+		return false, nil
+	}
+	if b.kill != nil {
+		if err := b.kill("withdraw produced material"); err != nil {
+			return false, err
+		}
+	}
+	if b.withdrawErr != nil {
+		return false, b.withdrawErr
+	}
+	b.produced = nil
+	b.journal = append(b.journal, "withdraw")
+	return true, nil
 }
 
 func (b *testBinder) Bind(_ context.Context, request custody.BindRequest) (secretstore.Binding, error) {

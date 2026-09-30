@@ -300,8 +300,8 @@ func (s clusterAccessSpy) Kubectl(ctx context.Context, request containeraccess.K
 	return s.record.called(ctx, "cluster kubectl", request)
 }
 
-func (s clusterAccessSpy) Kubeconfig(ctx context.Context, request containeraccess.KubeconfigRequest) error {
-	return s.record.called(ctx, "cluster kubeconfig", request)
+func (s clusterAccessSpy) Kubeconfig(ctx context.Context, request containeraccess.KubeconfigRequest) (*containeraccess.KubeconfigResult, error) {
+	return s.record.result.kubeconfig, s.record.called(ctx, "cluster kubeconfig", request)
 }
 
 func dispatchSpies(record *dispatchRecord) Services {

@@ -475,7 +475,7 @@ func checkpointUsable(t *testing.T, ctx context.Context, scenario checkpointScen
 // recovery artifact, the root's only entry holding exactly the canonical empty
 // registry; what the secret store's exclusive writes keep under
 // secrets/identities/; after a kill, any stage beneath a context's secrets/,
-// which Local keyring v3 resolves; and a media stage a pinned add retained
+// which Local keyring v4 resolves; and a media stage a pinned add retained
 // beside its record, which the repeated add publishes.
 func checkpointStaleEntries(root string, mode checkpointMode, retried bool) ([]string, error) {
 	recovery, err := checkpointInitialRegistryRecovery(root)
@@ -846,6 +846,7 @@ func checkpointScenarios() []checkpointScenario {
 		checkpointMediaDeleteScenario(),
 		checkpointMediaRetainScenario(),
 		checkpointSecretPublicationScenario(),
+		checkpointLentSecretScenario(),
 		checkpointSecretRotationScenario(),
 		checkpointSecretCleanupScenario(),
 		checkpointSecretInitializationScenario(),
@@ -989,6 +990,12 @@ func checkpointTraceShapes() map[string]map[checkpoint]int {
 			checkpointAfterSecretImmutableRename: 1, checkpointBeforeSecretRename: 2,
 			checkpointAfterSecretRename: 2, checkpointBeforeSecretPrune: 1, checkpointSyncContextFile: 1,
 			checkpointBeforeSecretUnlink: 1, checkpointAfterSecretUnlink: 1,
+		},
+		"secret-lent-area": {
+			checkpointCreateFile: 4, checkpointWriteFile: 4, checkpointSyncFile: 4,
+			checkpointSyncDirectory: 7, checkpointBeforeSecretImmutableRename: 1,
+			checkpointAfterSecretImmutableRename: 1, checkpointBeforeSecretRename: 2,
+			checkpointAfterSecretRename: 2,
 		},
 		"secret-rotation": {
 			checkpointCreateFile: 4, checkpointWriteFile: 4, checkpointSyncFile: 4,
@@ -2256,7 +2263,7 @@ func checkpointSecretPublicationFixture(t *testing.T) *Store {
 }
 
 func checkpointSecretPublicationScenario() checkpointScenario {
-	// specs/secrets.md, Local keyring v3: a caller inspects before it
+	// specs/secrets.md, Local keyring v4: a caller inspects before it
 	// retries, so a visible committed replacement is not replayed.
 	put := func(_ *testing.T, ctx context.Context, store *Store) error {
 		_, value, err := checkpointSecretState(ctx, store)
@@ -2279,12 +2286,67 @@ func checkpointSecretPublicationScenario() checkpointScenario {
 	})
 }
 
+// checkpointProduced reads the produced entry the lent-area scenario captures.
+func checkpointProduced(ctx context.Context, store *Store) (string, bool, error) {
+	token, err := checkpointSecretToken(ctx, store)
+	if err != nil {
+		return "", false, err
+	}
+	value, found := "", false
+	err = checkpointSecretAccess(store).View(ctx, token, true, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+		material, exists, err := session.ReadProduced(ctx, "cluster-install-example", "kubeconfig")
+		if err != nil || !exists {
+			return err
+		}
+		defer material.Clear()
+		part, _ := material.Part(secrets.ValuePart)
+		value, found = string(part), true
+		clear(part)
+		return nil
+	})
+	return value, found, err
+}
+
+func checkpointLentSecretScenario() checkpointScenario {
+	// specs/secrets.md, Produced material: the lifecycle publishes produced
+	// material through the area its transaction lends, and a recapture of
+	// equal bytes publishes nothing, so repeating the capture converges.
+	produce := func(_ *testing.T, ctx context.Context, store *Store) error {
+		return checkpointMutateLifecycle(ctx, store, func(tx lifecycle.Transaction) error {
+			return tx.Secrets(ctx, func(selected secretstore.Context, area secretstore.Area) error {
+				return checkpointSecretAccess(store).MutateArea(ctx, selected, area, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+					material := secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("produced-canary")})
+					defer material.Clear()
+					_, err := session.Produce(ctx, "cluster-install-example", []secretstore.ProducedInput{{Name: "kubeconfig", Material: material}})
+					return err
+				})
+			})
+		})
+	}
+	return checkpointSecretScenario(checkpointScenario{
+		name:    "secret-lent-area",
+		prepare: checkpointSecretPublicationFixture,
+		operate: produce,
+		retry:   produce,
+		settled: func(_ *testing.T, ctx context.Context, store *Store) error {
+			produced, found, err := checkpointProduced(ctx, store)
+			if err != nil || !found || produced != "produced-canary" {
+				return fmt.Errorf("the produced entry reads %q, found %t (%v)", produced, found, err)
+			}
+			if _, value, err := checkpointSecretState(ctx, store); err != nil || value != "original-canary" {
+				return fmt.Errorf("the capture changed the secret to %q (%v)", value, err)
+			}
+			return nil
+		},
+	})
+}
+
 // checkpointNote keeps one value a scenario's prepare observed beside the
 // root, where its later phases read it back.
 func checkpointNote(root string) string { return filepath.Join(filepath.Dir(root), "checkpoint-note") }
 
 func checkpointSecretRotationScenario() checkpointScenario {
-	// specs/secrets.md, Local keyring v3: rotation re-encrypts under a new
+	// specs/secrets.md, Local keyring v4: rotation re-encrypts under a new
 	// key; a caller that still reads the original key rotates again.
 	rotate := func(_ *testing.T, ctx context.Context, store *Store) error {
 		original, err := os.ReadFile(checkpointNote(store.options.Root))
@@ -2336,7 +2398,7 @@ func checkpointSecretArea(ctx context.Context, store *Store, callback func(secre
 }
 
 func checkpointSecretCleanupScenario() checkpointScenario {
-	// specs/secrets.md, Local keyring v3: cleanup removes only artifacts it
+	// specs/secrets.md, Local keyring v4: cleanup removes only artifacts it
 	// observed as unreferenced, and a later cleanup resumes from what remains.
 	prune := func(_ *testing.T, ctx context.Context, store *Store) error {
 		return checkpointSecretArea(ctx, store, func(area secretstore.Area) error {
@@ -2395,7 +2457,7 @@ func checkpointSecretCleanupScenario() checkpointScenario {
 }
 
 func checkpointSecretInitializationScenario() checkpointScenario {
-	// specs/secrets.md, Local keyring v3: an interrupted initialization is
+	// specs/secrets.md, Local keyring v4: an interrupted initialization is
 	// resumed by repeating it, which recovers and synchronizes the key it
 	// attributes.
 	initialize := func(_ *testing.T, ctx context.Context, store *Store) error {

@@ -64,8 +64,12 @@ type Controller struct {
 	CredentialsRef string
 	// TLSVerify covers the controller-to-BMC leg. An opt-out is declared per
 	// endpoint and never becomes a default.
-	TLSVerify    bool
-	VirtualMedia VirtualMedia
+	TLSVerify bool
+	// TrustBundleRef names the caBundle Secret that is the one anchor of the
+	// controller-to-BMC leg when set; the system trust store anchors it
+	// otherwise. Admission refuses it beside TLSVerify false.
+	TrustBundleRef string
+	VirtualMedia   VirtualMedia
 }
 
 // VirtualMedia is the BMC-to-artifact-server leg: how the controller is made
@@ -194,8 +198,9 @@ func authoredController(machine api.Object) (Controller, error) {
 	}
 	return Controller{
 		Endpoint: endpoint, CredentialsRef: credentials,
-		TLSVerify:    !bmc.Get("tls").Has("verify") || bmc.Get("tls", "verify").Bool(),
-		VirtualMedia: virtualMediaTrust(bmc.Get("virtualMedia", "tls")),
+		TLSVerify:      !bmc.Get("tls").Has("verify") || bmc.Get("tls", "verify").Bool(),
+		TrustBundleRef: bmc.Get("tls", "trustBundleRef").Text(),
+		VirtualMedia:   virtualMediaTrust(bmc.Get("virtualMedia", "tls")),
 	}, nil
 }
 
@@ -276,13 +281,20 @@ func physicalTarget(catalog api.Catalog, provider, machine api.Object, controlle
 	return target, nil
 }
 
+// virtualMediaTrust freezes the BMC-to-artifact-server leg. Importing the
+// server's certificate is the default, and each settle option is frozen only
+// under the one trust that acts on it.
 func virtualMediaTrust(tls api.Value) VirtualMedia {
 	media := VirtualMedia{Trust: tls.Get("trust").Text()}
 	if media.Trust == "" {
-		media.Trust = TrustDisableVerification
+		media.Trust = TrustImportCertificate
 	}
-	media.RestoreVerification = !tls.Has("restoreVerificationAfterBoot") || tls.Get("restoreVerificationAfterBoot").Bool()
-	media.RemoveCertificate = tls.Get("removeCertificateAfterBoot").Bool()
+	switch media.Trust {
+	case TrustDisableVerification:
+		media.RestoreVerification = !tls.Has("restoreVerificationAfterBoot") || tls.Get("restoreVerificationAfterBoot").Bool()
+	case TrustImportCertificate:
+		media.RemoveCertificate = tls.Get("removeCertificateAfterBoot").Bool()
+	}
 	return media
 }
 

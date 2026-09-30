@@ -315,3 +315,101 @@ func mentions(issues []api.Issue, field string) bool {
 	}
 	return false
 }
+
+// withProviderBMC is the fixture with its provider's BMC defaults replaced.
+func withProviderBMC(bmc api.Value) (api.Object, api.Catalog) {
+	machine, catalog := fixture()
+	objects := catalog.Objects()
+	for index, candidate := range objects {
+		if candidate.Kind() == api.InfraProvider {
+			objects[index] = candidate.WithSpec(candidate.Spec().WithPath(bmc, "baremetal", "defaults", "bmc"))
+		}
+	}
+	return machine, api.NewCatalog(objects)
+}
+
+const bundleField = "$.spec.hardware.management.bmc.tls.trustBundleRef"
+
+// A Machine may author its own bundle, but not beneath a provider that turns
+// verification off: the authored block is consistent on its own, and the
+// effective one, which inherited the opt-out, refuses.
+func TestAMachineBundleWithAnInheritedOptOutRefuses(t *testing.T) {
+	machine, catalog := fixture()
+	machine = machine.WithSpec(machine.Spec().WithPath(api.StringValue("node-ca"), "hardware", "management", "bmc", "tls", "trustBundleRef"))
+	if mentions(ValidateAuthored(machine, catalog), bundleField) {
+		t.Fatal("an authored bundle without an authored opt-out refused")
+	}
+	normalized, _ := Normalize(machine, catalog)
+	if normalized.Spec().Get("hardware", "management", "bmc", "tls", "verify").Bool() {
+		t.Fatal("the fixture provider's opt-out was not inherited")
+	}
+	if !mentions(Validate(normalized, catalog), bundleField) {
+		t.Fatal("a bundle beside an inherited opt-out was admitted")
+	}
+}
+
+// A provider's bundle reaches only the Machines that keep verification. One
+// that turns it off inherits no bundle and is admitted; one that keeps it
+// inherits the provider's; and a Machine's own bundle always wins.
+func TestAProviderBundleIsNotInheritedByAMachineThatOptsOut(t *testing.T) {
+	machine, catalog := withProviderBMC(m("credentialsRef", "bmc", "tls", m("verify", true, "trustBundleRef", "metal-ca")))
+	for name, test := range map[string]struct {
+		tls  api.Value
+		want string
+	}{
+		"opts out":       {m("verify", false), ""},
+		"keeps":          {m("verify", true), "metal-ca"},
+		"authors none":   {api.Value{}, "metal-ca"},
+		"its own bundle": {m("trustBundleRef", "node-ca"), "node-ca"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			local := machine
+			if test.tls.Present() {
+				local = machine.WithSpec(machine.Spec().WithPath(test.tls, "hardware", "management", "bmc", "tls"))
+			}
+			normalized, _ := Normalize(local, catalog)
+			if got := normalized.Spec().Get("hardware", "management", "bmc", "tls", "trustBundleRef").Text(); got != test.want {
+				t.Fatalf("effective bundle = %q, want %q", got, test.want)
+			}
+			if issues := Validate(normalized, catalog); len(issues) != 0 {
+				t.Fatalf("effective Machine refused: %v", issues)
+			}
+		})
+	}
+}
+
+// A Machine kind default would hand the virtual-media exception to every
+// Machine that authors no trust, so it refuses there; any other trust is an
+// ordinary default.
+func TestAMachineKindDefaultCannotDefaultDisableVerification(t *testing.T) {
+	const field = "$.spec.hardware.management.bmc.virtualMedia.tls.trust"
+	for trust, refused := range map[string]bool{"disable-verification": true, "import-certificate": false, "established": false} {
+		partial := object(api.Machine, "", m("hardware", m("management", m("bmc", m("virtualMedia", m("tls", m("trust", trust)))))))
+		issues := ValidatePartial(partial, api.Catalog{})
+		if mentions(issues, field) != refused {
+			t.Fatalf("a %s kind default: issues %v", trust, issues)
+		}
+		if refused && (issues[0].Message != "disable-verification is a per-Machine exception and never a kind default" || issues[0].Code != "api.invariant") {
+			t.Fatalf("issue = %+v", issues[0])
+		}
+	}
+}
+
+// Authored on one Machine, disable-verification is the explicit exception: it
+// is admitted, replaces the provider's trust, and is visible in effective
+// state with verification restored after boot unless the Machine says not to.
+func TestMachineVirtualMediaDisableVerificationIsAnExplicitException(t *testing.T) {
+	machine, catalog := fixture()
+	machine = machine.WithSpec(machine.Spec().WithPath(m("tls", m("trust", "disable-verification")), "hardware", "management", "bmc", "virtualMedia"))
+	if issues := ValidateAuthored(machine, catalog); len(issues) != 0 {
+		t.Fatalf("an authored per-Machine exception refused: %v", issues)
+	}
+	normalized, _ := Normalize(machine, catalog)
+	tls := normalized.Spec().Get("hardware", "management", "bmc", "virtualMedia", "tls")
+	if tls.Get("trust").Text() != "disable-verification" || !tls.Get("restoreVerificationAfterBoot").Bool() || tls.Has("removeCertificateAfterBoot") {
+		t.Fatalf("effective virtual-media trust = %v", tls)
+	}
+	if issues := Validate(normalized, catalog); len(issues) != 0 {
+		t.Fatalf("the effective exception refused: %v", issues)
+	}
+}

@@ -4,7 +4,6 @@ import (
 	addoncatalog "github.com/crmarques/bootwright/internal/addons/catalog"
 	addonpreflight "github.com/crmarques/bootwright/internal/addons/preflight"
 	"github.com/crmarques/bootwright/internal/cli"
-	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/containercluster/installation"
 	containerpreflight "github.com/crmarques/bootwright/internal/containercluster/preflight"
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
@@ -27,7 +26,6 @@ func wireStubs() cli.Services {
 		EnvironmentAccess:     environmentaccess.Service{},
 		ContainerPreflight:    containerpreflight.Service{},
 		Installer:             installation.Service{},
-		ClusterAccess:         containeraccess.Service{},
 		StoragePreflight:      storagepreflight.Service{},
 		StorageArtifacts:      storagerendering.Service{},
 		Artifacts:             artifactrendering.Service{},

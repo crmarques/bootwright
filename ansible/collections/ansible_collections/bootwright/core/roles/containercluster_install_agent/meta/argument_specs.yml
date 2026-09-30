@@ -52,6 +52,9 @@ argument_specs:
       bootwright_cluster_install_material:
         type: dict
         required: true
+      bootwright_cluster_install_output:
+        type: dict
+        required: false
 
   observe:
     short_description: Observe one frozen cluster installation without changing it.

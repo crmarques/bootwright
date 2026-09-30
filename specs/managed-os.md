@@ -85,9 +85,17 @@ and `fromMedia` name entries of the media store. A profile selecting
 `initialPassword`, `diskEncryption`, an enabled `fips`, a top-level
 `subscription`, `fromSubscription`, `mirror` or `templateClone` refuses before
 registration. These shapes carry secret bytes or effects this contract does not
-prove. A Machine whose management controller's virtual-media trust is
-`import-certificate` also refuses before registration, because importing a
-certificate into a management controller is not implemented. A Machine
+prove. A Machine whose installation delivers private material refuses
+`disable-verification` virtual-media trust before registration, ahead of its
+[delivered-key refusal](#physical-installation), because a controller that
+fetches the installer without verifying the artifact server boots whatever
+image answers, and that installer is what receives the private material; its
+remedy is `import-certificate`, or `established` when the controller already
+trusts the server. `import-certificate` needs the installer image served over
+https and the certificate its server presents, and refuses naming the Machine
+without either. The trust is set by the installation's insert and settled by
+its ejects after the installer's power-off
+([virtual media](substrates.md#adapter-boundary)). A Machine
 declaring any root-device hint other than `deviceName` refuses before
 registration, naming each such field, because the Kickstart selects its disk
 by name alone and would ignore the others. Publicly served
@@ -225,7 +233,10 @@ marker installs.
 published, and, when no other block of the same operation still needs it, the
 published package tree, then proves each absent. The installed system leaves
 the host with the Machine's disks, so this block consumes no authorization of
-its own on removal.
+its own on removal. Destroy touches no management controller: a virtual-media
+trust an interrupted attempt left set, a certificate imported or verification
+turned off, is settled by the next apply's eject, which converges to the
+frozen target rather than undoing its own writes.
 
 **Unknown resolution.** Observation reads the marker through the identity
 operation and the published content's presence. A matching marker with the

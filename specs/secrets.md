@@ -10,9 +10,9 @@ management without platform, entitlement or lifecycle effects.
 The standalone [Context configuration](contexts.md#context-configuration)
 selects `spec.secretStore.type`, defaulting to `local-keyring`. An immutable
 catalog injected at composition resolves exactly one implementation. Local
-keyring persists the immutable backend-format identity `local-keyring-v3`.
+keyring persists the immutable backend-format identity `local-keyring-v4`.
 The catalog maps that identity to the exact implementation and its public
-component status (`local-v3`, custody `local-keyfile-v1`). Interface/configuration
+component status (`local-v4`, custody `local-keyfile-v1`). Interface/configuration
 metadata belongs to the catalog and is not repeated in persisted records. Context creation initializes
 that implementation through a transaction-scoped Workspace area before ready
 publication, without requiring Environment input or generating Secret values.
@@ -145,7 +145,8 @@ again, at most three bindings in all, and releases each it made; one whose
 binding is still listed, or whose listing fails, reports the failure without
 reading any material. Binding and release occur outside the lifecycle
 operation's own store transaction, because acquisition holds the same store
-lock.
+lock. [Produced material](#produced-material) is the reverse: it is published
+and withdrawn only inside that transaction, through the secret area it lends.
 
 Canonical non-secret declaration fingerprints cover type/source/parameters and
 provenance. Changed declarations make retained values stale/orphaned, never
@@ -155,7 +156,28 @@ including an orphan-acknowledged deletion, which abandons the context's realized
 objects but still removes its keyring. Recreating a name starts with a new
 keyring and never exposes prior material.
 
-## Local keyring v3
+## Produced material
+
+Produced material is confidential output a lifecycle block's proved effect
+leaves, such as the administrator kubeconfig a
+[completed installation](container-clusters.md#installation) writes.
+It is keyed by the block that captured it and the output's name, never by a
+Secret declaration. Only the lifecycle holds and withdraws it: the engine
+publishes a block's outputs in one publication, and withdraws every entry of
+the context in one publication, through the secret area the
+[Workspace lends its transaction](contexts.md#storage-locking-and-publication)
+([capture and withdrawal](state-reconciliation.md#produced-material-custody)).
+A recapture of equal bytes publishes nothing; different bytes replace the
+entry's version, and the block's entries of other names stay. A store never
+initialized refuses a capture with `secret.store.uninitialized` and holds
+nothing to withdraw. No secret command lists, checks, reveals, sets, generates,
+deletes or matches it to a declaration of the same name; `cluster kubeconfig`
+reveals an installation's entry under the [explicit sensitive-output
+boundary](cli.md#administrator-access-export). Its parts count in `materialParts`,
+rotation re-encrypts it with every other version, and it is removed with the
+keyring.
+
+## Local keyring v4
 
 The `secrets/` subtree is initialized during context creation, independently
 of the enclosing registry format. Empty or absent means uninitialized.
@@ -188,12 +210,20 @@ selects the exact backend and binds metadata to the expected context. Resolve
 only catalog implementations; backend selection cannot authorize acquisition
 or effects beyond the current command. Unsupported IDs refuse before session
 acquisition. The encrypted metadata contains `activeKey`, `keys`, `versions`,
-`current` and `bindings`.
+`current`, `bindings` and `produced`.
 
 Each key record stores `id` and committed `seals`; presentation derives its
 active/retired state. Each immutable version stores `id`, a `sequence` of at
 least one, a declaration summary (`name`, `type`, `source`, `fingerprint`), and
-parts (`part`, `blobId`, `keyId`, `generation`, `size`).
+parts (`part`, `blobId`, `keyId`, `generation`, `size`). A produced version's
+summary is `name` (its entry's), `type` `opaque`, `source` `produced` and a
+`fingerprint` that is the hexadecimal SHA-256 of the canonical JSON
+`{"domain":"bootwright.secret.produced.v4","block":…,"name":…}`; its
+`sequence` is 1 and it holds one `value` part of one byte up to the part bound.
+`produced` is always present, `[]` when empty, and holds `block`, `name` and
+`version` entries sorted by block and then name, unique on that pair. A
+produced version is reached through exactly the one entry whose block and name
+its fingerprint covers, never through a current mapping or a binding.
 
 `sequence` is the version's ordinal within its own secret, counting from one.
 A new version takes one more than the highest ordinal that secret has ever
@@ -203,7 +233,9 @@ how a person names a version: human output shows `v<sequence>` and never the
 identifier. The identifier remains the only durable reference, so current
 mappings, bindings, and every JSON result continue to carry it. `sequence` is
 required and at least 1; a version without it is corrupt and refuses with
-`secret.store.corrupt`. Compute the declaration fingerprint from full canonical
+`secret.store.corrupt`. A produced version takes no ordinal from a Secret of
+the same name, whose series counts its own versions alone. Compute the
+declaration fingerprint from full canonical
 parameters and provenance at acquisition, then authenticate the summary.
 Original paths, source fields and generation options are not copied into each
 version. Current mappings contain `name` and `version`; bindings contain `id`
@@ -236,9 +268,9 @@ bytes and context under the lease. Atomic `store.json` replacement is the
 visibility commit, followed by parent sync. Readers observe a complete old or
 new metadata snapshot. Outcomes distinguish not committed, committed and
 uncertain; post-rename failure requires inspection before retry and never
-falls back. Rotation reencrypts current/bound material under a fresh key without
-changing logical IDs. Current metadata references only required encryption
-keys, so retired keys cannot prevent access once no retained material needs them.
+falls back. Rotation reencrypts current, bound and produced material under a
+fresh key without changing logical IDs. Current metadata references only
+required encryption keys, so retired keys cannot prevent access once no retained material needs them.
 
 The root shared lock protects the complete reader callback; its exclusive
 writer lock supplies cleanup quiescence. Before a new valid publication and
@@ -265,7 +297,12 @@ There is no conversion from an earlier keyring format. A `secrets/` subtree
 that is nonempty, holds no `store.json` this build can authenticate, and holds
 anything besides attributable initialization evidence and interrupted
 temporaries refuses with `secret.store.corrupt` before any session is acquired,
-and the remedy is a new context.
+and the remedy is a new context. A `store.json` that names a backend this
+build's catalog lacks, `local-keyring-v3` included, refuses every access,
+`secret encryption init` included, with `secret.store.implementation` before
+any session, naming that backend and the remedy: destroy the context's effects
+with the Bootwright build that created it, then `bootwright context delete
+--name <context> --purge` and create the context again.
 
 Threat exclusions remain root, the same OS identity, process memory and theft
 of the full store with its keys. Keys share the local filesystem custody

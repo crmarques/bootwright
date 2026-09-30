@@ -9,14 +9,15 @@ import (
 	"testing"
 )
 
-// stubCapabilities are the application packages whose command is recognized but
-// unavailable. Implementing one removes it here and marks its commands available
-// in the CLI command catalog in the same change.
+// stubCapabilities are the application packages whose commands are all
+// recognized but unavailable. Implementing one removes it here and marks its
+// commands available in the CLI command catalog in the same change; a command
+// such a package still leaves unavailable keeps its behavioural proof in the
+// package's own unavailable_test.go.
 func stubCapabilities() map[string]bool {
 	return map[string]bool{
 		"internal/addons/catalog":                true,
 		"internal/addons/preflight":              true,
-		"internal/containercluster/access":       true,
 		"internal/containercluster/installation": true,
 		"internal/containercluster/preflight":    true,
 		"internal/environment/access":            true,

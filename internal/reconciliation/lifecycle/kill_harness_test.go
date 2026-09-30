@@ -144,7 +144,20 @@ func (h *killHost) effect(ctx context.Context, execution Execution, verb reconci
 		return Result{Outcome: reconciliation.OutcomeFailed}, failure("lifecycle.state", "the host refused "+block, "")
 	}
 	killLog(ctx, execution, "converged")
-	return Result{Outcome: reconciliation.OutcomeChanged, Evidence: killEvidence(block, verb == reconciliation.Apply)}, nil
+	return Result{Outcome: reconciliation.OutcomeChanged, Evidence: killEvidence(block, verb == reconciliation.Apply), Produced: killProduced(block, true)}, nil
+}
+
+// killProducer is the block whose proved completion leaves material the
+// engine keeps in custody, as an installation leaves its administrator
+// access. It offers that material on its removal too, which the engine must
+// discard.
+const killProducer = "a"
+
+func killProduced(block string, realized bool) []Produced {
+	if block != killProducer || !realized {
+		return nil
+	}
+	return []Produced{{Name: "kubeconfig", Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("kubeconfig of " + block)})}}
 }
 
 // Observe answers an apply's resolution from the host alone: a realized block
@@ -155,7 +168,7 @@ func (h *killHost) Observe(_ context.Context, execution Execution) (Observation,
 	realized := h.realized[block]
 	h.mutex.Unlock()
 	if realized {
-		return Observation{Effect: reconciliation.EffectCompleted, Evidence: killEvidence(block, true)}, nil
+		return Observation{Effect: reconciliation.EffectCompleted, Evidence: killEvidence(block, true), Produced: killProduced(block, true)}, nil
 	}
 	return Observation{Effect: reconciliation.EffectNoEffect, Evidence: killEvidence(block, false)}, nil
 }
@@ -316,6 +329,7 @@ func killCloneBinder(b *testBinder) *testBinder {
 	return &testBinder{
 		bound: slices.Clone(b.bound), released: slices.Clone(b.released), issued: b.issued, material: material,
 		bindErr: b.bindErr, releaseErr: b.releaseErr, bindingsErr: b.bindingsErr,
+		produced: maps.Clone(b.produced), journal: slices.Clone(b.journal), produceErr: b.produceErr, withdrawErr: b.withdrawErr,
 	}
 }
 
@@ -355,8 +369,9 @@ func (k *killPoints) keep(snapshot *killSnapshot) {
 }
 
 // arm names every durable write of the rig to points: each write to either
-// operation area, each publication outside them and each Secret binding the
-// custody store issues or releases.
+// operation area, each publication outside them, each Secret binding the
+// custody store issues or releases, and each produced publication or
+// withdrawal it performs.
 func (r *killRig) arm(points *killPoints) {
 	w := r.harness.workspace
 	for _, area := range []*memoryArea{w.area, w.runArea} {
@@ -417,9 +432,11 @@ func killPristine(t *testing.T) []byte {
 // killState is what a journey leaves that an operator can observe: whether the
 // context rests applied, removed or holds an incomplete operation, its
 // evidence, its reservations and controller binding, how many Secret bindings
-// the custody store still holds for it, and what the host holds.
+// the custody store still holds for it, the produced material it keeps, and
+// what the host holds. A converged apply keeps its producer's entry and a
+// converged removal keeps none.
 type killState struct {
-	rest, evidence, reservations, bindings, realized string
+	rest, evidence, reservations, bindings, realized, produced string
 	// secretBindings is a count rather than the identities, because every run
 	// issues its own.
 	secretBindings int
@@ -432,6 +449,7 @@ func killStateOf(w *testWorkspace, binder *testBinder, host *killHost) killState
 		reservations:   fmt.Sprintf("%v", w.reservations),
 		bindings:       fmt.Sprintf("%v", w.controller.State.Bindings),
 		realized:       fmt.Sprintf("%v", host.realizedBlocks()),
+		produced:       fmt.Sprintf("%v", binder.producedEntries()),
 		secretBindings: killUnreleased(binder),
 	}
 }
@@ -548,14 +566,17 @@ func killPristineViolations(files map[string][]byte, evidence, pristine []byte) 
 }
 
 // killInvariants are what every store a journey leaves must hold: nothing past
-// pending under pristine evidence, nothing realized under it, and no effect the
-// host received without an attempt recorded for it.
+// pending under pristine evidence, nothing realized or kept in custody under
+// it, and no effect the host received without an attempt recorded for it.
 func killInvariants(snapshot *killSnapshot, pristine []byte) []string {
 	w := snapshot.workspace
 	failures := killPristineViolations(w.area.clone().files, w.evidence, pristine)
 	if bytes.Equal(w.evidence, pristine) {
 		if realized := snapshot.host.realizedBlocks(); len(realized) != 0 {
 			failures = append(failures, fmt.Sprintf("the evidence is pristine while the host holds %v", realized))
+		}
+		if produced := snapshot.binder.producedEntries(); len(produced) != 0 {
+			failures = append(failures, fmt.Sprintf("the evidence is pristine while custody keeps %v", produced))
 		}
 	}
 	return append(failures, killUnrecordedEffects(snapshot)...)
@@ -686,6 +707,25 @@ func TestAJourneyKilledAtAnyWriteLeavesAUsableStoreAndConvergesOnRetry(t *testin
 	for _, reference := range slices.Sorted(maps.Keys(ledger)) {
 		if !reached[reference] {
 			t.Errorf("ledger entry %s names a point no journey reaches: remove it", reference)
+		}
+	}
+}
+
+// The producer's capture and the removal's withdrawal are durable writes of
+// their journeys, so the harness kills at each of them rather than only
+// around them.
+func TestTheKillHarnessReachesTheCustodyPublications(t *testing.T) {
+	ctx := context.Background()
+	for journey, point := range map[string]string{"a": "publish produced material#1", "b": "withdraw produced material#1"} {
+		index := slices.IndexFunc(killJourneys(), func(candidate killJourney) bool { return candidate.name == journey })
+		rig := killJourneys()[index].begin(ctx, t)
+		names := &killPoints{counts: map[string]int{}}
+		rig.arm(names)
+		if err := killInvoke(ctx, rig.harness.service, killJourneys()[index].run); err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Contains(names.keys, point) {
+			t.Fatalf("journey %s never reaches %s: %v", journey, point, names.keys)
 		}
 	}
 }

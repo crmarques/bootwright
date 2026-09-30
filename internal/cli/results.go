@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"io"
 
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/spf13/cobra"
@@ -110,11 +111,8 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		if validMachinePower(result.power) {
 			return true, writeMachinePower(out, path, result.power, selectedJSON(command))
 		}
-	case "secret show":
-		part := secrets.Part(stringValue(command.Flags(), "part"))
-		if result.secretReveal != nil && result.secretReveal.Part == part && validSecretPart(part) {
-			return true, writeSecretReveal(out, result.secretReveal, part)
-		}
+	case "secret show", "cluster kubeconfig":
+		return writeReveal(out, command, path, result)
 	case "secret encryption init", "secret encryption rotate":
 		if validEncryptionMutation(result.encryptionMutation) {
 			return true, writeEncryptionMutation(out, path, result.encryptionMutation)
@@ -131,6 +129,22 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 			}
 			return true, writeEffective(ctx, out, path, result.effective, selectedJSON(command), encoder)
 		}
+	}
+	return false, nil
+}
+
+// writeReveal writes an explicit sensitive result: the exact requested bytes,
+// with no added LF and nothing else.
+func writeReveal(out io.Writer, command *cobra.Command, path string, result commandResult) (bool, error) {
+	if path == "cluster kubeconfig" {
+		if result.kubeconfig == nil {
+			return false, nil
+		}
+		return true, writeKubeconfig(out, result.kubeconfig)
+	}
+	part := secrets.Part(stringValue(command.Flags(), "part"))
+	if result.secretReveal != nil && result.secretReveal.Part == part && validSecretPart(part) {
+		return true, writeSecretReveal(out, result.secretReveal, part)
 	}
 	return false, nil
 }

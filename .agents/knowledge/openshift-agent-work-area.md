@@ -60,3 +60,17 @@ again after each resumable give-up, so a cluster that keeps an operator
 unstable across repeated applies can reach that count. Lesson: a claim that a
 value survives a rewrite must be checked against every bound its reader
 applies, not only against the shape.
+
+Since X21 (B10) the context's custody keeps a copy of the kubeconfig that the
+install block takes once it proves the installation complete, or once a
+resolution of an apply reads it complete, and `cluster kubeconfig` reveals that
+copy ([container clusters](../../specs/container-clusters.md#installation)).
+The copy does not remove either hazard above: every read of the cluster, each
+state read and a retried apply's settled decision included, still reads the
+installer's own file, so its growth past the 64 KiB bound and a
+truncation by a budget kill during the installer's in-place write still leave
+the identity unproved there. What custody changes is only what an operator
+exports: the bytes read at a proved completion, kept after the destroy that
+takes the work area and withdrawn only when the context's removal completes.
+Lesson: a copy taken downstream of a hazard protects its consumers, not the
+reads that happen before it exists.

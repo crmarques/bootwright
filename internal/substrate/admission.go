@@ -115,7 +115,7 @@ func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 func NormalizeBMCDefaults(bmc api.Value) api.Value {
 	bmc = bmc.With("tls", bmc.Get("tls").Default("verify", api.BoolValue(true)))
 	media := bmc.Get("virtualMedia")
-	tls := media.Get("tls").Default("trust", api.StringValue("disable-verification"))
+	tls := media.Get("tls").Default("trust", api.StringValue(TrustImportCertificate))
 	switch tls.Get("trust").Text() {
 	case "disable-verification":
 		tls = tls.Default("restoreVerificationAfterBoot", api.BoolValue(true))
@@ -131,9 +131,10 @@ func ValidateBMCDefaults(bmc api.Value, path string, authored bool) []api.Issue 
 	if authored && tls.Present() && tls.Len() == 0 {
 		issues = add(issues, issue(path+".virtualMedia.tls", "an authored virtual-media TLS block must set an option"))
 	}
+	issues = add(issues, validateControllerTrust(bmc, path)...)
 	trust := tls.Get("trust").Text()
 	if trust == "" {
-		trust = "disable-verification"
+		trust = TrustImportCertificate
 	}
 	if tls.Has("restoreVerificationAfterBoot") && trust != "disable-verification" {
 		issues = add(issues, issue(path+".virtualMedia.tls.restoreVerificationAfterBoot", "restoring verification requires disable-verification trust"))
@@ -144,11 +145,37 @@ func ValidateBMCDefaults(bmc api.Value, path string, authored bool) []api.Issue 
 	return issues
 }
 
+// validateControllerTrust refuses a bundle beside verification turned off. It
+// reads the value it is given, so an authored block and an effective one that
+// inherited either half are held to the same rule.
+func validateControllerTrust(bmc api.Value, path string) []api.Issue {
+	tls := bmc.Get("tls")
+	if !tls.Has("trustBundleRef") || !tls.Has("verify") || tls.Get("verify").Bool() {
+		return nil
+	}
+	return []api.Issue{{Code: "api.invariant", Field: path + ".tls.trustBundleRef",
+		Message:     "a controller trust bundle requires verification, and tls.verify is false here, whether authored or inherited",
+		Remediation: "set tls.verify: true where the bundle is declared, or remove tls.trustBundleRef"}}
+}
+
+// validateProviderMediaTrust refuses the one virtual-media trust that is an
+// exception: a provider default would hand it to every Machine it hosts.
+func validateProviderMediaTrust(bmc api.Value, path string) []api.Issue {
+	if bmc.Get("virtualMedia", "tls", "trust").Text() != TrustDisableVerification {
+		return nil
+	}
+	return []api.Issue{{Code: "api.invariant", Field: path + ".virtualMedia.tls.trust",
+		Message:     "disable-verification is a per-Machine exception and never a provider default",
+		Remediation: "declare hardware.management.bmc.virtualMedia.tls.trust: disable-verification on each Machine that needs it"}}
+}
+
 func ValidateAuthored(o api.Object, _ api.Catalog) []api.Issue {
 	if o.Kind() != api.InfraProvider {
 		return nil
 	}
-	issues := ValidateBMCDefaults(o.Spec().Get("baremetal", "defaults", "bmc"), "$.spec.baremetal.defaults.bmc", true)
+	bmc := o.Spec().Get("baremetal", "defaults", "bmc")
+	issues := ValidateBMCDefaults(bmc, "$.spec.baremetal.defaults.bmc", true)
+	issues = add(issues, validateProviderMediaTrust(bmc, "$.spec.baremetal.defaults.bmc")...)
 	staging := o.Spec().Get("vsphere", "isoStaging")
 	if staging.Present() && !staging.Has("datastore") && !staging.Has("folder") {
 		issues = add(issues, issue("$.spec.vsphere.isoStaging", "an authored staging block must set datastore or folder"))

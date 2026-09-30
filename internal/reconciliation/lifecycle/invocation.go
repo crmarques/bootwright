@@ -23,6 +23,28 @@ type MaterialFile struct {
 	Variable string
 }
 
+// OutputFile names one file a run on the controller may leave for the runner
+// to read back into RunResult.Produced. Variable is the key the adapter finds
+// that file's path under; the file never outlives the run.
+type OutputFile struct {
+	Name     string
+	Variable string
+}
+
+// Produced is one output a run left, read back as bounded memory the caller
+// owns and clears. It is material, never evidence.
+type Produced struct {
+	Name     string
+	Material secrets.Material
+}
+
+// ClearProduced clears every output's material.
+func ClearProduced(produced []Produced) {
+	for _, output := range produced {
+		output.Material.Clear()
+	}
+}
+
 // RunRequest is one authorized adapter invocation, in terms every capability
 // shares. Implementation selects the automation, so two implementations of one
 // kind never run each other's playbook. Material is bounded memory owned by the
@@ -39,6 +61,7 @@ type RunRequest struct {
 	// MaterialValues are non-secret values the adapter needs beside the
 	// material paths, such as a certificate fingerprint a probe compares.
 	MaterialValues map[string]string
+	Outputs        []OutputFile
 	Launch         prerequisites.PythonLaunch
 	Bundle         prerequisites.BundleLocation
 	Area           prerequisites.BundleArea
@@ -66,6 +89,7 @@ const MaxDeadline = 6 * time.Hour
 type RunResult struct {
 	Outcome  string
 	Evidence json.RawMessage
+	Produced []Produced
 }
 
 // Invocation is what a capability supplies to turn one authorized attempt into
@@ -80,6 +104,7 @@ type Invocation struct {
 	Placement      machineref.Placement
 	Materials      []MaterialFile
 	Values         map[string]string
+	Outputs        []OutputFile
 	// Deadline is the run's own deadline, derived from the budgets the frozen
 	// request carries; zero keeps the runner's default.
 	Deadline time.Duration
@@ -98,6 +123,7 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 		Placement:      invocation.Placement,
 		Materials:      append(slices.Clone(invocation.Materials), Materials(invocation.Placement)...),
 		MaterialValues: invocation.Values,
+		Outputs:        slices.Clone(invocation.Outputs),
 		Launch:         execution.Launch,
 		Bundle:         execution.Bundle,
 		Area:           execution.Area,

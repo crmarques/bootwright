@@ -35,6 +35,9 @@
     substrate_baremetal_machine_disk_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
     substrate_baremetal_machine_disk_user: '{{ containercluster_install_agent_user }}'
     substrate_baremetal_machine_disk_password: '{{ containercluster_install_agent_password }}'
+    # A cluster node's controller is reached through no bundle until physical
+    # nodes are delivered (B67); agentinstall refuses physical nodes today.
+    substrate_baremetal_machine_disk_ca: ''
     substrate_baremetal_machine_disk_power_on: false
   when: containercluster_install_agent_node.substrate == 'baremetal'
 

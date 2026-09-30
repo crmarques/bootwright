@@ -228,6 +228,71 @@ func TestAPhysicalInstallationWithoutANamedRootDeviceRefuses(t *testing.T) {
 	}
 }
 
+// A Machine whose installation delivers private material cannot let its
+// controller fetch the installer without verifying the server, so the
+// per-Machine exception refuses before registration, ahead of the refusal of
+// its delivered host key, and Unsupported agrees with the request builder.
+func TestAPrivateInstallationRefusesDisabledVerification(t *testing.T) {
+	metal := server(api.MapValue(text("deviceName", "/dev/sda")))
+	metal = metal.WithSpec(metal.Spec().WithPath(api.StringValue(substrate.TrustDisableVerification),
+		"hardware", "management", "bmc", "virtualMedia", "tls", "trust"))
+	catalog := labCatalog(metalProvider(), metal)
+	if unsupported := Unsupported(catalog); !slices.Equal(unsupported, []string{"Machine/metal-01"}) {
+		t.Fatalf("unsupported = %v", unsupported)
+	}
+	_, _, err := Requests(catalog, "controller", testContext)
+	expectRefusal(t, err, "lifecycle.unsupported")
+	reported := diagnostics.Of(err)[0]
+	if reported.Message != "a Machine that delivers private material through its installation cannot let its controller fetch without verifying the artifact server" {
+		t.Fatalf("message = %q", reported.Message)
+	}
+	if reported.Remediation != "declare hardware.management.bmc.virtualMedia.tls.trust: import-certificate on Machine/metal-01, or established when its controller already trusts the server" {
+		t.Fatalf("remediation = %q", reported.Remediation)
+	}
+}
+
+// Importing the server's certificate is the one trust with no fallback: it
+// needs the image served over https and the certificate that server presents,
+// and a request that lacks either refuses naming the Machine. No selection
+// reaches this today, because only a delivered-key target imports and it
+// always publishes privately, so the rule is proved on its own statement.
+func TestImportCertificateNeedsAnHttpsImageAndItsCertificate(t *testing.T) {
+	machine := server(api.MapValue(text("deviceName", "/dev/sda")))
+	importing := Request{
+		Image:             Publication{URL: "https://artifacts.lab.example.test/public/os/metal-01/install.iso"},
+		Target:            Target{Controller: Controller{VirtualMedia: VirtualMedia{Trust: substrate.TrustImportCertificate}}},
+		TLSCertificateRef: "lab-artifacts-tls",
+	}
+	if err := mediaTrustRefusal(machine, importing); err != nil {
+		t.Fatalf("an https image with its certificate refused: %v", err)
+	}
+	for name, change := range map[string]func(*Request){
+		"a plain http image":     func(r *Request) { r.Image.URL = "http://artifacts.lab.example.test/public/os/metal-01/install.iso" },
+		"no server certificate":  func(r *Request) { r.TLSCertificateRef = "" },
+		"neither of them at all": func(r *Request) { r.Image.URL, r.TLSCertificateRef = "http://a.test/i.iso", "" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			request := importing
+			change(&request)
+			err := mediaTrustRefusal(machine, request)
+			expectRefusal(t, err, "lifecycle.state")
+			reported := diagnostics.Of(err)[0]
+			if !strings.Contains(reported.Message, "Machine/metal-01") ||
+				reported.Remediation != "select an https artifactServerEndpoint on a server declaring spec.tls.secretRef" {
+				t.Fatalf("refusal = %#v", reported)
+			}
+		})
+	}
+	for _, trust := range []string{substrate.TrustEstablished, substrate.TrustDisableVerification} {
+		request := importing
+		request.Image.URL, request.TLSCertificateRef = "http://a.test/i.iso", ""
+		request.Target.Controller.VirtualMedia.Trust = trust
+		if err := mediaTrustRefusal(machine, request); err != nil {
+			t.Fatalf("%s needs no certificate to import, yet refused: %v", trust, err)
+		}
+	}
+}
+
 // A physical installation delivers its host key at a tokenized URL the
 // Kickstart names, and the Kickstart is implanted in an installer image served
 // without authentication. Until that delivery is private, every physical
@@ -391,7 +456,7 @@ func TestTheMarkerNamesTheRequestItProves(t *testing.T) {
 // Every version but the one this build writes refuses, and the refusal names
 // it so the remedy is the executable that registered the operation.
 func TestAFrozenRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"os-install-anaconda-v1", "os-install-anaconda-v2", "os-install-anaconda-v3", "os-install-anaconda-v5"} {
+	for _, version := range []string{"os-install-anaconda-v1", "os-install-anaconda-v2", "os-install-anaconda-v3", "os-install-anaconda-v4", "os-install-anaconda-v6"} {
 		_, err := DecodeRequest([]byte(`{"version":"` + version + `"}`))
 		if err == nil {
 			t.Fatalf("version %q was accepted", version)

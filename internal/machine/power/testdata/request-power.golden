@@ -1,0 +1,18 @@
+{
+  "controller": {
+    "credentialsRef": "metal-bmc",
+    "endpoint": "https://bmc.example.test/redfish/v1/Systems/1",
+    "tlsVerify": true
+  },
+  "force": false,
+  "identity": {
+    "context": "lab",
+    "object": "metal"
+  },
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "verb": "stop",
+  "version": "machine-power-redfish-v2"
+}

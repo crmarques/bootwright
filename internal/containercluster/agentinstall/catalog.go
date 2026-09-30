@@ -23,7 +23,7 @@ const (
 )
 
 const (
-	mediaRequestVersion   = "cluster-media-agent-v3"
+	mediaRequestVersion   = "cluster-media-agent-v4"
 	installRequestVersion = "cluster-install-agent-v3"
 )
 
@@ -78,6 +78,11 @@ const (
 // identities.
 func MediaBlockID(cluster string) string   { return "cluster-media-" + cluster }
 func InstallBlockID(cluster string) string { return "cluster-install-" + cluster }
+
+// KubeconfigOutput names the administrator access an installation block
+// offers for custody once it proves the installation complete, and the key
+// custody keeps it under beside InstallBlockID.
+const KubeconfigOutput = "kubeconfig"
 
 // WorkRoot is the area one cluster's native installer keeps its state in, on
 // the Machine the artifact server is placed on.

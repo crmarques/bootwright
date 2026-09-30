@@ -7,6 +7,13 @@
 # never becomes an unbounded wait.
 machine_power_redfish_attempts: 150
 
+# The controller's trust bundle as PEM, the one anchor its transport is
+# verified against, or empty when the controller declares none and the system
+# trust store anchors it.
+machine_power_redfish_ca_data: >-
+  {{ lookup('ansible.builtin.file', bootwright_machine_power_material.controllerCA)
+     if bootwright_machine_power_material.controllerCA | default('') | length > 0 else '' }}
+
 # The identity refusal prints what a management controller reported, and a
 # controller promises neither printable text nor a length. Each identity it
 # names loses these characters, the C0 and C1 controls and DEL, and is then cut

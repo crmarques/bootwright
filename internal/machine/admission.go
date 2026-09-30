@@ -72,11 +72,7 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	}
 	if bmc := s.Get("hardware", "management", "bmc"); bmc.Present() {
 		if found && substrate.RealizesPhysicalNICs(provider) {
-			defaults := provider.Spec().Get("baremetal", "defaults", "bmc")
-			if bmc.Has("virtualMedia") {
-				defaults = defaults.Without("virtualMedia")
-			}
-			bmc = inherit(bmc, defaults)
+			bmc = inherit(bmc, providerBMCDefaults(bmc, provider))
 		}
 		bmc = substrate.NormalizeBMCDefaults(bmc).Default("protocol", api.StringValue("redfish"))
 		s = s.WithPath(bmc, "hardware", "management", "bmc")
@@ -613,6 +609,22 @@ func inherit(local, defaults api.Value) api.Value {
 	}
 	return local
 }
+
+// providerBMCDefaults is what a bare-metal provider offers one Machine's
+// controller. A Machine's own virtual-media block replaces the provider's
+// whole, and a Machine that turns verification off inherits no bundle, since a
+// bundle is an anchor only for a verified leg.
+func providerBMCDefaults(bmc api.Value, provider api.Object) api.Value {
+	defaults := provider.Spec().Get("baremetal", "defaults", "bmc")
+	if bmc.Has("virtualMedia") {
+		defaults = defaults.Without("virtualMedia")
+	}
+	if bmc.Get("tls").Has("verify") && !bmc.Get("tls", "verify").Bool() && defaults.Get("tls").Has("trustBundleRef") {
+		defaults = defaults.With("tls", defaults.Get("tls").Without("trustBundleRef"))
+	}
+	return defaults
+}
+
 func validDNS(s string) bool {
 	if len(s) == 0 || len(s) > 253 || strings.HasSuffix(s, ".") {
 		return false

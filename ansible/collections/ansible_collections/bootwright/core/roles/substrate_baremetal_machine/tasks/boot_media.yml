@@ -16,6 +16,9 @@
     user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_boot_user) }}'
     password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_boot_password) }}'
     verify: '{{ substrate_baremetal_machine_boot_verify }}'
+    ca_data: >-
+      {{ lookup('ansible.builtin.file', substrate_baremetal_machine_boot_ca)
+         if substrate_baremetal_machine_boot_ca | length > 0 else '' }}
     operation: boot
     target: Cd
   no_log: true
@@ -26,5 +29,8 @@
     user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_boot_user) }}'
     password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_boot_password) }}'
     verify: '{{ substrate_baremetal_machine_boot_verify }}'
+    ca_data: >-
+      {{ lookup('ansible.builtin.file', substrate_baremetal_machine_boot_ca)
+         if substrate_baremetal_machine_boot_ca | length > 0 else '' }}
     operation: power-on
   no_log: true

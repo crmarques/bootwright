@@ -16,12 +16,15 @@ type Identity struct {
 	Object  string `json:"object"`
 }
 
-// Controller is the management controller this machine is proved through, and
-// the declaration whose credential answers it. No material is named here.
+// Controller is the management controller this machine is proved through, the
+// declaration whose credential answers it, and the bundle that is the one
+// anchor its transport verifies against when declared. No material is named
+// here.
 type Controller struct {
 	CredentialsRef string `json:"credentialsRef"`
 	Endpoint       string `json:"endpoint"`
 	TLSVerify      bool   `json:"tlsVerify"`
+	TrustBundleRef string `json:"trustBundleRef,omitempty"`
 }
 
 // Interface is one NIC the hardware must report for this to be the machine the
@@ -96,7 +99,7 @@ func (r Request) ReservationKeys() []string {
 // SecretReferences names every declaration this request's execution needs
 // bound, so the operation freezes them before it registers.
 func (r Request) SecretReferences() []string {
-	references := append(r.Placement.SecretReferences(), r.Controller.CredentialsRef)
+	references := append(r.Placement.SecretReferences(), r.Controller.CredentialsRef, r.Controller.TrustBundleRef)
 	out := make([]string, 0, len(references))
 	for _, reference := range references {
 		if reference != "" {

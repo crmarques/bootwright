@@ -183,11 +183,12 @@ var contractProperties = []string{
 	"observe-unproved", "quiescence-unproved",
 	"observe-removal-request", "observe-removal-unproved", "observe-removal-evidence-proves-request",
 	"observe-removal-proves-absence", "observe-removal-reads-presence", "observe-removal-reads-partial",
-	"observe-removal-ignores-readiness",
+	"observe-removal-ignores-readiness", "produced-only-on-proved-completion",
 }
 
 // contractRunner is a scripted runner: it records every request and answers
-// each with the one result it was given.
+// each with the one result it was given, leaving every output file the request
+// declares, as an adapter that reached its end would.
 type contractRunner struct {
 	mutex    sync.Mutex
 	requests []lifecycle.RunRequest
@@ -200,7 +201,13 @@ func (r *contractRunner) Run(_ context.Context, request lifecycle.RunRequest) (l
 	defer r.mutex.Unlock()
 	request.Canonical = slices.Clone(request.Canonical)
 	r.requests = append(r.requests, request)
-	return lifecycle.RunResult{Outcome: r.result.Outcome, Evidence: slices.Clone(r.result.Evidence)}, r.err
+	var produced []lifecycle.Produced
+	if r.err == nil {
+		for _, output := range request.Outputs {
+			produced = append(produced, lifecycle.Produced{Name: output.Name, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("left by " + output.Name)})})
+		}
+	}
+	return lifecycle.RunResult{Outcome: r.result.Outcome, Evidence: slices.Clone(r.result.Evidence), Produced: produced}, r.err
 }
 
 // script forgets every earlier request and answers the next ones with result
@@ -470,6 +477,43 @@ func contractEffects(t *testing.T, row contractRow, example contractExample, cap
 		contractRunnerFailures(row, block, capability, execution, runner, findings)
 		contractEvidence(t, row, example, block, capability, execution, runner, findings)
 		contractObservations(row, block, capability, execution, runner, findings)
+		contractProduced(t, row, execution, capability, runner, findings)
+	}
+}
+
+// contractProduced proves material a run leaves reaches the engine only from
+// a proved completion (specs/state-reconciliation.md, the custody of produced
+// material): an apply whose evidence it accepted as changed or unchanged, or
+// an apply's resolution that reads completion. A removal, by attempt or by
+// resolution, offers nothing whatever its evidence, and nothing is offered
+// under a name the run did not declare.
+func contractProduced(t *testing.T, row contractRow, execution lifecycle.Execution, capability lifecycle.Capability, runner *contractRunner, findings *contractFindings) {
+	t.Helper()
+	digest := execution.Block.RequestDigest
+	evidence := []json.RawMessage{json.RawMessage(`{}`), contractPresence(t, row, execution, digest), contractAbsence(t, row, digest), contractPartial(t, row, execution, digest)}
+	for _, operation := range []string{"apply", "observe", "destroy", "observe-removal"} {
+		for _, outcome := range []string{"changed", "unchanged"} {
+			for _, scripted := range evidence {
+				runner.script(lifecycle.RunResult{Outcome: outcome, Evidence: scripted}, nil)
+				result, observation, _ := contractCall(capability, operation, execution)
+				produced := append(result.Produced, observation.Produced...)
+				proved := operation == "apply" && (result.Outcome == reconciliation.OutcomeChanged || result.Outcome == reconciliation.OutcomeUnchanged) ||
+					operation == "observe" && observation.Effect == reconciliation.EffectCompleted
+				declared := map[string]bool{}
+				for _, request := range runner.sent() {
+					for _, output := range request.Outputs {
+						declared[output.Name] = true
+					}
+				}
+				for _, output := range produced {
+					if !proved || !declared[output.Name] {
+						findings.record(row, "produced-only-on-proved-completion",
+							fmt.Sprintf("%s: %s reporting %s on %s offered %s", execution.Block.ID, operation, outcome, scripted, output.Name))
+					}
+					output.Material.Clear()
+				}
+			}
+		}
 	}
 }
 

@@ -381,7 +381,7 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 		}
 		part.BlobID, part.KeyID, part.Generation = blobID, publication.id, generation
 	}
-	next.Selector = secretstore.Selector{SelectorVersion: formatVersion, Context: s.context.Name, Backend: s.selector.Backend, Generation: generation}
+	next.Selector = secretstore.Selector{SelectorVersion: secretstore.RecordVersion, Context: s.context.Name, Backend: s.selector.Backend, Generation: generation}
 	indexSize, err := canonicalEncodedSize(*next, indexMaximum)
 	if err != nil {
 		return err
@@ -557,6 +557,9 @@ func collectVersions(index *indexRecord) {
 			referenced[version] = true
 		}
 	}
+	for _, entry := range index.Produced {
+		referenced[entry.Version] = true
+	}
 	retained := index.Versions[:0]
 	for _, version := range index.Versions {
 		if referenced[version.ID] {
@@ -592,6 +595,7 @@ func canonicalizeIndex(index *indexRecord) {
 	for i := range index.Bindings {
 		slices.Sort(index.Bindings[i].Versions)
 	}
+	slices.SortFunc(index.Produced, compareProduced)
 }
 
 func versionIDs(index indexRecord) map[string]bool {
@@ -653,11 +657,12 @@ func keySeals(index indexRecord, id string) (uint64, bool) {
 
 // nextSequence continues a secret's own ordinal series. Deleting a version
 // never renumbers the ones that remain, so an ordinal always names the same
-// material for as long as it exists.
+// material for as long as it exists. A produced version of the same name is no
+// member of that series.
 func nextSequence(index indexRecord, name string) int {
 	highest := 0
 	for _, version := range index.Versions {
-		if version.Declaration.Name == name && version.Sequence > highest {
+		if version.Declaration.Name == name && version.Declaration.Source != producedSource && version.Sequence > highest {
 			highest = version.Sequence
 		}
 	}

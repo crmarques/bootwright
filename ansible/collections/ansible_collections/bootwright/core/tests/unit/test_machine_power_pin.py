@@ -87,7 +87,7 @@ def scope(tmp_path, observation=None, pin_uuid=None, pin_serial=None, **raw):
             "identity": {"context": "lab", "object": "metal"},
             "placement": {"machine": "controller"},
             "verb": "stop",
-            "version": "machine-power-redfish-v1",
+            "version": "machine-power-redfish-v2",
         },
     }))
     variables = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))

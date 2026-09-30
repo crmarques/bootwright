@@ -7,7 +7,7 @@
 - name: Validate the frozen machine request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_physical_request.version == 'machine-baremetal-v1'
+      - bootwright_substrate_physical_request.version == 'machine-baremetal-v2'
       - bootwright_substrate_physical_request.controller.endpoint is search('/redfish/v1/Systems/')
       - bootwright_substrate_physical_request.hardware | length > 0
       - bootwright_substrate_physical_digest is match('[0-9a-f]{64}')
@@ -32,6 +32,7 @@
     user: '{{ lookup("ansible.builtin.file", bootwright_substrate_physical_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_substrate_physical_material.controllerPassword) }}'
     verify: '{{ bootwright_substrate_physical_request.controller.tlsVerify }}'
+    ca_data: '{{ substrate_baremetal_machine_ca_data }}'
   register: substrate_baremetal_machine_observed
   no_log: true
 

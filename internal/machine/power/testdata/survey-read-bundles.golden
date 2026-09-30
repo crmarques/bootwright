@@ -1,0 +1,44 @@
+{
+  "context": "lab",
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "targets": [
+    {
+      "caVariable": "controllerCA0",
+      "controller": {
+        "credentialsRef": "metal-bmc",
+        "endpoint": "https://bmc.example.test/redfish/v1/Systems/1",
+        "tlsVerify": true,
+        "trustBundleRef": "metal-bmc-ca"
+      },
+      "object": "metal",
+      "passwordVariable": "controllerPassword0",
+      "userVariable": "controllerUser0"
+    },
+    {
+      "caVariable": "controllerCA1",
+      "controller": {
+        "credentialsRef": "rack-bmc",
+        "endpoint": "https://rack.example.test/redfish/v1/Systems/7",
+        "tlsVerify": true,
+        "trustBundleRef": "rack-bmc-ca"
+      },
+      "object": "rack",
+      "passwordVariable": "controllerPassword1",
+      "userVariable": "controllerUser1"
+    },
+    {
+      "controller": {
+        "credentialsRef": "zero-bmc",
+        "endpoint": "https://zero.example.test/redfish/v1/Systems/7",
+        "tlsVerify": true
+      },
+      "object": "zero",
+      "passwordVariable": "controllerPassword2",
+      "userVariable": "controllerUser2"
+    }
+  ],
+  "version": "machine-power-read-v2"
+}

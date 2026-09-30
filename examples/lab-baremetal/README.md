@@ -99,5 +99,7 @@ and `examples/wip/` is ignored for exactly this.
 
 Removal retains the installed system: physical erase is deliberately not part
 of this contract. A bonded or VLAN installation interface is not yet derived.
-`import-certificate` virtual-media trust refuses until it is qualified against
-real firmware.
+`import-certificate`, the default virtual-media trust, is implemented in the
+Redfish client but not yet qualified against real firmware. The lab
+controllers' own certificates stay unverified until their authority is carried
+as a `caBundle` Secret named by `tls.trustBundleRef`.

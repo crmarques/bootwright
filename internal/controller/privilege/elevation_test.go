@@ -430,6 +430,42 @@ func (c filterCase) check(t *testing.T) {
 	}
 }
 
+// An explicit sensitive result, such as an exported kubeconfig, is the child's
+// exact bytes: behind a pipe they cross the counting relay and the writer that
+// serializes the child's streams, which must neither add a final LF nor
+// translate a NUL or a CR, however the child splits its writes.
+func TestElevationRelaysRawOutputUnchanged(t *testing.T) {
+	chunks := []string{"apiVersion: v1\r\n", "data: \x00\x01", "\r", "\nkind: Config"}
+	var relayed []string
+	executor := executorFunc(func(_ context.Context, c Command) (int, error) {
+		if slices.Equal(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) {
+			return 1, nil
+		}
+		for _, chunk := range chunks {
+			n, err := io.WriteString(c.Output, chunk)
+			if err != nil || n != len(chunk) {
+				return 1, err
+			}
+			relayed = append(relayed, chunk)
+		}
+		return 0, nil
+	})
+	elevator := Elevator{
+		Executable: func() (string, error) { return "/proc/4242/exe", nil },
+		Sudo:       func() (string, error) { return "/usr/bin/sudo", nil },
+		Executor:   executor,
+		Delay:      delayFunc(func(ctx context.Context, _ time.Duration) error { <-ctx.Done(); return ctx.Err() }),
+	}
+	var stdout, stderr bytes.Buffer
+	outcome := elevator.Run(context.Background(), Invocation{Arguments: []string{"cluster", "kubeconfig", "--name", "sno"}, Output: &stdout, Error: &stderr})
+	if outcome.ExitCode != 0 || outcome.Diagnostic != nil {
+		t.Fatalf("outcome = %+v", outcome)
+	}
+	if want := strings.Join(chunks, ""); stdout.String() != want || stderr.Len() != 0 || len(relayed) != len(chunks) {
+		t.Fatalf("relayed %q with standard error %q, want exactly %q", stdout.String(), stderr.String(), want)
+	}
+}
+
 func TestStartFilterStripsOneAnnouncementAndPassesTheRestUnchanged(t *testing.T) {
 	long := strings.Repeat("x", 5000) + "\n"
 	for _, c := range []filterCase{

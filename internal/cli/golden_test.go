@@ -15,6 +15,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/availability"
+	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	stateencoding "github.com/crmarques/bootwright/internal/desiredstate/encoding"
@@ -218,7 +219,7 @@ func cliGoldens() []cliGolden {
 	version := func(id string) *string { return &id }
 	selection := secretstore.Selection{
 		Type:       "local-keyring",
-		Store:      secretstore.ComponentRef{ID: "local-v3", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1},
+		Store:      secretstore.ComponentRef{ID: "local-v4", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1},
 		KeyCustody: secretstore.ComponentRef{ID: "local-keyfile-v1", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1},
 	}
 	deferred := diagnostic{
@@ -343,7 +344,7 @@ func cliGoldens() []cliGolden {
 			Initialized: true,
 			Implementation: &encryption.ImplementationStatus{
 				Type: "local-keyring", State: "ready",
-				Store:      encryption.ComponentStatus{ID: "local-v3", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1},
+				Store:      encryption.ComponentStatus{ID: "local-v4", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1},
 				KeyCustody: encryption.ComponentStatus{ID: "local-keyfile-v1", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1},
 			},
 			ActiveKey: &key,
@@ -592,6 +593,14 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-secret-show", args: "secret show --name lab-bmc-credentials --part username", quoted: true, record: func(r *dispatchRecord) {
 			r.result.secretReveal = &custody.RevealResult{Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.UsernamePart: []byte("admin"), secrets.PasswordPart: []byte("unused")}), Part: secrets.UsernamePart}
 		}},
+		// The administrator kubeconfig is an explicit sensitive result too.
+		{golden: "cli-cluster-kubeconfig", args: "cluster kubeconfig --name sno", quoted: true, record: func(r *dispatchRecord) {
+			r.result.kubeconfig = &containeraccess.KubeconfigResult{Context: "lab", Cluster: "sno", Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(kubeconfigFixture)})}
+		}},
+		{
+			args: "cluster kubeconfig --name ceph", code: 1, record: func(r *dispatchRecord) { r.err = kubeconfigNotApplicable },
+			stderr: "[FAIL] cluster.not-applicable: bootwright cluster kubeconfig does not apply to ceph, a managed Ceph StorageCluster; it applies to OpenShift and OKD ContainerClusters only; next: bootwright render effective --context lab lists the clusters this context selects and their kinds\n",
+		},
 		{golden: "cli-secret-encryption-init", args: "secret encryption init", record: func(r *dispatchRecord) {
 			r.result.encryptionMutation = &encryption.MutationResult{Context: secretContext, Implementation: selection, ActiveKey: retiredKey, Changed: true}
 		}},
@@ -648,6 +657,47 @@ func cliGoldens() []cliGolden {
 			stderr: "[FAIL] cli.not-implemented: bootwright status is not implemented\n",
 		},
 		{golden: "cli-not-implemented-json", args: "status --output json", code: 1, record: func(r *dispatchRecord) { r.err = availability.ErrNotImplemented }},
+	}
+}
+
+const kubeconfigFixture = "apiVersion: v1\nclusters:\n- cluster:\n    server: https://api.sno.lab.example:6443\n  name: sno\nkind: Config\n"
+
+var kubeconfigNotApplicable = diagnostics.NewFailureWithRemediation("cluster.not-applicable",
+	"bootwright cluster kubeconfig does not apply to ceph, a managed Ceph StorageCluster; it applies to OpenShift and OKD ContainerClusters only", "",
+	"bootwright render effective --context lab lists the clusters this context selects and their kinds")
+
+// An explicit sensitive result is the custody's bytes exactly: nothing is
+// added, not even a final LF the material lacks, and standard error stays
+// empty. A refusal writes nothing to standard output and exactly one
+// diagnostic to standard error.
+func TestClusterKubeconfigWritesExactlyItsBytesOrOneDiagnostic(t *testing.T) {
+	run := func(result *containeraccess.KubeconfigResult, failure error) (int, string, string) {
+		record := &dispatchRecord{err: failure}
+		record.result.kubeconfig = result
+		var out, errOut bytes.Buffer
+		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"cluster", "kubeconfig", "--name", "sno"})
+		return code, out.String(), errOut.String()
+	}
+	for _, value := range []string{kubeconfigFixture, "apiVersion: v1\x00\r\nkind: Config"} {
+		code, out, errOut := run(&containeraccess.KubeconfigResult{Context: "lab", Cluster: "sno", Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(value)})}, nil)
+		if code != 0 || out != value || errOut != "" {
+			t.Fatalf("a revealed kubeconfig exited %d with %q and standard error %q, want exactly %q", code, out, errOut, value)
+		}
+	}
+	for _, failure := range []error{
+		kubeconfigNotApplicable,
+		diagnostics.NewFailureWithRemediation("access.target", "the context lab selects no ContainerCluster named sno", "", "name a ContainerCluster this context selects"),
+		diagnostics.NewFailureWithRemediation("access.unavailable", "this context holds no administrator kubeconfig for ContainerCluster sno", "", "bootwright apply --context lab"),
+		secretstore.Failure("store.implementation", "this context's secret store is local-keyring-v3, which this Bootwright build cannot open"),
+	} {
+		code, out, errOut := run(nil, failure)
+		if code != 1 || out != "" || strings.Count(errOut, "[FAIL] ") != 1 || strings.Count(errOut, "\n") != 1 {
+			t.Fatalf("a refused kubeconfig exited %d with %q and standard error %q, want exit 1, no output and one diagnostic", code, out, errOut)
+		}
+	}
+	code, out, errOut := run(&containeraccess.KubeconfigResult{Context: "lab", Cluster: "sno"}, nil)
+	if code != 1 || out != "" || strings.Count(errOut, "[FAIL] ") != 1 {
+		t.Fatalf("an empty kubeconfig exited %d with %q and standard error %q", code, out, errOut)
 	}
 }
 

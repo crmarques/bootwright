@@ -17,6 +17,10 @@ Each operation's worst case, from the bounds in redfish_control:
   or an eject.
 - eject: at most 120 s of pauses, and 870 s when every request after discovery
   times out (the detach and 24 probes).
+- the virtual-media trust an insert sets before its first attach, and what an
+  eject settles once the device is proved empty: no pause, and at most
+  CERTIFICATE_MEMBERS 8 + 5 requests, each under REQUEST_TIMEOUT, plus one
+  retry of a PATCH answered 412. established makes none.
 - boot: at most 60 s, and 510 s with timeouts (the system read, two PATCHes and
   12 read-backs).
 - power-on, power-off and shutdown: at most attempts x 2 s, and attempts x 32 s
@@ -70,6 +74,45 @@ options:
     description: Whether the controller's own transport is verified.
     type: bool
     default: true
+  ca_data:
+    description:
+      - PEM CA certificates that are the only anchors the controller's own
+        transport is verified against.
+      - Empty verifies against the system trust store. Refused beside I(verify=false).
+    type: str
+    default: ""
+  trust:
+    description:
+      - How an insert makes the controller trust the server it fetches the image
+        from. Applies only to insert.
+      - C(established) changes nothing on the controller.
+      - C(import-certificate) adds the first certificate of I(certificate) to the
+        device's certificate collection unless it is there and turns
+        VerifyCertificate on, with no fallback to any other trust.
+      - C(disable-verification) turns VerifyCertificate off when it reads on.
+    type: str
+    default: established
+    choices: [established, import-certificate, disable-verification]
+  certificate:
+    description:
+      - The artifact server's certificate as PEM. Only its first certificate is
+        imported or removed.
+      - Required by insert under C(import-certificate) and by eject with
+        I(remove_certificate).
+    type: str
+    default: ""
+  restore_verification:
+    description:
+      - Whether an eject turns the device's VerifyCertificate on once the device
+        is proved empty, unless it already reads on. Applies only to eject.
+    type: bool
+    default: false
+  remove_certificate:
+    description:
+      - Whether an eject deletes the device certificate equal to I(certificate)
+        once the device is proved empty. Applies only to eject.
+    type: bool
+    default: false
 author:
   - Bootwright contributors (@crmarques)
 """
@@ -105,6 +148,7 @@ MAX_ATTEMPTS = 600
 RESETS = {"power-on": ("On", "On"), "power-off": ("ForceOff", "Off"), "shutdown": ("GracefulShutdown", "Off")}
 # Every operation, each of which may change the machine.
 DRIVES = ("insert", "eject", "boot") + tuple(RESETS)
+TRUSTS = (redfish_control.TRUST_ESTABLISHED, redfish_control.TRUST_IMPORT, redfish_control.TRUST_DISABLED)
 
 
 def main():
@@ -118,34 +162,50 @@ def main():
             "target": {"type": "str", "default": "Cd", "choices": ["Cd", "Hdd"]},
             "attempts": {"type": "int", "default": 60},
             "verify": {"type": "bool", "default": True},
+            "ca_data": {"type": "str", "default": ""},
+            "trust": {"type": "str", "default": redfish_control.TRUST_ESTABLISHED, "choices": list(TRUSTS)},
+            "certificate": {"type": "str", "default": ""},
+            "restore_verification": {"type": "bool", "default": False},
+            "remove_certificate": {"type": "bool", "default": False},
         },
         supports_check_mode=False,
     )
     params = module.params
     operation = params["operation"]
-    client = redfish_control.Client(params["endpoint"], params["user"], params["password"], verify=bool(params["verify"]))
     attempts = max(1, min(int(params["attempts"]), MAX_ATTEMPTS))
     try:
-        changed, power, media = drive(client, operation, attempts, params["image"] or "", params["target"])
+        client = redfish_control.Client(params["endpoint"], params["user"], params["password"],
+                                        verify=bool(params["verify"]), ca_data=params["ca_data"] or "")
+        changed, power, media = drive(
+            client, operation, attempts, params["image"] or "", params["target"], trust=params["trust"],
+            certificate=params["certificate"] or "", restore_verification=bool(params["restore_verification"]),
+            remove_certificate=bool(params["remove_certificate"]))
     except redfish_control.ControllerError as failure:
         module.fail_json(msg="the management controller did not complete %s: %s" % (operation, failure))
     else:
         module.exit_json(changed=changed, power=power, media=media)
 
 
-def drive(client, operation, attempts, image="", target="Cd"):
+def drive(client, operation, attempts, image="", target="Cd", trust=redfish_control.TRUST_ESTABLISHED,
+          certificate="", restore_verification=False, remove_certificate=False):
     """Perform exactly the one operation asked for, prove it, and report it.
 
     Returns whether it changed anything, the power state the invocation's last
     system read reported, and the image the device last reported. Only insert
     and eject look for media; boot and power operations never do, so they
     report no image. Anything else is refused before a request is made: this
-    module drives, and a read goes through redfish_system_read.
+    module drives, and a read goes through redfish_system_read. An insert
+    carries the virtual-media trust and an eject what it settles; by default
+    neither asks the controller for anything more.
     """
     if operation not in DRIVES:
         raise redfish_control.ControllerError("%s is not an operation this module drives" % operation)
     if operation == "insert" and not image:
         raise redfish_control.ControllerError("insert needs an image")
+    if operation == "insert" and trust == redfish_control.TRUST_IMPORT and not certificate:
+        raise redfish_control.ControllerError("insert under import-certificate needs the server's certificate")
+    if operation == "eject" and remove_certificate and not certificate:
+        raise redfish_control.ControllerError("an eject removing a certificate needs that certificate")
     if operation == "boot":
         client.boot_once(target)
         return True, client.last_power, ""
@@ -156,7 +216,10 @@ def drive(client, operation, attempts, image="", target="Cd"):
         kind, expected = RESETS[operation]
         return client.power(kind, expected, attempts), client.last_power, ""
     power = client.power_state()
-    changed = client.insert(image) if operation == "insert" else client.eject()
+    if operation == "insert":
+        changed = client.insert(image, trust, certificate)
+    else:
+        changed = client.eject(restore_verification, remove_certificate, certificate)
     return changed, power, client.last_image
 
 

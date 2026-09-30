@@ -112,6 +112,17 @@ sudo ./bin/bootwright machine stop --name sno-01
 sudo ./bin/bootwright destroy --yes --authorize data-loss
 ```
 
-The administrator access the installation produced stays in the installer's own
+Once the apply proves the installation complete, the context keeps a copy of
+the administrator kubeconfig in its encrypted custody. Export it to a file only
+you can read:
+
+```sh
+umask 077
+sudo ./bin/bootwright cluster kubeconfig --name sno > sno.kubeconfig
+```
+
+The command writes exactly the kubeconfig's bytes and nothing else. The
+installer's own copy and the initial administrator password stay in its
 root-owned work area beneath `/var/lib/bootwright-clusters/`, which the destroy
-removes with everything else. No command reveals it yet.
+removes. The destroy withdraws the custodied kubeconfig only once it completes,
+so a destroy that stops part way keeps it.

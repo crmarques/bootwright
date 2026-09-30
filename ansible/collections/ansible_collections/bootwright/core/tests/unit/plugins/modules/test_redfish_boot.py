@@ -11,11 +11,13 @@ a write. No test names a vendor in the client.
 from __future__ import annotations
 
 import ast
+import base64
 import http.client
 import io
 import json
 import pathlib
 import re
+import ssl
 import urllib.error
 from urllib.parse import urlsplit
 
@@ -32,6 +34,18 @@ PASSWORD = "p4ssw0rd-never-shown"
 UUID = "5c8f2a3e-1d2b-4c5d-9e6f-7a8b9c0d1e2f"
 TASK = "/redfish/v1/TaskService/Tasks/5"
 MONITOR = "/redfish/v1/TaskService/TaskMonitors/5"
+BUNDLE = "controller-bundle-marker"
+
+
+def certificate(content):
+    """A PEM block whose DER is the given bytes: the client compares DER and
+    never parses the certificate, so no key is needed to stand for one."""
+    return "-----BEGIN CERTIFICATE-----\n%s\n-----END CERTIFICATE-----\n" % base64.b64encode(content).decode()
+
+
+SERVER = certificate(b"artifact server leaf")
+ISSUER = certificate(b"artifact server issuer")
+STALE = certificate(b"a certificate left by another server")
 
 
 class Answer:
@@ -74,12 +88,14 @@ class Firmware:
         parts = urlsplit(endpoint)
         self.endpoint, self.origin, self.system = endpoint, "%s://%s" % (parts.scheme, parts.netloc), parts.path
         self.resources, self.write = resources, write
-        self.scripts, self.calls, self.trust, self.pauses = {}, [], [], []
+        self.scripts, self.calls, self.trust, self.bundles, self.pauses = {}, [], [], [], []
         self.power, self.image, self.pending = "Off", "", ""
+        self.certificates, self.verify_certificate, self.certificate_root = {}, False, ""
         self.boot = {"BootSourceOverrideEnabled": "Continuous", "BootSourceOverrideTarget": "Hdd"}
 
-    def opener(self, verify=True):
+    def opener(self, verify=True, ca_data=""):
         self.trust.append(verify)
+        self.bundles.append(ca_data)
         return self
 
     def script(self, method, path, *answers):
@@ -105,6 +121,10 @@ class Firmware:
         resource = self.resources.get(path)
         if callable(resource):
             resource = resource(self)
+        root = self.certificate_root + "/"
+        if resource is None and self.certificate_root and path.startswith(root) and path[len(root):] in self.certificates:
+            resource = {"@odata.id": path, "CertificateString": self.certificates[path[len(root):]],
+                        "CertificateType": "PEM"}
         if resource is None:
             return 404, {"error": {"@Message.ExtendedInfo": [{"MessageId": "Base.1.8.ResourceMissingAtURI"}]}}, {}
         if isinstance(resource, (tuple, BaseException)):
@@ -120,16 +140,20 @@ def writes(firmware, since=0):
     return [(call[0], urlsplit(call[1]).path, call[3]) for call in firmware.calls[since:] if call[0] != "GET"]
 
 
-def connect(monkeypatch, firmware, verify=True):
+def connect(monkeypatch, firmware, verify=True, ca_data=""):
+    """A client on the firmware. A bundle here is a marker the fake opener
+    records rather than a loadable CA, so building its context is skipped."""
     monkeypatch.setattr(redfish_control, "_opener", firmware.opener)
-    client = redfish_control.Client(firmware.endpoint, "operator", PASSWORD, verify=verify)
+    if ca_data:
+        monkeypatch.setattr(redfish_control, "_trust_context", lambda verify, ca_data: None)
+    client = redfish_control.Client(firmware.endpoint, "operator", PASSWORD, verify=verify, ca_data=ca_data)
     client.sleep = firmware.pauses.append
     return client
 
 
-def run(monkeypatch, firmware, operation, attempts=3, image="", target="Cd"):
+def run(monkeypatch, firmware, operation, attempts=3, image="", target="Cd", **trust):
     """One module invocation: a fresh client, as main() builds one."""
-    return redfish_boot.drive(connect(monkeypatch, firmware), operation, attempts, image, target)
+    return redfish_boot.drive(connect(monkeypatch, firmware), operation, attempts, image, target, **trust)
 
 
 def read(monkeypatch, firmware, media=True):
@@ -159,12 +183,35 @@ def emulator():
     answers 204 (:207-225), and the reset answers 204 (main.py:713), treating
     ForceOn as On (libvirtdriver.py:299-301). Bootwright configures Cd alone,
     with MediaTypes CD and DVD.
+
+    The device links its Certificates collection and reports VerifyCertificate
+    (templates/virtual_media.json:27-30). A PATCH sets VerifyCertificate and
+    answers 204 without reading If-Match (controllers/virtual_media.py:59-75);
+    the collection's POST takes CertificateString and a PEM CertificateType,
+    refuses any other type, and answers 204 with a Location, a member reads
+    back its CertificateString, and its DELETE answers 204 (:78-145). The
+    device holds one certificate, "Default", and a second POST answers 409
+    (resources/vmedia.py:49, :128-165). A test may hold more members than that,
+    as another controller's collection can.
     """
     system, manager = "/redfish/v1/Systems/" + UUID, "/redfish/v1/Managers/" + UUID
     media, nic = system + "/VirtualMedia", system + "/EthernetInterfaces/52:54:00:aa:bb:01"
+    certificates = media + "/Cd/Certificates"
 
     def write(firmware, method, path, payload, headers):
-        if path == media + "/Cd/Actions/VirtualMedia.InsertMedia":
+        if method == "PATCH" and path == media + "/Cd":
+            firmware.verify_certificate = payload["VerifyCertificate"]
+        elif method == "POST" and path == certificates:
+            if firmware.certificates:
+                return 409, {"error": {"@Message.ExtendedInfo": [{"MessageId": "Base.1.8.ResourceAlreadyExists"}]}}, {}
+            if payload.get("CertificateType") != "PEM":
+                return 400, None, {}
+            firmware.certificates["Default"] = payload["CertificateString"]
+            return 204, None, {"Location": certificates + "/Default"}
+        elif method == "DELETE" and path.startswith(certificates + "/"):
+            if firmware.certificates.pop(path.rsplit("/", 1)[1], None) is None:
+                return 404, None, {}
+        elif path == media + "/Cd/Actions/VirtualMedia.InsertMedia":
             firmware.image = payload["Image"]
         elif path == media + "/Cd/Actions/VirtualMedia.EjectMedia":
             firmware.image = ""
@@ -176,7 +223,7 @@ def emulator():
             return 404, None, {}
         return 204, None, {}
 
-    return Firmware("http://bmc.test:8000" + system, {
+    firmware = Firmware("http://bmc.test:8000" + system, {
         system: lambda f: {
             "@odata.id": system, "Id": UUID, "UUID": UUID, "Manufacturer": "Sushy Emulator",
             "PowerState": f.power, "Boot": dict(f.boot),
@@ -194,11 +241,15 @@ def emulator():
         media + "/Cd": lambda f: {
             "@odata.id": media + "/Cd", "Id": "Cd", "MediaTypes": ["CD", "DVD"],
             "Image": f.image, "Inserted": bool(f.image), "WriteProtected": True,
+            "Certificates": {"@odata.id": certificates}, "VerifyCertificate": f.verify_certificate,
             "Actions": {
                 "#VirtualMedia.EjectMedia": {"target": media + "/Cd/Actions/VirtualMedia.EjectMedia"},
                 "#VirtualMedia.InsertMedia": {"target": media + "/Cd/Actions/VirtualMedia.InsertMedia"},
                 "Oem": {}}},
+        certificates: lambda f: {"Members": [{"@odata.id": certificates + "/" + name} for name in f.certificates]},
     }, write)
+    firmware.certificate_root = certificates
+    return firmware
 
 
 def manager_scoped():
@@ -489,7 +540,7 @@ def test_the_read_module_reports_what_it_read_and_fails_closed(monkeypatch):
         if answer:
             firmware.resources[firmware.system] = answer
         module = Module({"endpoint": firmware.endpoint, "user": "operator", "password": PASSWORD,
-                         "verify": True, "media": True})
+                         "verify": True, "ca_data": "", "media": True})
         monkeypatch.setattr(redfish_system_read, "AnsibleModule", module.build)
         monkeypatch.setattr(redfish_control, "_opener", firmware.opener)
         redfish_system_read.main()
@@ -1012,13 +1063,20 @@ def test_a_state_that_never_arrives_is_unproved(monkeypatch):
 
 # The trust a Machine declares reaches every call this operation makes. A
 # controller with an internal certificate authority is reached exactly as the
-# declaration says, rather than always verified or never.
+# declaration says, rather than always verified or never, and a declared
+# bundle is the anchor of every one of those calls.
 def test_declared_trust_reaches_every_call(monkeypatch):
     firmware = dual_view()
     redfish_boot.drive(connect(monkeypatch, firmware, verify=False), "insert", 3, IMAGE)
     redfish_boot.drive(connect(monkeypatch, firmware, verify=False), "power-off", 3)
     assert len(firmware.trust) == len(firmware.calls) > 1
     assert all(value is False for value in firmware.trust)
+
+    bundled = dual_view()
+    redfish_boot.drive(connect(monkeypatch, bundled, ca_data=BUNDLE), "insert", 3, IMAGE)
+    redfish_boot.drive(connect(monkeypatch, bundled, ca_data=BUNDLE), "power-off", 3)
+    assert len(bundled.bundles) == len(bundled.calls) > 1
+    assert all(value is True for value in bundled.trust) and all(value == BUNDLE for value in bundled.bundles)
 
 
 # The target proof reads identity, the interface inventory and power from one
@@ -1095,3 +1153,351 @@ def test_a_failure_line_never_carries_the_credential_or_a_body(monkeypatch):
     for line in lines:
         assert PASSWORD not in line and marker not in line and "intruder" not in line and "s3cret" not in line
         assert len(line) <= 200 and "\n" not in line
+
+
+CERTIFICATES = "/VirtualMedia/Cd/Certificates"
+DEVICE = "/VirtualMedia/Cd"
+IMPORT = {"trust": redfish_control.TRUST_IMPORT, "certificate": SERVER}
+
+
+def trust_writes(firmware, since=0):
+    """The writes that set the device's trust, in order: everything but the
+    attach and the detach."""
+    return [(method, path[len(firmware.system):], payload) for method, path, payload in writes(firmware, since)
+            if not path.endswith((INSERT, EJECT))]
+
+
+def refused_before_attach(firmware):
+    return not [path for _method, path, _payload in writes(firmware) if path.endswith(INSERT)]
+
+
+# Importing adds the server's certificate to the device's own collection and
+# turns verification on, both before the device is asked to fetch anything.
+def test_import_certificate_adds_the_server_certificate_and_enables_verification_before_insert(monkeypatch):
+    firmware = emulator()
+    assert run(monkeypatch, firmware, "insert", image=IMAGE, **IMPORT) == (True, "Off", IMAGE)
+    assert trust_writes(firmware) == [
+        ("POST", CERTIFICATES, {"CertificateString": SERVER, "CertificateType": "PEM"}),
+        ("PATCH", DEVICE, {"VerifyCertificate": True})]
+    assert [path for _method, path, _payload in writes(firmware)][-1].endswith(INSERT)
+    assert firmware.certificates == {"Default": SERVER} and firmware.verify_certificate is True
+
+
+# The certificate a server presents may arrive with its chain. The device is
+# given the server's own certificate, the first block, and compared by it.
+def test_only_the_leaf_is_imported(monkeypatch):
+    firmware = emulator()
+    run(monkeypatch, firmware, "insert", image=IMAGE, trust=redfish_control.TRUST_IMPORT, certificate=SERVER + ISSUER)
+    assert firmware.certificates == {"Default": SERVER}
+    mark = len(firmware.calls)
+    firmware.image = ""
+    run(monkeypatch, firmware, "insert", image=IMAGE, trust=redfish_control.TRUST_IMPORT, certificate=SERVER + ISSUER)
+    assert trust_writes(firmware, mark) == []
+
+
+# A device already holding the certificate, with verification on, is asked
+# for nothing more; the certificate is compared by its DER, not its spelling.
+def test_an_identical_certificate_is_not_added_twice(monkeypatch):
+    firmware = emulator()
+    firmware.certificates["Default"], firmware.verify_certificate = SERVER.replace("\n", "\r\n"), True
+    assert run(monkeypatch, firmware, "insert", image=IMAGE, **IMPORT) == (True, "Off", IMAGE)
+    assert trust_writes(firmware) == []
+
+
+# Import has no fallback: a device that offers no certificate collection
+# refuses, naming the exceptions an operator may declare instead, and nothing
+# is attached.
+def test_a_member_without_a_certificate_collection_refuses_naming_the_exception(monkeypatch):
+    for shape in (emulator, dual_view):
+        firmware = shape()
+        if shape is emulator:
+            serve = firmware.resources[firmware.system + DEVICE]
+            firmware.resources[firmware.system + DEVICE] = lambda f, serve=serve: {
+                key: value for key, value in serve(f).items() if key != "Certificates"}
+        with pytest.raises(ControllerError) as failure:
+            run(monkeypatch, firmware, "insert", image=IMAGE, **IMPORT)
+        line = str(failure.value)
+        assert line.endswith(": no Certificates; no fallback: established, or disable-verification on this Machine,"
+                             " which private delivery refuses") and len(line) < 200
+        assert not writes(firmware)
+
+
+# A controller whose VerifyCertificate cannot be written answers 400, 405 or
+# 501. Import then refuses rather than attaching an image it would fetch
+# unverified, and names the exceptions.
+@pytest.mark.parametrize("status", [400, 405, 501])
+def test_a_read_only_verify_certificate_refuses_import(monkeypatch, status):
+    firmware = emulator()
+    firmware.script("PATCH", firmware.system + DEVICE, (status, None, {}))
+    with pytest.raises(ControllerError) as failure:
+        run(monkeypatch, firmware, "insert", image=IMAGE, **IMPORT)
+    assert str(failure.value).endswith(
+        "HTTP %d, no fallback: established, or disable-verification on this Machine, which private delivery refuses"
+        % status)
+    assert refused_before_attach(firmware) and firmware.verify_certificate is False
+
+
+# 401 and 403 mean the account's role lacks the privilege, which is what the
+# line says, whether the certificate or the setting was refused.
+@pytest.mark.parametrize("method, path", [("POST", CERTIFICATES), ("PATCH", DEVICE)])
+def test_a_forbidden_write_names_the_privilege(monkeypatch, method, path):
+    firmware = emulator()
+    firmware.script(method, firmware.system + path, INSUFFICIENT)
+    with pytest.raises(ControllerError, match="HTTP 403, the account's role lacks the privilege"):
+        run(monkeypatch, firmware, "insert", image=IMAGE, **IMPORT)
+    assert refused_before_attach(firmware) and not firmware.pauses
+
+
+# A device that holds another certificate and refuses a second has its own
+# remedy: nothing here removes a certificate it did not import.
+def test_a_different_certificate_present_refuses_with_its_own_remedy(monkeypatch):
+    firmware = emulator()
+    firmware.certificates["Default"] = STALE
+    with pytest.raises(ControllerError) as failure:
+        run(monkeypatch, firmware, "insert", image=IMAGE, **IMPORT)
+    assert str(failure.value) == (
+        "importing: HTTP 409; remove the stale certificate from the controller's virtual-media"
+        " certificate collection, or set removeCertificateAfterBoot")
+    assert firmware.certificates == {"Default": STALE} and refused_before_attach(firmware)
+
+
+# Once the device is proved empty, removal deletes the one member that is the
+# given certificate and leaves every other alone.
+def test_removal_deletes_only_the_given_certificate(monkeypatch):
+    firmware = emulator()
+    firmware.image, firmware.certificates = IMAGE, {"Other": STALE, "Default": SERVER}
+    assert run(monkeypatch, firmware, "eject", remove_certificate=True, certificate=SERVER) == (True, "Off", "")
+    assert trust_writes(firmware) == [("DELETE", CERTIFICATES + "/Default", None)]
+    assert [path[len(firmware.system):] for _method, path, _payload in writes(firmware)] == [
+        EJECT, CERTIFICATES + "/Default"]
+    assert firmware.certificates == {"Other": STALE}
+    mark = len(firmware.calls)
+    assert run(monkeypatch, firmware, "eject", remove_certificate=True, certificate=SERVER) == (False, "Off", "")
+    assert not writes(firmware, mark)
+
+
+# Restoring is a target, not the inverse of this attempt's own write: the eject
+# after an interrupted attempt turns verification on whatever left it off, and
+# one that finds it on writes nothing. A controller that cannot write the
+# setting answers 400, 405 or 501, which a restore passes.
+def test_restore_turns_verification_on_after_an_interrupted_attempt(monkeypatch):
+    for inserted in (IMAGE, ""):
+        firmware = emulator()
+        firmware.image = inserted
+        assert run(monkeypatch, firmware, "eject", restore_verification=True) == (True, "Off", "")
+        assert trust_writes(firmware) == [("PATCH", DEVICE, {"VerifyCertificate": True})]
+        assert [path[len(firmware.system):] for _method, path, _payload in writes(firmware)] == (
+            [EJECT] if inserted else []) + [DEVICE]
+        assert firmware.verify_certificate is True
+        mark = len(firmware.calls)
+        assert run(monkeypatch, firmware, "eject", restore_verification=True) == (False, "Off", "")
+        assert not writes(firmware, mark)
+    for status in (400, 405, 501):
+        firmware = emulator()
+        firmware.script("PATCH", firmware.system + DEVICE, (status, None, {}))
+        assert run(monkeypatch, firmware, "eject", restore_verification=True) == (False, "Off", "")
+
+
+# The trust is settled only once the device is proved empty. An eject whose
+# device still presents media fails with the device's trust as it found it,
+# because the controller may still be fetching under that trust.
+def test_an_eject_that_is_not_proved_settles_nothing(monkeypatch):
+    firmware = emulator()
+    firmware.image, firmware.certificates = IMAGE, {"Default": SERVER}
+    firmware.script("POST", firmware.system + EJECT, (204, None, {}))
+    with pytest.raises(ControllerError, match="the device still presents media"):
+        run(monkeypatch, firmware, "eject", restore_verification=True, remove_certificate=True, certificate=SERVER)
+    assert trust_writes(firmware) == [] and [path for _method, path, _payload in writes(firmware)] == [
+        firmware.system + EJECT]
+    assert firmware.certificates == {"Default": SERVER} and firmware.verify_certificate is False
+
+
+# A write the device answers is not the evidence that it took. A device that
+# accepts VerifyCertificate and still reports the other value, as a
+# SecurityPolicy lock or firmware ignoring the property would, is refused: the
+# insert before anything is attached, and the eject's restore alike.
+def test_verification_is_read_back_rather_than_taken_from_the_answer(monkeypatch):
+    firmware = emulator()
+    firmware.script("PATCH", firmware.system + DEVICE, (204, None, {}))
+    with pytest.raises(ControllerError) as failure:
+        run(monkeypatch, firmware, "insert", image=IMAGE, **IMPORT)
+    assert str(failure.value).endswith("HTTP 200, " + redfish_control.NO_IMPORT)
+    assert refused_before_attach(firmware) and firmware.verify_certificate is False
+
+    firmware = emulator()
+    firmware.verify_certificate = True
+    firmware.script("PATCH", firmware.system + DEVICE, (204, None, {}))
+    with pytest.raises(ControllerError) as failure:
+        run(monkeypatch, firmware, "insert", image=IMAGE, trust=redfish_control.TRUST_DISABLED)
+    assert str(failure.value).endswith("HTTP 200, " + redfish_control.NO_DISABLE)
+    assert refused_before_attach(firmware) and firmware.verify_certificate is True
+
+    firmware = emulator()
+    firmware.image = IMAGE
+    firmware.script("PATCH", firmware.system + DEVICE, (204, None, {}))
+    with pytest.raises(ControllerError, match="HTTP 200, the device does not report VerifyCertificate true"):
+        run(monkeypatch, firmware, "eject", restore_verification=True)
+    assert firmware.image == "" and firmware.verify_certificate is False
+
+
+# The VerifyCertificate write carries the device's own entity tag, from its
+# ETag header or its body, and a 412 is retried once with `*`; a device that
+# carries no tag is sent no precondition. The insert's import and the eject's
+# restore are the two writes of that setting that must reach the device.
+@pytest.mark.parametrize("header, body, expected", [
+    ({"ETag": 'W/"m"'}, {}, ['W/"m"', "*"]),
+    ({}, {"@odata.etag": 'W/"m"'}, ['W/"m"', "*"]),
+    ({}, {}, [None]),
+], ids=["header", "body", "none"])
+def test_the_verification_write_carries_the_device_precondition(monkeypatch, header, body, expected):
+    for operation, image, trust in (("insert", IMAGE, IMPORT), ("eject", "", {"restore_verification": True})):
+        firmware = emulator()
+        serve = firmware.resources[firmware.system + DEVICE]
+        firmware.resources[firmware.system + DEVICE] = lambda f, serve=serve: (200, dict(serve(f), **body), header)
+        if len(expected) > 1:
+            firmware.script("PATCH", firmware.system + DEVICE, (412, None, {}))
+        assert run(monkeypatch, firmware, operation, image=image, **trust) == (True, "Off", image)
+        assert [call[2].get("if-match") for call in firmware.calls if call[0] == "PATCH"] == expected
+        assert firmware.verify_certificate is True and firmware.image == image
+
+
+# Disabling writes only a setting that reads on, and a controller that refuses
+# the write leaves verification on, so the insert stops there, naming the two
+# trusts that need no write.
+def test_disable_verification_writes_only_when_verification_is_on(monkeypatch):
+    disabling = {"trust": redfish_control.TRUST_DISABLED}
+    firmware = emulator()
+    run(monkeypatch, firmware, "insert", image=IMAGE, **disabling)
+    assert trust_writes(firmware) == []
+    firmware = emulator()
+    firmware.verify_certificate = True
+    run(monkeypatch, firmware, "insert", image=IMAGE, **disabling)
+    assert trust_writes(firmware) == [("PATCH", DEVICE, {"VerifyCertificate": False})]
+    firmware = emulator()
+    firmware.verify_certificate = True
+    firmware.script("PATCH", firmware.system + DEVICE, (405, None, {}))
+    with pytest.raises(ControllerError, match="verification stays on; use import-certificate or established"):
+        run(monkeypatch, firmware, "insert", image=IMAGE, **disabling)
+    assert refused_before_attach(firmware) and firmware.verify_certificate is True
+
+
+# established is a trust the controller already holds, so neither the insert
+# nor the eject asks anything of the device, and those are the defaults.
+def test_established_changes_no_setting(monkeypatch):
+    firmware = emulator()
+    firmware.certificates["Default"] = STALE
+    run(monkeypatch, firmware, "insert", image=IMAGE, trust=redfish_control.TRUST_ESTABLISHED, certificate=SERVER)
+    run(monkeypatch, firmware, "eject")
+    run(monkeypatch, firmware, "insert", image=IMAGE)
+    assert trust_writes(firmware) == [] and len(writes(firmware)) == 3
+    assert not [path for path in gets(firmware) if path.endswith(CERTIFICATES)]
+
+
+# The trust is set once, before the first attach, and never inside the retry:
+# an attach that fails and is retried does not import or write again.
+def test_trust_is_set_once_outside_the_insert_retry(monkeypatch):
+    firmware = emulator()
+    attach = firmware.system + INSERT
+    firmware.script("POST", attach, (500, None, {}), (500, None, {}))
+    assert run(monkeypatch, firmware, "insert", image=IMAGE, **IMPORT) == (True, "Off", IMAGE)
+    assert trust_writes(firmware) == [
+        ("POST", CERTIFICATES, {"CertificateString": SERVER, "CertificateType": "PEM"}),
+        ("PATCH", DEVICE, {"VerifyCertificate": True})]
+    assert [path for _method, path, _payload in writes(firmware)].count(attach) == 3
+    assert gets(firmware).count(firmware.system + CERTIFICATES) == 1
+
+
+# A collection is read in full before anything is added to it, so one listing
+# more members than the bound refuses rather than being read in part.
+def test_a_certificate_collection_beyond_its_bound_refuses(monkeypatch):
+    firmware = emulator()
+    for index in range(redfish_control.CERTIFICATE_MEMBERS + 1):
+        firmware.certificates["c%d" % index] = certificate(b"member %d" % index)
+    with pytest.raises(ControllerError, match="lists 9 certificates, more than the 8 read"):
+        run(monkeypatch, firmware, "insert", image=IMAGE, **IMPORT)
+    assert not writes(firmware)
+    assert not [path for path in gets(firmware) if path.startswith(firmware.system + CERTIFICATES + "/")]
+    firmware.certificates.pop("c0")
+    firmware.certificates["c8"] = SERVER
+    assert run(monkeypatch, firmware, "insert", image=IMAGE, **IMPORT) == (True, "Off", IMAGE)
+    assert len([path for path in gets(firmware) if path.startswith(firmware.system + CERTIFICATES + "/")]) == 8
+    assert trust_writes(firmware) == [("PATCH", DEVICE, {"VerifyCertificate": True})]
+
+
+# The new options ask nothing by default: an insert trusts what is established
+# and an eject settles nothing, so an existing consumer is driven as before.
+def test_the_trust_options_default_to_no_action(monkeypatch):
+    monkeypatch.setattr(redfish_boot, "AnsibleModule", built)
+    with pytest.raises(Built) as spec:
+        redfish_boot.main()
+    options = spec.value.args[0]["argument_spec"]
+    assert options["trust"]["default"] == "established" and options["certificate"]["default"] == ""
+    assert options["restore_verification"]["default"] is False and options["remove_certificate"]["default"] is False
+    assert options["ca_data"] == {"type": "str", "default": ""}
+    with pytest.raises(ControllerError, match="needs the server's certificate"):
+        run(monkeypatch, emulator(), "insert", image=IMAGE, trust=redfish_control.TRUST_IMPORT)
+    with pytest.raises(ControllerError, match="needs that certificate"):
+        run(monkeypatch, emulator(), "eject", remove_certificate=True)
+
+
+# Every module hands the declared bundle to the one client it builds, and a
+# bundle that cannot be used fails the module through its own failure rather
+# than as a traceback.
+@pytest.mark.parametrize("module, extra", [
+    (redfish_boot, {"operation": "boot", "image": None, "target": "Cd", "attempts": 3, "trust": "established",
+                    "certificate": "", "restore_verification": False, "remove_certificate": False}),
+    (redfish_system_read, {"media": False}),
+    (redfish_system_inspect, {}),
+])
+def test_the_bundle_reaches_the_client_from_every_module(monkeypatch, module, extra):
+    firmware = emulator()
+    params = dict({"endpoint": firmware.endpoint, "user": "operator", "password": PASSWORD, "verify": True,
+                   "ca_data": BUNDLE}, **extra)
+    built_with = []
+    monkeypatch.setattr(redfish_control, "_opener", firmware.opener)
+    monkeypatch.setattr(redfish_control, "_trust_context", lambda verify, ca_data: built_with.append(ca_data))
+    ending = Module(params)
+    monkeypatch.setattr(module, "AnsibleModule", ending.build)
+    module.main()
+    assert ending.arguments["argument_spec"]["ca_data"] == {"type": "str", "default": ""}
+    assert ending.ended[0] == "exit" and built_with == [BUNDLE]
+    assert firmware.bundles and all(value == BUNDLE for value in firmware.bundles)
+
+    monkeypatch.undo()
+    refusing = Module(dict(params, verify=False))
+    monkeypatch.setattr(module, "AnsibleModule", refusing.build)
+    monkeypatch.setattr(redfish_control, "_opener", firmware.opener)
+    module.main()
+    assert refusing.ended[0] == "fail" and "requires verification" in refusing.ended[1]["msg"]
+
+
+# An inspection is the proof before an erasure. A controller whose certificate
+# the declared trust refuses must not read as a system that could not be read,
+# which reports an empty identity; the inspection fails instead.
+def test_an_inspection_fails_on_an_unverified_certificate(monkeypatch):
+    firmware = emulator()
+    refused = urllib.error.URLError(ssl.SSLCertVerificationError(1, "certificate verify failed"))
+    firmware.resources[firmware.system] = refused
+    with pytest.raises(redfish_control.UnverifiedCertificate):
+        redfish_system_inspect.observe(connect(monkeypatch, firmware))
+
+    class Refusing:
+        """A client whose identity read is refused and whose inventory reads."""
+
+        def identity(self):
+            raise redfish_control.UnverifiedCertificate("reading /redfish/v1/Systems/1: refused")
+
+        def power_state(self):
+            return "Off"
+
+        def hardware_addresses(self):
+            return ["aa:bb:cc:dd:ee:01"], []
+
+    with pytest.raises(redfish_control.UnverifiedCertificate):
+        redfish_system_inspect.observe(Refusing())
+    ending = Module({"endpoint": firmware.endpoint, "user": "operator", "password": PASSWORD, "verify": True,
+                     "ca_data": ""})
+    monkeypatch.setattr(redfish_system_inspect, "AnsibleModule", ending.build)
+    redfish_system_inspect.main()
+    assert ending.ended[0] == "fail"
+    assert ending.ended[1]["msg"].endswith("did not verify against the system trust store")

@@ -184,6 +184,9 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 		}
 		request.Private, request.TLSCertificateRef = &private, certificate
 	}
+	if err := mediaTrustRefusal(machine, request); err != nil {
+		return Request{}, Requirements{}, err
+	}
 	source := anaconda.Get("packageSource")
 	if source.Has("hostedTree") {
 		tree, err := treeFor(catalog, source.Get("hostedTree"), contextName, profile, &needs)
@@ -294,6 +297,7 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 			CredentialsRef: derived.Controller.CredentialsRef,
 			Endpoint:       derived.Controller.Endpoint,
 			TLSVerify:      derived.Controller.TLSVerify,
+			TrustBundleRef: derived.Controller.TrustBundleRef,
 			VirtualMedia: VirtualMedia{
 				RemoveCertificate:   derived.Controller.VirtualMedia.RemoveCertificate,
 				RestoreVerification: derived.Controller.VirtualMedia.RestoreVerification,
@@ -305,10 +309,6 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 		Physical:   derived.Physical,
 		Substrate:  derived.Substrate,
 		URI:        derived.Identity.URI,
-	}
-	if derived.Controller.VirtualMedia.Trust == substrate.TrustImportCertificate {
-		return Target{}, refusal("lifecycle.state", "importing a certificate into a management controller is not implemented",
-			"select disable-verification or established virtual-media trust on "+machine.Identity())
 	}
 	// Only a physical machine proves itself by hardware address. A machine its
 	// substrate created is addressed by the interface name that realization
@@ -349,6 +349,14 @@ func refusedTarget(machine api.Object, target substrate.Target) error {
 			"a managed-OS installation selects its root disk by deviceName alone and cannot carry the other root-device hints the Machine declares",
 			"remove "+strings.Join(uncarried, ", ")+" from "+machine.Identity())
 	}
+	// A controller that fetches without verifying the artifact server boots
+	// whatever image answers, and the installer it boots is what receives the
+	// delivered key. Only a delivered-key target publishes privately, so this
+	// is exactly the private consumer the exception is refused for.
+	if target.Identity.Channel == substrate.ChannelDeliveredKey && target.Controller.VirtualMedia.Trust == substrate.TrustDisableVerification {
+		return refusal("lifecycle.unsupported", "a Machine that delivers private material through its installation cannot let its controller fetch without verifying the artifact server",
+			"declare hardware.management.bmc.virtualMedia.tls.trust: import-certificate on "+machine.Identity()+", or established when its controller already trusts the server")
+	}
 	// A delivered key reaches the installer at a tokenized URL the Kickstart
 	// names, and the Kickstart is implanted in an installer image served
 	// without authentication, so the token would protect nothing.
@@ -358,6 +366,21 @@ func refusedTarget(machine api.Object, target substrate.Target) error {
 				" from the selected Environment or install its operating system outside Bootwright")
 	}
 	return nil
+}
+
+// mediaTrustRefusal says why the controller cannot be made to trust the server
+// it fetches the installer image from. Importing a certificate needs the image
+// served over https and the certificate that server presents; there is no
+// other trust to fall back to.
+func mediaTrustRefusal(machine api.Object, request Request) error {
+	if request.Target.Controller.VirtualMedia.Trust != substrate.TrustImportCertificate {
+		return nil
+	}
+	if strings.HasPrefix(request.Image.URL, "https://") && request.TLSCertificateRef != "" {
+		return nil
+	}
+	return refusal("lifecycle.state", "importing the artifact server's certificate into the controller of "+machine.Identity()+" needs an https installer image and the certificate its server presents",
+		"select an https artifactServerEndpoint on a server declaring spec.tls.secretRef")
 }
 
 func findNamed(values api.Value, key, name string) (api.Value, bool) {

@@ -1,9 +1,15 @@
-"""The controller contract is exercised here, so it is tested without a BMC."""
+"""The controller contract is exercised here, so it is tested without a BMC.
+
+The trust cases that need a certificate authority live in
+tests/unit/test_redfish_control_trust.py, because the managed-host floor
+interpreter these module tests also run on carries no cryptography.
+"""
 
 from __future__ import annotations
 
 import http.client
 import io
+import json
 import ssl
 import urllib.error
 import urllib.request
@@ -13,6 +19,7 @@ import pytest
 from ansible_collections.bootwright.core.plugins.module_utils import redfish_control
 
 ENDPOINT = "https://bmc.test/redfish/v1/Systems/1"
+REFUSED = urllib.error.URLError(ssl.SSLCertVerificationError(1, "certificate verify failed"))
 
 
 class Reply:
@@ -40,9 +47,10 @@ class Recorder:
     """An opener that records every request it is handed and answers one way."""
 
     def __init__(self, answer=None):
-        self.requests, self.answer = [], answer if answer is not None else Reply()
+        self.requests, self.answer, self.trust = [], answer if answer is not None else Reply(), []
 
-    def opener(self, verify=True):
+    def opener(self, verify=True, ca_data=""):
+        self.trust.append((verify, ca_data))
         return self
 
     def open(self, request, timeout=None):
@@ -193,3 +201,68 @@ def test_verification_is_opted_out_of_per_call():
                 if isinstance(h, urllib.request.HTTPSHandler)]
     assert contexts
     assert ssl.create_default_context().verify_mode == ssl.CERT_REQUIRED
+
+
+@pytest.mark.parametrize("bundle", ["not a certificate", "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----"])
+def test_an_unloadable_bundle_refuses_before_any_request(monkeypatch, bundle):
+    recorder = Recorder()
+    monkeypatch.setattr(redfish_control, "_opener", recorder.opener)
+    with pytest.raises(redfish_control.ControllerError, match="cannot be loaded") as failure:
+        redfish_control.Client(ENDPOINT, "operator", "p4ssw0rd", ca_data=bundle)
+    assert not isinstance(failure.value, redfish_control.UnverifiedCertificate)
+    assert not recorder.trust and not recorder.requests
+
+
+class Scripted(Recorder):
+    """An opener that answers each request with the next of its answers."""
+
+    def __init__(self, *answers):
+        super().__init__()
+        self.answers = list(answers)
+
+    def open(self, request, timeout=None):
+        self.requests.append(request)
+        answer = self.answers.pop(0)
+        if isinstance(answer, BaseException):
+            raise answer
+        return answer
+
+
+# A poll reads an answer it cannot use as not yet the state, but a refused
+# certificate is an answer no retry changes, so it ends the poll at once.
+def test_an_unverified_certificate_ends_a_poll_at_once(monkeypatch):
+    scripted = Scripted(Reply(b'{"PowerState": "Off"}'), Reply(b"{}"), REFUSED, Reply(b'{"PowerState": "On"}'))
+    polled = client(monkeypatch, scripted)
+    polled.sleep = lambda seconds: None
+    with pytest.raises(redfish_control.UnverifiedCertificate):
+        polled.power("On", "On", attempts=3)
+    assert len(scripted.requests) == 3 and len(scripted.answers) == 1
+
+
+# The system read and the media discovery are kept once made, a failure
+# included, and the inventory swallows what it cannot read; none of them may
+# turn a refused certificate back into an ordinary unreadable answer.
+def test_an_unverified_certificate_survives_the_kept_system_read(monkeypatch):
+    recorder = Recorder(REFUSED)
+    kept = client(monkeypatch, recorder)
+    for _attempt in range(2):
+        with pytest.raises(redfish_control.UnverifiedCertificate):
+            kept.system()
+    assert len(recorder.requests) == 1
+    for _attempt in range(2):
+        with pytest.raises(redfish_control.UnverifiedCertificate):
+            kept.media_member()
+    with pytest.raises(redfish_control.UnverifiedCertificate):
+        kept.hardware_addresses()
+    assert isinstance(redfish_control.UnverifiedCertificate("line"), redfish_control.ControllerError)
+
+    system = Reply(json.dumps({"EthernetInterfaces": {"@odata.id": "/redfish/v1/Systems/1/EthernetInterfaces"}}).encode())
+    listing = Reply(json.dumps({"Members": [{"@odata.id": "/redfish/v1/Systems/1/EthernetInterfaces/1"}]}).encode())
+    for where, answers in {
+        "the system read the inventory path comes from": (REFUSED, Reply(b'{"Members": []}')),
+        "the interface collection": (system, REFUSED),
+        "an interface member": (system, listing, REFUSED),
+    }.items():
+        with pytest.raises(redfish_control.UnverifiedCertificate):
+            client(monkeypatch, Scripted(*answers)).hardware_addresses()
+        assert where

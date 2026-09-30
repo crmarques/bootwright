@@ -108,6 +108,21 @@ func secretCommandAndBindingJourney(t *testing.T, implementation string) {
 	if err := json.Unmarshal(list["secrets"], &rows); err != nil || len(rows) != 7 {
 		t.Fatal("wrong list membership", err, len(rows))
 	}
+	// Produced material enters custody only through a lifecycle transaction's
+	// lent area. A recapture of equal bytes publishes nothing, and no secret
+	// command lists, reveals or matches it to a declaration.
+	produced := "produced-kubeconfig-canary\n"
+	produceThroughLentArea(t, services, repository, "alpha", "cluster-install-alpha", "kubeconfig", produced)
+	captured := stateFingerprint(t, root)
+	produceThroughLentArea(t, services, repository, "alpha", "cluster-install-alpha", "kubeconfig", produced)
+	if !sameFingerprints(captured, stateFingerprint(t, root)) {
+		t.Fatal("an unchanged recapture wrote state")
+	}
+	list = secretResult(t, services, 0, "secret", "list")
+	if err := json.Unmarshal(list["secrets"], &rows); err != nil || len(rows) != 7 || strings.Contains(string(list["secrets"]), "kubeconfig") {
+		t.Fatal("produced material joined the secret list", err, len(rows))
+	}
+	contextRun(t, services, 1, "secret", "show", "--name", "kubeconfig", "--part", "value")
 	for _, check := range []struct {
 		name string
 		part secrets.Part
@@ -172,6 +187,15 @@ func secretCommandAndBindingJourney(t *testing.T, implementation string) {
 	addSecretInput(t, input, "secret.yaml", strings.Join(declarations[1:], "\n---\n"))
 	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
 	contextRun(t, services, 0, "secret", "encryption", "rotate", "--yes")
+	if value, found := readProduced(t, services, "alpha", "cluster-install-alpha", "kubeconfig"); !found || value != produced {
+		t.Fatal("rotation lost the produced material")
+	}
+	if !withdrawThroughLentArea(t, services, repository, "alpha") || withdrawThroughLentArea(t, services, repository, "alpha") {
+		t.Fatal("a withdrawal did not remove exactly the produced entries once")
+	}
+	if _, found := readProduced(t, services, "alpha", "cluster-install-alpha", "kubeconfig"); found {
+		t.Fatal("a withdrawn entry is still read")
+	}
 	reopened, err := bindings.Reopen(context.Background(), request)
 	if err != nil {
 		t.Fatal(err)
@@ -227,7 +251,7 @@ func secretCommandAndBindingJourney(t *testing.T, implementation string) {
 		if err != nil {
 			return err
 		}
-		for _, canary := range []string{"synthetic-opaque-canary", "synthetic-password-canary", "synthetic-file-canary", "replacement-canary"} {
+		for _, canary := range []string{"synthetic-opaque-canary", "synthetic-password-canary", "synthetic-file-canary", "replacement-canary", "produced-kubeconfig-canary"} {
 			if bytes.Contains(data, []byte(canary)) {
 				t.Errorf("plaintext in store file %s", entry.Name())
 			}

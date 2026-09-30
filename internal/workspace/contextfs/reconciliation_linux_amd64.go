@@ -51,6 +51,12 @@ type lifecycleTransaction struct {
 	stored  controllerStored
 	context *directory
 	areas   openedBundles
+	// record is the context record the transaction was admitted over, which
+	// every secret area it lends re-proves.
+	record contexts.Record
+	// lending serializes the secret areas this transaction lends: an
+	// operation's blocks share it, and one area at a time may publish.
+	lending sync.Mutex
 	// active and guard are the capability boundary every area this operation
 	// opens shares: it expires with the callback, and each access reproves that
 	// the shared controller record has not changed underneath it.
@@ -277,7 +283,7 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 				evidence:   evidence,
 				operations: &operationArea{store: s, subtree: "operations", context: dir, name: record.Name, active: func() bool { return active }},
 			},
-			base: t, stored: stored, context: dir,
+			base: t, stored: stored, context: dir, record: record,
 		}
 		defer func() {
 			active = false

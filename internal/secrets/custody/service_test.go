@@ -25,12 +25,29 @@ type serviceAccess struct {
 	// unlocks records the unlock argument of every View, so a test can prove
 	// a read acquired no unlock material.
 	unlocks []bool
+	// contexts and views count Context and View calls; areas lists every area
+	// MutateArea was handed.
+	contexts, views int
+	areas           []secretstore.Area
+}
+
+func (a *serviceAccess) MutateArea(_ context.Context, _ secretstore.Context, area secretstore.Area, callback func(secretstore.StoreSession, secretstore.Selection) error) error {
+	a.areas = append(a.areas, area)
+	if a.failure != nil {
+		return a.failure
+	}
+	if a.session == nil {
+		return callback(nil, secretstore.Selection{})
+	}
+	return callback(a.session, secretstore.Selection{})
 }
 
 func (a *serviceAccess) Context(context.Context, string) (secretstore.ContextSnapshot, error) {
+	a.contexts++
 	return a.snapshot, a.contextFailure
 }
 func (a *serviceAccess) View(_ context.Context, _ secretstore.Context, unlock bool, callback func(secretstore.StoreSession, secretstore.Selection) error) error {
+	a.views++
 	a.unlocks = append(a.unlocks, unlock)
 	if a.failure != nil {
 		return a.failure

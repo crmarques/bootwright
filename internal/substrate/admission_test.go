@@ -170,3 +170,116 @@ func TestLibvirtProfilesRequirePositiveCapacity(t *testing.T) {
 		t.Fatal("a KubeVirt profile was held to libvirt sizes", issues)
 	}
 }
+
+// fieldsOf lists the fields a set of issues is reported at.
+func fieldsOf(issues []api.Issue) []string {
+	fields := []string{}
+	for _, issue := range issues {
+		fields = append(fields, issue.Field)
+	}
+	return fields
+}
+
+// A bundle is an anchor only for a verified leg, so one beside verification
+// turned off refuses wherever it meets it: authored on a provider, authored on
+// a Machine, and on the effective Machine whose opt-out it inherited.
+func TestTrustBundleRequiresVerification(t *testing.T) {
+	bundled := m("credentialsRef", "bmc", "tls", m("verify", false, "trustBundleRef", "bmc-ca"))
+	provider := obj(api.InfraProvider, "floor", m("baremetal", m("defaults", m("bmc", bundled))))
+	want := "$.spec.baremetal.defaults.bmc.tls.trustBundleRef"
+	for name, issues := range map[string][]api.Issue{
+		"authored provider":  ValidateAuthored(provider, api.Catalog{}),
+		"effective provider": Validate(provider, api.Catalog{}),
+	} {
+		if fields := fieldsOf(issues); len(fields) != 1 || fields[0] != want {
+			t.Fatalf("%s: issues at %v, want %s", name, fields, want)
+		}
+		if issues[0].Code != "api.invariant" || issues[0].Remediation != "set tls.verify: true where the bundle is declared, or remove tls.trustBundleRef" ||
+			issues[0].Message != "a controller trust bundle requires verification, and tls.verify is false here, whether authored or inherited" {
+			t.Fatalf("%s: issue = %+v", name, issues[0])
+		}
+	}
+	machine := m("address", "https://bmc.example.test/redfish/v1/Systems/1", "tls", bundled.Get("tls"))
+	for name, authored := range map[string]bool{"authored Machine": true, "effective Machine under an inherited opt-out": false} {
+		if fields := fieldsOf(ValidateBMCDefaults(machine, "$.spec.hardware.management.bmc", authored)); len(fields) != 1 || fields[0] != "$.spec.hardware.management.bmc.tls.trustBundleRef" {
+			t.Fatalf("%s: issues at %v", name, fields)
+		}
+	}
+	for _, tls := range []api.Value{m("verify", true, "trustBundleRef", "bmc-ca"), m("trustBundleRef", "bmc-ca"), m("verify", false)} {
+		if issues := ValidateBMCDefaults(m("tls", tls), "$.spec.hardware.management.bmc", true); len(issues) != 0 {
+			t.Fatalf("tls %v refused: %v", tls, issues)
+		}
+	}
+}
+
+// Importing the server's certificate is the virtual-media trust a controller
+// gets unless its Machine declares another, in normalization, in admission and
+// in what a target freezes.
+func TestVirtualMediaTrustDefaultsToImportCertificate(t *testing.T) {
+	tls := NormalizeBMCDefaults(m()).Get("virtualMedia", "tls")
+	if tls.Get("trust").Text() != TrustImportCertificate || !tls.Has("removeCertificateAfterBoot") || tls.Get("removeCertificateAfterBoot").Bool() || tls.Has("restoreVerificationAfterBoot") {
+		t.Fatalf("normalized trust = %v", tls)
+	}
+	if issues := ValidateBMCDefaults(m("virtualMedia", m("tls", m("removeCertificateAfterBoot", true))), "$.bmc", true); len(issues) != 0 {
+		t.Fatalf("removing a certificate under the default trust refused: %v", issues)
+	}
+	if fields := fieldsOf(ValidateBMCDefaults(m("virtualMedia", m("tls", m("restoreVerificationAfterBoot", true))), "$.bmc", true)); len(fields) != 1 || fields[0] != "$.bmc.virtualMedia.tls.restoreVerificationAfterBoot" {
+		t.Fatalf("restoring verification under the default trust: issues at %v", fields)
+	}
+	if media := virtualMediaTrust(m()); media != (VirtualMedia{Trust: TrustImportCertificate}) {
+		t.Fatalf("frozen trust = %+v", media)
+	}
+}
+
+// disable-verification is a per-Machine exception, so a provider default that
+// would hand it to every Machine the provider hosts refuses, whether authored
+// on the provider or offered as an InfraProvider kind default. On a Machine it
+// stays admitted.
+func TestProviderVirtualMediaDisableVerificationRefuses(t *testing.T) {
+	provider := obj(api.InfraProvider, "floor", m("baremetal", m("defaults", m("bmc",
+		m("credentialsRef", "bmc", "virtualMedia", m("tls", m("trust", TrustDisableVerification)))))))
+	want := "$.spec.baremetal.defaults.bmc.virtualMedia.tls.trust"
+	for name, issues := range map[string][]api.Issue{
+		"authored":     ValidateAuthored(provider, api.Catalog{}),
+		"kind default": ValidatePartial(provider, api.Catalog{}),
+	} {
+		if fields := fieldsOf(issues); len(fields) != 1 || fields[0] != want {
+			t.Fatalf("%s: issues at %v, want %s", name, fields, want)
+		}
+		if issues[0].Message != "disable-verification is a per-Machine exception and never a provider default" ||
+			issues[0].Remediation != "declare hardware.management.bmc.virtualMedia.tls.trust: disable-verification on each Machine that needs it" {
+			t.Fatalf("%s: issue = %+v", name, issues[0])
+		}
+	}
+	for _, trust := range []string{TrustImportCertificate, TrustEstablished} {
+		allowed := obj(api.InfraProvider, "floor", m("baremetal", m("defaults", m("bmc", m("virtualMedia", m("tls", m("trust", trust)))))))
+		if issues := ValidateAuthored(allowed, api.Catalog{}); len(issues) != 0 {
+			t.Fatalf("a provider default of %s refused: %v", trust, issues)
+		}
+	}
+	machine := m("virtualMedia", m("tls", m("trust", TrustDisableVerification, "restoreVerificationAfterBoot", false)))
+	if issues := ValidateBMCDefaults(machine, "$.spec.hardware.management.bmc", true); len(issues) != 0 {
+		t.Fatalf("a Machine's own exception refused: %v", issues)
+	}
+}
+
+// Each settle option is frozen only under the one trust that acts on it:
+// restoring verification only after disabling it, true unless the Machine
+// declares otherwise, and removing a certificate only after importing it.
+func TestRestoreVerificationFreezesOnlyUnderDisableVerification(t *testing.T) {
+	for name, test := range map[string]struct {
+		tls  api.Value
+		want VirtualMedia
+	}{
+		"disable-verification":             {m("trust", TrustDisableVerification), VirtualMedia{Trust: TrustDisableVerification, RestoreVerification: true}},
+		"disable-verification, kept off":   {m("trust", TrustDisableVerification, "restoreVerificationAfterBoot", false), VirtualMedia{Trust: TrustDisableVerification}},
+		"import-certificate":               {m("trust", TrustImportCertificate), VirtualMedia{Trust: TrustImportCertificate}},
+		"import-certificate, then removed": {m("trust", TrustImportCertificate, "removeCertificateAfterBoot", true), VirtualMedia{Trust: TrustImportCertificate, RemoveCertificate: true}},
+		"established":                      {m("trust", TrustEstablished), VirtualMedia{Trust: TrustEstablished}},
+		"the default":                      {m(), VirtualMedia{Trust: TrustImportCertificate}},
+	} {
+		if media := virtualMediaTrust(test.tls); media != test.want {
+			t.Fatalf("%s: frozen %+v, want %+v", name, media, test.want)
+		}
+	}
+}

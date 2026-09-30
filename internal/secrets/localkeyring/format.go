@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	formatVersion    = 3
+	formatVersion    = 4
 	algorithm        = "AES-256-GCM"
 	selectorPath     = secretstore.RecordPath
 	selectorMaximum  = 64 << 10
@@ -51,14 +51,15 @@ type envelope struct {
 }
 
 type indexRecord struct {
-	FormatVersion int                   `json:"-"`
-	Algorithm     string                `json:"-"`
-	Selector      secretstore.Selector  `json:"-"`
-	ActiveKey     string                `json:"activeKey"`
-	Keys          []storedKey           `json:"keys"`
-	Versions      []storedVersion       `json:"versions"`
-	Current       []secretstore.Current `json:"current"`
-	Bindings      []secretstore.Binding `json:"bindings"`
+	FormatVersion int                    `json:"-"`
+	Algorithm     string                 `json:"-"`
+	Selector      secretstore.Selector   `json:"-"`
+	ActiveKey     string                 `json:"activeKey"`
+	Keys          []storedKey            `json:"keys"`
+	Versions      []storedVersion        `json:"versions"`
+	Current       []secretstore.Current  `json:"current"`
+	Bindings      []secretstore.Binding  `json:"bindings"`
+	Produced      []secretstore.Produced `json:"produced"`
 }
 
 type storedKey struct {
@@ -369,6 +370,7 @@ const (
 	indexJSONBinding
 	indexJSONParts
 	indexJSONBindingVersions
+	indexJSONProduced
 )
 
 func boundedIndexJSON(data []byte) bool {
@@ -470,8 +472,10 @@ func indexObjectChild(parent indexJSONRole, key string) (indexJSONRole, uint8, b
 			return indexJSONCurrent, 1 << 2, true
 		case "bindings":
 			return indexJSONBindings, 1 << 3, true
+		case "produced":
+			return indexJSONProduced, 1 << 4, true
 		}
-		if strings.EqualFold(key, "keys") || strings.EqualFold(key, "versions") || strings.EqualFold(key, "current") || strings.EqualFold(key, "bindings") {
+		if strings.EqualFold(key, "keys") || strings.EqualFold(key, "versions") || strings.EqualFold(key, "current") || strings.EqualFold(key, "bindings") || strings.EqualFold(key, "produced") {
 			return indexJSONGeneric, 0, false
 		}
 	}
@@ -508,7 +512,7 @@ func indexArrayLimit(role indexJSONRole) int {
 	switch role {
 	case indexJSONKeys:
 		return maxPhysicalItems
-	case indexJSONVersions, indexJSONCurrent, indexJSONBindings, indexJSONBindingVersions:
+	case indexJSONVersions, indexJSONCurrent, indexJSONBindings, indexJSONBindingVersions, indexJSONProduced:
 		return secrets.MaxVersions
 	case indexJSONParts:
 		return 2
@@ -673,12 +677,12 @@ func decodeBase64(value string, maximum int) ([]byte, error) {
 }
 
 func indexAAD(contextName string, selector secretstore.Selector, keyID string) []byte {
-	data, _ := json.Marshal(indexAdditionalData{Domain: "bootwright.secret.index.v3", FormatVersion: formatVersion, Algorithm: algorithm, Context: contextName, Selection: selector.Backend, Generation: selector.Generation, KeyID: keyID, BlobID: selector.Generation})
+	data, _ := json.Marshal(indexAdditionalData{Domain: "bootwright.secret.index.v4", FormatVersion: formatVersion, Algorithm: algorithm, Context: contextName, Selection: selector.Backend, Generation: selector.Generation, KeyID: keyID, BlobID: selector.Generation})
 	return data
 }
 
 func partAAD(contextName string, selection string, version storedVersion, part storedPart) []byte {
-	data, _ := json.Marshal(partAdditionalData{Domain: "bootwright.secret.part.v3", FormatVersion: formatVersion, Algorithm: algorithm, Context: contextName, Selection: selection, Generation: part.Generation, KeyID: part.KeyID, BlobID: part.BlobID, DeclarationFingerprint: version.Declaration.Fingerprint, Name: version.Declaration.Name, Type: version.Declaration.Type, Source: version.Declaration.Source, Version: version.ID, Part: part.Part})
+	data, _ := json.Marshal(partAdditionalData{Domain: "bootwright.secret.part.v4", FormatVersion: formatVersion, Algorithm: algorithm, Context: contextName, Selection: selection, Generation: part.Generation, KeyID: part.KeyID, BlobID: part.BlobID, DeclarationFingerprint: version.Declaration.Fingerprint, Name: version.Declaration.Name, Type: version.Declaration.Type, Source: version.Declaration.Source, Version: version.ID, Part: part.Part})
 	return data
 }
 
@@ -709,7 +713,7 @@ func ledgerMAC(contextName string, selection string, key []byte, keyID string, s
 	derive := hmac.New(sha256.New, key)
 	derive.Write([]byte("bootwright.secret.ledger.mac-key.v2"))
 	macKey := derive.Sum(nil)
-	data, _ := json.Marshal(ledgerAuthentication{Domain: "bootwright.secret.ledger.v3", FormatVersion: formatVersion, Algorithm: "HMAC-SHA256", Context: contextName, Selection: selection, KeyID: keyID, Seals: seals})
+	data, _ := json.Marshal(ledgerAuthentication{Domain: "bootwright.secret.ledger.v4", FormatVersion: formatVersion, Algorithm: "HMAC-SHA256", Context: contextName, Selection: selection, KeyID: keyID, Seals: seals})
 	mac := hmac.New(sha256.New, macKey)
 	mac.Write(data)
 	result := rawBase64.EncodeToString(mac.Sum(nil))
@@ -740,7 +744,7 @@ func initializationMAC(record initializationRecord, key []byte) string {
 	derive := hmac.New(sha256.New, key)
 	derive.Write([]byte("bootwright.secret.initialization.mac-key.v2"))
 	macKey := derive.Sum(nil)
-	data, _ := json.Marshal(initializationAuthentication{Domain: "bootwright.secret.initialization.v3", FormatVersion: record.FormatVersion, Context: record.Context, Selection: record.Selection, Attempts: record.Attempts, MACKeyID: record.MACKeyID})
+	data, _ := json.Marshal(initializationAuthentication{Domain: "bootwright.secret.initialization.v4", FormatVersion: record.FormatVersion, Context: record.Context, Selection: record.Selection, Attempts: record.Attempts, MACKeyID: record.MACKeyID})
 	mac := hmac.New(sha256.New, macKey)
 	mac.Write(data)
 	result := rawBase64.EncodeToString(mac.Sum(nil))
@@ -838,5 +842,28 @@ func interrupted(ctx context.Context, err error) error {
 }
 
 func validateVersionDeclaration(declaration secrets.VersionDeclaration) bool {
-	return validName(declaration.Name) && validFingerprint(declaration.Fingerprint) && (declaration.Source == "contextStore" || declaration.Source == "file" || declaration.Source == "generated") && len(declaration.Parts()) > 0 && len(declaration.Parts()) <= 2
+	return validName(declaration.Name) && validFingerprint(declaration.Fingerprint) && (declaration.Source == "contextStore" || declaration.Source == "file" || declaration.Source == "generated" || declaration.Source == producedSource) && len(declaration.Parts()) > 0 && len(declaration.Parts()) <= 2
+}
+
+// producedSource marks a version a lifecycle block captured. No Secret
+// declaration can name it, so no secret command reaches one.
+const (
+	producedSource = "produced"
+	producedType   = "opaque"
+	producedDomain = "bootwright.secret.produced.v4"
+)
+
+type producedIdentity struct {
+	Domain string `json:"domain"`
+	Block  string `json:"block"`
+	Name   string `json:"name"`
+}
+
+// producedDeclaration is the summary a produced version carries. Its
+// fingerprint covers the block and name that key it, so the version cannot be
+// moved to another entry.
+func producedDeclaration(block, name string) secrets.VersionDeclaration {
+	data, _ := json.Marshal(producedIdentity{Domain: producedDomain, Block: block, Name: name})
+	digest := sha256.Sum256(data)
+	return secrets.VersionDeclaration{Name: name, Type: producedType, Source: producedSource, Fingerprint: hex.EncodeToString(digest[:])}
 }

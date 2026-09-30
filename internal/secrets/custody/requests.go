@@ -46,6 +46,19 @@ type BindingRequest struct {
 
 type BindingsRequest struct{ ContextName string }
 
+// ProduceRequest offers one block's outputs for custody.
+type ProduceRequest struct {
+	Block   string
+	Outputs []secretstore.ProducedInput
+}
+
+// ReadProducedRequest names one produced entry of a context.
+type ReadProducedRequest struct {
+	ContextName string
+	Block       string
+	Name        string
+}
+
 type MutationResult struct {
 	Context   secretstore.Context
 	Name      string

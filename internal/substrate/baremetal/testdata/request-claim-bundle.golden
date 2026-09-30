@@ -1,0 +1,29 @@
+{
+  "controller": {
+    "credentialsRef": "server-bmc",
+    "endpoint": "https://bmc.example.test/redfish/v1/Systems/1",
+    "tlsVerify": true,
+    "trustBundleRef": "server-bmc-ca"
+  },
+  "hardware": [
+    {
+      "macAddress": "aa:bb:cc:dd:ee:01",
+      "name": "eno1"
+    },
+    {
+      "macAddress": "aa:bb:cc:dd:ee:02",
+      "name": "eno2"
+    }
+  ],
+  "identity": {
+    "block": "machine-server",
+    "context": "lab",
+    "object": "server"
+  },
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "provider": "floor",
+  "version": "machine-baremetal-v2"
+}

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
@@ -62,10 +63,14 @@ type serviceSession struct {
 	secretstore.StoreSession
 	inspections int
 	rotations   int
+	snapshot    *secretstore.Snapshot
 }
 
 func (s *serviceSession) Inspect(context.Context) (secretstore.Snapshot, error) {
 	s.inspections++
+	if s.snapshot != nil {
+		return *s.snapshot, nil
+	}
 	return secretstore.Snapshot{ActiveKey: "fixture-key", Keys: []secretstore.Key{{ID: "fixture-key", State: "active"}}}, nil
 }
 func (s *serviceSession) Rotate(context.Context) (string, error) {
@@ -154,5 +159,24 @@ func TestStoreAccessFailuresStopEncryptionBeforeSession(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// A produced version is sealed like any other, so its parts count among the
+// material parts the store holds, though it is neither current nor bound.
+func TestStatusCountsProducedParts(t *testing.T) {
+	service, access := serviceFixture()
+	access.session.snapshot = &secretstore.Snapshot{
+		ActiveKey: "fixture-key", Keys: []secretstore.Key{{ID: "fixture-key", State: "active"}},
+		Versions: []secretstore.Version{
+			{ID: "ver-current", Declaration: secrets.VersionDeclaration{Name: "token", Type: "token", Source: "contextStore"}, Parts: []secrets.Part{secrets.ValuePart}},
+			{ID: "ver-produced", Declaration: secrets.VersionDeclaration{Name: "kubeconfig", Type: "opaque", Source: "produced"}, Parts: []secrets.Part{secrets.ValuePart}},
+		},
+		Current:  []secretstore.Current{{Name: "token", Version: "ver-current"}},
+		Produced: []secretstore.Produced{{Block: "cluster-install-sno", Name: "kubeconfig", Version: "ver-produced"}},
+	}
+	status, err := service.Status(context.Background(), EncryptionStatusRequest{ContextName: "fixture"})
+	if err != nil || status.Items.MaterialParts != 2 || status.Items.CurrentVersions != 1 || status.Items.BoundVersions != 0 {
+		t.Fatalf("status = %+v, %v", status, err)
 	}
 }

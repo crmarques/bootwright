@@ -375,12 +375,20 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		{Name: "bmc-password", Part: secrets.PasswordPart, Secret: request.Target.Controller.CredentialsRef, Variable: "controllerPassword"},
 		{Name: "fleet-id", Part: secrets.PrivateKeyPart, Secret: request.FleetKeyRef, Variable: "fleetIdentity"},
 	}
-	// The private publication carries the key pair itself and the certificate
-	// the installing machine verifies the fetch against.
+	if request.Target.Controller.TrustBundleRef != "" {
+		materials = append(materials,
+			lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: request.Target.Controller.TrustBundleRef, Variable: "controllerCA"})
+	}
+	// The private publication carries the key pair itself.
 	if request.Private != nil {
 		materials = append(materials,
 			lifecycle.MaterialFile{Name: "host-key", Part: secrets.PrivateKeyPart, Secret: request.Target.HostKeyRef, Variable: "hostIdentity"},
-			lifecycle.MaterialFile{Name: "host-key.pub", Part: secrets.PublicKeyPart, Secret: request.Target.HostKeyRef, Variable: "hostIdentityPublic"},
+			lifecycle.MaterialFile{Name: "host-key.pub", Part: secrets.PublicKeyPart, Secret: request.Target.HostKeyRef, Variable: "hostIdentityPublic"})
+	}
+	// The serving certificate is what the installing machine verifies the
+	// private fetch against, and what a controller importing it trusts.
+	if request.TLSCertificateRef != "" {
+		materials = append(materials,
 			lifecycle.MaterialFile{Name: "artifact-ca", Part: secrets.CertificatePart, Secret: request.TLSCertificateRef, Variable: "artifactCertificate"})
 	}
 	// The deadline follows the budgets this request froze, not this build's.

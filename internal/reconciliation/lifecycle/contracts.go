@@ -66,6 +66,11 @@ type Transaction interface {
 	// RetainDependencies records the acquisition identities and native
 	// resolution a controller stage froze, before it installs them.
 	RetainDependencies(context.Context, *prerequisites.Definition, []prerequisites.DependencySource) error
+	// Secrets lends this context's secret area to one caller at a time, under
+	// the lock and lease the transaction already holds, so produced material
+	// is published and withdrawn inside the transaction that records it. The
+	// area expires when the callback returns; only Secrets interprets it.
+	Secrets(context.Context, func(secretstore.Context, secretstore.Area) error) error
 }
 
 type Workspace interface {
@@ -88,11 +93,17 @@ type Compiler interface {
 // once, and one no operation names is released after the context's next
 // registration or by its next destroy. Bindings lists identities only, so the
 // engine can tell those bindings apart without reading any material.
+//
+// Produce and Withdraw work only through the area a transaction lends, so what
+// a block produced enters custody before that block is recorded done, and a
+// completed removal withdraws all of it inside the transaction that records it.
 type SecretBinder interface {
 	Bind(context.Context, custody.BindRequest) (secretstore.Binding, error)
 	Reopen(context.Context, custody.BindingRequest) ([]secretstore.BoundMaterial, error)
 	Release(context.Context, custody.BindingRequest) (bool, error)
 	Bindings(context.Context, custody.BindingsRequest) ([]string, error)
+	Produce(context.Context, secretstore.Context, secretstore.Area, custody.ProduceRequest) ([]secretstore.Produced, error)
+	Withdraw(context.Context, secretstore.Context, secretstore.Area) (bool, error)
 }
 
 type HostIdentity interface {
@@ -344,9 +355,13 @@ type ControllerStage struct {
 	ReleaseFoundation  func() error
 }
 
+// Result is what one attempt did. Produced is material the attempt's proved
+// effect left, offered for custody; only the engine places it there, and never
+// in a record, log or evidence.
 type Result struct {
 	Outcome  reconciliation.Outcome
 	Evidence json.RawMessage
+	Produced []Produced
 }
 
 // Observation is what a resolution proved. Outcome is what the completed
@@ -354,8 +369,12 @@ type Result struct {
 // observation proves it states one: an observation the apply's own proof
 // repeats does, and one that cannot tell whether a lost attempt changed its
 // target leaves it empty and is recorded as changed.
+//
+// Produced is material a completed observation proves, offered for custody as
+// an attempt's is.
 type Observation struct {
 	Effect   reconciliation.EffectState
 	Outcome  reconciliation.Outcome
 	Evidence json.RawMessage
+	Produced []Produced
 }

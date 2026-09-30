@@ -441,9 +441,9 @@ func (s Service) Current(ctx context.Context, _ CurrentRequest) (*CurrentResult,
 	return &CurrentResult{Context: summary(record, selected)}, ctx.Err()
 }
 
-func deleteAction(orphans bool) string {
+func deleteAction(orphans bool, name string) string {
 	if orphans {
-		return "delete with orphaned objects"
+		return "delete with orphaned objects and any custodied cluster kubeconfig (export it first with bootwright cluster kubeconfig --context " + name + " --name <cluster>)"
 	}
 	return "delete"
 }
@@ -488,7 +488,7 @@ func (s Service) Delete(ctx context.Context, request DeleteRequest) (*DeleteResu
 				orphans = true
 			}
 		}
-		if err := s.confirm(ctx, request.SkipConfirmation, deleteAction(orphans), request.Name); err != nil {
+		if err := s.confirm(ctx, request.SkipConfirmation, deleteAction(orphans, record.Name), request.Name); err != nil {
 			return err
 		}
 		if err := tx.Delete(ctx, record); err != nil {

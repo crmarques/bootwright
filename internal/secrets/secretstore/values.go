@@ -80,6 +80,22 @@ type Binding struct {
 	Versions []string `json:"versions"`
 }
 
+// Produced names material one lifecycle block captured from a proved effect,
+// keyed by that block and the output's name. Only the lifecycle holds and
+// withdraws it; no Secret declaration names it.
+type Produced struct {
+	Block   string `json:"block"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
+// ProducedInput is one output a block offers for custody. Material is bounded
+// memory the caller owns and clears.
+type ProducedInput struct {
+	Name     string
+	Material secrets.Material
+}
+
 type Key struct {
 	ID    string `json:"id"`
 	State string `json:"state"`
@@ -90,6 +106,7 @@ type Snapshot struct {
 	Versions          []Version
 	Current           []Current
 	Bindings          []Binding
+	Produced          []Produced
 	ActiveKey         string
 	Keys              []Key
 	RetainedArtifacts int

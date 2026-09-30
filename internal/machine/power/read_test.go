@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 // surveyor answers each run with the state the fixture assigns every Machine
@@ -109,6 +112,57 @@ func TestEveryTargetInOneSurveyNamesItsOwnMaterial(t *testing.T) {
 	}
 	if references := readReferences(survey); !slices.Equal(references, []string{"bmc"}) {
 		t.Fatalf("one credential was bound %v", references)
+	}
+}
+
+// Every target reads its controller through its own bundle file: two targets
+// behind one host with different bundles get two files under two variables,
+// and a target that declares none gets neither. A single shared variable
+// would let the runner's name-keyed files hand one controller another's
+// anchor.
+func TestEachReadTargetReadsItsOwnBundle(t *testing.T) {
+	tls := map[string]api.Value{
+		"metal": m("verify", true, "trustBundleRef", "metal-bmc-ca"),
+		"rack":  m("verify", true, "trustBundleRef", "rack-bmc-ca"),
+	}
+	runtime, runner := &boundary{}, &surveyor{}
+	if _, err := New(stateSource{tls: tls}, evidenceSource{}, &pins{}, runtime, runner, nil, nil, nil).
+		Read(context.Background(), "lab", []string{"metal", "rack", "zero"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.runs) != 1 {
+		t.Fatalf("runs = %d, want one host reading three controllers", len(runner.runs))
+	}
+	var survey ReadSurvey
+	if err := json.Unmarshal(runner.runs[0].Canonical, &survey); err != nil {
+		t.Fatal(err)
+	}
+	bundles := map[string]lifecycle.MaterialFile{}
+	for _, file := range runner.runs[0].Materials {
+		if file.Part == secrets.CertificatePart {
+			bundles[file.Variable] = file
+		}
+	}
+	want := map[string]string{"metal": "metal-bmc-ca", "rack": "rack-bmc-ca", "zero": ""}
+	for index, target := range survey.Targets {
+		bundle := want[target.Object]
+		if bundle == "" {
+			if target.CAVariable != "" || target.Controller.TrustBundleRef != "" {
+				t.Fatalf("%s declares no bundle and carries %+v", target.Object, target)
+			}
+			continue
+		}
+		file, ok := bundles[target.CAVariable]
+		if !ok || target.CAVariable != "controllerCA"+strconv.Itoa(index) || file.Secret != bundle ||
+			file.Name != "bmc-ca-"+strconv.Itoa(index) || target.Controller.TrustBundleRef != bundle {
+			t.Fatalf("%s reads %+v through %q", target.Object, file, target.CAVariable)
+		}
+		if !slices.Contains(runtime.requested, bundle) {
+			t.Fatalf("%s's bundle was not bound: %v", target.Object, runtime.requested)
+		}
+	}
+	if len(bundles) != 2 {
+		t.Fatalf("bundle files = %+v, want exactly two", bundles)
 	}
 }
 

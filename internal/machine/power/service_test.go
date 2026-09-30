@@ -9,15 +9,21 @@ import (
 	"strings"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
-type stateSource struct{}
+// stateSource renders the fixture catalog, with each named Machine's controller
+// trust declared as tls gives it.
+type stateSource struct{ tls map[string]api.Value }
 
-func (stateSource) RenderEffective(context.Context, compilation.EffectiveRequest) (*compilation.EffectiveResult, error) {
+func (s stateSource) RenderEffective(context.Context, compilation.EffectiveRequest) (*compilation.EffectiveResult, error) {
+	if s.tls != nil {
+		return &compilation.EffectiveResult{Effective: goldenCatalog(s.tls)}, nil
+	}
 	return &compilation.EffectiveResult{Effective: catalog()}, nil
 }
 
@@ -306,6 +312,49 @@ func TestAProvedMachineCarriesItsIdentityToTheAdapter(t *testing.T) {
 			}
 			if !slices.Equal(proved.asked, [][2]string{{"lab", "metal"}}) {
 				t.Fatalf("pins asked = %v", proved.asked)
+			}
+		})
+	}
+}
+
+// A controller that declares a trust bundle is driven through it: the request
+// freezes it, the runtime binds it and the adapter receives it as its own
+// file. One that declares none is reached through the system trust store, so
+// nothing is bound or written for it.
+func TestPowerCarriesTheControllerBundle(t *testing.T) {
+	for name, bundle := range map[string]string{"declared": "metal-bmc-ca", "absent": ""} {
+		t.Run(name, func(t *testing.T) {
+			tls := map[string]api.Value{}
+			if bundle != "" {
+				tls["metal"] = m("verify", true, "trustBundleRef", bundle)
+			}
+			runtime, runner := &boundary{}, &adapter{machine: "metal", power: "off"}
+			if _, err := New(stateSource{tls: tls}, evidenceSource{}, &pins{}, runtime, runner, nil, nil, nil).
+				Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "metal", SkipConfirmation: true}); err != nil {
+				t.Fatal(err)
+			}
+			var frozen Request
+			if err := json.Unmarshal(runner.seen.Canonical, &frozen); err != nil {
+				t.Fatal(err)
+			}
+			var files []lifecycle.MaterialFile
+			for _, file := range runner.seen.Materials {
+				if file.Name == "bmc-ca" || file.Variable == "controllerCA" {
+					files = append(files, file)
+				}
+			}
+			if frozen.Controller.TrustBundleRef != bundle {
+				t.Fatalf("frozen bundle = %q, want %q", frozen.Controller.TrustBundleRef, bundle)
+			}
+			if bundle == "" {
+				if len(files) != 0 || slices.ContainsFunc(runtime.requested, func(s string) bool { return strings.HasSuffix(s, "-ca") }) {
+					t.Fatalf("a controller with no bundle carried %+v, bound %v", files, runtime.requested)
+				}
+				return
+			}
+			want := lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: bundle, Variable: "controllerCA"}
+			if len(files) != 1 || files[0] != want || !slices.Contains(runtime.requested, bundle) {
+				t.Fatalf("bundle files = %+v, bound %v", files, runtime.requested)
 			}
 		})
 	}

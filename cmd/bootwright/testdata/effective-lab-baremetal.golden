@@ -58,8 +58,8 @@ spec:
           verify: false
         virtualMedia:
           tls:
-            trust: disable-verification
-            restoreVerificationAfterBoot: true
+            trust: import-certificate
+            removeCertificateAfterBoot: false
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -197,8 +197,8 @@ spec:
           verify: false
         virtualMedia:
           tls:
-            trust: disable-verification
-            restoreVerificationAfterBoot: true
+            trust: import-certificate
+            removeCertificateAfterBoot: false
   networkAttachments:
     - name: lab-metal
       baremetal:

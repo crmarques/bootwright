@@ -62,5 +62,5 @@
     "name": "rhel-9.8-x86_64-dvd.iso"
   },
   "user": "bootwright",
-  "version": "os-install-anaconda-v4"
+  "version": "os-install-anaconda-v5"
 }

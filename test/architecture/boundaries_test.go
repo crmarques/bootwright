@@ -147,6 +147,9 @@ func applicationDependencies() map[string][]string {
 		"internal/infrastructureservices/dnsserver": {"internal/infrastructureservices/managedservice"},
 		"internal/infrastructureservices/ntpserver": {"internal/infrastructureservices/managedservice"},
 		"internal/infrastructureservices/proxy":     {"internal/infrastructureservices/managedservice"},
+		// Cluster access resolves a name in the compiled graph before it reads
+		// the custody the install block filled.
+		"internal/containercluster/access": {"internal/desiredstate/compilation"},
 	}
 }
 

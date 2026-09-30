@@ -6,7 +6,7 @@
 - name: Validate the frozen reading survey
   ansible.builtin.assert:
     that:
-      - bootwright_machine_power_read_request.version == 'machine-power-read-v1'
+      - bootwright_machine_power_read_request.version == 'machine-power-read-v2'
       - bootwright_machine_power_read_request.targets | length > 0
       - bootwright_machine_power_read_digest is match('[0-9a-f]{64}')
     quiet: true
@@ -30,6 +30,9 @@
     user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_read_material[item.userVariable]) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_read_material[item.passwordVariable]) }}'
     verify: '{{ item.controller.tlsVerify }}'
+    ca_data: >-
+      {{ lookup('ansible.builtin.file', bootwright_machine_power_read_material[item.caVariable])
+         if item.caVariable | default('') | length > 0 else '' }}
     media: false
   loop: '{{ bootwright_machine_power_read_request.targets }}'
   loop_control:

@@ -16,7 +16,6 @@ func TestUnavailableService(t *testing.T) {
 	}{
 		{"cluster oc", func(ctx context.Context) error { return (Service{}).OC(ctx, OCRequest{}) }},
 		{"cluster kubectl", func(ctx context.Context) error { return (Service{}).Kubectl(ctx, KubectlRequest{}) }},
-		{"cluster kubeconfig", func(ctx context.Context) error { return (Service{}).Kubeconfig(ctx, KubeconfigRequest{}) }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

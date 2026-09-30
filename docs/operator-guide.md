@@ -117,6 +117,15 @@ Changing a frozen block's Go request or plan shape changes its digests, so an
 operation registered by an earlier build can be neither continued nor removed
 by this one. Destroy or purge any live context before switching builds.
 
+A build that changes the local keyring's format cannot open a keyring the
+earlier format wrote: every access to it, `secret encryption init` included,
+refuses with `secret.store.implementation`, naming the persisted format and
+the way out. A context created before X21 keeps a `local-keyring-v3` keyring,
+so destroy it with the build that applied it, before running `setup` with
+this one, and then delete it with `bootwright context delete --name <context>
+--purge` and create it again. An apply or destroy that binds no Secret meets
+the refusal only when it reaches the keyring, which can be after its effects.
+
 ## Record a run
 
 The ledger owns the [row format](acceptance.md#row-format) and who may accept a

@@ -266,3 +266,56 @@ func TestUnusedClusterInstallTrustDefaultsValidateStructureOnly(t *testing.T) {
 		})
 	}
 }
+
+// disable-verification is a per-Machine exception, so neither kind default
+// that could hand it to many Machines is admitted: the Machine default names
+// it directly, and the InfraProvider default would pass it to every Machine
+// that provider hosts.
+func TestDisableVerificationIsNeverAKindDefault(t *testing.T) {
+	for _, tc := range []struct{ name, defaults, field, message string }{
+		{"Machine", "    Machine:\n      hardware:\n        management:\n          bmc:\n            virtualMedia:\n              tls: {trust: disable-verification}\n",
+			"$.spec.defaults.Machine.hardware.management.bmc.virtualMedia.tls.trust", "disable-verification is a per-Machine exception and never a kind default"},
+		{"InfraProvider", "    InfraProvider:\n      baremetal:\n        defaults:\n          bmc:\n            virtualMedia:\n              tls: {trust: disable-verification}\n",
+			"$.spec.defaults.InfraProvider.baremetal.defaults.bmc.virtualMedia.tls.trust", "disable-verification is a per-Machine exception and never a provider default"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			diagnostic := trustFailure(t, serviceSources(serviceEnvironment+"  defaults:\n"+tc.defaults), "api.invariant", tc.field)
+			if diagnostic.Message != tc.message {
+				t.Fatalf("message = %q", diagnostic.Message)
+			}
+		})
+	}
+}
+
+// bmcTrustSources is an Environment whose Machine kind default offers a
+// controller trust bundle, a controller Machine that keeps verification, and
+// one Machine that turns it off.
+func bmcTrustSources() desiredstate.Sources {
+	machine := func(name, address, extra, tls string) string {
+		return "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: " + name + "}\nspec:\n  os: {provided: true}\n" + extra +
+			"  network:\n    addresses: [{name: service, address: " + address + "}]\n" +
+			"  hardware:\n    management:\n      bmc:\n        address: https://" + name + "-bmc.example.test/redfish/v1/Systems/1\n" +
+			"        credentialsRef: bmc\n" + tls
+	}
+	env := serviceEnvironment + "  defaults:\n    Machine:\n      hardware:\n        management:\n          bmc:\n            tls: {trustBundleRef: bmc-ca}\n"
+	content := env + "\n---\n" + machine("service-host", "192.0.2.10", "  capabilities: [container-runtime]\n  access: {local: true}\n", "") +
+		"\n---\n" + machine("opted-out", "192.0.2.11", "", "        tls: {verify: false}\n") +
+		"\n---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: bmc-ca}\nspec: {type: caBundle}\n" +
+		"\n---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: bmc}\nspec: {type: usernamePassword}\n"
+	return desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(content))}}
+}
+
+// An Environment kind-default bundle reaches a Machine that keeps verification
+// and never one that authors tls.verify: false, so the opt-out compiles and
+// its effective controller carries no bundle.
+func TestAKindDefaultTrustBundleSkipsAMachineThatOptsOut(t *testing.T) {
+	state, _ := compileAcceptance(t, bmcTrustSources())
+	tls := requireObject(t, state.Effective(), api.Machine, "opted-out").Spec().Get("hardware", "management", "bmc", "tls")
+	if tls.Has("trustBundleRef") || tls.Get("verify").Bool() {
+		t.Fatalf("the opted-out Machine's effective controller trust = %v", tls)
+	}
+	kept := requireObject(t, state.Effective(), api.Machine, "service-host").Spec().Get("hardware", "management", "bmc", "tls")
+	if kept.Get("trustBundleRef").Text() != "bmc-ca" || !kept.Get("verify").Bool() {
+		t.Fatalf("the verifying Machine's effective controller trust = %v", kept)
+	}
+}

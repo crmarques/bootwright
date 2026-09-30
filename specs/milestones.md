@@ -17,27 +17,26 @@ every other command `bootwright --help` lists returns the
 
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
-| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | X21 |
+| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | X29, X30 |
 | [M2](milestones/m2.md) | Native input files for `openshift-install` and the cephadm and ceph CLIs | none | not started | define B51 |
 | [M3](milestones/m3.md) | Provision and destroy OpenShift clusters on bare metal | M1 | in progress | B61's operator gate |
-| [M4](milestones/m4.md) | Provision and destroy IBM Ceph clusters on bare metal | M1, M2, M3 | in progress | B72's operator gate; B73 waits for B9 and its host-key repair |
+| [M4](milestones/m4.md) | Provision and destroy IBM Ceph clusters on bare metal | M1, M2, M3 | in progress | B72's operator gate; B73 waits for its host-key repair |
 | [M5](milestones/m5.md) | First add-ons: MetalLB ingress and IBM Fusion Data Foundation | M3, M4 | not started | nothing until M3 and M4 |
 | [M6](milestones/m6.md) | Provision and destroy OpenShift clusters over OpenShift Virtualization | M3 | not started | nothing until M3 |
 | [M7](milestones/m7.md) | Add-ons ACM, Argo CD and GitLab | M5 | not started | nothing until M5 |
 
-X21 is active.
+No slice is active; X29 and X30 are planned.
 
-- **Next for agents:** deliver X21.
-- **Next for operator:** on a clean build that contains X20, run
-  [lab-rhel](../examples/lab-rhel/README.md#run-it) for
+- **Next for agents:** open and deliver X29 and X30.
+- **Next for operator:** on a clean build that contains X21, first destroy
+  every context applied before X21 with the build that applied it (X21 moves
+  request versions, the keyring format and the automation digest), then run
+  `setup`. Then run [lab-rhel](../examples/lab-rhel/README.md#run-it) for
   [B72](milestones/m4.md#b72) and [lab-sno](../examples/lab-sno/README.md) for
   [B61](milestones/m3.md#b61), and record each in the
   [acceptance ledger](../docs/acceptance.md) as the
-  [operator guide](../docs/operator-guide.md) describes, after destroying any
-  lab-sno context applied before X20 with its own executable; X22 moves the
-  automation digest, so run `setup` after finishing or destroying every
-  in-flight operation with the build that registered it. [B73](milestones/m4.md#b73)'s rehearsal waits for B9 and its host-key
-  repair.
+  [operator guide](../docs/operator-guide.md) describes.
+  [B73](milestones/m4.md#b73)'s rehearsal waits for its host-key repair.
 
 ## Scope rules
 

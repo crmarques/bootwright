@@ -17,7 +17,7 @@ import (
 
 const (
 	storeType = "local-keyring"
-	storeID   = "local-v3"
+	storeID   = "local-v4"
 	custodyID = "local-keyfile-v1"
 )
 
@@ -38,7 +38,7 @@ func NewWithOptions(options Options) *Implementation {
 	return &Implementation{random: options.Random}
 }
 
-func (*Implementation) Backend() string { return "local-keyring-v3" }
+func (*Implementation) Backend() string { return "local-keyring-v4" }
 
 func (i *Implementation) Selection() secretstore.Selection {
 	return secretstore.Selection{
@@ -158,7 +158,7 @@ func (s *session) Inspect(ctx context.Context) (secretstore.Snapshot, error) {
 	if err := s.refreshMetadata(ctx); err != nil {
 		return secretstore.Snapshot{}, err
 	}
-	result := secretstore.Snapshot{Versions: make([]secretstore.Version, 0, len(s.index.Versions)), Current: slices.Clone(s.index.Current), Bindings: cloneBindings(s.index.Bindings), ActiveKey: s.index.ActiveKey, Keys: publicKeys(s.index), RetainedArtifacts: s.retained, CleanupRequired: s.cleanup}
+	result := secretstore.Snapshot{Versions: make([]secretstore.Version, 0, len(s.index.Versions)), Current: slices.Clone(s.index.Current), Bindings: cloneBindings(s.index.Bindings), Produced: slices.Clone(s.index.Produced), ActiveKey: s.index.ActiveKey, Keys: publicKeys(s.index), RetainedArtifacts: s.retained, CleanupRequired: s.cleanup}
 	for _, version := range s.index.Versions {
 		parts := make([]secrets.Part, len(version.Parts))
 		for i, part := range version.Parts {
@@ -315,7 +315,7 @@ func validContext(context secretstore.Context) bool {
 }
 
 func validSelector(selector secretstore.Selector, context secretstore.Context, selection string) bool {
-	return selector.SelectorVersion == formatVersion && selector.Context == context.Name && selector.Backend == selection && validID(selector.Generation, "gen-")
+	return selector.SelectorVersion == secretstore.RecordVersion && selector.Context == context.Name && selector.Backend == selection && validID(selector.Generation, "gen-")
 }
 
 func areaFailure(ctx context.Context, code, message string, err error) error {
@@ -361,7 +361,7 @@ func entryNames(ctx context.Context, area secretstore.Area, directory string) (m
 }
 
 func validateIndex(index indexRecord, selector secretstore.Selector) error {
-	if index.FormatVersion != formatVersion || index.Algorithm != algorithm || index.Selector != selector || !validID(index.ActiveKey, "key-") || index.Keys == nil || index.Versions == nil || index.Current == nil || index.Bindings == nil || len(index.Keys) == 0 || len(index.Versions) > secrets.MaxVersions || len(index.Bindings) > maxBindings {
+	if index.FormatVersion != formatVersion || index.Algorithm != algorithm || index.Selector != selector || !validID(index.ActiveKey, "key-") || index.Keys == nil || index.Versions == nil || index.Current == nil || index.Bindings == nil || index.Produced == nil || len(index.Keys) == 0 || len(index.Versions) > secrets.MaxVersions || len(index.Bindings) > maxBindings || len(index.Produced) > secrets.MaxVersions {
 		return errors.New("invalid index header")
 	}
 	keys := make(map[string]storedKey, len(index.Keys))
@@ -412,7 +412,7 @@ func validateIndex(index indexRecord, selector secretstore.Selector) error {
 	previous = ""
 	for _, current := range index.Current {
 		version, exists := versions[current.Version]
-		if !exists || !validName(current.Name) || current.Name <= previous || currentNames[current.Name] || version.Declaration.Name != current.Name || version.Declaration.Source == "file" {
+		if !exists || !validName(current.Name) || current.Name <= previous || currentNames[current.Name] || version.Declaration.Name != current.Name || version.Declaration.Source == "file" || version.Declaration.Source == producedSource {
 			return errors.New("invalid current mapping")
 		}
 		currentNames[current.Name], referenced[current.Version] = true, true
@@ -425,7 +425,7 @@ func validateIndex(index indexRecord, selector secretstore.Selector) error {
 		}
 		priorVersion := ""
 		for _, id := range binding.Versions {
-			if _, exists := versions[id]; !exists || id <= priorVersion {
+			if version, exists := versions[id]; !exists || id <= priorVersion || version.Declaration.Source == producedSource {
 				return errors.New("invalid bound version")
 			}
 			referenced[id] = true
@@ -433,10 +433,39 @@ func validateIndex(index indexRecord, selector secretstore.Selector) error {
 		}
 		previous = binding.ID
 	}
+	if err := validateProduced(index.Produced, versions, referenced); err != nil {
+		return err
+	}
 	if len(referenced) != len(versions) {
 		return errors.New("unreferenced logical version")
 	}
 	return nil
+}
+
+// validateProduced admits a produced version only through the one entry it was
+// captured for: its name and fingerprint name that entry's block and name, it
+// is its series' only ordinal, and it holds at least one byte. Current and
+// binding references to one are refused before this runs, and a produced
+// version no entry names is left unreferenced.
+func validateProduced(entries []secretstore.Produced, versions map[string]storedVersion, referenced map[string]bool) error {
+	for position, entry := range entries {
+		version, exists := versions[entry.Version]
+		if !exists || !validName(entry.Block) || !validName(entry.Name) || referenced[entry.Version] || version.Declaration != producedDeclaration(entry.Block, entry.Name) || version.Sequence != 1 || len(version.Parts) != 1 || version.Parts[0].Size < 1 {
+			return errors.New("invalid produced entry")
+		}
+		if position > 0 && compareProduced(entries[position-1], entry) >= 0 {
+			return errors.New("invalid produced entry order")
+		}
+		referenced[entry.Version] = true
+	}
+	return nil
+}
+
+func compareProduced(a, b secretstore.Produced) int {
+	if order := strings.Compare(a.Block, b.Block); order != 0 {
+		return order
+	}
+	return strings.Compare(a.Name, b.Name)
 }
 
 func cloneIndex(index indexRecord) indexRecord {
@@ -444,6 +473,7 @@ func cloneIndex(index indexRecord) indexRecord {
 	result.Keys = slices.Clone(index.Keys)
 	result.Current = slices.Clone(index.Current)
 	result.Bindings = cloneBindings(index.Bindings)
+	result.Produced = slices.Clone(index.Produced)
 	result.Versions = make([]storedVersion, len(index.Versions))
 	for i, version := range index.Versions {
 		result.Versions[i] = version

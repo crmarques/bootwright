@@ -239,6 +239,46 @@ func TestOnlyThePublicHalfOfTheFleetKeyReachesTheAdapter(t *testing.T) {
 	}
 }
 
+// A controller that declares a trust bundle is reached through it on every
+// operation: the request binds the bundle and the adapter receives it as its
+// own file. One that declares none is reached through the system trust store,
+// so nothing is bound or written for it.
+func TestInstallationMaterialsIncludeTheControllerBundle(t *testing.T) {
+	for name, bundle := range map[string]string{"declared": "lab-bmc-ca", "absent": ""} {
+		t.Run(name, func(t *testing.T) {
+			call, request := execution(t, "digest")
+			request.Target.Controller.TrustBundleRef = bundle
+			canonical, err := request.Canonical()
+			if err != nil {
+				t.Fatal(err)
+			}
+			call.Block.Request = canonical
+			absent, _ := json.Marshal(Evidence{Absent: true, Postcondition: true, Request: "digest"})
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: absent}}
+			if _, err := New(runner).Destroy(context.Background(), call); err != nil {
+				t.Fatalf("destroy: %v", err)
+			}
+			var files []lifecycle.MaterialFile
+			for _, file := range runner.requests[0].Materials {
+				if file.Name == "bmc-ca" || file.Variable == "controllerCA" {
+					files = append(files, file)
+				}
+			}
+			bound := slices.Contains(request.SecretReferences(), "lab-bmc-ca")
+			if bundle == "" {
+				if len(files) != 0 || bound || strings.Contains(string(canonical), "trustBundleRef") {
+					t.Fatalf("a controller with no bundle carried one: %+v, bound %t, %s", files, bound, canonical)
+				}
+				return
+			}
+			want := lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: bundle, Variable: "controllerCA"}
+			if len(files) != 1 || files[0] != want || !bound {
+				t.Fatalf("bundle files = %+v, bound %t", files, bound)
+			}
+		})
+	}
+}
+
 // A destroy removes published content and needs no key, so it never reopens
 // the public half it does not use.
 func TestADestroyCarriesNoAuthorizedKey(t *testing.T) {

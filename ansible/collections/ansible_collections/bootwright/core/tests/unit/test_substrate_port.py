@@ -73,11 +73,15 @@ READS = MEDIA_READS | {
 }
 
 
-def access(prefix):
+def access(prefix, bundled=False):
     """The controller an entry point reaches: where, how it is verified, and the
-    paths of the material files holding its account, never their bytes."""
-    return {prefix + "_endpoint": ("str", True, None), prefix + "_verify": ("bool", True, None),
-            prefix + "_user": ("str", True, None), prefix + "_password": ("str", True, None)}
+    paths of the material files holding its account and, on an arm whose
+    controller can declare one, its trust bundle, never their bytes."""
+    found = {prefix + "_endpoint": ("str", True, None), prefix + "_verify": ("bool", True, None),
+             prefix + "_user": ("str", True, None), prefix + "_password": ("str", True, None)}
+    if bundled:
+        found[prefix + "_ca"] = ("str", True, None)
+    return found
 
 
 def identity(prefix, required):
@@ -95,12 +99,12 @@ OPTIONS = {
         "identity_read": identity(LIBVIRT + "_identity", ("uri", "domain", "marker_path", "host_key_path")),
     },
     "baremetal": {
-        "pre_boot": dict(access(BAREMETAL + "_target"), **{
+        "pre_boot": dict(access(BAREMETAL + "_target", bundled=True), **{
             BAREMETAL + "_target_expected": ("list", True, "str"),
             BAREMETAL + "_target_pinned_uuid_base64": ("str", True, None),
             BAREMETAL + "_target_pinned_serial_base64": ("str", True, None)}),
-        "boot_media": access(BAREMETAL + "_boot"),
-        "boot_disk": dict(access(BAREMETAL + "_disk"), **{BAREMETAL + "_disk_power_on": ("bool", True, None)}),
+        "boot_media": access(BAREMETAL + "_boot", bundled=True),
+        "boot_disk": dict(access(BAREMETAL + "_disk", bundled=True), **{BAREMETAL + "_disk_power_on": ("bool", True, None)}),
         "identity_read": identity(BAREMETAL + "_identity", ("address", "user", "file", "key", "marker_path", "work")),
     },
 }

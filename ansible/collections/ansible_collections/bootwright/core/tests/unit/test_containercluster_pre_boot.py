@@ -141,7 +141,9 @@ def test_each_proof_reaches_the_nodes_own_controller_with_its_own_credential(tmp
         assert (rendered["user"], rendered["password"]) == (
             "/run/bootwright/bmc-user-metal-02", "/run/bootwright/bmc-password-metal-02"), arm
         assert set(rendered) == ({"endpoint", "verify", "user", "password"} if arm == "libvirt" else {
-            "endpoint", "verify", "user", "password", "expected", "pinned_uuid_base64", "pinned_serial_base64"}), arm
+            "endpoint", "verify", "user", "password", "ca", "expected", "pinned_uuid_base64", "pinned_serial_base64"}), arm
+        if arm == "baremetal":
+            assert rendered["ca"] == "", "a cluster node's controller is reached through no bundle until B67"
 
 
 # Each node reads only the pin under its own position in the frozen order, and

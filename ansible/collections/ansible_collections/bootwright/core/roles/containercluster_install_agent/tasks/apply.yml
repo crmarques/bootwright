@@ -83,8 +83,9 @@
   no_log: true
 
 # The work area the image was built in holds the state these nodes install from
-# and the only administrator access to the cluster they install, and the media
-# block's rebuild starts by discarding it. It is marked before any node is
+# and the installer's own copy of the administrator access to the cluster they
+# install, the only one until this block proves the installation complete, and
+# the media block's rebuild starts by discarding it. It is marked before any node is
 # handed the image, and whether or not this attempt boots one, so a rebuild
 # refuses from then on. The mark leaves only with the area itself, in the media
 # block's inverse, which the removal plan starts after this block's own.
@@ -205,6 +206,23 @@
 # certificate.
 - name: Read the installed cluster and its nodes back
   ansible.builtin.import_tasks: state.yml
+
+# The runner reads this copy back and removes it with the job; the engine keeps
+# it in the context's custody before it records this block done.
+- name: Offer the administrator access of the proved installation for custody
+  ansible.builtin.copy:
+    src: '{{ containercluster_install_agent_kubeconfig }}'
+    dest: '{{ bootwright_cluster_install_output.kubeconfig }}'
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - bootwright_cluster_install_output is defined
+    - (containercluster_install_agent_before.observation.identity | default('')) | length > 0
+    - containercluster_install_agent_state.cluster == containercluster_install_agent_before.observation.identity
+    - containercluster_install_agent_state.completed is sameas true
+  no_log: true
 
 - name: Publish bounded installation completion evidence
   bootwright.core.containercluster_install_protocol:

@@ -210,6 +210,9 @@ func (s Service) execute(ctx context.Context, name string, frozen Request, pin m
 		return nil, err
 	}
 	references := append([]string{frozen.Controller.CredentialsRef}, frozen.Placement.SecretReferences()...)
+	if frozen.Controller.TrustBundleRef != "" {
+		references = append(references, frozen.Controller.TrustBundleRef)
+	}
 	var result, retained *Result
 	err = s.runtime.WithRuntime(ctx, lifecycle.RuntimeRequest{ContextName: name, Secrets: references}, func(inner context.Context, runtime lifecycle.Runtime) error {
 		retained = &Result{LogLocation: runtime.LogLocation, Logs: slices.Clone(runtime.Logs)}
@@ -261,6 +264,10 @@ func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, dig
 	materials := []lifecycle.MaterialFile{
 		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: frozen.Controller.CredentialsRef, Variable: "controllerUser"},
 		{Name: "bmc-password", Part: secrets.PasswordPart, Secret: frozen.Controller.CredentialsRef, Variable: "controllerPassword"},
+	}
+	if frozen.Controller.TrustBundleRef != "" {
+		materials = append(materials,
+			lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: frozen.Controller.TrustBundleRef, Variable: "controllerCA"})
 	}
 	return lifecycle.RunRequest{
 		Implementation: Implementation,

@@ -3,6 +3,7 @@ package machine
 import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // ValidatePartial rejects contradictions already provable in unused defaults.
@@ -27,6 +28,7 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 	if network.Has("attachmentRef") && network.Has("interfaceAttachments") {
 		issues = appendIssues(issues, invariant("$.spec.network.interfaceAttachments", "attachment selections are mutually exclusive"))
 	}
+	issues = appendIssues(issues, validateDefaultMediaTrust(o.Spec().Get("hardware", "management", "bmc"))...)
 	if o.Spec().Get("os", "provided").Bool() {
 		if o.Spec().Has("os", "install", "ntp") {
 			issues = appendIssues(issues, invariant("$.spec.os.install.ntp", "OS-ready Machines forbid installation NTP choices"))
@@ -38,4 +40,15 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 		}
 	}
 	return issues
+}
+
+// validateDefaultMediaTrust refuses the virtual-media exception in a Machine
+// kind default: inherited, it would reach every Machine that authors no trust.
+func validateDefaultMediaTrust(bmc api.Value) []api.Issue {
+	if bmc.Get("virtualMedia", "tls", "trust").Text() != substrate.TrustDisableVerification {
+		return nil
+	}
+	return []api.Issue{{Code: "api.invariant", Field: "$.spec.hardware.management.bmc.virtualMedia.tls.trust",
+		Message:     "disable-verification is a per-Machine exception and never a kind default",
+		Remediation: "declare hardware.management.bmc.virtualMedia.tls.trust: disable-verification on each Machine that needs it"}}
 }
